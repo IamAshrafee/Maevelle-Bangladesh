@@ -4,6 +4,7 @@ dist/
 .next/
 coverage/
 *.tsbuildinfo
+apps/*/next-env.d.ts
 pnpm-lock.yaml
 docs/
 .agents/

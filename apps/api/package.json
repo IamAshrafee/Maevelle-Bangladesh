@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@better-auth/utils": "0.4.2",
     "@fastify/type-provider-typebox": "6.1.0",
     "@maevelle/config": "workspace:*",
     "@maevelle/database": "workspace:*",

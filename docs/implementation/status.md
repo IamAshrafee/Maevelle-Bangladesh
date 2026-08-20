@@ -6,7 +6,7 @@ Current Milestone: First Secure Admin Access
 
 Completed: Foundation Runtime Application shell Platform migrations IAM/authentication
 
-Current Batch: PLATFORM-IDENTITY-01 complete
+Current Batch: PLATFORM-IDENTITY-01-CLOSEOUT complete
 
 Next: Catalog / Media / Sizing vertical slice
 

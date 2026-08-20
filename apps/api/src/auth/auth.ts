@@ -13,6 +13,11 @@ export interface MaevelleAuth {
     signUpEmail(input: {
       body: { email: string; password: string; name: string };
     }): Promise<{ user?: { id?: string } }>;
+    enableTwoFactor(input: {
+      headers: Headers;
+      body: { password: string; issuer?: string };
+    }): Promise<{ totpURI: string; backupCodes: string[] }>;
+    generateTOTP(input: { body: { secret: string } }): Promise<{ code: string }>;
   };
 }
 
@@ -91,6 +96,14 @@ export function createAuth(
           user: {
             fields: {
               twoFactorEnabled: 'two_factor_enabled',
+            },
+          },
+          twoFactor: {
+            fields: {
+              userId: 'user_id',
+              backupCodes: 'backup_codes',
+              failedVerificationCount: 'failed_verification_count',
+              lockedUntil: 'locked_until',
             },
           },
         },

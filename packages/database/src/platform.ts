@@ -40,6 +40,25 @@ export interface AuditEventInput {
   readonly metadata?: unknown;
 }
 
+const sensitiveAuditKey =
+  /(?:password|authorization|cookie|session[ _-]?token|api[ _-]?key|secret|backup[ _-]?code)/i;
+
+/**
+ * Audit events are historical evidence, not a second secret store. Preserve
+ * useful structure while redacting values whose keys identify credentials.
+ */
+function sanitizeAuditValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeAuditValue);
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      sensitiveAuditKey.test(key) ? '[REDACTED]' : sanitizeAuditValue(nestedValue),
+    ]),
+  );
+}
+
 /** Append-only writer; the database role has no ordinary UPDATE/DELETE grant. */
 export async function appendAuditEvent(
   db: Kysely<DatabaseSchema>,
@@ -51,7 +70,9 @@ export async function appendAuditEvent(
     ) values (
       ${event.organizationId ?? null}, ${event.actorType}, ${event.actorId ?? null}, ${event.membershipId ?? null}, ${event.action},
       ${event.targetType ?? null}, ${event.targetId ?? null}, ${event.requestId ?? null}, ${event.reason ?? null},
-      ${JSON.stringify(event.beforeDiff ?? null)}::jsonb, ${JSON.stringify(event.afterDiff ?? null)}::jsonb, ${JSON.stringify(event.metadata ?? null)}::jsonb
+      ${JSON.stringify(sanitizeAuditValue(event.beforeDiff ?? null))}::jsonb,
+      ${JSON.stringify(sanitizeAuditValue(event.afterDiff ?? null))}::jsonb,
+      ${JSON.stringify(sanitizeAuditValue(event.metadata ?? null))}::jsonb
     )
   `.execute(db);
 }
@@ -223,13 +244,21 @@ export interface AdminContextRecord {
   readonly capabilities: readonly string[];
 }
 
+export interface AdminContextRequest {
+  readonly organizationId?: string;
+  readonly requiredCapability?: string;
+}
+
 export async function findActiveAdminContext(
   db: Kysely<DatabaseSchema>,
   userId: string,
+  request: AdminContextRequest = {},
 ): Promise<AdminContextRecord | undefined> {
   const membership = await sql<{ organization_id: string; membership_id: string }>`
     select organization_id, id as membership_id from iam.organization_memberships
-    where user_id = ${userId} and status = 'ACTIVE'
+    where user_id = ${userId}
+      and status = 'ACTIVE'
+      and (${request.organizationId ?? null}::uuid is null or organization_id = ${request.organizationId ?? null}::uuid)
     order by created_at asc limit 1
   `.execute(db);
   const active = membership.rows[0];
@@ -239,10 +268,94 @@ export async function findActiveAdminContext(
     where membership_id = ${active.membership_id}
     order by capability_code
   `.execute(db);
+  if (
+    request.requiredCapability &&
+    !grants.rows.some((grant) => grant.capability_code === request.requiredCapability)
+  ) {
+    return undefined;
+  }
   return {
     organizationId: active.organization_id,
     membershipId: active.membership_id,
     capabilities: grants.rows.map((grant) => grant.capability_code),
+  };
+}
+
+export interface IdempotencyRecordInput {
+  readonly organizationId: string;
+  readonly principalType: string;
+  readonly principalId?: string;
+  readonly operationType: string;
+  readonly idempotencyKey: string;
+  readonly requestFingerprint: string;
+}
+
+export interface IdempotencyRecord {
+  readonly id: string;
+  readonly requestFingerprint: string;
+  readonly status: 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED_FINAL';
+  readonly created: boolean;
+}
+
+export class IdempotencyKeyReuseError extends Error {
+  public constructor() {
+    super('The idempotency key was already used for a different request.');
+    this.name = 'IdempotencyKeyReuseError';
+  }
+}
+
+/**
+ * Claims the canonical database-backed record for a request identity. A
+ * repeated equivalent request receives that record; a changed payload is a
+ * conflict instead of an accidental replay.
+ */
+export async function claimIdempotencyRecord(
+  db: Kysely<DatabaseSchema>,
+  input: IdempotencyRecordInput,
+): Promise<IdempotencyRecord> {
+  const inserted = await sql<{
+    id: string;
+    request_fingerprint: string;
+    status: IdempotencyRecord['status'];
+  }>`
+    insert into platform.idempotency_records (
+      organization_id, principal_type, principal_id, operation_type, idempotency_key, request_fingerprint, status
+    ) values (
+      ${input.organizationId}, ${input.principalType}, ${input.principalId ?? null}, ${input.operationType},
+      ${input.idempotencyKey}, ${input.requestFingerprint}, 'IN_PROGRESS'
+    ) on conflict do nothing
+    returning id, request_fingerprint, status
+  `.execute(db);
+  const created = inserted.rows[0];
+  if (created)
+    return {
+      id: created.id,
+      requestFingerprint: created.request_fingerprint,
+      status: created.status,
+      created: true,
+    };
+
+  const existing = await sql<{
+    id: string;
+    request_fingerprint: string;
+    status: IdempotencyRecord['status'];
+  }>`
+    select id, request_fingerprint, status from platform.idempotency_records
+    where organization_id = ${input.organizationId}
+      and principal_type = ${input.principalType}
+      and principal_id is not distinct from ${input.principalId ?? null}::uuid
+      and operation_type = ${input.operationType}
+      and idempotency_key = ${input.idempotencyKey}
+  `.execute(db);
+  const canonical = existing.rows[0];
+  if (!canonical) throw new Error('Idempotency conflict did not resolve to a canonical record.');
+  if (canonical.request_fingerprint !== input.requestFingerprint)
+    throw new IdempotencyKeyReuseError();
+  return {
+    id: canonical.id,
+    requestFingerprint: canonical.request_fingerprint,
+    status: canonical.status,
+    created: false,
   };
 }
 
