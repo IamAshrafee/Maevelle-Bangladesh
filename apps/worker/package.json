@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@maevelle/config": "workspace:*",
-    "@maevelle/database": "workspace:*"
+    "@maevelle/database": "workspace:*",
+    "@maevelle/observability": "workspace:*"
   }
 }

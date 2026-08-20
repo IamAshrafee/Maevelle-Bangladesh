@@ -11,35 +11,9 @@ export interface WorkerOptions {
   readonly logger?: WorkerLogger;
 }
 
-export type WorkerLogLevel = 'debug' | 'info' | 'warn' | 'error';
-
 export interface WorkerRuntime {
   start(): Promise<void>;
   close(): Promise<void>;
-}
-
-const consoleLogger: WorkerLogger = {
-  info(bindings, message) {
-    console.info(message, bindings);
-  },
-  debug(bindings, message) {
-    console.debug(message, bindings);
-  },
-};
-
-export function createConsoleWorkerLogger(logLevel: WorkerLogLevel): WorkerLogger {
-  return {
-    info(bindings, message) {
-      if (logLevel === 'debug' || logLevel === 'info') {
-        console.info(message, bindings);
-      }
-    },
-    debug(bindings, message) {
-      if (logLevel === 'debug') {
-        console.debug(message, bindings);
-      }
-    },
-  };
 }
 
 /**
@@ -47,7 +21,7 @@ export function createConsoleWorkerLogger(logLevel: WorkerLogLevel): WorkerLogge
  * begin after the migration-controlled jobs infrastructure exists.
  */
 export function createWorker(options: WorkerOptions): WorkerRuntime {
-  const logger = options.logger ?? consoleLogger;
+  const logger = options.logger;
   let heartbeat: NodeJS.Timeout | undefined;
   let started = false;
   let closePromise: Promise<void> | undefined;
@@ -60,11 +34,10 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
 
       await options.database.ping();
       started = true;
-      logger.info({}, 'Worker started.');
+      logger?.info({}, 'Worker started.');
       heartbeat = setInterval(() => {
-        logger.debug({}, 'Worker heartbeat.');
+        logger?.debug({}, 'Worker heartbeat.');
       }, options.heartbeatIntervalMs);
-      heartbeat.unref();
     },
     close(): Promise<void> {
       closePromise ??= (async () => {
@@ -74,7 +47,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         }
 
         await options.database.close();
-        logger.info({}, 'Worker stopped.');
+        logger?.info({}, 'Worker stopped.');
       })();
       return closePromise;
     },

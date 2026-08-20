@@ -21,6 +21,7 @@ describe('API health endpoints', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
+    expect(response.headers['x-request-id']).toBeDefined();
     expect(database.ping).not.toHaveBeenCalled();
     await app.close();
   });
@@ -33,6 +34,7 @@ describe('API health endpoints', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
+    expect(response.headers['x-request-id']).toBeDefined();
     expect(database.ping).toHaveBeenCalledOnce();
     await app.close();
   });

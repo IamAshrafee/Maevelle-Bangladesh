@@ -2,8 +2,9 @@ import { pathToFileURL } from 'node:url';
 
 import { loadConfig, type RuntimeConfig } from '@maevelle/config';
 import { createDatabase } from '@maevelle/database';
+import { createLogger } from '@maevelle/observability';
 
-import { createConsoleWorkerLogger, createWorker, type WorkerRuntime } from './worker.js';
+import { createWorker, type WorkerRuntime } from './worker.js';
 
 export async function startWorker(config: RuntimeConfig = loadConfig()): Promise<WorkerRuntime> {
   const database = createDatabase({
@@ -13,7 +14,7 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
   const worker = createWorker({
     database,
     heartbeatIntervalMs: config.workerHeartbeatIntervalMs,
-    logger: createConsoleWorkerLogger(config.logLevel),
+    logger: createLogger({ component: 'worker', level: config.logLevel }),
   });
 
   try {

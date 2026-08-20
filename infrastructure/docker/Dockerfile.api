@@ -1,0 +1,39 @@
+FROM node:24-bookworm-slim AS base
+
+WORKDIR /workspace
+RUN corepack enable
+
+FROM base AS dependencies
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/admin/package.json apps/admin/package.json
+COPY apps/api/package.json apps/api/package.json
+COPY apps/storefront/package.json apps/storefront/package.json
+COPY apps/worker/package.json apps/worker/package.json
+COPY packages/config/package.json packages/config/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/core/package.json packages/core/package.json
+COPY packages/database/package.json packages/database/package.json
+COPY packages/observability/package.json packages/observability/package.json
+COPY packages/security/package.json packages/security/package.json
+COPY packages/testkit/package.json packages/testkit/package.json
+COPY packages/ui-admin/package.json packages/ui-admin/package.json
+COPY packages/ui-storefront/package.json packages/ui-storefront/package.json
+RUN pnpm install --frozen-lockfile
+
+FROM dependencies AS build
+
+COPY . .
+RUN pnpm exec tsc --build apps/api/tsconfig.build.json --pretty false
+
+FROM node:24-bookworm-slim AS runtime
+
+RUN groupadd --system --gid 1001 maevelle && useradd --system --uid 1001 --gid maevelle maevelle
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build --chown=maevelle:maevelle /workspace/node_modules ./node_modules
+COPY --from=build --chown=maevelle:maevelle /workspace/package.json ./package.json
+COPY --from=build --chown=maevelle:maevelle /workspace/apps/api ./apps/api
+COPY --from=build --chown=maevelle:maevelle /workspace/packages ./packages
+USER maevelle
+CMD ["node", "apps/api/dist/src/server.js"]

@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 
 import { loadConfig, type RuntimeConfig } from '@maevelle/config';
 import { createDatabase, type DatabaseClient } from '@maevelle/database';
+import { createLogger } from '@maevelle/observability';
 
 import { buildApi } from './app.js';
 
@@ -18,7 +19,7 @@ export async function startApiServer(config: RuntimeConfig = loadConfig()): Prom
   });
   const app = buildApi({
     database,
-    logger: { level: config.logLevel },
+    logger: createLogger({ component: 'api', level: config.logLevel }),
   });
   let closePromise: Promise<void> | undefined;
 

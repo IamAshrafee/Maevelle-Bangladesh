@@ -1,8 +1,6 @@
 {
   "files": [],
   "references": [
-    { "path": "./apps/storefront/tsconfig.build.json" },
-    { "path": "./apps/admin/tsconfig.build.json" },
     { "path": "./apps/api/tsconfig.build.json" },
     { "path": "./apps/worker/tsconfig.build.json" },
     { "path": "./packages/core/tsconfig.build.json" },

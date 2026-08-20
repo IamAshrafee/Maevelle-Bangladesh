@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://maevelle_dev:maevelle_dev_password@localhost:5432/maevelle_dev
+      TEST_DATABASE_URL: postgresql://maevelle_dev:maevelle_dev_password@localhost:5432/maevelle_test
+      NEXT_TELEMETRY_DISABLED: '1'
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: maevelle_dev
+          POSTGRES_USER: maevelle_dev
+          POSTGRES_PASSWORD: maevelle_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=maevelle_dev --dbname=maevelle_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable repository-pinned pnpm
+        run: corepack enable
+      - name: Create dedicated test database
+        env:
+          PGPASSWORD: maevelle_dev_password
+        run: psql --host localhost --username maevelle_dev --dbname postgres --command "CREATE DATABASE maevelle_test;"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm check:architecture
