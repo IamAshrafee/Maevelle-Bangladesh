@@ -1,3 +1,8 @@
-// Worker application foundation. Worker runtime setup is introduced in TASK-009.
-
-export {};
+export { startWorker, installWorkerShutdownHandlers } from './server.js';
+export {
+  createConsoleWorkerLogger,
+  createWorker,
+  type WorkerLogLevel,
+  type WorkerOptions,
+  type WorkerRuntime,
+} from './worker.js';
