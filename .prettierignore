@@ -1,0 +1,11 @@
+node_modules/
+.pnpm-store/
+dist/
+.next/
+coverage/
+*.tsbuildinfo
+pnpm-lock.yaml
+docs/
+.agents/
+README.md
+skills-lock.json

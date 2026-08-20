@@ -7,6 +7,8 @@ dist/
 .next/
 coverage/
 *.tsbuildinfo
+.eslintcache
+.vitest/
 
 # Local environment and logs
 .env

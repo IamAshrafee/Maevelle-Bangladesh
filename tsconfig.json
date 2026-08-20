@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./tsconfig.tooling.json" },
     { "path": "./apps/storefront" },
     { "path": "./apps/admin" },
     { "path": "./apps/api" },
