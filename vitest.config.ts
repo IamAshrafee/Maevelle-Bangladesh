@@ -9,6 +9,7 @@ export default defineConfig({
       'packages/**/src/**/*.{test,spec}.ts',
       'packages/**/src/**/*.{test,spec}.tsx',
       'tooling/**/*.test.ts',
+      'tooling/**/*.test.mjs',
     ],
   },
 });
