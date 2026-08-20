@@ -1,0 +1,8418 @@
+# Maevelle Ecommerce — Database & Data Model Architecture
+
+**Document:** `docs/architecture/database-data-model-architecture.md`
+**Status:** Initial Relational Architecture / Living Document
+**Version:** 0.1
+**Database:** PostgreSQL
+**Related:** All domain architecture documents, `system-technical-architecture.md`, `security-audit-architecture.md`, `api-webhook-integration-architecture.md`
+
+---
+
+# 1. Purpose
+
+This document converts Maevelle's domain architecture into a coherent relational data model.
+
+It establishes:
+
+```text
+Entity identity
+
+Organization isolation
+
+Primary / foreign keys
+
+Relationship rules
+
+Money representation
+
+Time representation
+
+Status representation
+
+Snapshots
+
+Ledgers
+
+Concurrency versions
+
+Deletion / archive behavior
+
+JSON boundaries
+
+Indexes
+
+Constraints
+
+Projection tables
+
+High-volume data strategy
+
+Cross-domain references
+```
+
+It intentionally does **not** attempt to freeze every final SQL column yet.
+
+The sequence is:
+
+```text
+Domain Architecture
+        ↓
+Data Model Architecture
+        ↓
+Concrete Schema / DDL
+        ↓
+Migrations
+        ↓
+Repositories
+        ↓
+Application Code
+```
+
+---
+
+# 2. Core Principle
+
+> **The database is not merely persistence for objects. It is the final relational integrity layer protecting Maevelle's business truth.**
+
+Application validation remains essential.
+
+But important relationships and invariants should also be protected by:
+
+```text
+FOREIGN KEY
+
+UNIQUE
+
+NOT NULL
+
+CHECK
+
+transaction boundaries
+
+locking
+
+version checks
+```
+
+where relationally expressible.
+
+PostgreSQL provides native primary-key, unique, foreign-key, check and exclusion constraint mechanisms, making database-enforced relational integrity appropriate for Maevelle's critical relationships.
+
+---
+
+# 3. Second Core Principle
+
+> **The schema follows domains and business invariants—not screens and not API payloads.**
+
+Bad:
+
+```text
+admin_product_form
+```
+
+as a table.
+
+Good:
+
+```text
+products
+product_variants
+product_categories
+variant_prices
+```
+
+The Admin Product Editor is a presentation over these business concepts.
+
+---
+
+# 4. Third Core Principle
+
+> **Historical commercial truth is preserved through snapshots and immutable transaction records rather than reconstructed from today's Product, Customer or Settings data.**
+
+Example:
+
+```text
+Product today:
+"Maevelle Summer Hat V2"
+Price ৳850
+```
+
+must not change an Order from six months ago that recorded:
+
+```text
+Product:
+"Summer Beach Hat"
+
+SKU:
+HAT-RED-M
+
+Unit Price:
+৳650
+```
+
+---
+
+# 5. Fourth Core Principle
+
+> **Organization isolation must be reinforced by the relational model.**
+
+We should not rely exclusively on:
+
+```sql
+WHERE organization_id = ?
+```
+
+being remembered in every repository.
+
+Cross-Organization relationships should be structurally difficult or impossible.
+
+---
+
+# 6. Fifth Core Principle
+
+> **No universal polymorphic relationship becomes authoritative business data.**
+
+Avoid using:
+
+```text
+entity_type
+entity_id
+```
+
+as the primary relational mechanism for important domain relationships.
+
+Example bad authoritative relationship:
+
+```text
+payment_allocations
+target_type = "order"
+target_id = "..."
+```
+
+when an actual:
+
+```text
+order_id
+```
+
+foreign key can exist.
+
+---
+
+# 7. Where Generic References Are Acceptable
+
+Generic references can be appropriate for:
+
+```text
+Audit metadata
+
+Search projection metadata
+
+Human timelines
+
+Media usage projections
+
+Integration diagnostics
+
+Generic event envelopes
+```
+
+provided they are not the only integrity mechanism for authoritative relationships.
+
+---
+
+# 8. Sixth Core Principle
+
+> **Ledger domains are append-oriented.**
+
+Examples:
+
+```text
+Inventory movements
+
+Cash movements
+
+Audit
+
+Payment financial records
+```
+
+Corrections happen through:
+
+```text
+new compensating records
+```
+
+not:
+
+```text
+rewrite old history until it looks correct.
+```
+
+---
+
+# 9. Seventh Core Principle
+
+> **Current-state projections and historical ledgers are separate.**
+
+Example:
+
+```text
+inventory_levels
+```
+
+exists for fast operational reads.
+
+But:
+
+```text
+inventory_movements
+```
+
+remains the historical quantity trail.
+
+A corrupted:
+
+```text
+inventory_levels
+```
+
+projection should be reconstructable/reconcilable.
+
+---
+
+# 10. PostgreSQL Capability Validation
+
+The architecture intentionally uses PostgreSQL's strengths:
+
+- native relational constraints;
+- native UUID storage;
+- transaction isolation and row locking;
+- JSONB for bounded flexible structures;
+- GIN indexing where JSONB/text-document search genuinely requires it;
+- partitioning later if data volume justifies it.
+
+Current PostgreSQL also supports UUIDv7 generation; however Maevelle should not make its schema dependent on one database-side generator. IDs can be generated by the application or database while remaining stored as native `uuid`.
+
+---
+
+# 11. Database Namespace Strategy
+
+Recommended logical PostgreSQL schemas:
+
+```text
+platform
+
+catalog
+
+sizing
+
+media
+
+inventory
+
+warehouse
+
+procurement
+
+shipment
+
+landed_cost
+
+orders
+
+payments
+
+customers
+
+iam
+
+finance
+
+reviews
+
+promotions
+
+notifications
+
+analytics
+
+integrations
+
+audit
+```
+
+---
+
+# 12. Why Database Schemas?
+
+They make ownership visible.
+
+Example:
+
+```text
+inventory.inventory_items
+
+orders.orders
+
+payments.payments
+```
+
+instead of hundreds of unrelated tables inside one undifferentiated namespace.
+
+---
+
+# 13. Database Schema Does Not Mean Microservice
+
+Everything still exists inside:
+
+```text
+one PostgreSQL database
+```
+
+and transactions can span these logical schemas.
+
+---
+
+# 14. Tooling Exception
+
+If the selected ORM/migration tooling makes multi-schema management materially unsafe or painful, we may use one PostgreSQL schema with strict naming conventions.
+
+That requires an ADR.
+
+Logical domain ownership remains mandatory either way.
+
+---
+
+# 15. Naming Convention
+
+Recommended:
+
+```text
+snake_case
+```
+
+for:
+
+```text
+tables
+
+columns
+
+indexes
+
+constraints
+```
+
+---
+
+# 16. Tables
+
+Plural nouns:
+
+```text
+products
+
+product_variants
+
+orders
+
+order_lines
+```
+
+---
+
+# 17. Foreign Keys
+
+Use explicit names:
+
+```text
+organization_id
+
+product_id
+
+variant_id
+
+customer_id
+
+location_id
+```
+
+not:
+
+```text
+parent
+object
+ref
+```
+
+---
+
+# 18. Boolean Columns
+
+Prefer clear predicates:
+
+```text
+is_primary
+
+is_default
+
+is_active
+```
+
+when Boolean is genuinely appropriate.
+
+Do not use Boolean for complex lifecycle state.
+
+---
+
+# 19. Status Columns
+
+Prefer:
+
+```text
+status
+```
+
+with documented machine codes.
+
+Example:
+
+```text
+DRAFT
+ACTIVE
+ARCHIVED
+```
+
+---
+
+# 20. Database ENUM Strategy
+
+Do **not** make PostgreSQL ENUM the universal representation of changing business states.
+
+Recommended:
+
+```text
+text / varchar
++
+application enum
++
+database CHECK where valuable
+```
+
+for relatively stable state machines.
+
+---
+
+# 21. Why?
+
+Business states evolve.
+
+We want migrations to remain deliberate without coupling every application enum addition tightly to PostgreSQL ENUM evolution.
+
+---
+
+# 22. Lookup Tables
+
+Use first-class lookup/configuration entities when values are:
+
+```text
+business-manageable
+
+have metadata
+
+have lifecycle
+
+are referenced by many entities
+```
+
+Examples:
+
+```text
+Expense Categories
+
+Adjustment Reasons
+
+Colors
+
+Size Systems
+```
+
+---
+
+# 23. Entity Identity
+
+Recommended primary identity for domain entities:
+
+```text
+UUID
+```
+
+---
+
+# 24. Preferred UUID Version
+
+Prefer:
+
+```text
+UUIDv7
+```
+
+for newly generated domain identifiers.
+
+Benefits for our architecture include:
+
+```text
+globally safe generation
+
+reasonable chronological locality
+
+no central ID service
+```
+
+PostgreSQL's current UUID implementation supports storing UUIDs and current versions provide UUIDv7 generation, but Maevelle can generate UUIDv7 at the application layer if desired.
+
+---
+
+# 25. UUID Is Not a Human Number
+
+Order:
+
+```text
+id:
+0198...
+
+order_number:
+ORD-2026-000153
+```
+
+---
+
+# 26. Human Numbers
+
+Used for:
+
+```text
+support
+
+search
+
+documents
+
+operations
+
+customers
+```
+
+---
+
+# 27. Primary Key Does Not Change
+
+Changing:
+
+```text
+ORD
+→
+MV
+```
+
+does not affect Order UUID.
+
+---
+
+# 28. High-Volume Infrastructure IDs
+
+Not every internal row requires UUID.
+
+Pure internal append/infrastructure tables may use:
+
+```text
+BIGINT GENERATED AS IDENTITY
+```
+
+when external/global identity is unnecessary.
+
+PostgreSQL provides identity columns backed by internal sequences for generated numeric keys.
+
+---
+
+# 29. Hybrid Identity Strategy
+
+Recommended:
+
+### Domain Entities
+
+```text
+UUIDv7
+```
+
+### High-volume internal child/technical rows
+
+Potential:
+
+```text
+BIGINT identity
+```
+
+### Externally deduplicated Events
+
+```text
+UUID event_id
+```
+
+even if local row has bigint.
+
+---
+
+# 30. Example
+
+```text
+audit_events.id
+→ BIGINT identity
+
+audit_events.event_id
+→ UUID
+```
+
+if external/global correlation is useful.
+
+---
+
+# 31. Organization Entity
+
+Canonical:
+
+```text
+platform.organizations
+```
+
+---
+
+# 32. Organization-Owned Data
+
+Nearly every business-domain root table receives:
+
+```text
+organization_id NOT NULL
+```
+
+---
+
+# 33. Examples
+
+```text
+products
+
+orders
+
+customers
+
+locations
+
+suppliers
+
+payments
+
+expenses
+
+promotions
+```
+
+---
+
+# 34. Organization on Child Tables
+
+Important child tables should often also contain:
+
+```text
+organization_id
+```
+
+even where theoretically derivable through parent.
+
+---
+
+# 35. Why Duplicate Organization ID?
+
+It provides:
+
+```text
+safer joins
+
+tenant filtering
+
+composite FK enforcement
+
+future partition/readiness
+
+simpler authorization queries
+```
+
+The duplication is deliberate denormalization for integrity/security.
+
+---
+
+# 36. Composite Tenant-Safe Foreign Keys
+
+Example:
+
+```text
+orders
+UNIQUE (organization_id, id)
+```
+
+and:
+
+```text
+order_lines
+FOREIGN KEY (organization_id, order_id)
+REFERENCES orders (organization_id, id)
+```
+
+---
+
+# 37. Why?
+
+Then an Order Line cannot accidentally contain:
+
+```text
+organization_id = A
+order_id = Order-from-B
+```
+
+even if application code is wrong.
+
+PostgreSQL requires foreign-key targets to reference primary/unique candidate keys, making `(organization_id, id)` unique keys usable for this tenant-safe relationship pattern.
+
+---
+
+# 38. Do We Need Composite FKs Everywhere?
+
+No.
+
+Use most aggressively across:
+
+```text
+cross-domain relationships
+
+financial relationships
+
+customer/order relationships
+
+inventory/location relationships
+
+organization security boundaries
+```
+
+Pure composition children can sometimes rely on parent ownership.
+
+Exact coverage comes in DDL design.
+
+---
+
+# 39. Platform-Level Tables
+
+Some tables are not Organization-owned.
+
+Examples:
+
+```text
+users
+
+capability_definitions
+
+supported_currency_reference foundation
+
+system migrations
+```
+
+---
+
+# 40. Global User
+
+`iam.users` represents authentication identity.
+
+Membership connects:
+
+```text
+User
+↔
+Organization
+```
+
+---
+
+# 41. Common Mutable Entity Columns
+
+Recommended baseline where appropriate:
+
+```text
+id
+
+organization_id
+
+created_at
+
+created_by
+
+updated_at
+
+updated_by
+
+version
+```
+
+---
+
+# 42. Version
+
+Mutable collaborative entities use:
+
+```text
+version BIGINT
+```
+
+incremented on successful update.
+
+---
+
+# 43. Purpose
+
+Optimistic concurrency:
+
+```text
+expected version 17
+current version 18
+→ reject stale mutation
+```
+
+---
+
+# 44. Immutable Rows
+
+Append-only rows normally do not need:
+
+```text
+updated_at
+updated_by
+version
+```
+
+Examples:
+
+```text
+inventory_movement_lines
+
+audit_events
+```
+
+---
+
+# 45. Created By
+
+Actor reference is not always a human User.
+
+Could originate from:
+
+```text
+User
+
+Service Account
+
+Provider
+
+System
+```
+
+---
+
+# 46. Actor Representation
+
+Do not force all tables to foreign-key:
+
+```text
+created_by_user_id
+```
+
+if system/integration creation is valid.
+
+Use a consistent actor/audit strategy.
+
+Transactional entities may still preserve:
+
+```text
+created_by_membership_id
+```
+
+where operationally useful.
+
+Audit provides complete actor context.
+
+---
+
+# 47. Time Representation
+
+Business instants use:
+
+```text
+timestamptz
+```
+
+conceptually.
+
+PostgreSQL stores and converts `timestamp with time zone` values using session/display timezone semantics; this fits Maevelle's rule that the absolute instant is distinct from business-local presentation.
+
+---
+
+# 48. Examples
+
+```text
+created_at
+
+confirmed_at
+
+paid_at
+
+dispatched_at
+
+received_at
+```
+
+---
+
+# 49. Date-Only Values
+
+Use:
+
+```text
+date
+```
+
+for real calendar dates.
+
+Examples:
+
+```text
+supplier_invoice_date
+
+birth_date future if legitimately needed
+```
+
+---
+
+# 50. Do Not Use Timestamp for Every Date
+
+A supplier invoice dated:
+
+```text
+2026-08-20
+```
+
+does not necessarily mean:
+
+```text
+2026-08-20 00:00:00
+```
+
+as an event.
+
+---
+
+# 51. Timezone Identifiers
+
+Organization setting stores:
+
+```text
+Asia/Dhaka
+```
+
+as text validated as supported IANA timezone.
+
+---
+
+# 52. Money Representation
+
+Never:
+
+```text
+float
+double precision
+```
+
+for monetary authority.
+
+---
+
+# 53. Canonical Money Columns
+
+Conceptually:
+
+```text
+amount NUMERIC
+currency_code
+```
+
+---
+
+# 54. Recommended Transaction Precision
+
+Baseline candidate:
+
+```text
+NUMERIC(20,6)
+```
+
+for transaction monetary amounts.
+
+Final precision will be validated before DDL freeze.
+
+---
+
+# 55. Why More Than Two Decimals?
+
+Customer-facing money may commonly display fewer decimals, but:
+
+```text
+cost allocations
+
+per-unit landed cost
+
+FX calculations
+
+percentage fees
+```
+
+can require intermediate precision.
+
+---
+
+# 56. High-Precision Calculation
+
+Internal allocation/basis amounts can use something closer to:
+
+```text
+NUMERIC(28,12)
+```
+
+where required.
+
+---
+
+# 57. Final Monetary Allocation
+
+Rounding occurs explicitly according to transaction currency/financial policy.
+
+Never rely on implicit database display rounding.
+
+---
+
+# 58. Currency Code
+
+Store:
+
+```text
+BDT
+
+USD
+
+CNY
+```
+
+rather than:
+
+```text
+৳
+$
+¥
+```
+
+---
+
+# 59. FX Rates
+
+Use high-precision decimal.
+
+Conceptually:
+
+```text
+rate NUMERIC(28,12)
+```
+
+plus:
+
+```text
+base_currency
+
+quote_currency
+
+effective_at / rate_date
+
+source
+```
+
+---
+
+# 60. Quantity Representation
+
+Inventory architecture should not lock the platform forever to integer pieces.
+
+Recommended base:
+
+```text
+NUMERIC
+```
+
+with Inventory Item / Unit-of-Measure rules governing whether fractional quantity is valid.
+
+---
+
+# 61. Maevelle V1 Physical Fashion Items
+
+Normally require:
+
+```text
+whole-unit quantities.
+```
+
+---
+
+# 62. Future
+
+Can support:
+
+```text
+measured quantity
+
+fabric
+
+bulk material
+
+weighted products
+```
+
+without rebuilding every inventory table.
+
+---
+
+# 63. Measurement Representation
+
+Store:
+
+```text
+numeric value
++
+explicit unit
+```
+
+not human string:
+
+```text
+"12 inches"
+```
+
+as authoritative measurement.
+
+---
+
+# 64. Strings
+
+Prefer PostgreSQL:
+
+```text
+text
+```
+
+unless a domain limit has semantic/security value.
+
+---
+
+# 65. Length Validation
+
+Examples where limit matters:
+
+```text
+SKU
+
+coupon code
+
+human number
+
+phone input
+```
+
+can use application/database length checks.
+
+---
+
+# 66. Normalized Values
+
+Keep original and normalized values where meaningful.
+
+Example Customer Phone:
+
+```text
+raw_input
+
+normalized_number
+
+country_context
+```
+
+---
+
+# 67. Email
+
+Conceptually:
+
+```text
+email_original
+
+email_normalized
+```
+
+---
+
+# 68. Normalized Contact Is Not Universal Unique Customer Key
+
+As Customer Architecture established:
+
+```text
+two Customers may legitimately share a phone/email.
+```
+
+Therefore:
+
+```text
+INDEX
+```
+
+yes.
+
+```text
+UNIQUE CUSTOMER CONSTRAINT
+```
+
+no.
+
+---
+
+# 69. Case-Insensitive Text
+
+For controlled cases, normalization can be explicit.
+
+PostgreSQL also supplies a `citext` extension for case-insensitive text comparison, but Maevelle should use it only where its semantics genuinely match the domain rather than globally.
+
+---
+
+# 70. JSONB Principle
+
+> **JSONB is for bounded flexibility—not escaping relational modeling.**
+
+---
+
+# 71. Good JSONB Uses
+
+```text
+External provider raw payload
+
+Audit change metadata
+
+Historical option snapshot
+
+Flexible display metadata
+
+Job payload
+
+Webhook payload
+
+Import diagnostics
+
+Low-value extensible metadata
+```
+
+---
+
+# 72. Bad JSONB Uses
+
+Do not hide:
+
+```text
+Order Lines
+
+Inventory Quantities
+
+Payment Allocations
+
+Customer Phones
+
+Product Categories
+
+Permissions
+```
+
+inside giant JSON documents.
+
+---
+
+# 73. Why?
+
+These require:
+
+```text
+FKs
+
+uniqueness
+
+queries
+
+indexes
+
+constraints
+
+concurrency
+```
+
+---
+
+# 74. JSONB Search
+
+PostgreSQL supports GIN indexing over JSONB when key/value containment/search patterns justify it.
+
+That capability does **not** make JSONB the preferred model for relational business entities.
+
+---
+
+# 75. JSON Schema Version
+
+Persisted JSON payload that can survive deployments should include or infer:
+
+```text
+schema_version
+```
+
+where format may evolve.
+
+---
+
+# 76. Deletion Strategy
+
+There is no universal:
+
+```text
+deleted_at
+```
+
+rule for every table.
+
+---
+
+# 77. Business Entities
+
+Prefer explicit lifecycle:
+
+```text
+ACTIVE
+
+INACTIVE
+
+ARCHIVED
+
+VOIDED
+
+CANCELLED
+```
+
+according to domain.
+
+---
+
+# 78. Why?
+
+`deleted_at` cannot tell us:
+
+```text
+cancelled?
+
+archived?
+
+disabled?
+
+fraud-blocked?
+
+voided?
+```
+
+---
+
+# 79. Hard Delete
+
+Normally limited to:
+
+```text
+unused Drafts
+
+temporary uploads
+
+uncommitted ephemeral records
+
+expired technical data
+```
+
+---
+
+# 80. Historical Financial Records
+
+Never ordinary hard-delete:
+
+```text
+Orders
+
+Payments
+
+Refunds
+
+Inventory posted movements
+
+Finance ledger
+
+Landed Cost finalizations
+
+Audit
+```
+
+---
+
+# 81. Customer Privacy
+
+Customer privacy erasure becomes:
+
+```text
+anonymization / redaction
+```
+
+where transaction retention remains necessary.
+
+---
+
+# 82. Foreign-Key Delete Behavior
+
+Default for important historical relationships:
+
+```text
+RESTRICT / NO ACTION
+```
+
+---
+
+# 83. CASCADE
+
+Use only for true composition where deleting parent legitimately makes child meaningless.
+
+Examples:
+
+```text
+unused Draft Product Option Value
+
+temporary Upload Session Part
+
+uncommitted Draft child
+```
+
+---
+
+# 84. Never Broad-Cascade Historical Business Data
+
+Deleting Customer must not cascade:
+
+```text
+Orders
+
+Payments
+
+Refunds
+```
+
+---
+
+# 85. Referential History
+
+If historical Order references Product:
+
+```text
+Product remains archived
+```
+
+rather than physically deleted.
+
+---
+
+# 86. Snapshot + FK
+
+Historical entities can preserve both:
+
+```text
+variant_id
+```
+
+and:
+
+```text
+sku_snapshot
+title_snapshot
+option_snapshot
+```
+
+---
+
+# 87. Why Keep FK?
+
+For navigation/analytics lineage.
+
+---
+
+# 88. Why Keep Snapshot?
+
+Because master record can change.
+
+---
+
+# 89. Snapshot Must Stand Alone
+
+Order rendering must remain possible even if current Product:
+
+```text
+archived
+
+renamed
+
+reorganized
+```
+
+---
+
+# 90. Unique Constraint Strategy
+
+Uniqueness should represent business identity.
+
+Examples:
+
+```text
+Organization + SKU
+
+Organization + active Coupon normalized code
+
+Organization + Order Number
+
+Provider Account + External Transaction ID
+
+Idempotency Scope + Idempotency Key
+```
+
+---
+
+# 91. SKU Reuse
+
+Recommended:
+
+> **Do not reuse historical SKUs casually.**
+
+Archived Variant normally retains its SKU uniqueness reservation.
+
+---
+
+# 92. Order Number
+
+Unique:
+
+```text
+(organization_id, order_number)
+```
+
+---
+
+# 93. Coupon Code
+
+Historical reserved code architecture means normalized code uniqueness needs explicit lifecycle rules.
+
+---
+
+# 94. Provider Transaction Reference
+
+Could be unique within:
+
+```text
+provider_account_id
++
+provider_transaction_id
+```
+
+---
+
+# 95. Index Principles
+
+Indexes derive from:
+
+```text
+actual query patterns
+
+FK joins
+
+authorization filters
+
+sorting
+
+uniqueness
+
+high-value lookups
+```
+
+---
+
+# 96. Avoid "Index Everything"
+
+Every index has:
+
+```text
+storage
+
+write
+
+maintenance
+```
+
+cost.
+
+---
+
+# 97. Organization Prefix
+
+Many operational indexes begin with:
+
+```text
+organization_id
+```
+
+because almost all queries are Organization-scoped.
+
+---
+
+# 98. Example
+
+```text
+orders:
+(organization_id, created_at DESC)
+```
+
+---
+
+# 99. Status Queries
+
+Potential:
+
+```text
+(organization_id, status, created_at DESC)
+```
+
+---
+
+# 100. Human Number Lookup
+
+```text
+UNIQUE (organization_id, order_number)
+```
+
+already creates useful lookup path.
+
+---
+
+# 101. Customer Search
+
+Potential indexes around:
+
+```text
+normalized_phone
+
+normalized_email
+
+customer_number
+```
+
+---
+
+# 102. Product Search
+
+Search projection owns heavier:
+
+```text
+full-text
+
+trigram
+
+faceting
+```
+
+indexes rather than cluttering every Catalog table.
+
+---
+
+# 103. Partial Indexes
+
+Potential later:
+
+```text
+WHERE status = 'PENDING'
+```
+
+for high-volume operational queues.
+
+Use based on evidence.
+
+---
+
+# 104. Index Review
+
+Every large new index should identify:
+
+```text
+which query does this serve?
+```
+
+---
+
+# 105. Concurrency Architecture
+
+Important workflows require row locking or equivalent concurrency controls.
+
+PostgreSQL row-level locks block competing writers/lockers on the same rows while not generally preventing ordinary reads.
+
+---
+
+# 106. Locking Candidates
+
+```text
+Inventory Levels
+
+Promotion Usage Counters
+
+Number Sequences
+
+Payment Verification records
+
+Customer Merge records
+
+Job Claims
+```
+
+---
+
+# 107. Consistent Lock Order
+
+Where transaction touches multiple rows:
+
+```text
+sort / lock consistently
+```
+
+to reduce deadlock risk.
+
+---
+
+# 108. Optimistic vs Pessimistic
+
+Use:
+
+```text
+optimistic version
+```
+
+for collaborative editing.
+
+Use:
+
+```text
+row locks / atomic constraints
+```
+
+for scarce resources and financial/inventory mutations.
+
+---
+
+# 109. Example — Product Editing
+
+```text
+version check
+```
+
+---
+
+# 110. Example — Final Inventory Unit
+
+```text
+transactional lock/check
+```
+
+---
+
+# 111. Example — Final Coupon Use
+
+```text
+atomic usage claim
+```
+
+---
+
+# 112. Idempotency Table
+
+Canonical:
+
+```text
+platform.idempotency_records
+```
+
+---
+
+# 113. Fields Conceptually
+
+```text
+id
+
+organization_id
+
+actor_scope
+
+operation_type
+
+idempotency_key
+
+request_fingerprint
+
+status
+
+result_entity_type
+
+result_entity_id
+
+response_reference / safe response snapshot
+
+created_at
+
+expires_at
+```
+
+---
+
+# 114. Constraint
+
+Unique over defined scope:
+
+```text
+organization
++
+actor/client
++
+operation type
++
+idempotency key
+```
+
+---
+
+# 115. Same Key Different Fingerprint
+
+Rejected.
+
+---
+
+# 116. Catalog Domain
+
+Core tables:
+
+```text
+catalog.product_types
+
+catalog.products
+
+catalog.product_option_axes
+
+catalog.product_option_values
+
+catalog.product_variants
+
+catalog.variant_option_values
+
+catalog.attribute_definitions
+
+catalog.product_attribute_values
+
+catalog.variant_attribute_values
+
+catalog.categories
+
+catalog.product_categories
+
+catalog.collections
+
+catalog.collection_products
+
+catalog.tags
+
+catalog.product_tags
+
+catalog.occasions
+
+catalog.product_occasions
+
+catalog.colors
+
+catalog.variant_colors
+
+catalog.variant_prices
+
+catalog.product_information_groups
+
+catalog.product_information_items
+
+catalog.product_faqs
+```
+
+---
+
+# 117. Product
+
+`catalog.products`
+
+Owns:
+
+```text
+Product identity
+
+Product Type
+
+title
+
+description
+
+commercial lifecycle
+
+publication state
+
+primary category reference if configured
+
+SEO fields
+
+general metadata
+```
+
+---
+
+# 118. Product Does Not Own
+
+```text
+stock quantity
+
+purchase cost
+
+payment
+
+Order history
+```
+
+---
+
+# 119. Product Type
+
+`catalog.product_types`
+
+Reusable structural classification.
+
+---
+
+# 120. Product Type ≠ Category
+
+Keep separate FKs.
+
+---
+
+# 121. Options
+
+`product_option_axes`
+
+Example:
+
+```text
+Color
+
+Size
+```
+
+for a Product.
+
+---
+
+# 122. Option Values
+
+`product_option_values`
+
+Example:
+
+```text
+Color → Red
+
+Size → M
+```
+
+---
+
+# 123. External Semantic Link
+
+Option value can optionally reference:
+
+```text
+color_id
+
+size_definition_id
+```
+
+when its semantic concept is canonical.
+
+---
+
+# 124. Variants
+
+`product_variants`
+
+One exact sellable configuration.
+
+Fields conceptually:
+
+```text
+id
+
+organization_id
+
+product_id
+
+sku
+
+barcode
+
+status
+
+weight
+
+dimensions
+
+version
+```
+
+---
+
+# 125. Variant Combination
+
+`variant_option_values`
+
+links Variant to chosen Product Option Values.
+
+---
+
+# 126. Unique Variant Combination
+
+Application/database-generated signature can prevent duplicate:
+
+```text
+Red + M
+```
+
+Variant combinations for same Product.
+
+Exact constraint design comes in DDL.
+
+---
+
+# 127. SKU
+
+Unique:
+
+```text
+organization_id + normalized SKU
+```
+
+---
+
+# 128. Attributes
+
+Use controlled relational attribute model.
+
+`attribute_definitions` defines:
+
+```text
+name
+
+value type
+
+scope
+
+filterability
+
+validation
+```
+
+---
+
+# 129. Typed Attribute Values
+
+Do not store every value as text.
+
+Possible physical model:
+
+```text
+value_text
+
+value_decimal
+
+value_boolean
+
+value_date
+
+reference fields
+```
+
+with CHECK ensuring correct value column for declared assignment type.
+
+Exact physical design will receive a focused schema pass.
+
+---
+
+# 130. Category
+
+`categories`
+
+Adjacency model:
+
+```text
+id
+
+organization_id
+
+parent_category_id
+```
+
+---
+
+# 131. Category Cycle
+
+Prevent through:
+
+```text
+application/domain validation
+
+transactional move command
+
+database integrity safeguards where practical
+```
+
+---
+
+# 132. Product Category
+
+Many-to-many:
+
+```text
+product_categories
+```
+
+---
+
+# 133. Primary Category
+
+Recommended either:
+
+```text
+products.primary_category_id
+```
+
+with membership validation,
+
+or a role column on:
+
+```text
+product_categories
+```
+
+Exact choice later.
+
+---
+
+# 134. Collections
+
+Separate many-to-many:
+
+```text
+collections
+
+collection_products
+```
+
+---
+
+# 135. Tags / Occasions
+
+Separate controlled vocabularies.
+
+Do not store:
+
+```text
+tags = "summer,eid,wedding"
+```
+
+as comma string.
+
+---
+
+# 136. Colors
+
+Canonical:
+
+```text
+colors
+```
+
+with:
+
+```text
+name
+
+normalized name
+
+swatch information
+```
+
+---
+
+# 137. Variant Colors
+
+`variant_colors`
+
+Fields:
+
+```text
+variant_id
+
+color_id
+
+role
+```
+
+Roles:
+
+```text
+PRIMARY
+
+ASSOCIATED
+```
+
+---
+
+# 138. Pricing
+
+`variant_prices`
+
+separate from Variant core.
+
+Foundation supports:
+
+```text
+currency
+
+amount
+
+compare-at amount
+
+future price list / channel
+```
+
+---
+
+# 139. Product Information
+
+Use ordered relational groups/items.
+
+Do not put the entire specification panel in opaque JSON if it needs structured editing/search.
+
+---
+
+# 140. Sizing Domain
+
+Core:
+
+```text
+sizing.sizing_domains
+
+sizing.size_systems
+
+sizing.size_definitions
+
+sizing.measurement_definitions
+
+sizing.measurement_instructions
+
+sizing.size_guides
+
+sizing.size_guide_revisions
+
+sizing.size_guide_rows
+
+sizing.size_guide_measurements
+
+sizing.size_conversion_mappings
+
+sizing.product_size_configurations
+```
+
+---
+
+# 141. Size Definition
+
+Examples:
+
+```text
+M
+
+EU 42
+
+US 9
+
+Ring 7
+
+Free Size
+```
+
+---
+
+# 142. Measurement Definition
+
+Examples:
+
+```text
+Chest
+
+Garment Length
+
+Foot Length
+
+Waist
+```
+
+plus:
+
+```text
+measurement subject
+```
+
+---
+
+# 143. Size Guide Versioning
+
+Published Size Guide revision is immutable.
+
+Edit creates:
+
+```text
+new revision
+```
+
+rather than rewriting previous published matrix.
+
+---
+
+# 144. Size Guide Rows
+
+Each row references:
+
+```text
+Size Definition
+```
+
+or a guide-specific display size where necessary.
+
+---
+
+# 145. Size Guide Measurement
+
+Normalized cell:
+
+```text
+guide_revision
+
+row
+
+measurement definition
+
+value form
+
+min
+
+max
+
+unit
+
+approximation status
+```
+
+---
+
+# 146. Avoid One Giant Matrix JSON
+
+Because structured cells need:
+
+```text
+validation
+
+units
+
+sorting
+
+conversion
+
+reuse
+```
+
+---
+
+# 147. Media Domain
+
+Core:
+
+```text
+media.media_assets
+
+media.media_objects
+
+media.media_renditions
+
+media.media_folders
+
+media.media_tags
+
+media.media_asset_tags
+
+media.media_processing_records
+
+media.media_usage_projection
+```
+
+---
+
+# 148. Media Asset
+
+Stable semantic media identity.
+
+---
+
+# 149. Media Object
+
+Exact stored bytes.
+
+Fields:
+
+```text
+storage provider
+
+object key
+
+MIME
+
+bytes
+
+checksum
+
+dimensions
+
+metadata
+```
+
+---
+
+# 150. Rendition
+
+Derived:
+
+```text
+thumbnail
+
+medium
+
+large
+
+webp
+
+avif
+```
+
+linked to original Asset.
+
+---
+
+# 151. Replacement
+
+V1 strong rule:
+
+> **Do not destructively overwrite original bytes.**
+
+Replacement creates:
+
+```text
+new Asset
+```
+
+and relinks selected usages.
+
+---
+
+# 152. Future Asset Versioning
+
+If true same-Asset versioning becomes necessary:
+
+```text
+media_asset_versions
+```
+
+can be introduced.
+
+The initial schema should not prevent it.
+
+---
+
+# 153. Media Usage
+
+Authoritative domain relationship remains inside owning domain.
+
+Examples:
+
+```text
+catalog.product_media
+
+sizing.size_guide_media
+
+payments.payment_evidence
+
+reviews.review_media
+```
+
+---
+
+# 154. Why Not Generic `media_usage` Authority?
+
+Because a generic:
+
+```text
+entity_type/entity_id
+```
+
+cannot provide the same relational FK integrity.
+
+---
+
+# 155. Media Usage Projection
+
+`media_usage_projection`
+
+is convenient for:
+
+```text
+"Used in 17 places"
+
+Unused Asset search
+
+Impact preview
+```
+
+but is not deletion authority by itself.
+
+---
+
+# 156. Catalog Media
+
+Recommended:
+
+```text
+catalog.product_media
+```
+
+with:
+
+```text
+product_id
+
+asset_id
+
+role
+
+sort_order
+
+variant/color context
+```
+
+depending final gallery semantics.
+
+---
+
+# 157. Inventory Domain
+
+Core:
+
+```text
+inventory.inventory_items
+
+inventory.inventory_levels
+
+inventory.inventory_level_conditions
+
+inventory.inventory_transactions
+
+inventory.inventory_movement_lines
+
+inventory.inventory_reservations
+
+inventory.inventory_reservation_allocations
+
+inventory.inventory_reservation_events foundation
+
+inventory.stocktake_sessions
+
+inventory.stocktake_lines
+
+inventory.inventory_reconciliation_runs
+```
+
+---
+
+# 158. Inventory Item
+
+Separate from Variant.
+
+Typical V1:
+
+```text
+Variant
+1 → 1
+Inventory Item
+```
+
+---
+
+# 159. Constraint
+
+A Variant normally has at most one active Inventory Item in V1.
+
+Architecture remains future-ready for:
+
+```text
+bundles
+
+components
+
+packaging
+```
+
+---
+
+# 160. Inventory Level
+
+One:
+
+```text
+Inventory Item
++
+Location
+```
+
+---
+
+# 161. Unique
+
+```text
+organization_id
++
+inventory_item_id
++
+location_id
+```
+
+---
+
+# 162. Inventory Level Is Materialized State
+
+Potential fields:
+
+```text
+sellable_on_hand
+
+unavailable_on_hand
+
+reserved
+
+available_to_sell
+```
+
+or selected derived/materialized equivalents.
+
+---
+
+# 163. Condition Balances
+
+`inventory_level_conditions`
+
+tracks:
+
+```text
+SELLABLE
+
+DAMAGED
+
+QUARANTINE
+
+INSPECTION
+```
+
+---
+
+# 164. Physical On Hand
+
+Derived:
+
+```text
+sum physical condition balances
+```
+
+---
+
+# 165. Reserved
+
+Not a physical condition.
+
+Reservation is separate.
+
+---
+
+# 166. Incoming
+
+Not stored as physical on-hand.
+
+Derived/projected from:
+
+```text
+Inbound Shipment / Procurement
+```
+
+---
+
+# 167. In Transit
+
+Internal transfer state, not destination/source on-hand.
+
+Derived from:
+
+```text
+dispatched transfer quantity
+-
+received/resolved quantity
+```
+
+---
+
+# 168. Inventory Transaction
+
+`inventory_transactions`
+
+groups one logical stock event.
+
+Examples:
+
+```text
+Purchase Receipt
+
+Order Fulfillment
+
+Damage
+
+Stocktake Correction
+
+Manual Adjustment
+```
+
+---
+
+# 169. Inventory Movement Line
+
+Append-only signed quantity effect on:
+
+```text
+Inventory Item
+
+Location
+
+Physical Condition
+```
+
+---
+
+# 170. Example — Receipt
+
+```text
+INSPECTION +10
+```
+
+---
+
+# 171. Example — Pass Inspection
+
+One transaction:
+
+```text
+INSPECTION -10
+
+SELLABLE +10
+```
+
+---
+
+# 172. Example — Damage
+
+```text
+SELLABLE -1
+
+DAMAGED +1
+```
+
+Physical On Hand unchanged.
+
+---
+
+# 173. Example — Disposal
+
+```text
+DAMAGED -1
+```
+
+Physical On Hand decreases.
+
+---
+
+# 174. Example — Fulfillment
+
+```text
+SELLABLE -1
+```
+
+reservation is consumed separately.
+
+---
+
+# 175. Inventory Transaction Source
+
+Avoid generic authoritative source FK inside Inventory.
+
+Instead:
+
+```text
+inbound_receipt.inventory_transaction_id
+
+fulfillment.inventory_transaction_id
+
+stocktake.inventory_transaction_id
+```
+
+links source business object to resulting Inventory transaction.
+
+---
+
+# 176. Why?
+
+This gives real FK integrity without creating giant polymorphic source relationships.
+
+---
+
+# 177. Inventory Reservation
+
+Header:
+
+```text
+inventory_reservations
+```
+
+often related to:
+
+```text
+Order
+```
+
+---
+
+# 178. Reservation Allocation
+
+One row per:
+
+```text
+Order Line
++
+Inventory Item
++
+Location
++
+reserved quantity
+```
+
+---
+
+# 179. Supports Split Allocation
+
+One Order Line:
+
+```text
+3 units
+```
+
+could reserve:
+
+```text
+Location A → 2
+
+Location B → 1
+```
+
+---
+
+# 180. Reservation Mutation
+
+Maintain:
+
+```text
+reserved quantity
+
+consumed quantity
+
+released quantity
+
+status
+```
+
+with transactional validation and audit/events.
+
+---
+
+# 181. Reservation History
+
+If operational requirements justify deeper trace:
+
+```text
+inventory_reservation_events
+```
+
+can preserve lifecycle events.
+
+---
+
+# 182. Warehouse Domain
+
+Core:
+
+```text
+warehouse.locations
+
+warehouse.location_capabilities
+
+warehouse.fulfillment_priorities
+
+warehouse.transfers
+
+warehouse.transfer_lines
+
+warehouse.transfer_dispatches
+
+warehouse.transfer_dispatch_lines
+
+warehouse.transfer_receipts
+
+warehouse.transfer_receipt_lines
+```
+
+---
+
+# 183. Location
+
+Canonical physical/operational location.
+
+Type:
+
+```text
+WAREHOUSE
+
+SHOWROOM
+
+RETAIL_STORE
+
+FULFILLMENT_CENTER
+
+RETURN_CENTER
+
+THIRD_PARTY
+
+OTHER
+```
+
+---
+
+# 184. Capabilities
+
+Many-to-many/child table:
+
+```text
+location_capabilities
+```
+
+rather than embedding behavior in Location Type.
+
+---
+
+# 185. Transfer
+
+Header:
+
+```text
+source_location_id
+
+destination_location_id
+
+status
+```
+
+---
+
+# 186. Transfer Line
+
+```text
+inventory_item_id
+
+requested_quantity
+```
+
+---
+
+# 187. Dispatch
+
+Separate because partial/multiple dispatch must be possible.
+
+---
+
+# 188. Receipt
+
+Separate because:
+
+```text
+partial receipt
+
+loss
+
+damage
+
+variance
+```
+
+must be represented.
+
+---
+
+# 189. Transfer Inventory Effects
+
+Dispatch posts Inventory transaction reducing source sellable stock.
+
+Receipt posts Inventory transaction increasing destination condition.
+
+---
+
+# 190. Procurement Domain
+
+Core:
+
+```text
+procurement.suppliers
+
+procurement.supplier_contacts
+
+procurement.supplier_variant_mappings
+
+procurement.purchases
+
+procurement.purchase_lines
+
+procurement.purchase_amendments
+
+procurement.supplier_invoices
+
+procurement.supplier_invoice_lines
+
+procurement.supplier_payments
+
+procurement.supplier_payment_allocations
+
+procurement.supplier_claims foundation
+```
+
+---
+
+# 191. Supplier
+
+First-class entity.
+
+---
+
+# 192. Supplier Variant Mapping
+
+Stores:
+
+```text
+supplier's code
+
+supplier description
+
+supplier-specific attributes
+
+Maevelle Variant association
+```
+
+---
+
+# 193. Purchase
+
+One:
+
+```text
+Supplier
+
+Currency
+```
+
+per Purchase.
+
+---
+
+# 194. Purchase Line
+
+Can reference:
+
+```text
+Catalog Variant
+```
+
+or remain:
+
+```text
+temporarily unmapped
+```
+
+until controlled resolution.
+
+---
+
+# 195. Purchase Commercial Quantity
+
+Separate fields for:
+
+```text
+ordered quantity
+
+cancelled quantity
+```
+
+Physical receipt is derived from Inbound Receipts.
+
+---
+
+# 196. Purchase Amendment
+
+Material post-confirm Purchase modifications preserve version/amendment history rather than silently rewriting the commercial commitment.
+
+---
+
+# 197. Supplier Invoice
+
+Separate from Purchase.
+
+One Purchase can have:
+
+```text
+multiple invoices
+```
+
+and an Invoice may later potentially cover multiple related Purchase contexts if required.
+
+---
+
+# 198. Supplier Payment
+
+Actual supplier-side financial payment record.
+
+---
+
+# 199. Supplier Payment Allocation
+
+Links Payment to Supplier Invoice / payable context.
+
+Avoid putting:
+
+```text
+paid = true
+```
+
+on Purchase as the only financial model.
+
+---
+
+# 200. Inbound Shipment Domain
+
+Core:
+
+```text
+shipment.inbound_shipments
+
+shipment.inbound_shipment_items
+
+shipment.purchase_line_shipment_allocations
+
+shipment.shipment_packages
+
+shipment.shipment_package_items
+
+shipment.shipment_journey_legs
+
+shipment.shipment_tracking_references
+
+shipment.shipment_exceptions
+
+shipment.inbound_receipts
+
+shipment.inbound_receipt_lines
+```
+
+---
+
+# 201. Consolidation Model
+
+The critical relationship:
+
+```text
+Purchase Line
+     │
+     ▼
+Purchase-Line Shipment Allocation
+     │
+     ▼
+Inbound Shipment Item
+```
+
+allows:
+
+```text
+many Purchases
+many Suppliers
+one physical consolidated Shipment
+```
+
+---
+
+# 202. Shipment Item
+
+Represents one physical/commercial item allocation moving in this Shipment.
+
+References:
+
+```text
+purchase_line
+```
+
+where procurement-backed.
+
+---
+
+# 203. Allocation Quantity
+
+Tracks quantity allocated to Shipment.
+
+---
+
+# 204. Packages
+
+Physical packaging grouping.
+
+---
+
+# 205. Journey Legs
+
+Separate rows for:
+
+```text
+China supplier → consolidation warehouse
+
+consolidation → airport
+
+air freight
+
+Bangladesh local movement
+```
+
+where needed.
+
+---
+
+# 206. Tracking References
+
+Multiple per Shipment/leg/provider.
+
+---
+
+# 207. Canonical Receiving Decision
+
+## **Inbound Receipt is the canonical physical receiving document.**
+
+This resolves the earlier architectural ambiguity.
+
+---
+
+# 208. Why Not `Purchase Receipt`?
+
+Because one physical Shipment can contain:
+
+```text
+Purchase A
+
+Purchase B
+
+Purchase C
+```
+
+possibly from:
+
+```text
+different Suppliers.
+```
+
+The warehouse receives:
+
+```text
+one physical inbound movement
+```
+
+not three fictional separate receipts merely because Procurement has three Purchases.
+
+---
+
+# 209. Therefore
+
+```text
+Inbound Shipment
+        ↓
+Inbound Receipt
+        ↓
+Inventory Transaction
+```
+
+is canonical.
+
+---
+
+# 210. Purchase Receipt Becomes a View
+
+Procurement can derive:
+
+```text
+Purchase X received quantities
+```
+
+from:
+
+```text
+Inbound Receipt Lines
+→ Shipment Items
+→ Purchase Lines
+```
+
+---
+
+# 211. No Competing `purchase_receipts` Table
+
+This prevents two sources of truth.
+
+---
+
+# 212. Direct/Simple Supplier Delivery
+
+Even a simple local delivery can be represented by a minimal:
+
+```text
+Inbound Shipment
+```
+
+without requiring complex journey/package data.
+
+Thus physical receiving remains consistent.
+
+---
+
+# 213. Inbound Receipt
+
+Header:
+
+```text
+inbound_shipment_id
+
+receiving_location_id
+
+received_at
+
+received_by
+
+status
+
+inventory_transaction_id
+```
+
+---
+
+# 214. Receipt Line
+
+References:
+
+```text
+inbound_shipment_item_id
+
+inventory_item_id
+
+received quantity
+
+condition
+```
+
+and discrepancy fields.
+
+---
+
+# 215. Multiple Receipts
+
+One Shipment supports:
+
+```text
+Receipt 1
+
+Receipt 2
+
+Receipt 3
+```
+
+for partial arrival/unloading.
+
+---
+
+# 216. Over Receipt
+
+Receipt quantity can exceed expected only under explicit domain validation/permission.
+
+---
+
+# 217. Receipt Posting
+
+Posting creates immutable Inventory movement.
+
+Draft receipt can still be edited before posting.
+
+---
+
+# 218. Posted Receipt
+
+Do not edit physical quantities directly.
+
+Correction:
+
+```text
+receiving correction transaction
+```
+
+with audit.
+
+---
+
+# 219. Landed Cost Domain
+
+Core:
+
+```text
+landed_cost.worksheets
+
+landed_cost.worksheet_revisions
+
+landed_cost.cost_types
+
+landed_cost.cost_components
+
+landed_cost.component_scopes
+
+landed_cost.allocation_targets
+
+landed_cost.allocations
+
+landed_cost.basis_snapshots
+
+landed_cost.finalizations
+```
+
+---
+
+# 220. Worksheet
+
+Normally:
+
+```text
+Shipment-centric
+```
+
+in V1.
+
+---
+
+# 221. Revision
+
+Draft calculation may evolve.
+
+Finalized revision becomes historical financial/costing truth.
+
+---
+
+# 222. Cost Component
+
+Examples:
+
+```text
+Freight
+
+Customs
+
+Tax
+
+Handling
+
+Broker Fee
+```
+
+---
+
+# 223. Source Amount
+
+Preserve:
+
+```text
+original amount
+
+original currency
+
+converted worksheet amount
+
+FX context
+```
+
+---
+
+# 224. Scope
+
+Relational scopes should reference actual entities where possible:
+
+```text
+Shipment
+
+Journey Leg
+
+Package
+
+Purchase
+
+Purchase Line
+
+Shipment Item
+```
+
+---
+
+# 225. Allocation Target
+
+V1 final item allocation targets:
+
+```text
+Inbound Shipment Items
+```
+
+because they represent acquisition-specific quantities.
+
+---
+
+# 226. Why Not Variant?
+
+Same Variant can arrive:
+
+```text
+Shipment A at cost X
+
+Shipment B at cost Y
+```
+
+---
+
+# 227. Landed Cost Allocation
+
+Stores:
+
+```text
+component
+
+target shipment item
+
+basis
+
+raw allocation
+
+rounded allocation
+```
+
+---
+
+# 228. Basis Snapshot
+
+Preserves exactly:
+
+```text
+quantity
+
+purchase value
+
+weight
+
+volume
+```
+
+used during the calculation.
+
+---
+
+# 229. Estimated vs Actual
+
+Do not overwrite one amount.
+
+Preserve:
+
+```text
+estimate
+
+actual/revision
+
+variance
+```
+
+---
+
+# 230. Acquisition Cost Foundation
+
+Introduce a controlled cost provenance concept:
+
+```text
+landed_cost.acquisition_cost_layers
+```
+
+or equivalent during concrete DDL design.
+
+---
+
+# 231. Acquisition Cost Layer
+
+Would link:
+
+```text
+Inbound Receipt Line
+
+Shipment Item
+
+Inventory Item
+
+Received Quantity
+
+Purchase Unit Cost
+
+Allocated Additional Cost
+
+Total Unit Acquisition Cost
+
+Cost Status
+```
+
+---
+
+# 232. Purpose
+
+Preserve:
+
+```text
+same Variant
+different acquisition batches/costs
+```
+
+without using:
+
+```text
+variant.current_cost
+```
+
+as historical authority.
+
+---
+
+# 233. Important Boundary
+
+This does **not yet** define:
+
+```text
+FIFO
+
+weighted average
+
+accounting inventory valuation
+```
+
+Those remain later Inventory Costing/Accounting decisions.
+
+---
+
+# 234. Orders Domain
+
+Core:
+
+```text
+orders.carts
+
+orders.cart_lines
+
+orders.orders
+
+orders.order_lines
+
+orders.order_addresses
+
+orders.order_holds
+
+orders.order_notes
+
+orders.order_cancellations
+
+orders.order_cancellation_lines
+
+orders.fulfillments
+
+orders.fulfillment_lines
+
+orders.order_discount_applications
+
+orders.order_discount_allocations
+
+orders.order_timeline_projection
+```
+
+---
+
+# 235. Cart
+
+Server-side cart.
+
+Fields:
+
+```text
+id
+
+organization_id
+
+public/session token reference
+
+currency
+
+status
+
+expires_at
+
+version
+```
+
+---
+
+# 236. Cart Line
+
+References current:
+
+```text
+Variant
+```
+
+and requested quantity.
+
+---
+
+# 237. Cart Pricing
+
+Recalculable.
+
+Do not treat Cart price snapshots as final Order truth.
+
+---
+
+# 238. Order
+
+`orders.orders`
+
+Owns:
+
+```text
+order number
+
+source
+
+customer reference
+
+currency
+
+totals
+
+order state
+
+timestamps
+
+version
+```
+
+---
+
+# 239. Payment/Fulfillment State
+
+Do not duplicate Payment domain's full state into Order.
+
+Order may store:
+
+```text
+derived summary projection
+```
+
+or calculate via query service.
+
+---
+
+# 240. Order Line
+
+References:
+
+```text
+Product
+
+Variant
+```
+
+and preserves snapshots.
+
+---
+
+# 241. Order-Line Snapshot Columns
+
+Conceptually:
+
+```text
+sku_snapshot
+
+product_title_snapshot
+
+variant_title_snapshot
+
+option_snapshot JSONB
+
+unit_price
+
+compare/reference price if needed
+
+gross_amount
+
+discount_amount
+
+net_amount
+```
+
+---
+
+# 242. Why JSONB for Option Snapshot?
+
+Order option configuration is:
+
+```text
+historical display payload
+```
+
+not authoritative current Catalog relationship.
+
+Structured JSON is appropriate there.
+
+---
+
+# 243. Order Address
+
+`order_addresses`
+
+full transaction-time snapshot.
+
+---
+
+# 244. Customer Address FK
+
+Can preserve:
+
+```text
+source_customer_address_id
+```
+
+for lineage.
+
+But Order address snapshot remains independent.
+
+---
+
+# 245. Order Cancellation
+
+Header records:
+
+```text
+actor
+
+reason
+
+cause
+
+timestamp
+```
+
+---
+
+# 246. Cancellation Lines
+
+Explicit quantity per Order Line.
+
+Supports partial cancellation.
+
+---
+
+# 247. Hold
+
+First-class:
+
+```text
+order_holds
+```
+
+with:
+
+```text
+reason
+
+started
+
+released
+```
+
+---
+
+# 248. Fulfillment
+
+One Order can have many Fulfillments.
+
+---
+
+# 249. Fulfillment
+
+References:
+
+```text
+Location
+
+status
+
+tracking/delivery reference
+```
+
+---
+
+# 250. Fulfillment Line
+
+```text
+order_line_id
+
+quantity
+```
+
+---
+
+# 251. Inventory Link
+
+Fulfillment record preserves:
+
+```text
+inventory_transaction_id
+```
+
+after physical stock is posted.
+
+---
+
+# 252. Discount Application
+
+Order's historical Promotion application.
+
+Stores snapshot:
+
+```text
+promotion_id
+
+promotion_revision
+
+coupon code
+
+benefit type
+
+benefit value
+
+application order
+```
+
+---
+
+# 253. Discount Allocation
+
+Links Discount Application to:
+
+```text
+Order Line
+```
+
+or:
+
+```text
+Delivery Charge component
+```
+
+---
+
+# 254. Constraint
+
+Total application discount must reconcile to allocations.
+
+Some reconciliation is domain-level; database may reinforce non-negative amounts/valid target type.
+
+---
+
+# 255. Payments Domain
+
+Core:
+
+```text
+payments.payment_methods
+
+payments.payment_providers
+
+payments.payment_accounts
+
+payments.payment_intents
+
+payments.payment_attempts
+
+payments.payment_evidence
+
+payments.payments
+
+payments.payment_allocations
+
+payments.refunds
+
+payments.refund_allocations
+
+payments.payment_reversals
+
+payments.settlement_batches
+
+payments.settlements
+
+payments.settlement_lines
+
+payments.reconciliation_issues
+
+payments.provider_events
+```
+
+---
+
+# 256. Payment Method
+
+Examples:
+
+```text
+COD
+
+BKASH
+
+NAGAD
+```
+
+---
+
+# 257. Provider
+
+Examples:
+
+```text
+Manual
+
+Courier COD Provider
+
+Future SSLCommerz
+```
+
+---
+
+# 258. Account
+
+Specific receiving/provider merchant configuration.
+
+---
+
+# 259. Payment Intent
+
+Expected collection.
+
+References:
+
+```text
+Order
+```
+
+and expected amount/currency.
+
+---
+
+# 260. Payment Attempt
+
+One attempt/submission.
+
+Manual bKash screenshot/reference begins here.
+
+---
+
+# 261. Evidence
+
+Authoritative domain link:
+
+```text
+payment_evidence
+```
+
+references:
+
+```text
+media_asset_id
+```
+
+and Payment Attempt/Refund as appropriate.
+
+---
+
+# 262. Payment
+
+Only recognized/confirmed customer money.
+
+---
+
+# 263. Payment Amount
+
+Never reduce Payment amount to hide provider fee.
+
+---
+
+# 264. Payment Allocation
+
+Many-to-many foundation:
+
+```text
+Payment
+↔
+Order
+```
+
+---
+
+# 265. V1 Typical
+
+One Payment may allocate to one Order.
+
+Architecture supports:
+
+```text
+multiple Payments → one Order
+```
+
+immediately.
+
+---
+
+# 266. Unallocated Amount
+
+Derived:
+
+```text
+payment amount
+-
+allocations
+```
+
+---
+
+# 267. Refund
+
+First-class financial event.
+
+---
+
+# 268. Refund Allocation
+
+Links refund value back to:
+
+```text
+Payment
+
+Order
+
+Order Line / commercial component
+```
+
+where needed for accurate history.
+
+Exact model gets focused DDL review.
+
+---
+
+# 269. Reversal
+
+Separate from Refund.
+
+---
+
+# 270. Settlement Batch
+
+Provider remittance batch.
+
+---
+
+# 271. Settlement Line
+
+Maps:
+
+```text
+provider settlement
+
+payment / order / delivery reference
+
+gross
+
+fees
+
+net
+```
+
+---
+
+# 272. Reconciliation Issue
+
+First-class repairable discrepancy.
+
+---
+
+# 273. Provider Event
+
+Stores:
+
+```text
+provider event id
+
+account
+
+type
+
+received time
+
+raw/sanitized payload
+
+processing state
+```
+
+with uniqueness for callback idempotency.
+
+---
+
+# 274. Customers Domain
+
+Core:
+
+```text
+customers.customers
+
+customers.customer_phones
+
+customers.customer_emails
+
+customers.customer_addresses
+
+customers.customer_notes
+
+customers.customer_tags
+
+customers.customer_tag_assignments
+
+customers.customer_source_history
+
+customers.customer_duplicate_candidates
+
+customers.customer_merges
+
+customers.customer_aliases
+
+customers.customer_statistics_projection
+```
+
+---
+
+# 275. Customer
+
+Stable commercial identity.
+
+---
+
+# 276. Phone
+
+Multiple rows.
+
+Fields:
+
+```text
+raw input
+
+normalized number
+
+country context
+
+verification status
+
+is_primary
+```
+
+---
+
+# 277. Phone Index
+
+```text
+(organization_id, normalized_number)
+```
+
+non-unique.
+
+---
+
+# 278. Email
+
+Same pattern.
+
+---
+
+# 279. Address
+
+Reusable current Customer address.
+
+---
+
+# 280. Order Never Depends on Customer Address Remaining Unchanged
+
+Order has snapshot.
+
+---
+
+# 281. Customer Note
+
+One chronological Note row per Note.
+
+Do not keep one giant:
+
+```text
+notes TEXT
+```
+
+field.
+
+---
+
+# 282. Duplicate Candidate
+
+Records:
+
+```text
+customer_a
+
+customer_b
+
+signals
+
+confidence
+
+status
+```
+
+---
+
+# 283. Customer Merge
+
+Immutable/append-oriented merge decision record.
+
+---
+
+# 284. Surviving Customer
+
+Old Customer can store:
+
+```text
+status = MERGED
+merged_into_customer_id
+```
+
+or equivalent canonical pointer.
+
+---
+
+# 285. Customer Alias
+
+Useful for:
+
+```text
+old ID
+→ canonical ID
+```
+
+resolution.
+
+---
+
+# 286. Merge Must Not Rewrite Order Snapshots
+
+Historical Order `customer_id` could potentially be canonicalized through alias resolution for reporting while retaining original references/history.
+
+Exact FK strategy must preserve referential integrity.
+
+---
+
+# 287. Recommended Merge Strategy
+
+Keep historical Order's original Customer FK.
+
+Customer resolution layer follows:
+
+```text
+customer_aliases
+```
+
+to canonical Customer for aggregate views.
+
+This avoids massive Order rewrites.
+
+---
+
+# 288. IAM Domain
+
+Core:
+
+```text
+iam.users
+
+iam.organization_memberships
+
+iam.capability_definitions
+
+iam.permission_presets
+
+iam.permission_preset_capabilities
+
+iam.membership_permission_presets
+
+iam.membership_capability_grants
+
+iam.membership_scopes
+
+iam.sessions
+
+iam.mfa_methods
+
+iam.mfa_recovery_codes
+
+iam.service_accounts
+
+iam.api_credentials
+
+iam.authentication_events
+```
+
+---
+
+# 289. User
+
+Global authentication identity.
+
+---
+
+# 290. Membership
+
+Connects:
+
+```text
+User
+→ Organization
+```
+
+with status.
+
+---
+
+# 291. Membership Is Authorization Actor
+
+Admin actions normally operate under:
+
+```text
+Membership
+```
+
+not global User alone.
+
+---
+
+# 292. Capabilities
+
+System-defined codes.
+
+Examples:
+
+```text
+orders.view
+
+inventory.adjust
+
+payments.refund
+```
+
+---
+
+# 293. Permission Preset
+
+Reusable capability collection.
+
+Not authorization authority by itself.
+
+Resolved Membership capabilities remain authoritative.
+
+---
+
+# 294. Scopes
+
+Structured scope rows.
+
+Example:
+
+```text
+membership_id
+
+scope_type = LOCATION
+
+scope_id = ...
+```
+
+---
+
+# 295. Do Not Store Capabilities as CSV
+
+Never:
+
+```text
+permissions = "orders.view,orders.cancel"
+```
+
+---
+
+# 296. Session
+
+Server-side session identity.
+
+Fields:
+
+```text
+session token hash/reference
+
+user
+
+membership context
+
+auth level
+
+created
+
+expires
+
+revoked
+```
+
+---
+
+# 297. Raw Session Token
+
+Never stored plaintext if avoidable.
+
+---
+
+# 298. MFA Method
+
+Protected sensitive record.
+
+---
+
+# 299. Recovery Code
+
+Store hash.
+
+---
+
+# 300. Service Account
+
+Machine identity.
+
+---
+
+# 301. API Credential
+
+Separate secret credential row.
+
+Store:
+
+```text
+prefix/identifier
+
+hash
+
+status
+
+expiry
+
+last used
+```
+
+not raw key.
+
+---
+
+# 302. Finance Domain
+
+Core:
+
+```text
+finance.financial_accounts
+
+finance.expense_categories
+
+finance.expenses
+
+finance.expense_links
+
+finance.expense_payments
+
+finance.finance_transactions
+
+finance.financial_account_entries
+
+finance.internal_transfers
+
+finance.reconciliation_sessions
+
+finance.reconciliation_issues
+```
+
+---
+
+# 303. Financial Account
+
+Examples:
+
+```text
+Cash
+
+Bank
+
+bKash Merchant
+
+Nagad Merchant
+```
+
+---
+
+# 304. Account Balance
+
+Prefer ledger-derived/materialized balance rather than:
+
+```text
+balance = manually editable field.
+```
+
+---
+
+# 305. Finance Transaction
+
+Groups one financial movement.
+
+---
+
+# 306. Account Entry
+
+Signed monetary entry against Financial Account.
+
+---
+
+# 307. Internal Transfer
+
+Example:
+
+```text
+bKash → Bank
+```
+
+should result in:
+
+```text
+source account decrease
+
+destination account increase
+```
+
+under one transaction.
+
+---
+
+# 308. Expense
+
+Economic/business expense obligation.
+
+---
+
+# 309. Expense Payment
+
+Cash settlement of Expense.
+
+Separate because:
+
+```text
+Expense incurred
+≠
+cash paid.
+```
+
+---
+
+# 310. Expense Link
+
+Can relate Expense to:
+
+```text
+Shipment
+
+Purchase
+
+Order
+
+Campaign future
+```
+
+For high-value relationships use explicit link tables/FKs rather than only generic entity refs.
+
+Potential separate tables can be introduced by context if required.
+
+---
+
+# 311. Reconciliation
+
+Separate sessions/issues for comparing:
+
+```text
+system account movement
+↔
+external statement/provider
+```
+
+---
+
+# 312. Reviews Domain
+
+Core:
+
+```text
+reviews.reviews
+
+reviews.review_media
+
+reviews.review_moderation_events
+
+reviews.review_merchant_responses
+
+reviews.review_summary_projection
+```
+
+---
+
+# 313. Review
+
+References:
+
+```text
+Product
+
+Customer where resolved
+
+Order Line / purchase eligibility evidence
+```
+
+---
+
+# 314. Verification Evidence
+
+Prefer:
+
+```text
+order_line_id
+```
+
+when verified-purchase Review comes from Maevelle Order history.
+
+---
+
+# 315. Author Snapshot
+
+Public display name may be snapshotted/masked according to Review policy.
+
+---
+
+# 316. Review Media
+
+Authoritative relationship:
+
+```text
+review_id
+
+media_asset_id
+```
+
+---
+
+# 317. Moderation Event
+
+Append-oriented:
+
+```text
+submitted
+
+approved
+
+rejected
+
+hidden
+
+restored
+```
+
+with actor/reason.
+
+---
+
+# 318. Review Summary
+
+Rebuildable Product projection:
+
+```text
+rating_count
+
+rating_sum
+
+average
+
+distribution
+```
+
+---
+
+# 319. Promotions Domain
+
+Core:
+
+```text
+promotions.promotions
+
+promotions.promotion_revisions
+
+promotions.coupon_codes
+
+promotions.promotion_conditions
+
+promotions.promotion_targets
+
+promotions.promotion_exclusions
+
+promotions.promotion_combination_rules
+
+promotions.promotion_usage
+
+promotions.promotion_usage_releases
+```
+
+---
+
+# 320. Promotion
+
+Stable campaign identity.
+
+---
+
+# 321. Revision
+
+Commercial rules once active/used should be revision-aware.
+
+---
+
+# 322. Conditions
+
+Typed condition row.
+
+Avoid arbitrary executable rule code.
+
+---
+
+# 323. Targets
+
+Prefer explicit relational target tables.
+
+Potential:
+
+```text
+promotion_target_products
+
+promotion_target_variants
+
+promotion_target_categories
+
+promotion_target_collections
+```
+
+rather than:
+
+```text
+target_type / target_id
+```
+
+if integrity/queries warrant.
+
+---
+
+# 324. Why Multiple Target Tables?
+
+Stronger:
+
+```text
+FKs
+
+tenant safety
+
+query planning
+
+clarity
+```
+
+---
+
+# 325. Coupon
+
+Normalized code.
+
+Unique per policy.
+
+---
+
+# 326. Promotion Usage
+
+References:
+
+```text
+Promotion Revision
+
+Coupon if used
+
+Customer
+
+Order
+
+Benefit amount
+```
+
+---
+
+# 327. Usage State
+
+```text
+COMMITTED
+
+RELEASED
+```
+
+or equivalent.
+
+---
+
+# 328. Usage Race
+
+Unique/locking constraints must support:
+
+```text
+one-use Coupon
+
+global usage cap
+
+per-customer cap
+```
+
+safely.
+
+---
+
+# 329. Order Discount Snapshot Is in Order Domain
+
+Do not make historical Order rendering depend on current Promotion rows.
+
+---
+
+# 330. Notifications Domain
+
+Core:
+
+```text
+notifications.notification_types foundation
+
+notifications.notification_templates
+
+notifications.template_revisions
+
+notifications.notification_preferences
+
+notifications.notifications
+
+notifications.delivery_attempts
+
+notifications.provider_delivery_events
+```
+
+---
+
+# 331. Notification Type
+
+Likely code-controlled registry.
+
+Database table useful if editable metadata/preferences need it.
+
+---
+
+# 332. Template Revision
+
+Published revisions immutable.
+
+---
+
+# 333. Notification
+
+Recipient-specific concrete communication intent.
+
+---
+
+# 334. Recipient
+
+Prefer explicit nullable references:
+
+```text
+membership_id
+
+customer_id
+```
+
+with CHECK ensuring exactly correct recipient type.
+
+---
+
+# 335. Delivery Attempt
+
+One:
+
+```text
+Notification
+
+Channel
+
+Attempt Number
+```
+
+---
+
+# 336. Provider Event
+
+Append provider delivery callbacks/status history.
+
+---
+
+# 337. Analytics Domain
+
+Core V1 projections:
+
+```text
+analytics.sales_facts
+
+analytics.inventory_daily_snapshots
+
+analytics.purchase_facts
+
+analytics.shipment_facts
+
+analytics.payment_facts
+
+analytics.expense_facts
+
+analytics.customer_statistics
+
+analytics.product_statistics
+
+analytics.saved_reports
+
+analytics.dashboards
+
+analytics.analytics_refresh_runs
+
+analytics.data_quality_results
+```
+
+---
+
+# 338. Analytics Facts Are Rebuildable
+
+No transactional FK should depend on Analytics tables.
+
+---
+
+# 339. Sales Fact Grain
+
+Prefer:
+
+```text
+Order Line
+```
+
+for merchandise revenue metrics.
+
+---
+
+# 340. Stable Source ID
+
+Unique:
+
+```text
+source_order_line_id
+```
+
+prevents duplicate projection.
+
+---
+
+# 341. Inventory Snapshot Grain
+
+```text
+Inventory Item
++
+Location
++
+Snapshot Date
+```
+
+---
+
+# 342. Analytics Dimension Snapshots
+
+Where historical categorization matters, snapshot:
+
+```text
+product type
+
+primary category
+
+selected variant attributes
+```
+
+inside analytical fact/dimension history.
+
+---
+
+# 343. Metric Catalog
+
+Official Metric Definitions should primarily be:
+
+```text
+version-controlled code/configuration
+```
+
+in V1.
+
+Database can store metadata/version references but should not let ordinary admins rewrite financial formulas.
+
+---
+
+# 344. Settings Domain
+
+Core:
+
+```text
+platform.organizations
+
+platform.configuration_values
+
+platform.configuration_change_sets
+
+platform.number_sequences
+
+platform.number_sequence_history foundation
+
+platform.organization_locales foundation
+```
+
+plus domain-owned policy tables.
+
+---
+
+# 345. Configuration Values
+
+A shared configuration table can exist for genuinely typed/simple Settings.
+
+It must **not** become unrestricted arbitrary key/value storage.
+
+---
+
+# 346. Configuration Registry
+
+Definitions live in version-controlled application code:
+
+```text
+key
+
+type
+
+scope
+
+validation
+
+owner domain
+```
+
+---
+
+# 347. Value Storage
+
+Potential:
+
+```text
+value_jsonb
+```
+
+because registry controls/validates type.
+
+This is an acceptable JSONB use.
+
+---
+
+# 348. Complex Domain Policy
+
+Should have dedicated table/entity when required.
+
+Example:
+
+```text
+payment_methods
+```
+
+not:
+
+```text
+configuration["payments"]
+```
+
+---
+
+# 349. Number Sequence
+
+`platform.number_sequences`
+
+Fields conceptually:
+
+```text
+organization
+
+sequence_type
+
+prefix
+
+current counter
+
+reset scope/year
+
+version
+```
+
+---
+
+# 350. Allocation
+
+Sequence row locked/atomically incremented.
+
+---
+
+# 351. Integrations Domain
+
+Core:
+
+```text
+integrations.integrations
+
+integrations.integration_accounts
+
+integrations.external_entity_mappings
+
+integrations.integration_operations
+
+integrations.integration_exceptions
+
+integrations.inbound_provider_events
+```
+
+---
+
+# 352. Integration
+
+One configured external integration.
+
+---
+
+# 353. Account
+
+Provider-specific merchant/account identity.
+
+Secret material stored separately.
+
+---
+
+# 354. External Mapping
+
+```text
+provider/integration
+
+local entity
+
+external entity type
+
+external ID
+```
+
+---
+
+# 355. Generic Mapping Here Is Acceptable
+
+This table's business purpose itself is:
+
+```text
+generic integration identity mapping.
+```
+
+It is not substituting for core domain FKs.
+
+---
+
+# 356. Unique External Mapping
+
+Provider/account/external ID must not silently map to several local entities unless the provider semantics explicitly allow it.
+
+---
+
+# 357. Integration Operation
+
+Tracks:
+
+```text
+CREATE_DELIVERY
+
+CANCEL_DELIVERY
+
+QUERY_PAYMENT
+```
+
+etc.
+
+---
+
+# 358. Unknown Outcome
+
+State preserved:
+
+```text
+UNKNOWN_EXTERNAL_OUTCOME
+```
+
+for reconciliation.
+
+---
+
+# 359. Integration Exception
+
+Repair queue.
+
+---
+
+# 360. Inbound Provider Event
+
+Raw authenticated/deduplicated callback record.
+
+---
+
+# 361. Outbox
+
+Core:
+
+```text
+platform.outbox_events
+
+platform.event_consumer_receipts
+```
+
+---
+
+# 362. Outbox Event
+
+Conceptually:
+
+```text
+id
+
+event_id UUID
+
+organization_id
+
+event_type
+
+event_version
+
+aggregate_type
+
+aggregate_id
+
+aggregate_version
+
+payload JSONB
+
+occurred_at
+
+created_at
+```
+
+---
+
+# 363. Event ID
+
+Unique.
+
+---
+
+# 364. Outbox Processing
+
+Do **not** simply set:
+
+```text
+processed = true
+```
+
+if several independent consumers exist.
+
+---
+
+# 365. Consumer Receipt
+
+`event_consumer_receipts`
+
+tracks:
+
+```text
+event
+
+consumer
+
+status
+
+attempt
+
+processed_at
+```
+
+---
+
+# 366. Why?
+
+```text
+Notifications succeeded
+
+Analytics succeeded
+
+Webhooks failed
+```
+
+can coexist.
+
+---
+
+# 367. Jobs
+
+Core:
+
+```text
+platform.jobs
+
+platform.job_attempts foundation
+```
+
+---
+
+# 368. Job
+
+Fields conceptually:
+
+```text
+type
+
+payload_version
+
+payload JSONB
+
+priority
+
+status
+
+available_at
+
+lease_owner
+
+lease_expires_at
+
+attempt_count
+
+max_attempts
+
+created_at
+```
+
+---
+
+# 369. Job Payload
+
+Prefer IDs/references.
+
+Do not duplicate:
+
+```text
+entire Customer
+
+secret credential
+```
+
+inside queue message.
+
+---
+
+# 370. Job Claiming
+
+PostgreSQL supports `SKIP LOCKED`, which is explicitly useful for queue-like access by multiple consumers; this is appropriate for Maevelle's initial database-backed worker queue.
+
+---
+
+# 371. Webhooks
+
+Core:
+
+```text
+integrations.webhook_endpoints
+
+integrations.webhook_subscriptions
+
+integrations.webhook_events
+
+integrations.webhook_deliveries
+```
+
+---
+
+# 372. Webhook Event
+
+External contract snapshot.
+
+Separate from internal Outbox Event.
+
+---
+
+# 373. Webhook Delivery
+
+Every HTTP attempt.
+
+---
+
+# 374. Same Webhook Event
+
+Can have:
+
+```text
+Delivery #1
+
+Delivery #2
+
+Delivery #3
+```
+
+---
+
+# 375. Endpoint Secret
+
+Database stores:
+
+```text
+secret reference / encrypted secret material
+```
+
+according to Secret Management ADR.
+
+Never ordinary plaintext.
+
+---
+
+# 376. Audit Domain
+
+Core:
+
+```text
+audit.audit_events
+```
+
+Potential:
+
+```text
+audit.security_events
+```
+
+if we want separate operational security-event retention/query behavior.
+
+---
+
+# 377. Audit Event
+
+Append-only.
+
+Conceptually:
+
+```text
+id
+
+event_id
+
+organization_id
+
+actor_type
+
+actor_id
+
+membership_id if applicable
+
+action
+
+target_type
+
+target_id
+
+request_id
+
+reason
+
+before_diff JSONB
+
+after_diff JSONB
+
+metadata JSONB
+
+created_at
+```
+
+---
+
+# 378. Audit Polymorphism Is Acceptable
+
+Audit's purpose is generic cross-domain evidence.
+
+`target_type + target_id` here is metadata/navigation, not business FK authority.
+
+---
+
+# 379. Audit Must Not Cascade Delete
+
+Ever from normal domain deletion.
+
+---
+
+# 380. Audit Table Volume
+
+Potential future partitioning candidate.
+
+---
+
+# 381. Search Projection
+
+Recommended:
+
+```text
+catalog.product_search_documents
+```
+
+---
+
+# 382. One Row Per Searchable Product/Variant Strategy
+
+Exact grain determined by search UX.
+
+Potential:
+
+```text
+Product document
++
+variant facets
+```
+
+---
+
+# 383. Projection Contains
+
+```text
+normalized title
+
+search text/vector
+
+SKU terms
+
+category IDs
+
+collection IDs
+
+colors
+
+attributes
+
+availability projection
+```
+
+---
+
+# 384. Search Projection Is Disposable
+
+Can delete/rebuild without business loss.
+
+---
+
+# 385. JSON Arrays in Search Projection
+
+Acceptable for:
+
+```text
+facet IDs
+
+denormalized search tokens
+```
+
+because this is a derived projection.
+
+---
+
+# 386. High-Volume Tables
+
+Likely eventual high-volume candidates:
+
+```text
+inventory_movement_lines
+
+audit_events
+
+outbox_events
+
+jobs / attempts
+
+notification_delivery_attempts
+
+webhook_deliveries
+
+provider_events
+
+analytics behavioral events
+```
+
+---
+
+# 387. Do We Partition Them V1?
+
+Recommended:
+
+```text
+NO
+```
+
+unless realistic load testing demonstrates immediate need.
+
+---
+
+# 388. Why Delay Partitioning?
+
+Partitioning changes:
+
+```text
+index design
+
+uniqueness
+
+FK considerations
+
+maintenance
+
+query behavior
+```
+
+and should solve an actual scale problem.
+
+PostgreSQL's current partitioning rules also impose special requirements on primary/unique constraints, including inclusion of partition-key columns in partitioned-table uniqueness constraints.
+
+---
+
+# 389. Partition-Ready Design
+
+For likely future partition candidates preserve:
+
+```text
+created_at / occurred_at
+
+organization_id
+
+stable event identity
+```
+
+to allow future migration.
+
+---
+
+# 390. Partition Candidate — Audit
+
+Future:
+
+```text
+monthly created_at
+```
+
+partitions.
+
+---
+
+# 391. Partition Candidate — Inventory Ledger
+
+Potential:
+
+```text
+occurred_at
+```
+
+partitioning much later.
+
+But Inventory query/reconciliation patterns must be tested first.
+
+---
+
+# 392. Do Not Partition Core Small Tables
+
+Examples:
+
+```text
+products
+
+customers
+
+suppliers
+
+locations
+```
+
+without evidence.
+
+---
+
+# 393. Foreign-Key Strategy Across Archived Data
+
+FK remains valid because archived entities remain present.
+
+---
+
+# 394. Avoid `ON DELETE SET NULL` Everywhere
+
+That destroys valuable lineage.
+
+Use only when relationship genuinely becomes optional after deletion.
+
+---
+
+# 395. Example
+
+Order Line Product relationship should normally remain valid because Product is archived rather than deleted.
+
+---
+
+# 396. Historical External Provider
+
+If integration is disabled:
+
+```text
+integration row remains
+```
+
+so historical Payment/Delivery mappings remain explainable.
+
+---
+
+# 397. Provider Raw Payload
+
+Use JSONB.
+
+But sanitize or encrypt fields where provider includes sensitive data.
+
+---
+
+# 398. Snapshot Strategy
+
+Snapshots belong where current master data can legitimately change.
+
+---
+
+# 399. Required Snapshots
+
+Examples:
+
+```text
+Order Product/Variant
+
+Order Address
+
+Order Pricing
+
+Promotion application
+
+Supplier invoice amounts
+
+Landed Cost basis
+
+Payment verification context
+
+Webhook payload
+
+Notification rendered message
+```
+
+---
+
+# 400. Do Not Snapshot Everything
+
+Avoid copying full:
+
+```text
+Product row
+
+Customer row
+
+Organization row
+```
+
+into every transaction.
+
+Snapshot only information required to preserve historical meaning.
+
+---
+
+# 401. Source Reference + Snapshot Pattern
+
+Preferred:
+
+```text
+current_entity_id
++
+historical_snapshot_fields
+```
+
+---
+
+# 402. Snapshot JSONB vs Columns
+
+Stable, reportable financial fields:
+
+```text
+columns.
+```
+
+Variable display context:
+
+```text
+JSONB.
+```
+
+---
+
+# 403. Example Order Line
+
+Columns:
+
+```text
+quantity
+
+unit_price
+
+gross_amount
+
+discount_amount
+
+net_amount
+```
+
+JSONB:
+
+```text
+option_snapshot
+```
+
+---
+
+# 404. Ledger Reconciliation
+
+Every materialized balance ledger domain needs reconciliation.
+
+---
+
+# 405. Inventory
+
+```text
+movement sum
+↔
+inventory level
+```
+
+---
+
+# 406. Finance
+
+```text
+account entries
+↔
+materialized balance
+```
+
+---
+
+# 407. Promotion
+
+```text
+usage rows
+↔
+usage counters/projection
+```
+
+---
+
+# 408. Analytics
+
+```text
+facts
+↔
+source domains
+```
+
+---
+
+# 409. Reconciliation Must Not Auto-Hide Differences
+
+If mismatch:
+
+```text
+surface health error
+```
+
+before repair.
+
+---
+
+# 410. Database Transactions Across Domains
+
+Because Maevelle is a modular monolith using one PostgreSQL database, some application operations can atomically span domains.
+
+---
+
+# 411. Checkout Transaction
+
+Potential:
+
+```text
+Order
+
+Order Lines
+
+Promotion Usage
+
+Inventory Reservation
+
+Payment Intent
+
+Outbox
+```
+
+---
+
+# 412. Important Boundary
+
+Do not include:
+
+```text
+email send
+
+courier API
+
+webhook HTTP
+```
+
+inside this transaction.
+
+---
+
+# 413. Receiving Transaction
+
+Potential:
+
+```text
+Post Inbound Receipt
+
+Create Inventory Transaction
+
+Movement Lines
+
+Update Inventory Levels
+
+Create Outbox Event
+```
+
+atomic.
+
+---
+
+# 414. Payment Verification Transaction
+
+Potential:
+
+```text
+Verify Attempt
+
+Create Payment
+
+Allocate Payment
+
+Update Order financial projection
+
+Create Finance cash event where appropriate
+
+Outbox
+```
+
+according to final Payment/Finance integration contract.
+
+---
+
+# 415. Refund Transaction
+
+Potential:
+
+```text
+Create Refund
+
+Update Payment refundable balance/projection
+
+Finance/outbox records
+```
+
+before external provider side effect if async provider workflow requires it.
+
+State machine handles pending external refund.
+
+---
+
+# 416. Database Transaction Does Not Mean Domain Coupling Everywhere
+
+Application service owns orchestration.
+
+Modules still expose public interfaces.
+
+---
+
+# 417. Database Views
+
+Useful for safe derived operational concepts.
+
+Potential:
+
+```text
+procurement.purchase_receipt_summary_v
+
+orders.order_payment_summary_v
+
+inventory.current_availability_v
+```
+
+---
+
+# 418. Purchase Receipt View
+
+Strongly recommended.
+
+Example:
+
+```text
+Purchase
+→ Purchase Line
+→ Shipment Item
+→ Inbound Receipt Line
+```
+
+aggregated into:
+
+```text
+ordered
+
+shipped
+
+received
+```
+
+---
+
+# 419. Views Are Not Mutation Interfaces
+
+Never:
+
+```text
+UPDATE purchase_receipt_summary_v
+```
+
+as business command.
+
+---
+
+# 420. Materialized Views
+
+Use cautiously for expensive analytics/read projections.
+
+Application-managed projection tables may be more controllable for near-real-time updates.
+
+---
+
+# 421. Triggers
+
+Use sparingly.
+
+---
+
+# 422. Good Trigger Uses
+
+Potential:
+
+```text
+automatic updated_at
+
+strict audit infrastructure in special cases
+
+database-level invariant impossible via simple constraint
+```
+
+---
+
+# 423. Bad Trigger Uses
+
+Do not hide primary business workflows like:
+
+```text
+creating refund automatically
+
+sending emails
+
+calling providers
+
+creating Purchase from Product update
+```
+
+inside database triggers.
+
+---
+
+# 424. Why?
+
+Business behavior should remain visible in application/domain code.
+
+---
+
+# 425. Generated Columns
+
+Can be useful for deterministic database-derived values where appropriate; PostgreSQL supports generated columns computed from other columns.
+
+But do not encode complex cross-domain business rules through generated columns.
+
+---
+
+# 426. Derived Totals
+
+Order totals should generally be calculated by application/domain pricing logic and persisted/snapshotted.
+
+Do not rely on a generated column if discounts/tax/allocation logic spans many rows.
+
+---
+
+# 427. Check Constraints
+
+Use for local row invariants.
+
+Examples:
+
+```text
+quantity >= 0
+
+percentage between 0 and 100
+
+amount >= 0 where negative not valid
+
+source_location_id <> destination_location_id
+```
+
+---
+
+# 428. Cross-Row Business Invariants
+
+Usually require:
+
+```text
+transaction
+
+locking
+
+unique constraints
+
+application validation
+```
+
+rather than CHECK.
+
+---
+
+# 429. Constraint Naming
+
+Explicit names:
+
+```text
+orders_order_number_org_uq
+
+inventory_levels_item_location_uq
+
+payments_amount_positive_ck
+```
+
+makes migration/error diagnosis easier.
+
+---
+
+# 430. Database Errors
+
+Infrastructure maps expected constraint conflicts into domain/application errors.
+
+Example:
+
+```text
+unique idempotency conflict
+→ IDEMPOTENCY_KEY_REUSED
+```
+
+where appropriate.
+
+---
+
+# 431. Do Not Expose Raw Constraint Details Publicly
+
+Public API gets stable safe error.
+
+Internal logs keep diagnosis.
+
+---
+
+# 432. Migration Strategy
+
+Schema starts through migration:
+
+```text
+0001_platform
+
+0002_iam
+
+0003_catalog
+
+...
+```
+
+Exact grouping may be domain-based rather than one file per table.
+
+---
+
+# 433. Migration Ownership
+
+Domain modules own migrations for their tables.
+
+---
+
+# 434. Cross-Domain Migration
+
+Requires explicit architectural review.
+
+---
+
+# 435. Seed Data
+
+System-defined seeds:
+
+```text
+Capability definitions
+
+Core condition codes
+
+System notification types
+
+Supported system reason codes
+```
+
+---
+
+# 436. Business Data Is Not Seed
+
+Do not automatically create:
+
+```text
+Products
+
+Suppliers
+
+Orders
+```
+
+in production migrations.
+
+---
+
+# 437. Development Fixtures
+
+Separate.
+
+---
+
+# 438. Schema Test
+
+A new clean database must be reproducibly buildable from migrations.
+
+---
+
+# 439. Migration Upgrade Test
+
+CI should test:
+
+```text
+previous schema
+→ new schema
+```
+
+for risky migrations.
+
+---
+
+# 440. Data Backfill
+
+Large data transformation happens separately from DDL where needed.
+
+---
+
+# 441. Expand / Contract
+
+Example:
+
+```text
+add new column
+
+dual-write
+
+backfill
+
+switch reads
+
+enforce NOT NULL
+
+remove old later
+```
+
+---
+
+# 442. Do Not Add NOT NULL Unsafely to Huge Existing Table
+
+Future mature deployment should stage constraints/backfills where needed.
+
+---
+
+# 443. Database Access Roles
+
+At minimum conceptual roles:
+
+```text
+application runtime
+
+migration/deployment
+
+backup
+
+read-only operational/diagnostic if needed
+```
+
+---
+
+# 444. App Runtime
+
+No:
+
+```text
+SUPERUSER
+```
+
+---
+
+# 445. Database Ownership
+
+Migration role owns/changes schema.
+
+Application role uses required DML privileges.
+
+---
+
+# 446. Row-Level Security
+
+Potential future defense-in-depth for multi-Organization isolation.
+
+---
+
+# 447. V1 Decision
+
+Do **not** make PostgreSQL RLS mandatory to achieve correctness.
+
+Primary enforcement:
+
+```text
+application authorization
+
+organization-scoped repositories
+
+composite tenant-safe FKs
+
+constraints
+
+tests
+```
+
+---
+
+# 448. Why Leave RLS Optional?
+
+It introduces:
+
+```text
+connection context concerns
+
+background-job complexity
+
+migration complexity
+
+debugging complexity
+```
+
+that should only be accepted deliberately.
+
+---
+
+# 449. Future RLS
+
+Can be evaluated through ADR after base schema and repository patterns exist.
+
+---
+
+# 450. Database Security Views
+
+Potential restricted views for:
+
+```text
+masked customer data
+
+operational read-only reporting
+```
+
+future.
+
+---
+
+# 451. Backup and Restore Data Model Implication
+
+All critical identifiers and relationships live in PostgreSQL/object storage metadata such that restoring both produces a coherent platform.
+
+---
+
+# 452. Object Existence Health
+
+Media background health checks can detect:
+
+```text
+DB Asset exists
+but object missing
+```
+
+---
+
+# 453. Orphan Object Health
+
+Can detect:
+
+```text
+storage object
+without active DB Asset
+```
+
+for cleanup/reconciliation.
+
+---
+
+# 454. Data Integrity Health Framework
+
+Recommended periodic checks:
+
+```text
+Inventory level vs ledger
+
+Payment allocation totals
+
+Refund allocation totals
+
+Order totals
+
+Promotion allocation totals
+
+Purchase receipt quantities
+
+Landed Cost allocation totals
+
+Cash ledger balances
+
+Media object existence
+
+Analytics projection reconciliation
+```
+
+---
+
+# 455. Integrity Check Results
+
+Persist operational result:
+
+```text
+check
+
+scope
+
+run time
+
+status
+
+difference
+
+repair reference
+```
+
+potentially in a generic:
+
+```text
+platform.integrity_check_runs
+```
+
+foundation.
+
+---
+
+# 456. Repair Strategy
+
+Never silently:
+
+```text
+UPDATE balance = calculated
+```
+
+without provenance.
+
+---
+
+# 457. Repair
+
+Use:
+
+```text
+rebuild projection
+```
+
+if projection wrong.
+
+Use:
+
+```text
+compensating transaction
+```
+
+if business ledger wrong.
+
+---
+
+# 458. Data Import
+
+Imports should go:
+
+```text
+Staging / Parsed Rows
+      ↓
+Validation
+      ↓
+Preview
+      ↓
+Domain Commands
+      ↓
+Canonical Tables
+```
+
+---
+
+# 459. Do Not Bulk Copy Directly Into Domain Tables
+
+Especially:
+
+```text
+Inventory
+
+Payments
+
+Orders
+
+Customers
+```
+
+---
+
+# 460. Import Staging Tables
+
+Potential temporary/staging structure:
+
+```text
+platform.import_batches
+
+platform.import_rows
+```
+
+or files + job results.
+
+---
+
+# 461. Import Row
+
+Preserves:
+
+```text
+source row
+
+normalized values
+
+validation errors
+
+target entity
+```
+
+---
+
+# 462. Import Idempotency
+
+Retry must not duplicate successful rows.
+
+---
+
+# 463. Export
+
+Reads canonical/projection data.
+
+Exports do not become source of truth.
+
+---
+
+# 464. Historical Data Migration
+
+Legacy spreadsheet imports need:
+
+```text
+source reference
+
+migration batch
+
+data quality flags
+```
+
+---
+
+# 465. Opening Inventory
+
+Migrated starting stock must create:
+
+```text
+OPENING_BALANCE Inventory Transaction
+```
+
+not simply populate `inventory_levels`.
+
+---
+
+# 466. Opening Cash
+
+Same principle if legacy financial balances imported:
+
+```text
+Opening Finance Transaction
+```
+
+with documented source/basis.
+
+---
+
+# 467. Historical Orders
+
+Can be imported with:
+
+```text
+source = MIGRATION
+```
+
+and appropriate snapshot completeness metadata.
+
+---
+
+# 468. Schema Areas Requiring Separate DDL Review
+
+Before implementation, the following need extra-focused table design:
+
+```text
+Product Attributes
+
+Variant Combination Constraints
+
+Sizing Measurement Matrix
+
+Inventory Ledger + materialized levels
+
+Reservations
+
+Customer Merge
+
+Landed Cost Allocation
+
+Acquisition Cost Layers
+
+Payment/Refund Allocations
+
+Finance Account Ledger
+
+Promotion Rule Tables
+
+IAM scoped capabilities
+
+Outbox / Job leasing
+```
+
+---
+
+# 469. PostgreSQL Table Design Skill
+
+This is the correct stage to use the previously identified focused skills.sh capability:
+
+```text
+postgresql-table-design
+```
+
+before freezing DDL.
+
+Its role should be:
+
+```text
+review our architecture
+
+challenge relational choices
+
+review FK/index/constraint design
+
+find normalization problems
+
+find PostgreSQL-specific issues
+```
+
+not replace our domain decisions.
+
+---
+
+# 470. Later Skills
+
+After actual SQL exists:
+
+```text
+postgresql-code-review
+
+sql-optimization
+```
+
+become useful.
+
+---
+
+# 471. Database Stress Test — Cross-Organization FK
+
+Attempt:
+
+```text
+Org A Order
+→ Org B Customer
+```
+
+Expected:
+
+```text
+DB/application reject
+```
+
+---
+
+# 472. Cross-Organization Inventory
+
+```text
+Org A Inventory Item
+→ Org B Location
+```
+
+must fail.
+
+---
+
+# 473. Cross-Organization Promotion
+
+```text
+Org A Promotion
+→ Org B Product
+```
+
+must fail.
+
+---
+
+# 474. Final Stock Race
+
+Two transactions reserve last unit.
+
+Expected:
+
+```text
+exactly one successful commitment
+```
+
+when overselling disabled.
+
+---
+
+# 475. Double Receipt Post
+
+Same Inbound Receipt posted twice.
+
+Expected:
+
+```text
+one Inventory Transaction
+```
+
+through state + idempotency + unique linkage.
+
+---
+
+# 476. Double Fulfillment
+
+Same Fulfillment posting retried.
+
+Expected:
+
+```text
+one physical stock deduction
+```
+
+---
+
+# 477. Duplicate Provider Payment
+
+Same provider transaction arrives through:
+
+```text
+Webhook
+
+Polling
+
+manual reconciliation
+```
+
+Expected:
+
+```text
+one confirmed Payment
+```
+
+---
+
+# 478. Customer Shared Phone
+
+Two Customers:
+
+```text
+same normalized phone
+```
+
+Expected:
+
+```text
+allowed
+
+duplicate candidate signal
+```
+
+not database unique violation.
+
+---
+
+# 479. Customer Merge
+
+Millions of historical references should not require rewriting every transaction.
+
+Alias/canonical resolution preserves history.
+
+---
+
+# 480. Product Archive
+
+Archived Product with old Orders:
+
+```text
+Orders remain queryable
+
+FK remains valid
+```
+
+---
+
+# 481. Product Hard Delete Attempt
+
+If historical Order references it:
+
+```text
+RESTRICT
+```
+
+---
+
+# 482. Category Delete
+
+Category with historical/reporting relevance:
+
+```text
+archive
+```
+
+instead of destructive deletion.
+
+---
+
+# 483. Payment Evidence
+
+Deleting Media Asset referenced by Payment:
+
+```text
+blocked
+```
+
+by domain/media reference integrity.
+
+---
+
+# 484. Landed Cost Recalculation
+
+Finalized old allocation stays historical.
+
+New revision does not rewrite:
+
+```text
+previous allocation history
+```
+
+---
+
+# 485. Partial Receiving
+
+Purchase Line:
+
+```text
+100 ordered
+```
+
+Shipment:
+
+```text
+80 allocated
+```
+
+Receipt 1:
+
+```text
+30
+```
+
+Receipt 2:
+
+```text
+45
+```
+
+Remaining in physical Shipment expectation:
+
+```text
+5
+```
+
+Purchase unreceived total still accounts for:
+
+```text
+25
+```
+
+depending remaining unshipped/unreceived quantities.
+
+No conflicting Purchase Receipt table exists.
+
+---
+
+# 486. Same Variant Across Two Shipments
+
+```text
+Shipment A unit acquisition cost:
+৳500
+
+Shipment B:
+৳620
+```
+
+must remain distinguishable.
+
+---
+
+# 487. Order Snapshot
+
+Variant renamed after Order.
+
+Order remains:
+
+```text
+old title
+
+old SKU snapshot
+
+old option snapshot
+
+old price
+```
+
+---
+
+# 488. Category Change
+
+Historical analytics can use sale-time Primary Category snapshot.
+
+Current Catalog uses new Category.
+
+---
+
+# 489. Coupon Race
+
+One use remaining.
+
+Two Orders.
+
+Expected:
+
+```text
+one Promotion Usage committed
+```
+
+---
+
+# 490. Sequence Race
+
+100 Orders simultaneously.
+
+Expected:
+
+```text
+100 unique Order Numbers
+```
+
+Gaps may occur.
+
+Duplicates may not.
+
+---
+
+# 491. Worker Race
+
+10 workers claim 100 jobs.
+
+Each lease owned by one worker at a time.
+
+---
+
+# 492. Worker Crash
+
+Lease expires.
+
+Another worker retries.
+
+Job handler idempotency protects business effect.
+
+---
+
+# 493. Outbox Replay
+
+Same Outbox Event processed twice by Analytics.
+
+Unique source fact prevents duplicate Sales.
+
+---
+
+# 494. Audit Growth
+
+Millions of Audit Events should not degrade Order mutation because audit indexes are deliberately bounded/reviewed.
+
+Partitioning can later be introduced if real volume requires it.
+
+---
+
+# 495. JSONB Abuse Test
+
+Code review should reject proposal:
+
+```text
+orders.data JSONB
+```
+
+containing entire Order business model.
+
+---
+
+# 496. Generic Polymorphism Abuse Test
+
+Code review should reject:
+
+```text
+relationships(
+  source_type,
+  source_id,
+  target_type,
+  target_id
+)
+```
+
+as replacement for all domain relationships.
+
+---
+
+# 497. Important Data Invariants
+
+### DB-INV-001
+
+Every domain entity has a stable internal identity independent of human-readable numbers.
+
+### DB-INV-002
+
+Human-readable transaction numbers are never primary keys.
+
+### DB-INV-003
+
+Organization-owned root records always preserve explicit Organization ownership.
+
+### DB-INV-004
+
+Critical cross-domain relationships cannot cross Organization boundaries.
+
+### DB-INV-005
+
+Historical transactions are not hard-deleted as routine application behavior.
+
+### DB-INV-006
+
+Historical transaction snapshots are not reconstructed from current master data.
+
+### DB-INV-007
+
+Monetary authority never uses binary floating-point types.
+
+### DB-INV-008
+
+Every persisted monetary value has an explicit currency context unless structurally inherited from a clearly authoritative parent.
+
+### DB-INV-009
+
+Business-event instants use absolute timestamp semantics.
+
+### DB-INV-010
+
+Current Organization timezone changes never rewrite historical timestamps.
+
+### DB-INV-011
+
+JSONB does not replace relational modeling for critical many-to-many, financial, inventory or authorization relationships.
+
+### DB-INV-012
+
+Generic polymorphic references are never the only integrity mechanism for critical business relationships.
+
+### DB-INV-013
+
+Posted Inventory Movements are append-oriented.
+
+### DB-INV-014
+
+Inventory Levels remain reconcilable to Inventory ledger/reservation truth.
+
+### DB-INV-015
+
+Reservations remain separate from physical stock movement.
+
+### DB-INV-016
+
+Incoming quantities are not treated as On Hand.
+
+### DB-INV-017
+
+Transfer In-Transit quantities are not simultaneously normal source/destination On Hand.
+
+### DB-INV-018
+
+Inbound Receipt is the canonical physical receiving document.
+
+### DB-INV-019
+
+Purchase received quantity is derived through Inbound Receipt Lines rather than a competing Purchase Receipt truth.
+
+### DB-INV-020
+
+Posting an Inbound Receipt cannot create duplicate Inventory transactions under retry.
+
+### DB-INV-021
+
+Same Variant can preserve different acquisition-cost provenance across Receipts/Shipments.
+
+### DB-INV-022
+
+Order Lines preserve Product/Variant pricing/display snapshots.
+
+### DB-INV-023
+
+Order Addresses are transaction snapshots independent of Customer Address changes.
+
+### DB-INV-024
+
+Payments represent confirmed money and remain separate from Payment Attempts.
+
+### DB-INV-025
+
+Payment Allocations remain explicit.
+
+### DB-INV-026
+
+Provider fees never reduce recorded customer Payment principal.
+
+### DB-INV-027
+
+Refunds and Payment Reversals remain different entities/operations.
+
+### DB-INV-028
+
+Customer normalized phone/email values are searchable identity signals, not unconditional unique Customer keys.
+
+### DB-INV-029
+
+Customer Merge does not require rewriting historical Order snapshots.
+
+### DB-INV-030
+
+Capabilities and scopes are normalized relational records, not comma-separated permissions.
+
+### DB-INV-031
+
+Financial Account balances are ledger-derived/materialized rather than arbitrary mutable amounts.
+
+### DB-INV-032
+
+Promotion Usage remains transactionally concurrency-safe.
+
+### DB-INV-033
+
+Historical Order discount allocations remain independent of current Promotion configuration.
+
+### DB-INV-034
+
+Notification Delivery Attempts remain separate from Notifications.
+
+### DB-INV-035
+
+Analytics tables are rebuildable and never referenced as transactional authority.
+
+### DB-INV-036
+
+Configuration JSON values are permitted only through registered typed configuration definitions.
+
+### DB-INV-037
+
+External provider identities are explicitly mapped and scoped.
+
+### DB-INV-038
+
+Outbox Events are persisted atomically with the business transaction that emitted them.
+
+### DB-INV-039
+
+Independent Event consumers track processing separately.
+
+### DB-INV-040
+
+Critical background Jobs survive Worker restarts.
+
+### DB-INV-041
+
+Idempotency Records reject materially different requests using the same key.
+
+### DB-INV-042
+
+Audit Events are append-oriented and independent of target entity deletion.
+
+### DB-INV-043
+
+Search projections can be destroyed/rebuilt without loss of Catalog truth.
+
+### DB-INV-044
+
+Partitioning is introduced based on proven data/query requirements rather than anticipation alone.
+
+### DB-INV-045
+
+Database integrity constraints reinforce, rather than replace, domain validation.
+
+---
+
+# 498. V1 Mandatory Database Scope
+
+The first production schema should include:
+
+```text
+✓ Organizations
+
+✓ IAM Users
+
+✓ Memberships
+
+✓ Capabilities
+
+✓ Capability Grants
+
+✓ Scope Assignments
+
+✓ Sessions
+
+✓ MFA foundation
+
+✓ Products
+
+✓ Product Types
+
+✓ Product Options
+
+✓ Option Values
+
+✓ Variants
+
+✓ Variant Option Assignments
+
+✓ Attributes
+
+✓ Categories
+
+✓ Product Categories
+
+✓ Collections
+
+✓ Tags
+
+✓ Occasions
+
+✓ Colors
+
+✓ Variant Colors
+
+✓ Variant Prices
+
+✓ Product Information
+
+✓ FAQs
+
+✓ Sizing Domains
+
+✓ Size Systems
+
+✓ Size Definitions
+
+✓ Measurement Definitions
+
+✓ Size Guides
+
+✓ Guide Revisions
+
+✓ Guide Matrix
+
+✓ Media Assets
+
+✓ Storage Objects
+
+✓ Renditions
+
+✓ Product Media
+
+✓ Inventory Items
+
+✓ Inventory Levels
+
+✓ Condition Balances
+
+✓ Inventory Transactions
+
+✓ Inventory Movement Lines
+
+✓ Reservations
+
+✓ Reservation Allocations
+
+✓ Locations
+
+✓ Location Capabilities
+
+✓ Transfers
+
+✓ Transfer Dispatches
+
+✓ Transfer Receipts
+
+✓ Suppliers
+
+✓ Supplier Variant Mappings
+
+✓ Purchases
+
+✓ Purchase Lines
+
+✓ Supplier Invoices
+
+✓ Supplier Payments
+
+✓ Supplier Payment Allocations
+
+✓ Inbound Shipments
+
+✓ Shipment Items
+
+✓ Purchase-Line Shipment Allocations
+
+✓ Shipment Packages
+
+✓ Journey Legs
+
+✓ Tracking References
+
+✓ Inbound Receipts
+
+✓ Inbound Receipt Lines
+
+✓ Landed Cost Worksheets
+
+✓ Cost Components
+
+✓ Allocation Targets
+
+✓ Cost Allocations
+
+✓ Basis Snapshots
+
+✓ Acquisition-cost provenance foundation
+
+✓ Carts
+
+✓ Cart Lines
+
+✓ Orders
+
+✓ Order Lines
+
+✓ Order Addresses
+
+✓ Holds
+
+✓ Cancellations
+
+✓ Cancellation Lines
+
+✓ Fulfillments
+
+✓ Fulfillment Lines
+
+✓ Discount Applications
+
+✓ Discount Allocations
+
+✓ Payment Methods
+
+✓ Payment Providers
+
+✓ Payment Accounts
+
+✓ Payment Intents
+
+✓ Payment Attempts
+
+✓ Payment Evidence
+
+✓ Payments
+
+✓ Payment Allocations
+
+✓ Refunds
+
+✓ Reversals
+
+✓ Settlement foundation
+
+✓ Payment Reconciliation Issues
+
+✓ Customers
+
+✓ Customer Phones
+
+✓ Customer Emails
+
+✓ Customer Addresses
+
+✓ Customer Notes
+
+✓ Customer Tags
+
+✓ Duplicate Candidates
+
+✓ Customer Merge / Alias
+
+✓ Financial Accounts
+
+✓ Expense Categories
+
+✓ Expenses
+
+✓ Expense Payments
+
+✓ Finance Transactions
+
+✓ Account Entries
+
+✓ Reviews
+
+✓ Review Media
+
+✓ Review Moderation History
+
+✓ Review Summary Projection
+
+✓ Promotions
+
+✓ Promotion Revisions
+
+✓ Coupon Codes
+
+✓ Promotion Rules / Targets
+
+✓ Promotion Usage
+
+✓ Notification Templates
+
+✓ Template Revisions
+
+✓ Notification Preferences
+
+✓ Notifications
+
+✓ Delivery Attempts
+
+✓ Analytics Core Projections
+
+✓ Saved Reports foundation
+
+✓ Configuration Values
+
+✓ Number Sequences
+
+✓ Integrations
+
+✓ External Entity Mappings
+
+✓ Integration Operations
+
+✓ Integration Exceptions
+
+✓ Provider Events
+
+✓ Outbox Events
+
+✓ Event Consumer Receipts
+
+✓ Durable Jobs
+
+✓ Idempotency Records
+
+✓ Webhook Endpoints
+
+✓ Webhook Events
+
+✓ Webhook Deliveries
+
+✓ Audit Events
+
+✓ Search Projection
+```
+
+---
+
+# 499. Explicitly Deferred Schema Complexity
+
+Do not implement prematurely:
+
+```text
+Database sharding
+
+Organization-per-database
+
+Organization-per-schema
+
+Universal Event Sourcing
+
+Global EAV system
+
+Universal polymorphic relationships
+
+Lot / serial tracking
+
+Expiration dates
+
+Advanced COGS depletion
+
+FIFO/LIFO accounting
+
+Double-entry general ledger
+
+Complex tax engine
+
+Multi-storefront pricing hierarchy
+
+Database partitioning everywhere
+
+Materialized views everywhere
+
+Row-Level Security everywhere
+
+Cross-region IDs/infrastructure
+```
+
+---
+
+# 500. Decisions Established
+
+### Decision DB-001
+
+**PostgreSQL remains the authoritative relational datastore.**
+
+### Decision DB-002
+
+**Domain entities primarily use UUID identities, with UUIDv7 preferred for newly generated domain IDs.**
+
+### Decision DB-003
+
+**Pure technical/high-volume internal rows may use BIGINT identity where UUID provides no useful benefit.**
+
+### Decision DB-004
+
+**Human-readable numbers remain separate from entity IDs.**
+
+### Decision DB-005
+
+**Organization ownership is explicit in business tables.**
+
+### Decision DB-006
+
+**Critical tenant relationships use tenant-safe relational constraints/composite FK patterns where appropriate.**
+
+### Decision DB-007
+
+**Database schema ownership follows domain ownership.**
+
+### Decision DB-008
+
+**Money uses decimal NUMERIC semantics plus currency identity, never floating point.**
+
+### Decision DB-009
+
+**Business instants use time-zone-aware absolute timestamp semantics.**
+
+### Decision DB-010
+
+**No universal soft-delete pattern is imposed on every table.**
+
+### Decision DB-011
+
+**Business lifecycle states replace generic `deleted_at` where domain meaning exists.**
+
+### Decision DB-012
+
+**Historical commercial records are preserved rather than cascade-deleted.**
+
+### Decision DB-013
+
+**JSONB is reserved for bounded flexible/snapshot/integration data, not core relational truth.**
+
+### Decision DB-014
+
+**Generic polymorphic foreign references are avoided for authoritative domain relationships.**
+
+### Decision DB-015
+
+**Product Variants are normalized first-class entities.**
+
+### Decision DB-016
+
+**Product Options/Attributes remain separate relational concepts.**
+
+### Decision DB-017
+
+**Colors and Sizes can be canonical reusable vocabularies linked from Product Option Values.**
+
+### Decision DB-018
+
+**Published Size Guide revisions are immutable historical revisions.**
+
+### Decision DB-019
+
+**Domain-specific Media links remain authoritative; Media usage projection is secondary.**
+
+### Decision DB-020
+
+**Inventory uses append-oriented movement ledger plus materialized current levels.**
+
+### Decision DB-021
+
+**Physical Inventory conditions are relationally separate from Reservations.**
+
+### Decision DB-022
+
+**Incoming is derived from Procurement/Shipment context rather than physical Inventory balance.**
+
+### Decision DB-023
+
+**Transfer In-Transit quantity derives from dispatch/receipt state.**
+
+### Decision DB-024
+
+**Inbound Receipt is the canonical physical receiving entity.**
+
+### Decision DB-025
+
+**A separate authoritative Purchase Receipt table will not be created.**
+
+### Decision DB-026
+
+**Purchase receipt status/quantities are derived from Shipment Items and Inbound Receipt Lines.**
+
+### Decision DB-027
+
+**Receipt posting creates exactly one idempotent Inventory Transaction.**
+
+### Decision DB-028
+
+**Landed Cost allocations target acquisition-specific Shipment Items rather than global Variants.**
+
+### Decision DB-029
+
+**Acquisition-cost provenance will be preserved at Receipt/Shipment Item context.**
+
+### Decision DB-030
+
+**Inventory costing/COGS depletion methodology remains separate from physical quantity architecture.**
+
+### Decision DB-031
+
+**Orders preserve Product/Variant/Address/Pricing snapshots.**
+
+### Decision DB-032
+
+**Partial cancellation is modeled through explicit quantity-level Cancellation Lines.**
+
+### Decision DB-033
+
+**Fulfillments are first-class and quantity-based.**
+
+### Decision DB-034
+
+**Order Discount Allocations are first-class historical records.**
+
+### Decision DB-035
+
+**Payment Attempts, confirmed Payments, Allocations, Refunds, Reversals and Settlements remain separate relational entities.**
+
+### Decision DB-036
+
+**Customer phones/emails are multiple and non-unique identity signals.**
+
+### Decision DB-037
+
+**Customer merges preserve aliases/canonical resolution rather than rewriting transaction history.**
+
+### Decision DB-038
+
+**Access capabilities/scopes are relational, capability-based and Organization-aware.**
+
+### Decision DB-039
+
+**Finance uses account-entry/transaction ledger concepts rather than freely mutable balances.**
+
+### Decision DB-040
+
+**Promotion rules remain typed and relational rather than arbitrary executable JSON expressions.**
+
+### Decision DB-041
+
+**Analytics projections never become FK targets for transactional domains.**
+
+### Decision DB-042
+
+**Configuration may use registry-controlled JSONB values but complex domain entities remain dedicated relational records.**
+
+### Decision DB-043
+
+**External integrations retain explicit local↔external identity mappings.**
+
+### Decision DB-044
+
+**Outbox, Jobs, Idempotency and Webhook delivery are first-class durable infrastructure tables.**
+
+### Decision DB-045
+
+**Partitioning is intentionally deferred until table volume/query evidence warrants it.**
+
+---
+
+# 501. Consolidated Relational Map
+
+```text
+ORGANIZATION
+    │
+    ├── IAM / MEMBERSHIPS
+    │
+    ├── CATALOG
+    │      │
+    │      ├── Product Types
+    │      ├── Products
+    │      ├── Options / Attributes
+    │      ├── Variants
+    │      ├── Categories
+    │      ├── Collections
+    │      ├── Colors
+    │      └── Prices
+    │
+    ├── SIZING
+    │      └── Size Guides / Revisions / Measurements
+    │
+    ├── MEDIA
+    │      └── Assets / Objects / Renditions
+    │
+    ├── INVENTORY
+    │      │
+    │      ├── Inventory Items
+    │      ├── Levels
+    │      ├── Ledger
+    │      └── Reservations
+    │
+    ├── WAREHOUSE
+    │      │
+    │      ├── Locations
+    │      └── Transfers
+    │
+    ├── PROCUREMENT
+    │      │
+    │      ├── Suppliers
+    │      ├── Purchases
+    │      ├── Invoices
+    │      └── Supplier Payments
+    │
+    ├── INBOUND SHIPMENT
+    │      │
+    │      ├── Shipment Items
+    │      ├── Purchase Allocations
+    │      ├── Packages
+    │      ├── Journey Legs
+    │      └── Inbound Receipts
+    │               │
+    │               ▼
+    │          INVENTORY LEDGER
+    │
+    ├── LANDED COST
+    │      ├── Components
+    │      ├── Basis
+    │      └── Allocations
+    │
+    ├── CUSTOMERS
+    │      │
+    │      └── Orders
+    │             │
+    │             ├── Lines
+    │             ├── Discounts
+    │             ├── Fulfillments
+    │             └── Payments
+    │
+    ├── FINANCE
+    │      ├── Expenses
+    │      ├── Accounts
+    │      └── Cash Ledger
+    │
+    ├── REVIEWS
+    ├── PROMOTIONS
+    ├── NOTIFICATIONS
+    ├── ANALYTICS
+    ├── SETTINGS
+    ├── INTEGRATIONS
+    ├── OUTBOX / JOBS
+    └── AUDIT
+```
+
+---
+
+# 502. Most Important Refinement From This Document
+
+Previously there was still one unresolved structural question:
+
+```text
+Should receiving be modeled as
+Purchase Receipt
+or
+Inbound Receipt?
+```
+
+That is now resolved:
+
+```text
+PURCHASE
+   │
+   ▼
+PURCHASE LINE
+   │
+   ▼
+SHIPMENT ALLOCATION
+   │
+   ▼
+INBOUND SHIPMENT ITEM
+   │
+   ▼
+INBOUND RECEIPT LINE
+   │
+   ▼
+INVENTORY TRANSACTION
+```
+
+And:
+
+```text
+"Purchase Receipt"
+```
+
+is an operational/reporting interpretation derived from this chain.
+
+This correctly supports:
+
+```text
+multiple suppliers
+
+multiple purchases
+
+one consolidated shipment
+
+partial receipts
+
+over/under receipt
+
+condition receiving
+
+landed-cost provenance
+
+inventory ledger integrity
+```
+
+without maintaining two competing receiving systems.
+
+---
+
+# 503. Architecture Milestone
+
+We now have all of these aligned:
+
+```text
+Business Concept
+      ↓
+Domain Boundary
+      ↓
+Application Command
+      ↓
+API Contract
+      ↓
+Relational Entity
+      ↓
+Database Constraint
+      ↓
+Audit / Events
+```
+
+That means we have moved from:
+
+```text
+"What should the system do?"
+```
+
+to:
+
+```text
+"How can the system make incorrect states difficult or impossible to store?"
+```
+
+That is a very important transition.
+
+---
+
+# 504. Recommended Next Stage
+
+**I would not immediately start writing final DDL yet.**
+
+We have reached the exact point where your earlier request becomes especially important:
+
+> stress test it, find leaks, errors, unexpected scenarios, fallbacks, backup plans and weak assumptions.
+
+So the next document should be:
+
+```text
+docs/architecture/cross-domain-stress-test-failure-architecture.md
+```
+
+This should attack **everything we have designed so far**.
+
+Not merely list edge cases.
+
+We should systematically test:
+
+```text
+Catalog ↔ Inventory
+
+Inventory ↔ Orders
+
+Orders ↔ Payments
+
+Orders ↔ Customers
+
+Orders ↔ Promotions
+
+Payments ↔ Finance
+
+Procurement ↔ Shipments
+
+Shipments ↔ Receiving
+
+Receiving ↔ Inventory
+
+Receiving ↔ Landed Cost
+
+Transfers ↔ Inventory
+
+Returns ↔ Inventory
+
+Refunds ↔ Payments
+
+Refunds ↔ Finance
+
+Reviews ↔ Orders
+
+Media ↔ every domain
+
+Settings ↔ historical transactions
+
+Permissions ↔ every mutation
+
+Webhooks ↔ retries
+
+Workers ↔ crashes
+
+Database ↔ concurrency
+
+Deployments ↔ schema migrations
+
+Backups ↔ restore
+
+Provider outages
+
+Partial failures
+
+Duplicate requests
+
+Out-of-order events
+
+Missing events
+
+Corrupt projections
+
+Data migration
+
+Operator mistakes
+
+Malicious users
+```
+
+And instead of asking only:
+
+```text
+"What can fail?"
+```
+
+for every scenario we should answer:
+
+```text
+1. Trigger
+
+2. Expected correct state
+
+3. Wrong/dangerous state
+
+4. Prevention
+
+5. Detection
+
+6. Recovery
+
+7. Compensation
+
+8. Audit
+
+9. Customer impact
+
+10. Operator UX
+
+11. Automated test
+
+12. Remaining risk
+```
+
+That stress-test pass may change parts of this database architecture.
+
+**Only after that pass** should we freeze:
+
+```text
+final table list
+
+exact columns
+
+exact SQL types
+
+exact FK constraints
+
+exact indexes
+
+exact unique constraints
+
+exact transaction locking strategy
+```
+
+into the concrete PostgreSQL Schema Specification.
+
+That order gives us a much better chance of avoiding a schema that looks beautiful on paper but fails under real operations.
+
+---
+
+**End of Database & Data Model Architecture v0.1**
