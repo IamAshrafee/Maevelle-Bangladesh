@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 
 import { createDatabase } from './index.js';
 import { migrationStatus, runMigrations } from './migrate.js';
+import { migrations } from './migrations/index.js';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const configuredDatabaseName = testDatabaseUrl ? new URL(testDatabaseUrl).pathname.slice(1) : '';
@@ -31,7 +32,7 @@ describe('clean PostgreSQL migration path', () => {
       database = createDatabase({ connectionString: disposableUrl.toString(), maxConnections: 2 });
 
       const first = await runMigrations(database.db);
-      expect(first.executed).toHaveLength(6);
+      expect(first.executed).toHaveLength(Object.keys(migrations).length);
       const extensions = await sql<{ extname: string }>`
         select extname from pg_extension where extname in ('pg_trgm', 'pg_stat_statements') order by extname
       `.execute(database.db);

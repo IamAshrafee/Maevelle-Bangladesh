@@ -5,6 +5,7 @@ import type { DatabaseClient } from '@maevelle/database';
 
 import { createAuth } from '../auth/auth.js';
 import { registerAdminContextRoute } from './admin-context.js';
+import { registerCatalogRoutes } from './catalog.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -38,4 +39,5 @@ export function registerAuthRoutes(
     return reply.code(response.status).send(await response.text());
   });
   registerAdminContextRoute(app, database, auth);
+  registerCatalogRoutes(app, database, auth);
 }

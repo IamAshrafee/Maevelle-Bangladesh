@@ -1,0 +1,269 @@
+import type { FastifyInstance } from 'fastify';
+import { Type } from 'typebox';
+
+import type { DatabaseClient } from '@maevelle/database';
+import {
+  CatalogDomainError,
+  createCatalogCategory,
+  createCatalogProduct,
+  createCatalogVariant,
+  getStorefrontCatalogProduct,
+  listCatalogProducts,
+  moveCatalogCategory,
+  publishCatalogProduct,
+  unpublishCatalogProduct,
+  updateCatalogProduct,
+} from '@maevelle/database/catalog';
+import { findActiveAdminContext } from '@maevelle/database/platform';
+
+import type { createAuth } from '../auth/auth.js';
+
+type Auth = ReturnType<typeof createAuth>;
+
+function toHeaders(headers: Record<string, string | string[] | undefined>): Headers {
+  return new Headers(
+    Object.entries(headers).flatMap(([name, value]) =>
+      typeof value === 'string' ? [[name, value]] : [],
+    ),
+  );
+}
+
+async function requireCapability(
+  database: DatabaseClient,
+  auth: Auth,
+  headers: Record<string, string | string[] | undefined>,
+  capability: string,
+) {
+  const session = await auth.api.getSession({ headers: toHeaders(headers) });
+  if (!session?.user?.id) return undefined;
+  const context = await findActiveAdminContext(database.db, session.user.id, {
+    requiredCapability: capability,
+  });
+  return context ? { ...context, actorId: session.user.id } : undefined;
+}
+
+function domainError(
+  reply: { code(statusCode: number): { send(body: unknown): unknown } },
+  error: unknown,
+) {
+  if (!(error instanceof CatalogDomainError)) throw error;
+  const statusCode =
+    error.code === 'NOT_FOUND'
+      ? 404
+      : error.code === 'STALE_VERSION' || error.code === 'CONFLICT'
+        ? 409
+        : 422;
+  return reply.code(statusCode).send({ error: { code: error.code, message: error.message } });
+}
+
+export function registerCatalogRoutes(
+  app: FastifyInstance,
+  database: DatabaseClient,
+  auth: Auth,
+): void {
+  app.get('/admin/catalog/products', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listCatalogProducts(database.db, context.organizationId) };
+  });
+
+  app.post(
+    '/admin/catalog/products',
+    {
+      schema: {
+        body: Type.Object({
+          productTypeId: Type.String(),
+          title: Type.String({ minLength: 1 }),
+          handle: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
+          description: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          productTypeId: string;
+          title: string;
+          handle: string;
+          description?: string;
+        };
+        const product = await createCatalogProduct(database.db, {
+          ...body,
+          organizationId: context.organizationId,
+          actorId: context.actorId,
+        });
+        return reply.code(201).send({ data: product });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.patch(
+    '/admin/catalog/products/:productId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          title: Type.Optional(Type.String({ minLength: 1 })),
+          handle: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
+          description: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          version: number;
+          title?: string;
+          handle?: string;
+          description?: string | null;
+        };
+        const productId = (request.params as { productId: string }).productId;
+        const product = await updateCatalogProduct(database.db, {
+          ...body,
+          productId,
+          organizationId: context.organizationId,
+          actorId: context.actorId,
+          expectedVersion: body.version,
+        });
+        return { data: product };
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  for (const action of ['publish', 'unpublish'] as const) {
+    app.post(
+      `/admin/catalog/products/:productId/${action}`,
+      { schema: { body: Type.Object({ version: Type.Integer({ minimum: 1 }) }) } },
+      async (request, reply) => {
+        const context = await requireCapability(
+          database,
+          auth,
+          request.headers,
+          action === 'publish' ? 'catalog.publish' : 'catalog.publish',
+        );
+        if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+        try {
+          const { version } = request.body as { version: number };
+          const input = {
+            organizationId: context.organizationId,
+            actorId: context.actorId,
+            productId: (request.params as { productId: string }).productId,
+            expectedVersion: version,
+          };
+          const product =
+            action === 'publish'
+              ? await publishCatalogProduct(database.db, input)
+              : await unpublishCatalogProduct(database.db, input);
+          return { data: product };
+        } catch (error) {
+          return domainError(reply, error);
+        }
+      },
+    );
+  }
+
+  app.post(
+    '/admin/catalog/categories',
+    {
+      schema: {
+        body: Type.Object({
+          name: Type.String({ minLength: 1 }),
+          handle: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
+          parentCategoryId: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const category = await createCatalogCategory(database.db, {
+          ...(request.body as { name: string; handle: string; parentCategoryId?: string }),
+          organizationId: context.organizationId,
+        });
+        return reply.code(201).send({ data: category });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/catalog/categories/:categoryId/move',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          parentCategoryId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as { version: number; parentCategoryId?: string | null };
+        await moveCatalogCategory(database.db, {
+          organizationId: context.organizationId,
+          categoryId: (request.params as { categoryId: string }).categoryId,
+          ...(body.parentCategoryId === undefined
+            ? {}
+            : { parentCategoryId: body.parentCategoryId }),
+          expectedVersion: body.version,
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/catalog/products/:productId/variants',
+    {
+      schema: {
+        body: Type.Object({
+          sku: Type.String({ minLength: 1 }),
+          optionValueIds: Type.Array(Type.String(), { minItems: 1 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as { sku: string; optionValueIds: string[] };
+        const variant = await createCatalogVariant(database.db, {
+          ...body,
+          organizationId: context.organizationId,
+          productId: (request.params as { productId: string }).productId,
+        });
+        return reply.code(201).send({ data: variant });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.get(
+    '/storefront/v1/products/:handle',
+    { schema: { querystring: Type.Object({ organizationId: Type.String() }) } },
+    async (request, reply) => {
+      const product = await getStorefrontCatalogProduct(
+        database.db,
+        (request.query as { organizationId: string }).organizationId,
+        (request.params as { handle: string }).handle,
+      );
+      if (!product) return reply.code(404).send({ error: 'NOT_FOUND' });
+      return { data: product };
+    },
+  );
+}

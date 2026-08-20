@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./catalog": "./src/catalog.ts",
     "./migrations": "./src/migrations/index.ts",
     "./platform": "./src/platform.ts"
   },
