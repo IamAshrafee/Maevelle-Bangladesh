@@ -1,0 +1,18 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/storefront" },
+    { "path": "./apps/admin" },
+    { "path": "./apps/api" },
+    { "path": "./apps/worker" },
+    { "path": "./packages/core" },
+    { "path": "./packages/database" },
+    { "path": "./packages/contracts" },
+    { "path": "./packages/config" },
+    { "path": "./packages/observability" },
+    { "path": "./packages/security" },
+    { "path": "./packages/ui-admin" },
+    { "path": "./packages/ui-storefront" },
+    { "path": "./packages/testkit" }
+  ]
+}
