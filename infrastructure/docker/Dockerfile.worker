@@ -24,7 +24,7 @@ RUN pnpm install --frozen-lockfile
 FROM dependencies AS build
 
 COPY . .
-RUN pnpm exec tsc --build apps/worker/tsconfig.build.json --pretty false
+RUN pnpm exec tsc --build tsconfig.build.json --pretty false
 
 FROM node:24-bookworm-slim AS runtime
 

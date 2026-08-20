@@ -31,9 +31,13 @@ export function buildApi(options: BuildApiOptions) {
   // prevents Fastify from consuming and reserializing credential payloads.
   app.removeContentTypeParser('application/json');
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
-    done(null, body);
+    try {
+      done(null, JSON.parse(String(body)));
+    } catch {
+      done(new Error('Request body must be valid JSON.'));
+    }
   });
-  app.addContentTypeParser('*', { parseAs: 'string' }, (_request, body, done) => {
+  app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) => {
     done(null, body);
   });
 

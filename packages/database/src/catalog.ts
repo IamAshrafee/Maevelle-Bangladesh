@@ -4,13 +4,13 @@ import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent } from './platform.js';
 
 export class CatalogDomainError extends Error {
-  public constructor(
-    public readonly code:
-      'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED' | 'STALE_VERSION' | 'CATEGORY_CYCLE',
-    message: string,
-  ) {
+  public readonly code:
+    'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED' | 'STALE_VERSION' | 'CATEGORY_CYCLE';
+
+  public constructor(code: CatalogDomainError['code'], message: string) {
     super(message);
     this.name = 'CatalogDomainError';
+    this.code = code;
   }
 }
 
@@ -21,6 +21,72 @@ export interface ProductSummary {
   readonly status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
   readonly publicationStatus: 'UNPUBLISHED' | 'PUBLISHED';
   readonly version: number;
+}
+
+export async function createCatalogProductType(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; code: string; name: string },
+): Promise<{ id: string; code: string; name: string }> {
+  const result = await sql<{ id: string; code: string; name: string }>`
+    insert into catalog.product_types (organization_id, code, name) values (${input.organizationId}, ${input.code}, ${input.name}) returning id, code, name
+  `.execute(db);
+  const row = result.rows[0];
+  if (!row) throw new Error('Product type creation did not return a product type.');
+  return row;
+}
+
+export async function listCatalogProductTypes(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly { id: string; code: string; name: string }[]> {
+  const result = await sql<{
+    id: string;
+    code: string;
+    name: string;
+  }>`select id, code, name from catalog.product_types where organization_id = ${organizationId} and status = 'ACTIVE' order by name, id`.execute(
+    db,
+  );
+  return result.rows;
+}
+
+export async function createProductOptionAxis(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    productId: string;
+    code: string;
+    name: string;
+    position?: number;
+  },
+): Promise<{ id: string }> {
+  const result = await sql<{ id: string }>`
+    insert into catalog.product_option_axes (organization_id, product_id, code, name, position)
+    values (${input.organizationId}, ${input.productId}, ${input.code}, ${input.name}, ${input.position ?? 0}) returning id
+  `.execute(db);
+  const row = result.rows[0];
+  if (!row) throw new Error('Option axis creation did not return an id.');
+  return row;
+}
+
+export async function createProductOptionValue(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    optionAxisId: string;
+    code: string;
+    displayValue: string;
+    position?: number;
+    colorId?: string;
+    sizeDefinitionId?: string;
+  },
+): Promise<{ id: string }> {
+  const result = await sql<{ id: string }>`
+    insert into catalog.product_option_values (organization_id, option_axis_id, code, display_value, position, color_id, size_definition_id)
+    values (${input.organizationId}, ${input.optionAxisId}, ${input.code}, ${input.displayValue}, ${input.position ?? 0}, ${input.colorId ?? null}, ${input.sizeDefinitionId ?? null}) returning id
+  `.execute(db);
+  const row = result.rows[0];
+  if (!row) throw new Error('Option value creation did not return an id.');
+  return row;
 }
 
 function normalizeSku(value: string): string {

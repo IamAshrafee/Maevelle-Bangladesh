@@ -24,13 +24,14 @@ RUN pnpm install --frozen-lockfile
 FROM dependencies AS build
 
 COPY . .
-RUN pnpm exec tsc --build apps/api/tsconfig.build.json --pretty false
+RUN pnpm exec tsc --build tsconfig.build.json --pretty false
 
 FROM node:24-bookworm-slim AS runtime
 
 RUN groupadd --system --gid 1001 maevelle && useradd --system --uid 1001 --gid maevelle maevelle
 WORKDIR /app
 ENV NODE_ENV=production
+RUN mkdir -p /app/var/media && chown -R maevelle:maevelle /app/var
 COPY --from=build --chown=maevelle:maevelle /workspace/node_modules ./node_modules
 COPY --from=build --chown=maevelle:maevelle /workspace/package.json ./package.json
 COPY --from=build --chown=maevelle:maevelle /workspace/apps/api ./apps/api

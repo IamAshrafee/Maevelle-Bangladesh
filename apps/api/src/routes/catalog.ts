@@ -5,16 +5,21 @@ import type { DatabaseClient } from '@maevelle/database';
 import {
   CatalogDomainError,
   createCatalogCategory,
+  createCatalogProductType,
+  createProductOptionAxis,
+  createProductOptionValue,
   createCatalogProduct,
   createCatalogVariant,
   getStorefrontCatalogProduct,
   listCatalogProducts,
+  listCatalogProductTypes,
   moveCatalogCategory,
   publishCatalogProduct,
   unpublishCatalogProduct,
   updateCatalogProduct,
 } from '@maevelle/database/catalog';
 import { findActiveAdminContext } from '@maevelle/database/platform';
+import { getPublicSizeGuideForProduct } from '@maevelle/database/sizing';
 
 import type { createAuth } from '../auth/auth.js';
 
@@ -46,7 +51,14 @@ function domainError(
   reply: { code(statusCode: number): { send(body: unknown): unknown } },
   error: unknown,
 ) {
-  if (!(error instanceof CatalogDomainError)) throw error;
+  if (!(error instanceof CatalogDomainError)) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+      return reply
+        .code(409)
+        .send({ error: { code: 'CONFLICT', message: 'That value is already in use.' } });
+    }
+    throw error;
+  }
   const statusCode =
     error.code === 'NOT_FOUND'
       ? 404
@@ -56,11 +68,48 @@ function domainError(
   return reply.code(statusCode).send({ error: { code: error.code, message: error.message } });
 }
 
+function expectedVersion(header: string | string[] | undefined): number | undefined {
+  const value = Array.isArray(header) ? header[0] : header;
+  const number = Number(value?.replaceAll('"', ''));
+  return Number.isInteger(number) && number > 0 ? number : undefined;
+}
+
 export function registerCatalogRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
   auth: Auth,
 ): void {
+  app.get('/admin/catalog/product-types', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listCatalogProductTypes(database.db, context.organizationId) };
+  });
+
+  app.post(
+    '/admin/catalog/product-types',
+    {
+      schema: {
+        body: Type.Object({
+          code: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
+          name: Type.String({ minLength: 1 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await createCatalogProductType(database.db, {
+            organizationId: context.organizationId,
+            ...(request.body as { code: string; name: string }),
+          }),
+        });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
   app.get('/admin/catalog/products', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'catalog.view');
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -101,12 +150,75 @@ export function registerCatalogRoutes(
     },
   );
 
+  app.post(
+    '/admin/catalog/products/:productId/option-axes',
+    {
+      schema: {
+        body: Type.Object({
+          code: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
+          name: Type.String({ minLength: 1 }),
+          position: Type.Optional(Type.Integer({ minimum: 0 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await createProductOptionAxis(database.db, {
+            organizationId: context.organizationId,
+            productId: (request.params as { productId: string }).productId,
+            ...(request.body as { code: string; name: string; position?: number }),
+          }),
+        });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/catalog/option-axes/:axisId/values',
+    {
+      schema: {
+        body: Type.Object({
+          code: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
+          displayValue: Type.String({ minLength: 1 }),
+          position: Type.Optional(Type.Integer({ minimum: 0 })),
+          colorId: Type.Optional(Type.String()),
+          sizeDefinitionId: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await createProductOptionValue(database.db, {
+            organizationId: context.organizationId,
+            optionAxisId: (request.params as { axisId: string }).axisId,
+            ...(request.body as {
+              code: string;
+              displayValue: string;
+              position?: number;
+              colorId?: string;
+              sizeDefinitionId?: string;
+            }),
+          }),
+        });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
   app.patch(
     '/admin/catalog/products/:productId',
     {
       schema: {
         body: Type.Object({
-          version: Type.Integer({ minimum: 1 }),
           title: Type.Optional(Type.String({ minLength: 1 })),
           handle: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
           description: Type.Optional(Type.Union([Type.String(), Type.Null()])),
@@ -118,18 +230,25 @@ export function registerCatalogRoutes(
       if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
         const body = request.body as {
-          version: number;
           title?: string;
           handle?: string;
           description?: string | null;
         };
+        const version = expectedVersion(request.headers['if-match']);
+        if (!version)
+          return reply.code(428).send({
+            error: {
+              code: 'PRECONDITION_REQUIRED',
+              message: 'If-Match must contain the current product version.',
+            },
+          });
         const productId = (request.params as { productId: string }).productId;
         const product = await updateCatalogProduct(database.db, {
           ...body,
           productId,
           organizationId: context.organizationId,
           actorId: context.actorId,
-          expectedVersion: body.version,
+          expectedVersion: version,
         });
         return { data: product };
       } catch (error) {
@@ -264,6 +383,21 @@ export function registerCatalogRoutes(
       );
       if (!product) return reply.code(404).send({ error: 'NOT_FOUND' });
       return { data: product };
+    },
+  );
+
+  app.get(
+    '/storefront/v1/products/:handle/size-guide',
+    { schema: { querystring: Type.Object({ organizationId: Type.String() }) } },
+    async (request, reply) => {
+      const organizationId = (request.query as { organizationId: string }).organizationId;
+      const product = await getStorefrontCatalogProduct(
+        database.db,
+        organizationId,
+        (request.params as { handle: string }).handle,
+      );
+      if (!product) return reply.code(404).send({ error: 'NOT_FOUND' });
+      return { data: await getPublicSizeGuideForProduct(database.db, organizationId, product.id) };
     },
   );
 }

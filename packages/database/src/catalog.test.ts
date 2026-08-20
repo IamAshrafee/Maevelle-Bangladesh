@@ -6,6 +6,7 @@ import {
   createCatalogCategory,
   createCatalogProduct,
   createCatalogVariant,
+  getStorefrontCatalogProduct,
   moveCatalogCategory,
   publishCatalogProduct,
   unpublishCatalogProduct,
@@ -156,5 +157,46 @@ describe('catalog invariants', () => {
         expectedVersion: 1,
       }),
     ).rejects.toMatchObject({ code: 'CATEGORY_CYCLE' satisfies CatalogDomainError['code'] });
+  });
+
+  it('does not expose drafts or another organization’s products through public reads', async () => {
+    const fixture = await catalogFixture();
+    const handle = `private-${crypto.randomUUID().slice(0, 8)}`;
+    const draft = await createCatalogProduct(database.db, {
+      ...fixture,
+      title: 'Private until published',
+      handle,
+    });
+    expect(
+      await getStorefrontCatalogProduct(database.db, fixture.organizationId, handle),
+    ).toBeUndefined();
+    expect(
+      await getStorefrontCatalogProduct(database.db, crypto.randomUUID(), handle),
+    ).toBeUndefined();
+
+    const axis = await sql<{ id: string }>`
+      insert into catalog.product_option_axes (organization_id, product_id, code, name)
+      values (${fixture.organizationId}, ${draft.id}, 'size', 'Size') returning id
+    `.execute(database.db);
+    const option = await sql<{ id: string }>`
+      insert into catalog.product_option_values (organization_id, option_axis_id, code, display_value)
+      values (${fixture.organizationId}, ${axis.rows[0]!.id}, 'm', 'M') returning id
+    `.execute(database.db);
+    await createCatalogVariant(database.db, {
+      organizationId: fixture.organizationId,
+      productId: draft.id,
+      sku: `PRIVATE-${crypto.randomUUID().slice(0, 8)}`,
+      optionValueIds: [option.rows[0]!.id],
+    });
+    await publishCatalogProduct(database.db, {
+      ...fixture,
+      productId: draft.id,
+      expectedVersion: draft.version,
+    });
+    expect(
+      await getStorefrontCatalogProduct(database.db, fixture.organizationId, handle),
+    ).toMatchObject({
+      title: 'Private until published',
+    });
   });
 });

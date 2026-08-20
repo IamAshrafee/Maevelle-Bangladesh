@@ -4,10 +4,30 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./catalog": "./src/catalog.ts",
-    "./migrations": "./src/migrations/index.ts",
-    "./platform": "./src/platform.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./catalog": {
+      "types": "./src/catalog.ts",
+      "default": "./dist/src/catalog.js"
+    },
+    "./media": {
+      "types": "./src/media.ts",
+      "default": "./dist/src/media.js"
+    },
+    "./sizing": {
+      "types": "./src/sizing.ts",
+      "default": "./dist/src/sizing.js"
+    },
+    "./migrations": {
+      "types": "./src/migrations/index.ts",
+      "default": "./dist/src/migrations/index.js"
+    },
+    "./platform": {
+      "types": "./src/platform.ts",
+      "default": "./dist/src/platform.js"
+    }
   },
   "scripts": {
     "build": "tsc --build tsconfig.build.json --pretty false",

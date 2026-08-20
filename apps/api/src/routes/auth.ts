@@ -6,6 +6,9 @@ import type { DatabaseClient } from '@maevelle/database';
 import { createAuth } from '../auth/auth.js';
 import { registerAdminContextRoute } from './admin-context.js';
 import { registerCatalogRoutes } from './catalog.js';
+import { registerMediaRoutes } from './media.js';
+import { registerSizingRoutes } from './sizing.js';
+import { LocalMediaStorage } from '../media/local-media-storage.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -40,4 +43,12 @@ export function registerAuthRoutes(
   });
   registerAdminContextRoute(app, database, auth);
   registerCatalogRoutes(app, database, auth);
+  registerMediaRoutes(
+    app,
+    database,
+    auth,
+    new LocalMediaStorage(config.mediaStoragePath),
+    config.mediaMaxUploadBytes,
+  );
+  registerSizingRoutes(app, database, auth);
 }

@@ -39,3 +39,59 @@ p {
   color: #7f4a61;
   line-height: 1.6;
 }
+
+.eyebrow {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.choices button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid #d9a8bb;
+  border-radius: 0.5rem;
+  background: white;
+  padding: 0.5rem 0.75rem;
+}
+.choices button.selected {
+  border-color: #a31551;
+  box-shadow: 0 0 0 2px #f5c2d5;
+}
+.swatch {
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+}
+fieldset {
+  margin: 1rem 0;
+  border: 0;
+  padding: 0;
+}
+legend {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  border-bottom: 1px solid #f1d5df;
+  padding: 0.65rem;
+  text-align: left;
+}
+dt {
+  font-weight: 600;
+}
+dd {
+  margin: 0.2rem 0 0.7rem;
+}

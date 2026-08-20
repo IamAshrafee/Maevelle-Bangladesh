@@ -1,15 +1,15 @@
 # Maevelle implementation status
 
-Current Phase: Platform / IAM Foundation Complete
+Current Phase: Catalog Vertical Slice Complete
 
-Current Milestone: First Secure Admin Access
+Current Milestone: First Product Catalog, Media, and Sizing Flow
 
-Completed: Foundation Runtime Application shell Platform migrations IAM/authentication
+Completed: Foundation runtime and application shell, platform migrations, IAM/authentication, catalog, media, and revisioned sizing foundations
 
-Current Batch: PLATFORM-IDENTITY-01-CLOSEOUT complete
+Current Batch: CATALOG-VERTICAL-01-COMPLETION complete
 
-Next: Catalog / Media / Sizing vertical slice
+Next: Next product/domain milestone after review
 
 Blockers: None
 
-Known Risks: Production secret management, email/invitation delivery, and MFA enrollment policy remain intentionally deferred.
+Known Risks: Media storage is intentionally local-development only; production object storage, image processing/renditions, and broader catalog administration are deferred.

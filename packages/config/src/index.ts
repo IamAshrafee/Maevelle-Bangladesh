@@ -14,6 +14,9 @@ export interface RuntimeConfig {
   readonly betterAuthSecret: string;
   readonly authEncryptionKey: string;
   readonly authBaseUrl: string;
+  /** Local development media root. Production storage is configured in a later milestone. */
+  readonly mediaStoragePath: string;
+  readonly mediaMaxUploadBytes: number;
 }
 
 type Environment = Record<string, string | undefined>;
@@ -160,6 +163,14 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     betterAuthSecret: requiredSecret(environment, 'BETTER_AUTH_SECRET', 32),
     authEncryptionKey: requiredBase64Key(environment, 'AUTH_ENCRYPTION_KEY'),
     authBaseUrl: environment.BETTER_AUTH_URL ?? 'http://localhost:8080/api',
+    mediaStoragePath: environment.MEDIA_STORAGE_PATH ?? 'var/media',
+    mediaMaxUploadBytes: integer(
+      environment,
+      'MEDIA_MAX_UPLOAD_BYTES',
+      10 * 1024 * 1024,
+      1,
+      50 * 1024 * 1024,
+    ),
   });
 }
 
