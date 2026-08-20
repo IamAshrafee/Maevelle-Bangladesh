@@ -11,6 +11,9 @@ export interface RuntimeConfig {
   readonly apiPort: number;
   readonly logLevel: LogLevel;
   readonly workerHeartbeatIntervalMs: number;
+  readonly betterAuthSecret: string;
+  readonly authEncryptionKey: string;
+  readonly authBaseUrl: string;
 }
 
 type Environment = Record<string, string | undefined>;
@@ -78,6 +81,30 @@ function integer(
   return parsed;
 }
 
+function requiredSecret(
+  environment: Environment,
+  variableName: string,
+  minimumLength: number,
+): string {
+  const value = environment[variableName];
+  if (!value || value.length < minimumLength) {
+    throw new ConfigurationError(
+      `${variableName} is required and must be at least ${minimumLength} characters.`,
+    );
+  }
+  return value;
+}
+
+function requiredBase64Key(environment: Environment, variableName: string): string {
+  const value = environment[variableName];
+  if (!value) throw new ConfigurationError(`${variableName} is required.`);
+  const decoded = Buffer.from(value, 'base64');
+  if (decoded.length !== 32) {
+    throw new ConfigurationError(`${variableName} must decode to a 32-byte base64 key.`);
+  }
+  return value;
+}
+
 /**
  * Parses only runtime configuration needed by the current foundation. Error
  * messages deliberately name variables without echoing their values.
@@ -130,6 +157,9 @@ export function parseConfig(environment: Environment): RuntimeConfig {
       1_000,
       3_600_000,
     ),
+    betterAuthSecret: requiredSecret(environment, 'BETTER_AUTH_SECRET', 32),
+    authEncryptionKey: requiredBase64Key(environment, 'AUTH_ENCRYPTION_KEY'),
+    authBaseUrl: environment.BETTER_AUTH_URL ?? 'http://localhost:8080/api',
   });
 }
 

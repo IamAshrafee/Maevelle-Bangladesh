@@ -39,6 +39,9 @@ services:
       API_PORT: 3000
       DATABASE_POOL_MAX: 10
       LOG_LEVEL: info
+      BETTER_AUTH_SECRET: development-only-compose-secret-at-least-32-chars
+      AUTH_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      BETTER_AUTH_URL: http://localhost:8080
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,6 +67,8 @@ services:
       DATABASE_POOL_MAX: 10
       LOG_LEVEL: info
       WORKER_HEARTBEAT_INTERVAL_MS: 30000
+      BETTER_AUTH_SECRET: development-only-compose-secret-at-least-32-chars
+      AUTH_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
     depends_on:
       postgres:
         condition: service_healthy

@@ -6,6 +6,8 @@ const validEnvironment = {
   NODE_ENV: 'development',
   DATABASE_URL: 'postgresql://maevelle_dev:development-password@localhost:5434/maevelle_dev',
   TEST_DATABASE_URL: 'postgresql://maevelle_dev:development-password@localhost:5434/maevelle_test',
+  BETTER_AUTH_SECRET: 'development-only-test-secret-at-least-32-chars',
+  AUTH_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
 };
 
 describe('parseConfig', () => {

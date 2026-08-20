@@ -19,6 +19,7 @@ export async function startApiServer(config: RuntimeConfig = loadConfig()): Prom
   });
   const app = buildApi({
     database,
+    config,
     logger: createLogger({ component: 'api', level: config.logLevel }),
   });
   let closePromise: Promise<void> | undefined;

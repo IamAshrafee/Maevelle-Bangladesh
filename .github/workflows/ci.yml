@@ -38,6 +38,9 @@ jobs:
           PGPASSWORD: maevelle_dev_password
         run: psql --host localhost --username maevelle_dev --dbname postgres --command "CREATE DATABASE maevelle_test;"
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://maevelle_dev:maevelle_dev_password@localhost:5432/maevelle_test
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck

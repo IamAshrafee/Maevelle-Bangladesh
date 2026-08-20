@@ -5,8 +5,8 @@ export default function AdminHomePage() {
     <main>
       <section className="shell">
         <h1>Maevelle Admin</h1>
-        <p>The internal administration shell is ready for the upcoming IAM foundation.</p>
-        <Link href="/login">Login placeholder</Link>
+        <p>The internal administration shell is ready for authenticated access.</p>
+        <Link href="/login">Sign in</Link>
       </section>
     </main>
   );

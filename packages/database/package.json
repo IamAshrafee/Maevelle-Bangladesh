@@ -4,7 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./migrations": "./src/migrations/index.ts",
+    "./platform": "./src/platform.ts"
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json --pretty false",
+    "migrate": "pnpm run build && node dist/src/migrate-cli.js",
+    "migrate:status": "pnpm run build && node dist/src/migrate-cli.js --status"
   },
   "dependencies": {
     "kysely": "0.29.5",

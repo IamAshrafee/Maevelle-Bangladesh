@@ -1,15 +1,15 @@
 # Maevelle implementation status
 
-Current Phase: Phase 1 — Repository & Engineering Foundation
+Current Phase: Platform / IAM Foundation Complete
 
-Current Milestone: Application and delivery shell
+Current Milestone: First Secure Admin Access
 
-Completed: TASK-001 through TASK-017 foundation work
+Completed: Foundation Runtime Application shell Platform migrations IAM/authentication
 
-Current Batch: APPLICATION-FOUNDATION-01 complete
+Current Batch: PLATFORM-IDENTITY-01 complete
 
-Next: Database baseline migrations, then Platform/IAM foundation
+Next: Catalog / Media / Sizing vertical slice
 
 Blockers: None
 
-Known Risks: OpenTelemetry exporters, production secrets management, and production deployment configuration remain intentionally deferred.
+Known Risks: Production secret management, email/invitation delivery, and MFA enrollment policy remain intentionally deferred.

@@ -1,4 +1,5 @@
 import type { DatabaseClient } from '@maevelle/database';
+import { reclaimExpiredJobs } from '@maevelle/database/platform';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -17,8 +18,8 @@ export interface WorkerRuntime {
 }
 
 /**
- * Long-running process lifecycle only. Durable job registration and claiming
- * begin after the migration-controlled jobs infrastructure exists.
+ * The worker owns lease recovery. Job handlers remain intentionally absent
+ * until a domain registers an explicit durable handler.
  */
 export function createWorker(options: WorkerOptions): WorkerRuntime {
   const logger = options.logger;
@@ -36,7 +37,9 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
       started = true;
       logger?.info({}, 'Worker started.');
       heartbeat = setInterval(() => {
-        logger?.debug({}, 'Worker heartbeat.');
+        void reclaimExpiredJobs(options.database.db)
+          .then((reclaimed) => logger?.debug({ reclaimed }, 'Worker lease recovery tick.'))
+          .catch((error: unknown) => logger?.info({ error }, 'Worker lease recovery failed.'));
       }, options.heartbeatIntervalMs);
     },
     close(): Promise<void> {
