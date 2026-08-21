@@ -1,16 +1,16 @@
 # Maevelle implementation status
 
-Current Phase: Warehouse and Inventory Vertical Slice Complete
+Current Phase: Commercial foundation complete
 
-Current Milestone: WAREHOUSE-INVENTORY-01 — Multi-Location Warehouse + Ledger-Backed Inventory
+Current Milestone: CUSTOMER-PRICING-PROMOTIONS-CART-01 — COMPLETE
 
-Completed: Foundation runtime and application shell, platform migrations, IAM/authentication, catalog/media/sizing, warehouse locations and capabilities, immutable inventory ledger, balance projections, reservations, transfers, stocktakes, Admin inventory operations, and inventory API contracts
+Completed: Foundation runtime and application shell, platform migrations, IAM/authentication, catalog/media/sizing, warehouse locations and capabilities, immutable inventory ledger, Geography, Customers, Variant Pricing, Promotions/Coupons, and server-backed guest Cart
 
-Capabilities: multi-location inventory; ledger-backed stock; condition stock; reservations; Available To Sell; transfers; stocktakes; inventory history
+Capabilities: canonical Geography; Customer management; Variant Pricing; Promotions/Coupons; exact discount calculation; server-backed guest Cart; real Storefront pricing/cart
 
-Current Batch: WAREHOUSE-INVENTORY-01 complete
+Current Batch: CUSTOMER-PRICING-PROMOTIONS-CART-01 complete
 
-Next: Customer + Pricing + Promotions + Cart foundation
+Next: Orders + Checkout + COD Commerce Core
 
 Blockers: None
 

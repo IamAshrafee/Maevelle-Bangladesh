@@ -9,6 +9,10 @@ import { registerCatalogRoutes } from './catalog.js';
 import { registerMediaRoutes } from './media.js';
 import { registerSizingRoutes } from './sizing.js';
 import { registerInventoryRoutes } from './inventory.js';
+import { registerCustomerRoutes } from './customers.js';
+import { registerPricingRoutes } from './pricing.js';
+import { registerPromotionRoutes } from './promotions.js';
+import { registerCartRoutes } from './cart.js';
 import { LocalMediaStorage } from '../media/local-media-storage.js';
 
 export function registerAuthRoutes(
@@ -53,4 +57,8 @@ export function registerAuthRoutes(
   );
   registerSizingRoutes(app, database, auth);
   registerInventoryRoutes(app, database, auth);
+  registerCustomerRoutes(app, database, auth);
+  registerPricingRoutes(app, database, auth);
+  registerPromotionRoutes(app, database, auth);
+  registerCartRoutes(app, database);
 }

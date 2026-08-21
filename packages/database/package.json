@@ -35,6 +35,26 @@
     "./inventory": {
       "types": "./src/inventory.ts",
       "default": "./dist/src/inventory.js"
+    },
+    "./geography": {
+      "types": "./src/geography.ts",
+      "default": "./dist/src/geography.js"
+    },
+    "./customers": {
+      "types": "./src/customers.ts",
+      "default": "./dist/src/customers.js"
+    },
+    "./pricing": {
+      "types": "./src/pricing.ts",
+      "default": "./dist/src/pricing.js"
+    },
+    "./promotions": {
+      "types": "./src/promotions.ts",
+      "default": "./dist/src/promotions.js"
+    },
+    "./cart": {
+      "types": "./src/cart.ts",
+      "default": "./dist/src/cart.js"
     }
   },
   "scripts": {
@@ -43,6 +63,7 @@
     "migrate:status": "pnpm run build && node dist/src/migrate-cli.js --status"
   },
   "dependencies": {
+    "@maevelle/security": "workspace:*",
     "kysely": "0.29.5",
     "pg": "8.23.0"
   },

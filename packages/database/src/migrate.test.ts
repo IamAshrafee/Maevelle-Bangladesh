@@ -39,13 +39,18 @@ describe('clean PostgreSQL migration path', () => {
       expect(extensions.rows.map((row) => row.extname)).toEqual(['pg_stat_statements', 'pg_trgm']);
       const schemas = await sql<{ schema_name: string }>`
         select schema_name from information_schema.schemata
-        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory') order by schema_name
+        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart') order by schema_name
       `.execute(database.db);
       expect(schemas.rows.map((row) => row.schema_name)).toEqual([
         'audit',
+        'cart',
+        'customers',
+        'geography',
         'iam',
         'inventory',
         'platform',
+        'pricing',
+        'promotions',
         'warehouse',
       ]);
       const tables = await sql<{ table_name: string }>`
@@ -63,19 +68,46 @@ describe('clean PostgreSQL migration path', () => {
         union all
         select table_name from information_schema.tables
         where table_schema = 'inventory' and table_name in ('inventory_items', 'inventory_levels', 'inventory_movement_lines', 'inventory_reservations', 'stocktake_sessions')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'cart' and table_name in ('carts', 'cart_lines')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'customers' and table_name in ('customers', 'customer_phones', 'customer_addresses')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'geography' and table_name in ('datasets', 'nodes', 'node_aliases')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'pricing' and table_name = 'price_definitions'
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'promotions' and table_name in ('promotions', 'promotion_revisions', 'coupon_codes')
         order by table_name
       `.execute(database.db);
       expect(tables.rows.map((row) => row.table_name)).toEqual([
         'audit_events',
+        'cart_lines',
+        'carts',
+        'coupon_codes',
+        'customer_addresses',
+        'customer_phones',
+        'customers',
+        'datasets',
         'idempotency_records',
         'inventory_items',
         'inventory_levels',
         'inventory_movement_lines',
         'inventory_reservations',
         'locations',
+        'node_aliases',
+        'nodes',
         'organization_memberships',
         'organizations',
         'outbox_events',
+        'price_definitions',
+        'promotion_revisions',
+        'promotions',
         'stocktake_sessions',
         'transfer_lines',
         'transfers',

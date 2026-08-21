@@ -23,7 +23,12 @@ export interface StorefrontProductDto {
     name: string;
     values: readonly { id: string; code: string; label: string; colorHex?: string }[];
   }[];
-  readonly variants: readonly { id: string; sku: string; optionValueIds: readonly string[] }[];
+  readonly variants: readonly {
+    id: string;
+    sku: string;
+    optionValueIds: readonly string[];
+    price?: { amount: string; compareAtAmount: string | null; currency: string };
+  }[];
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
 }

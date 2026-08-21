@@ -20,6 +20,7 @@ import {
 } from '@maevelle/database/catalog';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 import { getPublicSizeGuideForProduct } from '@maevelle/database/sizing';
+import { resolveVariantPrice } from '@maevelle/database/pricing';
 
 import type { createAuth } from '../auth/auth.js';
 
@@ -374,15 +375,49 @@ export function registerCatalogRoutes(
 
   app.get(
     '/storefront/v1/products/:handle',
-    { schema: { querystring: Type.Object({ organizationId: Type.String() }) } },
+    {
+      schema: {
+        querystring: Type.Object({
+          organizationId: Type.String(),
+          currency: Type.Optional(Type.String({ pattern: '^[A-Z]{3}$' })),
+        }),
+      },
+    },
     async (request, reply) => {
+      const query = request.query as { organizationId: string; currency?: string };
       const product = await getStorefrontCatalogProduct(
         database.db,
-        (request.query as { organizationId: string }).organizationId,
+        query.organizationId,
         (request.params as { handle: string }).handle,
       );
       if (!product) return reply.code(404).send({ error: 'NOT_FOUND' });
-      return { data: product };
+      const currency = query.currency ?? 'BDT';
+      return {
+        data: {
+          ...product,
+          variants: await Promise.all(
+            product.variants.map(async (variant) => {
+              const price = await resolveVariantPrice(database.db, {
+                organizationId: query.organizationId,
+                variantId: variant.id,
+                currency,
+              });
+              return {
+                ...variant,
+                ...(price
+                  ? {
+                      price: {
+                        amount: price.amount,
+                        compareAtAmount: price.compareAtAmount,
+                        currency: price.currency,
+                      },
+                    }
+                  : {}),
+              };
+            }),
+          ),
+        },
+      };
     },
   );
 

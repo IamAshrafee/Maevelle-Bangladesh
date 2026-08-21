@@ -12,6 +12,12 @@ import * as media from './0400_media.js';
 import * as warehouse from './0500_warehouse.js';
 import * as inventory from './0600_inventory.js';
 import * as inventoryStocktakeTimestamp from './0601_inventory_stocktake_session_timestamp.js';
+import * as geography from './0650_geography.js';
+import * as customers from './0700_customers.js';
+import * as pricing from './0800_pricing.js';
+import * as promotions from './0900_promotions.js';
+import * as cart from './1000_cart.js';
+import * as geographySourceCodeNulls from './1001_geography_source_code_nulls.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -30,6 +36,12 @@ export const migrations = {
   '0500_warehouse': warehouse,
   '0600_inventory': inventory,
   '0601_inventory_stocktake_session_timestamp': inventoryStocktakeTimestamp,
+  '0650_geography': geography,
+  '0700_customers': customers,
+  '0800_pricing': pricing,
+  '0900_promotions': promotions,
+  '1000_cart': cart,
+  '1001_geography_source_code_nulls': geographySourceCodeNulls,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

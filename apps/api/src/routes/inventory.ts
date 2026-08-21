@@ -17,7 +17,6 @@ import {
   startStocktake,
   approveWarehouseTransfer,
   cancelWarehouseTransfer,
-
   getStocktakeWorkspace,
   listWarehouseTransfers,
   InventoryDomainError,
