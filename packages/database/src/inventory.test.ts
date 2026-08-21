@@ -7,6 +7,7 @@ import {
   adjustInventory,
   approveWarehouseTransfer,
   cancelWarehouseTransfer,
+
   createInventoryReservation,
   createWarehouseTransfer,
   dispatchWarehouseTransfer,
@@ -343,7 +344,6 @@ describe('ledger-backed inventory', () => {
       }),
     ).rejects.toMatchObject({ code: 'STALE_VERSION' });
   });
-
   it('posts a stocktake discrepancy at most once', async () => {
     const f = await fixture();
     const opened = await opening(f, '5');
