@@ -432,6 +432,13 @@ export async function createCatalogVariant(
         values (${input.organizationId}, ${variant.id}, ${selectedValue.option_axis_id}, ${selectedValue.option_value_id})
       `.execute(transaction);
     }
+    // Controlled Catalog → Inventory coordination: a sellable Variant always
+    // receives its separate inventory identity without Catalog owning stock.
+    await sql`
+      insert into inventory.inventory_items (organization_id, variant_id)
+      values (${input.organizationId}, ${variant.id})
+      on conflict (variant_id) do nothing
+    `.execute(transaction);
     return { id: variant.id, sku: variant.sku, version: Number(variant.version) };
   });
 }

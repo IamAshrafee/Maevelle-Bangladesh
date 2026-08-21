@@ -47,3 +47,38 @@ export interface PublicSizeGuideDto {
 export interface ApiErrorDto {
   readonly error: string | { code: string; message: string };
 }
+
+/** Decimal quantities remain strings across HTTP so JavaScript never becomes inventory authority. */
+export interface InventoryBalanceDto {
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly locationId: string;
+  readonly locationName: string;
+  readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+  readonly onHand: string;
+  readonly reserved: string;
+  readonly availableToSell: string;
+}
+
+export interface InventoryHistoryDto {
+  readonly id: string;
+  readonly occurredAt: string;
+  readonly transactionType: string;
+  readonly sku: string;
+  readonly locationName: string;
+  readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+  readonly quantityDelta: string;
+  readonly reasonCode: string | null;
+}
+
+export interface WarehouseLocationDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly locationType: string;
+  readonly status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  readonly capabilities: readonly string[];
+  readonly version: number;
+}

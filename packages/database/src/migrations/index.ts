@@ -9,6 +9,9 @@ import * as emailNormalization from './0005_iam_user_normalization.js';
 import * as catalog from './0200_catalog.js';
 import * as sizing from './0300_sizing.js';
 import * as media from './0400_media.js';
+import * as warehouse from './0500_warehouse.js';
+import * as inventory from './0600_inventory.js';
+import * as inventoryStocktakeTimestamp from './0601_inventory_stocktake_session_timestamp.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -24,6 +27,9 @@ export const migrations = {
   '0200_catalog': catalog,
   '0300_sizing': sizing,
   '0400_media': media,
+  '0500_warehouse': warehouse,
+  '0600_inventory': inventory,
+  '0601_inventory_stocktake_session_timestamp': inventoryStocktakeTimestamp,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

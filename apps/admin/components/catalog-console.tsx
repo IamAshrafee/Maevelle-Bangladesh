@@ -121,6 +121,12 @@ export function CatalogConsole() {
             >
               Sizing
             </Link>
+            <Link
+              className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
+              href="/admin/inventory/stock"
+            >
+              Inventory
+            </Link>
             <Button onClick={() => void reload()}>Refresh</Button>
           </nav>
         </header>

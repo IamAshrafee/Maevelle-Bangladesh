@@ -27,6 +27,14 @@
     "./platform": {
       "types": "./src/platform.ts",
       "default": "./dist/src/platform.js"
+    },
+    "./warehouse": {
+      "types": "./src/warehouse.ts",
+      "default": "./dist/src/warehouse.js"
+    },
+    "./inventory": {
+      "types": "./src/inventory.ts",
+      "default": "./dist/src/inventory.js"
     }
   },
   "scripts": {
