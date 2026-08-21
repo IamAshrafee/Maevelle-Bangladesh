@@ -39,9 +39,15 @@ describe('clean PostgreSQL migration path', () => {
       expect(extensions.rows.map((row) => row.extname)).toEqual(['pg_stat_statements', 'pg_trgm']);
       const schemas = await sql<{ schema_name: string }>`
         select schema_name from information_schema.schemata
-        where schema_name in ('platform', 'audit', 'iam') order by schema_name
+        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory') order by schema_name
       `.execute(database.db);
-      expect(schemas.rows.map((row) => row.schema_name)).toEqual(['audit', 'iam', 'platform']);
+      expect(schemas.rows.map((row) => row.schema_name)).toEqual([
+        'audit',
+        'iam',
+        'inventory',
+        'platform',
+        'warehouse',
+      ]);
       const tables = await sql<{ table_name: string }>`
         select table_name from information_schema.tables
         where table_schema = 'platform' and table_name in ('organizations', 'idempotency_records', 'outbox_events')
@@ -51,14 +57,28 @@ describe('clean PostgreSQL migration path', () => {
         union all
         select table_name from information_schema.tables
         where table_schema = 'iam' and table_name in ('users', 'organization_memberships')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'warehouse' and table_name in ('locations', 'transfers', 'transfer_lines')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'inventory' and table_name in ('inventory_items', 'inventory_levels', 'inventory_movement_lines', 'inventory_reservations', 'stocktake_sessions')
         order by table_name
       `.execute(database.db);
       expect(tables.rows.map((row) => row.table_name)).toEqual([
         'audit_events',
         'idempotency_records',
+        'inventory_items',
+        'inventory_levels',
+        'inventory_movement_lines',
+        'inventory_reservations',
+        'locations',
         'organization_memberships',
         'organizations',
         'outbox_events',
+        'stocktake_sessions',
+        'transfer_lines',
+        'transfers',
         'users',
       ]);
       expect((await migrationStatus(database.db)).every((migration) => migration.executedAt)).toBe(

@@ -1,15 +1,17 @@
 # Maevelle implementation status
 
-Current Phase: Catalog Vertical Slice Complete
+Current Phase: Warehouse and Inventory Vertical Slice Complete
 
-Current Milestone: First Product Catalog, Media, and Sizing Flow
+Current Milestone: WAREHOUSE-INVENTORY-01 — Multi-Location Warehouse + Ledger-Backed Inventory
 
-Completed: Foundation runtime and application shell, platform migrations, IAM/authentication, catalog, media, and revisioned sizing foundations
+Completed: Foundation runtime and application shell, platform migrations, IAM/authentication, catalog/media/sizing, warehouse locations and capabilities, immutable inventory ledger, balance projections, reservations, transfers, stocktakes, Admin inventory operations, and inventory API contracts
 
-Current Batch: CATALOG-VERTICAL-01-COMPLETION complete
+Capabilities: multi-location inventory; ledger-backed stock; condition stock; reservations; Available To Sell; transfers; stocktakes; inventory history
 
-Next: Next product/domain milestone after review
+Current Batch: WAREHOUSE-INVENTORY-01 complete
+
+Next: Customer + Pricing + Promotions + Cart foundation
 
 Blockers: None
 
-Known Risks: Media storage is intentionally local-development only; production object storage, image processing/renditions, and broader catalog administration are deferred.
+Known Risks: Media storage remains local-development only; warehouse transfer in-transit quantity is represented by dispatched-minus-received transfer lines until a dedicated transit-location/reporting requirement is introduced.

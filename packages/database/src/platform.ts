@@ -373,9 +373,7 @@ export async function createOwnerMembership(
     insert into iam.membership_capability_grants (membership_id, capability_code)
     select membership.id, capability.capability_code
     from iam.organization_memberships membership
-    join iam.capability_definitions capability on capability.capability_code in (
-      'catalog.view', 'catalog.manage', 'catalog.publish', 'media.view', 'media.manage', 'sizing.view', 'sizing.manage'
-    )
+    join iam.capability_definitions capability on true
     where membership.organization_id = ${organizationId} and membership.user_id = ${userId}
     on conflict do nothing
   `.execute(db);

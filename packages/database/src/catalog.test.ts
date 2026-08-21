@@ -80,6 +80,11 @@ describe('catalog invariants', () => {
       optionValueIds: [valueId],
     });
     expect(variant.sku).toMatch(/^HAT-/);
+    const inventoryItem = await sql<{ variant_id: string }>`
+      select variant_id from inventory.inventory_items
+      where organization_id = ${fixture.organizationId} and variant_id = ${variant.id}
+    `.execute(database.db);
+    expect(inventoryItem.rows[0]?.variant_id).toBe(variant.id);
     const published = await publishCatalogProduct(database.db, {
       ...fixture,
       productId: product.id,

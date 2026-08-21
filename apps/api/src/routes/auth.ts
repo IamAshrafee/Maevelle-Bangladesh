@@ -8,6 +8,7 @@ import { registerAdminContextRoute } from './admin-context.js';
 import { registerCatalogRoutes } from './catalog.js';
 import { registerMediaRoutes } from './media.js';
 import { registerSizingRoutes } from './sizing.js';
+import { registerInventoryRoutes } from './inventory.js';
 import { LocalMediaStorage } from '../media/local-media-storage.js';
 
 export function registerAuthRoutes(
@@ -51,4 +52,5 @@ export function registerAuthRoutes(
     config.mediaMaxUploadBytes,
   );
   registerSizingRoutes(app, database, auth);
+  registerInventoryRoutes(app, database, auth);
 }
