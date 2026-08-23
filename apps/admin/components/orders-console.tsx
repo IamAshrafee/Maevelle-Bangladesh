@@ -8,6 +8,8 @@ interface OrderSummary {
   id: string;
   orderNumber: string;
   status: string;
+  paymentMethod: string;
+  paymentStatus: string;
   total: string;
   customerName: string;
   createdAt: string;
@@ -18,6 +20,13 @@ interface OrderDetail {
   orderNumber: string;
   status: string;
   paymentMethod: string;
+  payment: {
+    status: string;
+    expected: string;
+    collected: string;
+    refunded: string;
+    outstanding: string;
+  };
   merchandiseGross: string;
   discountTotal: string;
   merchandiseNet: string;
@@ -158,7 +167,9 @@ export function OrdersConsole() {
                 <td>{order.customerName}</td>
                 <td>{new Date(order.createdAt).toLocaleString()}</td>
                 <td>{order.status}</td>
-                <td>COD</td>
+                <td>
+                  {order.paymentMethod} · {order.paymentStatus}
+                </td>
                 <td>{money(order.total)}</td>
               </tr>
             ))}
@@ -167,7 +178,15 @@ export function OrdersConsole() {
         {selected ? (
           <section>
             <h2>{selected.orderNumber}</h2>
-            <p>Status: {selected.status} · Payment: COD</p>
+            <p>
+              Status: {selected.status} · Payment method: {selected.paymentMethod}
+            </p>
+            <p>
+              Payment status: {selected.payment.status} · Expected{' '}
+              {money(selected.payment.expected)} · Collected {money(selected.payment.collected)} ·
+              Refunded {money(selected.payment.refunded)} · Outstanding{' '}
+              {money(selected.payment.outstanding)}
+            </p>
             <p>
               {selected.customer.displayName} · {selected.customer.phone}
               {selected.customer.email ? ` · ${selected.customer.email}` : ''}

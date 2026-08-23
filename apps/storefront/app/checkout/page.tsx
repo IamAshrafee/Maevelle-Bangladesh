@@ -9,7 +9,7 @@ import type { ApiEnvelope } from '@maevelle/contracts';
 interface Checkout {
   version: number;
   status: string;
-  paymentMethod: 'COD';
+  paymentMethod: 'COD' | 'BKASH_MANUAL' | 'NAGAD_MANUAL';
   calculationVersion: number;
   calculationFingerprint: string;
   cart: {
@@ -42,6 +42,12 @@ interface Checkout {
     countryCode: string;
   } | null;
 }
+interface PaymentMethod {
+  code: Checkout['paymentMethod'];
+  name: string;
+  methodType: 'COD' | 'MOBILE_WALLET';
+  instructions: { accountNumber?: string; text?: string };
+}
 
 function money(value: string): string {
   return `৳${value}`;
@@ -63,6 +69,7 @@ async function readError(
 export default function CheckoutPage() {
   const router = useRouter();
   const [checkout, setCheckout] = useState<Checkout>();
+  const [paymentMethods, setPaymentMethods] = useState<readonly PaymentMethod[]>([]);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const idempotencyKey = useRef<string | undefined>(undefined);
@@ -78,7 +85,13 @@ export default function CheckoutPage() {
       setMessage((await readError(response)).message);
       return;
     }
-    setCheckout(((await response.json()) as ApiEnvelope<Checkout>).data);
+    const current = ((await response.json()) as ApiEnvelope<Checkout>).data;
+    setCheckout(current);
+    const methods = await fetch('/api/storefront/v1/checkouts/current/payment-methods', {
+      credentials: 'include',
+    });
+    if (methods.ok)
+      setPaymentMethods(((await methods.json()) as ApiEnvelope<readonly PaymentMethod[]>).data);
   };
   useEffect(() => {
     void load();
@@ -148,6 +161,20 @@ export default function CheckoutPage() {
       setSaving(false);
     }
   }
+  async function selectPaymentMethod(paymentMethod: Checkout['paymentMethod']) {
+    if (!checkout || saving || checkout.paymentMethod === paymentMethod) return;
+    setSaving(true);
+    setMessage('');
+    const response = await fetch('/api/storefront/v1/checkouts/current/payment-method', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ version: checkout.version, paymentMethod }),
+    });
+    if (response.ok) setCheckout(((await response.json()) as ApiEnvelope<Checkout>).data);
+    else setMessage((await readError(response)).message);
+    setSaving(false);
+  }
   async function placeOrder() {
     if (!checkout || saving) return;
     setSaving(true);
@@ -199,7 +226,11 @@ export default function CheckoutPage() {
       <section className="shell">
         <h1>Checkout</h1>
         <p>
-          Payment method: <strong>Cash on Delivery</strong>
+          Payment method:{' '}
+          <strong>
+            {paymentMethods.find((method) => method.code === checkout.paymentMethod)?.name ??
+              checkout.paymentMethod}
+          </strong>
         </p>
         <form onSubmit={onContact}>
           <h2>Contact</h2>
@@ -216,6 +247,23 @@ export default function CheckoutPage() {
             Save contact
           </button>
         </form>
+        <h2>Payment method</h2>
+        {paymentMethods.map((method) => (
+          <label key={method.code}>
+            <input
+              checked={checkout.paymentMethod === method.code}
+              disabled={saving}
+              name="paymentMethod"
+              type="radio"
+              value={method.code}
+              onChange={() => void selectPaymentMethod(method.code)}
+            />{' '}
+            {method.name}
+            {method.methodType === 'MOBILE_WALLET'
+              ? ' · Manual payment after placing the Order'
+              : ''}
+          </label>
+        ))}
         <form onSubmit={onAddress}>
           <h2>Delivery address</h2>
           <label>
@@ -280,7 +328,9 @@ export default function CheckoutPage() {
           type="button"
           onClick={() => void placeOrder()}
         >
-          {saving ? 'Placing Order…' : 'Place Cash on Delivery Order'}
+          {saving
+            ? 'Placing Order…'
+            : `Place ${paymentMethods.find((method) => method.code === checkout.paymentMethod)?.name ?? checkout.paymentMethod} Order`}
         </button>
         <p>
           <Link href="/cart">Return to Cart</Link>

@@ -39,7 +39,7 @@ describe('clean PostgreSQL migration path', () => {
       expect(extensions.rows.map((row) => row.extname)).toEqual(['pg_stat_statements', 'pg_trgm']);
       const schemas = await sql<{ schema_name: string }>`
         select schema_name from information_schema.schemata
-        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders') order by schema_name
+        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments') order by schema_name
       `.execute(database.db);
       expect(schemas.rows.map((row) => row.schema_name)).toEqual([
         'audit',
@@ -49,6 +49,7 @@ describe('clean PostgreSQL migration path', () => {
         'iam',
         'inventory',
         'orders',
+        'payments',
         'platform',
         'pricing',
         'promotions',
@@ -87,6 +88,9 @@ describe('clean PostgreSQL migration path', () => {
         union all
         select table_name from information_schema.tables
         where table_schema = 'orders' and table_name in ('checkout_sessions', 'orders', 'order_lines', 'order_customer_snapshots', 'order_addresses')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'payments' and table_name in ('payment_methods', 'payment_intents', 'payment_attempts', 'payments', 'payment_allocations', 'refund_allocations', 'refunds')
         order by table_name
       `.execute(database.db);
       expect(tables.rows.map((row) => row.table_name)).toEqual([
@@ -114,9 +118,16 @@ describe('clean PostgreSQL migration path', () => {
         'organization_memberships',
         'organizations',
         'outbox_events',
+        'payment_allocations',
+        'payment_attempts',
+        'payment_intents',
+        'payment_methods',
+        'payments',
         'price_definitions',
         'promotion_revisions',
         'promotions',
+        'refund_allocations',
+        'refunds',
         'stocktake_sessions',
         'transfer_lines',
         'transfers',

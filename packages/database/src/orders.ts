@@ -11,6 +11,15 @@ import {
 import { claimIdempotencyRecord, IdempotencyKeyReuseError, appendAuditEvent } from './platform.js';
 import { evaluatePromotions } from './promotions.js';
 import { getGuestCart, type CartView } from './cart.js';
+import {
+  createPaymentIntentForOrder,
+  cancelPendingPaymentIntentsForOrder,
+  getOrderPaymentSummary,
+  listPaymentMethods,
+  requireActivePaymentMethod,
+  type PaymentMethodCode,
+  type PaymentSummary,
+} from './payments.js';
 
 const checkoutLifetimeMs = 60 * 60 * 1000;
 
@@ -58,7 +67,7 @@ export interface CheckoutView {
   readonly version: number;
   readonly status: 'ACTIVE' | 'CHANGED' | 'ORDER_PLACED' | 'EXPIRED';
   readonly expiresAt: string;
-  readonly paymentMethod: 'COD';
+  readonly paymentMethod: PaymentMethodCode;
   readonly calculationVersion: number;
   readonly calculationFingerprint: string;
   readonly cart: CartView;
@@ -73,7 +82,8 @@ export interface OrderView {
   readonly orderNumber: string;
   readonly status: string;
   readonly currency: string;
-  readonly paymentMethod: 'COD';
+  readonly paymentMethod: PaymentMethodCode;
+  readonly payment: PaymentSummary;
   readonly merchandiseGross: string;
   readonly discountTotal: string;
   readonly merchandiseNet: string;
@@ -148,7 +158,7 @@ async function checkoutRow(db: Kysely<DatabaseSchema>, token: string, lock = fal
     cart_version: string;
     calculation_version: string;
     calculation_fingerprint: string;
-    payment_method: 'COD';
+    payment_method: PaymentMethodCode;
     resulting_order_id: string | null;
   }>`select * from orders.checkout_sessions where public_token_hash = ${hashToken(token)} ${lock ? sql`for update` : sql``}`.execute(
     db,
@@ -373,6 +383,49 @@ export async function updateCheckoutAddress(
   });
 }
 
+/** Orders own checkout state; they ask the public Payments interface which methods are selectable. */
+export async function updateCheckoutPaymentMethod(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    checkoutToken: string;
+    cartToken: string;
+    expectedVersion: number;
+    paymentMethod: PaymentMethodCode;
+  },
+): Promise<CheckoutView> {
+  return db.transaction().execute(async (transaction) => {
+    const { checkout, cart } = await activeCheckout(transaction, input);
+    await requireActivePaymentMethod(transaction, {
+      organizationId: checkout.organization_id,
+      code: input.paymentMethod,
+    });
+    const updated = await sql<{ version: string }>`
+      update orders.checkout_sessions set payment_method = ${input.paymentMethod}, status = 'ACTIVE',
+        version = version + 1, updated_at = now() where id = ${checkout.id} returning version::text
+    `.execute(transaction);
+    return checkoutInputView(
+      {
+        ...checkout,
+        version: updated.rows[0]!.version,
+        status: 'ACTIVE',
+        payment_method: input.paymentMethod,
+      },
+      cart,
+    );
+  });
+}
+
+export async function getAvailableCheckoutPaymentMethods(
+  db: Kysely<DatabaseSchema>,
+  input: { checkoutToken: string; cartToken: string },
+) {
+  const checkout = await checkoutRow(db, input.checkoutToken);
+  const cart = await getGuestCart(db, input.cartToken);
+  if (cart.id !== checkout.cart_id)
+    throw new OrderDomainError('NOT_FOUND', 'Checkout was not found.');
+  return listPaymentMethods(db, checkout.organization_id, true);
+}
+
 export async function refreshCheckout(
   db: Kysely<DatabaseSchema>,
   input: { checkoutToken: string; cartToken: string; expectedVersion: number },
@@ -526,10 +579,11 @@ export type PlaceOrderResult =
 async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<OrderView> {
   const order = await sql<{
     id: string;
+    organization_id: string;
     order_number: string;
     order_status: string;
     currency_code: string;
-    payment_method: 'COD';
+    payment_method: PaymentMethodCode;
     subtotal_amount: string;
     discount_amount: string;
     total_amount: string;
@@ -548,7 +602,7 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     postal_code: string | null;
     country_code: string;
   }>`
-    select order_row.id, order_row.order_number, order_row.order_status, order_row.currency_code, order_row.payment_method, order_row.version::text,
+    select order_row.id, order_row.organization_id, order_row.order_number, order_row.order_status, order_row.currency_code, order_row.payment_method, order_row.version::text,
       order_row.subtotal_amount::text, order_row.discount_amount::text, order_row.total_amount::text,
       customer.display_name, customer.phone, customer.email, address.recipient_name, address.phone as delivery_phone, address.address_line_1, address.address_line_2,
       address.geography_node_id, address.area, address.city, address.district, address.postal_code, address.country_code
@@ -572,6 +626,12 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     select sku_snapshot, product_title_snapshot, quantity::text, unit_price::text, gross_amount::text, discount_amount::text, net_amount::text, option_snapshot
     from orders.order_lines where order_id = ${orderId} order by id
   `.execute(db);
+  const payment = await getOrderPaymentSummary(db, {
+    organizationId: row.organization_id,
+    orderId,
+    paymentMethod: row.payment_method,
+    expectedAmount: row.total_amount,
+  });
   return {
     id: row.id,
     version: Number(row.version),
@@ -579,6 +639,7 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     status: row.order_status,
     currency: row.currency_code,
     paymentMethod: row.payment_method,
+    payment,
     merchandiseGross: row.subtotal_amount,
     discountTotal: row.discount_amount,
     merchandiseNet: row.total_amount,
@@ -741,7 +802,7 @@ export async function placeOrder(
     const number = await nextOrderNumber(transaction, checkout.organization_id);
     const orderCreated = await sql<{ id: string }>`
       insert into orders.orders (organization_id, order_number, checkout_session_id, customer_id, source, currency_code, order_status, payment_method, subtotal_amount, discount_amount, total_amount)
-      values (${checkout.organization_id}, ${number}, ${checkout.id}, ${customerId}, 'STOREFRONT', ${cart.currency}, 'PENDING', 'COD', ${cart.merchandiseGross}::numeric, ${cart.discountTotal}::numeric, ${cart.merchandiseNet}::numeric) returning id
+      values (${checkout.organization_id}, ${number}, ${checkout.id}, ${customerId}, 'STOREFRONT', ${cart.currency}, 'PENDING', ${checkout.payment_method}, ${cart.merchandiseGross}::numeric, ${cart.discountTotal}::numeric, ${cart.merchandiseNet}::numeric) returning id
     `.execute(transaction);
     const orderId = orderCreated.rows[0]?.id;
     if (!orderId) throw new Error('Order creation did not return an id.');
@@ -809,6 +870,14 @@ export async function placeOrder(
       orderId,
       calculations,
     });
+    await createPaymentIntentForOrder(transaction, {
+      organizationId: checkout.organization_id,
+      orderId,
+      orderNumber: number,
+      paymentMethod: checkout.payment_method,
+      currency: cart.currency,
+      expectedAmount: cart.merchandiseNet,
+    });
     input.fault?.('after-promotion-usage');
     for (const calculation of calculations) {
       const snapshot = await sql<{
@@ -847,7 +916,7 @@ export async function placeOrder(
       action: 'orders.order.placed',
       targetType: 'orders.order',
       targetId: orderId,
-      metadata: { orderNumber: number, paymentMethod: 'COD' },
+      metadata: { orderNumber: number, paymentMethod: checkout.payment_method },
     });
     await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${checkout.organization_id}, 'orders.order.placed', 1, 'orders.order', ${orderId}, 1, ${JSON.stringify({ orderId, orderNumber: number })}::jsonb, now())`.execute(
       transaction,
@@ -864,6 +933,20 @@ export async function getOrderForCheckout(
   if (!checkout.resulting_order_id || checkout.status !== 'ORDER_PLACED')
     throw new OrderDomainError('NOT_FOUND', 'Order confirmation was not found.');
   return orderView(db, checkout.resulting_order_id);
+}
+
+/** Secure checkout credential resolver for adjacent application services such as Payments. */
+export async function getOrderForCheckoutContext(
+  db: Kysely<DatabaseSchema>,
+  checkoutToken: string,
+): Promise<{ order: OrderView; organizationId: string }> {
+  const checkout = await checkoutRow(db, checkoutToken);
+  if (!checkout.resulting_order_id || checkout.status !== 'ORDER_PLACED')
+    throw new OrderDomainError('NOT_FOUND', 'Order confirmation was not found.');
+  return {
+    order: await orderView(db, checkout.resulting_order_id),
+    organizationId: checkout.organization_id,
+  };
 }
 
 export async function getOrderForAdmin(
@@ -887,6 +970,8 @@ export async function listOrders(
     id: string;
     orderNumber: string;
     status: string;
+    paymentMethod: PaymentMethodCode;
+    paymentStatus: PaymentSummary['status'];
     total: string;
     customerName: string;
     createdAt: string;
@@ -896,22 +981,34 @@ export async function listOrders(
     id: string;
     order_number: string;
     order_status: string;
+    payment_method: PaymentMethodCode;
     total_amount: string;
     display_name: string;
     created_at: Date;
   }>`
-    select order_row.id, order_row.order_number, order_row.order_status, order_row.total_amount::text, customer.display_name, order_row.created_at
+    select order_row.id, order_row.order_number, order_row.order_status, order_row.payment_method, order_row.total_amount::text, customer.display_name, order_row.created_at
     from orders.orders order_row join orders.order_customer_snapshots customer on customer.order_id = order_row.id
     where order_row.organization_id = ${organizationId} order by order_row.created_at desc, order_row.id desc limit 100
   `.execute(db);
-  return result.rows.map((row) => ({
-    id: row.id,
-    orderNumber: row.order_number,
-    status: row.order_status,
-    total: row.total_amount,
-    customerName: row.display_name,
-    createdAt: row.created_at.toISOString(),
-  }));
+  return Promise.all(
+    result.rows.map(async (row) => ({
+      id: row.id,
+      orderNumber: row.order_number,
+      status: row.order_status,
+      paymentMethod: row.payment_method,
+      paymentStatus: (
+        await getOrderPaymentSummary(db, {
+          organizationId,
+          orderId: row.id,
+          paymentMethod: row.payment_method,
+          expectedAmount: row.total_amount,
+        })
+      ).status,
+      total: row.total_amount,
+      customerName: row.display_name,
+      createdAt: row.created_at.toISOString(),
+    })),
+  );
 }
 
 export async function updateOrderStatus(
@@ -1001,6 +1098,10 @@ export async function cancelOrder(
       });
       if (release.released) releasedReservations += 1;
     }
+    await cancelPendingPaymentIntentsForOrder(transaction, {
+      organizationId: input.organizationId,
+      orderId: input.orderId,
+    });
     await sql`update orders.orders set order_status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now() where id = ${input.orderId}`.execute(
       transaction,
     );

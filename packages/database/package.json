@@ -59,6 +59,10 @@
     "./orders": {
       "types": "./src/orders.ts",
       "default": "./dist/src/orders.js"
+    },
+    "./payments": {
+      "types": "./src/payments.ts",
+      "default": "./dist/src/payments.js"
     }
   },
   "scripts": {
