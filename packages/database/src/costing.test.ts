@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
 
+import { addGuestCartLine, createGuestCart } from './cart.js';
 import {
   addLandedCostComponent,
   allocateDeterministically,
@@ -10,7 +11,21 @@ import {
   finalizeLandedCostWorksheet,
 } from './costing.js';
 import { createDatabase } from './index.js';
+import {
+  createDelivery,
+  dispatchDelivery,
+  markDelivered,
+  recordManualCourierBooking,
+} from './delivery.js';
+import { createFulfillment, dispatchFulfillment, transitionFulfillment } from './fulfillment.js';
+import {
+  createCheckout,
+  placeOrder,
+  updateCheckoutAddress,
+  updateCheckoutContact,
+} from './orders.js';
 import { createOrganization } from './platform.js';
+import { createPriceDefinition } from './pricing.js';
 import {
   addPurchaseLine,
   createPurchase,
@@ -44,7 +59,7 @@ async function receivedShipment() {
   );
   const product = await sql<{
     id: string;
-  }>`insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status) values (${organization.id}, ${type.rows[0]!.id}, ${`cost-${crypto.randomUUID().slice(0, 8)}`}, 'Cost product', 'ACTIVE', 'UNPUBLISHED') returning id`.execute(
+  }>`insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status, published_at) values (${organization.id}, ${type.rows[0]!.id}, ${`cost-${crypto.randomUUID().slice(0, 8)}`}, 'Cost product', 'ACTIVE', 'PUBLISHED', now()) returning id`.execute(
     database.db,
   );
   const variant = await sql<{
@@ -59,6 +74,13 @@ async function receivedShipment() {
     name: 'Cost warehouse',
     locationType: 'WAREHOUSE',
     capabilities: ['STOCK_HOLDING', 'PURCHASE_RECEIVING'],
+  });
+  await createPriceDefinition(database.db, {
+    organizationId: organization.id,
+    actorId,
+    variantId: variant.rows[0]!.id,
+    currency: 'CNY',
+    amount: '129.0000',
   });
   const supplier = await createSupplier(database.db, {
     organizationId: organization.id,
@@ -115,7 +137,120 @@ async function receivedShipment() {
     lines: [{ shipmentAllocationId: allocationId, condition: 'SELLABLE', quantity: '4' }],
     idempotencyKey: crypto.randomUUID(),
   });
-  return { organizationId: organization.id, actorId, shipmentId: shipment.id };
+  return {
+    organizationId: organization.id,
+    actorId,
+    shipmentId: shipment.id,
+    locationId: location.id,
+    variantId: variant.rows[0]!.id,
+  };
+}
+
+async function createDispatchedDelivery(
+  input: Awaited<ReturnType<typeof receivedShipment>>,
+  quantity: string,
+) {
+  const cart = await createGuestCart(database.db, {
+    organizationId: input.organizationId,
+    currency: 'CNY',
+  });
+  await addGuestCartLine(database.db, {
+    token: cart.token,
+    variantId: input.variantId,
+    quantity,
+    expectedVersion: cart.cart.version,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const checkout = await createCheckout(database.db, { cartToken: cart.token });
+  const contact = await updateCheckoutContact(database.db, {
+    checkoutToken: checkout.token,
+    cartToken: cart.token,
+    expectedVersion: checkout.checkout.version,
+    contact: { name: 'Cost Buyer', phone: '01700000000' },
+  });
+  const addressed = await updateCheckoutAddress(database.db, {
+    checkoutToken: checkout.token,
+    cartToken: cart.token,
+    expectedVersion: contact.version,
+    address: {
+      recipientName: 'Cost Buyer',
+      phone: '01700000000',
+      addressLine1: '1 Cost Road',
+      countryCode: 'BD',
+    },
+  });
+  const placed = await placeOrder(database.db, {
+    checkoutToken: checkout.token,
+    cartToken: cart.token,
+    acceptedCalculationVersion: addressed.calculationVersion,
+    acceptedCalculationFingerprint: addressed.calculationFingerprint,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  if (placed.kind !== 'PLACED') throw new Error('Expected an Order to be placed.');
+  const orderLine = await sql<{
+    id: string;
+  }>`select id from orders.order_lines where order_id = ${placed.order.id}`.execute(database.db);
+  const created = await createFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    orderId: placed.order.id,
+    locationId: input.locationId,
+    lines: [{ orderLineId: orderLine.rows[0]!.id, quantity }],
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const ready = await transitionFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: created.id,
+    expectedVersion: created.version,
+    nextStatus: 'READY',
+  });
+  const picking = await transitionFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: ready.id,
+    expectedVersion: ready.version,
+    nextStatus: 'PICKING',
+  });
+  const packed = await transitionFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: picking.id,
+    expectedVersion: picking.version,
+    nextStatus: 'PACKED',
+  });
+  const dispatched = await dispatchFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: packed.id,
+    expectedVersion: packed.version,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const delivery = await createDelivery(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: dispatched.id,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const booked = await recordManualCourierBooking(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    deliveryId: delivery.id,
+    expectedVersion: delivery.version,
+    carrierName: 'Manual',
+    trackingReference: crypto.randomUUID(),
+    idempotencyKey: crypto.randomUUID(),
+  });
+  return {
+    dispatched,
+    inTransit: await dispatchDelivery(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: booked.id,
+      expectedVersion: booked.version,
+      idempotencyKey: crypto.randomUUID(),
+    }),
+  };
 }
 
 describe('landed-cost deterministic allocation', () => {
@@ -220,5 +355,59 @@ describe('landed-cost deterministic allocation', () => {
       database.db,
     );
     expect(effects.rows[0]).toMatchObject({ delta: '0.00000000', remaining: '10.000000' });
+  });
+
+  it('consumes receipt-backed FIFO cost at dispatch and recognizes immutable COGS only at successful delivery', async () => {
+    const input = await receivedShipment();
+    const worksheet = await createLandedCostWorksheet(database.db, {
+      ...input,
+      baseCurrencyCode: 'CNY',
+    });
+    await addLandedCostComponent(database.db, {
+      organizationId: input.organizationId,
+      revisionId: worksheet.revisionId,
+      costType: 'INTERNATIONAL_FREIGHT',
+      scope: 'GLOBAL',
+      originalAmount: '100.0000',
+      originalCurrencyCode: 'CNY',
+      valueStatus: 'ACTUAL',
+      allocationMethod: 'QUANTITY',
+    });
+    await finalizeLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      revisionId: worksheet.revisionId,
+    });
+    const flow = await createDispatchedDelivery(input, '3');
+    const before = await sql<{
+      remaining: string;
+      assigned: string;
+      cogs: string;
+    }>`select (select sum(remaining_quantity)::text from costing.cost_layer_positions where organization_id = ${input.organizationId}) as remaining, (select total_cost::text from costing.outbound_cost_assignments where fulfillment_id = ${flow.dispatched.id}) as assigned, (select count(*)::text from costing.cogs_recognitions where organization_id = ${input.organizationId}) as cogs`.execute(
+      database.db,
+    );
+    expect(before.rows[0]).toEqual({ remaining: '7.000000', assigned: '150.00000000', cogs: '0' });
+    const deliveryKey = crypto.randomUUID();
+    await markDelivered(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: flow.inTransit.id,
+      expectedVersion: flow.inTransit.version,
+      idempotencyKey: deliveryKey,
+    });
+    await markDelivered(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: flow.inTransit.id,
+      expectedVersion: flow.inTransit.version,
+      idempotencyKey: deliveryKey,
+    });
+    const after = await sql<{
+      total: string;
+      count: string;
+    }>`select coalesce(sum(total_cost), 0)::text as total, count(*)::text as count from costing.cogs_recognitions where organization_id = ${input.organizationId}`.execute(
+      database.db,
+    );
+    expect(after.rows[0]).toEqual({ total: '150.00000000', count: '1' });
   });
 });
