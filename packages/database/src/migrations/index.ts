@@ -30,6 +30,8 @@ import * as receiving from './1700_receiving.js';
 import * as landedCost from './1800_landed_cost.js';
 import * as costing from './1900_costing.js';
 import * as costingAdjustmentEffects from './1901_costing_adjustment_effects.js';
+import * as returns from './2000_returns.js';
+import * as returnCostRecovery from './2100_return_cost_recovery.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -66,6 +68,8 @@ export const migrations = {
   '1800_landed_cost': landedCost,
   '1900_costing': costing,
   '1901_costing_adjustment_effects': costingAdjustmentEffects,
+  '2000_returns': returns,
+  '2100_return_cost_recovery': returnCostRecovery,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

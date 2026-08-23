@@ -13,7 +13,8 @@ export type InventoryTransactionType =
   | 'TRANSFER_RECEIPT'
   | 'STOCKTAKE_ADJUSTMENT'
   | 'FULFILLMENT_DISPATCH'
-  | 'INBOUND_RECEIPT';
+  | 'INBOUND_RECEIPT'
+  | 'RETURN_RECEIPT';
 
 export class InventoryDomainError extends Error {
   public constructor(
@@ -314,6 +315,47 @@ export async function receiveInboundInventoryInTransaction(
     })),
   });
   return { transactionId, inventoryItemIds: itemIds };
+}
+
+/** Reverse receiving is physical truth too, but deliberately uses its own immutable source. */
+export async function receiveReturnInventoryInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    receiptId: string;
+    locationId: string;
+    idempotencyRecordId: string;
+    lines: readonly { inventoryItemId: string; condition: InventoryCondition; quantity: string }[];
+  },
+): Promise<string> {
+  await requireActiveLocationCapability(
+    transaction,
+    input.organizationId,
+    input.locationId,
+    'STOCK_HOLDING',
+  );
+  await requireActiveLocationCapability(
+    transaction,
+    input.organizationId,
+    input.locationId,
+    'RETURN_RECEIVING',
+  );
+  for (const line of input.lines) assertQuantity(line.quantity, 'Returned quantity');
+  return postTransaction(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    transactionType: 'RETURN_RECEIPT',
+    reasonCode: 'RETURN_RECEIPT',
+    referenceType: 'returns.return_receipt',
+    referenceId: input.receiptId,
+    idempotencyRecordId: input.idempotencyRecordId,
+    lines: input.lines.map((line) => ({
+      ...line,
+      locationId: input.locationId,
+      quantityDelta: line.quantity,
+    })),
+  });
 }
 
 async function completeIdempotency(

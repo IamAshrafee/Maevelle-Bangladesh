@@ -79,6 +79,10 @@
     "./costing": {
       "types": "./src/costing.ts",
       "default": "./dist/src/costing.js"
+    },
+    "./returns": {
+      "types": "./src/returns.ts",
+      "default": "./dist/src/returns.js"
     }
   },
   "scripts": {
