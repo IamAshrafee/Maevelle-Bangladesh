@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
 
 const checks = [
-  ['pnpm', ['check:architecture']],
-  ['pnpm', ['check:secrets']],
+  [process.execPath, ['scripts/check-architecture.mjs']],
+  [process.execPath, ['scripts/check-secrets.mjs']],
   [
     'docker',
     ['compose', '-f', 'compose.staging.yaml', '--env-file', '.env.staging.example', 'config'],
@@ -11,7 +11,7 @@ const checks = [
 for (const [command, args] of checks) {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell: false,
   });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
