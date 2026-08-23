@@ -90,6 +90,7 @@ export interface OrderView {
   readonly customer: { displayName: string; phone: string; email: string | null };
   readonly address: CheckoutAddressInput;
   readonly lines: readonly {
+    id: string;
     sku: string;
     productTitle: string;
     quantity: string;
@@ -614,6 +615,7 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
   const row = order.rows[0];
   if (!row) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
   const lines = await sql<{
+    id: string;
     sku_snapshot: string;
     product_title_snapshot: string;
     quantity: string;
@@ -623,7 +625,7 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     net_amount: string;
     option_snapshot: readonly { name: string; value: string }[];
   }>`
-    select sku_snapshot, product_title_snapshot, quantity::text, unit_price::text, gross_amount::text, discount_amount::text, net_amount::text, option_snapshot
+    select id, sku_snapshot, product_title_snapshot, quantity::text, unit_price::text, gross_amount::text, discount_amount::text, net_amount::text, option_snapshot
     from orders.order_lines where order_id = ${orderId} order by id
   `.execute(db);
   const payment = await getOrderPaymentSummary(db, {
@@ -657,6 +659,7 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
       countryCode: row.country_code,
     },
     lines: lines.rows.map((line) => ({
+      id: line.id,
       sku: line.sku_snapshot,
       productTitle: line.product_title_snapshot,
       quantity: line.quantity,
@@ -844,6 +847,9 @@ export async function placeOrder(
           idempotencyKey: `order:${orderId}:${created.rows[0]!.id}`,
         });
         await sql`insert into orders.order_inventory_reservations (organization_id, order_id, order_line_id, reservation_id) values (${checkout.organization_id}, ${orderId}, ${created.rows[0]!.id}, ${reservation.reservationId})`.execute(
+          transaction,
+        );
+        await sql`insert into inventory.inventory_reservation_allocations (organization_id, reservation_id, order_line_id, inventory_item_id, location_id, reserved_quantity) values (${checkout.organization_id}, ${reservation.reservationId}, ${created.rows[0]!.id}, ${reservation.inventoryItemId}, ${location.rows[0].location_id}, ${detail.quantity}::numeric)`.execute(
           transaction,
         );
         input.fault?.('after-reservation');

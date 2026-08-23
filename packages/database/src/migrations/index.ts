@@ -22,6 +22,8 @@ import * as ordersCheckoutCod from './1100_orders_checkout_cod.js';
 import * as payments from './1200_payments.js';
 import * as checkoutPaymentDefault from './1201_checkout_payment_default.js';
 import * as refundAllocations from './1202_refund_allocations.js';
+import * as fulfillment from './1300_fulfillment.js';
+import * as delivery from './1400_delivery.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -50,6 +52,8 @@ export const migrations = {
   '1200_payments': payments,
   '1201_checkout_payment_default': checkoutPaymentDefault,
   '1202_refund_allocations': refundAllocations,
+  '1300_fulfillment': fulfillment,
+  '1400_delivery': delivery,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

@@ -39,12 +39,14 @@ describe('clean PostgreSQL migration path', () => {
       expect(extensions.rows.map((row) => row.extname)).toEqual(['pg_stat_statements', 'pg_trgm']);
       const schemas = await sql<{ schema_name: string }>`
         select schema_name from information_schema.schemata
-        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments') order by schema_name
+        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments', 'fulfillment', 'delivery') order by schema_name
       `.execute(database.db);
       expect(schemas.rows.map((row) => row.schema_name)).toEqual([
         'audit',
         'cart',
         'customers',
+        'delivery',
+        'fulfillment',
         'geography',
         'iam',
         'inventory',
@@ -69,7 +71,7 @@ describe('clean PostgreSQL migration path', () => {
         where table_schema = 'warehouse' and table_name in ('locations', 'transfers', 'transfer_lines')
         union all
         select table_name from information_schema.tables
-        where table_schema = 'inventory' and table_name in ('inventory_items', 'inventory_levels', 'inventory_movement_lines', 'inventory_reservations', 'stocktake_sessions')
+        where table_schema = 'inventory' and table_name in ('inventory_items', 'inventory_levels', 'inventory_movement_lines', 'inventory_reservations', 'inventory_reservation_allocations', 'stocktake_sessions')
         union all
         select table_name from information_schema.tables
         where table_schema = 'cart' and table_name in ('carts', 'cart_lines')
@@ -91,6 +93,12 @@ describe('clean PostgreSQL migration path', () => {
         union all
         select table_name from information_schema.tables
         where table_schema = 'payments' and table_name in ('payment_methods', 'payment_intents', 'payment_attempts', 'payments', 'payment_allocations', 'refund_allocations', 'refunds')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'fulfillment' and table_name in ('fulfillments', 'fulfillment_lines')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'delivery' and table_name in ('deliveries', 'delivery_lines', 'delivery_events', 'delivery_attempts', 'courier_bookings', 'cod_collection_instructions')
         order by table_name
       `.execute(database.db);
       expect(tables.rows.map((row) => row.table_name)).toEqual([
@@ -98,15 +106,24 @@ describe('clean PostgreSQL migration path', () => {
         'cart_lines',
         'carts',
         'checkout_sessions',
+        'cod_collection_instructions',
         'coupon_codes',
+        'courier_bookings',
         'customer_addresses',
         'customer_phones',
         'customers',
         'datasets',
+        'deliveries',
+        'delivery_attempts',
+        'delivery_events',
+        'delivery_lines',
+        'fulfillment_lines',
+        'fulfillments',
         'idempotency_records',
         'inventory_items',
         'inventory_levels',
         'inventory_movement_lines',
+        'inventory_reservation_allocations',
         'inventory_reservations',
         'locations',
         'node_aliases',

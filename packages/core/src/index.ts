@@ -1,3 +1,5 @@
-// Framework-neutral domain and application modules will be added in later tasks.
-
-export {};
+export type {
+  CourierBookingRequest,
+  CourierBookingResult,
+  CourierProviderPort,
+} from './delivery.js';

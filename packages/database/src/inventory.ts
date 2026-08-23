@@ -11,7 +11,8 @@ export type InventoryTransactionType =
   | 'CONDITION_CHANGE'
   | 'TRANSFER_DISPATCH'
   | 'TRANSFER_RECEIPT'
-  | 'STOCKTAKE_ADJUSTMENT';
+  | 'STOCKTAKE_ADJUSTMENT'
+  | 'FULFILLMENT_DISPATCH';
 
 export class InventoryDomainError extends Error {
   public constructor(
@@ -621,17 +622,53 @@ export async function releaseInventoryReservationInTransaction(
   const row = reservation.rows[0];
   if (!row) throw new InventoryDomainError('NOT_FOUND', 'Reservation was not found.');
   let released = false;
-  if (row.status === 'ACTIVE') {
+  if (['ACTIVE', 'PARTIALLY_CONSUMED'].includes(row.status)) {
+    const allocations = await sql<{
+      id: string;
+      reserved_quantity: string;
+      consumed_quantity: string;
+      released_quantity: string;
+    }>`select id, reserved_quantity::text, consumed_quantity::text, released_quantity::text from inventory.inventory_reservation_allocations where organization_id = ${input.organizationId} and reservation_id = ${row.id} for update`.execute(
+      transaction,
+    );
+    const remainingResult = await sql<{
+      remaining: string;
+    }>`select coalesce(sum(reserved_quantity - consumed_quantity - released_quantity), 0)::text as remaining from inventory.inventory_reservation_allocations where organization_id = ${input.organizationId} and reservation_id = ${row.id}`.execute(
+      transaction,
+    );
+    // Generic Inventory reservations predate the order/fulfillment bridge and
+    // legitimately have no allocation row. Their header quantity remains the
+    // authoritative release amount.
+    const remaining =
+      allocations.rows.length === 0 ? row.quantity : (remainingResult.rows[0]?.remaining ?? '0');
+    if (remaining === '0') {
+      const response = { reservationId: row.id, released: false };
+      await completeIdempotency(
+        transaction,
+        started.recordId!,
+        'inventory.reservation',
+        row.id,
+        response,
+      );
+      return response;
+    }
     const level = await lockLevel(
       transaction,
       input.organizationId,
       row.inventory_item_id,
       row.location_id,
     );
-    await sql`update inventory.inventory_levels set reserved_quantity = reserved_quantity - ${row.quantity}::numeric, version = version + 1, updated_at = now() where id = ${level.id}`.execute(
+    await sql`update inventory.inventory_levels set reserved_quantity = reserved_quantity - ${remaining}::numeric, version = version + 1, updated_at = now() where id = ${level.id}`.execute(
       transaction,
     );
-    await sql`update inventory.inventory_reservations set status = 'RELEASED', released_at = now(), updated_at = now(), version = version + 1 where id = ${row.id}`.execute(
+    if (allocations.rows.length)
+      await sql`update inventory.inventory_reservation_allocations set released_quantity = reserved_quantity - consumed_quantity, updated_at = now(), version = version + 1 where reservation_id = ${row.id} and organization_id = ${input.organizationId}`.execute(
+        transaction,
+      );
+    const status = allocations.rows.some((allocation) => allocation.consumed_quantity !== '0')
+      ? 'CONSUMED'
+      : 'RELEASED';
+    await sql`update inventory.inventory_reservations set status = ${status}, released_at = now(), updated_at = now(), version = version + 1 where id = ${row.id}`.execute(
       transaction,
     );
     released = true;
@@ -645,7 +682,7 @@ export async function releaseInventoryReservationInTransaction(
       metadata: {
         inventoryItemId: row.inventory_item_id,
         locationId: row.location_id,
-        quantity: row.quantity,
+        quantity: remaining,
       },
     });
   }
@@ -658,6 +695,102 @@ export async function releaseInventoryReservationInTransaction(
     response,
   );
   return response;
+}
+
+/**
+ * Fulfillment owns the workflow transition; Inventory owns this locked
+ * physical movement. The surrounding fulfillment command is idempotent. A
+ * dispatch can consume several allocations, while an inventory transaction
+ * has a one-to-one idempotency-record constraint, so individual movements
+ * deliberately do not reuse the fulfillment command's record.
+ */
+export async function consumeReservationAllocationInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    reservationAllocationId: string;
+    quantity: string;
+    fulfillmentId: string;
+    idempotencyRecordId?: string | undefined;
+  },
+): Promise<{ inventoryTransactionId: string; consumed: string }> {
+  assertQuantity(input.quantity, 'Consumed quantity');
+  const allocation = await sql<{
+    id: string;
+    reservation_id: string;
+    inventory_item_id: string;
+    location_id: string;
+    reserved_quantity: string;
+    consumed_quantity: string;
+    released_quantity: string;
+    reservation_status: string;
+  }>`
+    select allocation.id, allocation.reservation_id, allocation.inventory_item_id, allocation.location_id,
+      allocation.reserved_quantity::text, allocation.consumed_quantity::text, allocation.released_quantity::text,
+      reservation.status as reservation_status
+    from inventory.inventory_reservation_allocations allocation
+    join inventory.inventory_reservations reservation on reservation.id = allocation.reservation_id
+    where allocation.organization_id = ${input.organizationId} and allocation.id = ${input.reservationAllocationId}
+    for update of allocation, reservation
+  `.execute(transaction);
+  const row = allocation.rows[0];
+  if (!row) throw new InventoryDomainError('NOT_FOUND', 'Reservation allocation was not found.');
+  if (!['ACTIVE', 'PARTIALLY_CONSUMED'].includes(row.reservation_status))
+    throw new InventoryDomainError(
+      'CONFLICT',
+      'Reservation is no longer available for physical consumption.',
+    );
+  const remaining = subtract(
+    subtract(row.reserved_quantity, row.consumed_quantity),
+    row.released_quantity,
+  );
+  if (subtract(remaining, input.quantity).startsWith('-'))
+    throw new InventoryDomainError(
+      'CONFLICT',
+      'Requested physical consumption exceeds the active reservation allocation.',
+    );
+  const level = await lockLevel(
+    transaction,
+    input.organizationId,
+    row.inventory_item_id,
+    row.location_id,
+  );
+  // Make the reservation unavailable before posting the physical movement.
+  // postTransaction checks ATS as sellable minus reserved; decrementing
+  // sellable first would reject a valid final reserved unit.
+  await sql`update inventory.inventory_levels set reserved_quantity = reserved_quantity - ${input.quantity}::numeric, version = version + 1, updated_at = now() where id = ${level.id}`.execute(
+    transaction,
+  );
+  const inventoryTransactionId = await postTransaction(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    transactionType: 'FULFILLMENT_DISPATCH',
+    reasonCode: 'FULFILLMENT_DISPATCH',
+    referenceType: 'fulfillment.fulfillment',
+    referenceId: input.fulfillmentId,
+    idempotencyRecordId: input.idempotencyRecordId,
+    lines: [
+      {
+        inventoryItemId: row.inventory_item_id,
+        locationId: row.location_id,
+        condition: 'SELLABLE',
+        quantityDelta: `-${input.quantity}`,
+      },
+    ],
+  });
+  await sql`update inventory.inventory_reservation_allocations set consumed_quantity = consumed_quantity + ${input.quantity}::numeric, updated_at = now(), version = version + 1 where id = ${row.id}`.execute(
+    transaction,
+  );
+  const totals = await sql<{
+    remaining: string;
+  }>`select coalesce(sum(reserved_quantity - consumed_quantity - released_quantity), 0)::text as remaining from inventory.inventory_reservation_allocations where organization_id = ${input.organizationId} and reservation_id = ${row.reservation_id}`.execute(
+    transaction,
+  );
+  await sql`update inventory.inventory_reservations set status = case when ${totals.rows[0]!.remaining}::numeric = 0 then 'CONSUMED' else 'PARTIALLY_CONSUMED' end, consumed_at = case when ${totals.rows[0]!.remaining}::numeric = 0 then now() else consumed_at end, updated_at = now(), version = version + 1 where id = ${row.reservation_id}`.execute(
+    transaction,
+  );
+  return { inventoryTransactionId, consumed: input.quantity };
 }
 
 export async function listInventoryBalances(

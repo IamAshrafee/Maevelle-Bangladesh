@@ -51,12 +51,17 @@ interface PaymentDetail {
     instructions: { accountNumber?: string; text?: string };
   } | null;
 }
+interface FulfillmentDeliveryStatus {
+  fulfillment: 'PREPARING' | 'DISPATCHED' | null;
+  delivery: 'PREPARING' | 'IN_TRANSIT' | 'DELIVERED' | 'FAILED' | null;
+}
 const money = (value: string) => `৳${value}`;
 export default function OrderConfirmationPage() {
   const [order, setOrder] = useState<Order>();
   const [message, setMessage] = useState('');
   const [payment, setPayment] = useState<PaymentDetail>();
   const [submitting, setSubmitting] = useState(false);
+  const [fulfillmentDelivery, setFulfillmentDelivery] = useState<FulfillmentDeliveryStatus>();
   useEffect(() => {
     void (async () => {
       const response = await fetch('/api/storefront/v1/orders/confirmation', {
@@ -72,6 +77,16 @@ export default function OrderConfirmationPage() {
       });
       if (paymentResponse.ok)
         setPayment(((await paymentResponse.json()) as ApiEnvelope<PaymentDetail>).data);
+      const fulfillmentResponse = await fetch(
+        '/api/storefront/v1/orders/confirmation/fulfillment',
+        {
+          credentials: 'include',
+        },
+      );
+      if (fulfillmentResponse.ok)
+        setFulfillmentDelivery(
+          ((await fulfillmentResponse.json()) as ApiEnvelope<FulfillmentDeliveryStatus>).data,
+        );
     })();
   }, []);
   async function submitManualPayment(form: HTMLFormElement) {
@@ -141,6 +156,22 @@ export default function OrderConfirmationPage() {
             .filter(Boolean)
             .join(', ')}
         </p>
+        {fulfillmentDelivery?.fulfillment ? (
+          <p>
+            Fulfillment:{' '}
+            {fulfillmentDelivery.fulfillment === 'DISPATCHED' ? 'Dispatched' : 'Preparing'}
+            {fulfillmentDelivery.delivery
+              ? ` · Delivery: ${
+                  fulfillmentDelivery.delivery === 'IN_TRANSIT'
+                    ? 'In transit'
+                    : fulfillmentDelivery.delivery[0] +
+                      fulfillmentDelivery.delivery.slice(1).toLowerCase()
+                }`
+              : ''}
+          </p>
+        ) : (
+          <p>Fulfillment: Preparing</p>
+        )}
         <h2>Items</h2>
         {order.lines.map((line) => (
           <article key={`${line.sku}-${line.productTitle}`}>

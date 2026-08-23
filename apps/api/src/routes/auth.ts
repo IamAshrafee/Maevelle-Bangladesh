@@ -14,6 +14,7 @@ import { registerPricingRoutes } from './pricing.js';
 import { registerPromotionRoutes } from './promotions.js';
 import { registerCartRoutes } from './cart.js';
 import { registerOrderRoutes } from './orders.js';
+import { registerFulfillmentDeliveryRoutes } from './fulfillment-delivery.js';
 import { LocalMediaStorage } from '../media/local-media-storage.js';
 
 export function registerAuthRoutes(
@@ -63,4 +64,5 @@ export function registerAuthRoutes(
   registerPromotionRoutes(app, database, auth);
   registerCartRoutes(app, database);
   registerOrderRoutes(app, database, auth);
+  registerFulfillmentDeliveryRoutes(app, database, auth);
 }

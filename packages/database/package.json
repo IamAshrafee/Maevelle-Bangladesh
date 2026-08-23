@@ -63,6 +63,14 @@
     "./payments": {
       "types": "./src/payments.ts",
       "default": "./dist/src/payments.js"
+    },
+    "./fulfillment": {
+      "types": "./src/fulfillment.ts",
+      "default": "./dist/src/fulfillment.js"
+    },
+    "./delivery": {
+      "types": "./src/delivery.ts",
+      "default": "./dist/src/delivery.js"
     }
   },
   "scripts": {

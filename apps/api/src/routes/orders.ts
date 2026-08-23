@@ -36,6 +36,7 @@ import {
   verifyManualPayment,
   type PaymentMethodCode,
 } from '@maevelle/database/payments';
+import { getPublicOrderFulfillmentStatus } from '@maevelle/database/delivery';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
@@ -381,6 +382,24 @@ export function registerOrderRoutes(
             orderId: context.order.id,
           }),
         },
+      };
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
+  app.get('/storefront/v1/orders/confirmation/fulfillment', async (request, reply) => {
+    const checkoutToken = token(request.headers, checkoutCookie);
+    if (!checkoutToken)
+      return reply
+        .code(404)
+        .send({ error: { code: 'NOT_FOUND', message: 'Order confirmation was not found.' } });
+    try {
+      const context = await getOrderForCheckoutContext(database.db, checkoutToken);
+      return {
+        data: await getPublicOrderFulfillmentStatus(database.db, {
+          organizationId: context.organizationId,
+          orderId: context.order.id,
+        }),
       };
     } catch (caught) {
       return sendError(reply, caught);
