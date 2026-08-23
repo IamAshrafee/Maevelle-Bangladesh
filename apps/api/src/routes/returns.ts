@@ -4,7 +4,9 @@ import type { DatabaseClient } from '@maevelle/database';
 import {
   authorizeReturnCase,
   createReturnCase,
+  getReturnCase,
   initiateRto,
+  linkRefundToReturn,
   listReturnCases,
   postReturnReceipt,
   ReturnDomainError,
@@ -48,6 +50,20 @@ export function registerReturnRoutes(
     const active = await admin(database, auth, request.headers, 'returns.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listReturnCases(database.db, active.organizationId) };
+  });
+  app.get('/admin/returns/:id', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'returns.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      return {
+        data: await getReturnCase(database.db, {
+          organizationId: active.organizationId,
+          returnCaseId: (request.params as { id: string }).id,
+        }),
+      };
+    } catch (error) {
+      return send(reply, error);
+    }
   });
   app.post(
     '/admin/returns',
@@ -181,6 +197,26 @@ export function registerReturnRoutes(
             }),
           }),
         });
+      } catch (error) {
+        return send(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/returns/:id/refunds',
+    { schema: { body: Type.Object({ refundId: Type.String() }) } },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'refunds.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return {
+          data: await linkRefundToReturn(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            returnCaseId: (request.params as { id: string }).id,
+            refundId: (request.body as { refundId: string }).refundId,
+          }),
+        };
       } catch (error) {
         return send(reply, error);
       }

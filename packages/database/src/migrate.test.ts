@@ -39,7 +39,7 @@ describe('clean PostgreSQL migration path', () => {
       expect(extensions.rows.map((row) => row.extname)).toEqual(['pg_stat_statements', 'pg_trgm']);
       const schemas = await sql<{ schema_name: string }>`
         select schema_name from information_schema.schemata
-        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments', 'fulfillment', 'delivery', 'procurement', 'inbound_shipment', 'receiving', 'landed_cost', 'costing') order by schema_name
+        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments', 'fulfillment', 'delivery', 'procurement', 'inbound_shipment', 'receiving', 'landed_cost', 'costing', 'returns') order by schema_name
       `.execute(database.db);
       expect(schemas.rows.map((row) => row.schema_name)).toEqual([
         'audit',
@@ -60,6 +60,7 @@ describe('clean PostgreSQL migration path', () => {
         'procurement',
         'promotions',
         'receiving',
+        'returns',
         'warehouse',
       ]);
       const tables = await sql<{ table_name: string }>`
@@ -121,7 +122,10 @@ describe('clean PostgreSQL migration path', () => {
         where table_schema = 'costing' and table_name in ('cost_layers', 'cost_layer_positions', 'cost_layer_adjustments', 'outbound_cost_assignments', 'outbound_cost_assignment_lines', 'cogs_recognitions')
         union all
         select table_name from information_schema.tables
-        where table_schema = 'costing' and table_name in ('outbound_cost_assignment_adjustments', 'cogs_adjustments')
+        where table_schema = 'costing' and table_name in ('outbound_cost_assignment_adjustments', 'cogs_adjustments', 'return_cost_layers', 'cogs_recoveries')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'returns' and table_name in ('return_cases', 'return_lines', 'return_receipts', 'return_receipt_lines', 'return_refund_links')
         order by table_name
       `.execute(database.db);
       expect(tables.rows.map((row) => row.table_name)).toEqual([
@@ -134,6 +138,7 @@ describe('clean PostgreSQL migration path', () => {
         'cod_collection_instructions',
         'cogs_adjustments',
         'cogs_recognitions',
+        'cogs_recoveries',
         'component_allocations',
         'cost_components',
         'cost_layer_adjustments',
@@ -185,6 +190,12 @@ describe('clean PostgreSQL migration path', () => {
         'purchases',
         'refund_allocations',
         'refunds',
+        'return_cases',
+        'return_cost_layers',
+        'return_lines',
+        'return_receipt_lines',
+        'return_receipts',
+        'return_refund_links',
         'shipments',
         'stocktake_sessions',
         'suppliers',

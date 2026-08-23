@@ -847,7 +847,20 @@ export async function getInventoryValuation(
       and (${input.inventoryItemId ?? null}::uuid is null or layer.inventory_item_id = ${input.inventoryItemId ?? null}::uuid)
       and (${input.locationId ?? null}::uuid is null or layer.location_id = ${input.locationId ?? null}::uuid)
     group by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code, product.title, variant.sku, location.name
-    order by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code
+    union all
+    select layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code,
+      product.title as product_title, variant.sku, location.name as location_name,
+      sum(layer.quantity)::text as quantity, sum(layer.quantity * layer.unit_cost)::text as value
+    from costing.return_cost_layers layer
+    join inventory.inventory_items item on item.id = layer.inventory_item_id
+    join catalog.product_variants variant on variant.id = item.variant_id
+    join catalog.products product on product.id = variant.product_id
+    join warehouse.locations location on location.id = layer.location_id
+    where layer.organization_id = ${input.organizationId}
+      and (${input.inventoryItemId ?? null}::uuid is null or layer.inventory_item_id = ${input.inventoryItemId ?? null}::uuid)
+      and (${input.locationId ?? null}::uuid is null or layer.location_id = ${input.locationId ?? null}::uuid)
+    group by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code, product.title, variant.sku, location.name
+    order by inventory_item_id, location_id, condition_code, currency_code
   `.execute(db);
   return rows.rows;
 }
@@ -1041,7 +1054,7 @@ export async function verifyCostingIntegrity(
     ),
     sql<{
       id: string;
-    }>`select level.id from inventory.inventory_level_conditions level where level.organization_id = ${organizationId} and level.quantity > 0 and not exists (select 1 from costing.cost_layers layer where layer.organization_id = level.organization_id and layer.inventory_item_id = level.inventory_item_id and layer.location_id = level.location_id and layer.condition_code = level.condition_code)`.execute(
+    }>`select level.id from inventory.inventory_level_conditions level where level.organization_id = ${organizationId} and level.quantity > 0 and not exists (select 1 from costing.cost_layers layer where layer.organization_id = level.organization_id and layer.inventory_item_id = level.inventory_item_id and layer.location_id = level.location_id and layer.condition_code = level.condition_code) and not exists (select 1 from costing.return_cost_layers layer where layer.organization_id = level.organization_id and layer.inventory_item_id = level.inventory_item_id and layer.location_id = level.location_id and layer.condition_code = level.condition_code)`.execute(
       db,
     ),
     sql<{
@@ -1150,7 +1163,7 @@ export async function verifyCostingIntegrity(
     }>`
       select level.id
       from inventory.inventory_level_conditions level
-      join (
+      left join (
         select layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code, sum(position.remaining_quantity) as quantity
         from costing.cost_layers layer
         join costing.cost_layer_positions position on position.cost_layer_id = layer.id
@@ -1160,7 +1173,18 @@ export async function verifyCostingIntegrity(
         and position.inventory_item_id = level.inventory_item_id
         and position.location_id = level.location_id
         and position.condition_code = level.condition_code
-      where level.organization_id = ${organizationId} and position.quantity <> level.quantity
+      left join (
+        select layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code, sum(layer.quantity) as quantity
+        from costing.return_cost_layers layer
+        where layer.organization_id = ${organizationId}
+        group by layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code
+      ) returned on returned.organization_id = level.organization_id
+        and returned.inventory_item_id = level.inventory_item_id
+        and returned.location_id = level.location_id
+        and returned.condition_code = level.condition_code
+      where level.organization_id = ${organizationId}
+        and (position.quantity is not null or returned.quantity is not null)
+        and coalesce(position.quantity, 0) + coalesce(returned.quantity, 0) <> level.quantity
     `.execute(db),
   ]);
   return [

@@ -1,15 +1,15 @@
 # Maevelle implementation status
 
-Current Phase: Commercial inbound operations and costing foundation complete
+Current Phase: Commercial reverse logistics and refund-linkage foundation complete
 
-Current Milestone: LANDED-COST-COSTING-01 — COMPLETE
+Current Milestone: RETURNS-RTO-REFUNDS-01 — COMPLETE
 
-Completed: Foundation runtime and application shell; Platform/IAM; catalog, media, and sizing; warehouse/inventory; geography, customers, pricing, promotions, and cart; checkout/COD orders; payments; fulfillment and delivery; procurement, shipment, and receiving; revisioned Landed Cost, receipt-backed FIFO costing, immutable outbound assignments, delivery-based COGS, late adjustments/credits, costing integrity verification, and operational Admin costing views.
+Completed: Foundation runtime and application shell; Platform/IAM; catalog, media, and sizing; warehouse/inventory; geography, customers, pricing, promotions, and cart; checkout/COD orders; payments; fulfillment and delivery; procurement, shipment, and receiving; revisioned Landed Cost, receipt-backed FIFO costing, immutable outbound assignments, delivery-based COGS, late adjustments/credits, costing integrity verification, operational Admin costing views, customer returns, RTO, reverse receiving, payment-refund linkage, and COGS recovery.
 
-Current Batch: LANDED-COST-COSTING-01 operational closeout complete and verified through PostgreSQL integration tests, authenticated protected API checks, and Docker/Caddy routing.
+Current Batch: RETURNS-RTO-REFUNDS-01 complete and verified through PostgreSQL integration tests, clean migrations, authenticated protected API checks, and Docker/Caddy routing.
 
-Next: RETURNS-RTO-REFUNDS-01
+Next: FINANCE-01
 
 Blockers: None
 
-Known Risks: Media storage remains local-development only; manual delivery operations deliberately do not automate courier booking, reconciliation, COD settlement, RTO receiving, or returns; financial cost corrections remain append-only and require the existing capability-gated revision workflow.
+Known Risks: Media storage remains local-development only; manual delivery operations deliberately do not automate courier booking, reconciliation, or COD settlement; financial cost corrections and reverse-receipt cost recovery remain append-only and capability-gated.
