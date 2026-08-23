@@ -95,6 +95,10 @@
     "./notifications": {
       "types": "./src/notifications.ts",
       "default": "./dist/src/notifications.js"
+    },
+    "./analytics": {
+      "types": "./src/analytics.ts",
+      "default": "./dist/src/analytics.js"
     }
   },
   "scripts": {

@@ -98,6 +98,20 @@ describe('clean PostgreSQL migration path', () => {
         'review_revisions',
         'reviews',
       ]);
+      const analyticsSchema = await sql<{ schema_name: string }>`
+        select schema_name from information_schema.schemata where schema_name = 'analytics'
+      `.execute(database.db);
+      expect(analyticsSchema.rows.map((row) => row.schema_name)).toEqual(['analytics']);
+      const analyticsTables = await sql<{ table_name: string }>`
+        select table_name from information_schema.tables where table_schema = 'analytics' order by table_name
+      `.execute(database.db);
+      expect(analyticsTables.rows.map((row) => row.table_name)).toEqual([
+        'analytics_refresh_runs',
+        'data_quality_results',
+        'inventory_daily_snapshots',
+        'metric_definitions',
+        'sales_facts',
+      ]);
       const tables = await sql<{ table_name: string }>`
         select table_name from information_schema.tables
         where table_schema = 'platform' and table_name in ('organizations', 'idempotency_records', 'outbox_events')
