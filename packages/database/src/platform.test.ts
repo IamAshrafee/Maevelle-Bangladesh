@@ -47,6 +47,28 @@ async function createTestOrganization(label: string): Promise<string> {
 }
 
 describe('platform audit, idempotency, and outbox foundations', () => {
+  it('starts a fresh encrypted-auth rate-limit window after a prior window expires', async () => {
+    const keyHash = `test-rate-limit-${crypto.randomUUID()}`;
+
+    expect(await platform.incrementAuthStorageValue(database.db, keyHash, 60)).toBe(1);
+    expect(await platform.incrementAuthStorageValue(database.db, keyHash, 60)).toBe(2);
+    await sql`
+      update iam.auth_kv_store
+      set expires_at = now() - interval '1 second'
+      where key_hash = ${keyHash}
+    `.execute(database.db);
+
+    expect(await platform.incrementAuthStorageValue(database.db, keyHash, 60)).toBe(1);
+    const expiry = await sql<{ active: boolean }>`
+      select expires_at > now() as active
+      from iam.auth_kv_store
+      where key_hash = ${keyHash}
+    `.execute(database.db);
+    expect(expiry.rows[0]?.active).toBe(true);
+
+    await sql`delete from iam.auth_kv_store where key_hash = ${keyHash}`.execute(database.db);
+  });
+
   it('appends historical audit evidence and redacts credential-shaped metadata', async () => {
     const organizationId = await createTestOrganization('audit');
     const password = 'do-not-persist-password';

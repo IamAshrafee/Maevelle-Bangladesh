@@ -660,6 +660,7 @@ export async function assignOutboundCostsForFulfillmentInTransaction(
     fulfillment_line_id: string;
     inventory_item_id: string;
     location_id: string;
+    location_name: string;
     quantity: string;
   }>`
     select line.id as fulfillment_line_id, item.id as inventory_item_id, fulfillment.location_id, line.quantity::text
@@ -792,10 +793,26 @@ export async function listCostLayers(db: Kysely<DatabaseSchema>, organizationId:
     currency_code: string;
     location_id: string;
     condition_code: string;
+    product_title: string;
+    sku: string;
+    receipt_number: string;
+    received_at: string;
+    cost_state: string;
   }>`
-    select layer.id, layer.inbound_receipt_line_id as receipt_line_id, position.remaining_quantity::text, layer.original_quantity::text, (layer.base_purchase_cost + coalesce(sum(adjustment.delta_total_cost), 0))::text as effective_cost, layer.currency_code, layer.location_id, layer.condition_code
-    from costing.cost_layers layer join costing.cost_layer_positions position on position.cost_layer_id = layer.id left join costing.cost_layer_adjustments adjustment on adjustment.cost_layer_id = layer.id
-    where layer.organization_id = ${organizationId} group by layer.id, position.id order by layer.received_at, layer.id
+    select layer.id, layer.inbound_receipt_line_id as receipt_line_id, position.remaining_quantity::text, layer.original_quantity::text,
+      (layer.base_purchase_cost + coalesce(sum(adjustment.delta_total_cost), 0))::text as effective_cost,
+      layer.currency_code, layer.location_id, location.name as location_name, layer.condition_code, allocation.product_title_snapshot as product_title,
+      allocation.sku_snapshot as sku, receipt.receipt_number, layer.received_at::text, layer.cost_state
+    from costing.cost_layers layer
+    join costing.cost_layer_positions position on position.cost_layer_id = layer.id
+    join receiving.inbound_receipt_lines receipt_line on receipt_line.id = layer.inbound_receipt_line_id
+    join receiving.inbound_receipts receipt on receipt.id = receipt_line.inbound_receipt_id
+    join inbound_shipment.purchase_line_allocations allocation on allocation.id = layer.shipment_allocation_id
+    join warehouse.locations location on location.id = layer.location_id
+    left join costing.cost_layer_adjustments adjustment on adjustment.cost_layer_id = layer.id
+    where layer.organization_id = ${organizationId}
+    group by layer.id, position.id, allocation.product_title_snapshot, allocation.sku_snapshot, receipt.receipt_number, location.name
+    order by layer.received_at, layer.id
   `.execute(db);
   return rows.rows;
 }
@@ -809,18 +826,27 @@ export async function getInventoryValuation(
     inventory_item_id: string;
     location_id: string;
     condition_code: string;
+    product_title: string;
+    sku: string;
+    location_name: string;
     currency_code: string;
     quantity: string;
     value: string;
   }>`
     select layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code,
+      product.title as product_title, variant.sku, location.name as location_name,
       sum(position.remaining_quantity)::text as quantity,
       sum((layer.base_purchase_cost + coalesce((select sum(adjustment.delta_total_cost) from costing.cost_layer_adjustments adjustment where adjustment.cost_layer_id = layer.id), 0)) * position.remaining_quantity / layer.original_quantity)::text as value
-    from costing.cost_layers layer join costing.cost_layer_positions position on position.cost_layer_id = layer.id
+    from costing.cost_layers layer
+    join costing.cost_layer_positions position on position.cost_layer_id = layer.id
+    join inventory.inventory_items item on item.id = layer.inventory_item_id
+    join catalog.product_variants variant on variant.id = item.variant_id
+    join catalog.products product on product.id = variant.product_id
+    join warehouse.locations location on location.id = layer.location_id
     where layer.organization_id = ${input.organizationId}
       and (${input.inventoryItemId ?? null}::uuid is null or layer.inventory_item_id = ${input.inventoryItemId ?? null}::uuid)
       and (${input.locationId ?? null}::uuid is null or layer.location_id = ${input.locationId ?? null}::uuid)
-    group by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code
+    group by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code, product.title, variant.sku, location.name
     order by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code
   `.execute(db);
   return rows.rows;
@@ -837,10 +863,151 @@ export async function listOutboundCostAssignments(
     total_cost: string;
     currency_code: string;
     cogs_adjustments: string;
+    quantity: string;
+    order_number: string;
+    product_title: string;
+    sku: string;
+    created_at: string;
   }>`
     select assignment.id, assignment.fulfillment_id, assignment.status, assignment.total_cost::text, assignment.currency_code,
-      coalesce((select sum(adjustment.amount) from costing.cogs_adjustments adjustment join costing.cogs_recognitions recognition on recognition.id = adjustment.cogs_recognition_id where recognition.outbound_cost_assignment_id = assignment.id), 0)::text as cogs_adjustments
-    from costing.outbound_cost_assignments assignment where assignment.organization_id = ${organizationId} order by assignment.created_at desc, assignment.id desc
+      coalesce((select sum(adjustment.amount) from costing.cogs_adjustments adjustment join costing.cogs_recognitions recognition on recognition.id = adjustment.cogs_recognition_id where recognition.outbound_cost_assignment_id = assignment.id), 0)::text as cogs_adjustments,
+      coalesce(sum(line.quantity), 0)::text as quantity, orders.order_number,
+      min(order_line.product_title_snapshot) as product_title, min(order_line.sku_snapshot) as sku,
+      assignment.created_at::text
+    from costing.outbound_cost_assignments assignment
+    join fulfillment.fulfillments fulfillment on fulfillment.id = assignment.fulfillment_id
+    join orders.orders orders on orders.id = fulfillment.order_id
+    left join costing.outbound_cost_assignment_lines line on line.outbound_cost_assignment_id = assignment.id
+    left join fulfillment.fulfillment_lines fulfillment_line on fulfillment_line.id = line.fulfillment_line_id
+    left join orders.order_lines order_line on order_line.id = fulfillment_line.order_line_id
+    where assignment.organization_id = ${organizationId}
+    group by assignment.id, orders.order_number
+    order by assignment.created_at desc, assignment.id desc
+  `.execute(db);
+  return rows.rows;
+}
+
+/** Read model for the operational Admin worksheet screen; all financial facts remain immutable. */
+export async function getLandedCostWorksheet(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; worksheetId: string },
+) {
+  const worksheet = await sql<{
+    id: string;
+    shipment_id: string;
+    worksheet_number: string;
+    base_currency_code: string;
+    status: string;
+    current_revision_id: string | null;
+    created_at: string;
+    finalized_at: string | null;
+  }>`
+    select id, shipment_id, worksheet_number, base_currency_code, status, current_revision_id, created_at::text, finalized_at::text
+    from landed_cost.worksheets
+    where organization_id = ${input.organizationId} and id = ${input.worksheetId}
+  `.execute(db);
+  const header = worksheet.rows[0];
+  if (!header) throw new CostingDomainError('NOT_FOUND', 'Landed Cost Worksheet was not found.');
+  const [revisions, components, results] = await Promise.all([
+    sql<{
+      id: string;
+      revision_number: string;
+      revision_kind: string;
+      status: string;
+      supersedes_revision_id: string | null;
+      created_at: string;
+      finalized_at: string | null;
+      total_effect: string;
+    }>`
+      select revision.id, revision.revision_number::text, revision.revision_kind, revision.status, revision.supersedes_revision_id,
+        revision.created_at::text, revision.finalized_at::text,
+        coalesce(sum(component.worksheet_amount), 0)::text as total_effect
+      from landed_cost.worksheet_revisions revision
+      left join landed_cost.cost_components component on component.worksheet_revision_id = revision.id
+      where revision.organization_id = ${input.organizationId} and revision.worksheet_id = ${input.worksheetId}
+      group by revision.id
+      order by revision.revision_number desc
+    `.execute(db),
+    sql<{
+      id: string;
+      revision_id: string;
+      cost_type: string;
+      original_amount: string;
+      original_currency_code: string;
+      worksheet_amount: string;
+      value_status: string;
+      allocation_method: string;
+      scope: string;
+      fx_rate: string | null;
+      fx_rate_recorded_at: string | null;
+      fx_source: string | null;
+      reference: string | null;
+      notes: string | null;
+    }>`
+      select id, worksheet_revision_id as revision_id, cost_type, original_amount::text, original_currency_code,
+        worksheet_amount::text, value_status, allocation_method, scope, fx_rate::text, fx_rate_recorded_at::text, fx_source, reference, notes
+      from landed_cost.cost_components
+      where organization_id = ${input.organizationId} and worksheet_revision_id = ${header.current_revision_id}::uuid
+      order by created_at, id
+    `.execute(db),
+    sql<{
+      allocation_target_id: string;
+      purchase_cost: string;
+      additional_cost: string;
+      total_acquisition_cost: string;
+      unit_acquisition_cost: string;
+      currency_code: string;
+      sku: string;
+      product_title: string;
+      quantity: string;
+    }>`
+      select result.allocation_target_id, result.purchase_cost::text, result.additional_cost::text,
+        result.total_acquisition_cost::text, result.unit_acquisition_cost::text, result.currency_code,
+        allocation.sku_snapshot as sku, allocation.product_title_snapshot as product_title,
+        target.eligible_quantity::text as quantity
+      from landed_cost.acquisition_cost_results result
+      join landed_cost.allocation_targets target on target.id = result.allocation_target_id
+      join inbound_shipment.purchase_line_allocations allocation on allocation.id = target.shipment_allocation_id
+      where result.organization_id = ${input.organizationId} and result.worksheet_revision_id = ${header.current_revision_id}::uuid
+      order by allocation.product_title_snapshot, allocation.sku_snapshot
+    `.execute(db),
+  ]);
+  return {
+    ...header,
+    revisions: revisions.rows,
+    components: components.rows,
+    results: results.rows,
+  };
+}
+
+export async function listLandedCostWorksheets(db: Kysely<DatabaseSchema>, organizationId: string) {
+  const ids = await sql<{ id: string }>`
+    select id from landed_cost.worksheets where organization_id = ${organizationId} order by created_at desc, id desc
+  `.execute(db);
+  return Promise.all(
+    ids.rows.map((row) => getLandedCostWorksheet(db, { organizationId, worksheetId: row.id })),
+  );
+}
+
+export async function listCogsRecognitions(db: Kysely<DatabaseSchema>, organizationId: string) {
+  const rows = await sql<{
+    id: string;
+    delivery_id: string;
+    fulfillment_id: string;
+    order_number: string;
+    total_cost: string;
+    currency_code: string;
+    created_at: string;
+  }>`
+    select recognition.id, delivery.id as delivery_id, assignment.fulfillment_id, orders.order_number,
+      recognition.total_cost::text, recognition.currency_code, recognition.created_at::text
+    from costing.cogs_recognitions recognition
+    join costing.outbound_cost_assignments assignment on assignment.id = recognition.outbound_cost_assignment_id
+    join fulfillment.fulfillments fulfillment on fulfillment.id = assignment.fulfillment_id
+    join orders.orders orders on orders.id = fulfillment.order_id
+    left join delivery.deliveries delivery on delivery.fulfillment_id = fulfillment.id
+    where recognition.organization_id = ${organizationId} and recognition.recognition_kind = 'ORIGINAL'
+    order by recognition.created_at desc, recognition.id desc
   `.execute(db);
   return rows.rows;
 }

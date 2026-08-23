@@ -264,7 +264,17 @@ export async function incrementAuthStorageValue(
   const result = await sql<{ counter_value: string }>`
     insert into iam.auth_kv_store (key_hash, encrypted_value, counter_value, expires_at, key_version)
     values (${keyHash}, null, 1, now() + (${ttlSeconds} * interval '1 second'), 1)
-    on conflict (key_hash) do update set counter_value = iam.auth_kv_store.counter_value + 1, updated_at = now()
+    on conflict (key_hash) do update set
+      counter_value = case
+        when iam.auth_kv_store.expires_at is not null and iam.auth_kv_store.expires_at <= now() then 1
+        else iam.auth_kv_store.counter_value + 1
+      end,
+      expires_at = case
+        when iam.auth_kv_store.expires_at is not null and iam.auth_kv_store.expires_at <= now()
+          then now() + (${ttlSeconds} * interval '1 second')
+        else iam.auth_kv_store.expires_at
+      end,
+      updated_at = now()
     returning counter_value::text
   `.execute(db);
   return Number(result.rows[0]?.counter_value ?? 1);

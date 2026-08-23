@@ -9,7 +9,10 @@ import {
   createLandedCostWorksheet,
   finalizeLandedCostWorksheet,
   getInventoryValuation,
+  getLandedCostWorksheet,
+  listCogsRecognitions,
   listCostLayers,
+  listLandedCostWorksheets,
   listOutboundCostAssignments,
   previewLandedCostWorksheet,
   type AllocationMethod,
@@ -74,6 +77,11 @@ export function registerCostingRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCostLayers(database.db, active.organizationId) };
   });
+  app.get('/admin/costing/cogs', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'costing.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listCogsRecognitions(database.db, active.organizationId) };
+  });
   app.get('/admin/costing/valuation', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'costing.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -116,6 +124,25 @@ export function registerCostingRoutes(
       }
     },
   );
+  app.get('/admin/landed-cost/worksheets', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'landed_cost.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listLandedCostWorksheets(database.db, active.organizationId) };
+  });
+  app.get('/admin/landed-cost/worksheets/:worksheetId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'landed_cost.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      return {
+        data: await getLandedCostWorksheet(database.db, {
+          organizationId: active.organizationId,
+          worksheetId: (request.params as { worksheetId: string }).worksheetId,
+        }),
+      };
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
   app.post(
     '/admin/landed-cost/worksheets/:worksheetId/revisions',
     {
