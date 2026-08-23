@@ -18,6 +18,7 @@ import { registerFulfillmentDeliveryRoutes } from './fulfillment-delivery.js';
 import { registerProcurementRoutes } from './procurement.js';
 import { registerCostingRoutes } from './costing.js';
 import { registerReturnRoutes } from './returns.js';
+import { registerFinanceRoutes } from './finance.js';
 import { LocalMediaStorage } from '../media/local-media-storage.js';
 
 export function registerAuthRoutes(
@@ -71,4 +72,5 @@ export function registerAuthRoutes(
   registerProcurementRoutes(app, database, auth);
   registerCostingRoutes(app, database, auth);
   registerReturnRoutes(app, database, auth);
+  registerFinanceRoutes(app, database, auth);
 }

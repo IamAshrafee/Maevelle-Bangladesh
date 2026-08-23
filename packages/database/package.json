@@ -83,6 +83,10 @@
     "./returns": {
       "types": "./src/returns.ts",
       "default": "./dist/src/returns.js"
+    },
+    "./finance": {
+      "types": "./src/finance.ts",
+      "default": "./dist/src/finance.js"
     }
   },
   "scripts": {

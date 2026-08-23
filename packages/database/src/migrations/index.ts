@@ -33,6 +33,7 @@ import * as costingAdjustmentEffects from './1901_costing_adjustment_effects.js'
 import * as returns from './2000_returns.js';
 import * as returnCostRecovery from './2100_return_cost_recovery.js';
 import * as returnCostLayerProvenance from './2101_return_cost_layer_provenance.js';
+import * as finance from './2200_finance.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -72,6 +73,7 @@ export const migrations = {
   '2000_returns': returns,
   '2100_return_cost_recovery': returnCostRecovery,
   '2101_return_cost_layer_provenance': returnCostLayerProvenance,
+  '2200_finance': finance,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

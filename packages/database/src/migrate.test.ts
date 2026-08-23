@@ -63,6 +63,26 @@ describe('clean PostgreSQL migration path', () => {
         'returns',
         'warehouse',
       ]);
+      const financeSchema = await sql<{ schema_name: string }>`
+        select schema_name from information_schema.schemata where schema_name = 'finance'
+      `.execute(database.db);
+      expect(financeSchema.rows.map((row) => row.schema_name)).toEqual(['finance']);
+      const financeTables = await sql<{ table_name: string }>`
+        select table_name from information_schema.tables where table_schema = 'finance' order by table_name
+      `.execute(database.db);
+      expect(financeTables.rows.map((row) => row.table_name)).toEqual([
+        'expense_adjustments',
+        'expense_categories',
+        'expense_links',
+        'expense_payments',
+        'expenses',
+        'finance_transactions',
+        'financial_account_entries',
+        'financial_accounts',
+        'internal_transfers',
+        'reconciliation_issues',
+        'reconciliation_sessions',
+      ]);
       const tables = await sql<{ table_name: string }>`
         select table_name from information_schema.tables
         where table_schema = 'platform' and table_name in ('organizations', 'idempotency_records', 'outbox_events')
