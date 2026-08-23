@@ -763,6 +763,8 @@ export async function placeOrder(
       const location = await sql<{ location_id: string }>`
         select level.location_id from inventory.inventory_items item join inventory.inventory_levels level on level.inventory_item_id = item.id
         join warehouse.locations location on location.id = level.location_id and location.status = 'ACTIVE'
+        join warehouse.location_capabilities capability on capability.location_id = location.id and capability.organization_id = location.organization_id
+          and capability.capability_code = 'STOCK_HOLDING'
         where item.organization_id = ${checkout.organization_id} and item.variant_id = ${detail.variant_id} and item.status = 'ACTIVE'
           and level.sellable_quantity - level.reserved_quantity >= ${detail.quantity}::numeric
         order by level.location_id for update limit 1

@@ -342,6 +342,31 @@ describe('atomic guest checkout and COD Orders', () => {
     expect(counts.rows[0]?.count).toBe('0');
   });
 
+  it('returns a semantic stock error when available inventory is not at a STOCK_HOLDING location', async () => {
+    const input = await fixture('1');
+    const flow = await checkoutFor(input);
+    const location = await sql<{ location_id: string }>`
+      select level.location_id from inventory.inventory_levels level join inventory.inventory_items item on item.id = level.inventory_item_id
+      where item.organization_id = ${input.organizationId} and item.variant_id = ${input.variantId}
+    `.execute(database.db);
+    await sql`delete from warehouse.location_capabilities where location_id = ${location.rows[0]!.location_id}`.execute(
+      database.db,
+    );
+    await sql`insert into warehouse.location_capabilities (organization_id, location_id, capability_code) values (${input.organizationId}, ${location.rows[0]!.location_id}, 'INTERNAL_STORAGE')`.execute(
+      database.db,
+    );
+    await expect(submit(flow)).rejects.toMatchObject({
+      code: 'OUT_OF_STOCK',
+    } satisfies Partial<OrderDomainError>);
+    const orders = await sql<{
+      count: string;
+    }>`select count(*)::text as count from orders.orders where organization_id = ${input.organizationId}`.execute(
+      database.db,
+    );
+    expect(orders.rows[0]?.count).toBe('0');
+    expect(await balances(input)).toEqual({ sellable: '1.000000', reserved: '0.000000' });
+  });
+
   it('serializes final coupon redemption so the losing real transaction leaves no Order', async () => {
     const input = await fixture('3');
     const promotion = await createPromotion(database.db, {
