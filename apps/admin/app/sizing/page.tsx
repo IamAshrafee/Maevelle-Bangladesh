@@ -36,7 +36,7 @@ export default function SizingPage() {
   return (
     <main className="min-h-screen bg-muted/30 p-6">
       <div className="mx-auto max-w-2xl">
-        <Link className="text-sm underline" href="/admin">
+        <Link className="text-sm underline" href="/">
           ← Catalog
         </Link>
         <Card className="mt-4">

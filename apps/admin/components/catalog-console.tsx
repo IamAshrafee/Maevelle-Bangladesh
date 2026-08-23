@@ -111,19 +111,19 @@ export function CatalogConsole() {
           <nav className="flex gap-2">
             <Link
               className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
-              href="/admin/media"
+              href="/media"
             >
               Media
             </Link>
             <Link
               className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
-              href="/admin/sizing"
+              href="/sizing"
             >
               Sizing
             </Link>
             <Link
               className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
-              href="/admin/inventory/stock"
+              href="/inventory/stock"
             >
               Inventory
             </Link>
