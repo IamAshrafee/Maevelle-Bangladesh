@@ -1,5 +1,6 @@
 import type { DatabaseClient } from '@maevelle/database';
 import { reclaimExpiredJobs } from '@maevelle/database/platform';
+import { processNotificationOutbox } from '@maevelle/database/notifications';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -37,8 +38,13 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
       started = true;
       logger?.info({}, 'Worker started.');
       heartbeat = setInterval(() => {
-        void reclaimExpiredJobs(options.database.db)
-          .then((reclaimed) => logger?.debug({ reclaimed }, 'Worker lease recovery tick.'))
+        void Promise.all([
+          reclaimExpiredJobs(options.database.db),
+          processNotificationOutbox(options.database.db),
+        ])
+          .then(([reclaimed, notifications]) =>
+            logger?.debug({ reclaimed, notifications }, 'Worker recovery tick.'),
+          )
           .catch((error: unknown) => logger?.info({ error }, 'Worker lease recovery failed.'));
       }, options.heartbeatIntervalMs);
     },
