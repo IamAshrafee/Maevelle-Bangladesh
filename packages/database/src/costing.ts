@@ -374,6 +374,12 @@ export async function previewLandedCostWorksheet(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; revisionId: string },
 ): Promise<{ components: readonly { id: string; allocations: readonly AllocationPreview[] }[] }> {
+  const revision = await sql<{ id: string }>`
+    select id from landed_cost.worksheet_revisions
+    where organization_id = ${input.organizationId} and id = ${input.revisionId}
+  `.execute(db);
+  if (!revision.rows[0])
+    throw new CostingDomainError('NOT_FOUND', 'Landed Cost Revision was not found.');
   const components = await sql<{
     id: string;
   }>`select id from landed_cost.cost_components where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId} order by id`.execute(
@@ -686,7 +692,20 @@ export async function assignOutboundCostsForFulfillmentInTransaction(
       where position.organization_id = ${input.organizationId} and layer.inventory_item_id = ${line.inventory_item_id}::uuid and layer.location_id = ${line.location_id}::uuid and layer.condition_code = 'SELLABLE' and position.remaining_quantity > 0
       order by layer.received_at asc, layer.id asc for update of position, layer
     `.execute(tx);
-    if (!positions.rows.length && !assignedAnyLayer) continue;
+    if (!positions.rows.length) {
+      const provenance = await sql<{ exists: boolean }>`
+        select exists(
+          select 1 from costing.cost_layers layer
+          where layer.organization_id = ${input.organizationId}
+            and layer.inventory_item_id = ${line.inventory_item_id}::uuid
+            and layer.location_id = ${line.location_id}::uuid
+            and layer.condition_code = 'SELLABLE'
+        ) as exists
+      `.execute(tx);
+      // Historical pre-costing stock can be physically dispatched, but stock
+      // with known Cost Layers must never silently lose its cost provenance.
+      if (!provenance.rows[0]?.exists && !assignedAnyLayer) continue;
+    }
     for (const position of positions.rows) {
       if (!required) break;
       const available = fixed(position.remaining, quantityScale);
@@ -824,4 +843,225 @@ export async function listOutboundCostAssignments(
     from costing.outbound_cost_assignments assignment where assignment.organization_id = ${organizationId} order by assignment.created_at desc, assignment.id desc
   `.execute(db);
   return rows.rows;
+}
+
+export interface CostingIntegrityIssue {
+  readonly code: string;
+  readonly summary: string;
+  readonly entityId?: string;
+}
+
+/** Read-only verifier: detects inconsistent cost facts without fabricating a repair. */
+export async function verifyCostingIntegrity(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly CostingIntegrityIssue[]> {
+  const checks = await Promise.all([
+    sql<{
+      id: string;
+    }>`select component.id from landed_cost.cost_components component left join landed_cost.component_allocations allocation on allocation.cost_component_id = component.id where component.organization_id = ${organizationId} and component.worksheet_revision_id in (select id from landed_cost.worksheet_revisions where status = 'FINALIZED') group by component.id, component.worksheet_amount having coalesce(sum(allocation.allocated_amount), 0) <> component.worksheet_amount`.execute(
+      db,
+    ),
+    sql<{
+      id: string;
+    }>`select adjustment.id from costing.cost_layer_adjustments adjustment left join (select cost_layer_adjustment_id, coalesce(sum(amount), 0) as amount from costing.outbound_cost_assignment_adjustments group by cost_layer_adjustment_id) pending on pending.cost_layer_adjustment_id = adjustment.id left join (select cost_layer_adjustment_id, coalesce(sum(amount), 0) as amount from costing.cogs_adjustments group by cost_layer_adjustment_id) recognized on recognized.cost_layer_adjustment_id = adjustment.id where adjustment.organization_id = ${organizationId} and abs(coalesce(pending.amount, 0) + coalesce(recognized.amount, 0)) > abs(adjustment.delta_total_cost)`.execute(
+      db,
+    ),
+    sql<{
+      id: string;
+    }>`select layer.id from costing.cost_layers layer join receiving.inbound_receipt_lines receipt on receipt.id = layer.inbound_receipt_line_id where layer.organization_id = ${organizationId} and layer.original_quantity <> receipt.quantity`.execute(
+      db,
+    ),
+    sql<{
+      id: string;
+    }>`select level.id from inventory.inventory_level_conditions level where level.organization_id = ${organizationId} and level.quantity > 0 and not exists (select 1 from costing.cost_layers layer where layer.organization_id = level.organization_id and layer.inventory_item_id = level.inventory_item_id and layer.location_id = level.location_id and layer.condition_code = level.condition_code)`.execute(
+      db,
+    ),
+    sql<{
+      id: string;
+    }>`select delivery.id from delivery.deliveries delivery join fulfillment.fulfillments fulfillment on fulfillment.id = delivery.fulfillment_id where delivery.organization_id = ${organizationId} and delivery.outcome_status = 'DELIVERED' and exists (select 1 from costing.outbound_cost_assignments assignment where assignment.fulfillment_id = fulfillment.id) and not exists (select 1 from costing.cogs_recognitions recognition join costing.outbound_cost_assignments assignment on assignment.id = recognition.outbound_cost_assignment_id where assignment.fulfillment_id = fulfillment.id)`.execute(
+      db,
+    ),
+    sql<{
+      id: string;
+    }>`select position.id from costing.cost_layer_positions position where position.organization_id = ${organizationId} and position.remaining_quantity < 0`.execute(
+      db,
+    ),
+    sql<{
+      id: string;
+    }>`
+      with physical as (
+        select fulfillment.id, sum(line.quantity) as quantity
+        from fulfillment.fulfillments fulfillment
+        join fulfillment.fulfillment_lines line on line.fulfillment_id = fulfillment.id
+        where fulfillment.organization_id = ${organizationId}
+        group by fulfillment.id
+      ), assigned as (
+        select assignment.id, assignment.fulfillment_id, sum(line.quantity) as quantity
+        from costing.outbound_cost_assignments assignment
+        left join costing.outbound_cost_assignment_lines line on line.outbound_cost_assignment_id = assignment.id
+        where assignment.organization_id = ${organizationId}
+        group by assignment.id
+      )
+      select assigned.id
+      from assigned join physical on physical.id = assigned.fulfillment_id
+      where coalesce(assigned.quantity, 0) <> physical.quantity
+    `.execute(db),
+    sql<{
+      id: string;
+    }>`
+      select fulfillment.id
+      from fulfillment.fulfillments fulfillment
+      join fulfillment.fulfillment_lines fulfillment_line on fulfillment_line.fulfillment_id = fulfillment.id
+      join orders.order_lines order_line on order_line.id = fulfillment_line.order_line_id
+      join inventory.inventory_items item on item.organization_id = fulfillment.organization_id and item.variant_id = order_line.variant_id
+      join inventory.fulfillment_inventory_allocations allocation on allocation.fulfillment_line_id = fulfillment_line.id
+      where fulfillment.organization_id = ${organizationId}
+        and fulfillment.status = 'DISPATCHED'
+        and allocation.quantity_consumed > 0
+        and exists (
+          select 1 from costing.cost_layers layer
+          where layer.organization_id = fulfillment.organization_id
+            and layer.inventory_item_id = item.id
+            and layer.location_id = fulfillment.location_id
+            and layer.condition_code = 'SELLABLE'
+        )
+        and not exists (
+          select 1 from costing.outbound_cost_assignments assignment
+          where assignment.organization_id = fulfillment.organization_id and assignment.fulfillment_id = fulfillment.id
+        )
+      group by fulfillment.id
+    `.execute(db),
+    sql<{
+      id: string;
+    }>`
+      select recognition.id
+      from costing.cogs_recognitions recognition
+      left join costing.outbound_cost_assignments assignment on assignment.id = recognition.outbound_cost_assignment_id
+      where recognition.organization_id = ${organizationId} and assignment.id is null
+    `.execute(db),
+    sql<{
+      id: string;
+    }>`
+      select component.id
+      from landed_cost.cost_components component
+      join landed_cost.worksheet_revisions revision on revision.id = component.worksheet_revision_id
+      join landed_cost.worksheets worksheet on worksheet.id = revision.worksheet_id
+      where component.organization_id = ${organizationId}
+        and component.original_currency_code <> worksheet.base_currency_code
+        and (component.fx_rate is null or component.fx_source is null)
+    `.execute(db),
+    sql<{
+      id: string;
+    }>`
+      select position.id
+      from costing.cost_layer_positions position
+      join costing.cost_layers layer on layer.id = position.cost_layer_id
+      left join inventory.inventory_level_conditions level
+        on level.organization_id = layer.organization_id
+        and level.inventory_item_id = layer.inventory_item_id
+        and level.location_id = layer.location_id
+        and level.condition_code = layer.condition_code
+      where position.organization_id = ${organizationId}
+      group by position.id, position.remaining_quantity
+      having position.remaining_quantity > coalesce(max(level.quantity), 0)
+    `.execute(db),
+    sql<{
+      id: string;
+    }>`
+      select result.id
+      from landed_cost.acquisition_cost_results result
+      join landed_cost.allocation_targets target on target.id = result.allocation_target_id
+      where result.organization_id = ${organizationId}
+        and (
+          result.total_acquisition_cost <> result.purchase_cost + result.additional_cost
+          or result.unit_acquisition_cost <> result.total_acquisition_cost / nullif(target.eligible_quantity, 0)
+        )
+    `.execute(db),
+    sql<{
+      id: string;
+    }>`
+      select level.id
+      from inventory.inventory_level_conditions level
+      join (
+        select layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code, sum(position.remaining_quantity) as quantity
+        from costing.cost_layers layer
+        join costing.cost_layer_positions position on position.cost_layer_id = layer.id
+        where layer.organization_id = ${organizationId}
+        group by layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code
+      ) position on position.organization_id = level.organization_id
+        and position.inventory_item_id = level.inventory_item_id
+        and position.location_id = level.location_id
+        and position.condition_code = level.condition_code
+      where level.organization_id = ${organizationId} and position.quantity <> level.quantity
+    `.execute(db),
+  ]);
+  return [
+    ...checks[0].rows.map((row) => ({
+      code: 'ALLOCATION_MISMATCH',
+      summary: 'Finalized component allocations do not equal its committed amount.',
+      entityId: row.id,
+    })),
+    ...checks[2].rows.map((row) => ({
+      code: 'LAYER_RECEIPT_QUANTITY_MISMATCH',
+      summary: 'Cost Layer quantity differs from its canonical Receipt Line.',
+      entityId: row.id,
+    })),
+    ...checks[3].rows.map((row) => ({
+      code: 'UNCOSTED_INVENTORY',
+      summary: 'Physical inventory has no authoritative Cost Layer provenance.',
+      entityId: row.id,
+    })),
+    ...checks[4].rows.map((row) => ({
+      code: 'DELIVERED_COGS_MISSING',
+      summary: 'Delivered cost-enabled fulfillment is missing COGS recognition.',
+      entityId: row.id,
+    })),
+    ...checks[1].rows.map((row) => ({
+      code: 'ADJUSTMENT_EFFECT_MISMATCH',
+      summary:
+        'Outbound and recognized COGS adjustment effects exceed their source Layer adjustment.',
+      entityId: row.id,
+    })),
+    ...checks[5].rows.map((row) => ({
+      code: 'NEGATIVE_FIFO_POSITION',
+      summary: 'A Cost Layer Position must never have negative remaining quantity.',
+      entityId: row.id,
+    })),
+    ...checks[6].rows.map((row) => ({
+      code: 'OUTBOUND_ASSIGNMENT_QUANTITY_MISMATCH',
+      summary: 'Outbound Cost Assignment quantity differs from the physical Fulfillment quantity.',
+      entityId: row.id,
+    })),
+    ...checks[7].rows.map((row) => ({
+      code: 'OUTBOUND_ASSIGNMENT_MISSING',
+      summary: 'Cost-enabled physical outbound inventory is missing its Cost Assignment.',
+      entityId: row.id,
+    })),
+    ...checks[8].rows.map((row) => ({
+      code: 'COGS_ORPHAN',
+      summary: 'COGS recognition has no valid Outbound Cost Assignment.',
+      entityId: row.id,
+    })),
+    ...checks[9].rows.map((row) => ({
+      code: 'FX_PROVENANCE_MISSING',
+      summary: 'Cross-currency cost component is missing persisted FX provenance.',
+      entityId: row.id,
+    })),
+    ...checks[10].rows.map((row) => ({
+      code: 'VALUATION_QUANTITY_MISMATCH',
+      summary: 'FIFO Position quantity exceeds the matching physical inventory quantity.',
+      entityId: row.id,
+    })),
+    ...checks[11].rows.map((row) => ({
+      code: 'ACQUISITION_RESULT_MISMATCH',
+      summary: 'Shipment acquisition total or unit result is internally inconsistent.',
+      entityId: row.id,
+    })),
+    ...checks[12].rows.map((row) => ({
+      code: 'VALUATION_QUANTITY_MISMATCH',
+      summary: 'FIFO Position quantity differs from matching physical inventory.',
+      entityId: row.id,
+    })),
+  ];
 }

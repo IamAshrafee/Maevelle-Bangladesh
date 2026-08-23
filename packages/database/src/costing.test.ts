@@ -9,6 +9,11 @@ import {
   createLandedCostRevision,
   createLandedCostWorksheet,
   finalizeLandedCostWorksheet,
+  getInventoryValuation,
+  listCostLayers,
+  listOutboundCostAssignments,
+  previewLandedCostWorksheet,
+  verifyCostingIntegrity,
 } from './costing.js';
 import { createDatabase } from './index.js';
 import {
@@ -147,7 +152,7 @@ async function receivedShipment() {
   };
 }
 
-async function createDispatchedDelivery(
+async function createPackedFulfillment(
   input: Awaited<ReturnType<typeof receivedShipment>>,
   quantity: string,
 ) {
@@ -220,6 +225,14 @@ async function createDispatchedDelivery(
     expectedVersion: picking.version,
     nextStatus: 'PACKED',
   });
+  return packed;
+}
+
+async function createDispatchedDelivery(
+  input: Awaited<ReturnType<typeof receivedShipment>>,
+  quantity: string,
+) {
+  const packed = await createPackedFulfillment(input, quantity);
   const dispatched = await dispatchFulfillment(database.db, {
     organizationId: input.organizationId,
     actorId: input.actorId,
@@ -252,6 +265,32 @@ async function createDispatchedDelivery(
       idempotencyKey: crypto.randomUUID(),
     }),
   };
+}
+
+async function finalizeFreight(
+  input: Awaited<ReturnType<typeof receivedShipment>>,
+  amount: string,
+) {
+  const worksheet = await createLandedCostWorksheet(database.db, {
+    ...input,
+    baseCurrencyCode: 'CNY',
+  });
+  await addLandedCostComponent(database.db, {
+    organizationId: input.organizationId,
+    revisionId: worksheet.revisionId,
+    costType: 'INTERNATIONAL_FREIGHT',
+    scope: 'GLOBAL',
+    originalAmount: amount,
+    originalCurrencyCode: 'CNY',
+    valueStatus: amount.startsWith('-') ? 'CREDIT' : 'ACTUAL',
+    allocationMethod: 'QUANTITY',
+  });
+  await finalizeLandedCostWorksheet(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    revisionId: worksheet.revisionId,
+  });
+  return worksheet;
 }
 
 describe('landed-cost deterministic allocation', () => {
@@ -484,5 +523,478 @@ describe('landed-cost deterministic allocation', () => {
       cogs: '0',
       refunds: '0',
     });
+  });
+
+  it('allows exactly one independent PostgreSQL FIFO consumer to claim the final costed unit', async () => {
+    const input = await receivedShipment();
+    const positions = await sql<{ id: string }>`
+      select position.id
+      from costing.cost_layer_positions position
+      join costing.cost_layers layer on layer.id = position.cost_layer_id
+      where position.organization_id = ${input.organizationId}
+      order by layer.received_at, layer.id
+    `.execute(database.db);
+    await sql`update costing.cost_layer_positions set remaining_quantity = case when id = ${positions.rows[0]!.id}::uuid then 1 else 0 end where organization_id = ${input.organizationId}`.execute(
+      database.db,
+    );
+    const [first, second] = await Promise.all([
+      createPackedFulfillment(input, '1'),
+      createPackedFulfillment(input, '1'),
+    ]);
+    const firstPool = createDatabase({
+      connectionString: process.env.TEST_DATABASE_URL!,
+      maxConnections: 1,
+    });
+    const secondPool = createDatabase({
+      connectionString: process.env.TEST_DATABASE_URL!,
+      maxConnections: 1,
+    });
+    try {
+      const attempts = await Promise.allSettled([
+        dispatchFulfillment(firstPool.db, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          fulfillmentId: first.id,
+          expectedVersion: first.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+        dispatchFulfillment(secondPool.db, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          fulfillmentId: second.id,
+          expectedVersion: second.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ]);
+      expect(attempts.filter((attempt) => attempt.status === 'fulfilled')).toHaveLength(1);
+      expect(attempts.filter((attempt) => attempt.status === 'rejected')).toHaveLength(1);
+    } finally {
+      await Promise.all([firstPool.close(), secondPool.close()]);
+    }
+    const facts = await sql<{ remaining: string; assignments: string; lines: string }>`
+      select
+        (select sum(remaining_quantity)::text from costing.cost_layer_positions where organization_id = ${input.organizationId}) as remaining,
+        (select count(*)::text from costing.outbound_cost_assignments where organization_id = ${input.organizationId}) as assignments,
+        (select count(*)::text from costing.outbound_cost_assignment_lines where organization_id = ${input.organizationId}) as lines
+    `.execute(database.db);
+    expect(facts.rows[0]).toEqual({ remaining: '0.000000', assignments: '1', lines: '1' });
+  });
+
+  it('uses independent PostgreSQL locks to consume two FIFO layers once each', async () => {
+    const input = await receivedShipment();
+    const positions = await sql<{ id: string }>`
+      select position.id
+      from costing.cost_layer_positions position
+      join costing.cost_layers layer on layer.id = position.cost_layer_id
+      where position.organization_id = ${input.organizationId}
+      order by layer.received_at, layer.id
+    `.execute(database.db);
+    expect(positions.rows).toHaveLength(2);
+    await sql`update costing.cost_layer_positions set remaining_quantity = 1 where id in (${positions.rows[0]!.id}::uuid, ${positions.rows[1]!.id}::uuid)`.execute(
+      database.db,
+    );
+    const [first, second] = await Promise.all([
+      createPackedFulfillment(input, '1'),
+      createPackedFulfillment(input, '1'),
+    ]);
+    const firstPool = createDatabase({
+      connectionString: process.env.TEST_DATABASE_URL!,
+      maxConnections: 1,
+    });
+    const secondPool = createDatabase({
+      connectionString: process.env.TEST_DATABASE_URL!,
+      maxConnections: 1,
+    });
+    try {
+      await Promise.all([
+        dispatchFulfillment(firstPool.db, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          fulfillmentId: first.id,
+          expectedVersion: first.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+        dispatchFulfillment(secondPool.db, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          fulfillmentId: second.id,
+          expectedVersion: second.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ]);
+    } finally {
+      await Promise.all([firstPool.close(), secondPool.close()]);
+    }
+    const facts = await sql<{ remaining: string; assignments: string; distinct_layers: string }>`
+      select
+        (select sum(remaining_quantity)::text from costing.cost_layer_positions where organization_id = ${input.organizationId}) as remaining,
+        (select count(*)::text from costing.outbound_cost_assignments where organization_id = ${input.organizationId}) as assignments,
+        (select count(distinct cost_layer_id)::text from costing.outbound_cost_assignment_lines where organization_id = ${input.organizationId}) as distinct_layers
+    `.execute(database.db);
+    expect(facts.rows[0]).toEqual({
+      remaining: '0.000000',
+      assignments: '2',
+      distinct_layers: '2',
+    });
+  });
+
+  it('makes duplicate cost-layer-backed dispatch and injected failure atomic', async () => {
+    const input = await receivedShipment();
+    const packed = await createPackedFulfillment(input, '1');
+    await expect(
+      dispatchFulfillment(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        fulfillmentId: packed.id,
+        expectedVersion: packed.version,
+        idempotencyKey: crypto.randomUUID(),
+        fault: () => {
+          throw new Error('dispatch fault');
+        },
+      }),
+    ).rejects.toThrow('dispatch fault');
+    const rollback = await sql<{
+      status: string;
+      on_hand: string;
+      reserved: string;
+      remaining: string;
+      assignments: string;
+      audit: string;
+      outbox: string;
+    }>`
+      select
+        (select status from fulfillment.fulfillments where id = ${packed.id}) as status,
+        (select sellable_quantity::text from inventory.inventory_levels where organization_id = ${input.organizationId}) as on_hand,
+        (select reserved_quantity::text from inventory.inventory_levels where organization_id = ${input.organizationId}) as reserved,
+        (select sum(remaining_quantity)::text from costing.cost_layer_positions where organization_id = ${input.organizationId}) as remaining,
+        (select count(*)::text from costing.outbound_cost_assignments where organization_id = ${input.organizationId}) as assignments,
+        (select count(*)::text from audit.audit_events where target_id = ${packed.id} and action = 'fulfillment.fulfillment.dispatched') as audit,
+        (select count(*)::text from platform.outbox_events where aggregate_id = ${packed.id} and event_type = 'fulfillment.dispatched') as outbox
+    `.execute(database.db);
+    expect(rollback.rows[0]).toEqual({
+      status: 'PACKED',
+      on_hand: '10.000000',
+      reserved: '1.000000',
+      remaining: '10.000000',
+      assignments: '0',
+      audit: '0',
+      outbox: '0',
+    });
+    const firstPool = createDatabase({
+      connectionString: process.env.TEST_DATABASE_URL!,
+      maxConnections: 1,
+    });
+    const secondPool = createDatabase({
+      connectionString: process.env.TEST_DATABASE_URL!,
+      maxConnections: 1,
+    });
+    try {
+      const attempts = await Promise.allSettled([
+        dispatchFulfillment(firstPool.db, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          fulfillmentId: packed.id,
+          expectedVersion: packed.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+        dispatchFulfillment(secondPool.db, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          fulfillmentId: packed.id,
+          expectedVersion: packed.version,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ]);
+      expect(attempts.filter((attempt) => attempt.status === 'fulfilled')).toHaveLength(1);
+    } finally {
+      await Promise.all([firstPool.close(), secondPool.close()]);
+    }
+    const committed = await sql<{
+      status: string;
+      on_hand: string;
+      reserved: string;
+      remaining: string;
+      assignments: string;
+      lines: string;
+      audit: string;
+      outbox: string;
+    }>`
+      select
+        (select status from fulfillment.fulfillments where id = ${packed.id}) as status,
+        (select sellable_quantity::text from inventory.inventory_levels where organization_id = ${input.organizationId}) as on_hand,
+        (select reserved_quantity::text from inventory.inventory_levels where organization_id = ${input.organizationId}) as reserved,
+        (select sum(remaining_quantity)::text from costing.cost_layer_positions where organization_id = ${input.organizationId}) as remaining,
+        (select count(*)::text from costing.outbound_cost_assignments where organization_id = ${input.organizationId}) as assignments,
+        (select count(*)::text from costing.outbound_cost_assignment_lines where organization_id = ${input.organizationId}) as lines,
+        (select count(*)::text from audit.audit_events where target_id = ${packed.id} and action = 'fulfillment.fulfillment.dispatched') as audit,
+        (select count(*)::text from platform.outbox_events where aggregate_id = ${packed.id} and event_type = 'fulfillment.dispatched') as outbox
+    `.execute(database.db);
+    expect(committed.rows[0]).toEqual({
+      status: 'DISPATCHED',
+      on_hand: '9.000000',
+      reserved: '0.000000',
+      remaining: '9.000000',
+      assignments: '1',
+      lines: '1',
+      audit: '1',
+      outbox: '1',
+    });
+  });
+
+  it('distributes a positive late acquisition adjustment exactly across on-hand, pending outbound, and recognized COGS', async () => {
+    const input = await receivedShipment();
+    const worksheet = await finalizeFreight(input, '600.0000');
+    const delivered = await createDispatchedDelivery(input, '3');
+    await markDelivered(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: delivered.inTransit.id,
+      expectedVersion: delivered.inTransit.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await createDispatchedDelivery(input, '3');
+    const original = await sql<{ layers: string; assignment: string; cogs: string }>`
+      select
+        (select sum(base_purchase_cost)::text from costing.cost_layers where organization_id = ${input.organizationId}) as layers,
+        (select sum(total_cost)::text from costing.outbound_cost_assignments where organization_id = ${input.organizationId}) as assignment,
+        (select sum(total_cost)::text from costing.cogs_recognitions where organization_id = ${input.organizationId}) as cogs
+    `.execute(database.db);
+    const adjustment = await createLandedCostRevision(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      worksheetId: worksheet.id,
+      kind: 'ADJUSTMENT',
+    });
+    await addLandedCostComponent(database.db, {
+      organizationId: input.organizationId,
+      revisionId: adjustment.revisionId,
+      costType: 'CUSTOMS_DUTY',
+      scope: 'GLOBAL',
+      originalAmount: '100.0000',
+      originalCurrencyCode: 'CNY',
+      valueStatus: 'ACTUAL',
+      allocationMethod: 'QUANTITY',
+    });
+    await finalizeLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      revisionId: adjustment.revisionId,
+    });
+    const effects = await sql<{ source: string; pending: string; cogs: string }>`
+      select
+        (select sum(delta_total_cost)::text from costing.cost_layer_adjustments where worksheet_revision_id = ${adjustment.revisionId}) as source,
+        (select sum(effect.amount)::text from costing.outbound_cost_assignment_adjustments effect join costing.cost_layer_adjustments source on source.id = effect.cost_layer_adjustment_id where source.worksheet_revision_id = ${adjustment.revisionId}) as pending,
+        (select sum(effect.amount)::text from costing.cogs_adjustments effect join costing.cost_layer_adjustments source on source.id = effect.cost_layer_adjustment_id where source.worksheet_revision_id = ${adjustment.revisionId}) as cogs
+    `.execute(database.db);
+    expect(effects.rows[0]).toEqual({
+      source: '100.00000000',
+      pending: '30.00000000',
+      cogs: '30.00000000',
+    });
+    expect(
+      Number(effects.rows[0]!.source) -
+        Number(effects.rows[0]!.pending) -
+        Number(effects.rows[0]!.cogs),
+    ).toBeCloseTo(40, 10);
+    const after = await sql<{ layers: string; assignment: string; cogs: string }>`
+      select
+        (select sum(base_purchase_cost)::text from costing.cost_layers where organization_id = ${input.organizationId}) as layers,
+        (select sum(total_cost)::text from costing.outbound_cost_assignments where organization_id = ${input.organizationId}) as assignment,
+        (select sum(total_cost)::text from costing.cogs_recognitions where organization_id = ${input.organizationId}) as cogs
+    `.execute(database.db);
+    expect(after.rows[0]).toEqual(original.rows[0]);
+  });
+
+  it('records a negative credit through the same three append-only buckets without rewriting history', async () => {
+    const input = await receivedShipment();
+    const worksheet = await finalizeFreight(input, '600.0000');
+    const delivered = await createDispatchedDelivery(input, '3');
+    await markDelivered(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: delivered.inTransit.id,
+      expectedVersion: delivered.inTransit.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await createDispatchedDelivery(input, '3');
+    const credit = await createLandedCostRevision(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      worksheetId: worksheet.id,
+      kind: 'CREDIT',
+    });
+    await addLandedCostComponent(database.db, {
+      organizationId: input.organizationId,
+      revisionId: credit.revisionId,
+      costType: 'OTHER_ACQUISITION_COST',
+      scope: 'GLOBAL',
+      originalAmount: '-50.0000',
+      originalCurrencyCode: 'CNY',
+      valueStatus: 'CREDIT',
+      allocationMethod: 'QUANTITY',
+    });
+    await finalizeLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      revisionId: credit.revisionId,
+    });
+    const effects = await sql<{ source: string; pending: string; cogs: string; originals: string }>`
+      select
+        (select sum(delta_total_cost)::text from costing.cost_layer_adjustments where worksheet_revision_id = ${credit.revisionId}) as source,
+        (select sum(effect.amount)::text from costing.outbound_cost_assignment_adjustments effect join costing.cost_layer_adjustments source on source.id = effect.cost_layer_adjustment_id where source.worksheet_revision_id = ${credit.revisionId}) as pending,
+        (select sum(effect.amount)::text from costing.cogs_adjustments effect join costing.cost_layer_adjustments source on source.id = effect.cost_layer_adjustment_id where source.worksheet_revision_id = ${credit.revisionId}) as cogs,
+        (select count(*)::text from costing.cogs_recognitions where organization_id = ${input.organizationId} and recognition_kind = 'ORIGINAL') as originals
+    `.execute(database.db);
+    expect(effects.rows[0]).toEqual({
+      source: '-50.00000000',
+      pending: '-15.00000000',
+      cogs: '-15.00000000',
+      originals: '1',
+    });
+    expect(
+      Number(effects.rows[0]!.source) -
+        Number(effects.rows[0]!.pending) -
+        Number(effects.rows[0]!.cogs),
+    ).toBeCloseTo(-20, 10);
+  });
+
+  it('detects controlled integrity corruption while a healthy finalized fixture remains clean', async () => {
+    const input = await receivedShipment();
+    const worksheet = await finalizeFreight(input, '100.0000');
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
+    const allocation = await sql<{ id: string }>`
+      select allocation.id
+      from landed_cost.component_allocations allocation
+      join landed_cost.cost_components component on component.id = allocation.cost_component_id
+      where component.worksheet_revision_id = ${worksheet.revisionId}
+      order by allocation.id
+      limit 1
+    `.execute(database.db);
+    await sql`update landed_cost.component_allocations set allocated_amount = allocated_amount + 1 where id = ${allocation.rows[0]!.id}`.execute(
+      database.db,
+    );
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'ALLOCATION_MISMATCH' })]),
+    );
+  });
+
+  it('detects missing outbound provenance and adjustment-effect corruption without repairing either', async () => {
+    const input = await receivedShipment();
+    const worksheet = await finalizeFreight(input, '600.0000');
+    const flow = await createDispatchedDelivery(input, '3');
+    const revision = await createLandedCostRevision(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      worksheetId: worksheet.id,
+      kind: 'ADJUSTMENT',
+    });
+    await addLandedCostComponent(database.db, {
+      organizationId: input.organizationId,
+      revisionId: revision.revisionId,
+      costType: 'CUSTOMS_DUTY',
+      scope: 'GLOBAL',
+      originalAmount: '100.0000',
+      originalCurrencyCode: 'CNY',
+      valueStatus: 'ACTUAL',
+      allocationMethod: 'QUANTITY',
+    });
+    await finalizeLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      revisionId: revision.revisionId,
+    });
+    const adjustment = await sql<{ id: string }>`
+      select id from costing.cost_layer_adjustments where worksheet_revision_id = ${revision.revisionId} order by id limit 1
+    `.execute(database.db);
+    await sql`update costing.cost_layer_adjustments set delta_total_cost = 1 where id = ${adjustment.rows[0]!.id}`.execute(
+      database.db,
+    );
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'ADJUSTMENT_EFFECT_MISMATCH' })]),
+    );
+    const assignment = await sql<{ id: string }>`
+      select id from costing.outbound_cost_assignments where fulfillment_id = ${flow.dispatched.id}
+    `.execute(database.db);
+    await sql`delete from costing.outbound_cost_assignment_adjustments where outbound_cost_assignment_line_id in (select id from costing.outbound_cost_assignment_lines where outbound_cost_assignment_id = ${assignment.rows[0]!.id})`.execute(
+      database.db,
+    );
+    await sql`delete from costing.outbound_cost_assignment_lines where outbound_cost_assignment_id = ${assignment.rows[0]!.id}`.execute(
+      database.db,
+    );
+    await sql`delete from costing.outbound_cost_assignments where id = ${assignment.rows[0]!.id}`.execute(
+      database.db,
+    );
+    const issues = await verifyCostingIntegrity(database.db, input.organizationId);
+    expect(issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'OUTBOUND_ASSIGNMENT_MISSING' })]),
+    );
+  });
+
+  it('keeps every costing and landed-cost service query organization-scoped', async () => {
+    const organizationA = await receivedShipment();
+    const organizationB = await receivedShipment();
+    const worksheet = await createLandedCostWorksheet(database.db, {
+      ...organizationA,
+      baseCurrencyCode: 'CNY',
+    });
+    await expect(
+      previewLandedCostWorksheet(database.db, {
+        organizationId: organizationB.organizationId,
+        revisionId: worksheet.revisionId,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      addLandedCostComponent(database.db, {
+        organizationId: organizationB.organizationId,
+        revisionId: worksheet.revisionId,
+        costType: 'INTERNATIONAL_FREIGHT',
+        scope: 'GLOBAL',
+        originalAmount: '100.0000',
+        originalCurrencyCode: 'CNY',
+        valueStatus: 'ACTUAL',
+        allocationMethod: 'QUANTITY',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      finalizeLandedCostWorksheet(database.db, {
+        organizationId: organizationB.organizationId,
+        actorId: organizationB.actorId,
+        revisionId: worksheet.revisionId,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      createLandedCostRevision(database.db, {
+        organizationId: organizationB.organizationId,
+        actorId: organizationB.actorId,
+        worksheetId: worksheet.id,
+        kind: 'ADJUSTMENT',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(await listCostLayers(database.db, organizationB.organizationId)).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ location_id: organizationA.locationId })]),
+    );
+    expect(
+      await getInventoryValuation(database.db, { organizationId: organizationB.organizationId }),
+    ).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ location_id: organizationA.locationId })]),
+    );
+    expect(await listOutboundCostAssignments(database.db, organizationB.organizationId)).toEqual(
+      [],
+    );
+  });
+
+  it('surfaces legacy physical inventory without inventing a zero-cost layer', async () => {
+    const input = await receivedShipment();
+    const issues = await verifyCostingIntegrity(database.db, input.organizationId);
+    expect(issues).toEqual([]);
+    await sql`delete from costing.cost_layer_positions where organization_id = ${input.organizationId}`.execute(
+      database.db,
+    );
+    await sql`delete from costing.cost_layers where organization_id = ${input.organizationId}`.execute(
+      database.db,
+    );
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'UNCOSTED_INVENTORY' })]),
+    );
   });
 });
