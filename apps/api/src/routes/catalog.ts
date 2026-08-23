@@ -11,6 +11,7 @@ import {
   createCatalogProduct,
   createCatalogVariant,
   getStorefrontCatalogProduct,
+  listStorefrontCatalogProducts,
   listCatalogProducts,
   listCatalogProductTypes,
   moveCatalogCategory,
@@ -373,6 +374,23 @@ export function registerCatalogRoutes(
     },
   );
 
+  app.get(
+    '/storefront/v1/products',
+    {
+      schema: {
+        querystring: Type.Object({
+          organizationId: Type.String(),
+          q: Type.Optional(Type.String({ minLength: 2, maxLength: 120 })),
+        }),
+      },
+    },
+    async (request) => {
+      const query = request.query as { organizationId: string; q?: string };
+      return {
+        data: await listStorefrontCatalogProducts(database.db, query.organizationId, query.q),
+      };
+    },
+  );
   app.get(
     '/storefront/v1/products/:handle',
     {

@@ -478,6 +478,29 @@ export interface StorefrontProduct {
   readonly faqs: readonly { question: string; answer: string }[];
 }
 
+export interface StorefrontProductCard {
+  readonly id: string;
+  readonly handle: string;
+  readonly title: string;
+  readonly description: string | null;
+}
+
+/** Public listings return only published catalog truth. */
+export async function listStorefrontCatalogProducts(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  query?: string,
+): Promise<readonly StorefrontProductCard[]> {
+  const term = query?.trim();
+  const result = await sql<StorefrontProductCard>`
+    select id::text,handle,title,description from catalog.products
+    where organization_id=${organizationId} and status='ACTIVE' and publication_status='PUBLISHED'
+      and (${term ?? null}::text is null or to_tsvector('simple',coalesce(title,'') || ' ' || coalesce(description,'')) @@ websearch_to_tsquery('simple',${term ?? null}))
+    order by published_at desc nulls last,id desc limit 48
+  `.execute(db);
+  return result.rows;
+}
+
 /** Public read deliberately filters lifecycle and publication state before any detail is loaded. */
 export async function getStorefrontCatalogProduct(
   db: Kysely<DatabaseSchema>,
