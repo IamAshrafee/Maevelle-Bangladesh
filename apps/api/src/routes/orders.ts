@@ -57,15 +57,13 @@ function sendError(
         : caught.code === 'OUT_OF_STOCK'
           ? 422
           : 422;
-  return reply
-    .code(status)
-    .send({
-      error: {
-        code: caught.code,
-        message: caught.message,
-        ...(caught.checkout ? { checkout: caught.checkout } : {}),
-      },
-    });
+  return reply.code(status).send({
+    error: {
+      code: caught.code,
+      message: caught.message,
+      ...(caught.checkout ? { checkout: caught.checkout } : {}),
+    },
+  });
 }
 function headers(value: Record<string, string | string[] | undefined>): Headers {
   return new Headers(
@@ -265,15 +263,13 @@ export function registerOrderRoutes(
           idempotencyKey: key,
         });
         return result.kind === 'CHANGED'
-          ? reply
-              .code(409)
-              .send({
-                error: {
-                  code: 'CHECKOUT_CHANGED',
-                  message: 'Order details changed; review the updated total.',
-                  checkout: result.checkout,
-                },
-              })
+          ? reply.code(409).send({
+              error: {
+                code: 'CHECKOUT_CHANGED',
+                message: 'Order details changed; review the updated total.',
+                checkout: result.checkout,
+              },
+            })
           : reply.code(201).send({ data: result.order });
       } catch (caught) {
         return sendError(reply, caught);

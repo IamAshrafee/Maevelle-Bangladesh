@@ -69,6 +69,7 @@ export interface CheckoutView {
 
 export interface OrderView {
   readonly id: string;
+  readonly version: number;
   readonly orderNumber: string;
   readonly status: string;
   readonly currency: string;
@@ -86,6 +87,7 @@ export interface OrderView {
     gross: string;
     discount: string;
     net: string;
+    options: readonly { name: string; value: string }[];
   }[];
 }
 
@@ -531,6 +533,7 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     subtotal_amount: string;
     discount_amount: string;
     total_amount: string;
+    version: string;
     display_name: string;
     phone: string;
     email: string | null;
@@ -545,7 +548,7 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     postal_code: string | null;
     country_code: string;
   }>`
-    select order_row.id, order_row.order_number, order_row.order_status, order_row.currency_code, order_row.payment_method,
+    select order_row.id, order_row.order_number, order_row.order_status, order_row.currency_code, order_row.payment_method, order_row.version::text,
       order_row.subtotal_amount::text, order_row.discount_amount::text, order_row.total_amount::text,
       customer.display_name, customer.phone, customer.email, address.recipient_name, address.phone as delivery_phone, address.address_line_1, address.address_line_2,
       address.geography_node_id, address.area, address.city, address.district, address.postal_code, address.country_code
@@ -564,12 +567,14 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     gross_amount: string;
     discount_amount: string;
     net_amount: string;
+    option_snapshot: readonly { name: string; value: string }[];
   }>`
-    select sku_snapshot, product_title_snapshot, quantity::text, unit_price::text, gross_amount::text, discount_amount::text, net_amount::text
+    select sku_snapshot, product_title_snapshot, quantity::text, unit_price::text, gross_amount::text, discount_amount::text, net_amount::text, option_snapshot
     from orders.order_lines where order_id = ${orderId} order by id
   `.execute(db);
   return {
     id: row.id,
+    version: Number(row.version),
     orderNumber: row.order_number,
     status: row.order_status,
     currency: row.currency_code,
@@ -598,6 +603,7 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
       gross: line.gross_amount,
       discount: line.discount_amount,
       net: line.net_amount,
+      options: line.option_snapshot,
     })),
   };
 }
@@ -610,12 +616,12 @@ export async function placeOrder(
     acceptedCalculationVersion: number;
     acceptedCalculationFingerprint: string;
     idempotencyKey: string;
+    /** Test-only fault injection. Never populated by application routes. */
+    fault?: (stage: 'after-order-header' | 'after-reservation' | 'after-promotion-usage') => void;
   },
 ): Promise<PlaceOrderResult> {
   return db.transaction().execute(async (transaction) => {
     const checkout = await checkoutRow(transaction, input.checkoutToken, true);
-    if (checkout.status === 'ORDER_PLACED' && checkout.resulting_order_id)
-      return { kind: 'PLACED', order: await orderView(transaction, checkout.resulting_order_id) };
     if (checkout.expires_at <= new Date()) {
       await sql`update orders.checkout_sessions set status = 'EXPIRED', updated_at = now() where id = ${checkout.id}`.execute(
         transaction,
@@ -657,9 +663,16 @@ export async function placeOrder(
         );
       throw error;
     }
+    if (checkout.status === 'ORDER_PLACED' && checkout.resulting_order_id)
+      throw new OrderDomainError(
+        'CHECKOUT_COMPLETED',
+        'Checkout has already created an Order with a different request.',
+      );
     const cart = await getGuestCart(transaction, input.cartToken);
     if (cart.id !== checkout.cart_id)
       throw new OrderDomainError('NOT_FOUND', 'Checkout was not found.');
+    if (cart.lines.some((line) => line.availability !== 'AVAILABLE' || !line.unitPrice))
+      throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
     const changed =
       cart.version !== Number(checkout.cart_version) ||
       cartFingerprint(cart) !== checkout.calculation_fingerprint ||
@@ -732,6 +745,7 @@ export async function placeOrder(
     `.execute(transaction);
     const orderId = orderCreated.rows[0]?.id;
     if (!orderId) throw new Error('Order creation did not return an id.');
+    input.fault?.('after-order-header');
     await sql`insert into orders.order_customer_snapshots (order_id, organization_id, customer_id, display_name, phone, email) values (${orderId}, ${checkout.organization_id}, ${customerId}, ${contact.name}, ${contact.phone}, ${contact.email ?? null})`.execute(
       transaction,
     );
@@ -769,6 +783,7 @@ export async function placeOrder(
         await sql`insert into orders.order_inventory_reservations (organization_id, order_id, order_line_id, reservation_id) values (${checkout.organization_id}, ${orderId}, ${created.rows[0]!.id}, ${reservation.reservationId})`.execute(
           transaction,
         );
+        input.fault?.('after-reservation');
       } catch (error) {
         if (error instanceof InventoryDomainError && error.code === 'INSUFFICIENT_STOCK')
           throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
@@ -792,6 +807,7 @@ export async function placeOrder(
       orderId,
       calculations,
     });
+    input.fault?.('after-promotion-usage');
     for (const calculation of calculations) {
       const snapshot = await sql<{
         name: string;

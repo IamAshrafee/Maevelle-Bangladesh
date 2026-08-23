@@ -1,6 +1,7 @@
 'use client';
 
 import { type FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
 
@@ -141,6 +142,9 @@ export default function CartPage() {
             <p>Discount: {money(cart.discountTotal)}</p>
             <p>
               <strong>Total: {money(cart.merchandiseNet)}</strong>
+            </p>
+            <p>
+              <Link href="/checkout">Proceed to Checkout</Link>
             </p>
           </>
         )}
