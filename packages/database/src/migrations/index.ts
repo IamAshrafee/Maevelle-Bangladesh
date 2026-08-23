@@ -18,6 +18,7 @@ import * as pricing from './0800_pricing.js';
 import * as promotions from './0900_promotions.js';
 import * as cart from './1000_cart.js';
 import * as geographySourceCodeNulls from './1001_geography_source_code_nulls.js';
+import * as ordersCheckoutCod from './1100_orders_checkout_cod.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -42,6 +43,7 @@ export const migrations = {
   '0900_promotions': promotions,
   '1000_cart': cart,
   '1001_geography_source_code_nulls': geographySourceCodeNulls,
+  '1100_orders_checkout_cod': ordersCheckoutCod,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

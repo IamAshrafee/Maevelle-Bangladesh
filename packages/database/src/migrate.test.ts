@@ -39,7 +39,7 @@ describe('clean PostgreSQL migration path', () => {
       expect(extensions.rows.map((row) => row.extname)).toEqual(['pg_stat_statements', 'pg_trgm']);
       const schemas = await sql<{ schema_name: string }>`
         select schema_name from information_schema.schemata
-        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart') order by schema_name
+        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders') order by schema_name
       `.execute(database.db);
       expect(schemas.rows.map((row) => row.schema_name)).toEqual([
         'audit',
@@ -48,6 +48,7 @@ describe('clean PostgreSQL migration path', () => {
         'geography',
         'iam',
         'inventory',
+        'orders',
         'platform',
         'pricing',
         'promotions',
@@ -83,12 +84,16 @@ describe('clean PostgreSQL migration path', () => {
         union all
         select table_name from information_schema.tables
         where table_schema = 'promotions' and table_name in ('promotions', 'promotion_revisions', 'coupon_codes')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'orders' and table_name in ('checkout_sessions', 'orders', 'order_lines', 'order_customer_snapshots', 'order_addresses')
         order by table_name
       `.execute(database.db);
       expect(tables.rows.map((row) => row.table_name)).toEqual([
         'audit_events',
         'cart_lines',
         'carts',
+        'checkout_sessions',
         'coupon_codes',
         'customer_addresses',
         'customer_phones',
@@ -102,6 +107,10 @@ describe('clean PostgreSQL migration path', () => {
         'locations',
         'node_aliases',
         'nodes',
+        'order_addresses',
+        'order_customer_snapshots',
+        'order_lines',
+        'orders',
         'organization_memberships',
         'organizations',
         'outbox_events',

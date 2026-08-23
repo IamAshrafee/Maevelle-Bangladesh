@@ -55,6 +55,10 @@
     "./cart": {
       "types": "./src/cart.ts",
       "default": "./dist/src/cart.js"
+    },
+    "./orders": {
+      "types": "./src/orders.ts",
+      "default": "./dist/src/orders.js"
     }
   },
   "scripts": {
