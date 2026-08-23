@@ -99,6 +99,10 @@
     "./analytics": {
       "types": "./src/analytics.ts",
       "default": "./dist/src/analytics.js"
+    },
+    "./admin-operations": {
+      "types": "./src/admin-operations.ts",
+      "default": "./dist/src/admin-operations.js"
     }
   },
   "scripts": {
