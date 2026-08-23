@@ -15,6 +15,7 @@ import {
   createDelivery,
   dispatchDelivery,
   markDelivered,
+  markDeliveryFailed,
   recordManualCourierBooking,
 } from './delivery.js';
 import { createFulfillment, dispatchFulfillment, transitionFulfillment } from './fulfillment.js';
@@ -409,5 +410,79 @@ describe('landed-cost deterministic allocation', () => {
       database.db,
     );
     expect(after.rows[0]).toEqual({ total: '150.00000000', count: '1' });
+  });
+
+  it('rolls back delivery and COGS together, then permits only one concurrent recognition', async () => {
+    const input = await receivedShipment();
+    const flow = await createDispatchedDelivery(input, '1');
+    await expect(
+      markDelivered(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        deliveryId: flow.inTransit.id,
+        expectedVersion: flow.inTransit.version,
+        idempotencyKey: crypto.randomUUID(),
+        fault: () => {
+          throw new Error('delivery fault');
+        },
+      }),
+    ).rejects.toThrow('delivery fault');
+    const rolledBack = await sql<{
+      status: string;
+      cogs: string;
+    }>`select (select operational_status from delivery.deliveries where id = ${flow.inTransit.id}) as status, (select count(*)::text from costing.cogs_recognitions where organization_id = ${input.organizationId}) as cogs`.execute(
+      database.db,
+    );
+    expect(rolledBack.rows[0]).toEqual({ status: 'IN_TRANSIT', cogs: '0' });
+    const results = await Promise.allSettled([
+      markDelivered(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        deliveryId: flow.inTransit.id,
+        expectedVersion: flow.inTransit.version,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+      markDelivered(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        deliveryId: flow.inTransit.id,
+        expectedVersion: flow.inTransit.version,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const cogs = await sql<{
+      count: string;
+    }>`select count(*)::text as count from costing.cogs_recognitions where organization_id = ${input.organizationId}`.execute(
+      database.db,
+    );
+    expect(cogs.rows[0]!.count).toBe('1');
+  });
+
+  it('keeps failed-delivery stock and its outbound assignment consumed without fabricated COGS', async () => {
+    const input = await receivedShipment();
+    const flow = await createDispatchedDelivery(input, '2');
+    await markDeliveryFailed(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: flow.inTransit.id,
+      expectedVersion: flow.inTransit.version,
+      reasonCode: 'UNREACHABLE',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const facts = await sql<{
+      remaining: string;
+      assignments: string;
+      cogs: string;
+      refunds: string;
+    }>`select (select sum(remaining_quantity)::text from costing.cost_layer_positions where organization_id = ${input.organizationId}) as remaining, (select count(*)::text from costing.outbound_cost_assignments where organization_id = ${input.organizationId}) as assignments, (select count(*)::text from costing.cogs_recognitions where organization_id = ${input.organizationId}) as cogs, (select count(*)::text from payments.refunds where organization_id = ${input.organizationId}) as refunds`.execute(
+      database.db,
+    );
+    expect(facts.rows[0]).toEqual({
+      remaining: '8.000000',
+      assignments: '1',
+      cogs: '0',
+      refunds: '0',
+    });
   });
 });
