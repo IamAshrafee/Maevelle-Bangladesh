@@ -30,7 +30,7 @@ export function CustomersConsole() {
     try {
       setCustomers((await request<ApiEnvelope<readonly Customer[]>>('/admin/customers')).data);
     } catch {
-      window.location.assign('/login');
+      window.location.assign('/admin/login');
     }
   };
   useEffect(() => {

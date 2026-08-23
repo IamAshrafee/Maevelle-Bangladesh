@@ -45,8 +45,8 @@ services:
       MEDIA_STORAGE_PATH: /app/var/media
       MEDIA_MAX_UPLOAD_BYTES: 10485760
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - media_data:/app/var/media
     healthcheck:
@@ -74,8 +74,37 @@ services:
       BETTER_AUTH_SECRET: development-only-compose-secret-at-least-32-chars
       AUTH_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
     depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    image: maevelle-bangladesh-api
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.api
+    command: ['node', 'packages/database/dist/src/migrate-cli.js']
+    environment:
+      DATABASE_URL: postgresql://maevelle_dev:maevelle_dev_password@postgres:5432/maevelle_dev
+    depends_on:
       postgres:
         condition: service_healthy
+
+  bootstrap-owner:
+    image: maevelle-bangladesh-api
+    command: ['node', 'apps/api/dist/src/bootstrap-owner.js']
+    environment:
+      DATABASE_URL: postgresql://maevelle_dev:maevelle_dev_password@postgres:5432/maevelle_dev
+      DATABASE_POOL_MAX: 1
+      BETTER_AUTH_SECRET: development-only-compose-secret-at-least-32-chars
+      AUTH_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      BETTER_AUTH_URL: http://localhost:8080
+      BOOTSTRAP_OWNER_EMAIL: ${BOOTSTRAP_OWNER_EMAIL:-owner@maevelle.local}
+      BOOTSTRAP_OWNER_PASSWORD: ${BOOTSTRAP_OWNER_PASSWORD:-Maevelle-dev-password-2026}
+      BOOTSTRAP_ORGANIZATION_CODE: ${BOOTSTRAP_ORGANIZATION_CODE:-maevelle}
+      BOOTSTRAP_ORGANIZATION_NAME: ${BOOTSTRAP_ORGANIZATION_NAME:-Maevelle Bangladesh}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   admin:
     build:
@@ -122,6 +151,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      bootstrap-owner:
+        condition: service_completed_successfully
       admin:
         condition: service_healthy
       storefront:

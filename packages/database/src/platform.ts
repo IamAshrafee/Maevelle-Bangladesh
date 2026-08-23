@@ -25,6 +25,38 @@ export async function createOrganization(
   return { id };
 }
 
+export async function findOrganizationByCode(
+  db: Kysely<DatabaseSchema>,
+  code: string,
+): Promise<{ id: string } | undefined> {
+  const result = await sql<{ id: string }>`
+    select id from platform.organizations where code = ${code} limit 1
+  `.execute(db);
+  return result.rows[0];
+}
+
+export async function findUserIdByEmail(
+  db: Kysely<DatabaseSchema>,
+  email: string,
+): Promise<string | undefined> {
+  const result = await sql<{ id: string }>`
+    select id from iam.users where lower(email) = lower(${email}) limit 1
+  `.execute(db);
+  return result.rows[0]?.id;
+}
+
+export async function findActiveOwnerUserId(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<string | undefined> {
+  const result = await sql<{ user_id: string }>`
+    select user_id from iam.organization_memberships
+    where organization_id = ${organizationId} and membership_type = 'OWNER' and status = 'ACTIVE'
+    limit 1
+  `.execute(db);
+  return result.rows[0]?.user_id;
+}
+
 export interface AuditEventInput {
   readonly organizationId?: string;
   readonly actorType: string;

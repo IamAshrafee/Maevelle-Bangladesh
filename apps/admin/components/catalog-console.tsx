@@ -58,7 +58,7 @@ export function CatalogConsole() {
       setTypes(typeResult.data);
       setTypeId((current) => current || typeResult.data[0]?.id || '');
     } catch {
-      window.location.assign('/login');
+      window.location.assign('/admin/login');
     }
   };
   useEffect(() => {

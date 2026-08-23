@@ -1,6 +1,12 @@
 import { loadConfig } from '@maevelle/config';
 import { createDatabase } from '@maevelle/database';
-import { createOrganization, createOwnerMembership } from '@maevelle/database/platform';
+import {
+  createOrganization,
+  createOwnerMembership,
+  findActiveOwnerUserId,
+  findOrganizationByCode,
+  findUserIdByEmail,
+} from '@maevelle/database/platform';
 
 import { createAuth } from './auth/auth.js';
 
@@ -23,22 +29,38 @@ const database = createDatabase({
 
 try {
   const auth = createAuth(config, database, true);
-  // Programmatic bootstrap is deliberately separate from the public sign-up route.
-  const result = await auth.api.signUpEmail({
-    body: { email, password, name: organizationName },
-  });
-  const userId = result.user?.id;
-  if (!userId) throw new Error('Bootstrap owner creation did not return a user id.');
+  let userId = await findUserIdByEmail(database.db, email);
 
-  const organization = await createOrganization(database.db, {
-    code: organizationCode,
-    displayName: organizationName,
-    timezone: 'Asia/Dhaka',
-    defaultLocale: 'en-BD',
-    defaultCurrency: 'BDT',
-  });
-  await createOwnerMembership(database.db, organization.id, userId, organizationName);
-  console.log('Bootstrap owner created. Do not rerun this command for the same organization.');
+  if (!userId) {
+    // Programmatic bootstrap remains separate from the public sign-up route.
+    const result = await auth.api.signUpEmail({
+      body: { email, password, name: organizationName },
+    });
+    userId = result.user?.id;
+    if (!userId) throw new Error('Bootstrap owner creation did not return a user id.');
+  }
+
+  const organization =
+    (await findOrganizationByCode(database.db, organizationCode)) ??
+    (await createOrganization(database.db, {
+      code: organizationCode,
+      displayName: organizationName,
+      timezone: 'Asia/Dhaka',
+      defaultLocale: 'en-BD',
+      defaultCurrency: 'BDT',
+    }));
+
+  const ownerUserId = await findActiveOwnerUserId(database.db, organization.id);
+  if (ownerUserId && ownerUserId !== userId) {
+    throw new Error(`Organization ${organizationCode} already has a different active Owner.`);
+  }
+
+  if (!ownerUserId) {
+    await createOwnerMembership(database.db, organization.id, userId, organizationName);
+    console.log('Development Owner account created.');
+  } else {
+    console.log('Development Owner account already exists.');
+  }
 } finally {
   await database.close();
 }

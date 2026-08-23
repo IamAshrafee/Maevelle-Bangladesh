@@ -96,7 +96,7 @@ export function InventoryConsole({
       setHistory(historyResult?.data ?? []);
       setLocationId((value) => value || locationResult.data[0]?.id || '');
     } catch {
-      window.location.assign('/login');
+      window.location.assign('/admin/login');
     }
   };
   useEffect(() => {
