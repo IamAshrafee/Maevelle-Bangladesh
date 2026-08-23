@@ -5,9 +5,12 @@ import type { DatabaseClient } from '@maevelle/database';
 import {
   addLandedCostComponent,
   CostingDomainError,
+  createLandedCostRevision,
   createLandedCostWorksheet,
   finalizeLandedCostWorksheet,
+  getInventoryValuation,
   listCostLayers,
+  listOutboundCostAssignments,
   previewLandedCostWorksheet,
   type AllocationMethod,
 } from '@maevelle/database/costing';
@@ -71,6 +74,22 @@ export function registerCostingRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCostLayers(database.db, active.organizationId) };
   });
+  app.get('/admin/costing/valuation', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'costing.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const query = request.query as { inventoryItemId?: string; locationId?: string };
+    return {
+      data: await getInventoryValuation(database.db, {
+        organizationId: active.organizationId,
+        ...query,
+      }),
+    };
+  });
+  app.get('/admin/costing/outbound-assignments', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'costing.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listOutboundCostAssignments(database.db, active.organizationId) };
+  });
   app.post(
     '/admin/landed-cost/worksheets',
     {
@@ -90,6 +109,31 @@ export function registerCostingRoutes(
           data: await createLandedCostWorksheet(database.db, {
             ...active,
             ...(request.body as { shipmentId: string; baseCurrencyCode: string; notes?: string }),
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/landed-cost/worksheets/:worksheetId/revisions',
+    {
+      schema: {
+        body: Type.Object({
+          kind: Type.Union([Type.Literal('ADJUSTMENT'), Type.Literal('CREDIT')]),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'landed_cost.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await createLandedCostRevision(database.db, {
+            ...active,
+            worksheetId: (request.params as { worksheetId: string }).worksheetId,
+            ...(request.body as { kind: 'ADJUSTMENT' | 'CREDIT' }),
           }),
         });
       } catch (error) {

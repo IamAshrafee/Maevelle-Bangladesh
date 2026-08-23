@@ -33,7 +33,8 @@ function fixed(value: string, scale: bigint): bigint {
   const raw = negative ? value.trim().slice(1) : value.trim();
   if (!/^\d+(?:\.\d+)?$/.test(raw))
     throw new CostingDomainError('VALIDATION_FAILED', 'A decimal value is invalid.');
-  const [whole = '0', fraction = ''] = raw.split('.');
+  const [whole = '0', originalFraction = ''] = raw.split('.');
+  const fraction = originalFraction.replace(/0+$/, '');
   const digits = scale.toString().length - 1;
   if (fraction.length > digits)
     throw new CostingDomainError('VALIDATION_FAILED', `Value exceeds ${digits} decimal places.`);
@@ -103,8 +104,14 @@ async function assertRevisionMutable(
   organizationId: string,
   revisionId: string,
 ) {
-  const result = await sql<{ status: string; worksheet_id: string; base_currency_code: string }>`
-    select revision.status, revision.worksheet_id, worksheet.base_currency_code
+  const result = await sql<{
+    status: string;
+    worksheet_id: string;
+    base_currency_code: string;
+    revision_kind: 'INITIAL' | 'ADJUSTMENT' | 'CREDIT';
+    supersedes_revision_id: string | null;
+  }>`
+    select revision.status, revision.worksheet_id, worksheet.base_currency_code, revision.revision_kind, revision.supersedes_revision_id
     from landed_cost.worksheet_revisions revision join landed_cost.worksheets worksheet on worksheet.id = revision.worksheet_id
     where revision.organization_id = ${organizationId} and revision.id = ${revisionId} for update
   `.execute(executor);
@@ -113,6 +120,61 @@ async function assertRevisionMutable(
   if (row.status !== 'DRAFT')
     throw new CostingDomainError('INVALID_TRANSITION', 'Only a draft revision can be changed.');
   return row;
+}
+
+/** Opens an immutable adjustment/credit revision without changing finalized evidence. */
+export async function createLandedCostRevision(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    worksheetId: string;
+    kind: 'ADJUSTMENT' | 'CREDIT';
+  },
+): Promise<{ revisionId: string }> {
+  return db.transaction().execute(async (tx) => {
+    const worksheet = await sql<{
+      id: string;
+      current_revision_id: string | null;
+    }>`select id, current_revision_id from landed_cost.worksheets where organization_id = ${input.organizationId} and id = ${input.worksheetId} for update`.execute(
+      tx,
+    );
+    const current = worksheet.rows[0];
+    if (!current || !current.current_revision_id)
+      throw new CostingDomainError('NOT_FOUND', 'Landed Cost Worksheet was not found.');
+    const prior = await sql<{
+      revision_number: string;
+      status: string;
+    }>`select revision_number::text, status from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${current.current_revision_id} for update`.execute(
+      tx,
+    );
+    if (prior.rows[0]?.status !== 'FINALIZED')
+      throw new CostingDomainError(
+        'INVALID_TRANSITION',
+        'A new revision requires the current revision to be finalized.',
+      );
+    const created = await sql<{
+      id: string;
+    }>`insert into landed_cost.worksheet_revisions (organization_id, worksheet_id, revision_number, revision_kind, supersedes_revision_id, created_by_actor_id) values (${input.organizationId}, ${input.worksheetId}, ${Number(prior.rows[0]!.revision_number) + 1}, ${input.kind}, ${current.current_revision_id}::uuid, ${input.actorId}) returning id`.execute(
+      tx,
+    );
+    const revisionId = created.rows[0]!.id;
+    await sql`insert into landed_cost.allocation_targets (organization_id, worksheet_revision_id, shipment_allocation_id, eligible_quantity, purchase_value, weight, volume, chargeable_weight, percentage, manual_amount) select organization_id, ${revisionId}::uuid, shipment_allocation_id, eligible_quantity, purchase_value, weight, volume, chargeable_weight, percentage, manual_amount from landed_cost.allocation_targets where worksheet_revision_id = ${current.current_revision_id}`.execute(
+      tx,
+    );
+    await sql`update landed_cost.worksheets set current_revision_id = ${revisionId}::uuid, status = 'DRAFT', finalized_at = null, version = version + 1 where id = ${input.worksheetId}`.execute(
+      tx,
+    );
+    await appendAuditEvent(tx, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: `landed_cost.revision.${input.kind.toLowerCase()}.created`,
+      targetType: 'landed_cost.revision',
+      targetId: revisionId,
+    });
+    return { revisionId };
+  });
 }
 
 export async function createLandedCostWorksheet(
@@ -361,6 +423,81 @@ export async function createProvisionalCostLayersForInboundReceiptInTransaction(
   }
 }
 
+async function distributeLayerAdjustmentToOutboundFacts(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    costLayerAdjustmentId: string;
+    costLayerId: string;
+    delta: string;
+  },
+): Promise<void> {
+  const layer = await sql<{
+    original_quantity: string;
+  }>`select original_quantity::text from costing.cost_layers where organization_id = ${input.organizationId} and id = ${input.costLayerId}`.execute(
+    tx,
+  );
+  const layerRow = layer.rows[0];
+  if (!layerRow) throw new CostingDomainError('NOT_FOUND', 'Cost layer was not found.');
+  const lines = await sql<{
+    id: string;
+    outbound_cost_assignment_id: string;
+    quantity: string;
+    status: string;
+    recognition_id: string | null;
+  }>`
+    select line.id, line.outbound_cost_assignment_id, line.quantity::text, assignment.status,
+      (select recognition.id from costing.cogs_recognitions recognition where recognition.outbound_cost_assignment_id = assignment.id and recognition.recognition_kind = 'ORIGINAL') as recognition_id
+    from costing.outbound_cost_assignment_lines line join costing.outbound_cost_assignments assignment on assignment.id = line.outbound_cost_assignment_id
+    where line.organization_id = ${input.organizationId} and line.cost_layer_id = ${input.costLayerId} order by line.id
+  `.execute(tx);
+  if (!lines.rows.length) return;
+  const outboundQuantity = lines.rows.reduce(
+    (total, line) => total + fixed(line.quantity, quantityScale),
+    0n,
+  );
+  const originalQuantity = fixed(layerRow.original_quantity, quantityScale);
+  if (outboundQuantity > originalQuantity)
+    throw new CostingDomainError(
+      'CONFLICT',
+      'Outbound cost assignment exceeds its source layer quantity.',
+    );
+  const pieces = allocateDeterministically(input.delta, [
+    ...lines.rows.map((line) => ({
+      id: line.id,
+      shipmentAllocationId: line.outbound_cost_assignment_id,
+      basis: line.quantity,
+    })),
+    ...(outboundQuantity < originalQuantity
+      ? [
+          {
+            id: '__on_hand__',
+            shipmentAllocationId: '__on_hand__',
+            basis: decimal(originalQuantity - outboundQuantity, quantityScale),
+          },
+        ]
+      : []),
+  ]);
+  for (const piece of pieces) {
+    if (piece.targetId === '__on_hand__') continue;
+    const line = lines.rows.find((candidate) => candidate.id === piece.targetId)!;
+    if (line.status === 'COGS_RECOGNIZED') {
+      if (!line.recognition_id)
+        throw new CostingDomainError(
+          'CONFLICT',
+          'A COGS-recognized outbound assignment is missing its recognition fact.',
+        );
+      await sql`insert into costing.cogs_adjustments (organization_id, cogs_recognition_id, cost_layer_adjustment_id, amount) values (${input.organizationId}, ${line.recognition_id}, ${input.costLayerAdjustmentId}, ${piece.amount}::numeric) on conflict (cogs_recognition_id, cost_layer_adjustment_id) do nothing`.execute(
+        tx,
+      );
+    } else {
+      await sql`insert into costing.outbound_cost_assignment_adjustments (organization_id, outbound_cost_assignment_line_id, cost_layer_adjustment_id, amount) values (${input.organizationId}, ${line.id}, ${input.costLayerAdjustmentId}, ${piece.amount}::numeric) on conflict (outbound_cost_assignment_line_id, cost_layer_adjustment_id) do nothing`.execute(
+        tx,
+      );
+    }
+  }
+}
+
 export async function finalizeLandedCostWorksheet(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; actorId: string; revisionId: string },
@@ -409,11 +546,33 @@ export async function finalizeLandedCostWorksheet(
       }>`select coalesce(sum(allocated_amount), 0)::text as value from landed_cost.component_allocations where allocation_target_id = ${target.id}`.execute(
         tx,
       );
-      const total =
-        fixed(target.purchase_total, 100_000_000n) + fixed(additions.rows[0]!.value, 100_000_000n);
+      const prior = revision.supersedes_revision_id
+        ? await sql<{
+            purchase_cost: string;
+            additional_cost: string;
+            total_acquisition_cost: string;
+          }>`
+          select result.purchase_cost::text, result.additional_cost::text, result.total_acquisition_cost::text
+          from landed_cost.acquisition_cost_results result join landed_cost.allocation_targets previous_target on previous_target.id = result.allocation_target_id
+          where result.organization_id = ${input.organizationId} and result.worksheet_revision_id = ${revision.supersedes_revision_id} and previous_target.shipment_allocation_id = ${target.shipment_allocation_id}
+        `.execute(tx)
+        : undefined;
+      const priorResult = prior?.rows[0];
+      if (revision.revision_kind !== 'INITIAL' && !priorResult)
+        throw new CostingDomainError(
+          'CONFLICT',
+          'An adjustment revision requires prior finalized acquisition-cost results.',
+        );
+      const purchaseCost = priorResult
+        ? fixed(priorResult.purchase_cost, 100_000_000n)
+        : fixed(target.purchase_total, 100_000_000n);
+      const additionalCost =
+        (priorResult ? fixed(priorResult.additional_cost, 100_000_000n) : 0n) +
+        fixed(additions.rows[0]!.value, 100_000_000n);
+      const total = purchaseCost + additionalCost;
       const receivedQuantity = fixed(target.quantity, quantityScale);
       const unit = (total * quantityScale) / receivedQuantity;
-      await sql`insert into landed_cost.acquisition_cost_results (organization_id, worksheet_revision_id, allocation_target_id, purchase_cost, additional_cost, total_acquisition_cost, unit_acquisition_cost, currency_code) values (${input.organizationId}, ${input.revisionId}, ${target.id}, ${target.purchase_total}::numeric, ${additions.rows[0]!.value}::numeric, ${decimal(total, 100_000_000n)}::numeric, ${decimal(unit * quantityScale, 100_000_000n)}::numeric, ${revision.base_currency_code})`.execute(
+      await sql`insert into landed_cost.acquisition_cost_results (organization_id, worksheet_revision_id, allocation_target_id, purchase_cost, additional_cost, total_acquisition_cost, unit_acquisition_cost, currency_code) values (${input.organizationId}, ${input.revisionId}, ${target.id}, ${decimal(purchaseCost, 100_000_000n)}::numeric, ${decimal(additionalCost, 100_000_000n)}::numeric, ${decimal(total, 100_000_000n)}::numeric, ${decimal(unit, 100_000_000n)}::numeric, ${revision.base_currency_code})`.execute(
         tx,
       );
       const layers = await sql<{
@@ -423,17 +582,47 @@ export async function finalizeLandedCostWorksheet(
       }>`select layer.id, layer.original_quantity::text as quantity, layer.base_purchase_cost::text from costing.cost_layers layer where layer.organization_id = ${input.organizationId} and layer.shipment_allocation_id = ${target.shipment_allocation_id} for update`.execute(
         tx,
       );
-      for (const layer of layers.rows) {
-        const expected = (unit * fixed(layer.quantity, quantityScale)) / quantityScale;
-        const delta = expected - fixed(layer.base_purchase_cost, 100_000_000n);
-        await sql`insert into costing.cost_layer_adjustments (organization_id, cost_layer_id, worksheet_revision_id, delta_total_cost, reason) values (${input.organizationId}, ${layer.id}, ${input.revisionId}, ${decimal(delta, 100_000_000n)}::numeric, 'FINALIZATION') on conflict (cost_layer_id, worksheet_revision_id) do nothing`.execute(
+      const adjustmentAmounts: readonly { id: string; amount: string }[] =
+        revision.revision_kind === 'INITIAL'
+          ? layers.rows.map((layer) => ({
+              id: layer.id,
+              amount: decimal(
+                (unit * fixed(layer.quantity, quantityScale)) / quantityScale -
+                  fixed(layer.base_purchase_cost, 100_000_000n),
+                100_000_000n,
+              ),
+            }))
+          : allocateDeterministically(
+              additions.rows[0]!.value,
+              layers.rows.map((layer) => ({
+                id: layer.id,
+                shipmentAllocationId: layer.id,
+                basis: layer.quantity,
+              })),
+            ).map((allocation) => ({ id: allocation.targetId, amount: allocation.amount }));
+      for (const allocation of adjustmentAmounts) {
+        const layer = layers.rows.find((candidate) => candidate.id === allocation.id)!;
+        const deltaAmount = allocation.amount;
+        const adjustment = await sql<{
+          id: string;
+        }>`insert into costing.cost_layer_adjustments (organization_id, cost_layer_id, worksheet_revision_id, delta_total_cost, reason) values (${input.organizationId}, ${layer.id}, ${input.revisionId}, ${deltaAmount}::numeric, ${revision.revision_kind === 'CREDIT' ? 'CREDIT' : revision.revision_kind === 'INITIAL' ? 'FINALIZATION' : 'ADJUSTMENT'}) on conflict (cost_layer_id, worksheet_revision_id) do update set delta_total_cost = excluded.delta_total_cost returning id`.execute(
           tx,
         );
+        await distributeLayerAdjustmentToOutboundFacts(tx, {
+          organizationId: input.organizationId,
+          costLayerAdjustmentId: adjustment.rows[0]!.id,
+          costLayerId: layer.id,
+          delta: deltaAmount,
+        });
         await sql`update costing.cost_layers set cost_state = 'FINALIZED', source_revision_id = ${input.revisionId}::uuid where id = ${layer.id}`.execute(
           tx,
         );
       }
     }
+    if (revision.supersedes_revision_id)
+      await sql`update landed_cost.worksheet_revisions set status = 'SUPERSEDED' where id = ${revision.supersedes_revision_id}`.execute(
+        tx,
+      );
     await sql`update landed_cost.worksheet_revisions set status = 'FINALIZED', finalized_at = now() where id = ${input.revisionId}`.execute(
       tx,
     );
@@ -555,6 +744,20 @@ export async function recognizeCogsForDeliveredFulfillmentInTransaction(
   await sql`insert into costing.cogs_recognitions (organization_id, outbound_cost_assignment_id, recognition_kind, total_cost, currency_code) values (${input.organizationId}, ${assignment.id}, 'ORIGINAL', ${assignment.total_cost}::numeric, ${assignment.currency_code}) on conflict (outbound_cost_assignment_id, recognition_kind) do nothing`.execute(
     tx,
   );
+  const recognition = await sql<{
+    id: string;
+  }>`select id from costing.cogs_recognitions where outbound_cost_assignment_id = ${assignment.id} and recognition_kind = 'ORIGINAL'`.execute(
+    tx,
+  );
+  await sql`
+    insert into costing.cogs_adjustments (organization_id, cogs_recognition_id, cost_layer_adjustment_id, amount)
+    select ${input.organizationId}, ${recognition.rows[0]!.id}, pending.cost_layer_adjustment_id, sum(pending.amount)
+    from costing.outbound_cost_assignment_adjustments pending
+    join costing.outbound_cost_assignment_lines line on line.id = pending.outbound_cost_assignment_line_id
+    where line.outbound_cost_assignment_id = ${assignment.id}
+    group by pending.cost_layer_adjustment_id
+    on conflict (cogs_recognition_id, cost_layer_adjustment_id) do nothing
+  `.execute(tx);
   await sql`update costing.outbound_cost_assignments set status = 'COGS_RECOGNIZED', recognized_at = now() where id = ${assignment.id}`.execute(
     tx,
   );
@@ -574,6 +777,51 @@ export async function listCostLayers(db: Kysely<DatabaseSchema>, organizationId:
     select layer.id, layer.inbound_receipt_line_id as receipt_line_id, position.remaining_quantity::text, layer.original_quantity::text, (layer.base_purchase_cost + coalesce(sum(adjustment.delta_total_cost), 0))::text as effective_cost, layer.currency_code, layer.location_id, layer.condition_code
     from costing.cost_layers layer join costing.cost_layer_positions position on position.cost_layer_id = layer.id left join costing.cost_layer_adjustments adjustment on adjustment.cost_layer_id = layer.id
     where layer.organization_id = ${organizationId} group by layer.id, position.id order by layer.received_at, layer.id
+  `.execute(db);
+  return rows.rows;
+}
+
+/** Current valuation derives only from remaining FIFO positions and append-only adjustments. */
+export async function getInventoryValuation(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; inventoryItemId?: string; locationId?: string },
+) {
+  const rows = await sql<{
+    inventory_item_id: string;
+    location_id: string;
+    condition_code: string;
+    currency_code: string;
+    quantity: string;
+    value: string;
+  }>`
+    select layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code,
+      sum(position.remaining_quantity)::text as quantity,
+      sum((layer.base_purchase_cost + coalesce((select sum(adjustment.delta_total_cost) from costing.cost_layer_adjustments adjustment where adjustment.cost_layer_id = layer.id), 0)) * position.remaining_quantity / layer.original_quantity)::text as value
+    from costing.cost_layers layer join costing.cost_layer_positions position on position.cost_layer_id = layer.id
+    where layer.organization_id = ${input.organizationId}
+      and (${input.inventoryItemId ?? null}::uuid is null or layer.inventory_item_id = ${input.inventoryItemId ?? null}::uuid)
+      and (${input.locationId ?? null}::uuid is null or layer.location_id = ${input.locationId ?? null}::uuid)
+    group by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code
+    order by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code
+  `.execute(db);
+  return rows.rows;
+}
+
+export async function listOutboundCostAssignments(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+) {
+  const rows = await sql<{
+    id: string;
+    fulfillment_id: string;
+    status: string;
+    total_cost: string;
+    currency_code: string;
+    cogs_adjustments: string;
+  }>`
+    select assignment.id, assignment.fulfillment_id, assignment.status, assignment.total_cost::text, assignment.currency_code,
+      coalesce((select sum(adjustment.amount) from costing.cogs_adjustments adjustment join costing.cogs_recognitions recognition on recognition.id = adjustment.cogs_recognition_id where recognition.outbound_cost_assignment_id = assignment.id), 0)::text as cogs_adjustments
+    from costing.outbound_cost_assignments assignment where assignment.organization_id = ${organizationId} order by assignment.created_at desc, assignment.id desc
   `.execute(db);
   return rows.rows;
 }
