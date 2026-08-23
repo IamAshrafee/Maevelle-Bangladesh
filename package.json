@@ -15,6 +15,7 @@
     "build": "pnpm --filter @maevelle/admin build && pnpm --filter @maevelle/storefront build && tsc --build tsconfig.build.json --pretty false",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
+    "check:release-readiness": "node scripts/release-readiness.mjs",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs --follow postgres",

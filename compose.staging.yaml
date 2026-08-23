@@ -1,0 +1,50 @@
+# Repository-side staging topology. Copy .env.staging.example to a private .env.staging
+# and supply environment-specific secrets before using it on a staging host.
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    env_file: .env.staging
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --auth-host=scram-sha-256
+    command: [postgres, -c, shared_preload_libraries=pg_stat_statements, -c, timezone=UTC]
+    volumes: [postgres_staging_data:/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready --username=$$POSTGRES_USER --dbname=$$POSTGRES_DB]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  migrate:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.api }
+    command: [node, packages/database/dist/src/migrate-cli.js]
+    env_file: .env.staging
+    environment: { DATABASE_URL: '${DATABASE_URL}' }
+    depends_on: { postgres: { condition: service_healthy } }
+  api:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.api }
+    restart: unless-stopped
+    env_file: .env.staging
+    environment: { API_HOST: 0.0.0.0, API_PORT: 3000 }
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  worker:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.worker }
+    restart: unless-stopped
+    env_file: .env.staging
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  admin:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.admin }
+    restart: unless-stopped
+  storefront:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.storefront }
+    restart: unless-stopped
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports: ['${CADDY_PORT:-8080}:80']
+    volumes: [./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro]
+    depends_on: [api, admin, storefront]
+volumes:
+  postgres_staging_data:
