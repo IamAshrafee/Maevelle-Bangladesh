@@ -16,6 +16,7 @@ export interface BuildApiOptions {
 }
 
 export function buildApi(options: BuildApiOptions) {
+  const authAttempts = new Map<string, { count: number; resetAt: number }>();
   const loggerOptions =
     options.logger === false
       ? { logger: false }
@@ -43,6 +44,20 @@ export function buildApi(options: BuildApiOptions) {
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id);
+    if (!request.url.startsWith('/auth/')) return;
+    const key = `${request.ip}:${request.url.split('?')[0]}`;
+    const now = Date.now();
+    const current = authAttempts.get(key);
+    const state =
+      !current || current.resetAt <= now ? { count: 0, resetAt: now + 60_000 } : current;
+    state.count += 1;
+    authAttempts.set(key, state);
+    if (state.count > 20) {
+      reply.header('retry-after', String(Math.ceil((state.resetAt - now) / 1000)));
+      return reply
+        .code(429)
+        .send({ error: { code: 'RATE_LIMITED', message: 'Too many attempts.' } });
+    }
   });
 
   app.setErrorHandler((error, request, reply) => {
