@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { CatalogConsole } from '@/components/catalog-console';
 
 export default function AdminHomePage() {
-  redirect('/admin');
+  return <CatalogConsole />;
 }
