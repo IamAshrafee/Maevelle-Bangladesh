@@ -83,6 +83,21 @@ describe('clean PostgreSQL migration path', () => {
         'reconciliation_issues',
         'reconciliation_sessions',
       ]);
+      const reviewsSchema = await sql<{ schema_name: string }>`
+        select schema_name from information_schema.schemata where schema_name = 'reviews'
+      `.execute(database.db);
+      expect(reviewsSchema.rows.map((row) => row.schema_name)).toEqual(['reviews']);
+      const reviewTables = await sql<{ table_name: string }>`
+        select table_name from information_schema.tables where table_schema = 'reviews' order by table_name
+      `.execute(database.db);
+      expect(reviewTables.rows.map((row) => row.table_name)).toEqual([
+        'merchant_responses',
+        'product_rating_summary',
+        'review_access_tokens',
+        'review_media',
+        'review_revisions',
+        'reviews',
+      ]);
       const tables = await sql<{ table_name: string }>`
         select table_name from information_schema.tables
         where table_schema = 'platform' and table_name in ('organizations', 'idempotency_records', 'outbox_events')

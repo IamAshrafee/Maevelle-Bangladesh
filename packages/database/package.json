@@ -87,6 +87,10 @@
     "./finance": {
       "types": "./src/finance.ts",
       "default": "./dist/src/finance.js"
+    },
+    "./reviews": {
+      "types": "./src/reviews.ts",
+      "default": "./dist/src/reviews.js"
     }
   },
   "scripts": {

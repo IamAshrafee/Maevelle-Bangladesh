@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 import type { ApiEnvelope, PublicSizeGuideDto, StorefrontProductDto } from '@maevelle/contracts';
+import { ProductReviews } from '@/components/product-reviews';
 
 interface CartView {
   version: number;
@@ -248,6 +249,7 @@ export default function ProductPage() {
             ))}
           </section>
         ) : null}
+        <ProductReviews productId={product.id} organizationId={organizationId!} />
       </article>
     </main>
   );
