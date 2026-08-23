@@ -71,6 +71,10 @@
     "./delivery": {
       "types": "./src/delivery.ts",
       "default": "./dist/src/delivery.js"
+    },
+    "./procurement": {
+      "types": "./src/procurement.ts",
+      "default": "./dist/src/procurement.js"
     }
   },
   "scripts": {

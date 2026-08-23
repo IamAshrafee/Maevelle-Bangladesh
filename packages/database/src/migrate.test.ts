@@ -39,7 +39,7 @@ describe('clean PostgreSQL migration path', () => {
       expect(extensions.rows.map((row) => row.extname)).toEqual(['pg_stat_statements', 'pg_trgm']);
       const schemas = await sql<{ schema_name: string }>`
         select schema_name from information_schema.schemata
-        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments', 'fulfillment', 'delivery') order by schema_name
+        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments', 'fulfillment', 'delivery', 'procurement', 'inbound_shipment', 'receiving') order by schema_name
       `.execute(database.db);
       expect(schemas.rows.map((row) => row.schema_name)).toEqual([
         'audit',
@@ -49,12 +49,15 @@ describe('clean PostgreSQL migration path', () => {
         'fulfillment',
         'geography',
         'iam',
+        'inbound_shipment',
         'inventory',
         'orders',
         'payments',
         'platform',
         'pricing',
+        'procurement',
         'promotions',
+        'receiving',
         'warehouse',
       ]);
       const tables = await sql<{ table_name: string }>`
@@ -99,6 +102,15 @@ describe('clean PostgreSQL migration path', () => {
         union all
         select table_name from information_schema.tables
         where table_schema = 'delivery' and table_name in ('deliveries', 'delivery_lines', 'delivery_events', 'delivery_attempts', 'courier_bookings', 'cod_collection_instructions')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'procurement' and table_name in ('suppliers', 'purchases', 'purchase_lines')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'inbound_shipment' and table_name in ('shipments', 'purchase_line_allocations')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'receiving' and table_name in ('inbound_receipts', 'inbound_receipt_lines')
         order by table_name
       `.execute(database.db);
       expect(tables.rows.map((row) => row.table_name)).toEqual([
@@ -120,6 +132,8 @@ describe('clean PostgreSQL migration path', () => {
         'fulfillment_lines',
         'fulfillments',
         'idempotency_records',
+        'inbound_receipt_lines',
+        'inbound_receipts',
         'inventory_items',
         'inventory_levels',
         'inventory_movement_lines',
@@ -143,9 +157,14 @@ describe('clean PostgreSQL migration path', () => {
         'price_definitions',
         'promotion_revisions',
         'promotions',
+        'purchase_line_allocations',
+        'purchase_lines',
+        'purchases',
         'refund_allocations',
         'refunds',
+        'shipments',
         'stocktake_sessions',
+        'suppliers',
         'transfer_lines',
         'transfers',
         'users',

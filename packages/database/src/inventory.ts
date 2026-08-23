@@ -12,7 +12,8 @@ export type InventoryTransactionType =
   | 'TRANSFER_DISPATCH'
   | 'TRANSFER_RECEIPT'
   | 'STOCKTAKE_ADJUSTMENT'
-  | 'FULFILLMENT_DISPATCH';
+  | 'FULFILLMENT_DISPATCH'
+  | 'INBOUND_RECEIPT';
 
 export class InventoryDomainError extends Error {
   public constructor(
@@ -254,6 +255,65 @@ async function postTransaction(
     );
   }
   return transactionId;
+}
+
+/**
+ * Published inventory boundary for canonical inbound receiving. The caller
+ * owns receipt/idempotency state; Inventory owns the single append-only
+ * transaction and its condition-level balance projections.
+ */
+export async function receiveInboundInventoryInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    receiptId: string;
+    locationId: string;
+    idempotencyRecordId: string;
+    lines: readonly {
+      variantId: string;
+      condition: InventoryCondition;
+      quantity: string;
+    }[];
+  },
+): Promise<{ transactionId: string; inventoryItemIds: ReadonlyMap<string, string> }> {
+  await requireActiveLocationCapability(
+    transaction,
+    input.organizationId,
+    input.locationId,
+    'STOCK_HOLDING',
+  );
+  await requireActiveLocationCapability(
+    transaction,
+    input.organizationId,
+    input.locationId,
+    'PURCHASE_RECEIVING',
+  );
+  const itemIds = new Map<string, string>();
+  for (const line of input.lines) {
+    assertQuantity(line.quantity, 'Received quantity');
+    if (!itemIds.has(line.variantId))
+      itemIds.set(
+        line.variantId,
+        await ensureItem(transaction, input.organizationId, line.variantId),
+      );
+  }
+  const transactionId = await postTransaction(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    transactionType: 'INBOUND_RECEIPT',
+    reasonCode: 'INBOUND_RECEIPT',
+    referenceType: 'receiving.inbound_receipt',
+    referenceId: input.receiptId,
+    idempotencyRecordId: input.idempotencyRecordId,
+    lines: input.lines.map((line) => ({
+      inventoryItemId: itemIds.get(line.variantId)!,
+      locationId: input.locationId,
+      condition: line.condition,
+      quantityDelta: line.quantity,
+    })),
+  });
+  return { transactionId, inventoryItemIds: itemIds };
 }
 
 async function completeIdempotency(
