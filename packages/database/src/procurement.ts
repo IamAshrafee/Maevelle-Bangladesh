@@ -2,6 +2,7 @@ import { sql, type Kysely, type Transaction } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
 import { receiveInboundInventoryInTransaction, type InventoryCondition } from './inventory.js';
+import { createProvisionalCostLayersForInboundReceiptInTransaction } from './costing.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 
 type DatabaseExecutor = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
@@ -895,6 +896,28 @@ export async function postInboundReceipt(
       transaction,
     );
     const receiptId = receipt.rows[0]!.id;
+    const receiptLines: {
+      id: string;
+      shipmentAllocationId: string;
+      variantId: string;
+      condition: InventoryCondition;
+      quantity: string;
+    }[] = [];
+    for (const line of input.lines) {
+      const allocation = allocationRows.get(line.shipmentAllocationId)!;
+      const inserted = await sql<{
+        id: string;
+      }>`insert into receiving.inbound_receipt_lines (organization_id, inbound_receipt_id, shipment_allocation_id, variant_id, condition_code, quantity) values (${input.organizationId}, ${receiptId}, ${line.shipmentAllocationId}, ${allocation.variant_id}, ${line.condition}, ${line.quantity}::numeric) returning id`.execute(
+        transaction,
+      );
+      receiptLines.push({
+        id: inserted.rows[0]!.id,
+        shipmentAllocationId: line.shipmentAllocationId,
+        variantId: allocation.variant_id,
+        condition: line.condition,
+        quantity: line.quantity,
+      });
+    }
     const inventory = await receiveInboundInventoryInTransaction(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -910,12 +933,11 @@ export async function postInboundReceipt(
     await sql`update receiving.inbound_receipts set posted_inventory_transaction_id = ${inventory.transactionId}::uuid where id = ${receiptId}`.execute(
       transaction,
     );
-    for (const line of input.lines) {
-      const allocation = allocationRows.get(line.shipmentAllocationId)!;
-      await sql`insert into receiving.inbound_receipt_lines (organization_id, inbound_receipt_id, shipment_allocation_id, variant_id, condition_code, quantity) values (${input.organizationId}, ${receiptId}, ${line.shipmentAllocationId}, ${allocation.variant_id}, ${line.condition}, ${line.quantity}::numeric)`.execute(
-        transaction,
-      );
-    }
+    await createProvisionalCostLayersForInboundReceiptInTransaction(transaction, {
+      organizationId: input.organizationId,
+      receiptId,
+      locationId: shipmentRow.receiving_location_id,
+    });
     const totals = await sql<{
       allocated: string;
       received: string;

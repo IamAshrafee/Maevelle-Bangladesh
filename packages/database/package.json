@@ -75,6 +75,10 @@
     "./procurement": {
       "types": "./src/procurement.ts",
       "default": "./dist/src/procurement.js"
+    },
+    "./costing": {
+      "types": "./src/costing.ts",
+      "default": "./dist/src/costing.js"
     }
   },
   "scripts": {

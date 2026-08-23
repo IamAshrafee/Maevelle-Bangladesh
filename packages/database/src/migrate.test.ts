@@ -39,11 +39,12 @@ describe('clean PostgreSQL migration path', () => {
       expect(extensions.rows.map((row) => row.extname)).toEqual(['pg_stat_statements', 'pg_trgm']);
       const schemas = await sql<{ schema_name: string }>`
         select schema_name from information_schema.schemata
-        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments', 'fulfillment', 'delivery', 'procurement', 'inbound_shipment', 'receiving') order by schema_name
+        where schema_name in ('platform', 'audit', 'iam', 'warehouse', 'inventory', 'geography', 'customers', 'pricing', 'promotions', 'cart', 'orders', 'payments', 'fulfillment', 'delivery', 'procurement', 'inbound_shipment', 'receiving', 'landed_cost', 'costing') order by schema_name
       `.execute(database.db);
       expect(schemas.rows.map((row) => row.schema_name)).toEqual([
         'audit',
         'cart',
+        'costing',
         'customers',
         'delivery',
         'fulfillment',
@@ -51,6 +52,7 @@ describe('clean PostgreSQL migration path', () => {
         'iam',
         'inbound_shipment',
         'inventory',
+        'landed_cost',
         'orders',
         'payments',
         'platform',
@@ -111,14 +113,28 @@ describe('clean PostgreSQL migration path', () => {
         union all
         select table_name from information_schema.tables
         where table_schema = 'receiving' and table_name in ('inbound_receipts', 'inbound_receipt_lines')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'landed_cost' and table_name in ('worksheets', 'worksheet_revisions', 'cost_components', 'allocation_targets', 'component_allocations', 'acquisition_cost_results')
+        union all
+        select table_name from information_schema.tables
+        where table_schema = 'costing' and table_name in ('cost_layers', 'cost_layer_positions', 'cost_layer_adjustments', 'outbound_cost_assignments', 'outbound_cost_assignment_lines', 'cogs_recognitions')
         order by table_name
       `.execute(database.db);
       expect(tables.rows.map((row) => row.table_name)).toEqual([
+        'acquisition_cost_results',
+        'allocation_targets',
         'audit_events',
         'cart_lines',
         'carts',
         'checkout_sessions',
         'cod_collection_instructions',
+        'cogs_recognitions',
+        'component_allocations',
+        'cost_components',
+        'cost_layer_adjustments',
+        'cost_layer_positions',
+        'cost_layers',
         'coupon_codes',
         'courier_bookings',
         'customer_addresses',
@@ -148,6 +164,8 @@ describe('clean PostgreSQL migration path', () => {
         'orders',
         'organization_memberships',
         'organizations',
+        'outbound_cost_assignment_lines',
+        'outbound_cost_assignments',
         'outbox_events',
         'payment_allocations',
         'payment_attempts',
@@ -168,6 +186,8 @@ describe('clean PostgreSQL migration path', () => {
         'transfer_lines',
         'transfers',
         'users',
+        'worksheet_revisions',
+        'worksheets',
       ]);
       expect((await migrationStatus(database.db)).every((migration) => migration.executedAt)).toBe(
         true,

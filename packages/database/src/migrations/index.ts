@@ -27,6 +27,8 @@ import * as delivery from './1400_delivery.js';
 import * as procurement from './1500_procurement.js';
 import * as inboundShipment from './1600_inbound_shipment.js';
 import * as receiving from './1700_receiving.js';
+import * as landedCost from './1800_landed_cost.js';
+import * as costing from './1900_costing.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -60,6 +62,8 @@ export const migrations = {
   '1500_procurement': procurement,
   '1600_inbound_shipment': inboundShipment,
   '1700_receiving': receiving,
+  '1800_landed_cost': landedCost,
+  '1900_costing': costing,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

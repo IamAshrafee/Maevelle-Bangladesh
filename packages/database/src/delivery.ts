@@ -2,6 +2,7 @@ import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
+import { recognizeCogsForDeliveredFulfillmentInTransaction } from './costing.js';
 
 export type DeliveryOperationalStatus =
   'READY' | 'BOOKED' | 'HANDED_OVER' | 'IN_TRANSIT' | 'DELIVERED' | 'FAILED' | 'CANCELLED';
@@ -635,6 +636,15 @@ async function recordOutcome(
       await sql`update delivery.deliveries set operational_status = 'DELIVERED', outcome_status = 'DELIVERED', delivered_at = now(), version = version + 1, updated_at = now() where id = ${input.deliveryId}`.execute(
         transaction,
       );
+      const fulfillment = await sql<{
+        fulfillment_id: string;
+      }>`select fulfillment_id from delivery.deliveries where id = ${input.deliveryId}`.execute(
+        transaction,
+      );
+      await recognizeCogsForDeliveredFulfillmentInTransaction(transaction, {
+        organizationId: input.organizationId,
+        fulfillmentId: fulfillment.rows[0]!.fulfillment_id,
+      });
     } else {
       await sql`update delivery.delivery_lines set failed_quantity = quantity, version = version + 1, updated_at = now() where organization_id = ${input.organizationId} and delivery_id = ${input.deliveryId}`.execute(
         transaction,

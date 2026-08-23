@@ -2,6 +2,7 @@ import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
 import { consumeReservationAllocationInTransaction, InventoryDomainError } from './inventory.js';
+import { assignOutboundCostsForFulfillmentInTransaction, CostingDomainError } from './costing.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { requireActiveLocationCapability } from './warehouse.js';
 
@@ -487,6 +488,16 @@ export async function dispatchFulfillment(
           throw new FulfillmentDomainError('CONFLICT', error.message);
         throw error;
       }
+    }
+    try {
+      await assignOutboundCostsForFulfillmentInTransaction(transaction, {
+        organizationId: input.organizationId,
+        fulfillmentId: input.fulfillmentId,
+      });
+    } catch (error) {
+      if (error instanceof CostingDomainError)
+        throw new FulfillmentDomainError('CONFLICT', error.message);
+      throw error;
     }
     input.fault?.();
     await sql`update fulfillment.fulfillments set status = 'DISPATCHED', dispatched_at = now(), version = version + 1, updated_at = now() where id = ${input.fulfillmentId}`.execute(

@@ -53,7 +53,9 @@ async function prepare() {
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
 
-  throw new Error('Maevelle did not become ready. Run: docker compose ps && docker compose logs --tail=100');
+  throw new Error(
+    'Maevelle did not become ready. Run: docker compose ps && docker compose logs --tail=100',
+  );
 }
 
 async function reset() {
