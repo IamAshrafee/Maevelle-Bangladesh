@@ -28,7 +28,12 @@ const environment = {
 };
 const packageManager = process.env.npm_execpath;
 if (!packageManager) throw new Error('Run the acceptance harness through pnpm.');
-const result = spawnSync(process.execPath, [packageManager, 'exec', 'vitest', 'run', ...files], {
+const packageManagerIsScript = /\.(?:c?js|mjs)$/iu.test(packageManager);
+const command = packageManagerIsScript ? process.execPath : packageManager;
+const args = packageManagerIsScript
+  ? [packageManager, 'exec', 'vitest', 'run', ...files]
+  : ['exec', 'vitest', 'run', ...files];
+const result = spawnSync(command, args, {
   stdio: 'inherit',
   shell: false,
   env: environment,
