@@ -53,3 +53,51 @@ describe('API health endpoints', () => {
     await app.close();
   });
 });
+
+describe('API hardening foundation', () => {
+  it('sets browser hardening headers and rejects an untrusted Admin mutation origin', async () => {
+    const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
+    const app = buildApi({
+      database,
+      logger: false,
+      config: {
+        nodeEnv: 'test',
+        databaseUrl: 'postgresql://test',
+        testDatabaseUrl: 'postgresql://test',
+        databasePoolMax: 1,
+        apiHost: '127.0.0.1',
+        apiPort: 3000,
+        logLevel: 'error',
+        workerHeartbeatIntervalMs: 1000,
+        betterAuthSecret: 'x'.repeat(32),
+        authEncryptionKey: Buffer.alloc(32).toString('base64'),
+        authBaseUrl: 'https://admin.maevelle.example/api',
+        mediaStoragePath: 'var/media',
+        mediaMaxUploadBytes: 1024,
+      },
+    });
+    const publicResponse = await app.inject({ method: 'GET', url: '/health/live' });
+    expect(publicResponse.headers['x-content-type-options']).toBe('nosniff');
+    expect(publicResponse.headers['x-frame-options']).toBe('DENY');
+    const hostile = await app.inject({
+      method: 'POST',
+      url: '/admin/catalog/products',
+      headers: { origin: 'https://attacker.example' },
+      payload: {},
+    });
+    expect(hostile.statusCode).toBe(403);
+    expect(hostile.json()).toMatchObject({ error: { code: 'ORIGIN_REJECTED' } });
+    await app.close();
+  });
+
+  it('bounds abuse-sensitive authentication traffic', async () => {
+    const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
+    const app = buildApi({ database, logger: false });
+    let response;
+    for (let index = 0; index < 21; index += 1)
+      response = await app.inject({ method: 'POST', url: '/auth/sign-in/email', payload: {} });
+    expect(response?.statusCode).toBe(429);
+    expect(response?.headers['retry-after']).toBeDefined();
+    await app.close();
+  });
+});

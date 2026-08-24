@@ -16,7 +16,7 @@ export interface BuildApiOptions {
 }
 
 export function buildApi(options: BuildApiOptions) {
-  const authAttempts = new Map<string, { count: number; resetAt: number }>();
+  const rateAttempts = new Map<string, { count: number; resetAt: number }>();
   const loggerOptions =
     options.logger === false
       ? { logger: false }
@@ -25,6 +25,7 @@ export function buildApi(options: BuildApiOptions) {
         : { logger: true };
   const app = Fastify({
     ...loggerOptions,
+    bodyLimit: 1_048_576,
     genReqId: (request) => resolveCorrelationId(request.headers['x-correlation-id']),
   }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -44,15 +45,44 @@ export function buildApi(options: BuildApiOptions) {
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id);
-    if (!request.url.startsWith('/auth/')) return;
-    const key = `${request.ip}:${request.url.split('?')[0]}`;
+    reply.headers({
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+      'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+    });
+    const method = request.method.toUpperCase();
+    const origin = request.headers.origin;
+    if (
+      options.config &&
+      origin &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
+      request.url.startsWith('/admin/')
+    ) {
+      const trustedOrigin = new URL(options.config.authBaseUrl).origin;
+      const sameHost = new URL(origin).host === request.headers.host;
+      if (origin !== trustedOrigin && !sameHost)
+        return reply.code(403).send({
+          error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
+        });
+    }
+    const limits = [
+      { prefix: '/auth/', maximum: 20 },
+      { prefix: '/storefront/v1/reviews', maximum: 15 },
+      { prefix: '/storefront/v1/orders/confirmation', maximum: 60 },
+      { prefix: '/integrations/', maximum: 120 },
+    ];
+    const policy = limits.find((candidate) => request.url.startsWith(candidate.prefix));
+    if (!policy) return;
+    const key = `${request.ip}:${policy.prefix}`;
     const now = Date.now();
-    const current = authAttempts.get(key);
+    const current = rateAttempts.get(key);
     const state =
       !current || current.resetAt <= now ? { count: 0, resetAt: now + 60_000 } : current;
     state.count += 1;
-    authAttempts.set(key, state);
-    if (state.count > 20) {
+    rateAttempts.set(key, state);
+    if (state.count > policy.maximum) {
       reply.header('retry-after', String(Math.ceil((state.resetAt - now) / 1000)));
       return reply
         .code(429)

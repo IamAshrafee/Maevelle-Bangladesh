@@ -2,13 +2,13 @@
 
 Current Phase: Roadmap mega-run — Wave B
 
-Current Milestone: FULL-STOREFRONT-SEO-MERCHANDISING-01 — COMPLETE
+Current Milestone: SYSTEM-HARDENING-01 — COMPLETE
 
 Completed: Foundation runtime and application shell; Platform/IAM; catalog, media, and sizing; warehouse/inventory; geography, customers, pricing, promotions, and cart; checkout/COD orders; payments; fulfillment and delivery; procurement, shipment, and receiving; revisioned Landed Cost and FIFO costing; returns and finance; Reviews; Notifications/Integrations; rebuildable Analytics; operational Admin workspaces; Storefront public catalog/SEO policy surfaces; security checks; and repository-side staging/launch preparation.
 
-Current Batch: Phase 17 is complete. The Storefront now provides responsive navigation, typed homepage sections, nested category browsing, PostgreSQL FTS/trigram search, contextual filters and sorting, authoritative price/availability cards, secure tracking, structured product data, canonical redirects, and rebuildable search projections.
+Current Batch: Phases 17–18 are complete. System hardening now includes browser mutation origin checks, security headers, bounded request bodies, abuse-sensitive rate policies, source hardening scans, dependency and secret gates, PostgreSQL backup/isolated-restore tooling and proof, projection recovery, and documented repository measurements.
 
-Next: Phase 18 — System Hardening.
+Next: Phase 19 — Repository staging, UAT, and launch readiness.
 
 Blockers: None for Phases 14–16. Environment-specific external provider, staging, backup, monitoring, and launch approvals remain later delivery gates.
 
