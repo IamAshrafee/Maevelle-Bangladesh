@@ -9,6 +9,7 @@ import {
 } from '@maevelle/database/notifications';
 import type { EncryptionKey } from '@maevelle/security';
 import { processAnalyticsOutbox } from '@maevelle/database/analytics';
+import { processCatalogImports } from '@maevelle/database/admin-operations';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -53,6 +54,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           deliverPendingEmails(options.database.db, createLocalEmailAdapter()),
           createWebhookEventsFromOutbox(options.database.db),
           processAnalyticsOutbox(options.database.db),
+          processCatalogImports(options.database.db),
           ...(options.encryptionKey
             ? [deliverPendingWebhooks(options.database.db, options.encryptionKey)]
             : []),
@@ -64,6 +66,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
               emailDeliveries,
               webhookEvents,
               analytics,
+              imports,
               webhookDeliveries,
             ]) =>
               logger?.debug(
@@ -73,6 +76,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
                   emailDeliveries,
                   webhookEvents,
                   analytics,
+                  imports,
                   webhookDeliveries,
                 },
                 'Worker recovery tick.',

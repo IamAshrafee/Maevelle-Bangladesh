@@ -142,6 +142,9 @@ export function CatalogConsole() {
             <Link className="rounded-md border px-3 py-2 text-sm" href="/analytics">
               Analytics
             </Link>
+            <Link className="rounded-md border px-3 py-2 text-sm" href="/operations">
+              Operations
+            </Link>
             <Button onClick={() => void reload()}>Refresh</Button>
           </nav>
         </header>

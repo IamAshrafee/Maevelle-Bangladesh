@@ -505,6 +505,7 @@ export async function deliverPendingEmails(
   db: Kysely<DatabaseSchema>,
   adapter: EmailAdapter,
   limit = 20,
+  organizationId?: string,
 ) {
   const pending = await sql<{
     id: string;
@@ -512,7 +513,7 @@ export async function deliverPendingEmails(
     rendered_subject: string | null;
     rendered_body: string;
     recipient: string;
-  }>`select n.id,n.organization_id,n.rendered_subject,n.rendered_body,coalesce(e.email,p.value) recipient from notifications.notifications n left join customers.customer_emails e on e.customer_id=n.customer_id and e.is_primary=true left join lateral (select null::text value) p on true where n.channel='EMAIL' and n.status in ('PENDING','FAILED') and coalesce((select max(a.next_retry_at) from notifications.delivery_attempts a where a.notification_id=n.id),now())<=now() and not exists(select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.status='SENT') order by n.created_at for update skip locked limit ${limit}`.execute(
+  }>`select n.id,n.organization_id,n.rendered_subject,n.rendered_body,e.raw_value recipient from notifications.notifications n left join customers.customer_emails e on e.customer_id=n.customer_id and e.is_primary=true where n.channel='EMAIL' and n.status in ('PENDING','FAILED') and (${organizationId ?? null}::uuid is null or n.organization_id=${organizationId ?? null}::uuid) and coalesce((select max(a.next_retry_at) from notifications.delivery_attempts a where a.notification_id=n.id),now())<=now() and not exists(select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.status='SENT') order by n.created_at for update of n skip locked limit ${limit}`.execute(
     db,
   );
   let processed = 0;
@@ -891,7 +892,7 @@ export async function verifyNotificationIntegrationIntegrity(
     select 'NOTIFICATION_TEMPLATE_REVISION_MISSING' code,n.id entity_id from notifications.notifications n where n.organization_id=${organizationId} and n.status<>'SUPPRESSED' and n.template_revision_id is null
     union all select 'DUPLICATE_SUCCESSFUL_NOTIFICATION_DELIVERY',n.id from notifications.notifications n join notifications.delivery_attempts a on a.notification_id=n.id and a.status='SENT' where n.organization_id=${organizationId} group by n.id having count(*)>1
     union all select 'REQUIRED_NOTIFICATION_SUPPRESSED',n.id from notifications.notifications n join notifications.notification_policies p on p.notification_type=n.notification_type and p.delivery_requirement='REQUIRED_OPERATIONAL' where n.organization_id=${organizationId} and n.status='SUPPRESSED'
-    union all select 'DUPLICATE_CANONICAL_WEBHOOK_EVENT',min(w.id) from integrations.webhook_events w where w.organization_id=${organizationId} and w.source_outbox_event_id is not null group by w.source_outbox_event_id,w.event_type,w.event_version having count(*)>1
+    union all select 'DUPLICATE_CANONICAL_WEBHOOK_EVENT',min(w.id::text)::uuid from integrations.webhook_events w where w.organization_id=${organizationId} and w.source_outbox_event_id is not null group by w.source_outbox_event_id,w.event_type,w.event_version having count(*)>1
     union all select 'WEBHOOK_SUCCESS_WITHOUT_ATTEMPT',w.id from integrations.webhook_events w where w.organization_id=${organizationId} and exists(select 1 from integrations.webhook_deliveries d where d.webhook_event_id=w.id and d.status='SENT') and not exists(select 1 from integrations.webhook_deliveries d where d.webhook_event_id=w.id and d.status='SENT' and d.completed_at is not null)
     union all select 'PROVIDER_RAW_STATUS_MISSING',p.id from integrations.inbound_provider_events p where p.organization_id=${organizationId} and p.provider_status is null
     union all select 'CROSS_ORG_EXTERNAL_MAPPING',m.id from integrations.external_entity_mappings m join integrations.integration_accounts a on a.id=m.integration_account_id where m.organization_id=${organizationId} and a.organization_id<>m.organization_id

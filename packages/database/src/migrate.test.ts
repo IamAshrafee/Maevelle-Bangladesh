@@ -107,9 +107,17 @@ describe('clean PostgreSQL migration path', () => {
       `.execute(database.db);
       expect(analyticsTables.rows.map((row) => row.table_name)).toEqual([
         'analytics_refresh_runs',
+        'cash_facts',
+        'cost_facts',
+        'customer_facts',
         'data_quality_results',
+        'delivery_facts',
         'inventory_daily_snapshots',
         'metric_definitions',
+        'order_facts',
+        'payment_facts',
+        'projection_event_receipts',
+        'return_facts',
         'sales_facts',
       ]);
       const tables = await sql<{ table_name: string }>`

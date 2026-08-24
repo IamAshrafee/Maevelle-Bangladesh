@@ -264,7 +264,7 @@ export async function getAnalyticsDashboards(db: Kysely<DatabaseSchema>, organiz
     sql`select currency_code,sum(gross_amount)::text gross_sales,sum(discount_amount)::text discounts,sum(net_amount-refund_amount)::text net_sales,sum(refund_amount)::text refunds from analytics.order_facts where organization_id=${organizationId} group by currency_code order by currency_code`.execute(
       db,
     ),
-    sql`select coalesce(variant.sku,fact.source_order_line_id::text) sku,sum(fact.quantity)::text quantity,sum(fact.net_amount)::text net_sales,fact.currency_code from analytics.sales_facts fact left join catalog.product_variants variant on variant.id=fact.variant_id where fact.organization_id=${organizationId} group by sku,fact.currency_code order by sum(fact.net_amount) desc limit 50`.execute(
+    sql`select coalesce(variant.sku,fact.source_order_line_id::text) sku,sum(fact.quantity)::text quantity,sum(fact.net_amount)::text net_sales,fact.currency_code from analytics.sales_facts fact left join catalog.product_variants variant on variant.id=fact.variant_id where fact.organization_id=${organizationId} group by coalesce(variant.sku,fact.source_order_line_id::text),fact.currency_code order by sum(fact.net_amount) desc limit 50`.execute(
       db,
     ),
     sql`select fact.canonical_customer_id,customer.display_name,fact.order_count::text,fact.lifetime_net_amount::text,fact.currency_code from analytics.customer_facts fact join customers.customers customer on customer.id=fact.canonical_customer_id where fact.organization_id=${organizationId} order by fact.lifetime_net_amount desc limit 50`.execute(

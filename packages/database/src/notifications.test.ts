@@ -24,7 +24,8 @@ async function fixture(label: string) {
   }>`insert into customers.customers(organization_id,customer_number,display_name) values(${organization.id},${`CUS-${crypto.randomUUID().slice(0, 8)}`},'Notification buyer') returning id`.execute(
     database.db,
   );
-  await sql`insert into customers.customer_emails(organization_id,customer_id,email,normalized_value,is_primary) values(${organization.id},${customer.rows[0]!.id}::uuid,${`buyer-${crypto.randomUUID()}@example.test`},${`buyer-${crypto.randomUUID()}@example.test`},true)`.execute(
+  const customerEmail = `buyer-${crypto.randomUUID()}@example.test`;
+  await sql`insert into customers.customer_emails(organization_id,customer_id,raw_value,normalized_value,is_primary) values(${organization.id},${customer.rows[0]!.id}::uuid,${customerEmail},${customerEmail},true)`.execute(
     database.db,
   );
   const order = await sql<{
@@ -171,6 +172,9 @@ describe('notifications and integrations', () => {
       database.db,
     );
     expect(status.rows[0]?.status).toBe('UNKNOWN_OUTCOME');
+    expect(
+      await notifications.verifyNotificationIntegrationIntegrity(database.db, data.organizationId),
+    ).toEqual([]);
   });
   it('pins rendered notifications to immutable published template revisions', async () => {
     const data = await fixture('templates');
@@ -234,8 +238,12 @@ describe('notifications and integrations', () => {
         return { status: 'SENT', providerReference: 'provider-one' };
       },
     };
-    expect(await notifications.deliverPendingEmails(database.db, adapter)).toBe(1);
-    expect(await notifications.deliverPendingEmails(database.db, adapter)).toBe(0);
+    expect(
+      await notifications.deliverPendingEmails(database.db, adapter, 20, data.organizationId),
+    ).toBe(1);
+    expect(
+      await notifications.deliverPendingEmails(database.db, adapter, 20, data.organizationId),
+    ).toBe(0);
     expect(calls).toBe(1);
     const inbox = await notifications.listRecipientInbox(database.db, {
       organizationId: data.organizationId,

@@ -41,7 +41,10 @@ export function SettingsConsole() {
       await request('/admin/settings/organization', {
         method: 'PUT',
         body: JSON.stringify({
-          businessProfile: { businessName: data.get('businessName') },
+          businessProfile: {
+            businessName: data.get('businessName'),
+            lowStockThreshold: Number(data.get('lowStockThreshold') ?? 0),
+          },
           storefrontProfile: { publicStoreName: data.get('publicStoreName') },
         }),
       });
@@ -77,6 +80,16 @@ export function SettingsConsole() {
               defaultValue={String(profile?.storefront_profile?.publicStoreName ?? '')}
               name="publicStoreName"
               maxLength={160}
+            />
+          </label>
+          <label>
+            Low-stock attention threshold{' '}
+            <input
+              type="number"
+              min={0}
+              max={100000}
+              defaultValue={Number(profile?.business_profile?.lowStockThreshold ?? 0)}
+              name="lowStockThreshold"
             />
           </label>
           <button type="submit">Save settings</button>
