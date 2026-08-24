@@ -32,6 +32,9 @@ import {
 import type { createAuth } from '../auth/auth.js';
 
 type Auth = ReturnType<typeof createAuth>;
+const organizationIdParameter = Type.String({
+  pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+});
 
 function toHeaders(headers: Record<string, string | string[] | undefined>): Headers {
   return new Headers(
@@ -385,7 +388,7 @@ export function registerCatalogRoutes(
     {
       schema: {
         querystring: Type.Object({
-          organizationId: Type.String(),
+          organizationId: organizationIdParameter,
           q: Type.Optional(Type.String({ minLength: 2, maxLength: 120 })),
         }),
       },
@@ -399,7 +402,7 @@ export function registerCatalogRoutes(
   );
   app.get(
     '/storefront/v1/categories',
-    { schema: { querystring: Type.Object({ organizationId: Type.String() }) } },
+    { schema: { querystring: Type.Object({ organizationId: organizationIdParameter }) } },
     async (request) => ({
       data: await listPublicCategories(
         database.db,
@@ -412,7 +415,7 @@ export function registerCatalogRoutes(
     {
       schema: {
         querystring: Type.Object({
-          organizationId: Type.String(),
+          organizationId: organizationIdParameter,
           q: Type.Optional(Type.String({ maxLength: 120 })),
           categoryId: Type.Optional(Type.String()),
           minimumPrice: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
@@ -458,7 +461,7 @@ export function registerCatalogRoutes(
     {
       schema: {
         querystring: Type.Object({
-          organizationId: Type.String(),
+          organizationId: organizationIdParameter,
           currency: Type.Optional(Type.String({ pattern: '^[A-Z]{3}$' })),
         }),
       },
@@ -512,7 +515,7 @@ export function registerCatalogRoutes(
 
   app.get(
     '/storefront/v1/products/:handle/size-guide',
-    { schema: { querystring: Type.Object({ organizationId: Type.String() }) } },
+    { schema: { querystring: Type.Object({ organizationId: organizationIdParameter }) } },
     async (request, reply) => {
       const organizationId = (request.query as { organizationId: string }).organizationId;
       const product = await getStorefrontCatalogProduct(
