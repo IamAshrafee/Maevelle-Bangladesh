@@ -8,6 +8,7 @@ import {
   processNotificationOutbox,
 } from '@maevelle/database/notifications';
 import type { EncryptionKey } from '@maevelle/security';
+import { processAnalyticsOutbox } from '@maevelle/database/analytics';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -51,15 +52,31 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           processNotificationOutbox(options.database.db),
           deliverPendingEmails(options.database.db, createLocalEmailAdapter()),
           createWebhookEventsFromOutbox(options.database.db),
+          processAnalyticsOutbox(options.database.db),
           ...(options.encryptionKey
             ? [deliverPendingWebhooks(options.database.db, options.encryptionKey)]
             : []),
         ])
-          .then(([reclaimed, notifications, emailDeliveries, webhookEvents, webhookDeliveries]) =>
-            logger?.debug(
-              { reclaimed, notifications, emailDeliveries, webhookEvents, webhookDeliveries },
-              'Worker recovery tick.',
-            ),
+          .then(
+            ([
+              reclaimed,
+              notifications,
+              emailDeliveries,
+              webhookEvents,
+              analytics,
+              webhookDeliveries,
+            ]) =>
+              logger?.debug(
+                {
+                  reclaimed,
+                  notifications,
+                  emailDeliveries,
+                  webhookEvents,
+                  analytics,
+                  webhookDeliveries,
+                },
+                'Worker recovery tick.',
+              ),
           )
           .catch((error: unknown) => logger?.info({ error }, 'Worker lease recovery failed.'));
       }, options.heartbeatIntervalMs);

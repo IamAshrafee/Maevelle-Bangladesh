@@ -25,6 +25,52 @@ type Snapshot = {
   readonly reserved_quantity: string;
   readonly available_to_sell: string;
 };
+type DashboardRow = Record<string, unknown>;
+type Dashboards = {
+  readonly overview: readonly DashboardRow[];
+  readonly sales: readonly DashboardRow[];
+  readonly products: readonly DashboardRow[];
+  readonly customers: readonly DashboardRow[];
+  readonly deliveryReturns: DashboardRow;
+  readonly finance: readonly DashboardRow[];
+  readonly metricCatalog: readonly DashboardRow[];
+};
+
+function ReportTable({ title, rows }: { title: string; rows: readonly DashboardRow[] }) {
+  const columns = rows[0] ? Object.keys(rows[0]).slice(0, 7) : [];
+  return (
+    <section>
+      <h2>{title}</h2>
+      {rows.length === 0 ? <p>No {title.toLowerCase()} facts projected.</p> : null}
+      {rows.length ? (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                {columns.map((column) => (
+                  <th key={column}>{column.replaceAll('_', ' ')}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={index}>
+                  {columns.map((column) => (
+                    <td key={column}>
+                      {Array.isArray(row[column])
+                        ? row[column].join(', ')
+                        : String(row[column] ?? '—')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -39,15 +85,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function AnalyticsConsole() {
   const [overview, setOverview] = useState<Overview>();
   const [snapshots, setSnapshots] = useState<readonly Snapshot[]>([]);
+  const [dashboards, setDashboards] = useState<Dashboards>();
   const [message, setMessage] = useState('Loading analytical projections…');
   const reload = async () => {
     try {
-      const [o, s] = await Promise.all([
+      const [o, s, d] = await Promise.all([
         request<ApiEnvelope<Overview>>('/admin/analytics/overview'),
         request<ApiEnvelope<readonly Snapshot[]>>('/admin/analytics/inventory-snapshots'),
+        request<ApiEnvelope<Dashboards>>('/admin/analytics/dashboards'),
       ]);
       setOverview(o.data);
       setSnapshots(s.data);
+      setDashboards(d.data);
       setMessage('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load analytics.');
@@ -147,6 +196,19 @@ export function AnalyticsConsole() {
         ) : (
           <p>No inventory snapshot has been captured yet.</p>
         )}
+        <ReportTable title="Products" rows={dashboards?.products ?? []} />
+        <ReportTable title="Customers" rows={dashboards?.customers ?? []} />
+        <ReportTable
+          title="Delivery and returns"
+          rows={dashboards ? [dashboards.deliveryReturns] : []}
+        />
+        <ReportTable title="Finance cash ledger" rows={dashboards?.finance ?? []} />
+        <ReportTable title="Versioned metric catalog" rows={dashboards?.metricCatalog ?? []} />
+        <p className="muted">
+          Gross sales drills into Order snapshots; refunds use refund completion date; cash is
+          sourced only from the Finance ledger; gross margin is shown only with recognized Costing
+          facts.
+        </p>
       </section>
     </main>
   );

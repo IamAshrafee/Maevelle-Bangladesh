@@ -5,8 +5,10 @@ import { createDatabase } from './index.js';
 import { createOrganization } from './platform.js';
 import {
   captureInventoryDailySnapshot,
+  consumeAnalyticsOutbox,
+  getAnalyticsDashboards,
   getAnalyticsOverview,
-  rebuildSalesFacts,
+  rebuildAnalyticsProjections,
   verifyAnalyticsIntegrity,
 } from './analytics.js';
 
@@ -44,7 +46,7 @@ describe('rebuildable analytics projections', () => {
   it('rebuilds tenant-scoped order-line metrics without changing source orders', async () => {
     const a = await fixture('a');
     const b = await fixture('b');
-    await rebuildSalesFacts(database.db, a);
+    await rebuildAnalyticsProjections(database.db, a);
     const overview = await getAnalyticsOverview(database.db, a);
     expect(overview.metrics).toEqual([
       expect.objectContaining({
@@ -57,6 +59,43 @@ describe('rebuildable analytics projections', () => {
     ]);
     expect((await getAnalyticsOverview(database.db, b)).metrics).toEqual([]);
     expect(await verifyAnalyticsIntegrity(database.db, a)).toEqual([]);
+  });
+
+  it('rebuilds every fact family exactly and keeps semantic metrics separated by currency', async () => {
+    const organizationId = await fixture('rebuild');
+    await rebuildAnalyticsProjections(database.db, organizationId);
+    const before = await getAnalyticsDashboards(database.db, organizationId);
+    expect(before.metricCatalog).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ metric_key: 'GROSS_SALES', semantic_version: 1 }),
+        expect.objectContaining({ metric_key: 'COLLECTED_CASH', semantic_version: 1 }),
+        expect.objectContaining({ metric_key: 'REFUNDS_BY_REFUND_DATE', semantic_version: 1 }),
+      ]),
+    );
+    await sql`delete from analytics.order_facts where organization_id=${organizationId}`.execute(
+      database.db,
+    );
+    expect(await verifyAnalyticsIntegrity(database.db, organizationId)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'MISSING_ORDER_FACT' })]),
+    );
+    await rebuildAnalyticsProjections(database.db, organizationId);
+    expect(await getAnalyticsDashboards(database.db, organizationId)).toEqual(before);
+    expect(await verifyAnalyticsIntegrity(database.db, organizationId)).toEqual([]);
+  });
+
+  it('claims duplicate projection events once under concurrent delivery', async () => {
+    const organizationId = await fixture('events');
+    const event = await sql<{
+      id: string;
+    }>`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,payload,occurred_at) select ${organizationId},'analytics.rebuild.requested',1,'platform.organization',id,'{}'::jsonb,now() from platform.organizations where id=${organizationId} returning id::text`.execute(
+      database.db,
+    );
+    const outcomes = await Promise.all([
+      consumeAnalyticsOutbox(database.db, Number(event.rows[0]!.id)),
+      consumeAnalyticsOutbox(database.db, Number(event.rows[0]!.id)),
+    ]);
+    expect(outcomes.filter((outcome) => outcome.processed)).toHaveLength(1);
+    expect((await getAnalyticsOverview(database.db, organizationId)).metrics).toHaveLength(1);
   });
 
   it('captures an inventory snapshot only for the requested organization', async () => {

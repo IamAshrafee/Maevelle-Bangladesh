@@ -2,13 +2,13 @@
 
 Current Phase: Roadmap mega-run — Wave A
 
-Current Milestone: NOTIFICATIONS-INTEGRATIONS-01 — COMPLETE
+Current Milestone: ANALYTICS-REPORTING-01 — COMPLETE
 
 Completed: Foundation runtime and application shell; Platform/IAM; catalog, media, and sizing; warehouse/inventory; geography, customers, pricing, promotions, and cart; checkout/COD orders; payments; fulfillment and delivery; procurement, shipment, and receiving; revisioned Landed Cost and FIFO costing; returns and finance; Reviews; Notifications/Integrations; rebuildable Analytics; operational Admin workspaces; Storefront public catalog/SEO policy surfaces; security checks; and repository-side staging/launch preparation.
 
-Current Batch: Phase 14 now includes immutable template revisions, required/optional policy enforcement, recipient inbox state, bounded email and webhook delivery workers, DNS-aware SSRF protection, provider dedupe and reconciliation, full operational health queries, integrity checks, and protected Admin operations.
+Current Batch: Phases 14–15 are complete. Reporting now has versioned semantic definitions; currency-separated Order, Customer, Delivery, Return, Payment, Costing, cash, and Inventory projections; organization-timezone attribution; idempotent outbox consumption; full rebuild; drill-down; integrity checks; and operational dashboards.
 
-Next: Complete Phase 15 Analytics/Reporting, then Phase 16 Full Admin Operations in Wave A.
+Next: Complete Phase 16 Full Admin Operations and run the Wave A closeout gates.
 
 Blockers: Local Docker Desktop is currently unavailable; repository implementation continues while runtime verification is deferred to the Wave A closeout.
 

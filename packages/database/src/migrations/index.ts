@@ -38,6 +38,7 @@ import * as reviews from './2300_reviews.js';
 import * as notificationsIntegrations from './2400_notifications_integrations.js';
 import * as notificationsIntegrationsOperations from './2401_notifications_integrations_operations.js';
 import * as analytics from './2500_analytics.js';
+import * as analyticsReportingOperations from './2501_analytics_reporting_operations.js';
 import * as adminOperations from './2600_admin_operations.js';
 
 /**
@@ -83,6 +84,7 @@ export const migrations = {
   '2400_notifications_integrations': notificationsIntegrations,
   '2401_notifications_integrations_operations': notificationsIntegrationsOperations,
   '2500_analytics': analytics,
+  '2501_analytics_reporting_operations': analyticsReportingOperations,
   '2600_admin_operations': adminOperations,
 } satisfies Record<string, Migration>;
 
