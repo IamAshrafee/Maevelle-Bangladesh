@@ -91,6 +91,19 @@ export function buildApi(options: BuildApiOptions) {
   });
 
   app.setErrorHandler((error, request, reply) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'validation' in error &&
+      Array.isArray(error.validation)
+    )
+      return reply.status(400).send({
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Request validation failed.',
+          requestId: request.id,
+        },
+      });
     request.log.error({ err: error, requestId: request.id }, 'Unhandled API request error.');
     return reply.status(500).send({
       error: {

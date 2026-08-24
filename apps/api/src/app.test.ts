@@ -87,6 +87,12 @@ describe('API hardening foundation', () => {
     });
     expect(hostile.statusCode).toBe(403);
     expect(hostile.json()).toMatchObject({ error: { code: 'ORIGIN_REJECTED' } });
+    const malformed = await app.inject({
+      method: 'GET',
+      url: '/storefront/v1/categories?organizationId=',
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json()).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
     await app.close();
   });
 
