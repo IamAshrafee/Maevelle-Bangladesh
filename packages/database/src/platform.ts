@@ -1,6 +1,55 @@
 import { sql, type Kysely } from 'kysely';
+import { hashToken } from '@maevelle/security';
 
 import type { DatabaseSchema } from './index.js';
+
+export type OperationalControlKey =
+  | 'checkout_enabled'
+  | 'review_submission_enabled'
+  | 'customer_returns_enabled'
+  | 'email_delivery_enabled'
+  | 'webhook_delivery_enabled';
+
+export async function setOperationalControl(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    key: OperationalControlKey;
+    type: 'FEATURE_FLAG' | 'KILL_SWITCH';
+    enabled: boolean;
+    actorId?: string;
+    reason?: string;
+  },
+): Promise<void> {
+  await sql`insert into platform.operational_controls(organization_id,control_key,control_type,enabled,reason,updated_by) values(${input.organizationId},${input.key},${input.type},${input.enabled},${input.reason ?? null},${input.actorId ?? null}::uuid) on conflict(organization_id,control_key) do update set control_type=excluded.control_type,enabled=excluded.enabled,reason=excluded.reason,updated_by=excluded.updated_by,updated_at=now()`.execute(
+    db,
+  );
+}
+
+export async function isOperationalControlEnabled(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  key: OperationalControlKey,
+): Promise<boolean> {
+  const result = await sql<{
+    enabled: boolean;
+  }>`select enabled from platform.operational_controls where organization_id=${organizationId} and control_key=${key}`.execute(
+    db,
+  );
+  return result.rows[0]?.enabled ?? true;
+}
+
+export async function isCheckoutEnabledForToken(
+  db: Kysely<DatabaseSchema>,
+  checkoutToken: string,
+): Promise<boolean> {
+  const result = await sql<{
+    enabled: boolean;
+  }>`select coalesce(control.enabled,true) enabled from orders.checkout_sessions checkout left join platform.operational_controls control on control.organization_id=checkout.organization_id and control.control_key='checkout_enabled' where checkout.public_token_hash=${hashToken(checkoutToken)} limit 1`.execute(
+    db,
+  );
+  return result.rows[0]?.enabled ?? false;
+}
 
 export interface CreateOrganizationInput {
   readonly code: string;

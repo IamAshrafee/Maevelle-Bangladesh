@@ -28,12 +28,23 @@ services:
     restart: unless-stopped
     env_file: ${STAGING_ENV_FILE:-.env.staging}
     environment: { API_HOST: 0.0.0.0, API_PORT: 3000 }
-    depends_on: { migrate: { condition: service_completed_successfully } }
+    depends_on: { seed-staging: { condition: service_completed_successfully } }
   worker:
     build: { context: ., dockerfile: infrastructure/docker/Dockerfile.worker }
     restart: unless-stopped
     env_file: ${STAGING_ENV_FILE:-.env.staging}
+    depends_on: { seed-staging: { condition: service_completed_successfully } }
+  bootstrap-owner:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.api }
+    command: [node, apps/api/dist/src/bootstrap-owner.js]
+    env_file: ${STAGING_ENV_FILE:-.env.staging}
     depends_on: { migrate: { condition: service_completed_successfully } }
+  seed-staging:
+    build: { context: ., dockerfile: infrastructure/docker/Dockerfile.api }
+    command: [node, packages/database/dist/src/staging-seed.js]
+    env_file: ${STAGING_ENV_FILE:-.env.staging}
+    environment: { ALLOW_STAGING_SEED: '1' }
+    depends_on: { bootstrap-owner: { condition: service_completed_successfully } }
   admin:
     build: { context: ., dockerfile: infrastructure/docker/Dockerfile.admin }
     restart: unless-stopped

@@ -13,6 +13,16 @@ docker compose -f compose.staging.yaml --env-file .env.staging up --build -d
 
 Verify `/api/health/live`, `/api/health/ready`, Admin sign-in, Storefront browsing, and worker health. Run migrations only forward; do not attempt a schema rollback.
 
+The staging topology automatically runs forward migrations, idempotent Owner bootstrap, and the guarded deterministic staging seed before API/Worker startup. Run the repository acceptance and routed smoke commands with:
+
+```powershell
+pnpm test:acceptance
+$env:STAGING_BASE_URL='https://your-staging-origin'; pnpm smoke:staging
+pnpm check:release-readiness
+```
+
+The deterministic sample remains Draft and carries no fabricated opening Inventory or Cost Layer. Operators must introduce opening Inventory through the canonical Inventory command and authoritative acquisition-cost workflow.
+
 ## Human UAT evidence
 
 An authorized operator must record the date, environment, account (not password), result, and evidence location for: Catalog publishing, COD checkout, manual payment verification, warehouse dispatch, receiving/Landed Cost, return/refund, finance expense, reporting, and access control. The release remains `AWAITING_HUMAN_UAT` until this evidence is signed off.

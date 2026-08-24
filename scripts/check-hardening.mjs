@@ -14,7 +14,11 @@ for (const file of files) {
     failures.push(`${file}: executable string evaluation`);
   if (/document\.write\s*\(|\.innerHTML\s*=/u.test(source))
     failures.push(`${file}: unsafe browser HTML sink`);
-  if (/dangerouslySetInnerHTML/u.test(source) && !file.endsWith('products/[handle]/page.tsx'))
+  if (
+    /dangerouslySetInnerHTML/u.test(source) &&
+    !file.endsWith('products/[handle]/page.tsx') &&
+    !file.endsWith('scripts/check-hardening.mjs')
+  )
     failures.push(`${file}: unreviewed React HTML sink`);
   if (/AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/u.test(source))
     failures.push(`${file}: credential material`);

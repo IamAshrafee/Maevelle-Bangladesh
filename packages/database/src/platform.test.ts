@@ -35,6 +35,31 @@ describe('durable PostgreSQL job leasing', () => {
   });
 });
 
+describe('operational rollout controls', () => {
+  it('distinguishes kill switches from settings and disables only new side effects', async () => {
+    const organizationId = await createTestOrganization('controls');
+    expect(
+      await platform.isOperationalControlEnabled(database.db, organizationId, 'checkout_enabled'),
+    ).toBe(true);
+    await platform.setOperationalControl(database.db, {
+      organizationId,
+      key: 'checkout_enabled',
+      type: 'KILL_SWITCH',
+      enabled: false,
+      reason: 'Repository recovery drill',
+    });
+    expect(
+      await platform.isOperationalControlEnabled(database.db, organizationId, 'checkout_enabled'),
+    ).toBe(false);
+    const outboxBefore = await sql<{
+      count: string;
+    }>`select count(*)::text count from platform.outbox_events where organization_id=${organizationId}`.execute(
+      database.db,
+    );
+    expect(outboxBefore.rows[0]?.count).toBe('0');
+  });
+});
+
 async function createTestOrganization(label: string): Promise<string> {
   const organization = await platform.createOrganization(database.db, {
     code: `test-${label}-${crypto.randomUUID().slice(0, 8)}`,

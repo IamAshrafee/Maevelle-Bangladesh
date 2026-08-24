@@ -513,7 +513,7 @@ export async function deliverPendingEmails(
     rendered_subject: string | null;
     rendered_body: string;
     recipient: string;
-  }>`select n.id,n.organization_id,n.rendered_subject,n.rendered_body,e.raw_value recipient from notifications.notifications n left join customers.customer_emails e on e.customer_id=n.customer_id and e.is_primary=true where n.channel='EMAIL' and n.status in ('PENDING','FAILED') and (${organizationId ?? null}::uuid is null or n.organization_id=${organizationId ?? null}::uuid) and coalesce((select max(a.next_retry_at) from notifications.delivery_attempts a where a.notification_id=n.id),now())<=now() and not exists(select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.status='SENT') order by n.created_at for update of n skip locked limit ${limit}`.execute(
+  }>`select n.id,n.organization_id,n.rendered_subject,n.rendered_body,e.raw_value recipient from notifications.notifications n left join customers.customer_emails e on e.customer_id=n.customer_id and e.is_primary=true where n.channel='EMAIL' and n.status in ('PENDING','FAILED') and (${organizationId ?? null}::uuid is null or n.organization_id=${organizationId ?? null}::uuid) and not exists(select 1 from platform.operational_controls control where control.organization_id=n.organization_id and control.control_key='email_delivery_enabled' and not control.enabled) and coalesce((select max(a.next_retry_at) from notifications.delivery_attempts a where a.notification_id=n.id),now())<=now() and not exists(select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.status='SENT') order by n.created_at for update of n skip locked limit ${limit}`.execute(
     db,
   );
   let processed = 0;
@@ -627,7 +627,7 @@ export async function createWebhookEventsFromOutbox(db: Kysely<DatabaseSchema>, 
     aggregate_version: string | null;
     payload: object;
     occurred_at: Date;
-  }>`select o.id::text,o.event_id,o.organization_id,o.event_type,o.event_version,o.aggregate_type,o.aggregate_id,o.aggregate_version::text,o.payload,o.occurred_at from platform.outbox_events o where o.organization_id is not null and exists(select 1 from integrations.webhook_endpoints e join integrations.webhook_subscriptions s on s.webhook_endpoint_id=e.id where e.organization_id=o.organization_id and e.status='ACTIVE' and s.event_type=o.event_type and s.event_version=o.event_version) and not exists(select 1 from integrations.webhook_events w where w.source_outbox_event_id=o.id and w.event_type=o.event_type and w.event_version=o.event_version) order by o.id limit ${limit}`.execute(
+  }>`select o.id::text,o.event_id,o.organization_id,o.event_type,o.event_version,o.aggregate_type,o.aggregate_id,o.aggregate_version::text,o.payload,o.occurred_at from platform.outbox_events o where o.organization_id is not null and not exists(select 1 from platform.operational_controls control where control.organization_id=o.organization_id and control.control_key='webhook_delivery_enabled' and not control.enabled) and exists(select 1 from integrations.webhook_endpoints e join integrations.webhook_subscriptions s on s.webhook_endpoint_id=e.id where e.organization_id=o.organization_id and e.status='ACTIVE' and s.event_type=o.event_type and s.event_version=o.event_version) and not exists(select 1 from integrations.webhook_events w where w.source_outbox_event_id=o.id and w.event_type=o.event_type and w.event_version=o.event_version) order by o.id limit ${limit}`.execute(
     db,
   );
   for (const event of events.rows) {

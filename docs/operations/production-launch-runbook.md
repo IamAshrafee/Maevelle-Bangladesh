@@ -1,6 +1,6 @@
 # Controlled production launch runbook
 
-Status: **READY_FOR_EXPLICIT_LAUNCH**. This is preparation only; it is not authorization to deploy.
+Status: **NOT AUTHORIZED / NOT EXECUTED**. This is preparation only; it is not authorization to deploy.
 
 1. Obtain explicit launch approval and confirm a signed UAT record.
 2. Confirm encrypted PostgreSQL 18 backup destination and a successful isolated restore drill.

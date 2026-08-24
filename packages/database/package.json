@@ -112,7 +112,8 @@
   "scripts": {
     "build": "tsc --build tsconfig.build.json --pretty false",
     "migrate": "pnpm run build && node dist/src/migrate-cli.js",
-    "migrate:status": "pnpm run build && node dist/src/migrate-cli.js --status"
+    "migrate:status": "pnpm run build && node dist/src/migrate-cli.js --status",
+    "seed:staging": "pnpm run build && node dist/src/staging-seed.js"
   },
   "dependencies": {
     "@maevelle/security": "workspace:*",

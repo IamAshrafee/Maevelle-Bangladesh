@@ -37,7 +37,7 @@ import {
   type PaymentMethodCode,
 } from '@maevelle/database/payments';
 import { getPublicOrderFulfillmentStatus } from '@maevelle/database/delivery';
-import { findActiveAdminContext } from '@maevelle/database/platform';
+import { findActiveAdminContext, isCheckoutEnabledForToken } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
 
@@ -331,6 +331,13 @@ export function registerOrderRoutes(
         return reply
           .code(422)
           .send({ error: { code: 'VALIDATION_FAILED', message: 'Idempotency-Key is required.' } });
+      if (!(await isCheckoutEnabledForToken(database.db, checkoutToken)))
+        return reply.code(503).send({
+          error: {
+            code: 'CHECKOUT_DISABLED',
+            message: 'Checkout is temporarily unavailable. Your Cart remains unchanged.',
+          },
+        });
       try {
         const body = request.body as { calculationVersion: number; calculationFingerprint: string };
         const result = await placeOrder(database.db, {
