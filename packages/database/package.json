@@ -103,6 +103,10 @@
     "./admin-operations": {
       "types": "./src/admin-operations.ts",
       "default": "./dist/src/admin-operations.js"
+    },
+    "./storefront": {
+      "types": "./src/storefront.ts",
+      "default": "./dist/src/storefront.js"
     }
   },
   "scripts": {

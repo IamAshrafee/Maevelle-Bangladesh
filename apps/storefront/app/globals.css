@@ -13,6 +13,112 @@ body {
   margin: 0;
 }
 
+a {
+  color: #8b1748;
+  text-underline-offset: 0.2em;
+}
+button,
+input,
+select {
+  min-height: 2.75rem;
+  font: inherit;
+}
+button,
+.button-link {
+  border: 0;
+  border-radius: 999px;
+  background: #8b1748;
+  color: white;
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  text-decoration: none;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #f2a7c5;
+  outline-offset: 3px;
+}
+.site-header,
+.site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem clamp(1rem, 5vw, 4rem);
+  background: white;
+  border-bottom: 1px solid #f1d5df;
+}
+.site-header nav,
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.brand {
+  color: #3f1d2e;
+  font-size: 1.35rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+.site-footer {
+  align-items: flex-start;
+  border-bottom: 0;
+  border-top: 1px solid #f1d5df;
+}
+.hero {
+  width: min(100%, 72rem);
+  margin: 2rem auto;
+  border-radius: 1.5rem;
+  padding: clamp(2rem, 8vw, 6rem);
+  background: linear-gradient(135deg, #f8dbe7, #fff5ee);
+}
+.feature-grid,
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  width: min(100%, 72rem);
+  margin: 1rem auto 2rem;
+}
+.feature-grid article,
+.product-card {
+  border: 1px solid #f1d5df;
+  border-radius: 1rem;
+  background: white;
+  padding: 1.25rem;
+}
+.wide {
+  width: min(100%, 72rem);
+}
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+.filter-grid label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+.filter-grid input,
+.filter-grid select {
+  width: 100%;
+  border: 1px solid #c995aa;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  background: white;
+}
+.category-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-block: 1rem;
+}
+
 main {
   display: grid;
   min-height: 100vh;
@@ -27,6 +133,34 @@ main {
   background: #ffffff;
   padding: 2rem;
   box-shadow: 0 1rem 3rem rgb(63 29 46 / 8%);
+}
+
+@media (max-width: 40rem) {
+  .site-header,
+  .site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .site-header nav {
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  main {
+    padding: 1rem;
+    place-items: start stretch;
+  }
+  .shell {
+    padding: 1.25rem;
+  }
+  .hero {
+    margin: 0;
+    padding: 2rem 1.25rem;
+  }
+  table {
+    display: block;
+    overflow-x: auto;
+  }
 }
 
 h1 {

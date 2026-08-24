@@ -6,6 +6,7 @@ import Link from 'next/link';
 
 import type { ApiEnvelope, PublicSizeGuideDto, StorefrontProductDto } from '@maevelle/contracts';
 import { ProductReviews } from '@/components/product-reviews';
+import { productJsonLd, safeJsonLd } from '@/src/seo';
 
 interface CartView {
   version: number;
@@ -133,6 +134,12 @@ export default function ProductPage() {
   return (
     <main>
       <article className="shell">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: safeJsonLd(productJsonLd(product, `/products/${product.handle}`)),
+          }}
+        />
         <p className="eyebrow">Maevelle collection</p>
         <h1>{product.title}</h1>
         {product.description ? <p>{product.description}</p> : null}
@@ -147,6 +154,7 @@ export default function ProductPage() {
                     key={value.id}
                     type="button"
                     className={selected[axis.id] === value.id ? 'selected' : ''}
+                    aria-pressed={selected[axis.id] === value.id}
                     onClick={() => setSelected((current) => ({ ...current, [axis.id]: value.id }))}
                   >
                     {value.colorHex ? (

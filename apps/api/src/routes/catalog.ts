@@ -22,6 +22,12 @@ import {
 import { findActiveAdminContext } from '@maevelle/database/platform';
 import { getPublicSizeGuideForProduct } from '@maevelle/database/sizing';
 import { resolveVariantPrice } from '@maevelle/database/pricing';
+import {
+  listPublicCategories,
+  rebuildStorefrontSearch,
+  resolveProductRedirect,
+  searchStorefront,
+} from '@maevelle/database/storefront';
 
 import type { createAuth } from '../auth/auth.js';
 
@@ -392,6 +398,62 @@ export function registerCatalogRoutes(
     },
   );
   app.get(
+    '/storefront/v1/categories',
+    { schema: { querystring: Type.Object({ organizationId: Type.String() }) } },
+    async (request) => ({
+      data: await listPublicCategories(
+        database.db,
+        (request.query as { organizationId: string }).organizationId,
+      ),
+    }),
+  );
+  app.get(
+    '/storefront/v1/search',
+    {
+      schema: {
+        querystring: Type.Object({
+          organizationId: Type.String(),
+          q: Type.Optional(Type.String({ maxLength: 120 })),
+          categoryId: Type.Optional(Type.String()),
+          minimumPrice: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
+          maximumPrice: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
+          availability: Type.Optional(
+            Type.Union([Type.Literal('IN_STOCK'), Type.Literal('OUT_OF_STOCK')]),
+          ),
+          sort: Type.Optional(
+            Type.Union([
+              Type.Literal('RELEVANCE'),
+              Type.Literal('NEWEST'),
+              Type.Literal('PRICE_ASC'),
+              Type.Literal('PRICE_DESC'),
+            ]),
+          ),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+        }),
+      },
+    },
+    async (request) => ({
+      data: await searchStorefront(
+        database.db,
+        request.query as {
+          organizationId: string;
+          q?: string;
+          categoryId?: string;
+          minimumPrice?: string;
+          maximumPrice?: string;
+          availability?: 'IN_STOCK' | 'OUT_OF_STOCK';
+          sort?: 'RELEVANCE' | 'NEWEST' | 'PRICE_ASC' | 'PRICE_DESC';
+          page?: number;
+        },
+      ),
+    }),
+  );
+  app.post('/admin/catalog/search/rebuild', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: { count: await rebuildStorefrontSearch(database.db, context.organizationId) } };
+  });
+  app.get(
     '/storefront/v1/products/:handle',
     {
       schema: {
@@ -408,7 +470,16 @@ export function registerCatalogRoutes(
         query.organizationId,
         (request.params as { handle: string }).handle,
       );
-      if (!product) return reply.code(404).send({ error: 'NOT_FOUND' });
+      if (!product) {
+        const redirect = await resolveProductRedirect(
+          database.db,
+          query.organizationId,
+          (request.params as { handle: string }).handle,
+        );
+        if (redirect)
+          return reply.code(308).header('location', `/storefront/v1/products/${redirect}`).send();
+        return reply.code(404).send({ error: 'NOT_FOUND' });
+      }
       const currency = query.currency ?? 'BDT';
       return {
         data: {

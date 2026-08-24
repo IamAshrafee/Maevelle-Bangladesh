@@ -1,87 +1,49 @@
-'use client';
-
 import Link from 'next/link';
-import { type FormEvent, useEffect, useState } from 'react';
+import { CatalogBrowser } from '@/components/catalog-browser';
 
-import type { ApiEnvelope } from '@maevelle/contracts';
-
-type Product = { id: string; handle: string; title: string; description: string | null };
+const sections = [
+  {
+    eyebrow: 'New arrivals',
+    title: 'Discover what is newly published',
+    body: 'Browse current products with live price and availability.',
+  },
+  {
+    eyebrow: 'Thoughtful fit',
+    title: 'Choose with confidence',
+    body: 'Variant details and product-specific size guides support every selection.',
+  },
+  {
+    eyebrow: 'Secure checkout',
+    title: 'Commerce truth stays server-authoritative',
+    body: 'Promotions, stock, payment choices, and totals are confirmed before Order creation.',
+  },
+] as const;
 
 export default function StorefrontHomePage() {
-  const [products, setProducts] = useState<readonly Product[]>([]);
-  const [organizationId, setOrganizationId] = useState('');
-  const [message, setMessage] = useState(
-    'Enter your store organization to browse published products.',
-  );
-  const browse = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const org = String(form.get('organizationId') ?? '');
-    const q = String(form.get('q') ?? '');
-    try {
-      const response = await fetch(
-        `/api/storefront/v1/products?organizationId=${encodeURIComponent(org)}${q ? `&q=${encodeURIComponent(q)}` : ''}`,
-      );
-      if (!response.ok) throw new Error('Catalog search is unavailable.');
-      setProducts(((await response.json()) as ApiEnvelope<readonly Product[]>).data);
-      setOrganizationId(org);
-      setMessage('');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to load published products.');
-    }
-  };
-  useEffect(() => {
-    const org = new URLSearchParams(window.location.search).get('organizationId');
-    if (!org) return;
-    const form = document.getElementById('catalog-search') as HTMLFormElement | null;
-    form?.requestSubmit();
-  }, []);
   return (
     <main>
-      <section className="shell">
+      <section className="hero">
         <p className="eyebrow">Maevelle</p>
         <h1>Thoughtful everyday commerce</h1>
         <p>
-          Browse only currently published products. Price and availability remain API-authoritative.
+          Published products, transparent pricing, secure checkout, and dependable order tracking.
         </p>
-        <form id="catalog-search" onSubmit={(event) => void browse(event)}>
-          <label>
-            Store organization
-            <input
-              defaultValue={
-                new URLSearchParams(
-                  typeof window === 'undefined' ? '' : window.location.search,
-                ).get('organizationId') ?? ''
-              }
-              name="organizationId"
-              required
-            />
-          </label>
-          <label>
-            Search catalog <input name="q" placeholder="Product title or description" />
-          </label>
-          <button type="submit">Browse</button>
-        </form>
-        <p role="status">{message}</p>
-        <nav>
-          <Link href="/cart">Cart</Link> · <Link href="/checkout">Checkout</Link> ·{' '}
-          <Link href="/policies/shipping">Shipping</Link> ·{' '}
-          <Link href="/policies/returns">Returns</Link>
-        </nav>
-        <section aria-label="Published products">
-          {products.map((product) => (
-            <article key={product.id}>
-              <h2>
-                <Link
-                  href={`/products/${product.handle}?organizationId=${encodeURIComponent(organizationId)}`}
-                >
-                  {product.title}
-                </Link>
-              </h2>
-              <p>{product.description ?? 'See product details.'}</p>
-            </article>
-          ))}
-        </section>
+        <Link className="button-link" href="/search">
+          Browse the collection
+        </Link>
+      </section>
+      <section className="feature-grid" aria-label="Storefront highlights">
+        {sections.map((section) => (
+          <article key={section.title}>
+            <p className="eyebrow">{section.eyebrow}</p>
+            <h2>{section.title}</h2>
+            <p>{section.body}</p>
+          </article>
+        ))}
+      </section>
+      <section className="shell wide">
+        <h2>Featured products</h2>
+        <CatalogBrowser />
       </section>
     </main>
   );

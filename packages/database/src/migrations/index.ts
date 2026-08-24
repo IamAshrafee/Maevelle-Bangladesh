@@ -41,6 +41,7 @@ import * as analytics from './2500_analytics.js';
 import * as analyticsReportingOperations from './2602_analytics_reporting_operations.js';
 import * as adminOperations from './2600_admin_operations.js';
 import * as adminOperationsComplete from './2603_admin_operations_complete.js';
+import * as storefrontSearch from './2700_storefront_search.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -88,6 +89,7 @@ export const migrations = {
   '2602_analytics_reporting_operations': analyticsReportingOperations,
   '2600_admin_operations': adminOperations,
   '2603_admin_operations_complete': adminOperationsComplete,
+  '2700_storefront_search': storefrontSearch,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {
