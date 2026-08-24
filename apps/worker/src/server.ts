@@ -15,6 +15,10 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
     database,
     heartbeatIntervalMs: config.workerHeartbeatIntervalMs,
     logger: createLogger({ component: 'worker', level: config.logLevel }),
+    encryptionKey: {
+      id: 'runtime-auth-key',
+      value: Buffer.from(config.authEncryptionKey, 'base64'),
+    },
   });
 
   try {

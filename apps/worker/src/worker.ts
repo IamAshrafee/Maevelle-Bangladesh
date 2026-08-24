@@ -1,6 +1,13 @@
 import type { DatabaseClient } from '@maevelle/database';
 import { reclaimExpiredJobs } from '@maevelle/database/platform';
-import { processNotificationOutbox } from '@maevelle/database/notifications';
+import {
+  createLocalEmailAdapter,
+  createWebhookEventsFromOutbox,
+  deliverPendingEmails,
+  deliverPendingWebhooks,
+  processNotificationOutbox,
+} from '@maevelle/database/notifications';
+import type { EncryptionKey } from '@maevelle/security';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -11,6 +18,7 @@ export interface WorkerOptions {
   readonly database: DatabaseClient;
   readonly heartbeatIntervalMs: number;
   readonly logger?: WorkerLogger;
+  readonly encryptionKey?: EncryptionKey;
 }
 
 export interface WorkerRuntime {
@@ -41,9 +49,17 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         void Promise.all([
           reclaimExpiredJobs(options.database.db),
           processNotificationOutbox(options.database.db),
+          deliverPendingEmails(options.database.db, createLocalEmailAdapter()),
+          createWebhookEventsFromOutbox(options.database.db),
+          ...(options.encryptionKey
+            ? [deliverPendingWebhooks(options.database.db, options.encryptionKey)]
+            : []),
         ])
-          .then(([reclaimed, notifications]) =>
-            logger?.debug({ reclaimed, notifications }, 'Worker recovery tick.'),
+          .then(([reclaimed, notifications, emailDeliveries, webhookEvents, webhookDeliveries]) =>
+            logger?.debug(
+              { reclaimed, notifications, emailDeliveries, webhookEvents, webhookDeliveries },
+              'Worker recovery tick.',
+            ),
           )
           .catch((error: unknown) => logger?.info({ error }, 'Worker lease recovery failed.'));
       }, options.heartbeatIntervalMs);

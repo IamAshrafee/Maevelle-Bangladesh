@@ -48,6 +48,25 @@ export function registerNotificationRoutes(
     return { data: await notifications.listNotifications(database.db, a.organizationId) };
   });
   app.post(
+    '/admin/notifications/:notificationId/read',
+    { schema: { params: Type.Object({ notificationId: Type.String() }) } },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        await notifications.markNotificationRead(database.db, {
+          organizationId: a.organizationId,
+          recipientType: 'MEMBERSHIP',
+          recipientId: a.membershipId,
+          notificationId: (req.params as { notificationId: string }).notificationId,
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
     '/admin/notifications/preferences',
     {
       schema: {
@@ -80,8 +99,55 @@ export function registerNotificationRoutes(
   app.get('/admin/integrations', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'integrations.view');
     if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await notifications.integrationHealth(database.db, a.organizationId) };
+    const [health, operations] = await Promise.all([
+      notifications.integrationHealth(database.db, a.organizationId),
+      notifications.integrationOperations(database.db, a.organizationId),
+    ]);
+    return { data: { health, ...operations } };
   });
+  app.get('/admin/integrations/integrity', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'integrations.view');
+    if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return {
+      data: await notifications.verifyNotificationIntegrationIntegrity(
+        database.db,
+        a.organizationId,
+      ),
+    };
+  });
+  app.post(
+    '/admin/integrations/operations/:operationId/reconcile',
+    {
+      schema: {
+        params: Type.Object({ operationId: Type.String() }),
+        body: Type.Object({
+          outcome: Type.Union([
+            Type.Literal('CONFIRMED_SUCCESS'),
+            Type.Literal('CONFIRMED_FAILURE'),
+            Type.Literal('RECONCILIATION_REQUIRED'),
+          ]),
+          externalReference: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'integrations.manage');
+      if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        await notifications.reconcileIntegrationOperation(database.db, {
+          organizationId: a.organizationId,
+          operationId: (req.params as { operationId: string }).operationId,
+          ...(req.body as {
+            outcome: 'CONFIRMED_SUCCESS' | 'CONFIRMED_FAILURE' | 'RECONCILIATION_REQUIRED';
+            externalReference?: string;
+          }),
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
   app.post(
     '/admin/integrations/webhooks',
     {

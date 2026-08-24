@@ -24,6 +24,9 @@ async function fixture(label: string) {
   }>`insert into customers.customers(organization_id,customer_number,display_name) values(${organization.id},${`CUS-${crypto.randomUUID().slice(0, 8)}`},'Notification buyer') returning id`.execute(
     database.db,
   );
+  await sql`insert into customers.customer_emails(organization_id,customer_id,email,normalized_value,is_primary) values(${organization.id},${customer.rows[0]!.id}::uuid,${`buyer-${crypto.randomUUID()}@example.test`},${`buyer-${crypto.randomUUID()}@example.test`},true)`.execute(
+    database.db,
+  );
   const order = await sql<{
     id: string;
   }>`insert into orders.orders(organization_id,order_number,customer_id,currency_code,payment_method,subtotal_amount,discount_amount,total_amount) values(${organization.id},${`NOT-${crypto.randomUUID().slice(0, 8)}`},${customer.rows[0]!.id}::uuid,'BDT','COD',1,0,1) returning id`.execute(
@@ -147,8 +150,11 @@ describe('notifications and integrations', () => {
       payload: { reference: 'x' },
       authenticationStatus: 'VERIFIED' as const,
     };
-    expect((await notifications.ingestProviderEvent(database.db, event)).created).toBe(true);
-    expect((await notifications.ingestProviderEvent(database.db, event)).created).toBe(false);
+    const providerRace = await Promise.all([
+      notifications.ingestProviderEvent(database.db, event),
+      notifications.ingestProviderEvent(database.db, event),
+    ]);
+    expect(providerRace.filter((result) => result.created)).toHaveLength(1);
     const operation = await notifications.createIntegrationOperation(database.db, {
       organizationId: data.organizationId,
       integrationAccountId: account.rows[0]!.id,
@@ -165,5 +171,103 @@ describe('notifications and integrations', () => {
       database.db,
     );
     expect(status.rows[0]?.status).toBe('UNKNOWN_OUTCOME');
+  });
+  it('pins rendered notifications to immutable published template revisions', async () => {
+    const data = await fixture('templates');
+    const template = await notifications.createNotificationTemplate(database.db, {
+      organizationId: data.organizationId,
+      notificationType: 'ORDER_PLACED',
+      channel: 'EMAIL',
+      name: 'Order email',
+    });
+    const first = await notifications.createTemplateRevision(database.db, {
+      organizationId: data.organizationId,
+      templateId: template.id,
+      subjectTemplate: 'Order update',
+      bodyTemplate: 'Version one',
+      variableSchema: {},
+    });
+    await notifications.publishTemplateRevision(
+      database.db,
+      data.organizationId,
+      template.id,
+      first.id,
+    );
+    await notifications.createNotificationFromOutbox(database.db, data.eventId);
+    const second = await notifications.createTemplateRevision(database.db, {
+      organizationId: data.organizationId,
+      templateId: template.id,
+      bodyTemplate: 'Version two',
+      variableSchema: {},
+    });
+    await notifications.publishTemplateRevision(
+      database.db,
+      data.organizationId,
+      template.id,
+      second.id,
+    );
+    const nextEvent = await sql<{
+      id: string;
+    }>`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,payload,occurred_at) values(${data.organizationId},'orders.order.placed',1,'orders.order',${data.orderId}::uuid,${JSON.stringify({ orderId: data.orderId })}::jsonb,now()) returning id::text`.execute(
+      database.db,
+    );
+    await notifications.createNotificationFromOutbox(database.db, Number(nextEvent.rows[0]!.id));
+    const rendered = await sql<{
+      rendered_body: string;
+      revision_number: number;
+    }>`select n.rendered_body,r.revision_number from notifications.notifications n join notifications.template_revisions r on r.id=n.template_revision_id where n.organization_id=${data.organizationId} and n.channel='EMAIL' order by n.created_at`.execute(
+      database.db,
+    );
+    expect(rendered.rows.map((row) => [row.rendered_body, row.revision_number])).toEqual([
+      ['Version one', 1],
+      ['Version two', 2],
+    ]);
+  });
+  it('runs bounded email attempts idempotently and marks in-app notifications read for their recipient only', async () => {
+    const data = await fixture('delivery');
+    await notifications.createNotificationFromOutbox(database.db, data.eventId);
+    let calls = 0;
+    const adapter: notifications.EmailAdapter = {
+      name: 'test',
+      async send() {
+        calls++;
+        return { status: 'SENT', providerReference: 'provider-one' };
+      },
+    };
+    expect(await notifications.deliverPendingEmails(database.db, adapter)).toBe(1);
+    expect(await notifications.deliverPendingEmails(database.db, adapter)).toBe(0);
+    expect(calls).toBe(1);
+    const inbox = await notifications.listRecipientInbox(database.db, {
+      organizationId: data.organizationId,
+      recipientType: 'CUSTOMER',
+      recipientId: data.customerId,
+    });
+    expect(inbox).toHaveLength(1);
+    await notifications.markNotificationRead(database.db, {
+      organizationId: data.organizationId,
+      recipientType: 'CUSTOMER',
+      recipientId: data.customerId,
+      notificationId: String(inbox[0]!.id),
+    });
+    expect(
+      await notifications.listRecipientInbox(database.db, {
+        organizationId: data.organizationId,
+        recipientType: 'CUSTOMER',
+        recipientId: data.customerId,
+        unreadOnly: true,
+      }),
+    ).toHaveLength(0);
+  });
+  it('blocks DNS rebinding and redirect destinations that resolve to private networks', async () => {
+    await expect(
+      notifications.validateWebhookDestination('https://hooks.example.test/event', async () => [
+        '10.0.0.2',
+      ]),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      notifications.validateWebhookDestination('https://hooks.example.test/event', async () => [
+        '8.8.8.8',
+      ]),
+    ).resolves.toBeInstanceOf(URL);
   });
 });

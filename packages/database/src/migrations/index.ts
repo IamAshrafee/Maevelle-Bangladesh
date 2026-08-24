@@ -36,6 +36,7 @@ import * as returnCostLayerProvenance from './2101_return_cost_layer_provenance.
 import * as finance from './2200_finance.js';
 import * as reviews from './2300_reviews.js';
 import * as notificationsIntegrations from './2400_notifications_integrations.js';
+import * as notificationsIntegrationsOperations from './2401_notifications_integrations_operations.js';
 import * as analytics from './2500_analytics.js';
 import * as adminOperations from './2600_admin_operations.js';
 
@@ -80,6 +81,7 @@ export const migrations = {
   '2200_finance': finance,
   '2300_reviews': reviews,
   '2400_notifications_integrations': notificationsIntegrations,
+  '2401_notifications_integrations_operations': notificationsIntegrationsOperations,
   '2500_analytics': analytics,
   '2600_admin_operations': adminOperations,
 } satisfies Record<string, Migration>;
