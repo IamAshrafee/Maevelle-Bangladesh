@@ -1,5 +1,5 @@
-import { CatalogConsole } from '@/components/catalog-console';
+import { DashboardConsole } from '@/components/dashboard-console';
 
 export default function AdminHomePage() {
-  return <CatalogConsole />;
+  return <DashboardConsole />;
 }

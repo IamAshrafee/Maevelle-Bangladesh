@@ -45,11 +45,17 @@ describe('admin operations support', () => {
     }>`insert into customers.customers(organization_id,customer_number,display_name) values(${organization.id},${`CUS-${crypto.randomUUID().slice(0, 8)}`},'Searchable customer') returning id::text`.execute(
       database.db,
     );
-    await sql`insert into orders.orders(organization_id,order_number,customer_id,currency_code,payment_method,subtotal_amount,discount_amount,total_amount) values(${organization.id},'OPS-SEARCH-001',${customer.rows[0]!.id}::uuid,'BDT','COD',1,0,1)`.execute(
+    const order = await sql<{
+      id: string;
+    }>`insert into orders.orders(organization_id,order_number,customer_id,currency_code,payment_method,subtotal_amount,discount_amount,total_amount) values(${organization.id},'OPS-SEARCH-001',${customer.rows[0]!.id}::uuid,'BDT','COD',1,0,1) returning id::text`.execute(
       database.db,
     );
     expect(await globalSearch(database.db, organization.id, 'SEARCH')).toContainEqual(
-      expect.objectContaining({ kind: 'Order', label: 'OPS-SEARCH-001' }),
+      expect.objectContaining({
+        kind: 'Order',
+        label: 'OPS-SEARCH-001',
+        href: `/orders?order=${order.rows[0]!.id}`,
+      }),
     );
     await saveView(database.db, {
       organizationId: organization.id,

@@ -6,6 +6,9 @@ const defaultTestDatabaseUrl =
 export default defineConfig({
   test: {
     environment: 'node',
+    // Integration files share one disposable PostgreSQL database. Run files serially;
+    // tests that prove concurrency still open independent connections explicitly.
+    fileParallelism: false,
     env: {
       TEST_DATABASE_URL: process.env.TEST_DATABASE_URL ?? defaultTestDatabaseUrl,
     },

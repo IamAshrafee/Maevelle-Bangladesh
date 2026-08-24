@@ -10,6 +10,31 @@ export interface CatalogProductSummaryDto {
   readonly status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
   readonly publicationStatus: 'UNPUBLISHED' | 'PUBLISHED';
   readonly version: number;
+  readonly productTypeName?: string;
+  readonly variantCount?: number;
+  readonly skuPreview?: string | null;
+  readonly updatedAt?: string;
+}
+
+export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
+  readonly description: string | null;
+  readonly productTypeId: string;
+  readonly options: readonly {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly values: readonly {
+      readonly id: string;
+      readonly code: string;
+      readonly label: string;
+    }[];
+  }[];
+  readonly variants: readonly {
+    readonly id: string;
+    readonly sku: string;
+    readonly status: string;
+    readonly optionValueIds: readonly string[];
+  }[];
 }
 
 export interface StorefrontProductDto {

@@ -1,13 +1,32 @@
 'use client';
 
-import { type FormEvent, useEffect, useState } from 'react';
+import {
+  AlertTriangle,
+  Archive,
+  ArrowRight,
+  Boxes,
+  CheckCircle2,
+  Grid2X2,
+  Image,
+  PackageSearch,
+  Plus,
+  RefreshCw,
+  Ruler,
+  Search,
+  Tags,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
-import type { ApiEnvelope, CatalogProductSummaryDto } from '@maevelle/contracts';
+import type {
+  ApiEnvelope,
+  CatalogProductSummaryDto,
+  CatalogProductWorkspaceDto,
+} from '@maevelle/contracts';
 
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -17,14 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
 interface ProductType {
   id: string;
@@ -38,15 +49,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
   });
-  if (!response.ok) throw new Error('The requested catalog operation could not be completed.');
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: { message?: string; code?: string } | string;
+    };
+    const detail =
+      typeof body.error === 'object' ? (body.error.message ?? body.error.code) : body.error;
+    throw new Error(detail ?? 'The requested catalog operation could not be completed.');
+  }
   return response.json() as Promise<T>;
 }
 
 export function CatalogConsole() {
   const [products, setProducts] = useState<readonly CatalogProductSummaryDto[]>([]);
   const [types, setTypes] = useState<readonly ProductType[]>([]);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState('Loading Products…');
   const [typeId, setTypeId] = useState('');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('ALL');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selected, setSelected] = useState<CatalogProductSummaryDto>();
+  const [workspace, setWorkspace] = useState<CatalogProductWorkspaceDto>();
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const reload = async () => {
     try {
@@ -57,13 +82,54 @@ export function CatalogConsole() {
       setProducts(productResult.data);
       setTypes(typeResult.data);
       setTypeId((current) => current || typeResult.data[0]?.id || '');
-    } catch {
-      window.location.assign('/admin/login');
+      setMessage('');
+      return productResult.data;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load the Product catalog.');
+      return [];
     }
   };
+
   useEffect(() => {
-    void reload();
+    const parameters = new URLSearchParams(window.location.search);
+    setCreateOpen(parameters.get('create') === 'product');
+    void reload().then((loadedProducts) => {
+      const productId = parameters.get('product');
+      const product = loadedProducts.find((candidate) => candidate.id === productId);
+      if (product) void openProduct(product);
+    });
   }, []);
+
+  async function openProduct(product: CatalogProductSummaryDto) {
+    setSelected(product);
+    setWorkspace(undefined);
+    setWorkspaceLoading(true);
+    try {
+      const result = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+        `/admin/catalog/products/${product.id}`,
+      );
+      setWorkspace(result.data);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load Product setup.');
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  const visible = useMemo(
+    () =>
+      products.filter(
+        (product) =>
+          (status === 'ALL' ||
+            (status === 'PUBLISHED'
+              ? product.publicationStatus === 'PUBLISHED'
+              : product.status === status)) &&
+          `${product.title} ${product.handle} ${product.skuPreview ?? ''} ${product.productTypeName ?? ''}`
+            .toLowerCase()
+            .includes(query.toLowerCase()),
+      ),
+    [products, query, status],
+  );
 
   async function createType(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,9 +143,10 @@ export function CatalogConsole() {
       setMessage('Product type created.');
       await reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to create product type.');
+      setMessage(error instanceof Error ? error.message : 'Unable to create Product type.');
     }
   }
+
   async function createProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -94,98 +161,486 @@ export function CatalogConsole() {
         }),
       });
       event.currentTarget.reset();
-      setMessage('Draft product created. Add options and variants before publishing.');
+      setCreateOpen(false);
+      setMessage('Draft created. Continue through media, sizing, pricing, variants, and stock.');
       await reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to create product.');
+      setMessage(error instanceof Error ? error.message : 'Unable to create Product.');
     }
   }
+
+  async function publication(product: CatalogProductSummaryDto) {
+    setBusy(true);
+    const action = product.publicationStatus === 'PUBLISHED' ? 'unpublish' : 'publish';
+    try {
+      await request(`/admin/catalog/products/${product.id}/${action}`, {
+        method: 'POST',
+        body: JSON.stringify({ version: product.version }),
+      });
+      setMessage(
+        action === 'publish'
+          ? `${product.title} is published.`
+          : `${product.title} is no longer publicly discoverable.`,
+      );
+      setSelected(undefined);
+      await reload();
+    } catch (error) {
+      setMessage(
+        `${error instanceof Error ? error.message : 'Publication was rejected.'} Resolve the publishing checklist and retry.`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAxis(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      await request(`/admin/catalog/products/${selected.id}/option-axes`, {
+        method: 'POST',
+        body: JSON.stringify({ code: data.get('code'), name: data.get('name') }),
+      });
+      form.reset();
+      setMessage('Option added. Add its customer-facing values next.');
+      await openProduct(selected);
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to create option.');
+    }
+  }
+
+  async function createOptionValue(event: FormEvent<HTMLFormElement>, axisId: string) {
+    event.preventDefault();
+    if (!selected) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      await request(`/admin/catalog/option-axes/${axisId}/values`, {
+        method: 'POST',
+        body: JSON.stringify({ code: data.get('code'), displayValue: data.get('displayValue') }),
+      });
+      form.reset();
+      setMessage('Option value added.');
+      await openProduct(selected);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to add option value.');
+    }
+  }
+
+  async function createVariant(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected || !workspace) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const optionValueIds = data.getAll('optionValueId').map(String);
+    if (optionValueIds.length !== workspace.options.length) {
+      setMessage('Choose exactly one value from every option before creating a Variant.');
+      return;
+    }
+    try {
+      await request(`/admin/catalog/products/${selected.id}/variants`, {
+        method: 'POST',
+        body: JSON.stringify({ sku: data.get('sku'), optionValueIds }),
+      });
+      form.reset();
+      setMessage('Sellable Variant created. Continue with price, media, and inventory.');
+      await openProduct(selected);
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to create Variant.');
+    }
+  }
+
   return (
-    <main className="min-h-screen bg-muted/30 p-6">
-      <div className="mx-auto grid max-w-6xl gap-6">
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Maevelle / Catalog</p>
-            <h1 className="text-3xl font-semibold tracking-tight">Product workspace</h1>
+    <main className="admin-page products-v2">
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">Catalog / Products</p>
+          <h1>Products</h1>
+          <p>Build, validate, publish, and maintain the sellable catalog.</p>
+        </div>
+        <div className="page-actions">
+          <button className="button secondary" type="button" onClick={() => void reload()}>
+            <RefreshCw /> Refresh
+          </button>
+          <button className="button primary" type="button" onClick={() => setCreateOpen(true)}>
+            <Plus /> Create Product
+          </button>
+        </div>
+      </header>
+      {message ? (
+        <div className="notice notice-warning" role="status">
+          <AlertTriangle /> {message}
+        </div>
+      ) : null}
+      <section className="catalog-summary" aria-label="Catalog summary">
+        <article>
+          <span>All Products</span>
+          <strong>{products.length}</strong>
+        </article>
+        <article>
+          <span>Published</span>
+          <strong>
+            {products.filter((product) => product.publicationStatus === 'PUBLISHED').length}
+          </strong>
+        </article>
+        <article>
+          <span>Drafts</span>
+          <strong>{products.filter((product) => product.status === 'DRAFT').length}</strong>
+        </article>
+        <article>
+          <span>Product types</span>
+          <strong>{types.length}</strong>
+        </article>
+      </section>
+      <section className="orders-filterbar" aria-label="Product filters">
+        <label className="table-search">
+          <Search />
+          <span className="sr-only">Search Products</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search name, handle, SKU, or type…"
+          />
+        </label>
+        <div className="filter-chips" role="group" aria-label="Product status">
+          {['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'].map((item) => (
+            <button
+              aria-pressed={status === item}
+              key={item}
+              type="button"
+              onClick={() => setStatus(item)}
+            >
+              {item === 'ALL' ? 'All Products' : item}
+            </button>
+          ))}
+        </div>
+        <span className="result-count">{visible.length} results</span>
+      </section>
+      <div className={`product-workspace ${selected ? 'detail-open' : ''}`}>
+        <section className="panel product-list-panel">
+          <div className="data-table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Type</th>
+                  <th>Variants</th>
+                  <th>Catalog state</th>
+                  <th>Updated</th>
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((product) => (
+                  <tr
+                    className={selected?.id === product.id ? 'selected-row' : ''}
+                    key={product.id}
+                  >
+                    <td>
+                      <div className="product-identity">
+                        <span>
+                          <PackageSearch />
+                        </span>
+                        <div>
+                          <strong>{product.title}</strong>
+                          <small>
+                            /{product.handle}
+                            {product.skuPreview ? ` · ${product.skuPreview}` : ''}
+                          </small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{product.productTypeName ?? '—'}</td>
+                    <td>{product.variantCount ?? 0}</td>
+                    <td>
+                      <div className="inline-status">
+                        <StatusBadge status={product.status} />
+                        <StatusBadge status={product.publicationStatus} />
+                      </div>
+                    </td>
+                    <td>
+                      {product.updatedAt
+                        ? new Date(product.updatedAt).toLocaleDateString('en-BD', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })
+                        : '—'}
+                    </td>
+                    <td>
+                      <button
+                        className="row-link"
+                        type="button"
+                        onClick={() => void openProduct(product)}
+                      >
+                        Open workspace <ArrowRight />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {visible.length === 0 ? (
+              <div className="empty-state">
+                <PackageSearch />
+                <strong>No matching Products</strong>
+                <p>Create a draft or clear the current filters.</p>
+                <button type="button" onClick={() => setCreateOpen(true)}>
+                  Create Product
+                </button>
+              </div>
+            ) : null}
           </div>
-          <nav className="flex gap-2">
-            <Link
-              className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
-              href="/media"
-            >
-              Media
-            </Link>
-            <Link
-              className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
-              href="/sizing"
-            >
-              Sizing
-            </Link>
-            <Link
-              className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
-              href="/inventory/stock"
-            >
-              Inventory
-            </Link>
-            <Link
-              className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
-              href="/reviews"
-            >
-              Reviews
-            </Link>
-            <Link
-              className="inline-flex h-9 items-center rounded-md border px-3 text-sm"
-              href="/notifications"
-            >
-              Notifications
-            </Link>
-            <Link className="rounded-md border px-3 py-2 text-sm" href="/analytics">
-              Analytics
-            </Link>
-            <Link className="rounded-md border px-3 py-2 text-sm" href="/operations">
-              Operations
-            </Link>
-            <Button onClick={() => void reload()}>Refresh</Button>
-          </nav>
-        </header>
-        {message ? (
-          <p role="status" className="rounded-md bg-secondary px-3 py-2 text-sm">
-            {message}
-          </p>
+        </section>
+        {selected ? (
+          <aside className="product-detail-panel">
+            <header className="detail-header">
+              <div>
+                <p className="eyebrow">Product workspace</p>
+                <h2>{selected.title}</h2>
+                <div className="inline-status">
+                  <StatusBadge status={selected.status} />
+                  <StatusBadge status={selected.publicationStatus} />
+                </div>
+              </div>
+              <button
+                aria-label="Close Product workspace"
+                type="button"
+                onClick={() => setSelected(undefined)}
+              >
+                <X />
+              </button>
+            </header>
+            <section className="publish-readiness">
+              <div>
+                <strong>Publishing readiness</strong>
+                <p>The server validates every authoritative requirement when you publish.</p>
+              </div>
+              <ul>
+                <li>
+                  <CheckCircle2 /> Product identity
+                </li>
+                <li className={Number(selected.variantCount) ? '' : 'incomplete'}>
+                  <CheckCircle2 /> Sellable Variant
+                </li>
+                <li>
+                  <Tags /> Active price
+                </li>
+                <li>
+                  <Image /> Product media
+                </li>
+                <li>
+                  <Boxes /> Available inventory
+                </li>
+              </ul>
+              <button disabled={busy} type="button" onClick={() => void publication(selected)}>
+                {selected.publicationStatus === 'PUBLISHED' ? <Archive /> : <CheckCircle2 />}
+                {selected.publicationStatus === 'PUBLISHED'
+                  ? 'Unpublish Product'
+                  : 'Validate & publish'}
+              </button>
+            </section>
+            <section className="variant-workspace">
+              <div className="section-heading">
+                <div>
+                  <h3>Options & Variants</h3>
+                  <p>
+                    Define customer choices, then create each sellable SKU from one value per
+                    option.
+                  </p>
+                </div>
+                <StatusBadge status={`${workspace?.variants.length ?? 0} variants`} />
+              </div>
+              {workspaceLoading ? (
+                <p className="loading-line">Loading Product configuration…</p>
+              ) : null}
+              {!workspaceLoading && workspace ? (
+                <>
+                  <div className="option-axis-grid">
+                    {workspace.options.map((axis) => (
+                      <article key={axis.id}>
+                        <header>
+                          <strong>{axis.name}</strong>
+                          <small>{axis.code}</small>
+                        </header>
+                        <div className="option-pills">
+                          {axis.values.map((value) => (
+                            <span key={value.id}>{value.label}</span>
+                          ))}
+                          {axis.values.length === 0 ? <em>No values yet</em> : null}
+                        </div>
+                        <form
+                          className="inline-create-form"
+                          onSubmit={(event) => void createOptionValue(event, axis.id)}
+                        >
+                          <input name="displayValue" placeholder="Display value" required />
+                          <input
+                            name="code"
+                            placeholder="code"
+                            pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                            required
+                          />
+                          <button type="submit">Add value</button>
+                        </form>
+                      </article>
+                    ))}
+                  </div>
+                  <details className="compact-disclosure" open={workspace.options.length === 0}>
+                    <summary>Add Product option</summary>
+                    <form className="inline-create-form" onSubmit={createAxis}>
+                      <input name="name" placeholder="Option name (e.g. Color)" required />
+                      <input
+                        name="code"
+                        placeholder="color"
+                        pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                        required
+                      />
+                      <button type="submit">Add option</button>
+                    </form>
+                  </details>
+                  {workspace.options.length > 0 &&
+                  workspace.options.every((axis) => axis.values.length > 0) ? (
+                    <form className="variant-create-form" onSubmit={createVariant}>
+                      <div>
+                        <strong>Create a sellable Variant</strong>
+                        <small>
+                          Choose one value from every option. SKU is normalized by the server.
+                        </small>
+                      </div>
+                      <input name="sku" placeholder="SKU" required />
+                      {workspace.options.map((axis) => (
+                        <label key={axis.id}>
+                          <span>{axis.name}</span>
+                          <select name="optionValueId" required defaultValue="">
+                            <option value="" disabled>
+                              Choose {axis.name}
+                            </option>
+                            {axis.values.map((value) => (
+                              <option key={value.id} value={value.id}>
+                                {value.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                      <button type="submit">
+                        <Grid2X2 /> Create Variant
+                      </button>
+                    </form>
+                  ) : null}
+                  <div className="variant-matrix">
+                    <div className="variant-matrix-row header">
+                      <span>SKU</span>
+                      <span>Configuration</span>
+                      <span>Status</span>
+                    </div>
+                    {workspace.variants.map((variant) => (
+                      <div className="variant-matrix-row" key={variant.id}>
+                        <strong>{variant.sku}</strong>
+                        <span>
+                          {variant.optionValueIds
+                            .map(
+                              (valueId) =>
+                                workspace.options
+                                  .flatMap((axis) => axis.values)
+                                  .find((value) => value.id === valueId)?.label ?? 'Unknown',
+                            )
+                            .join(' / ')}
+                        </span>
+                        <StatusBadge status={variant.status} />
+                      </div>
+                    ))}
+                    {workspace.variants.length === 0 ? (
+                      <div className="empty-inline">
+                        No Variants yet. Create options and the first SKU.
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </section>
+            <section className="product-setup-nav">
+              <h3>Product setup</h3>
+              <Link href="/media">
+                <Image />
+                <span>
+                  <strong>Media</strong>
+                  <small>Upload, preview, and associate images</small>
+                </span>
+                <ArrowRight />
+              </Link>
+              <Link href="/sizing">
+                <Ruler />
+                <span>
+                  <strong>Sizing</strong>
+                  <small>Size definitions and guide revisions</small>
+                </span>
+                <ArrowRight />
+              </Link>
+              <Link href="/pricing">
+                <Tags />
+                <span>
+                  <strong>Pricing</strong>
+                  <small>Authoritative Variant price lists</small>
+                </span>
+                <ArrowRight />
+              </Link>
+              <Link href="/inventory/stock">
+                <Boxes />
+                <span>
+                  <strong>Inventory</strong>
+                  <small>Warehouse stock and availability</small>
+                </span>
+                <ArrowRight />
+              </Link>
+            </section>
+            <footer className="detail-actions">
+              <small>
+                Version {selected.version} · /{selected.handle}
+              </small>
+            </footer>
+          </aside>
         ) : null}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Create product type</CardTitle>
-              <CardDescription>
-                Types define the product family before you create drafts.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="grid gap-3" onSubmit={createType}>
-                <Label htmlFor="type-code">Code</Label>
-                <Input
-                  id="type-code"
-                  name="code"
-                  placeholder="dress"
-                  required
-                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                />
-                <Label htmlFor="type-name">Name</Label>
-                <Input id="type-name" name="name" placeholder="Dress" required />
-                <Button type="submit">Create type</Button>
-              </form>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Create draft product</CardTitle>
-              <CardDescription>
-                Drafts are not visible on the Storefront until publish requirements pass.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="grid gap-3" onSubmit={createProduct}>
+      </div>
+      {createOpen ? (
+        <div
+          className="drawer-backdrop"
+          role="presentation"
+          onMouseDown={() => setCreateOpen(false)}
+        >
+          <aside
+            aria-label="Create Product"
+            aria-modal="true"
+            className="form-drawer"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <p className="eyebrow">New catalog item</p>
+                <h2>Create a draft Product</h2>
+                <p>
+                  Start with identity. Variants, media, pricing, sizing, and stock remain controlled
+                  steps.
+                </p>
+              </div>
+              <button
+                aria-label="Close create Product"
+                type="button"
+                onClick={() => setCreateOpen(false)}
+              >
+                <X />
+              </button>
+            </header>
+            <form onSubmit={createProduct}>
+              <div className="form-section">
+                <h3>Product identity</h3>
                 <Label>Product type</Label>
                 <Select value={typeId} onValueChange={(value) => setTypeId(value ?? '')}>
                   <SelectTrigger>
@@ -199,9 +654,9 @@ export function CatalogConsole() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Label htmlFor="title">Title</Label>
-                <Input id="title" name="title" required />
-                <Label htmlFor="handle">URL handle</Label>
+                <Label htmlFor="title">Product name</Label>
+                <Input id="title" name="title" required placeholder="Linen wrap dress" />
+                <Label htmlFor="handle">Storefront handle</Label>
                 <Input
                   id="handle"
                   name="handle"
@@ -209,59 +664,45 @@ export function CatalogConsole() {
                   pattern="[a-z0-9]+(-[a-z0-9]+)*"
                   placeholder="linen-wrap-dress"
                 />
+                <small>
+                  Lowercase letters, numbers, and hyphens. Later changes preserve redirect history.
+                </small>
                 <Label htmlFor="description">Description</Label>
-                <Input id="description" name="description" />
+                <textarea
+                  id="description"
+                  name="description"
+                  rows={5}
+                  placeholder="Describe material, cut, use, and customer value."
+                />
+              </div>
+              <footer>
+                <button type="button" onClick={() => setCreateOpen(false)}>
+                  Cancel
+                </button>
                 <Button type="submit" disabled={!typeId}>
-                  Create draft
+                  Create draft <ArrowRight />
                 </Button>
+              </footer>
+            </form>
+            <details className="type-creator">
+              <summary>Need another Product type?</summary>
+              <form onSubmit={createType}>
+                <Label htmlFor="type-code">Type code</Label>
+                <Input
+                  id="type-code"
+                  name="code"
+                  placeholder="dress"
+                  required
+                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                />
+                <Label htmlFor="type-name">Type name</Label>
+                <Input id="type-name" name="name" placeholder="Dress" required />
+                <Button type="submit">Create type</Button>
               </form>
-            </CardContent>
-          </Card>
+            </details>
+          </aside>
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Products</CardTitle>
-            <CardDescription>Lifecycle status is authoritative from the API.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Handle</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Version</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {products.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.title}</TableCell>
-                    <TableCell>{product.handle}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          product.publicationStatus === 'PUBLISHED' ? 'default' : 'secondary'
-                        }
-                      >
-                        {product.status} / {product.publicationStatus}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{product.version}</TableCell>
-                  </TableRow>
-                ))}
-                {products.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground">
-                      No products yet.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+      ) : null}
     </main>
   );
 }

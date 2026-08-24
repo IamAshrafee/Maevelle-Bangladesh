@@ -980,6 +980,7 @@ export async function listOrders(
     paymentStatus: PaymentSummary['status'];
     total: string;
     customerName: string;
+    customerId: string;
     createdAt: string;
   }[]
 > {
@@ -990,9 +991,10 @@ export async function listOrders(
     payment_method: PaymentMethodCode;
     total_amount: string;
     display_name: string;
+    customer_id: string;
     created_at: Date;
   }>`
-    select order_row.id, order_row.order_number, order_row.order_status, order_row.payment_method, order_row.total_amount::text, customer.display_name, order_row.created_at
+    select order_row.id, order_row.order_number, order_row.order_status, order_row.payment_method, order_row.total_amount::text, customer.display_name,customer.customer_id::text,order_row.created_at
     from orders.orders order_row join orders.order_customer_snapshots customer on customer.order_id = order_row.id
     where order_row.organization_id = ${organizationId} order by order_row.created_at desc, order_row.id desc limit 100
   `.execute(db);
@@ -1012,6 +1014,7 @@ export async function listOrders(
       ).status,
       total: row.total_amount,
       customerName: row.display_name,
+      customerId: row.customer_id,
       createdAt: row.created_at.toISOString(),
     })),
   );

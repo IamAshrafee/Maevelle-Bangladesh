@@ -160,13 +160,13 @@ export async function globalSearch(
   if (query.trim().length < 2) return [];
   return (
     await sql<{ kind: string; label: string; detail: string; href: string }>`
-      select 'Order' as kind,order_number as label,order_status as detail,('/orders/' || id::text) as href from orders.orders where organization_id=${organizationId} and order_number ilike ${term}
-      union all select 'Customer',customer_number,display_name,('/customers/' || id::text) from customers.customers where organization_id=${organizationId} and (customer_number ilike ${term} or display_name ilike ${term})
-      union all select 'Product',title,handle,('/catalog/products/' || id::text) from catalog.products where organization_id=${organizationId} and (title ilike ${term} or handle ilike ${term})
-      union all select 'Delivery',delivery_number,operational_status,('/delivery/' || id::text) from delivery.deliveries where organization_id=${organizationId} and delivery_number ilike ${term}
-      union all select 'Payment',payment_number,status,('/payments/' || id::text) from payments.payments where organization_id=${organizationId} and (payment_number ilike ${term} or external_reference ilike ${term})
-      union all select 'Purchase',purchase_number,status,('/purchases/' || id::text) from procurement.purchases where organization_id=${organizationId} and purchase_number ilike ${term}
-      union all select 'Shipment',shipment_number,status,('/inbound-shipments/' || id::text) from inbound_shipment.shipments where organization_id=${organizationId} and shipment_number ilike ${term}
+      select 'Order' as kind,order_number as label,order_status as detail,('/orders?order=' || id::text) as href from orders.orders where organization_id=${organizationId} and order_number ilike ${term}
+      union all select 'Customer',customer_number,display_name,('/customers?customer=' || id::text) from customers.customers where organization_id=${organizationId} and (customer_number ilike ${term} or display_name ilike ${term})
+      union all select 'Product',title,handle,('/products?product=' || id::text) from catalog.products where organization_id=${organizationId} and (title ilike ${term} or handle ilike ${term})
+      union all select 'Delivery',delivery_number,operational_status,('/deliveries?delivery=' || id::text) from delivery.deliveries where organization_id=${organizationId} and delivery_number ilike ${term}
+      union all select 'Payment',payment_number,status,('/payments?payment=' || id::text) from payments.payments where organization_id=${organizationId} and (payment_number ilike ${term} or external_reference ilike ${term})
+      union all select 'Purchase',purchase_number,status,('/purchases?purchase=' || id::text) from procurement.purchases where organization_id=${organizationId} and purchase_number ilike ${term}
+      union all select 'Shipment',shipment_number,status,('/inbound-shipments?shipment=' || id::text) from inbound_shipment.shipments where organization_id=${organizationId} and shipment_number ilike ${term}
       limit 30
     `.execute(db)
   ).rows;

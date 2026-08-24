@@ -21,6 +21,27 @@ export interface ProductSummary {
   readonly status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
   readonly publicationStatus: 'UNPUBLISHED' | 'PUBLISHED';
   readonly version: number;
+  readonly productTypeName?: string;
+  readonly variantCount?: number;
+  readonly skuPreview?: string | null;
+  readonly updatedAt?: string;
+}
+
+export interface CatalogProductWorkspace extends ProductSummary {
+  readonly description: string | null;
+  readonly productTypeId: string;
+  readonly options: readonly {
+    id: string;
+    code: string;
+    name: string;
+    values: readonly { id: string; code: string; label: string }[];
+  }[];
+  readonly variants: readonly {
+    id: string;
+    sku: string;
+    status: string;
+    optionValueIds: readonly string[];
+  }[];
 }
 
 export async function createCatalogProductType(
@@ -134,6 +155,10 @@ function asProduct(row: {
   status: ProductSummary['status'];
   publication_status: ProductSummary['publicationStatus'];
   version: string;
+  product_type_name?: string;
+  variant_count?: string;
+  sku_preview?: string | null;
+  updated_at?: string;
 }): ProductSummary {
   return {
     id: row.id,
@@ -142,6 +167,10 @@ function asProduct(row: {
     status: row.status,
     publicationStatus: row.publication_status,
     version: Number(row.version),
+    ...(row.product_type_name === undefined ? {} : { productTypeName: row.product_type_name }),
+    ...(row.variant_count === undefined ? {} : { variantCount: Number(row.variant_count) }),
+    ...(row.sku_preview === undefined ? {} : { skuPreview: row.sku_preview }),
+    ...(row.updated_at === undefined ? {} : { updatedAt: row.updated_at }),
   };
 }
 
@@ -454,12 +483,110 @@ export async function listCatalogProducts(
     status: ProductSummary['status'];
     publication_status: ProductSummary['publicationStatus'];
     version: string;
+    product_type_name: string;
+    variant_count: string;
+    sku_preview: string | null;
+    updated_at: string;
   }>`
-    select id, handle, title, status, publication_status, version::text
-    from catalog.products where organization_id = ${organizationId}
-    order by updated_at desc, id desc
+    select product.id, product.handle, product.title, product.status, product.publication_status,
+      product.version::text, product_type.name as product_type_name,
+      count(variant.id)::text as variant_count,
+      min(variant.sku) as sku_preview,
+      product.updated_at::text
+    from catalog.products product
+    join catalog.product_types product_type
+      on product_type.id=product.product_type_id and product_type.organization_id=product.organization_id
+    left join catalog.product_variants variant
+      on variant.product_id=product.id and variant.organization_id=product.organization_id
+    where product.organization_id = ${organizationId}
+    group by product.id,product_type.name
+    order by product.updated_at desc, product.id desc
   `.execute(db);
   return result.rows.map(asProduct);
+}
+
+/** Tenant-scoped operational read model for the Admin Product workspace. */
+export async function getCatalogProductWorkspace(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  productId: string,
+): Promise<CatalogProductWorkspace | undefined> {
+  const product = await sql<{
+    id: string;
+    handle: string;
+    title: string;
+    description: string | null;
+    status: ProductSummary['status'];
+    publication_status: ProductSummary['publicationStatus'];
+    version: string;
+    product_type_id: string;
+    product_type_name: string;
+    updated_at: string;
+  }>`
+    select product.id::text,product.handle,product.title,product.description,product.status,
+      product.publication_status,product.version::text,product.product_type_id::text,
+      product_type.name as product_type_name,product.updated_at::text
+    from catalog.products product
+    join catalog.product_types product_type
+      on product_type.id=product.product_type_id and product_type.organization_id=product.organization_id
+    where product.organization_id=${organizationId} and product.id=${productId}::uuid
+  `.execute(db);
+  const row = product.rows[0];
+  if (!row) return undefined;
+
+  const [axes, values, variants] = await Promise.all([
+    sql<{ id: string; code: string; name: string }>`
+      select id::text,code,name from catalog.product_option_axes
+      where organization_id=${organizationId} and product_id=${productId}::uuid and status='ACTIVE'
+      order by position,id
+    `.execute(db),
+    sql<{ id: string; option_axis_id: string; code: string; label: string }>`
+      select value.id::text,value.option_axis_id::text,value.code,value.display_value as label
+      from catalog.product_option_values value
+      join catalog.product_option_axes axis
+        on axis.id=value.option_axis_id and axis.organization_id=value.organization_id
+      where value.organization_id=${organizationId} and axis.product_id=${productId}::uuid
+        and value.status='ACTIVE' and axis.status='ACTIVE'
+      order by value.position,value.id
+    `.execute(db),
+    sql<{ id: string; sku: string; status: string; option_value_ids: string[] }>`
+      select variant.id::text,variant.sku,variant.status,
+        coalesce(array_agg(link.option_value_id::text order by link.option_value_id)
+          filter (where link.option_value_id is not null),'{}') as option_value_ids
+      from catalog.product_variants variant
+      left join catalog.variant_option_values link on link.variant_id=variant.id
+      where variant.organization_id=${organizationId} and variant.product_id=${productId}::uuid
+      group by variant.id,variant.sku,variant.status
+      order by variant.sku,variant.id
+    `.execute(db),
+  ]);
+
+  return {
+    id: row.id,
+    handle: row.handle,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    publicationStatus: row.publication_status,
+    version: Number(row.version),
+    productTypeId: row.product_type_id,
+    productTypeName: row.product_type_name,
+    variantCount: variants.rows.length,
+    skuPreview: variants.rows[0]?.sku ?? null,
+    updatedAt: row.updated_at,
+    options: axes.rows.map((axis) => ({
+      ...axis,
+      values: values.rows
+        .filter((value) => value.option_axis_id === axis.id)
+        .map(({ id, code, label }) => ({ id, code, label })),
+    })),
+    variants: variants.rows.map((variant) => ({
+      id: variant.id,
+      sku: variant.sku,
+      status: variant.status,
+      optionValueIds: variant.option_value_ids,
+    })),
+  };
 }
 
 export interface StorefrontProduct {

@@ -13,6 +13,7 @@ import {
   addCustomerAddress,
   addCustomerPhone,
   findCustomerDuplicateCandidates,
+  listCustomers,
 } from './customers.js';
 import {
   createGeographyNode,
@@ -165,6 +166,14 @@ describe('commercial foundation invariants', () => {
       isPrimary: true,
     });
     await addCustomerPhone(database.db, { ...fixture, customerId: two.id, phone: '+01700000000' });
+    await expect(listCustomers(database.db, fixture.organizationId, 'First')).resolves.toEqual([
+      expect.objectContaining({
+        id: one.id,
+        primaryPhone: '01700 000000',
+        orderCount: 0,
+        totalSpend: '0',
+      }),
+    ]);
     expect(
       await findCustomerDuplicateCandidates(database.db, {
         organizationId: fixture.organizationId,

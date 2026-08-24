@@ -19,6 +19,11 @@ export interface CustomerSummary {
   readonly displayName: string;
   readonly status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'MERGED' | 'ANONYMIZED';
   readonly version: number;
+  readonly primaryPhone?: string | null;
+  readonly primaryEmail?: string | null;
+  readonly orderCount?: number;
+  readonly totalSpend?: string;
+  readonly lastOrderAt?: string | null;
 }
 
 function normalizePhone(value: string): string {
@@ -43,6 +48,11 @@ function toCustomer(row: {
   display_name: string;
   status: CustomerSummary['status'];
   version: string;
+  primary_phone?: string | null;
+  primary_email?: string | null;
+  order_count?: string;
+  total_spend?: string;
+  last_order_at?: string | null;
 }): CustomerSummary {
   return {
     id: row.id,
@@ -50,6 +60,11 @@ function toCustomer(row: {
     displayName: row.display_name,
     status: row.status,
     version: Number(row.version),
+    primaryPhone: row.primary_phone ?? null,
+    primaryEmail: row.primary_email ?? null,
+    orderCount: Number(row.order_count ?? 0),
+    totalSpend: row.total_spend ?? '0',
+    lastOrderAt: row.last_order_at ?? null,
   };
 }
 
@@ -120,12 +135,32 @@ export async function listCustomers(
     display_name: string;
     status: CustomerSummary['status'];
     version: string;
+    primary_phone: string | null;
+    primary_email: string | null;
+    order_count: string;
+    total_spend: string;
+    last_order_at: string | null;
   }>`
-    select id, customer_number, display_name, status, version::text
-    from customers.customers
-    where organization_id = ${organizationId}
-      and (${search?.trim() || null}::text is null or lower(display_name) like ${`%${search?.trim().toLocaleLowerCase() ?? ''}%`})
-    order by updated_at desc, id desc
+    select customer.id,customer.customer_number,customer.display_name,customer.status,
+      customer.version::text,
+      (select phone.raw_value from customers.customer_phones phone
+        where phone.customer_id=customer.id
+        order by phone.is_primary desc,phone.created_at,phone.id limit 1) as primary_phone,
+      (select email.raw_value from customers.customer_emails email
+        where email.customer_id=customer.id
+        order by email.is_primary desc,email.created_at,email.id limit 1) as primary_email,
+      (select count(*)::text from orders.orders order_row
+        where order_row.organization_id=customer.organization_id and order_row.customer_id=customer.id) as order_count,
+      (select coalesce(sum(order_row.total_amount) filter (where order_row.order_status<>'CANCELLED'),0)::text
+        from orders.orders order_row
+        where order_row.organization_id=customer.organization_id and order_row.customer_id=customer.id) as total_spend,
+      (select max(order_row.created_at)::text from orders.orders order_row
+        where order_row.organization_id=customer.organization_id and order_row.customer_id=customer.id) as last_order_at
+    from customers.customers customer
+    where customer.organization_id = ${organizationId}
+      and (${search?.trim() || null}::text is null or lower(customer.display_name) like ${`%${search?.trim().toLocaleLowerCase() ?? ''}%`}
+        or lower(customer.customer_number) like ${`%${search?.trim().toLocaleLowerCase() ?? ''}%`})
+    order by customer.updated_at desc, customer.id desc
     limit 100
   `.execute(db);
   return result.rows.map(toCustomer);

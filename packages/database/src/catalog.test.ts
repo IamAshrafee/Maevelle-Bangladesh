@@ -6,6 +6,7 @@ import {
   createCatalogCategory,
   createCatalogProduct,
   createCatalogVariant,
+  getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
   moveCatalogCategory,
   publishCatalogProduct,
@@ -80,6 +81,22 @@ describe('catalog invariants', () => {
       optionValueIds: [valueId],
     });
     expect(variant.sku).toMatch(/^HAT-/);
+    await expect(
+      getCatalogProductWorkspace(database.db, fixture.organizationId, product.id),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: product.id,
+        productTypeName: 'Hat',
+        variantCount: 1,
+        options: [
+          expect.objectContaining({
+            name: 'Size',
+            values: [expect.objectContaining({ label: 'M' })],
+          }),
+        ],
+        variants: [expect.objectContaining({ id: variant.id, sku: variant.sku })],
+      }),
+    );
     const inventoryItem = await sql<{ variant_id: string }>`
       select variant_id from inventory.inventory_items
       where organization_id = ${fixture.organizationId} and variant_id = ${variant.id}

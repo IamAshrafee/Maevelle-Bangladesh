@@ -10,6 +10,7 @@ import {
   createProductOptionValue,
   createCatalogProduct,
   createCatalogVariant,
+  getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
   listStorefrontCatalogProducts,
   listCatalogProducts,
@@ -125,6 +126,21 @@ export function registerCatalogRoutes(
     const context = await requireCapability(database, auth, request.headers, 'catalog.view');
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCatalogProducts(database.db, context.organizationId) };
+  });
+
+  app.get('/admin/catalog/products/:productId', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const product = await getCatalogProductWorkspace(
+      database.db,
+      context.organizationId,
+      (request.params as { productId: string }).productId,
+    );
+    if (!product)
+      return reply.code(404).send({
+        error: { code: 'NOT_FOUND', message: 'Product was not found in this organization.' },
+      });
+    return { data: product };
   });
 
   app.post(
