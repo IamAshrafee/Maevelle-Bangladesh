@@ -101,13 +101,14 @@ export function FinanceConsole({ section }: { section: Section }) {
   }, []);
   const submit = (path: string) => async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const form = event.currentTarget;
     try {
-      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const values = Object.fromEntries(new FormData(form));
       await request(path, {
         method: 'POST',
         body: JSON.stringify({ ...values, idempotencyKey: crypto.randomUUID() }),
       });
-      event.currentTarget.reset();
+      form.reset();
       setMessage('Saved.');
       await reload();
     } catch (error) {

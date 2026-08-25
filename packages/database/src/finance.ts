@@ -189,12 +189,19 @@ export async function createFinancialAccount(
       );
       if (r.rows[0]) return r.rows[0];
     }
-    const r = await sql<{
-      id: string;
-    }>`insert into finance.financial_accounts (organization_id,account_number,name,account_type,currency_code,reference_label) values (${input.organizationId},${input.accountNumber},${input.name},${input.accountType},${input.currencyCode},${input.referenceLabel ?? null}) returning id`.execute(
-      tx,
-    );
-    const id = r.rows[0]?.id;
+    let id: string;
+    try {
+      const r = await sql<{
+        id: string;
+      }>`insert into finance.financial_accounts (organization_id,account_number,name,account_type,currency_code,reference_label) values (${input.organizationId},${input.accountNumber},${input.name},${input.accountType},${input.currencyCode},${input.referenceLabel ?? null}) returning id`.execute(
+        tx,
+      );
+      id = r.rows[0]?.id as string;
+    } catch (error) {
+      if ((error as { code?: string }).code === '23505')
+        throw new FinanceDomainError('CONFLICT', 'Financial account with this number already exists.');
+      throw error;
+    }
     if (!id) throw new Error('Financial account was not created.');
     if (input.openingBalance && Number(input.openingBalance) !== 0) {
       const amount = signed(input.openingBalance);
