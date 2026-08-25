@@ -30,6 +30,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { StockWorklist } from '@/components/inventory/stock-worklist';
+import { AdjustmentWorkspace } from '@/components/inventory/adjustment-workspace';
+import { WarehouseWorklist } from '@/components/inventory/warehouse-worklist';
+import { TransfersWorklist } from '@/components/inventory/transfers-worklist';
+import { StocktakeWorkspace } from '@/components/inventory/stocktake-workspace';
 
 type WarehouseTransfer = {
   id: string;
@@ -404,60 +409,9 @@ export function InventoryConsole({
         ) : null}
         {section === 'stock' ? (
           <>
-            <Card>
-              <CardHeader>
-                <CardTitle>Controlled adjustment</CardTitle>
-                <CardDescription>
-                  Enter a delta, never a replacement balance. Negative SELLABLE adjustments cannot
-                  exceed Available To Sell.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="grid gap-3 md:grid-cols-5" onSubmit={adjust}>
-                  <div>
-                    <Label htmlFor="variant">Variant ID</Label>
-                    <Input id="variant" name="variantId" required />
-                  </div>
-                  <div>
-                    <Label>Location</Label>
-                    <Select
-                      value={locationId}
-                      onValueChange={(value) => setLocationId(value ?? '')}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose Location" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {locations.map((location) => (
-                          <SelectItem key={location.id} value={location.id}>
-                            {location.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="condition">Condition</Label>
-                    <Input id="condition" name="condition" defaultValue="SELLABLE" required />
-                  </div>
-                  <div>
-                    <Label htmlFor="quantity">Delta</Label>
-                    <Input id="quantity" name="quantityDelta" placeholder="10 or -2" required />
-                  </div>
-                  <div>
-                    <Label htmlFor="reason">Reason</Label>
-                    <Input id="reason" name="reasonCode" defaultValue="OPENING_BALANCE" required />
-                  </div>
-                  <div className="md:col-span-5">
-                    <Label htmlFor="note">Note</Label>
-                    <Input id="note" name="note" />
-                  </div>
-                  <Button className="md:col-span-5" type="submit" disabled={!locationId}>
-                    Post adjustment
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+            <div className="mb-6">
+              <AdjustmentWorkspace locations={locations} onSuccess={() => void reload()} />
+            </div>
             <Card>
               <CardHeader>
                 <CardTitle>Condition movement</CardTitle>
@@ -493,235 +447,26 @@ export function InventoryConsole({
                 </form>
               </CardContent>
             </Card>
+            <div className="mt-6">
+              <h2 className="text-xl font-semibold tracking-tight mb-4">Current Stock Balances</h2>
+              <StockWorklist balances={balances} />
+            </div>
           </>
         ) : null}
         {section === 'transfers' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Create an internal transfer</CardTitle>
-              <CardDescription>
-                A transfer starts as a Draft. Approval, dispatch, and receipt remain explicit
-                API-backed lifecycle steps.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="grid gap-3 md:grid-cols-2" onSubmit={createTransfer}>
-                <div>
-                  <Label htmlFor="transfer-source">Source Location</Label>
-                  <Select name="sourceLocationId" required>
-                    <SelectTrigger id="transfer-source">
-                      <SelectValue placeholder="Choose source" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.map((location) => (
-                        <SelectItem key={location.id} value={location.id}>
-                          {location.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="transfer-destination">Destination Location</Label>
-                  <Select name="destinationLocationId" required>
-                    <SelectTrigger id="transfer-destination">
-                      <SelectValue placeholder="Choose destination" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.map((location) => (
-                        <SelectItem key={location.id} value={location.id}>
-                          {location.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="transfer-variant">Variant ID</Label>
-                  <Input id="transfer-variant" name="variantId" required />
-                </div>
-                <div>
-                  <Label htmlFor="transfer-quantity">Quantity</Label>
-                  <Input id="transfer-quantity" name="quantity" required />
-                </div>
-                <div className="md:col-span-2">
-                  <Label htmlFor="transfer-notes">Notes</Label>
-                  <Input id="transfer-notes" name="notes" />
-                </div>
-                <Button className="md:col-span-2" type="submit">
-                  Create Draft Transfer
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        ) : null}
-        {section === 'transfers' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Transfer queue</CardTitle>
-              <CardDescription>
-                Dispatch reduces source availability only after approval; receiving posts stock to
-                the destination.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {transfers.map((transfer) => (
-                <div
-                  key={transfer.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
-                >
-                  <div>
-                    <div className="font-medium">{transfer.transferNumber}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {transfer.lines.length} line(s) · {transfer.status}
-                    </div>
-                  </div>
-                  {['DRAFT', 'READY', 'IN_TRANSIT', 'PARTIALLY_RECEIVED'].includes(
-                    transfer.status,
-                  ) ? (
-                    <div className="flex gap-2">
-                      <Button type="button" onClick={() => void progressTransfer(transfer)}>
-                        {transfer.status === 'DRAFT'
-                          ? 'Approve'
-                          : transfer.status === 'READY'
-                            ? 'Dispatch'
-                            : 'Receive remaining'}
-                      </Button>
-                      {transfer.status === 'DRAFT' ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => void cancelTransfer(transfer)}
-                        >
-                          Cancel
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <Badge variant="secondary">{transfer.status}</Badge>
-                  )}
-                </div>
-              ))}
-              {transfers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No transfers yet.</p>
-              ) : null}
-            </CardContent>
-          </Card>
+          <TransfersWorklist transfers={transfers} locations={locations} reload={reload} />
         ) : null}
         {section === 'stocktakes' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Stocktake workflow</CardTitle>
-              <CardDescription>
-                Snapshot stock, record every count against the current version, then post one
-                immutable correction.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-64">
-                  <Label>Location</Label>
-                  <Select value={locationId} onValueChange={(value) => setLocationId(value ?? '')}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose Location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.map((location) => (
-                        <SelectItem key={location.id} value={location.id}>
-                          {location.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button type="button" disabled={!locationId} onClick={() => void beginStocktake()}>
-                  Start Stocktake
-                </Button>
-              </div>
-              <form className="grid gap-3 md:grid-cols-3" onSubmit={countStocktakeLine}>
-                <div>
-                  <Label htmlFor="stocktake-id">Stocktake ID</Label>
-                  <Input
-                    id="stocktake-id"
-                    name="stocktakeId"
-                    value={stocktakeId}
-                    onChange={(event) => setStocktakeId(event.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="inventory-item-id">Inventory Item ID</Label>
-                  <Input id="inventory-item-id" name="inventoryItemId" required />
-                </div>
-                <div>
-                  <Label htmlFor="counted-quantity">Counted quantity</Label>
-                  <Input id="counted-quantity" name="countedQuantity" required />
-                </div>
-                <Button className="md:col-span-3" type="submit">
-                  Save Count
-                </Button>
-              </form>
-              {stocktakeWorkspace ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Inventory Item</TableHead>
-                      <TableHead>System snapshot</TableHead>
-                      <TableHead>Counted</TableHead>
-                      <TableHead>Discrepancy</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stocktakeWorkspace.lines.map((line) => (
-                      <TableRow key={line.inventoryItemId}>
-                        <TableCell className="font-mono text-xs">{line.inventoryItemId}</TableCell>
-                        <TableCell>{line.expectedQuantity}</TableCell>
-                        <TableCell>{line.countedQuantity ?? 'Not counted'}</TableCell>
-                        <TableCell>
-                          {line.countedQuantity === null
-                            ? '—'
-                            : String(Number(line.countedQuantity) - Number(line.expectedQuantity))}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : null}
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={!stocktakeId}
-                onClick={() => void postStocktake()}
-              >
-                Post Counted Stocktake
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="mt-6">
+            <StocktakeWorkspace locations={locations} />
+          </div>
         ) : null}
         {section === 'warehouses' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Location list</CardTitle>
-              <CardDescription>
-                Locations carrying stock remain historical records and are retired rather than
-                deleted.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2">
-              {locations.map((location) => (
-                <div key={location.id} className="rounded-md border p-3 text-sm">
-                  <span className="font-medium">{location.name}</span> · {location.code} ·{' '}
-                  {location.locationType} · <Badge variant="secondary">{location.status}</Badge>
-                  <div className="mt-1 text-muted-foreground">
-                    {location.capabilities.join(', ')}
-                  </div>
-                </div>
-              ))}
-              {locations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No locations yet.</p>
-              ) : null}
-            </CardContent>
-          </Card>
+          <div className="mt-6">
+            <h2 className="text-xl font-semibold tracking-tight mb-4">Location list</h2>
+            <p className="text-muted-foreground mb-6">Locations carrying stock remain historical records and are retired rather than deleted.</p>
+            <WarehouseWorklist locations={locations} />
+          </div>
         ) : null}
         {section === 'history' ? (
           <Card>

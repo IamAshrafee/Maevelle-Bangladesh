@@ -1,8 +1,10 @@
 'use client';
 
-import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ApiEnvelope } from '@maevelle/contracts';
+import { NotificationsWorkspace } from '@/components/notifications/notifications-workspace';
+import { IntegrationsWorkspace } from '@/components/integrations/integrations-workspace';
+const toast = { success: console.log, error: console.error, promise: console.log, info: console.log };
 
 type Notification = {
   id: string;
@@ -40,148 +42,54 @@ async function request<T>(path: string, init?: RequestInit) {
   return response.json() as Promise<T>;
 }
 
-function OperationalTable({ title, rows }: { title: string; rows: readonly Row[] }) {
-  const keys = rows[0]
-    ? Object.keys(rows[0])
-        .filter((key) => !key.includes('secret'))
-        .slice(0, 7)
-    : [];
-  return (
-    <section>
-      <h2>{title}</h2>
-      {rows.length === 0 ? <p className="muted">No {title.toLowerCase()} records.</p> : null}
-      {rows.length > 0 ? (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                {keys.map((key) => (
-                  <th key={key}>{key.replaceAll('_', ' ')}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={row.id ?? index}>
-                  {keys.map((key) => (
-                    <td key={key}>
-                      {Array.isArray(row[key]) ? row[key].join(', ') : String(row[key] ?? '—')}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 export function NotificationsConsole({ integrations = false }: { integrations?: boolean }) {
   const [notifications, setNotifications] = useState<readonly Notification[]>([]);
   const [integrationData, setIntegrationData] = useState<Integrations>();
-  const [filter, setFilter] = useState('ALL');
-  const [message, setMessage] = useState('Loading…');
+  const [loading, setLoading] = useState(true);
+
   const reload = useCallback(async () => {
+    setLoading(true);
     try {
-      if (integrations)
+      if (integrations) {
         setIntegrationData((await request<ApiEnvelope<Integrations>>('/admin/integrations')).data);
-      else
-        setNotifications(
-          (await request<ApiEnvelope<readonly Notification[]>>('/admin/notifications')).data,
-        );
-      setMessage('');
+      } else {
+        setNotifications((await request<ApiEnvelope<readonly Notification[]>>('/admin/notifications')).data);
+      }
     } catch {
-      setMessage('Unable to load this protected operational view.');
+      toast.error('Unable to load this protected operational view.');
+    } finally {
+      setLoading(false);
     }
   }, [integrations]);
+
   useEffect(() => {
     void reload();
   }, [reload]);
-  const visible = useMemo(
-    () =>
-      notifications.filter(
-        (item) => filter === 'ALL' || item.status === filter || item.channel === filter,
-      ),
-    [filter, notifications],
-  );
+
   return (
-    <main>
-      <section className="shell">
-        <p className="eyebrow">Operations</p>
-        <h1>{integrations ? 'Integrations' : 'Notifications'}</h1>
-        <nav>
-          <Link href="/notifications">Notifications</Link> ·{' '}
-          <Link href="/integrations">Integrations</Link> · <Link href="/reviews">Reviews</Link>
-        </nav>
-        {message ? <p role="status">{message}</p> : null}
-        {integrations && integrationData ? (
-          <>
-            <OperationalTable title="Health" rows={integrationData.health} />
-            <OperationalTable title="Accounts" rows={integrationData.accounts} />
-            <OperationalTable
-              title="Operations and reconciliation"
-              rows={integrationData.operations}
-            />
-            <OperationalTable title="Provider events" rows={integrationData.providerEvents} />
-            <OperationalTable title="Exceptions" rows={integrationData.exceptions} />
-            <OperationalTable title="External mappings" rows={integrationData.mappings} />
-            <OperationalTable title="Webhook subscriptions" rows={integrationData.webhooks} />
-            <OperationalTable title="Webhook deliveries" rows={integrationData.webhookDeliveries} />
-          </>
-        ) : null}
-        {!integrations ? (
-          <>
-            <label>
-              Filter{' '}
-              <select value={filter} onChange={(event) => setFilter(event.target.value)}>
-                <option>ALL</option>
-                <option>IN_APP</option>
-                <option>EMAIL</option>
-                <option>PENDING</option>
-                <option>SENT</option>
-                <option>READ</option>
-                <option>FAILED</option>
-                <option>SUPPRESSED</option>
-              </select>
-            </label>
-            {visible.length === 0 && !message ? <p>No matching notifications.</p> : null}
-            {visible.map((item) => (
-              <article key={item.id}>
-                <h2>{item.notification_type}</h2>
-                <p>
-                  {item.channel} · {item.status} · revision {item.revision_number ?? 'missing'} ·{' '}
-                  {new Date(item.created_at).toLocaleString()}
-                </p>
-                <p>{item.rendered_body}</p>
-                <p className="muted">Source: {item.source_domain}</p>
-                {item.attempts?.map((attempt) => (
-                  <p key={attempt.attemptNumber} className="muted">
-                    Attempt {attempt.attemptNumber}: {attempt.status} via {attempt.provider}
-                    {attempt.errorCode ? ` (${attempt.errorCode})` : ''}
-                  </p>
-                ))}
-                {item.channel === 'IN_APP' && item.status !== 'READ' ? (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await request(`/admin/notifications/${item.id}/read`, { method: 'POST' });
-                        await reload();
-                      } catch {
-                        setMessage('Unable to mark the notification as read.');
-                      }
-                    }}
-                  >
-                    Mark read
-                  </button>
-                ) : null}
-              </article>
-            ))}
-          </>
-        ) : null}
-      </section>
+    <main className="flex h-[calc(100vh-4rem)]">
+      <div className="flex-1 flex flex-col min-w-0 p-6 overflow-hidden">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight mb-2">
+            {integrations ? 'Integrations' : 'Notifications'}
+          </h1>
+          <p className="text-muted-foreground mb-6">
+            {integrations 
+              ? 'Manage third-party connectors, webhooks, and background sync operations.'
+              : 'Event-driven messaging hub for Email, SMS, and Webhook triggers.'}
+          </p>
+        </div>
+        
+        {loading ? (
+          <div className="flex items-center justify-center p-12 text-muted-foreground">Loading...</div>
+        ) : (
+          integrations ? (
+            <IntegrationsWorkspace integrationData={integrationData} />
+          ) : (
+            <NotificationsWorkspace notifications={notifications as any[]} reload={reload} />
+          )
+        )}
+      </div>
     </main>
   );
 }

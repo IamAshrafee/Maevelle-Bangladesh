@@ -25,6 +25,7 @@ import {
   createRefund,
   getPayment,
   getOrderPaymentInstructions,
+  getOrderPaymentLedger,
   getPaymentAttempt,
   listPaymentMethods,
   listPayments,
@@ -470,6 +471,21 @@ export function registerOrderRoutes(
           organizationId: active.organizationId,
           orderId: (request.params as { orderId: string }).orderId,
         }),
+      };
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
+  app.get('/admin/orders/:orderId/ledger', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      return {
+        data: await getOrderPaymentLedger(
+          database.db,
+          active.organizationId,
+          (request.params as { orderId: string }).orderId,
+        ),
       };
     } catch (caught) {
       return sendError(reply, caught);

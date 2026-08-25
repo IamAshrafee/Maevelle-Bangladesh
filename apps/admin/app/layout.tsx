@@ -7,6 +7,8 @@ import { AdminShell } from '@/components/admin-shell';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: {
     default: 'Maevelle Admin',

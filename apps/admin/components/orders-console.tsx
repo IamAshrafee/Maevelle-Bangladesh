@@ -18,6 +18,15 @@ import {
 
 import type { ApiEnvelope } from '@maevelle/contracts';
 import { StatusBadge } from '@/components/status-badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { PaymentLedgerWorkspace } from '@/components/orders/payment-ledger-workspace';
+import { FulfillmentCreationWorkspace } from '@/components/orders/fulfillment-creation-workspace';
 
 interface OrderSummary {
   id: string;
@@ -472,9 +481,7 @@ export function OrdersConsole() {
                   Refunded<strong>{money(selected.payment.refunded)}</strong>
                 </span>
               </div>
-              <Link className="row-link" href="/payments">
-                Review Payment workspace <ArrowRight />
-              </Link>
+              <PaymentLedgerWorkspace orderId={selected.id} expectedAmount={selected.payment.expected} />
             </section>
             <section className="detail-section">
               <h3>
@@ -504,48 +511,12 @@ export function OrdersConsole() {
               </div>
             </section>
             {['PENDING', 'CONFIRMED'].includes(selected.status) && locations.length ? (
-              <details className="detail-command">
-                <summary>Create Fulfillment</summary>
-                <p>
-                  Choose reserved quantities. Physical stock changes only when Fulfillment is
-                  dispatched.
-                </p>
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void createFulfillment(event.currentTarget);
-                  }}
-                >
-                  <label>
-                    Stock location
-                    <select name="locationId" required defaultValue="">
-                      <option disabled value="">
-                        Choose location
-                      </option>
-                      {locations.map((location) => (
-                        <option key={location.id} value={location.id}>
-                          {location.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {selected.lines.map((line) => (
-                    <label key={line.id}>
-                      {line.productTitle} · ordered {line.quantity}
-                      <input
-                        defaultValue={line.quantity}
-                        inputMode="decimal"
-                        min="0"
-                        name={`quantity-${line.id}`}
-                        step="0.000001"
-                      />
-                    </label>
-                  ))}
-                  <button disabled={busy} type="submit">
-                    Create Fulfillment
-                  </button>
-                </form>
-              </details>
+              <FulfillmentCreationWorkspace 
+                orderId={selected.id}
+                lines={selected.lines}
+                locations={locations}
+                onCreated={() => void load()}
+              />
             ) : null}
             <footer className="detail-actions">
               {['PENDING', 'CONFIRMED'].includes(selected.status) ? (

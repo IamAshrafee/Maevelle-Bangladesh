@@ -63,6 +63,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
+import { SupplierWorklist } from '@/components/procurement/supplier-worklist';
+import { PurchaseWorklist } from '@/components/procurement/purchase-worklist';
+import { ShipmentWorklist } from '@/components/procurement/shipment-worklist';
+import { ReceiptWorklist } from '@/components/procurement/receipt-worklist';
+
 export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
   const [suppliers, setSuppliers] = useState<readonly Supplier[]>([]);
   const [purchases, setPurchases] = useState<readonly Purchase[]>([]);
@@ -243,195 +248,24 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
         </p>
         {message ? <p role="status">{message}</p> : null}
         {screen === 'suppliers' ? (
-          <>
-            <form onSubmit={(event) => void createSupplier(event)}>
-              <label>
-                Code <input name="code" required />
-              </label>
-              <label>
-                Supplier name <input name="name" required />
-              </label>
-              <button type="submit">Create supplier</button>
-            </form>
-            {suppliers.map((supplier) => (
-              <article key={supplier.id}>
-                <h2>{supplier.name}</h2>
-                <p>
-                  {supplier.code} · {supplier.status}
-                </p>
-                <p>Supplier ID: {supplier.id}</p>
-              </article>
-            ))}
-          </>
+          <div className="mt-8">
+            <SupplierWorklist suppliers={suppliers} reload={reload} />
+          </div>
         ) : null}
         {screen === 'purchases' ? (
-          <>
-            <form onSubmit={(event) => void createPurchase(event)}>
-              <label>
-                Supplier ID <input name="supplierId" required />
-              </label>
-              <label>
-                Currency
-                <select defaultValue="CNY" name="currencyCode">
-                  <option value="BDT">BDT</option>
-                  <option value="CNY">CNY</option>
-                  <option value="USD">USD</option>
-                </select>
-              </label>
-              <button type="submit">Create draft purchase</button>
-            </form>
-            <form onSubmit={(event) => void addPurchaseLine(event)}>
-              <label>
-                Draft Purchase ID <input name="purchaseId" required />
-              </label>
-              <label>
-                Catalog Variant ID <input name="variantId" required />
-              </label>
-              <label>
-                Quantity{' '}
-                <input
-                  defaultValue="1"
-                  min="0.000001"
-                  name="quantity"
-                  required
-                  step="0.000001"
-                  type="number"
-                />
-              </label>
-              <label>
-                Unit price{' '}
-                <input
-                  defaultValue="0"
-                  min="0"
-                  name="unitPrice"
-                  required
-                  step="0.0001"
-                  type="number"
-                />
-              </label>
-              <button type="submit">Add purchase line</button>
-            </form>
-            {purchases.map((purchase) => (
-              <article key={purchase.id}>
-                <h2>{purchase.purchaseNumber}</h2>
-                <p>
-                  {purchase.supplierName} · {purchase.currencyCode} · {purchase.status}
-                </p>
-                <p>Purchase ID: {purchase.id}</p>
-                {purchase.lines.map((line) => (
-                  <p key={line.id}>
-                    {line.sku} · {line.quantity} × {line.unitPrice} · Purchase Line ID: {line.id}
-                  </p>
-                ))}
-                {purchase.status === 'DRAFT' ? (
-                  <button onClick={() => void placePurchase(purchase)} type="button">
-                    Place purchase
-                  </button>
-                ) : null}
-              </article>
-            ))}
-          </>
+          <div className="mt-8">
+            <PurchaseWorklist purchases={purchases} reload={reload} />
+          </div>
         ) : null}
         {screen === 'shipments' ? (
-          <>
-            <form onSubmit={(event) => void createShipment(event)}>
-              <label>
-                Receiving Location ID <input name="receivingLocationId" required />
-              </label>
-              <label>
-                Purchase Line ID <input name="purchaseLineId" required />
-              </label>
-              <label>
-                Quantity{' '}
-                <input
-                  defaultValue="1"
-                  min="0.000001"
-                  name="quantity"
-                  required
-                  step="0.000001"
-                  type="number"
-                />
-              </label>
-              <label>
-                Transport
-                <select defaultValue="SEA" name="transportMode">
-                  <option value="AIR">Air</option>
-                  <option value="SEA">Sea</option>
-                  <option value="ROAD">Road</option>
-                  <option value="RAIL">Rail</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </label>
-              <button type="submit">Plan inbound shipment</button>
-            </form>
-            {shipments.map((shipment) => (
-              <article key={shipment.id}>
-                <h2>{shipment.shipmentNumber}</h2>
-                <p>
-                  {shipment.receivingLocationName} · {shipment.status} · {shipment.receivingStatus}
-                </p>
-                <p>Shipment ID: {shipment.id}</p>
-                {shipment.allocations.map((allocation) => (
-                  <p key={allocation.id}>
-                    {allocation.sku} · {allocation.supplierName} · planned{' '}
-                    {allocation.allocatedQuantity} · received {allocation.receivedQuantity} ·
-                    Allocation ID: {allocation.id}
-                  </p>
-                ))}
-                {shipment.status !== 'ARRIVED' && shipment.status !== 'CANCELLED' ? (
-                  <button onClick={() => void arrive(shipment)} type="button">
-                    Mark arrived
-                  </button>
-                ) : null}
-              </article>
-            ))}
-          </>
+          <div className="mt-8">
+            <ShipmentWorklist shipments={shipments} reload={reload} />
+          </div>
         ) : null}
         {screen === 'receiving' ? (
-          <>
-            <form onSubmit={(event) => void postReceipt(event)}>
-              <label>
-                Arrived Shipment ID <input name="shipmentId" required />
-              </label>
-              <label>
-                Shipment Allocation ID <input name="shipmentAllocationId" required />
-              </label>
-              <label>
-                Condition
-                <select defaultValue="SELLABLE" name="condition">
-                  <option value="SELLABLE">Sellable</option>
-                  <option value="DAMAGED">Damaged</option>
-                  <option value="QUARANTINE">Quarantine</option>
-                  <option value="INSPECTION">Inspection</option>
-                </select>
-              </label>
-              <label>
-                Counted Quantity{' '}
-                <input
-                  defaultValue="1"
-                  min="0.000001"
-                  name="quantity"
-                  required
-                  step="0.000001"
-                  type="number"
-                />
-              </label>
-              <button type="submit">Post inbound receipt</button>
-            </form>
-            {receipts.map((receipt) => (
-              <article key={receipt.id}>
-                <h2>{receipt.receiptNumber}</h2>
-                <p>
-                  {receipt.status} · Shipment {receipt.shipmentId}
-                </p>
-                {receipt.lines.map((line, index) => (
-                  <p key={`${receipt.id}-${index}`}>
-                    {line.condition} · {line.quantity}
-                  </p>
-                ))}
-              </article>
-            ))}
-          </>
+          <div className="mt-8">
+            <ReceiptWorklist receipts={receipts} />
+          </div>
         ) : null}
       </section>
     </main>

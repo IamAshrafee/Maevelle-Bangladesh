@@ -2,6 +2,7 @@ import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent } from './platform.js';
+import { getPublicSizeGuideForProduct } from './sizing.js';
 
 export class CatalogDomainError extends Error {
   public readonly code:
@@ -42,6 +43,8 @@ export interface CatalogProductWorkspace extends ProductSummary {
     status: string;
     optionValueIds: readonly string[];
   }[];
+  readonly media?: any[];
+  readonly sizeGuide?: any;
 }
 
 export async function createCatalogProductType(
@@ -534,7 +537,7 @@ export async function getCatalogProductWorkspace(
   const row = product.rows[0];
   if (!row) return undefined;
 
-  const [axes, values, variants] = await Promise.all([
+  const [axes, values, variants, media, sizeGuide] = await Promise.all([
     sql<{ id: string; code: string; name: string }>`
       select id::text,code,name from catalog.product_option_axes
       where organization_id=${organizationId} and product_id=${productId}::uuid and status='ACTIVE'
@@ -559,6 +562,15 @@ export async function getCatalogProductWorkspace(
       group by variant.id,variant.sku,variant.status
       order by variant.sku,variant.id
     `.execute(db),
+    sql<{ asset_id: string; role: string; position: number; variant_id: string | null; object_key: string; mime_type: string; alt_text: string | null }>`
+      select pm.asset_id::text, pm.role, pm.position, pm.variant_id::text, mo.object_key, mo.mime_type, ma.alt_text
+      from catalog.product_media pm
+      join media.media_assets ma on ma.id = pm.asset_id
+      join media.media_objects mo on mo.id = ma.current_object_id
+      where pm.organization_id=${organizationId} and pm.product_id=${productId}::uuid
+      order by pm.position
+    `.execute(db),
+    getPublicSizeGuideForProduct(db, organizationId, productId),
   ]);
 
   return {
@@ -586,6 +598,16 @@ export async function getCatalogProductWorkspace(
       status: variant.status,
       optionValueIds: variant.option_value_ids,
     })),
+    media: (media?.rows || []).map((m) => ({
+      assetId: m.asset_id,
+      role: m.role as 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM',
+      position: m.position,
+      variantId: m.variant_id,
+      url: `/api/admin/media/${m.asset_id}`,
+      mimeType: m.mime_type,
+      altText: m.alt_text,
+    })),
+    sizeGuide: sizeGuide || null,
   };
 }
 

@@ -35,6 +35,16 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
     readonly status: string;
     readonly optionValueIds: readonly string[];
   }[];
+  readonly media: readonly {
+    readonly assetId: string;
+    readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+    readonly position: number;
+    readonly variantId: string | null;
+    readonly url: string;
+    readonly mimeType: string;
+    readonly altText: string | null;
+  }[];
+  readonly sizeGuide: PublicSizeGuideDto | null;
 }
 
 export interface StorefrontProductDto {

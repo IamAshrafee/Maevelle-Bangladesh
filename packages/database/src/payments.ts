@@ -1038,3 +1038,38 @@ export async function listRefunds(
   );
   return Promise.all(ids.rows.map((row) => getRefund(db, organizationId, row.id)));
 }
+
+export async function getOrderPaymentLedger(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  orderId: string,
+): Promise<{
+  payments: readonly PaymentView[];
+  refunds: readonly RefundView[];
+  attempts: readonly PaymentAttemptView[];
+}> {
+  const paymentRecords = await sql<{ id: string }>`
+    select p.id from payments.payments p
+    join payments.payment_allocations a on a.payment_id = p.id
+    where p.organization_id = ${organizationId} and a.order_id = ${orderId}
+  `.execute(db);
+
+  const refundRecords = await sql<{ id: string }>`
+    select id from payments.refunds
+    where organization_id = ${organizationId} and order_id = ${orderId}
+  `.execute(db);
+
+  const attemptRecords = await sql<{ id: string }>`
+    select a.id from payments.payment_attempts a
+    join payments.payment_intents i on i.id = a.payment_intent_id
+    where a.organization_id = ${organizationId} and i.order_id = ${orderId}
+  `.execute(db);
+
+  const [payments, refunds, attempts] = await Promise.all([
+    Promise.all(paymentRecords.rows.map(r => getPayment(db, organizationId, r.id))),
+    Promise.all(refundRecords.rows.map(r => getRefund(db, organizationId, r.id))),
+    Promise.all(attemptRecords.rows.map(r => getPaymentAttempt(db, organizationId, r.id))),
+  ]);
+
+  return { payments, refunds, attempts };
+}

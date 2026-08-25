@@ -36,6 +36,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ProductMediaWorkspace } from '@/components/catalog/product-media-workspace';
+import { ProductSizingWorkspace } from '@/components/catalog/product-sizing-workspace';
 
 interface ProductType {
   id: string;
@@ -565,24 +567,15 @@ export function CatalogConsole() {
                 </>
               ) : null}
             </section>
-            <section className="product-setup-nav">
+            {workspace ? (
+               <div className="mt-8 border-t pt-8 space-y-8">
+                 <ProductMediaWorkspace product={workspace} onRefresh={() => void openProduct(selected)} />
+                 <ProductSizingWorkspace product={workspace} onRefresh={() => void openProduct(selected)} />
+               </div>
+            ) : null}
+            <section className="product-setup-nav mt-8">
               <h3>Product setup</h3>
-              <Link href="/media">
-                <Image />
-                <span>
-                  <strong>Media</strong>
-                  <small>Upload, preview, and associate images</small>
-                </span>
-                <ArrowRight />
-              </Link>
-              <Link href="/sizing">
-                <Ruler />
-                <span>
-                  <strong>Sizing</strong>
-                  <small>Size definitions and guide revisions</small>
-                </span>
-                <ArrowRight />
-              </Link>
+
               <Link href="/pricing">
                 <Tags />
                 <span>
