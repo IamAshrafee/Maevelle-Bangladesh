@@ -72,6 +72,7 @@ describe('API hardening foundation', () => {
         betterAuthSecret: 'x'.repeat(32),
         authEncryptionKey: Buffer.alloc(32).toString('base64'),
         authBaseUrl: 'https://admin.maevelle.example/api',
+        authTrustedOrigins: ['http://localhost:3000'],
         mediaStoragePath: 'var/media',
         mediaMaxUploadBytes: 1024,
       },

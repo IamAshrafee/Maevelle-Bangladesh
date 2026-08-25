@@ -35,6 +35,7 @@ export function createAuth(
     baseURL: config.authBaseUrl,
     basePath: '/auth',
     secret: config.betterAuthSecret,
+    trustedOrigins: config.authTrustedOrigins as string[],
     database: {
       db: database.db,
       type: 'postgres',

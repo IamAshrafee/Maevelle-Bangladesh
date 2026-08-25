@@ -22,6 +22,7 @@ const config: RuntimeConfig = {
   betterAuthSecret: 'test-only-better-auth-secret-that-is-long-enough',
   authEncryptionKey: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   authBaseUrl: 'http://localhost:3000',
+  authTrustedOrigins: ['http://localhost:3000'],
   mediaStoragePath: 'var/test-media',
   mediaMaxUploadBytes: 10 * 1024 * 1024,
 };
