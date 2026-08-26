@@ -1,8 +1,12 @@
 'use client';
 
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
-import type { ApiEnvelope } from '@maevelle/contracts';
+import type {
+  ApiEnvelope,
+  CatalogVariantChoiceDto,
+  WarehouseLocationDto,
+} from '@maevelle/contracts';
 
 type Screen = 'suppliers' | 'purchases' | 'shipments' | 'receiving';
 
@@ -11,6 +15,9 @@ interface Supplier {
   code: string;
   name: string;
   status: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
   version: number;
 }
 interface Purchase {
@@ -20,18 +27,27 @@ interface Purchase {
   currencyCode: string;
   status: string;
   version: number;
-  lines: readonly { id: string; sku: string; quantity: string; unitPrice: string }[];
+  lines: readonly {
+    id: string;
+    sku: string;
+    productTitle: string;
+    quantity: string;
+    unitPrice: string;
+  }[];
 }
 interface Shipment {
   id: string;
   shipmentNumber: string;
   receivingLocationName: string;
+  transportMode: string;
   status: string;
   receivingStatus: string;
   version: number;
   allocations: readonly {
     id: string;
+    purchaseNumber: string;
     sku: string;
+    productTitle: string;
     supplierName: string;
     allocatedQuantity: string;
     receivedQuantity: string;
@@ -63,34 +79,96 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
+function formatMoney(amount: string, currency: string) {
+  return new Intl.NumberFormat('en-BD', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 4,
+  }).format(Number(amount));
+}
+
 export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
   const [suppliers, setSuppliers] = useState<readonly Supplier[]>([]);
   const [purchases, setPurchases] = useState<readonly Purchase[]>([]);
   const [shipments, setShipments] = useState<readonly Shipment[]>([]);
   const [receipts, setReceipts] = useState<readonly Receipt[]>([]);
+  const [variants, setVariants] = useState<readonly CatalogVariantChoiceDto[]>([]);
+  const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const reload = async () => {
+    setLoading(true);
+    setMessage('');
     try {
-      if (screen === 'suppliers')
-        setSuppliers((await request<ApiEnvelope<readonly Supplier[]>>('/admin/suppliers')).data);
+      const tasks: Promise<void>[] = [];
+      if (screen === 'suppliers' || screen === 'purchases')
+        tasks.push(
+          request<ApiEnvelope<readonly Supplier[]>>('/admin/suppliers').then((value) =>
+            setSuppliers(value.data),
+          ),
+        );
+      if (screen === 'suppliers' || screen === 'purchases' || screen === 'shipments')
+        tasks.push(
+          request<ApiEnvelope<readonly Purchase[]>>('/admin/purchases').then((value) =>
+            setPurchases(value.data),
+          ),
+        );
       if (screen === 'purchases')
-        setPurchases((await request<ApiEnvelope<readonly Purchase[]>>('/admin/purchases')).data);
+        tasks.push(
+          request<ApiEnvelope<readonly CatalogVariantChoiceDto[]>>('/admin/catalog/variants').then(
+            (value) => setVariants(value.data),
+          ),
+        );
+      if (screen === 'shipments' || screen === 'receiving')
+        tasks.push(
+          request<ApiEnvelope<readonly Shipment[]>>('/admin/inbound-shipments').then((value) =>
+            setShipments(value.data),
+          ),
+        );
       if (screen === 'shipments')
-        setShipments(
-          (await request<ApiEnvelope<readonly Shipment[]>>('/admin/inbound-shipments')).data,
+        tasks.push(
+          request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations').then(
+            (value) => setLocations(value.data),
+          ),
         );
       if (screen === 'receiving')
-        setReceipts(
-          (await request<ApiEnvelope<readonly Receipt[]>>('/admin/inbound-receipts')).data,
+        tasks.push(
+          request<ApiEnvelope<readonly Receipt[]>>('/admin/inbound-receipts').then((value) =>
+            setReceipts(value.data),
+          ),
         );
+      await Promise.all(tasks);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load this operation.');
+    } finally {
+      setLoading(false);
     }
   };
   useEffect(() => {
     void reload();
   }, [screen]);
+
+  const draftPurchases = purchases.filter((purchase) => purchase.status === 'DRAFT');
+  const shippableLines = purchases.flatMap((purchase) =>
+    purchase.status === 'PLACED'
+      ? purchase.lines.map((line) => ({ ...line, purchaseNumber: purchase.purchaseNumber }))
+      : [],
+  );
+  const receivableAllocations = useMemo(
+    () =>
+      shipments.flatMap((shipment) =>
+        shipment.status === 'ARRIVED'
+          ? shipment.allocations
+              .filter(
+                (allocation) =>
+                  Number(allocation.allocatedQuantity) > Number(allocation.receivedQuantity),
+              )
+              .map((allocation) => ({ ...allocation, shipment }))
+          : [],
+      ),
+    [shipments],
+  );
 
   async function createSupplier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,29 +176,19 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
     try {
       await request('/admin/suppliers', {
         method: 'POST',
-        body: JSON.stringify({ code: form.get('code'), name: form.get('name') }),
+        body: JSON.stringify({
+          code: form.get('code'),
+          name: form.get('name'),
+          contactName: form.get('contactName') || undefined,
+          contactEmail: form.get('contactEmail') || undefined,
+          contactPhone: form.get('contactPhone') || undefined,
+        }),
       });
       event.currentTarget.reset();
       setMessage('Supplier created.');
       await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Supplier could not be created.');
-    }
-  }
-
-  async function arrive(shipment: Shipment) {
-    try {
-      await request(`/admin/inbound-shipments/${shipment.id}/arrive`, {
-        method: 'POST',
-        headers: { 'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({ version: shipment.version }),
-      });
-      setMessage('Shipment arrival recorded. Inventory remains unchanged until receipt posting.');
-      await reload();
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'Shipment arrival could not be recorded.',
-      );
     }
   }
 
@@ -136,32 +204,10 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
         }),
       });
       event.currentTarget.reset();
-      setMessage('Draft Purchase created. Add catalog Variant lines before placing it.');
+      setMessage('Draft purchase created. Add catalog lines, then place it when ready.');
       await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Purchase could not be created.');
-    }
-  }
-
-  async function createShipment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      await request('/admin/inbound-shipments', {
-        method: 'POST',
-        body: JSON.stringify({
-          receivingLocationId: form.get('receivingLocationId'),
-          transportMode: form.get('transportMode'),
-          allocations: [
-            { purchaseLineId: form.get('purchaseLineId'), quantity: form.get('quantity') },
-          ],
-        }),
-      });
-      event.currentTarget.reset();
-      setMessage('Inbound Shipment planned. Arrival never changes stock.');
-      await reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Shipment could not be planned.');
     }
   }
 
@@ -192,24 +238,69 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
         method: 'POST',
         body: JSON.stringify({ version: purchase.version }),
       });
-      setMessage('Purchase placed. It can now be allocated to inbound shipments.');
+      setMessage('Purchase placed. It can now be allocated to an inbound shipment.');
       await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Purchase could not be placed.');
     }
   }
 
-  async function postReceipt(event: FormEvent<HTMLFormElement>) {
+  async function createShipment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
-      await request(`/admin/inbound-shipments/${form.get('shipmentId')}/receipts`, {
+      await request('/admin/inbound-shipments', {
+        method: 'POST',
+        body: JSON.stringify({
+          receivingLocationId: form.get('receivingLocationId'),
+          transportMode: form.get('transportMode'),
+          allocations: [
+            { purchaseLineId: form.get('purchaseLineId'), quantity: form.get('quantity') },
+          ],
+        }),
+      });
+      event.currentTarget.reset();
+      setMessage('Inbound shipment planned. Arrival does not change stock.');
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Shipment could not be planned.');
+    }
+  }
+
+  async function arrive(shipment: Shipment) {
+    try {
+      await request(`/admin/inbound-shipments/${shipment.id}/arrive`, {
+        method: 'POST',
+        headers: { 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({ version: shipment.version }),
+      });
+      setMessage('Shipment arrival recorded. Stock changes only after receipt posting.');
+      await reload();
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'Shipment arrival could not be recorded.',
+      );
+    }
+  }
+
+  async function postReceipt(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const selection = receivableAllocations.find(
+      (allocation) => allocation.id === form.get('shipmentAllocationId'),
+    );
+    if (!selection) {
+      setMessage('Choose an arrived shipment line that still has quantity to receive.');
+      return;
+    }
+    try {
+      await request(`/admin/inbound-shipments/${selection.shipment.id}/receipts`, {
         method: 'POST',
         headers: { 'idempotency-key': crypto.randomUUID() },
         body: JSON.stringify({
           lines: [
             {
-              shipmentAllocationId: form.get('shipmentAllocationId'),
+              shipmentAllocationId: selection.id,
               condition: form.get('condition'),
               quantity: form.get('quantity'),
             },
@@ -227,6 +318,7 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
   return (
     <main>
       <section className="shell">
+        <p className="eyebrow">Supply operations</p>
         <h1>
           {screen === 'suppliers'
             ? 'Suppliers'
@@ -234,58 +326,128 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
               ? 'Purchases'
               : screen === 'shipments'
                 ? 'Inbound shipments'
-                : 'Inbound receipts'}
+                : 'Receiving'}
         </h1>
         <p>
           {screen === 'receiving'
-            ? 'Posted receipts are immutable and create the canonical inventory ledger movement.'
-            : 'Procurement, transit, and physical receipt remain distinct operational facts.'}
+            ? 'Review what was expected and received before posting an immutable stock receipt.'
+            : 'Procurement, transit, and physical receipt remain separate operational facts.'}
         </p>
         {message ? <p role="status">{message}</p> : null}
-        {screen === 'suppliers' ? (
+        {loading ? <p aria-live="polite">Loading authoritative supply records…</p> : null}
+
+        {screen === 'suppliers' && !loading ? (
           <>
             <form onSubmit={(event) => void createSupplier(event)}>
+              <h2>Create supplier</h2>
               <label>
-                Code <input name="code" required />
+                Supplier code <input name="code" required placeholder="SHENZHEN-TEXTILES" />
               </label>
               <label>
-                Supplier name <input name="name" required />
+                Supplier name <input name="name" required autoComplete="organization" />
+              </label>
+              <label>
+                Contact name <input name="contactName" autoComplete="name" />
+              </label>
+              <label>
+                Contact email <input name="contactEmail" type="email" autoComplete="email" />
+              </label>
+              <label>
+                Contact phone <input name="contactPhone" type="tel" autoComplete="tel" />
               </label>
               <button type="submit">Create supplier</button>
             </form>
-            {suppliers.map((supplier) => (
-              <article key={supplier.id}>
-                <h2>{supplier.name}</h2>
-                <p>
-                  {supplier.code} · {supplier.status}
-                </p>
-                <p>Supplier ID: {supplier.id}</p>
-              </article>
-            ))}
+            {suppliers.length === 0 ? <p>No suppliers yet.</p> : null}
+            {suppliers.map((supplier) => {
+              const related = purchases.filter(
+                (purchase) => purchase.supplierName === supplier.name,
+              );
+              return (
+                <article key={supplier.id}>
+                  <p className="eyebrow">{supplier.code}</p>
+                  <h2>{supplier.name}</h2>
+                  <p>{supplier.status}</p>
+                  {supplier.contactName || supplier.contactEmail || supplier.contactPhone ? (
+                    <p>
+                      {[supplier.contactName, supplier.contactEmail, supplier.contactPhone]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  ) : null}
+                  <p>
+                    {related.length} purchase{related.length === 1 ? '' : 's'} ·{' '}
+                    {related
+                      .slice(0, 3)
+                      .map((purchase) => purchase.purchaseNumber)
+                      .join(', ') || 'No recent purchasing activity'}
+                  </p>
+                </article>
+              );
+            })}
           </>
         ) : null}
-        {screen === 'purchases' ? (
+
+        {screen === 'purchases' && !loading ? (
           <>
             <form onSubmit={(event) => void createPurchase(event)}>
+              <h2>Create draft purchase</h2>
               <label>
-                Supplier ID <input name="supplierId" required />
+                Supplier
+                <select name="supplierId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose an active supplier
+                  </option>
+                  {suppliers
+                    .filter((supplier) => supplier.status === 'ACTIVE')
+                    .map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.name} · {supplier.code}
+                      </option>
+                    ))}
+                </select>
               </label>
               <label>
                 Currency
                 <select defaultValue="CNY" name="currencyCode">
-                  <option value="BDT">BDT</option>
-                  <option value="CNY">CNY</option>
-                  <option value="USD">USD</option>
+                  <option value="BDT">BDT — Bangladeshi taka</option>
+                  <option value="CNY">CNY — Chinese yuan</option>
+                  <option value="USD">USD — US dollar</option>
                 </select>
               </label>
-              <button type="submit">Create draft purchase</button>
+              <button disabled={suppliers.length === 0} type="submit">
+                Create draft purchase
+              </button>
             </form>
             <form onSubmit={(event) => void addPurchaseLine(event)}>
+              <h2>Add a purchase line</h2>
               <label>
-                Draft Purchase ID <input name="purchaseId" required />
+                Draft purchase
+                <select name="purchaseId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose a draft purchase
+                  </option>
+                  {draftPurchases.map((purchase) => (
+                    <option key={purchase.id} value={purchase.id}>
+                      {purchase.purchaseNumber} · {purchase.supplierName} · {purchase.currencyCode}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
-                Catalog Variant ID <input name="variantId" required />
+                Product variant
+                <select name="variantId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose a product and SKU
+                  </option>
+                  {variants
+                    .filter((variant) => variant.status === 'ACTIVE')
+                    .map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.productTitle} · {variant.sku}
+                        {variant.optionSummary ? ` · ${variant.optionSummary}` : ''}
+                      </option>
+                    ))}
+                </select>
               </label>
               <label>
                 Quantity{' '}
@@ -299,7 +461,7 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
                 />
               </label>
               <label>
-                Unit price{' '}
+                Unit cost{' '}
                 <input
                   defaultValue="0"
                   min="0"
@@ -307,24 +469,34 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
                   required
                   step="0.0001"
                   type="number"
+                  inputMode="decimal"
                 />
               </label>
-              <button type="submit">Add purchase line</button>
+              <button disabled={draftPurchases.length === 0 || variants.length === 0} type="submit">
+                Add purchase line
+              </button>
             </form>
+            {purchases.length === 0 ? <p>No purchases yet.</p> : null}
             {purchases.map((purchase) => (
               <article key={purchase.id}>
+                <p className="eyebrow">{purchase.status}</p>
                 <h2>{purchase.purchaseNumber}</h2>
                 <p>
-                  {purchase.supplierName} · {purchase.currencyCode} · {purchase.status}
+                  {purchase.supplierName} · {purchase.currencyCode}
                 </p>
-                <p>Purchase ID: {purchase.id}</p>
+                {purchase.lines.length === 0 ? <p>No lines have been added.</p> : null}
                 {purchase.lines.map((line) => (
                   <p key={line.id}>
-                    {line.sku} · {line.quantity} × {line.unitPrice} · Purchase Line ID: {line.id}
+                    {line.productTitle} · {line.sku} · {line.quantity} ×{' '}
+                    {formatMoney(line.unitPrice, purchase.currencyCode)}
                   </p>
                 ))}
                 {purchase.status === 'DRAFT' ? (
-                  <button onClick={() => void placePurchase(purchase)} type="button">
+                  <button
+                    disabled={purchase.lines.length === 0}
+                    onClick={() => void placePurchase(purchase)}
+                    type="button"
+                  >
                     Place purchase
                   </button>
                 ) : null}
@@ -332,14 +504,43 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
             ))}
           </>
         ) : null}
-        {screen === 'shipments' ? (
+
+        {screen === 'shipments' && !loading ? (
           <>
             <form onSubmit={(event) => void createShipment(event)}>
+              <h2>Plan an inbound shipment</h2>
               <label>
-                Receiving Location ID <input name="receivingLocationId" required />
+                Receiving location
+                <select name="receivingLocationId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose a receiving warehouse
+                  </option>
+                  {locations
+                    .filter(
+                      (location) =>
+                        location.status === 'ACTIVE' &&
+                        location.capabilities.includes('PURCHASE_RECEIVING'),
+                    )
+                    .map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name} · {location.code}
+                      </option>
+                    ))}
+                </select>
               </label>
               <label>
-                Purchase Line ID <input name="purchaseLineId" required />
+                Purchase line
+                <select name="purchaseLineId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose a placed purchase line
+                  </option>
+                  {shippableLines.map((line) => (
+                    <option key={line.id} value={line.id}>
+                      {line.purchaseNumber} · {line.productTitle} · {line.sku} · ordered{' '}
+                      {line.quantity}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Quantity{' '}
@@ -362,20 +563,28 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
                   <option value="OTHER">Other</option>
                 </select>
               </label>
-              <button type="submit">Plan inbound shipment</button>
+              <button
+                disabled={shippableLines.length === 0 || locations.length === 0}
+                type="submit"
+              >
+                Plan inbound shipment
+              </button>
             </form>
+            {shipments.length === 0 ? <p>No inbound shipments yet.</p> : null}
             {shipments.map((shipment) => (
               <article key={shipment.id}>
+                <p className="eyebrow">
+                  {shipment.status} · {shipment.receivingStatus}
+                </p>
                 <h2>{shipment.shipmentNumber}</h2>
                 <p>
-                  {shipment.receivingLocationName} · {shipment.status} · {shipment.receivingStatus}
+                  {shipment.receivingLocationName} · {shipment.transportMode}
                 </p>
-                <p>Shipment ID: {shipment.id}</p>
                 {shipment.allocations.map((allocation) => (
                   <p key={allocation.id}>
-                    {allocation.sku} · {allocation.supplierName} · planned{' '}
-                    {allocation.allocatedQuantity} · received {allocation.receivedQuantity} ·
-                    Allocation ID: {allocation.id}
+                    {allocation.purchaseNumber} · {allocation.productTitle} · {allocation.sku} ·{' '}
+                    {allocation.supplierName} · planned {allocation.allocatedQuantity} · received{' '}
+                    {allocation.receivedQuantity}
                   </p>
                 ))}
                 {shipment.status !== 'ARRIVED' && shipment.status !== 'CANCELLED' ? (
@@ -387,14 +596,25 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
             ))}
           </>
         ) : null}
-        {screen === 'receiving' ? (
+
+        {screen === 'receiving' && !loading ? (
           <>
             <form onSubmit={(event) => void postReceipt(event)}>
+              <h2>Post a receipt</h2>
               <label>
-                Arrived Shipment ID <input name="shipmentId" required />
-              </label>
-              <label>
-                Shipment Allocation ID <input name="shipmentAllocationId" required />
+                Arrived shipment line
+                <select name="shipmentAllocationId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose a line with quantity remaining
+                  </option>
+                  {receivableAllocations.map((allocation) => (
+                    <option key={allocation.id} value={allocation.id}>
+                      {allocation.shipment.shipmentNumber} · {allocation.productTitle} ·{' '}
+                      {allocation.sku} · expected {allocation.allocatedQuantity} · received{' '}
+                      {allocation.receivedQuantity}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Condition
@@ -406,7 +626,7 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
                 </select>
               </label>
               <label>
-                Counted Quantity{' '}
+                Receive now{' '}
                 <input
                   defaultValue="1"
                   min="0.000001"
@@ -416,21 +636,33 @@ export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
                   type="number"
                 />
               </label>
-              <button type="submit">Post inbound receipt</button>
+              <button disabled={receivableAllocations.length === 0} type="submit">
+                Review and post receipt
+              </button>
+              <p>
+                Posting creates an immutable physical inventory movement. Verify the count and
+                condition first.
+              </p>
             </form>
-            {receipts.map((receipt) => (
-              <article key={receipt.id}>
-                <h2>{receipt.receiptNumber}</h2>
-                <p>
-                  {receipt.status} · Shipment {receipt.shipmentId}
-                </p>
-                {receipt.lines.map((line, index) => (
-                  <p key={`${receipt.id}-${index}`}>
-                    {line.condition} · {line.quantity}
+            {receipts.length === 0 ? <p>No receipts have been posted.</p> : null}
+            {receipts.map((receipt) => {
+              const shipment = shipments.find((item) => item.id === receipt.shipmentId);
+              return (
+                <article key={receipt.id}>
+                  <p className="eyebrow">{receipt.status}</p>
+                  <h2>{receipt.receiptNumber}</h2>
+                  <p>
+                    {shipment?.shipmentNumber ?? 'Inbound shipment'} ·{' '}
+                    {shipment?.receivingLocationName ?? 'Receiving location'}
                   </p>
-                ))}
-              </article>
-            ))}
+                  {receipt.lines.map((line, index) => (
+                    <p key={`${receipt.id}-${index}`}>
+                      {line.condition} · {line.quantity}
+                    </p>
+                  ))}
+                </article>
+              );
+            })}
           </>
         ) : null}
       </section>

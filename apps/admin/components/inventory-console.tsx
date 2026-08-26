@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import type {
   ApiEnvelope,
+  CatalogVariantChoiceDto,
   InventoryBalanceDto,
   InventoryHistoryDto,
   WarehouseLocationDto,
@@ -71,6 +72,7 @@ export function InventoryConsole({
   section?: 'stock' | 'warehouses' | 'transfers' | 'stocktakes' | 'history';
 }) {
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
+  const [variants, setVariants] = useState<readonly CatalogVariantChoiceDto[]>([]);
   const [balances, setBalances] = useState<readonly InventoryBalanceDto[]>([]);
   const [transfers, setTransfers] = useState<readonly WarehouseTransfer[]>([]);
   const [history, setHistory] = useState<readonly InventoryHistoryDto[]>([]);
@@ -80,17 +82,20 @@ export function InventoryConsole({
   const [stocktakeWorkspace, setStocktakeWorkspace] = useState<StocktakeWorkspace>();
   const reload = async () => {
     try {
-      const [locationResult, stockResult, transferResult, historyResult] = await Promise.all([
-        request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations'),
-        request<ApiEnvelope<readonly InventoryBalanceDto[]>>('/admin/inventory/stock'),
-        section === 'transfers'
-          ? request<ApiEnvelope<readonly WarehouseTransfer[]>>('/admin/warehouse/transfers')
-          : Promise.resolve(undefined),
-        section === 'history'
-          ? request<ApiEnvelope<readonly InventoryHistoryDto[]>>('/admin/inventory/history')
-          : Promise.resolve(undefined),
-      ]);
+      const [locationResult, variantResult, stockResult, transferResult, historyResult] =
+        await Promise.all([
+          request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations'),
+          request<ApiEnvelope<readonly CatalogVariantChoiceDto[]>>('/admin/catalog/variants'),
+          request<ApiEnvelope<readonly InventoryBalanceDto[]>>('/admin/inventory/stock'),
+          section === 'transfers'
+            ? request<ApiEnvelope<readonly WarehouseTransfer[]>>('/admin/warehouse/transfers')
+            : Promise.resolve(undefined),
+          section === 'history'
+            ? request<ApiEnvelope<readonly InventoryHistoryDto[]>>('/admin/inventory/history')
+            : Promise.resolve(undefined),
+        ]);
       setLocations(locationResult.data);
+      setVariants(variantResult.data);
       setBalances(stockResult.data);
       setTransfers(transferResult?.data ?? []);
       setHistory(historyResult?.data ?? []);
@@ -415,8 +420,20 @@ export function InventoryConsole({
               <CardContent>
                 <form className="grid gap-3 md:grid-cols-5" onSubmit={adjust}>
                   <div>
-                    <Label htmlFor="variant">Variant ID</Label>
-                    <Input id="variant" name="variantId" required />
+                    <Label htmlFor="variant">Product variant</Label>
+                    <Select name="variantId" required>
+                      <SelectTrigger id="variant">
+                        <SelectValue placeholder="Choose product and SKU" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {variants.map((variant) => (
+                          <SelectItem key={variant.id} value={variant.id}>
+                            {variant.productTitle} · {variant.sku}
+                            {variant.optionSummary ? ` · ${variant.optionSummary}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label>Location</Label>
@@ -468,8 +485,20 @@ export function InventoryConsole({
               <CardContent>
                 <form className="grid gap-3 md:grid-cols-5" onSubmit={moveCondition}>
                   <div>
-                    <Label htmlFor="move-variant">Variant ID</Label>
-                    <Input id="move-variant" name="variantId" required />
+                    <Label htmlFor="move-variant">Product variant</Label>
+                    <Select name="variantId" required>
+                      <SelectTrigger id="move-variant">
+                        <SelectValue placeholder="Choose product and SKU" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {variants.map((variant) => (
+                          <SelectItem key={variant.id} value={variant.id}>
+                            {variant.productTitle} · {variant.sku}
+                            {variant.optionSummary ? ` · ${variant.optionSummary}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label htmlFor="move-from">From</Label>
@@ -537,8 +566,20 @@ export function InventoryConsole({
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="transfer-variant">Variant ID</Label>
-                  <Input id="transfer-variant" name="variantId" required />
+                  <Label htmlFor="transfer-variant">Product variant</Label>
+                  <Select name="variantId" required>
+                    <SelectTrigger id="transfer-variant">
+                      <SelectValue placeholder="Choose product and SKU" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {variants.map((variant) => (
+                        <SelectItem key={variant.id} value={variant.id}>
+                          {variant.productTitle} · {variant.sku}
+                          {variant.optionSummary ? ` · ${variant.optionSummary}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label htmlFor="transfer-quantity">Quantity</Label>
