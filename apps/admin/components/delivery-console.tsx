@@ -1,8 +1,19 @@
 'use client';
 
-import { type FormEvent, useEffect, useState } from 'react';
+import { ArrowRight, MapPin, PackageCheck, Route, Truck } from 'lucide-react';
+import Link from 'next/link';
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
+
+import {
+  OperationalEmptyState,
+  OperationalFeedback,
+  OperationalPageHeader,
+  OperationalWorklistToolbar,
+  useOperationalWorklist,
+} from './operational-worklist';
+import { StatusBadge } from './status-badge';
 
 interface Delivery {
   id: string;
@@ -25,24 +36,82 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
   });
-  if (!response.ok) throw new Error('The delivery command was rejected.');
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string | { message?: string };
+    };
+    throw new Error(
+      typeof payload.error === 'string'
+        ? payload.error
+        : (payload.error?.message ?? 'The delivery command was rejected.'),
+    );
+  }
   return response.json() as Promise<T>;
 }
 
+const searchText = (item: Delivery) =>
+  [
+    item.deliveryNumber,
+    item.orderNumber,
+    item.fulfillmentNumber,
+    item.recipient.name,
+    item.recipient.phone,
+    item.manualCarrierName,
+    item.trackingReference,
+  ].join(' ');
+const statusOf = (item: Delivery) => item.operationalStatus;
+const referenceOf = (item: Delivery) => item.deliveryNumber;
+const timestampOf = (item: Delivery) => item.events.at(-1)?.occurredAt;
+
 export function DeliveryConsole() {
   const [deliveries, setDeliveries] = useState<readonly Delivery[]>([]);
+  const [selectedId, setSelectedId] = useState<string>();
   const [message, setMessage] = useState('');
-  const reload = async () => {
+  const [messageTone, setMessageTone] = useState<'success' | 'warning' | 'danger'>('success');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
     try {
-      setDeliveries((await request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries')).data);
-    } catch {
-      setMessage('Unable to load deliveries. Sign in with delivery permission.');
+      const result = (await request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries')).data;
+      setDeliveries(result);
+      setSelectedId((current) =>
+        current && result.some((item) => item.id === current) ? current : result[0]?.id,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load deliveries.');
+      setMessageTone('danger');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
+
   useEffect(() => {
     void reload();
-  }, []);
+  }, [reload]);
+
+  const worklist = useOperationalWorklist({
+    items: deliveries,
+    storageKey: 'admin:deliveries',
+    getSearchText: searchText,
+    getStatus: statusOf,
+    getReference: referenceOf,
+    getTimestamp: timestampOf,
+  });
+  const selected = useMemo(
+    () => deliveries.find((item) => item.id === selectedId),
+    [deliveries, selectedId],
+  );
+
   async function simple(delivery: Delivery, action: 'dispatch' | 'delivered' | 'failed') {
+    const confirmation =
+      action === 'delivered'
+        ? 'Confirm successful delivery? This recognizes COGS and records an immutable delivery outcome.'
+        : action === 'failed'
+          ? 'Mark this delivery as failed? Use RTO to process the physical return afterward.'
+          : 'Confirm handover to the carrier?';
+    if (!window.confirm(confirmation)) return;
+    setBusy(true);
     try {
       const body =
         action === 'failed'
@@ -53,13 +122,22 @@ export function DeliveryConsole() {
         headers: { 'idempotency-key': crypto.randomUUID() },
         body: JSON.stringify(body),
       });
+      setMessage(`Delivery ${action} command completed.`);
+      setMessageTone('success');
       await reload();
-    } catch {
-      setMessage('The delivery state could not be updated. Reload and try again.');
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'The delivery state could not be updated.',
+      );
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
     }
   }
+
   async function book(delivery: Delivery, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setBusy(true);
     const form = new FormData(event.currentTarget);
     try {
       await request(`/admin/deliveries/${delivery.id}/manual-booking`, {
@@ -72,66 +150,274 @@ export function DeliveryConsole() {
         }),
       });
       event.currentTarget.reset();
+      setMessage('Manual carrier booking recorded.');
+      setMessageTone('success');
       await reload();
-    } catch {
-      setMessage('Manual courier booking could not be recorded.');
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'Manual courier booking could not be recorded.',
+      );
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
     }
   }
+
+  const inTransit = deliveries.filter((item) => item.operationalStatus === 'IN_TRANSIT').length;
+  const needsBooking = deliveries.filter((item) => item.operationalStatus === 'READY').length;
+  const exceptions = deliveries.filter((item) => item.operationalStatus === 'FAILED').length;
+
   return (
     <main>
-      <section className="shell">
-        <h1>Deliveries</h1>
-        <p>Delivery does not alter commercial Order, payment, or physical inventory history.</p>
-        {message ? <p role="status">{message}</p> : null}
-        {deliveries.map((delivery) => (
-          <article key={delivery.id}>
-            <h2>{delivery.deliveryNumber}</h2>
-            <p>
-              Order {delivery.orderNumber} · Fulfillment {delivery.fulfillmentNumber} ·{' '}
-              {delivery.operationalStatus}
-            </p>
-            <p>
-              {delivery.recipient.name} · {delivery.recipient.phone}
-              <br />
-              {delivery.recipient.address}
-            </p>
-            {delivery.manualCarrierName ? (
-              <p>
-                {delivery.manualCarrierName} · {delivery.trackingReference}
-              </p>
-            ) : null}
-            {delivery.operationalStatus === 'READY' ? (
-              <form onSubmit={(event) => void book(delivery, event)}>
-                <label>
-                  Manual carrier <input name="carrierName" required />
-                </label>
-                <label>
-                  Tracking/reference <input name="trackingReference" required />
-                </label>
-                <button type="submit">Record booking</button>
-              </form>
-            ) : null}
-            {delivery.operationalStatus === 'BOOKED' ? (
-              <button onClick={() => void simple(delivery, 'dispatch')} type="button">
-                Hand over / dispatch
-              </button>
-            ) : null}
-            {delivery.operationalStatus === 'IN_TRANSIT' ? (
-              <>
-                <button onClick={() => void simple(delivery, 'delivered')} type="button">
-                  Mark delivered
-                </button>
-                <button onClick={() => void simple(delivery, 'failed')} type="button">
-                  Mark failed
-                </button>
-              </>
-            ) : null}
-            <p>Timeline: {delivery.events.map((entry) => entry.type).join(' → ')}</p>
+      <section className="shell admin-page">
+        <OperationalPageHeader
+          eyebrow="Operations / Last mile"
+          title="Delivery worklist"
+          description="Book carriers, record handover, resolve exceptions, and preserve delivery outcomes independently from payment and inventory history."
+          actions={
+            <Link className="button secondary" href="/rto">
+              Open RTO <ArrowRight aria-hidden="true" />
+            </Link>
+          }
+        />
+        <section className="metric-strip" aria-label="Delivery summary">
+          <article>
+            <span>All deliveries</span>
+            <strong>{deliveries.length}</strong>
+            <small>Current tenant</small>
           </article>
-        ))}
-        {deliveries.length === 0 ? (
-          <p>No deliveries yet. Create one after a Fulfillment is physically dispatched.</p>
-        ) : null}
+          <article>
+            <span>Needs booking</span>
+            <strong>{needsBooking}</strong>
+            <small>Ready for carrier assignment</small>
+          </article>
+          <article>
+            <span>In transit</span>
+            <strong>{inTransit}</strong>
+            <small>Awaiting a terminal outcome</small>
+          </article>
+          <article>
+            <span>Exceptions</span>
+            <strong>{exceptions}</strong>
+            <small>Failed deliveries requiring RTO review</small>
+          </article>
+        </section>
+        {message ? <OperationalFeedback tone={messageTone}>{message}</OperationalFeedback> : null}
+        <OperationalWorklistToolbar
+          query={worklist.query}
+          onQueryChange={worklist.setQuery}
+          status={worklist.status}
+          onStatusChange={worklist.setStatus}
+          statuses={[
+            'READY',
+            'BOOKED',
+            'HANDED_OVER',
+            'IN_TRANSIT',
+            'DELIVERED',
+            'FAILED',
+            'CANCELLED',
+          ]}
+          sort={worklist.sort}
+          onSortChange={worklist.setSort}
+          density={worklist.density}
+          onDensityChange={worklist.setDensity}
+          resultCount={worklist.visibleItems.length}
+          savedViews={worklist.savedViews}
+          onSaveView={worklist.saveView}
+          onApplyView={worklist.applyView}
+          searchLabel="Search delivery, order, recipient, carrier, or tracking"
+        />
+        <div className={`operational-workspace ${selected ? 'detail-open' : ''}`}>
+          <section className={`panel worklist-panel density-${worklist.density}`}>
+            {loading ? (
+              <div className="skeleton-list" aria-label="Loading deliveries">
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : worklist.visibleItems.length ? (
+              <div className="data-table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Delivery</th>
+                      <th>Order</th>
+                      <th>Recipient</th>
+                      <th>Carrier</th>
+                      <th>Status</th>
+                      <th>
+                        <span className="sr-only">Open</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {worklist.visibleItems.map((item) => (
+                      <tr key={item.id} className={item.id === selectedId ? 'selected-row' : ''}>
+                        <td>
+                          <strong>{item.deliveryNumber}</strong>
+                          <span className="cell-secondary">{item.fulfillmentNumber}</span>
+                        </td>
+                        <td>{item.orderNumber}</td>
+                        <td>
+                          {item.recipient.name}
+                          <span className="cell-secondary">{item.recipient.phone}</span>
+                        </td>
+                        <td>
+                          {item.manualCarrierName ?? 'Unassigned'}
+                          <span className="cell-secondary">{item.trackingReference ?? '—'}</span>
+                        </td>
+                        <td>
+                          <StatusBadge status={item.operationalStatus} />
+                        </td>
+                        <td>
+                          <button type="button" onClick={() => setSelectedId(item.id)}>
+                            Open
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <OperationalEmptyState
+                title="No matching deliveries"
+                description="Clear filters or create a delivery after physical fulfillment dispatch."
+                action={
+                  <Link className="button secondary" href="/fulfillments">
+                    Open fulfillments
+                  </Link>
+                }
+              />
+            )}
+          </section>
+          {selected ? (
+            <aside className="operational-detail" aria-label={`${selected.deliveryNumber} detail`}>
+              <header className="detail-header">
+                <div>
+                  <p className="eyebrow">Delivery</p>
+                  <h2>{selected.deliveryNumber}</h2>
+                  <div className="inline-status">
+                    <StatusBadge status={selected.operationalStatus} />
+                    <StatusBadge status={selected.outcomeStatus} />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(undefined)}
+                  aria-label="Close detail"
+                >
+                  ×
+                </button>
+              </header>
+              <div className="detail-body">
+                <dl className="detail-facts">
+                  <div>
+                    <dt>Order</dt>
+                    <dd>{selected.orderNumber}</dd>
+                  </div>
+                  <div>
+                    <dt>Fulfillment</dt>
+                    <dd>{selected.fulfillmentNumber}</dd>
+                  </div>
+                  <div>
+                    <dt>Version</dt>
+                    <dd>{selected.version}</dd>
+                  </div>
+                </dl>
+                <section className="operational-guidance">
+                  <MapPin aria-hidden="true" />
+                  <div>
+                    <strong>{selected.recipient.name}</strong>
+                    <p>
+                      {selected.recipient.phone}
+                      <br />
+                      {selected.recipient.address}
+                    </p>
+                  </div>
+                </section>
+                {selected.operationalStatus === 'READY' ? (
+                  <form
+                    className="panel inset-form"
+                    onSubmit={(event) => void book(selected, event)}
+                  >
+                    <h3>Record manual carrier booking</h3>
+                    <label>
+                      Carrier name
+                      <input name="carrierName" autoComplete="organization" required />
+                    </label>
+                    <label>
+                      Tracking/reference
+                      <input name="trackingReference" autoComplete="off" required />
+                    </label>
+                    <button disabled={busy} type="submit">
+                      <Truck aria-hidden="true" /> Record booking
+                    </button>
+                  </form>
+                ) : null}
+                {selected.operationalStatus === 'BOOKED' ? (
+                  <section className="next-action-card">
+                    <div>
+                      <strong>Handover is next</strong>
+                      <p>Confirm the parcel has physically left Maevelle custody.</p>
+                    </div>
+                    <button
+                      disabled={busy}
+                      onClick={() => void simple(selected, 'dispatch')}
+                      type="button"
+                    >
+                      Record handover
+                    </button>
+                  </section>
+                ) : null}
+                {selected.operationalStatus === 'IN_TRANSIT' ? (
+                  <section className="next-action-card">
+                    <div>
+                      <strong>Record carrier outcome</strong>
+                      <p>Successful delivery recognizes COGS; failure remains separate for RTO.</p>
+                    </div>
+                    <div className="detail-actions">
+                      <button
+                        disabled={busy}
+                        onClick={() => void simple(selected, 'delivered')}
+                        type="button"
+                      >
+                        <PackageCheck aria-hidden="true" /> Delivered
+                      </button>
+                      <button
+                        className="danger-action"
+                        disabled={busy}
+                        onClick={() => void simple(selected, 'failed')}
+                        type="button"
+                      >
+                        Failed
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+                <section>
+                  <h3>Operational timeline</h3>
+                  <ol className="timeline-list">
+                    {selected.events.map((entry, index) => (
+                      <li key={`${entry.type}-${entry.occurredAt}-${index}`}>
+                        <Route aria-hidden="true" />
+                        <div>
+                          <strong>{entry.type.replaceAll('_', ' ')}</strong>
+                          <time dateTime={entry.occurredAt}>
+                            {new Intl.DateTimeFormat('en-BD', {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            }).format(new Date(entry.occurredAt))}
+                          </time>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              </div>
+            </aside>
+          ) : null}
+        </div>
       </section>
     </main>
   );
