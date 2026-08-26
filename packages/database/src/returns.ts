@@ -14,7 +14,7 @@ export class ReturnDomainError extends Error {
 }
 export async function listReturnCases(db: Kysely<DatabaseSchema>, organizationId: string) {
   return (
-    await sql`select id, return_number, case_type, case_status, authorization_status, receipt_status, version::text, created_at from returns.return_cases where organization_id = ${organizationId} order by created_at desc`.execute(
+    await sql`select return_case.id,return_case.return_number,return_case.case_type,return_case.case_status,return_case.authorization_status,return_case.receipt_status,return_case.version::text,return_case.created_at::text,return_case.order_id,orders.order_number,customer.display_name as customer_name,return_case.reason_code from returns.return_cases return_case join orders.orders orders on orders.id=return_case.order_id and orders.organization_id=return_case.organization_id left join customers.customers customer on customer.id=return_case.customer_id and customer.organization_id=return_case.organization_id where return_case.organization_id = ${organizationId} order by return_case.created_at desc`.execute(
       db,
     )
   ).rows;
@@ -32,7 +32,12 @@ export async function getReturnCase(
     authorization_status: string;
     receipt_status: string;
     version: string;
-  }>`select id, return_number, case_type, case_status, authorization_status, receipt_status, version::text from returns.return_cases where organization_id=${input.organizationId} and id=${input.returnCaseId}`.execute(
+    order_id: string;
+    order_number: string;
+    customer_name: string | null;
+    reason_code: string;
+    reason_text: string | null;
+  }>`select return_case.id,return_case.return_number,return_case.case_type,return_case.case_status,return_case.authorization_status,return_case.receipt_status,return_case.version::text,return_case.order_id,orders.order_number,customer.display_name as customer_name,return_case.reason_code,return_case.reason_text from returns.return_cases return_case join orders.orders orders on orders.id=return_case.order_id and orders.organization_id=return_case.organization_id left join customers.customers customer on customer.id=return_case.customer_id and customer.organization_id=return_case.organization_id where return_case.organization_id=${input.organizationId} and return_case.id=${input.returnCaseId}`.execute(
     db,
   );
   if (!header.rows[0]) throw new ReturnDomainError('NOT_FOUND', 'Return case was not found.');

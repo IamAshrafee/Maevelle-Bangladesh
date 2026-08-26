@@ -1,7 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+
 import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
 import type { ApiEnvelope } from '@maevelle/contracts';
+
+import { StatusBadge } from './status-badge';
+
 type ReturnCase = {
   id: string;
   return_number: string;
@@ -11,10 +16,16 @@ type ReturnCase = {
   receipt_status: string;
   version: string;
   created_at: string;
+  order_id: string;
+  order_number: string;
+  customer_name: string | null;
+  reason_code: string;
 };
 type ReturnDetail = ReturnCase & {
+  reason_text: string | null;
   lines: readonly {
     id: string;
+    order_line_id: string;
     sku: string;
     product_title: string;
     requested_quantity: string;
@@ -25,272 +36,588 @@ type ReturnDetail = ReturnCase & {
   refunds: readonly { id: string; refund_id: string; created_at: string }[];
   cogsRecovery: { total_cost: string; currency_code: string } | undefined;
 };
+type OrderSummary = { id: string; orderNumber: string; customerName: string; status: string };
+type OrderDetail = {
+  id: string;
+  orderNumber: string;
+  lines: readonly { id: string; sku: string; productTitle: string; quantity: string }[];
+};
+type Delivery = {
+  id: string;
+  deliveryNumber: string;
+  orderNumber: string;
+  operationalStatus: string;
+};
+type Location = { id: string; name: string; status: string; capabilities: readonly string[] };
+type Refund = {
+  id: string;
+  refundNumber: string;
+  amount: string;
+  status: string;
+  reasonCode: string;
+};
+
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
     ...init,
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
   });
-  if (!response.ok) throw new Error('Return command was rejected.');
-  return response.json() as Promise<T>;
+  const payload = (await response.json().catch(() => undefined)) as
+    (T & { error?: { message?: string } | string }) | undefined;
+  if (!response.ok) {
+    const error = payload?.error;
+    throw new Error(
+      typeof error === 'object' && error?.message
+        ? error.message
+        : 'The reverse-logistics operation could not be completed.',
+    );
+  }
+  return payload as T;
 }
+
 export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
   const [cases, setCases] = useState<readonly ReturnCase[]>([]);
+  const [orders, setOrders] = useState<readonly OrderSummary[]>([]);
+  const [deliveries, setDeliveries] = useState<readonly Delivery[]>([]);
+  const [locations, setLocations] = useState<readonly Location[]>([]);
+  const [refunds, setRefunds] = useState<readonly Refund[]>([]);
   const [selected, setSelected] = useState<ReturnDetail>();
+  const [order, setOrder] = useState<OrderDetail>();
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('ALL');
   const [message, setMessage] = useState('');
-  const reload = async () => {
-    try {
-      setCases((await request<ApiEnvelope<readonly ReturnCase[]>>('/admin/returns')).data);
-    } catch {
-      setMessage('Unable to load reverse logistics. Sign in with Returns permission.');
-    }
-  };
-  useEffect(() => {
-    void reload();
-  }, []);
-  const open = async (id: string) => {
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const open = useCallback(async (id: string) => {
     try {
       setSelected((await request<ApiEnvelope<ReturnDetail>>(`/admin/returns/${id}`)).data);
-    } catch {
-      setMessage('Unable to open this reverse logistics case.');
+      setError('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to open this case.');
+    }
+  }, []);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [caseRows, orderRows, deliveryRows, locationRows, refundRows] = await Promise.all([
+        request<ApiEnvelope<readonly ReturnCase[]>>('/admin/returns'),
+        request<ApiEnvelope<readonly OrderSummary[]>>('/admin/orders'),
+        request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries'),
+        request<ApiEnvelope<readonly Location[]>>('/admin/warehouse/locations'),
+        request<ApiEnvelope<readonly Refund[]>>('/admin/refunds'),
+      ]);
+      setCases(caseRows.data);
+      setOrders(orderRows.data);
+      setDeliveries(deliveryRows.data);
+      setLocations(locationRows.data.filter((item) => item.capabilities.includes('STOCK_HOLDING')));
+      setRefunds(refundRows.data);
+      const parameters = new URLSearchParams(window.location.search);
+      const requested = parameters.get('return');
+      const currentId =
+        requested ??
+        selected?.id ??
+        caseRows.data.find((item) => item.case_type === (rto ? 'RTO' : 'CUSTOMER_RETURN'))?.id;
+      if (currentId) await open(currentId);
+      setError('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to load reverse logistics.');
+    } finally {
+      setLoading(false);
+    }
+  }, [open, rto, selected?.id]);
+
+  useEffect(() => {
+    void reload();
+  }, [rto]);
+
+  const visible = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    return cases.filter(
+      (item) =>
+        item.case_type === (rto ? 'RTO' : 'CUSTOMER_RETURN') &&
+        (status === 'ALL' || item.case_status === status || item.receipt_status === status) &&
+        (!term ||
+          `${item.return_number} ${item.order_number} ${item.customer_name ?? ''} ${item.reason_code}`
+            .toLocaleLowerCase()
+            .includes(term)),
+    );
+  }, [cases, query, rto, status]);
+
+  const chooseOrder = async (orderId: string) => {
+    if (!orderId) return setOrder(undefined);
+    try {
+      setOrder((await request<ApiEnvelope<OrderDetail>>(`/admin/orders/${orderId}`)).data);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to load Order lines.');
     }
   };
+
+  const run = async (work: () => Promise<unknown>, success: string) => {
+    setBusy(true);
+    try {
+      await work();
+      setMessage(success);
+      setError('');
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The command was rejected.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <main>
-      <section className="shell">
-        <h1>{rto ? 'RTO' : 'Returns'}</h1>
-        <p>
-          Commercial return intent, physical reverse receipt, refund, and cost recovery remain
-          separate facts.
-        </p>
-        <nav aria-label="Reverse logistics navigation">
-          <Link href="/returns">Returns</Link> · <Link href="/rto">RTO</Link> ·{' '}
-          <Link href="/orders">Orders</Link> · <Link href="/fulfillments">Fulfillments</Link> ·{' '}
-          <Link href="/costing">Costing</Link>
+    <main className="admin-workspace">
+      <header className="workspace-header">
+        <div>
+          <p className="eyebrow">Sales / Reverse logistics</p>
+          <h1>{rto ? 'Return to origin' : 'Customer returns'}</h1>
+          <p>
+            {rto
+              ? 'Track failed-delivery stock back to a physical receipt. RTO is not a customer Return.'
+              : 'Keep commercial return intent, physical receipt, refund, and cost recovery as connected but separate facts.'}
+          </p>
+        </div>
+        <nav aria-label="Reverse logistics">
+          <Link href="/returns">Customer returns</Link> · <Link href="/rto">RTO</Link> ·{' '}
+          <Link href="/payments">Refunds</Link> · <Link href="/costing">Costing</Link>
         </nav>
-        {message ? <p role="status">{message}</p> : null}
+      </header>
+      <section className="metric-grid">
+        <article>
+          <strong>{visible.filter((item) => item.case_status === 'OPEN').length}</strong>
+          <span>Open</span>
+        </article>
+        <article>
+          <strong>
+            {visible.filter((item) => item.authorization_status === 'PENDING').length}
+          </strong>
+          <span>Awaiting authorization</span>
+        </article>
+        <article>
+          <strong>
+            {visible.filter((item) => item.receipt_status === 'PARTIALLY_RECEIVED').length}
+          </strong>
+          <span>Partial receipts</span>
+        </article>
+        <article>
+          <strong>{visible.filter((item) => item.case_status === 'RESOLVED').length}</strong>
+          <span>Resolved</span>
+        </article>
+      </section>
+      {message ? (
+        <p className="success-message" role="status">
+          {message}
+        </p>
+      ) : null}
+      {error ? (
+        <div className="error-panel" role="alert">
+          <p>{error}</p>
+          <button type="button" onClick={() => void reload()}>
+            Try again
+          </button>
+        </div>
+      ) : null}
+
+      <section className="command-panel return-create-panel">
+        <div>
+          <p className="eyebrow">New case</p>
+          <h2>{rto ? 'Start from a failed Delivery' : 'Start from a delivered Order line'}</h2>
+          <p>
+            The server validates eligibility, delivered quantity, tenant, and duplicate commands.
+          </p>
+        </div>
         {rto ? (
           <form
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
-              void request('/admin/rto', {
-                method: 'POST',
-                body: JSON.stringify({
-                  deliveryId: form.get('deliveryId'),
-                  idempotencyKey: crypto.randomUUID(),
-                }),
-              })
-                .then(reload)
-                .catch(() =>
-                  setMessage('RTO creation was rejected. Only failed deliveries are eligible.'),
-                );
+              void run(
+                () =>
+                  request('/admin/rto', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      deliveryId: form.get('deliveryId'),
+                      idempotencyKey: crypto.randomUUID(),
+                    }),
+                  }),
+                'RTO case created from the failed Delivery.',
+              );
             }}
           >
             <label>
-              Failed delivery ID <input name="deliveryId" required />
+              Failed Delivery
+              <select name="deliveryId" required defaultValue="">
+                <option value="" disabled>
+                  Choose a failed Delivery
+                </option>
+                {deliveries
+                  .filter((item) => item.operationalStatus === 'FAILED')
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.deliveryNumber} · Order {item.orderNumber}
+                    </option>
+                  ))}
+              </select>
             </label>
-            <button type="submit">Initiate RTO</button>
+            <button disabled={busy} type="submit">
+              Create RTO case
+            </button>
           </form>
         ) : (
           <form
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
-              void request('/admin/returns', {
-                method: 'POST',
-                body: JSON.stringify({
-                  orderId: form.get('orderId'),
-                  reasonCode: form.get('reasonCode'),
-                  lines: [
-                    {
-                      orderLineId: form.get('orderLineId'),
-                      deliveryLineId: form.get('deliveryLineId') || undefined,
-                      quantity: form.get('quantity'),
-                    },
-                  ],
-                  idempotencyKey: crypto.randomUUID(),
-                }),
-              })
-                .then(reload)
-                .catch(() =>
-                  setMessage('Return request was rejected. It must reference delivered quantity.'),
-                );
+              void run(
+                () =>
+                  request('/admin/returns', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      orderId: form.get('orderId'),
+                      reasonCode: form.get('reasonCode'),
+                      reasonText: form.get('reasonText') || undefined,
+                      lines: [
+                        {
+                          orderLineId: form.get('orderLineId'),
+                          quantity: String(form.get('quantity')),
+                        },
+                      ],
+                      idempotencyKey: crypto.randomUUID(),
+                    }),
+                  }),
+                'Customer Return request created. Authorize it before receiving stock.',
+              );
             }}
           >
             <label>
-              Order ID <input name="orderId" required />
+              Order
+              <select
+                name="orderId"
+                required
+                value={order?.id ?? ''}
+                onChange={(event) => void chooseOrder(event.target.value)}
+              >
+                <option value="">Choose an Order</option>
+                {orders.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.orderNumber} · {item.customerName} · {item.status}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
-              Order line ID <input name="orderLineId" required />
+              Order line
+              <select name="orderLineId" required defaultValue="">
+                <option value="" disabled>
+                  Choose a delivered line
+                </option>
+                {order?.lines.map((line) => (
+                  <option key={line.id} value={line.id}>
+                    {line.sku} · {line.productTitle} · ordered {line.quantity}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
-              Delivery line ID <input name="deliveryLineId" />
+              Quantity
+              <input name="quantity" type="number" min="0.0001" step="0.0001" required />
             </label>
             <label>
-              Quantity <input name="quantity" defaultValue="1" required />
-            </label>
-            <label>
-              Reason{' '}
-              <select name="reasonCode" defaultValue="OTHER">
-                <option value="WRONG_SIZE">Wrong size</option>
-                <option value="DAMAGED_ON_ARRIVAL">Damaged</option>
+              Reason
+              <select name="reasonCode">
+                <option value="CUSTOMER_CHANGED_MIND">Customer changed mind</option>
+                <option value="DAMAGED">Damaged</option>
+                <option value="WRONG_ITEM">Wrong item</option>
+                <option value="SIZE_OR_FIT">Size or fit</option>
                 <option value="OTHER">Other</option>
               </select>
             </label>
-            <button type="submit">Request return</button>
+            <label>
+              Context
+              <textarea name="reasonText" maxLength={1000} />
+            </label>
+            <button disabled={busy || !order} type="submit">
+              Create Return request
+            </button>
           </form>
         )}
-        {cases
-          .filter((x) => (rto ? x.case_type === 'RTO' : x.case_type === 'CUSTOMER_RETURN'))
-          .map((item) => (
-            <article key={item.id}>
-              <h2>{item.return_number}</h2>
-              <p>
-                {item.case_status} · authorization {item.authorization_status} · receipt{' '}
-                {item.receipt_status}
-              </p>
-              {!rto && item.authorization_status === 'PENDING' ? (
+      </section>
+
+      <section className="review-layout">
+        <div className="worklist-panel">
+          <div className="worklist-toolbar">
+            <label>
+              Search
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Return, Order, customer, or reason"
+              />
+            </label>
+            <label>
+              Status
+              <select value={status} onChange={(event) => setStatus(event.target.value)}>
+                <option value="ALL">All</option>
+                <option value="OPEN">Open</option>
+                <option value="RESOLVED">Resolved</option>
+                <option value="NOT_RECEIVED">Not received</option>
+                <option value="PARTIALLY_RECEIVED">Partially received</option>
+                <option value="RECEIVED">Received</option>
+              </select>
+            </label>
+          </div>
+          {loading ? <p>Loading cases…</p> : null}
+          {!loading && visible.length === 0 ? (
+            <div className="empty-state">
+              <h2>No matching cases</h2>
+              <p>Create a case above or clear the filters.</p>
+            </div>
+          ) : null}
+          <div className="review-list">
+            {visible.map((item) => (
+              <button
+                type="button"
+                className={selected?.id === item.id ? 'review-row active' : 'review-row'}
+                key={item.id}
+                onClick={() => void open(item.id)}
+              >
+                <span>
+                  <strong>{item.return_number}</strong>
+                  <small>
+                    Order {item.order_number} · {item.customer_name ?? 'Guest customer'}
+                  </small>
+                </span>
+                <span>
+                  <StatusBadge status={item.case_status} />
+                  <small>{item.receipt_status.replaceAll('_', ' ')}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <aside className="detail-panel">
+          {selected ? (
+            <>
+              <div className="detail-panel-header">
+                <div>
+                  <p className="eyebrow">{selected.case_type.replaceAll('_', ' ')}</p>
+                  <h2>{selected.return_number}</h2>
+                </div>
+                <StatusBadge status={selected.case_status} />
+              </div>
+              <dl className="detail-list">
+                <div>
+                  <dt>Order</dt>
+                  <dd>
+                    <Link href={`/orders?order=${selected.order_id}`}>{selected.order_number}</Link>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Customer</dt>
+                  <dd>{selected.customer_name ?? 'Guest customer'}</dd>
+                </div>
+                <div>
+                  <dt>Reason</dt>
+                  <dd>{selected.reason_code.replaceAll('_', ' ')}</dd>
+                </div>
+                <div>
+                  <dt>Authorization</dt>
+                  <dd>{selected.authorization_status.replaceAll('_', ' ')}</dd>
+                </div>
+                <div>
+                  <dt>Receipt</dt>
+                  <dd>{selected.receipt_status.replaceAll('_', ' ')}</dd>
+                </div>
+              </dl>
+              {selected.reason_text ? <p>{selected.reason_text}</p> : null}
+              <h3>Return lines</h3>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>SKU</th>
+                      <th>Requested</th>
+                      <th>Authorized</th>
+                      <th>Received</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selected.lines.map((line) => (
+                      <tr key={line.id}>
+                        <td>{line.product_title}</td>
+                        <td>{line.sku}</td>
+                        <td>{line.requested_quantity}</td>
+                        <td>{line.authorized_quantity}</td>
+                        <td>{line.received_quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {selected.case_type === 'CUSTOMER_RETURN' &&
+              selected.authorization_status === 'PENDING' ? (
                 <button
+                  disabled={busy}
                   type="button"
-                  onClick={() =>
-                    void request(`/admin/returns/${item.id}/authorize`, {
-                      method: 'POST',
-                      body: JSON.stringify({
-                        expectedVersion: Number(item.version),
-                        idempotencyKey: crypto.randomUUID(),
-                      }),
-                    })
-                      .then(reload)
-                      .catch(() =>
-                        setMessage('Authorization was rejected. Reload before retrying.'),
-                      )
-                  }
+                  onClick={() => {
+                    if (window.confirm('Authorize the requested quantities for physical return?'))
+                      void run(
+                        () =>
+                          request(`/admin/returns/${selected.id}/authorize`, {
+                            method: 'POST',
+                            body: JSON.stringify({
+                              expectedVersion: Number(selected.version),
+                              idempotencyKey: crypto.randomUUID(),
+                            }),
+                          }),
+                        'Return authorized.',
+                      );
+                  }}
                 >
-                  Authorize return
+                  Authorize Return
                 </button>
               ) : null}
-              <button type="button" onClick={() => void open(item.id)}>
-                Open operational detail
-              </button>
-            </article>
-          ))}
-        {selected ? (
-          <section aria-label="Reverse receipt detail">
-            <h2>{selected.return_number}</h2>
-            <p>
-              {selected.case_status} · {selected.authorization_status} · {selected.receipt_status}
-            </p>
-            <h3>Physical lines</h3>
-            {selected.lines.map((line) => (
-              <p key={line.id}>
-                {line.product_title} / {line.sku}: requested {line.requested_quantity}, authorized{' '}
-                {line.authorized_quantity}, received {line.received_quantity}
-              </p>
-            ))}
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                const form = new FormData(event.currentTarget);
-                void request(`/admin/returns/${selected.id}/receipts`, {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    locationId: form.get('locationId'),
-                    idempotencyKey: crypto.randomUUID(),
-                    lines: [
-                      {
-                        returnLineId: form.get('returnLineId'),
-                        condition: form.get('condition'),
-                        quantity: form.get('quantity'),
-                      },
-                    ],
-                  }),
-                })
-                  .then(async () => {
-                    await reload();
-                    await open(selected.id);
-                    setMessage(
-                      'Reverse receipt posted. Inventory and cost recovery were recorded together.',
+              {selected.authorization_status !== 'PENDING' &&
+              selected.receipt_status !== 'RECEIVED' ? (
+                <form
+                  className="command-panel"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const form = new FormData(event.currentTarget);
+                    void run(
+                      () =>
+                        request(`/admin/returns/${selected.id}/receipts`, {
+                          method: 'POST',
+                          body: JSON.stringify({
+                            locationId: form.get('locationId'),
+                            idempotencyKey: crypto.randomUUID(),
+                            lines: [
+                              {
+                                returnLineId: form.get('returnLineId'),
+                                condition: form.get('condition'),
+                                quantity: String(form.get('quantity')),
+                              },
+                            ],
+                          }),
+                        }),
+                      'Physical return receipt posted; Inventory and Costing were updated atomically.',
                     );
-                  })
-                  .catch(() =>
-                    setMessage(
-                      'Reverse receipt was rejected. Confirm authorization, location capability, quantity, and provenance.',
-                    ),
-                  );
-              }}
-            >
-              <h3>Post reverse receipt</h3>
-              <label>
-                Return line
-                <select name="returnLineId" defaultValue={selected.lines[0]?.id} required>
-                  {selected.lines.map((line) => (
-                    <option key={line.id} value={line.id}>
-                      {line.sku} (remaining{' '}
-                      {Number(line.authorized_quantity) - Number(line.received_quantity)})
+                  }}
+                >
+                  <h3>Post physical receipt</h3>
+                  <label>
+                    Warehouse
+                    <select name="locationId" required>
+                      {locations.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Line
+                    <select name="returnLineId" required>
+                      {selected.lines
+                        .filter(
+                          (line) =>
+                            Number(line.received_quantity) < Number(line.authorized_quantity),
+                        )
+                        .map((line) => (
+                          <option key={line.id} value={line.id}>
+                            {line.sku} · remaining{' '}
+                            {Number(line.authorized_quantity) - Number(line.received_quantity)}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    Condition
+                    <select name="condition">
+                      <option>SELLABLE</option>
+                      <option>INSPECTION</option>
+                      <option>QUARANTINE</option>
+                      <option>DAMAGED</option>
+                    </select>
+                  </label>
+                  <label>
+                    Receive now
+                    <input name="quantity" type="number" min="0.0001" step="0.0001" required />
+                  </label>
+                  <button disabled={busy} type="submit">
+                    Review and post receipt
+                  </button>
+                </form>
+              ) : null}
+              <section>
+                <h3>Refund relationship</h3>
+                <p>
+                  Return approval does not create a Refund. Link only an existing Payments refund
+                  for this Order.
+                </p>
+                <form
+                  className="inline-actions"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const refundId = String(new FormData(event.currentTarget).get('refundId'));
+                    void run(
+                      () =>
+                        request(`/admin/returns/${selected.id}/refunds`, {
+                          method: 'POST',
+                          body: JSON.stringify({ refundId }),
+                        }),
+                      'Existing Refund linked to this Return.',
+                    );
+                  }}
+                >
+                  <select name="refundId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose an existing Refund
                     </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Return-receiving location ID <input name="locationId" required />
-              </label>
-              <label>
-                Condition
-                <select name="condition" defaultValue="INSPECTION">
-                  <option value="SELLABLE">Sellable</option>
-                  <option value="INSPECTION">Inspection</option>
-                  <option value="DAMAGED">Damaged</option>
-                  <option value="QUARANTINE">Quarantine</option>
-                </select>
-              </label>
-              <label>
-                Received quantity <input name="quantity" defaultValue="1" required />
-              </label>
-              <button type="submit">Post immutable reverse receipt</button>
-            </form>
-            <h3>Receipt and refund links</h3>
-            {selected.receipts.map((receipt) => (
-              <p key={receipt.id}>
-                {receipt.receipt_number} · {receipt.status}
-              </p>
-            ))}
-            {selected.refunds.map((refund) => (
-              <p key={refund.id}>Linked refund {refund.refund_id}</p>
-            ))}
-            <p>
-              COGS recovery: {selected.cogsRecovery?.total_cost ?? '0'}{' '}
-              {selected.cogsRecovery?.currency_code}
-            </p>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                const form = new FormData(event.currentTarget);
-                void request(`/admin/returns/${selected.id}/refunds`, {
-                  method: 'POST',
-                  body: JSON.stringify({ refundId: form.get('refundId') }),
-                })
-                  .then(async () => {
-                    await open(selected.id);
-                    setMessage(
-                      'Existing payment refund linked to this commercial return resolution.',
-                    );
-                  })
-                  .catch(() =>
-                    setMessage(
-                      'Refund link was rejected. Refunds remain owned by Payments and must match this Order.',
-                    ),
-                  );
-              }}
-            >
-              <label>
-                Existing payment refund ID <input name="refundId" required />
-              </label>
-              <button type="submit">Link existing refund</button>
-            </form>
-          </section>
-        ) : null}
-        {cases.length === 0 ? <p>No {rto ? 'RTO cases' : 'customer returns'} yet.</p> : null}
+                    {refunds.map((refund) => (
+                      <option key={refund.id} value={refund.id}>
+                        {refund.refundNumber} · {refund.amount} · {refund.status}
+                      </option>
+                    ))}
+                  </select>
+                  <button disabled={busy} type="submit">
+                    Link Refund
+                  </button>
+                </form>
+                <p>
+                  {selected.refunds.length} linked Refund{selected.refunds.length === 1 ? '' : 's'}{' '}
+                  · COGS recovery {selected.cogsRecovery?.total_cost ?? '0'}{' '}
+                  {selected.cogsRecovery?.currency_code}
+                </p>
+              </section>
+              <section>
+                <h3>Receipt history</h3>
+                {selected.receipts.length ? (
+                  selected.receipts.map((receipt) => (
+                    <p key={receipt.id}>
+                      {receipt.receipt_number} · {receipt.status} ·{' '}
+                      {new Date(receipt.posted_at).toLocaleString()}
+                    </p>
+                  ))
+                ) : (
+                  <p className="muted">No physical receipt posted.</p>
+                )}
+              </section>
+            </>
+          ) : (
+            <div className="empty-state">
+              <h2>Select a case</h2>
+              <p>Inspect the commercial and physical state together.</p>
+            </div>
+          )}
+        </aside>
       </section>
     </main>
   );
