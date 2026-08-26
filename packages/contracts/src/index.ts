@@ -37,6 +37,15 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   }[];
 }
 
+export interface CatalogVariantChoiceDto {
+  readonly id: string;
+  readonly sku: string;
+  readonly productId: string;
+  readonly productTitle: string;
+  readonly status: string;
+  readonly optionSummary: string;
+}
+
 export interface StorefrontProductDto {
   readonly id: string;
   readonly handle: string;

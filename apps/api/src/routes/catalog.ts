@@ -14,6 +14,7 @@ import {
   getStorefrontCatalogProduct,
   listStorefrontCatalogProducts,
   listCatalogProducts,
+  listCatalogVariantChoices,
   listCatalogProductTypes,
   moveCatalogCategory,
   publishCatalogProduct,
@@ -126,6 +127,12 @@ export function registerCatalogRoutes(
     const context = await requireCapability(database, auth, request.headers, 'catalog.view');
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCatalogProducts(database.db, context.organizationId) };
+  });
+
+  app.get('/admin/catalog/variants', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listCatalogVariantChoices(database.db, context.organizationId) };
   });
 
   app.get('/admin/catalog/products/:productId', async (request, reply) => {

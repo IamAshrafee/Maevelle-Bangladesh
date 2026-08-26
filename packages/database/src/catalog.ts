@@ -505,6 +505,52 @@ export async function listCatalogProducts(
   return result.rows.map(asProduct);
 }
 
+/** Compact tenant-scoped read model for operational selectors outside Catalog. */
+export async function listCatalogVariantChoices(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<
+  readonly {
+    id: string;
+    sku: string;
+    productId: string;
+    productTitle: string;
+    status: string;
+    optionSummary: string;
+  }[]
+> {
+  const result = await sql<{
+    id: string;
+    sku: string;
+    product_id: string;
+    product_title: string;
+    status: string;
+    option_summary: string;
+  }>`
+    select variant.id::text,variant.sku,product.id::text as product_id,
+      product.title as product_title,variant.status,
+      coalesce(string_agg(axis.name || ': ' || value.display_value, ' · ' order by axis.position,value.position),'') as option_summary
+    from catalog.product_variants variant
+    join catalog.products product
+      on product.id=variant.product_id and product.organization_id=variant.organization_id
+    left join catalog.variant_option_values link
+      on link.variant_id=variant.id and link.organization_id=variant.organization_id
+    left join catalog.product_option_axes axis on axis.id=link.option_axis_id
+    left join catalog.product_option_values value on value.id=link.option_value_id
+    where variant.organization_id=${organizationId}
+    group by variant.id,product.id,product.title
+    order by product.title,variant.sku,variant.id
+  `.execute(db);
+  return result.rows.map((row) => ({
+    id: row.id,
+    sku: row.sku,
+    productId: row.product_id,
+    productTitle: row.product_title,
+    status: row.status,
+    optionSummary: row.option_summary,
+  }));
+}
+
 /** Tenant-scoped operational read model for the Admin Product workspace. */
 export async function getCatalogProductWorkspace(
   db: Kysely<DatabaseSchema>,
