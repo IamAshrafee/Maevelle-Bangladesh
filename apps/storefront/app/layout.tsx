@@ -3,8 +3,10 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { StorefrontFooter, StorefrontHeader } from '@/components/storefront-header';
 import { StorefrontContextProvider } from '@/components/storefront-context';
+import { storefrontPublicBaseUrl } from '@/src/server-catalog';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(storefrontPublicBaseUrl),
   title: {
     default: 'Maevelle Storefront',
     template: '%s | Maevelle',

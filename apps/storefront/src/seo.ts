@@ -22,7 +22,9 @@ export function productJsonLd(product: StorefrontProductDto, canonicalUrl: strin
     '@type': 'Product',
     name: product.title,
     description: product.description ?? undefined,
-    image: product.media.map((asset) => `/api/media/public/${asset.id}`),
+    image: product.media.map((asset) =>
+      new URL(`/api/media/public/${asset.id}`, canonicalUrl).toString(),
+    ),
     url: canonicalUrl,
     offers,
   };
