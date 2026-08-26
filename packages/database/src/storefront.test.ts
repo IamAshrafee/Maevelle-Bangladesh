@@ -124,6 +124,14 @@ describe('public Storefront projection', () => {
       (
         await searchStorefront(database.db, {
           organizationId: value.organizationId,
+          query: 'totally unrelated hiking boots',
+        })
+      ).total,
+    ).toBe(0);
+    expect(
+      (
+        await searchStorefront(database.db, {
+          organizationId: value.organizationId,
           categoryId: value.leafId,
           availability: 'IN_STOCK',
           sort: 'PRICE_ASC',

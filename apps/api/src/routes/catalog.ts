@@ -469,21 +469,30 @@ export function registerCatalogRoutes(
         }),
       },
     },
-    async (request) => ({
-      data: await searchStorefront(
-        database.db,
-        request.query as {
-          organizationId: string;
-          q?: string;
-          categoryId?: string;
-          minimumPrice?: string;
-          maximumPrice?: string;
-          availability?: 'IN_STOCK' | 'OUT_OF_STOCK';
-          sort?: 'RELEVANCE' | 'NEWEST' | 'PRICE_ASC' | 'PRICE_DESC';
-          page?: number;
-        },
-      ),
-    }),
+    async (request) => {
+      const query = request.query as {
+        organizationId: string;
+        q?: string;
+        categoryId?: string;
+        minimumPrice?: string;
+        maximumPrice?: string;
+        availability?: 'IN_STOCK' | 'OUT_OF_STOCK';
+        sort?: 'RELEVANCE' | 'NEWEST' | 'PRICE_ASC' | 'PRICE_DESC';
+        page?: number;
+      };
+      return {
+        data: await searchStorefront(database.db, {
+          organizationId: query.organizationId,
+          ...(query.q ? { query: query.q } : {}),
+          ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+          ...(query.minimumPrice ? { minimumPrice: query.minimumPrice } : {}),
+          ...(query.maximumPrice ? { maximumPrice: query.maximumPrice } : {}),
+          ...(query.availability ? { availability: query.availability } : {}),
+          ...(query.sort ? { sort: query.sort } : {}),
+          ...(query.page ? { page: query.page } : {}),
+        }),
+      };
+    },
   );
   app.post('/admin/catalog/search/rebuild', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
