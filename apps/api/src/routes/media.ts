@@ -4,9 +4,12 @@ import { Type } from 'typebox';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   attachMediaToProduct,
+  detachMediaFromProduct,
   findMediaAsset,
+  listMediaLibrary,
   MediaDomainError,
   registerUploadedMedia,
+  updateMediaAssetMetadata,
 } from '@maevelle/database/media';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
@@ -69,6 +72,12 @@ export function registerMediaRoutes(
   storage: LocalMediaStorage,
   maxUploadBytes: number,
 ): void {
+  app.get('/admin/media', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'media.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listMediaLibrary(database.db, context.organizationId) };
+  });
+
   app.post('/admin/media/images', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'media.manage');
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -141,6 +150,53 @@ export function registerMediaRoutes(
       }
     },
   );
+
+  app.patch(
+    '/admin/media/:assetId',
+    {
+      schema: {
+        body: Type.Object({
+          title: Type.Optional(Type.Union([Type.String({ maxLength: 160 }), Type.Null()])),
+          altText: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
+          visibility: Type.Optional(Type.Union([Type.Literal('PUBLIC'), Type.Literal('PRIVATE')])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'media.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        await updateMediaAssetMetadata(database.db, {
+          organizationId: context.organizationId,
+          assetId: (request.params as { assetId: string }).assetId,
+          ...(request.body as {
+            title?: string | null;
+            altText?: string | null;
+            visibility?: 'PUBLIC' | 'PRIVATE';
+          }),
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return mediaError(reply, error);
+      }
+    },
+  );
+
+  app.delete('/admin/catalog/products/:productId/media/:productMediaId', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      const params = request.params as { productId: string; productMediaId: string };
+      await detachMediaFromProduct(database.db, {
+        organizationId: context.organizationId,
+        productId: params.productId,
+        productMediaId: params.productMediaId,
+      });
+      return reply.code(204).send();
+    } catch (error) {
+      return mediaError(reply, error);
+    }
+  });
 
   app.get('/media/public/:assetId', async (request, reply) => {
     const asset = await findMediaAsset(

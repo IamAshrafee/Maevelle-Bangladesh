@@ -22,6 +22,29 @@ export interface MediaAsset {
   readonly altText: string | null;
 }
 
+export interface MediaLibraryAsset {
+  readonly id: string;
+  readonly visibility: MediaAsset['visibility'];
+  readonly status: MediaAsset['status'];
+  readonly mimeType: MediaAsset['mimeType'];
+  readonly byteSize: number;
+  readonly altText: string | null;
+  readonly title: string | null;
+  readonly widthPx: number | null;
+  readonly heightPx: number | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly usages: readonly {
+    readonly id: string;
+    readonly productId: string;
+    readonly productTitle: string;
+    readonly variantId: string | null;
+    readonly variantSku: string | null;
+    readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+    readonly position: number;
+  }[];
+}
+
 function asAsset(row: {
   id: string;
   visibility_class: 'PUBLIC' | 'PRIVATE';
@@ -118,6 +141,104 @@ export async function findMediaAsset(
   return result.rows[0] ? asAsset(result.rows[0]) : undefined;
 }
 
+/** Tenant-scoped Admin read model; object keys are intentionally not exposed to the browser. */
+export async function listMediaLibrary(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly MediaLibraryAsset[]> {
+  const [assets, usages] = await Promise.all([
+    sql<{
+      id: string;
+      visibility_class: MediaAsset['visibility'];
+      status: MediaAsset['status'];
+      mime_type: MediaAsset['mimeType'];
+      byte_size: string;
+      title: string | null;
+      alt_text: string | null;
+      width_px: number | null;
+      height_px: number | null;
+      created_at: string;
+      updated_at: string;
+    }>`
+      select asset.id::text,asset.visibility_class,asset.status,object.mime_type,
+        object.byte_size::text,asset.title,asset.alt_text,
+        object.width_px,object.height_px,asset.created_at::text,asset.updated_at::text
+      from media.media_assets asset
+      join media.media_objects object
+        on object.id=asset.current_object_id and object.organization_id=asset.organization_id
+      where asset.organization_id=${organizationId} and asset.status in ('READY','ARCHIVED')
+      order by asset.created_at desc,asset.id desc
+    `.execute(db),
+    sql<{
+      id: string;
+      asset_id: string;
+      product_id: string;
+      product_title: string;
+      variant_id: string | null;
+      variant_sku: string | null;
+      role: MediaLibraryAsset['usages'][number]['role'];
+      position: number;
+    }>`
+      select link.id::text,link.asset_id::text,link.product_id::text,
+        product.title as product_title,link.variant_id::text,variant.sku as variant_sku,
+        link.role,link.position
+      from catalog.product_media link
+      join catalog.products product
+        on product.id=link.product_id and product.organization_id=link.organization_id
+      left join catalog.product_variants variant
+        on variant.id=link.variant_id and variant.organization_id=link.organization_id
+      where link.organization_id=${organizationId}
+      order by link.position,link.id
+    `.execute(db),
+  ]);
+  return assets.rows.map((asset) => ({
+    id: asset.id,
+    visibility: asset.visibility_class,
+    status: asset.status,
+    mimeType: asset.mime_type,
+    byteSize: Number(asset.byte_size),
+    altText: asset.alt_text,
+    title: asset.title,
+    widthPx: asset.width_px,
+    heightPx: asset.height_px,
+    createdAt: asset.created_at,
+    updatedAt: asset.updated_at,
+    usages: usages.rows
+      .filter((usage) => usage.asset_id === asset.id)
+      .map((usage) => ({
+        id: usage.id,
+        productId: usage.product_id,
+        productTitle: usage.product_title,
+        variantId: usage.variant_id,
+        variantSku: usage.variant_sku,
+        role: usage.role,
+        position: usage.position,
+      })),
+  }));
+}
+
+export async function updateMediaAssetMetadata(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    assetId: string;
+    title?: string | null;
+    altText?: string | null;
+    visibility?: MediaAsset['visibility'];
+  },
+): Promise<void> {
+  const result = await sql`
+    update media.media_assets
+    set title=case when ${input.title === undefined} then title else ${input.title ?? null} end,
+      alt_text=case when ${input.altText === undefined} then alt_text else ${input.altText ?? null} end,
+      visibility_class=coalesce(${input.visibility ?? null},visibility_class),
+      updated_at=now(),version=version+1
+    where id=${input.assetId} and organization_id=${input.organizationId} and status='READY'
+  `.execute(db);
+  if (Number(result.numAffectedRows) !== 1)
+    throw new MediaDomainError('NOT_FOUND', 'Media asset was not found.');
+}
+
 export async function attachMediaToProduct(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -137,9 +258,31 @@ export async function attachMediaToProduct(
     db,
   );
   if (!product.rows[0]) throw new MediaDomainError('NOT_FOUND', 'Product was not found.');
+  if (input.variantId) {
+    const variant = await sql<{ id: string }>`
+      select id from catalog.product_variants
+      where id=${input.variantId} and product_id=${input.productId}
+        and organization_id=${input.organizationId}
+    `.execute(db);
+    if (!variant.rows[0])
+      throw new MediaDomainError('VALIDATION_FAILED', 'Variant is not available for this Product.');
+  }
   await sql`
     insert into catalog.product_media (organization_id, product_id, variant_id, asset_id, role, position)
     values (${input.organizationId}, ${input.productId}, ${input.variantId ?? null}, ${input.assetId}, ${input.role}, ${input.position ?? 0})
     on conflict (product_id, variant_id, asset_id, role) do update set position = excluded.position
   `.execute(db);
+}
+
+export async function detachMediaFromProduct(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; productId: string; productMediaId: string },
+): Promise<void> {
+  const result = await sql`
+    delete from catalog.product_media
+    where id=${input.productMediaId} and product_id=${input.productId}
+      and organization_id=${input.organizationId}
+  `.execute(db);
+  if (Number(result.numAffectedRows) !== 1)
+    throw new MediaDomainError('NOT_FOUND', 'Product media placement was not found.');
 }

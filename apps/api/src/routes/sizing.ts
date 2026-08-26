@@ -11,6 +11,7 @@ import {
   createSizeGuideRevision,
   createSizeSystem,
   createSizingDomain,
+  getAdminSizingWorkspace,
   publishSizeGuideRevision,
   setSizeGuideMeasurement,
   SizingDomainError,
@@ -61,6 +62,12 @@ export function registerSizingRoutes(
   database: DatabaseClient,
   auth: Auth,
 ): void {
+  app.get('/admin/sizing', async (request, reply) => {
+    const context = await requireSizing(database, auth, request.headers, 'sizing.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await getAdminSizingWorkspace(database.db, context.organizationId) };
+  });
+
   const secured = (
     path: string,
     body: ReturnType<typeof Type.Object>,

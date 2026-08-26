@@ -13,6 +13,7 @@ import {
   createSizeGuideRevision,
   createSizeSystem,
   createSizingDomain,
+  getAdminSizingWorkspace,
   publishSizeGuideRevision,
   setSizeGuideMeasurement,
 } from './sizing.js';
@@ -129,5 +130,78 @@ describe('revisioned sizing', () => {
       database.db,
     );
     expect(attached.rows[0]!.count).toBe('1');
+
+    const workspace = await getAdminSizingWorkspace(database.db, organization.id);
+    const listedGuide = workspace.guides.find((candidate) => candidate.id === guide.id);
+    expect(listedGuide).toMatchObject({
+      name: 'Dress guide',
+      currentPublishedRevisionId: guide.revisionId,
+    });
+    expect(listedGuide?.revisions.map((revision) => revision.status)).toEqual([
+      'DRAFT',
+      'PUBLISHED',
+    ]);
+    expect(listedGuide?.revisions[1]?.rows[0]).toMatchObject({
+      displayLabel: 'M',
+      measurements: [
+        expect.objectContaining({ measurementDefinitionId: measurement.id, exact: '92.000000' }),
+      ],
+    });
+    expect(workspace.productConfigurations).toEqual([
+      expect.objectContaining({ productId: product.id, sizeGuideId: guide.id }),
+    ]);
+  });
+
+  it('rejects cross-tenant parent IDs and keeps Admin read models isolated', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `sizing-owner-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Sizing owner',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const other = await createOrganization(database.db, {
+      code: `sizing-other-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Sizing other',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const domain = await createSizingDomain(database.db, {
+      organizationId: owner.id,
+      code: 'owner-garment',
+      name: 'Owner garment',
+      subjectType: 'GARMENT',
+    });
+    await expect(
+      createSizeSystem(database.db, {
+        organizationId: other.id,
+        sizingDomainId: domain.id,
+        code: 'forbidden-system',
+        name: 'Forbidden system',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      createMeasurementDefinition(database.db, {
+        organizationId: other.id,
+        sizingDomainId: domain.id,
+        code: 'forbidden-measurement',
+        name: 'Forbidden measurement',
+        subjectType: 'GARMENT',
+        defaultUnit: 'cm',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      createSizeGuide(database.db, {
+        organizationId: other.id,
+        actorId: crypto.randomUUID(),
+        name: 'Forbidden guide',
+        sizingDomainId: domain.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await getAdminSizingWorkspace(database.db, other.id)).domains).toEqual([]);
+    expect((await getAdminSizingWorkspace(database.db, owner.id)).domains).toEqual([
+      expect.objectContaining({ id: domain.id, name: 'Owner garment' }),
+    ]);
   });
 });
