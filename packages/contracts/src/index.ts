@@ -62,9 +62,24 @@ export interface StorefrontProductDto {
     sku: string;
     optionValueIds: readonly string[];
     price?: { amount: string; compareAtAmount: string | null; currency: string };
+    available: boolean;
+  }[];
+  readonly media: readonly {
+    id: string;
+    variantId: string | null;
+    role: string;
+    altText: string | null;
   }[];
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
+}
+
+export interface StorefrontContextDto {
+  readonly organizationId: string;
+  readonly storeName: string;
+  readonly currency: string;
+  readonly locale: string;
+  readonly announcement?: string;
 }
 
 export interface PublicSizeGuideDto {

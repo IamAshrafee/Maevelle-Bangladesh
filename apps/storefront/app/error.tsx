@@ -2,9 +2,9 @@
 export default function ErrorPage({ reset }: { reset: () => void }) {
   return (
     <main>
-      <section className="shell">
+      <section className="catalog-message error-state">
         <h1>Storefront temporarily unavailable</h1>
-        <p>No private system detail has been exposed. Try the request again.</p>
+        <p>We could not load this page. Your information is safe; please try again.</p>
         <button type="button" onClick={reset}>
           Try again
         </button>

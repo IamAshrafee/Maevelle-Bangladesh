@@ -55,39 +55,63 @@ export function ProductReviews({
   }, [organizationId, productId]);
 
   return (
-    <section aria-labelledby="reviews-heading">
-      <h2 id="reviews-heading">Verified customer reviews</h2>
+    <section className="reviews-section" aria-labelledby="reviews-heading">
+      <div className="review-section-heading">
+        <div>
+          <p className="eyebrow">Real customer experience</p>
+          <h2 id="reviews-heading">Verified reviews</h2>
+        </div>
+        {state === 'ready' && summary?.rating_count ? (
+          <div className="review-score">
+            <strong>{Number(summary.average_rating).toFixed(1)}</strong>
+            <span aria-label={`${Number(summary.average_rating).toFixed(1)} out of 5 stars`}>
+              ★★★★★
+            </span>
+            <small>
+              {summary.rating_count} review{summary.rating_count === 1 ? '' : 's'}
+            </small>
+          </div>
+        ) : null}
+      </div>
       {state === 'loading' ? <p>Loading reviews…</p> : null}
       {state === 'error' ? <p>Reviews are unavailable right now.</p> : null}
-      {state === 'ready' && summary?.rating_count ? (
-        <p>
-          {Number(summary.average_rating).toFixed(1)} out of 5 from {summary.rating_count} verified
-          customer review{summary.rating_count === 1 ? '' : 's'}.
-        </p>
+      {state === 'ready' && reviews.length === 0 ? (
+        <div className="catalog-message">
+          <h3>No reviews yet</h3>
+          <p>Verified customers can review this product through their secure order link.</p>
+        </div>
       ) : null}
-      {state === 'ready' && reviews.length === 0 ? <p>No reviews yet.</p> : null}
-      {reviews.map((review) => (
-        <article key={review.id}>
-          <p aria-label={`${review.rating} out of 5 stars`}>
-            {'★'.repeat(review.rating)}
-            {'☆'.repeat(5 - review.rating)}
-          </p>
-          <h3>{review.title ?? 'Verified customer review'}</h3>
-          {review.body ? <p>{review.body}</p> : null}
-          <p>
-            {review.public_display_name} · {new Date(review.submitted_at).toLocaleDateString()}
-          </p>
-          {review.media_asset_ids.map((assetId) => (
-            <img key={assetId} src={`/api/media/public/${assetId}`} alt="Customer review media" />
-          ))}
-          {review.merchant_response ? (
-            <aside>
-              <strong>Maevelle response</strong>
-              <p>{review.merchant_response}</p>
-            </aside>
-          ) : null}
-        </article>
-      ))}
+      <div className="review-list">
+        {reviews.map((review) => (
+          <article className="review-card" key={review.id}>
+            <p aria-label={`${review.rating} out of 5 stars`}>
+              {'★'.repeat(review.rating)}
+              {'☆'.repeat(5 - review.rating)}
+            </p>
+            <h3>{review.title ?? 'Verified customer review'}</h3>
+            {review.body ? <p>{review.body}</p> : null}
+            <p>
+              {review.public_display_name} · {new Date(review.submitted_at).toLocaleDateString()}
+            </p>
+            {review.media_asset_ids.map((assetId) => (
+              <img
+                key={assetId}
+                src={`/api/media/public/${assetId}`}
+                alt="Customer review media"
+                width="320"
+                height="320"
+                loading="lazy"
+              />
+            ))}
+            {review.merchant_response ? (
+              <aside className="merchant-response">
+                <strong>Maevelle response</strong>
+                <p>{review.merchant_response}</p>
+              </aside>
+            ) : null}
+          </article>
+        ))}
+      </div>
     </section>
   );
 }

@@ -25,6 +25,7 @@ const config: RuntimeConfig = {
   authTrustedOrigins: ['http://localhost:3000'],
   mediaStoragePath: 'var/test-media',
   mediaMaxUploadBytes: 10 * 1024 * 1024,
+  storefrontOrganizationCode: 'maevelle',
 };
 
 function cookieHeader(setCookie: string | string[] | undefined): string {

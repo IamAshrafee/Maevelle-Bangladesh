@@ -20,6 +20,56 @@ export interface StorefrontSearchItem {
   readonly currency: string | null;
   readonly available: boolean;
   readonly rank: number;
+  readonly primaryMediaAssetId: string | null;
+  readonly secondaryMediaAssetId: string | null;
+  readonly averageRating: string | null;
+  readonly reviewCount: number;
+}
+
+export async function resolveStorefrontContext(
+  db: Kysely<DatabaseSchema>,
+  organizationCode: string,
+): Promise<
+  | {
+      organizationId: string;
+      storeName: string;
+      currency: string;
+      locale: string;
+      announcement?: string;
+    }
+  | undefined
+> {
+  const result = await sql<{
+    organization_id: string;
+    display_name: string;
+    default_currency: string;
+    default_locale: string;
+    storefront_profile: Record<string, unknown> | null;
+  }>`
+    select organization.id::text as organization_id,organization.display_name,
+      organization.default_currency,organization.default_locale,profile.storefront_profile
+    from platform.organizations organization
+    left join settings.organization_profiles profile on profile.organization_id=organization.id
+    where organization.code=${organizationCode} and organization.status='ACTIVE'
+    limit 1
+  `.execute(db);
+  const row = result.rows[0];
+  if (!row) return undefined;
+  const profile = row.storefront_profile ?? {};
+  const publicStoreName = profile.publicStoreName;
+  const announcement = profile.announcement;
+  return {
+    organizationId: row.organization_id,
+    storeName:
+      typeof publicStoreName === 'string' && publicStoreName.trim()
+        ? publicStoreName.trim()
+        : row.display_name,
+    currency: row.default_currency,
+    locale: row.default_locale,
+    ...(typeof announcement === 'string' && announcement.trim()
+      ? { announcement: announcement.trim() }
+      : {}),
+  };
 }
 
 export interface StorefrontSearchResult {
@@ -137,6 +187,10 @@ export async function searchStorefront(
     facet_max: string | null;
     in_stock_count: string;
     out_of_stock_count: string;
+    primary_media_asset_id: string | null;
+    secondary_media_asset_id: string | null;
+    average_rating: string | null;
+    review_count: string;
   }>`
     with matched as (
       select document.*,
@@ -162,8 +216,17 @@ export async function searchStorefront(
     select matched.product_id::text id,matched.handle,matched.title,matched.description,
       matched.minimum_price::text,matched.currency_code,matched.available,matched.rank,
       facets.total::text,facets.facet_min::text,facets.facet_max::text,
-      facets.in_stock_count::text,facets.out_of_stock_count::text
+      facets.in_stock_count::text,facets.out_of_stock_count::text,
+      (select link.asset_id::text from catalog.product_media link join media.media_assets asset on asset.id=link.asset_id where link.organization_id=${input.organizationId} and link.product_id=matched.product_id and link.variant_id is null and asset.status='READY' and asset.visibility_class='PUBLIC' order by link.position,link.id limit 1) as primary_media_asset_id,
+      (select link.asset_id::text from catalog.product_media link join media.media_assets asset on asset.id=link.asset_id where link.organization_id=${input.organizationId} and link.product_id=matched.product_id and link.variant_id is null and asset.status='READY' and asset.visibility_class='PUBLIC' order by link.position,link.id offset 1 limit 1) as secondary_media_asset_id,
+      rating.average_rating::text,rating.rating_count::text as review_count
     from matched cross join facets
+    left join lateral (
+      select case when summary.rating_count>0 then summary.rating_sum::numeric/summary.rating_count else null end average_rating,
+        summary.rating_count
+      from reviews.product_rating_summary summary
+      where summary.organization_id=${input.organizationId} and summary.product_id=matched.product_id
+    ) rating on true
     order by
       case when ${sort}='RELEVANCE' then matched.rank end desc,
       case when ${sort}='PRICE_ASC' then matched.minimum_price end asc nulls last,
@@ -182,6 +245,10 @@ export async function searchStorefront(
       currency: row.currency_code,
       available: row.available,
       rank: Number(row.rank),
+      primaryMediaAssetId: row.primary_media_asset_id,
+      secondaryMediaAssetId: row.secondary_media_asset_id,
+      averageRating: row.average_rating,
+      reviewCount: Number(row.review_count ?? 0),
     })),
     total: Number(first?.total ?? 0),
     page,

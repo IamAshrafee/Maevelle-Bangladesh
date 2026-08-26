@@ -75,6 +75,7 @@ describe('API hardening foundation', () => {
         authTrustedOrigins: ['http://localhost:3000'],
         mediaStoragePath: 'var/media',
         mediaMaxUploadBytes: 1024,
+        storefrontOrganizationCode: 'maevelle',
       },
     });
     const publicResponse = await app.inject({ method: 'GET', url: '/health/live' });

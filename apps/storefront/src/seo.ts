@@ -9,7 +9,9 @@ export function productJsonLd(product: StorefrontProductDto, canonicalUrl: strin
             sku: variant.sku,
             price: variant.price.amount,
             priceCurrency: variant.price.currency,
-            availability: 'https://schema.org/InStock',
+            availability: variant.available
+              ? 'https://schema.org/InStock'
+              : 'https://schema.org/OutOfStock',
             url: canonicalUrl,
           },
         ]
@@ -20,6 +22,7 @@ export function productJsonLd(product: StorefrontProductDto, canonicalUrl: strin
     '@type': 'Product',
     name: product.title,
     description: product.description ?? undefined,
+    image: product.media.map((asset) => `/api/media/public/${asset.id}`),
     url: canonicalUrl,
     offers,
   };

@@ -18,6 +18,8 @@ export interface RuntimeConfig {
   /** Local development media root. Production storage is configured in a later milestone. */
   readonly mediaStoragePath: string;
   readonly mediaMaxUploadBytes: number;
+  /** Public Storefront tenant resolved by the API; customers never enter an organization UUID. */
+  readonly storefrontOrganizationCode: string;
 }
 
 type Environment = Record<string, string | undefined>;
@@ -177,6 +179,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
       1,
       50 * 1024 * 1024,
     ),
+    storefrontOrganizationCode: environment.STOREFRONT_ORGANIZATION_CODE?.trim() || 'maevelle',
   });
 }
 

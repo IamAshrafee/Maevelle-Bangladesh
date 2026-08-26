@@ -646,7 +646,18 @@ export interface StorefrontProduct {
     name: string;
     values: readonly { id: string; code: string; label: string; colorHex?: string }[];
   }[];
-  readonly variants: readonly { id: string; sku: string; optionValueIds: readonly string[] }[];
+  readonly variants: readonly {
+    id: string;
+    sku: string;
+    optionValueIds: readonly string[];
+    available: boolean;
+  }[];
+  readonly media: readonly {
+    id: string;
+    variantId: string | null;
+    role: string;
+    altText: string | null;
+  }[];
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
 }
@@ -720,11 +731,33 @@ export async function getStorefrontCatalogProduct(
       };
     }),
   );
-  const variants = await sql<{ id: string; sku: string; option_value_ids: string[] }>`
-    select variant.id, variant.sku, array_agg(link.option_value_id order by link.option_value_id) as option_value_ids
+  const variants = await sql<{
+    id: string;
+    sku: string;
+    option_value_ids: string[];
+    available: boolean;
+  }>`
+    select variant.id, variant.sku, array_agg(link.option_value_id order by link.option_value_id) as option_value_ids,
+      coalesce(bool_or(level.sellable_quantity-level.reserved_quantity>0),false) as available
     from catalog.product_variants variant join catalog.variant_option_values link on link.variant_id = variant.id
+    left join inventory.inventory_items item on item.variant_id=variant.id and item.organization_id=variant.organization_id
+    left join inventory.inventory_levels level on level.inventory_item_id=item.id and level.organization_id=variant.organization_id
     where variant.product_id = ${row.id} and variant.status = 'ACTIVE'
     group by variant.id, variant.sku order by variant.sku
+  `.execute(db);
+  const media = await sql<{
+    id: string;
+    variant_id: string | null;
+    role: string;
+    alt_text: string | null;
+  }>`
+    select link.asset_id::text as id,link.variant_id::text,link.role,asset.alt_text
+    from catalog.product_media link
+    join media.media_assets asset
+      on asset.id=link.asset_id and asset.organization_id=link.organization_id
+    where link.organization_id=${organizationId} and link.product_id=${row.id}
+      and asset.status='READY' and asset.visibility_class='PUBLIC'
+    order by link.position,link.id
   `.execute(db);
   const details = await sql<{ group_title: string; label: string; value_text: string }>`
     select information_group.title as group_title, item.label, item.value_text
@@ -746,6 +779,13 @@ export async function getStorefrontCatalogProduct(
       id: variant.id,
       sku: variant.sku,
       optionValueIds: variant.option_value_ids,
+      available: variant.available,
+    })),
+    media: media.rows.map((asset) => ({
+      id: asset.id,
+      variantId: asset.variant_id,
+      role: asset.role,
+      altText: asset.alt_text,
     })),
     details: details.rows.map((detail) => ({
       group: detail.group_title,

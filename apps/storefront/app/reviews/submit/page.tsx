@@ -24,11 +24,12 @@ function ReviewSubmissionForm() {
   const organizationId = search.get('organizationId');
   const token = search.get('token');
   const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   if (!organizationId || !token)
     return (
       <main>
-        <section className="shell">
+        <section className="review-submit-page">
           <h1>Review link unavailable</h1>
           <p>This secure review link is missing or invalid.</p>
         </section>
@@ -37,14 +38,16 @@ function ReviewSubmissionForm() {
 
   return (
     <main>
-      <section className="shell">
-        <h1>Share your verified purchase experience</h1>
+      <section className="review-submit-page">
+        <p className="eyebrow">Verified purchase</p>
+        <h1>How was your Maevelle experience?</h1>
         <p>
           Your review is submitted for moderation. It cannot be published or rated by the client.
         </p>
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            setSubmitting(true);
             const form = new FormData(event.currentTarget);
             void fetch('/api/reviews', {
               method: 'POST',
@@ -65,7 +68,8 @@ function ReviewSubmissionForm() {
               })
               .catch(() =>
                 setMessage('Review submission was rejected. Please use your secure link.'),
-              );
+              )
+              .finally(() => setSubmitting(false));
           }}
         >
           <label>
@@ -84,7 +88,9 @@ function ReviewSubmissionForm() {
           <label>
             Review <textarea name="body" maxLength={5000} />
           </label>
-          <button type="submit">Submit review</button>
+          <button disabled={submitting} type="submit">
+            {submitting ? 'Submitting…' : 'Submit review'}
+          </button>
         </form>
         {message ? <p role="status">{message}</p> : null}
       </section>

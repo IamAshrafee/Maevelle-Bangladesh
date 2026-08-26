@@ -9,8 +9,11 @@ export default function SearchPage() {
   return (
     <main>
       <section className="shell wide">
-        <p className="eyebrow">Catalog</p>
-        <h1>Search products</h1>
+        <div className="collection-heading">
+          <p className="eyebrow">Find your next piece</p>
+          <h1>Search Maevelle</h1>
+          <p>Search by product name, SKU, or collection. Small typos are okay.</p>
+        </div>
         <CatalogBrowser />
       </section>
     </main>

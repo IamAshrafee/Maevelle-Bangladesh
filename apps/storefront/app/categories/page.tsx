@@ -7,8 +7,12 @@ export const metadata: Metadata = {
 export default function CategoriesPage() {
   return (
     <main>
-      <section className="shell wide">
-        <h1>Categories</h1>
+      <section className="collection-hero shell wide">
+        <p className="eyebrow">The full collection</p>
+        <h1>Shop Maevelle</h1>
+        <p>
+          Explore every published piece, refine by price and availability, and find the right fit.
+        </p>
         <CatalogBrowser />
       </section>
     </main>

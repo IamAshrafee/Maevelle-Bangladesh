@@ -2,22 +2,26 @@ import type { Metadata } from 'next';
 
 import './globals.css';
 import { StorefrontFooter, StorefrontHeader } from '@/components/storefront-header';
+import { StorefrontContextProvider } from '@/components/storefront-context';
 
 export const metadata: Metadata = {
   title: {
     default: 'Maevelle Storefront',
     template: '%s | Maevelle',
   },
-  description: 'Maevelle public storefront application.',
+  description:
+    'Shop Maevelle fashion with clear sizing, secure checkout, and dependable order tracking.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>
-        <StorefrontHeader />
-        {children}
-        <StorefrontFooter />
+        <StorefrontContextProvider>
+          <StorefrontHeader />
+          {children}
+          <StorefrontFooter />
+        </StorefrontContextProvider>
       </body>
     </html>
   );

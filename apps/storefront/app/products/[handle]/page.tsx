@@ -1,63 +1,63 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ApiEnvelope, PublicSizeGuideDto, StorefrontProductDto } from '@maevelle/contracts';
 import { ProductReviews } from '@/components/product-reviews';
+import { notifyCartChanged, useStorefrontContext } from '@/components/storefront-context';
 import { productJsonLd, safeJsonLd } from '@/src/seo';
 
 interface CartView {
   version: number;
-  merchandiseGross: string;
-  discountTotal: string;
   merchandiseNet: string;
-  lines: readonly {
-    id: string;
-    sku: string;
-    quantity: string;
-    gross: string;
-    availability: string;
-  }[];
-  appliedCoupons: readonly string[];
+  lines: readonly { id: string }[];
 }
 
-function displayMoney(amount: string, currency = 'BDT'): string {
-  return `${currency === 'BDT' ? '৳' : `${currency} `}${amount}`;
+function money(amount: string, currency = 'BDT') {
+  return new Intl.NumberFormat('en-BD', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(Number(amount));
 }
 
-function formatMeasurement(
-  measurement: PublicSizeGuideDto['rows'][number]['measurements'][number],
-): string {
-  const value = measurement.exact ?? `${measurement.min}–${measurement.max}`;
-  return `${value} ${measurement.unit}${measurement.approximate ? ' (approx.)' : ''}`;
+function measurement(value: PublicSizeGuideDto['rows'][number]['measurements'][number]) {
+  return `${value.exact ?? `${value.min}–${value.max}`} ${value.unit}${value.approximate ? ' approx.' : ''}`;
 }
 
 export default function ProductPage() {
   const parameters = useParams<{ handle: string }>();
-  const search = useSearchParams();
-  const organizationId = search.get('organizationId');
+  const { context, loading: contextLoading } = useStorefrontContext();
   const [product, setProduct] = useState<StorefrontProductDto>();
   const [guide, setGuide] = useState<PublicSizeGuideDto | null>();
   const [selected, setSelected] = useState<Record<string, string>>({});
+  const [activeMedia, setActiveMedia] = useState(0);
   const [cart, setCart] = useState<CartView>();
   const [cartMessage, setCartMessage] = useState('');
-  const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading');
+  const [busy, setBusy] = useState(false);
+  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
+  const sizeDialog = useRef<HTMLDialogElement>(null);
+  const galleryDialog = useRef<HTMLDialogElement>(null);
+
   useEffect(() => {
-    if (!organizationId || !parameters.handle) {
-      setState('missing');
-      return;
-    }
-    const query = `organizationId=${encodeURIComponent(organizationId)}`;
-    Promise.all([
-      fetch(`/api/storefront/v1/products/${encodeURIComponent(parameters.handle)}?${query}`),
+    if (!context || !parameters.handle) return;
+    const controller = new AbortController();
+    const query = `organizationId=${encodeURIComponent(context.organizationId)}`;
+    setState('loading');
+    void Promise.all([
+      fetch(`/api/storefront/v1/products/${encodeURIComponent(parameters.handle)}?${query}`, {
+        signal: controller.signal,
+      }),
       fetch(
         `/api/storefront/v1/products/${encodeURIComponent(parameters.handle)}/size-guide?${query}`,
+        { signal: controller.signal },
       ),
     ])
       .then(async ([catalogResponse, guideResponse]) => {
-        if (!catalogResponse.ok) throw new Error('not-found');
+        if (catalogResponse.status === 404) return setState('missing');
+        if (!catalogResponse.ok) throw new Error('catalog');
         const catalog = (await catalogResponse.json()) as ApiEnvelope<StorefrontProductDto>;
         setProduct(catalog.data);
         setGuide(
@@ -65,19 +65,77 @@ export default function ProductPage() {
             ? ((await guideResponse.json()) as ApiEnvelope<PublicSizeGuideDto | null>).data
             : null,
         );
+        const first =
+          catalog.data.variants.find((variant) => variant.available && variant.price) ??
+          catalog.data.variants.find((variant) => variant.price) ??
+          catalog.data.variants[0];
+        if (first) {
+          const initial: Record<string, string> = {};
+          for (const axis of catalog.data.options) {
+            const value = axis.values.find((candidate) =>
+              first.optionValueIds.includes(candidate.id),
+            );
+            if (value) initial[axis.id] = value.id;
+          }
+          setSelected(initial);
+        }
         setState('ready');
       })
-      .catch(() => setState('missing'));
-  }, [organizationId, parameters.handle]);
+      .catch(() => {
+        if (!controller.signal.aborted) setState('error');
+      });
+    return () => controller.abort();
+  }, [context, parameters.handle]);
+
   const selectedVariant = useMemo(
     () =>
-      product?.variants.find(
-        (variant) =>
-          Object.values(selected).length === product.options.length &&
-          product.options.every((axis) => variant.optionValueIds.includes(selected[axis.id] ?? '')),
+      product?.variants.find((variant) =>
+        product.options.every((axis) => variant.optionValueIds.includes(selected[axis.id] ?? '')),
       ),
     [product, selected],
   );
+  const shownMedia = useMemo(() => {
+    if (!product) return [];
+    const matched = selectedVariant
+      ? product.media.filter((asset) => asset.variantId === selectedVariant.id)
+      : [];
+    const general = product.media.filter((asset) => asset.variantId === null);
+    return [
+      ...matched,
+      ...general.filter((asset) => !matched.some((candidate) => candidate.id === asset.id)),
+    ];
+  }, [product, selectedVariant]);
+  useEffect(() => setActiveMedia(0), [selectedVariant?.id]);
+
+  function valuePossible(axisId: string, valueId: string) {
+    if (!product) return false;
+    return product.variants.some(
+      (variant) =>
+        variant.optionValueIds.includes(valueId) &&
+        product.options.every(
+          (axis) =>
+            axis.id === axisId ||
+            !selected[axis.id] ||
+            variant.optionValueIds.includes(selected[axis.id]!),
+        ),
+    );
+  }
+  function choose(axisId: string, valueId: string) {
+    if (!product) return;
+    const next = { ...selected, [axisId]: valueId };
+    const exact = product.variants.find((variant) =>
+      product.options.every((axis) => variant.optionValueIds.includes(next[axis.id] ?? '')),
+    );
+    if (exact) return setSelected(next);
+    const compatible = product.variants.find((variant) => variant.optionValueIds.includes(valueId));
+    if (!compatible) return;
+    const corrected: Record<string, string> = {};
+    for (const axis of product.options) {
+      const match = axis.values.find((value) => compatible.optionValueIds.includes(value.id));
+      if (match) corrected[axis.id] = match.id;
+    }
+    setSelected(corrected);
+  }
   async function loadOrCreateCart(): Promise<CartView> {
     const current = await fetch('/api/storefront/v1/carts/current', { credentials: 'include' });
     if (current.ok) return ((await current.json()) as ApiEnvelope<CartView>).data;
@@ -85,13 +143,18 @@ export default function ProductPage() {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ organizationId, currency: 'BDT' }),
+      body: JSON.stringify({
+        organizationId: context?.organizationId,
+        currency: context?.currency ?? 'BDT',
+      }),
     });
-    if (!created.ok) throw new Error('Cart could not be created.');
+    if (!created.ok) throw new Error('Your cart could not be started. Please try again.');
     return ((await created.json()) as ApiEnvelope<CartView>).data;
   }
   async function addToCart() {
-    if (!selectedVariant) return;
+    if (!selectedVariant?.price || !selectedVariant.available) return;
+    setBusy(true);
+    setCartMessage('');
     try {
       const current = cart ?? (await loadOrCreateCart());
       const response = await fetch('/api/storefront/v1/carts/current/lines', {
@@ -105,160 +168,319 @@ export default function ProductPage() {
         }),
       });
       if (!response.ok)
-        throw new Error('This Variant could not be added at its current availability.');
+        throw new Error('This option is no longer available. Please choose another.');
       const next = ((await response.json()) as ApiEnvelope<CartView>).data;
       setCart(next);
-      setCartMessage('Added to your cart. Inventory is not reserved until checkout.');
+      notifyCartChanged();
+      setCartMessage('Added to your bag.');
     } catch (error) {
-      setCartMessage(error instanceof Error ? error.message : 'Cart could not be updated.');
+      setCartMessage(error instanceof Error ? error.message : 'Your bag could not be updated.');
+    } finally {
+      setBusy(false);
     }
   }
-  if (state === 'loading')
+
+  if (contextLoading || state === 'loading')
     return (
       <main>
-        <p>Loading product…</p>
-      </main>
-    );
-  if (state === 'missing' || !product)
-    return (
-      <main>
-        <section className="shell">
-          <h1>Product unavailable</h1>
-          <p>
-            This product is unpublished, missing, or the Storefront organization context was not
-            supplied.
-          </p>
+        <section className="pdp-shell">
+          <div className="pdp-loading" aria-label="Loading product" aria-busy="true">
+            <span />
+            <span />
+          </div>
         </section>
       </main>
     );
+  if (state === 'missing')
+    return (
+      <main>
+        <section className="catalog-message missing-state">
+          <p className="eyebrow">No longer available</p>
+          <h1>This product cannot be found</h1>
+          <p>It may be unpublished or its address may have changed.</p>
+          <Link className="button-link dark" href="/categories">
+            Continue shopping
+          </Link>
+        </section>
+      </main>
+    );
+  if (state === 'error' || !product || !context)
+    return (
+      <main>
+        <section className="catalog-message error-state">
+          <h1>We could not load this product</h1>
+          <p>Please try again or return to the collection.</p>
+          <button type="button" onClick={() => window.location.reload()}>
+            Try again
+          </button>
+        </section>
+      </main>
+    );
+
+  const currentMedia = shownMedia[activeMedia];
+  const price = selectedVariant?.price;
   return (
     <main>
-      <article className="shell">
+      <article className="pdp-shell">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: safeJsonLd(productJsonLd(product, `/products/${product.handle}`)),
           }}
         />
-        <p className="eyebrow">Maevelle collection</p>
-        <h1>{product.title}</h1>
-        {product.description ? <p>{product.description}</p> : null}
-        <section>
-          <h2>Choose options</h2>
-          {product.options.map((axis) => (
-            <fieldset key={axis.id}>
-              <legend>{axis.name}</legend>
-              <div className="choices">
-                {axis.values.map((value) => (
+        <nav className="breadcrumbs" aria-label="Breadcrumb">
+          <Link href="/">Home</Link>
+          <span aria-hidden="true">/</span>
+          <Link href="/categories">Shop</Link>
+          <span aria-hidden="true">/</span>
+          <span>{product.title}</span>
+        </nav>
+        <div className="pdp-grid">
+          <section className="product-gallery" aria-label="Product images">
+            <button
+              className="gallery-main"
+              type="button"
+              disabled={!currentMedia}
+              onClick={() => galleryDialog.current?.showModal()}
+              aria-label="Open expanded product image"
+            >
+              {currentMedia ? (
+                <img
+                  src={`/api/media/public/${currentMedia.id}`}
+                  alt={currentMedia.altText ?? product.title}
+                  width="960"
+                  height="1280"
+                />
+              ) : (
+                <span className="product-image-fallback" aria-hidden="true">
+                  M
+                </span>
+              )}
+            </button>
+            {shownMedia.length > 1 ? (
+              <div className="gallery-thumbnails">
+                {shownMedia.map((asset, index) => (
                   <button
-                    key={value.id}
+                    key={`${asset.id}-${index}`}
+                    className={activeMedia === index ? 'selected' : ''}
                     type="button"
-                    className={selected[axis.id] === value.id ? 'selected' : ''}
-                    aria-pressed={selected[axis.id] === value.id}
-                    onClick={() => setSelected((current) => ({ ...current, [axis.id]: value.id }))}
+                    aria-label={`View image ${index + 1}`}
+                    aria-pressed={activeMedia === index}
+                    onClick={() => setActiveMedia(index)}
                   >
-                    {value.colorHex ? (
-                      <span className="swatch" style={{ backgroundColor: value.colorHex }} />
-                    ) : null}
-                    {value.label}
+                    <img alt="" src={`/api/media/public/${asset.id}`} width="96" height="128" />
                   </button>
                 ))}
               </div>
-            </fieldset>
-          ))}
-        </section>
-        <p aria-live="polite">
-          {selectedVariant
-            ? `Selected SKU: ${selectedVariant.sku}`
-            : 'Choose every option to select an available variant.'}
-        </p>
-        {selectedVariant?.price ? (
-          <p className="text-xl font-semibold" aria-live="polite">
-            {selectedVariant.price.compareAtAmount ? (
-              <del className="mr-2 text-base font-normal text-slate-500">
-                {displayMoney(
-                  selectedVariant.price.compareAtAmount,
-                  selectedVariant.price.currency,
-                )}
-              </del>
             ) : null}
-            {displayMoney(selectedVariant.price.amount, selectedVariant.price.currency)}
-          </p>
-        ) : selectedVariant ? (
-          <p>This Variant is currently unpriced.</p>
-        ) : null}
-        <button type="button" disabled={!selectedVariant?.price} onClick={() => void addToCart()}>
-          Add to cart
-        </button>
-        {cartMessage ? <p role="status">{cartMessage}</p> : null}
-        {cart ? (
-          <section aria-label="Cart summary">
-            <h2>Cart</h2>
-            <p>
-              {cart.lines.length} line(s) · {displayMoney(cart.merchandiseNet)}
+          </section>
+          <section className="pdp-information">
+            <p className="eyebrow">Maevelle collection</p>
+            <h1>{product.title}</h1>
+            <p className="pdp-rating-link">
+              <a href="#reviews">Verified customer reviews</a>
             </p>
-            {cart.discountTotal !== '0.0000' ? (
-              <p>Discount: {displayMoney(cart.discountTotal)}</p>
-            ) : null}
-          </section>
-        ) : null}
-        <p>
-          <Link href="/cart">View cart</Link>
-        </p>
-        {guide ? (
-          <section>
-            <h2>{guide.name}</h2>
-            {guide.instructions ? <p>{guide.instructions}</p> : null}
-            <table>
-              <thead>
-                <tr>
-                  <th>Size</th>
-                  <th>Measurements</th>
-                </tr>
-              </thead>
-              <tbody>
-                {guide.rows.map((row) => (
-                  <tr key={row.label}>
-                    <td>{row.label}</td>
-                    <td>
-                      {row.measurements
-                        .map(
-                          (measurement) => `${measurement.name}: ${formatMeasurement(measurement)}`,
-                        )
-                        .join(', ')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        ) : null}
-        {product.details.length ? (
-          <section>
-            <h2>Details</h2>
-            <dl>
-              {product.details.map((detail) => (
-                <div key={`${detail.group}-${detail.label}`}>
-                  <dt>{detail.label}</dt>
-                  <dd>{detail.value}</dd>
-                </div>
+            <div className="pdp-price" aria-live="polite">
+              {price ? (
+                <>
+                  {price.compareAtAmount ? (
+                    <del>{money(price.compareAtAmount, price.currency)}</del>
+                  ) : null}
+                  <strong>{money(price.amount, price.currency)}</strong>
+                  {price.compareAtAmount && Number(price.compareAtAmount) > Number(price.amount) ? (
+                    <span>
+                      Save{' '}
+                      {money(
+                        String(Number(price.compareAtAmount) - Number(price.amount)),
+                        price.currency,
+                      )}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <strong>Choose an option to see price</strong>
+              )}
+            </div>
+            {product.description ? <p className="pdp-description">{product.description}</p> : null}
+            <div className="variant-options">
+              {product.options.map((axis) => (
+                <fieldset key={axis.id}>
+                  <legend>
+                    <span>{axis.name}</span>
+                    {axis.code.toLowerCase().includes('size') && guide ? (
+                      <button type="button" onClick={() => sizeDialog.current?.showModal()}>
+                        Size guide
+                      </button>
+                    ) : null}
+                  </legend>
+                  <div
+                    className={`option-values ${axis.values.some((value) => value.colorHex) ? 'color-options' : ''}`}
+                  >
+                    {axis.values.map((value) => {
+                      const possible = valuePossible(axis.id, value.id);
+                      const active = selected[axis.id] === value.id;
+                      return (
+                        <button
+                          key={value.id}
+                          type="button"
+                          className={active ? 'selected' : ''}
+                          disabled={!possible}
+                          aria-pressed={active}
+                          onClick={() => choose(axis.id, value.id)}
+                        >
+                          {value.colorHex ? (
+                            <span
+                              className="swatch"
+                              style={{ backgroundColor: value.colorHex }}
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <span>{value.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
               ))}
-            </dl>
-          </section>
-        ) : null}
-        {product.faqs.length ? (
-          <section>
-            <h2>FAQ</h2>
-            {product.faqs.map((faq) => (
-              <details key={faq.question}>
-                <summary>{faq.question}</summary>
-                <p>{faq.answer}</p>
+            </div>
+            <p
+              className={`availability ${selectedVariant?.available ? 'available' : 'unavailable'}`}
+            >
+              {selectedVariant
+                ? selectedVariant.available
+                  ? 'In stock and ready to order'
+                  : 'This option is currently out of stock'
+                : 'Choose your options'}
+            </p>
+            <button
+              className="add-to-cart"
+              type="button"
+              disabled={busy || !price || !selectedVariant?.available}
+              onClick={() => void addToCart()}
+            >
+              {busy ? 'Adding…' : selectedVariant?.available ? 'Add to bag' : 'Unavailable'}
+            </button>
+            {cartMessage ? (
+              <div className="cart-feedback" role="status">
+                <span>{cartMessage}</span>
+                {cart ? <Link href="/cart">View bag ({cart.lines.length})</Link> : null}
+              </div>
+            ) : null}
+            <div className="pdp-assurances">
+              <p>
+                <strong>Secure guest checkout</strong>
+                <span>No account required.</span>
+              </p>
+              <p>
+                <strong>Order tracking</strong>
+                <span>Follow meaningful delivery milestones.</span>
+              </p>
+              <p>
+                <strong>Clear return context</strong>
+                <span>Eligibility is confirmed against your order.</span>
+              </p>
+            </div>
+            <div className="product-accordions">
+              {product.details.length ? (
+                <details open>
+                  <summary>Product details</summary>
+                  <dl>
+                    {product.details.map((detail) => (
+                      <div key={`${detail.group}-${detail.label}`}>
+                        <dt>{detail.label}</dt>
+                        <dd>{detail.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </details>
+              ) : null}
+              <details>
+                <summary>Shipping & returns</summary>
+                <p>
+                  Delivery choices and charges are confirmed during checkout. Return eligibility is
+                  checked securely against your order.
+                </p>
+                <p>
+                  <Link href="/policies/shipping">Shipping information</Link> ·{' '}
+                  <Link href="/policies/returns">Returns information</Link>
+                </p>
               </details>
-            ))}
+              {product.faqs.length ? (
+                <details>
+                  <summary>Questions & answers</summary>
+                  {product.faqs.map((faq) => (
+                    <div key={faq.question}>
+                      <h3>{faq.question}</h3>
+                      <p>{faq.answer}</p>
+                    </div>
+                  ))}
+                </details>
+              ) : null}
+            </div>
           </section>
-        ) : null}
-        <ProductReviews productId={product.id} organizationId={organizationId!} />
+        </div>
+        <div id="reviews">
+          <ProductReviews productId={product.id} organizationId={context.organizationId} />
+        </div>
       </article>
+      <dialog className="size-guide-dialog" ref={sizeDialog}>
+        <header>
+          <div>
+            <p className="eyebrow">Find your fit</p>
+            <h2>{guide?.name ?? 'Size guide'}</h2>
+          </div>
+          <button
+            type="button"
+            aria-label="Close size guide"
+            onClick={() => sizeDialog.current?.close()}
+          >
+            ✕
+          </button>
+        </header>
+        {guide?.instructions ? <p>{guide.instructions}</p> : null}
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Size</th>
+                <th>Measurements</th>
+              </tr>
+            </thead>
+            <tbody>
+              {guide?.rows.map((row) => (
+                <tr key={row.label}>
+                  <th scope="row">{row.label}</th>
+                  <td>
+                    {row.measurements
+                      .map((item) => `${item.name}: ${measurement(item)}`)
+                      .join(' · ')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="dialog-note">
+          Measurements are product-specific. Choose the closest fit for your preferred ease.
+        </p>
+      </dialog>
+      <dialog className="gallery-dialog" ref={galleryDialog}>
+        <button
+          type="button"
+          aria-label="Close expanded image"
+          onClick={() => galleryDialog.current?.close()}
+        >
+          ✕
+        </button>
+        {currentMedia ? (
+          <img
+            src={`/api/media/public/${currentMedia.id}`}
+            alt={currentMedia.altText ?? product.title}
+            width="1200"
+            height="1600"
+          />
+        ) : null}
+      </dialog>
     </main>
   );
 }

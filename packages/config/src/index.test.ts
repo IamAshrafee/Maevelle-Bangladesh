@@ -22,6 +22,7 @@ describe('parseConfig', () => {
       apiHost: '127.0.0.1',
       apiPort: 3000,
       logLevel: 'info',
+      storefrontOrganizationCode: 'maevelle',
     });
   });
 

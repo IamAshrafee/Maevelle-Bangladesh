@@ -29,6 +29,7 @@ import {
   rebuildStorefrontSearch,
   resolveProductRedirect,
   searchStorefront,
+  resolveStorefrontContext,
 } from '@maevelle/database/storefront';
 
 import type { createAuth } from '../auth/auth.js';
@@ -91,7 +92,17 @@ export function registerCatalogRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
   auth: Auth,
+  storefrontOrganizationCode = 'maevelle',
 ): void {
+  app.get('/storefront/v1/context', async (_request, reply) => {
+    const context = await resolveStorefrontContext(database.db, storefrontOrganizationCode);
+    if (!context)
+      return reply.code(503).send({
+        error: { code: 'STOREFRONT_UNAVAILABLE', message: 'The Storefront is not configured.' },
+      });
+    return { data: context };
+  });
+
   app.get('/admin/catalog/product-types', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'catalog.view');
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });

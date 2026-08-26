@@ -33,6 +33,9 @@ export interface CartView {
     variantId: string;
     sku: string;
     productTitle: string;
+    productHandle: string;
+    mediaAssetId: string | null;
+    options: readonly { name: string; value: string }[];
     quantity: string;
     unitPrice: string | null;
     compareAtUnitPrice: string | null;
@@ -188,15 +191,31 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
     product_id: string;
     product_title: string;
     category_ids: string[];
+    product_handle: string;
+    media_asset_id: string | null;
+    options: { name: string; value: string }[];
   }>`
-    select line.id, line.variant_id, line.quantity::text, variant.sku, product.id as product_id, product.title as product_title,
-      coalesce(array_agg(category.category_id) filter (where category.category_id is not null), '{}') as category_ids
+    select line.id, line.variant_id, line.quantity::text, variant.sku, product.id as product_id,
+      product.title as product_title,product.handle as product_handle,
+      coalesce(array_agg(category.category_id) filter (where category.category_id is not null), '{}') as category_ids,
+      (select media_link.asset_id::text from catalog.product_media media_link
+        join media.media_assets asset on asset.id=media_link.asset_id
+        where media_link.organization_id=cart_row.organization_id and media_link.product_id=product.id
+          and (media_link.variant_id=variant.id or media_link.variant_id is null)
+          and asset.status='READY' and asset.visibility_class='PUBLIC'
+        order by (media_link.variant_id=variant.id) desc,media_link.position,media_link.id limit 1) as media_asset_id,
+      (select coalesce(jsonb_agg(jsonb_build_object('name',axis.name,'value',option_value.display_value) order by axis.position),'[]'::jsonb)
+        from catalog.variant_option_values option_link
+        join catalog.product_option_axes axis on axis.id=option_link.option_axis_id
+        join catalog.product_option_values option_value on option_value.id=option_link.option_value_id
+        where option_link.variant_id=variant.id) as options
     from cart.cart_lines line
+    join cart.carts cart_row on cart_row.id=line.cart_id
     join catalog.product_variants variant on variant.id = line.variant_id
     join catalog.products product on product.id = variant.product_id
     left join catalog.product_categories category on category.product_id = product.id
     where line.cart_id = ${cart.id}
-    group by line.id, line.variant_id, line.quantity, variant.sku, product.id, product.title
+    group by line.id, line.variant_id, line.quantity, variant.id, variant.sku, product.id, product.title,product.handle,cart_row.organization_id
     order by line.created_at, line.id
   `.execute(db);
   const coupons = await sql<{ normalized_code: string }>`
@@ -255,6 +274,9 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
       variantId: line.variant_id,
       sku: line.sku,
       productTitle: line.product_title,
+      productHandle: line.product_handle,
+      mediaAssetId: line.media_asset_id,
+      options: line.options,
       quantity: line.quantity,
       unitPrice: line.price?.amount ?? null,
       compareAtUnitPrice: line.price?.compareAtAmount ?? null,

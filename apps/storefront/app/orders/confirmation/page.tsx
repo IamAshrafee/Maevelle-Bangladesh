@@ -118,7 +118,7 @@ export default function OrderConfirmationPage() {
   if (!order)
     return (
       <main>
-        <section className="shell">
+        <section className="confirmation-page">
           <h1>Order confirmation</h1>
           <p>{message || 'Loading confirmation…'}</p>
           <Link href="/">Continue shopping</Link>
@@ -127,35 +127,47 @@ export default function OrderConfirmationPage() {
     );
   return (
     <main>
-      <section className="shell">
-        <h1>Order {order.orderNumber}</h1>
-        <p>Status: {order.status}</p>
+      <section className="confirmation-page">
+        <div className="confirmation-mark" aria-hidden="true">
+          ✓
+        </div>
+        <p className="eyebrow">Thank you for your order</p>
+        <h1>It’s confirmed.</h1>
+        <p className="confirmation-number">
+          Order <strong>{order.orderNumber}</strong> · {order.status.replaceAll('_', ' ')}
+        </p>
         <p>
           Payment: <strong>{payment?.instructions?.name ?? order.paymentMethod}</strong> ·{' '}
           {payment?.summary.status === 'UNPAID' && order.paymentMethod === 'COD'
             ? 'Payment due on delivery'
             : (payment?.summary.status ?? 'Payment due')}
         </p>
-        <h2>Customer</h2>
-        <p>
-          {order.customer.displayName} · {order.customer.phone}
-          {order.customer.email ? ` · ${order.customer.email}` : ''}
-        </p>
-        <h2>Delivery</h2>
-        <p>
-          {[
-            order.address.recipientName,
-            order.address.addressLine1,
-            order.address.addressLine2,
-            order.address.area,
-            order.address.city,
-            order.address.district,
-            order.address.postalCode,
-            order.address.countryCode,
-          ]
-            .filter(Boolean)
-            .join(', ')}
-        </p>
+        <div className="confirmation-grid">
+          <section>
+            <h2>Contact</h2>
+            <p>
+              {order.customer.displayName} · {order.customer.phone}
+              {order.customer.email ? ` · ${order.customer.email}` : ''}
+            </p>
+          </section>
+          <section>
+            <h2>Delivery address</h2>
+            <p>
+              {[
+                order.address.recipientName,
+                order.address.addressLine1,
+                order.address.addressLine2,
+                order.address.area,
+                order.address.city,
+                order.address.district,
+                order.address.postalCode,
+                order.address.countryCode,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+            </p>
+          </section>
+        </div>
         {fulfillmentDelivery?.fulfillment ? (
           <p>
             Fulfillment:{' '}
@@ -172,30 +184,41 @@ export default function OrderConfirmationPage() {
         ) : (
           <p>Fulfillment: Preparing</p>
         )}
-        <h2>Items</h2>
-        {order.lines.map((line) => (
-          <article key={`${line.sku}-${line.productTitle}`}>
-            <h3>{line.productTitle}</h3>
-            <p>
-              {line.sku}
-              {line.options.length
-                ? ` · ${line.options.map((option) => `${option.name}: ${option.value}`).join(', ')}`
-                : ''}
-            </p>
-            <p>
-              Qty {line.quantity} · Unit {money(line.unitPrice)} · Gross {money(line.gross)} ·
-              Discount {money(line.discount)} · Net {money(line.net)}
-            </p>
-          </article>
-        ))}
-        <p>Merchandise: {money(order.merchandiseGross)}</p>
-        <p>Discount: {money(order.discountTotal)}</p>
-        <p>
-          <strong>Total: {money(order.merchandiseNet)}</strong>
-        </p>
+        <section className="confirmation-items">
+          <h2>What you ordered</h2>
+          {order.lines.map((line) => (
+            <article key={`${line.sku}-${line.productTitle}`}>
+              <h3>{line.productTitle}</h3>
+              <p>
+                {line.sku}
+                {line.options.length
+                  ? ` · ${line.options.map((option) => `${option.name}: ${option.value}`).join(', ')}`
+                  : ''}
+              </p>
+              <p>
+                Qty {line.quantity} · Unit {money(line.unitPrice)} · Gross {money(line.gross)} ·
+                Discount {money(line.discount)} · Net {money(line.net)}
+              </p>
+            </article>
+          ))}
+        </section>
+        <dl className="confirmation-totals">
+          <div>
+            <dt>Merchandise</dt>
+            <dd>{money(order.merchandiseGross)}</dd>
+          </div>
+          <div>
+            <dt>Discount</dt>
+            <dd>−{money(order.discountTotal)}</dd>
+          </div>
+          <div>
+            <dt>Total</dt>
+            <dd>{money(order.merchandiseNet)}</dd>
+          </div>
+        </dl>
         {payment?.instructions?.method === 'BKASH_MANUAL' ||
         payment?.instructions?.method === 'NAGAD_MANUAL' ? (
-          <section>
+          <section className="manual-payment-card">
             <h2>Manual payment</h2>
             <p>
               {payment.instructions.instructions.text ??
@@ -234,7 +257,14 @@ export default function OrderConfirmationPage() {
           </section>
         ) : null}
         {message ? <p role="status">{message}</p> : null}
-        <Link href="/">Continue shopping</Link>
+        <div className="confirmation-actions">
+          <Link className="button-link dark" href="/orders/track">
+            Track this order
+          </Link>
+          <Link className="button-secondary button-link" href="/">
+            Continue shopping
+          </Link>
+        </div>
       </section>
     </main>
   );

@@ -7,6 +7,7 @@ import {
   listPublicCategories,
   processStorefrontSearchOutbox,
   rebuildStorefrontSearch,
+  resolveStorefrontContext,
   resolveProductRedirect,
   searchStorefront,
 } from './storefront.js';
@@ -83,6 +84,27 @@ async function fixture() {
 }
 
 describe('public Storefront projection', () => {
+  it('resolves the configured active store without asking customers for a tenant identifier', async () => {
+    const code = `public-store-${crypto.randomUUID().slice(0, 8)}`;
+    const organization = await createOrganization(database.db, {
+      code,
+      displayName: 'Public Maevelle Store',
+      timezone: 'Asia/Dhaka',
+      defaultLocale: 'en-BD',
+      defaultCurrency: 'BDT',
+    });
+    await sql`insert into settings.organization_profiles(organization_id,storefront_profile) values(${organization.id},${JSON.stringify({ publicStoreName: 'Maevelle', announcement: 'New collection available' })}::jsonb)`.execute(
+      database.db,
+    );
+    await expect(resolveStorefrontContext(database.db, code)).resolves.toEqual({
+      organizationId: organization.id,
+      storeName: 'Maevelle',
+      currency: 'BDT',
+      locale: 'en-BD',
+      announcement: 'New collection available',
+    });
+  });
+
   it('rebuilds authoritative price/availability and ranks typo, partial-title, and SKU searches', async () => {
     const value = await fixture();
     expect(await rebuildStorefrontSearch(database.db, value.organizationId)).toBe(1);
