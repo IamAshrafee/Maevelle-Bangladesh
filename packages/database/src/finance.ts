@@ -199,7 +199,10 @@ export async function createFinancialAccount(
       id = r.rows[0]?.id as string;
     } catch (error) {
       if ((error as { code?: string }).code === '23505')
-        throw new FinanceDomainError('CONFLICT', 'Financial account with this number already exists.');
+        throw new FinanceDomainError(
+          'CONFLICT',
+          'Financial account with this number already exists.',
+        );
       throw error;
     }
     if (!id) throw new Error('Financial account was not created.');

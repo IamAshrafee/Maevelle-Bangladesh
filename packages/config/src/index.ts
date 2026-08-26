@@ -164,8 +164,10 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     betterAuthSecret: requiredSecret(environment, 'BETTER_AUTH_SECRET', 32),
     authEncryptionKey: requiredBase64Key(environment, 'AUTH_ENCRYPTION_KEY'),
     authBaseUrl: environment.BETTER_AUTH_URL ?? 'http://localhost:8080/api',
-    authTrustedOrigins: environment.AUTH_TRUSTED_ORIGINS 
-      ? environment.AUTH_TRUSTED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+    authTrustedOrigins: environment.AUTH_TRUSTED_ORIGINS
+      ? environment.AUTH_TRUSTED_ORIGINS.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       : ['http://localhost:3000', 'http://localhost:3001'],
     mediaStoragePath: environment.MEDIA_STORAGE_PATH ?? 'var/media',
     mediaMaxUploadBytes: integer(
