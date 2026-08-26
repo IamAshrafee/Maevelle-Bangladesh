@@ -6,6 +6,7 @@ import { createDatabase } from './index.js';
 import { createOrganization } from './platform.js';
 import {
   getRatingSummary,
+  listAdminReviews,
   listPublicReviews,
   moderateReview,
   rebuildRatingSummary,
@@ -122,6 +123,14 @@ describe('Reviews', () => {
     expect(publicReviews).toHaveLength(1);
     expect(publicReviews[0]?.rating).toBe(1);
     expect(publicReviews[0]?.media_asset_ids).toEqual([]);
+    const adminReviews = await listAdminReviews(database.db, data.organizationId);
+    expect(adminReviews).toHaveLength(1);
+    expect(adminReviews[0]).toMatchObject({
+      product_title: 'Review product',
+      revision_number: 2,
+      moderation_status: 'PENDING',
+      verified_purchase: true,
+    });
     await rebuildRatingSummary(database.db, data.organizationId, data.productId);
     expect(await verifyReviewIntegrity(database.db, data.organizationId)).toEqual([]);
   });
@@ -143,6 +152,8 @@ describe('Reviews', () => {
       decision: 'APPROVE',
     });
     expect(await listPublicReviews(database.db, a.organizationId, b.productId)).toEqual([]);
+    expect(await listAdminReviews(database.db, a.organizationId)).toEqual([]);
+    expect(await listAdminReviews(database.db, b.organizationId)).toHaveLength(1);
     await expect(
       moderateReview(database.db, {
         organizationId: a.organizationId,

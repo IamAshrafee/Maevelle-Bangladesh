@@ -578,6 +578,26 @@ export async function setNotificationPreference(
   );
 }
 
+export async function listNotificationPreferences(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    recipientType: 'MEMBERSHIP' | 'CUSTOMER';
+    recipientId: string;
+  },
+) {
+  return (
+    await sql<{
+      notification_type: string;
+      channel: string;
+      enabled: boolean;
+      updated_at: string;
+    }>`select notification_type,channel,enabled,updated_at::text from notifications.preferences where organization_id=${input.organizationId} and recipient_type=${input.recipientType} and recipient_id=${input.recipientId}::uuid order by notification_type,channel`.execute(
+      db,
+    )
+  ).rows;
+}
+
 export async function createWebhookEndpoint(
   db: Kysely<DatabaseSchema>,
   input: {

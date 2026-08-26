@@ -86,6 +86,11 @@ export function AnalyticsConsole() {
   const [overview, setOverview] = useState<Overview>();
   const [snapshots, setSnapshots] = useState<readonly Snapshot[]>([]);
   const [dashboards, setDashboards] = useState<Dashboards>();
+  const [metric, setMetric] = useState<
+    'GROSS_SALES' | 'NET_SALES' | 'REFUNDS' | 'GROSS_MARGIN' | 'CASH' | 'INVENTORY'
+  >('NET_SALES');
+  const [drilldown, setDrilldown] = useState<readonly DashboardRow[]>([]);
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Loading analytical projections…');
   const reload = async () => {
     try {
@@ -106,96 +111,171 @@ export function AnalyticsConsole() {
     void reload();
   }, []);
   const rebuild = async () => {
+    if (
+      !window.confirm(
+        'Rebuild analytics projections from authoritative Orders, Inventory, Costing, Returns, Payments, and Finance facts?',
+      )
+    )
+      return;
+    setBusy(true);
     try {
       await request('/admin/analytics/rebuild', { method: 'POST' });
       setMessage('Reporting projections rebuilt from authoritative source facts.');
       await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Rebuild was rejected.');
+    } finally {
+      setBusy(false);
     }
   };
+
+  useEffect(() => {
+    let active = true;
+    void request<ApiEnvelope<readonly DashboardRow[]>>(`/admin/analytics/drilldown/${metric}`)
+      .then((response) => {
+        if (active) setDrilldown(response.data);
+      })
+      .catch(() => {
+        if (active) setDrilldown([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [metric]);
   return (
-    <main>
-      <section className="shell">
-        <p className="eyebrow">Operations / Reporting</p>
-        <h1>Analytics</h1>
-        <p>
-          Rebuildable projections only. Financial and inventory source records remain authoritative.
-        </p>
+    <main className="admin-workspace">
+      <header className="workspace-header">
+        <div>
+          <p className="eyebrow">Operations / Reporting</p>
+          <h1>Analytics</h1>
+          <p>
+            Business metrics with explicit currency and source truth. Reporting projections never
+            replace transactional records.
+          </p>
+        </div>
         <nav aria-label="Reporting navigation">
           <Link href="/finance">Finance</Link> · <Link href="/inventory/stock">Inventory</Link> ·{' '}
           <Link href="/costing">Costing</Link>
         </nav>
-        <p role="status">{message}</p>
-        <button type="button" onClick={() => void rebuild()}>
+      </header>
+      {message ? (
+        <p className="status-message" role="status">
+          {message}
+        </p>
+      ) : null}
+      <section className="analytics-controls">
+        <div>
+          <strong>Projection freshness</strong>
+          <span>
+            {overview?.refreshedAt
+              ? new Date(overview.refreshedAt).toLocaleString()
+              : 'Not yet rebuilt'}
+          </span>
+        </div>
+        <button disabled={busy} type="button" onClick={() => void rebuild()}>
           Rebuild projections
         </button>
-        <p>
-          Last successful refresh:{' '}
-          {overview?.refreshedAt
-            ? new Date(overview.refreshedAt).toLocaleString()
-            : 'Not yet rebuilt'}
-        </p>
-        <h2>Sales metrics by currency</h2>
+      </section>
+      <section>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Overview</p>
+            <h2>Sales by currency</h2>
+          </div>
+          <p className="muted">All-time committed Order facts in the current projection.</p>
+        </div>
         {overview?.metrics.length ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Currency</th>
-                <th>Gross sales</th>
-                <th>Discounts</th>
-                <th>Net sales</th>
-                <th>Recognized cost</th>
-                <th>Gross margin</th>
-                <th>Order lines</th>
-              </tr>
-            </thead>
-            <tbody>
-              {overview.metrics.map((metric) => (
-                <tr key={metric.currencyCode}>
-                  <td>{metric.currencyCode}</td>
-                  <td>{metric.grossSales}</td>
-                  <td>{metric.discounts}</td>
-                  <td>{metric.netSales}</td>
-                  <td>{metric.recognizedCost ?? 'Awaiting recognized COGS'}</td>
-                  <td>{metric.grossMargin ?? 'Awaiting recognized COGS'}</td>
-                  <td>{metric.orderLines}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="metric-card-grid">
+            {overview.metrics.map((item) => (
+              <article key={item.currencyCode}>
+                <span>{item.currencyCode}</span>
+                <strong>{item.netSales}</strong>
+                <small>Net sales</small>
+                <dl>
+                  <div>
+                    <dt>Gross</dt>
+                    <dd>{item.grossSales}</dd>
+                  </div>
+                  <div>
+                    <dt>Discounts</dt>
+                    <dd>{item.discounts}</dd>
+                  </div>
+                  <div>
+                    <dt>Recognized cost</dt>
+                    <dd>{item.recognizedCost ?? 'Pending'}</dd>
+                  </div>
+                  <div>
+                    <dt>Gross margin</dt>
+                    <dd>{item.grossMargin ?? 'Pending'}</dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
         ) : (
-          <p>No sales facts have been projected yet.</p>
+          <div className="empty-state">
+            <h3>No sales facts yet</h3>
+            <p>Complete an Order or rebuild projections after staging fixtures are loaded.</p>
+          </div>
         )}
+      </section>
+      <section>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Drill-down</p>
+            <h2>Trace a metric to source facts</h2>
+          </div>
+          <label>
+            Metric
+            <select
+              value={metric}
+              onChange={(event) => setMetric(event.target.value as typeof metric)}
+            >
+              <option value="GROSS_SALES">Gross sales</option>
+              <option value="NET_SALES">Net sales</option>
+              <option value="REFUNDS">Refunds</option>
+              <option value="GROSS_MARGIN">Gross margin</option>
+              <option value="CASH">Cash</option>
+              <option value="INVENTORY">Inventory</option>
+            </select>
+          </label>
+        </div>
+        <ReportTable title={metric.replaceAll('_', ' ')} rows={drilldown} />
+      </section>
+      <section>
         <h2>Inventory snapshots</h2>
         {snapshots.length ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>SKU</th>
-                <th>Location</th>
-                <th>Sellable</th>
-                <th>Reserved</th>
-                <th>Available to sell</th>
-              </tr>
-            </thead>
-            <tbody>
-              {snapshots.map((snapshot) => (
-                <tr key={`${snapshot.snapshot_date}-${snapshot.sku}-${snapshot.location_name}`}>
-                  <td>{snapshot.snapshot_date}</td>
-                  <td>{snapshot.sku}</td>
-                  <td>{snapshot.location_name}</td>
-                  <td>{snapshot.sellable_quantity}</td>
-                  <td>{snapshot.reserved_quantity}</td>
-                  <td>{snapshot.available_to_sell}</td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>SKU</th>
+                  <th>Location</th>
+                  <th>Sellable</th>
+                  <th>Reserved</th>
+                  <th>Available to sell</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {snapshots.map((snapshot) => (
+                  <tr key={`${snapshot.snapshot_date}-${snapshot.sku}-${snapshot.location_name}`}>
+                    <td>{snapshot.snapshot_date}</td>
+                    <td>{snapshot.sku}</td>
+                    <td>{snapshot.location_name}</td>
+                    <td>{snapshot.sellable_quantity}</td>
+                    <td>{snapshot.reserved_quantity}</td>
+                    <td>{snapshot.available_to_sell}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <p>No inventory snapshot has been captured yet.</p>
+          <p className="muted">No inventory snapshot has been captured yet.</p>
         )}
+      </section>
+      <section className="analytics-report-grid">
         <ReportTable title="Products" rows={dashboards?.products ?? []} />
         <ReportTable title="Customers" rows={dashboards?.customers ?? []} />
         <ReportTable
@@ -203,13 +283,20 @@ export function AnalyticsConsole() {
           rows={dashboards ? [dashboards.deliveryReturns] : []}
         />
         <ReportTable title="Finance cash ledger" rows={dashboards?.finance ?? []} />
-        <ReportTable title="Versioned metric catalog" rows={dashboards?.metricCatalog ?? []} />
-        <p className="muted">
-          Gross sales drills into Order snapshots; refunds use refund completion date; cash is
-          sourced only from the Finance ledger; gross margin is shown only with recognized Costing
-          facts.
-        </p>
       </section>
+      <section>
+        <h2>Metric definitions</h2>
+        <p className="muted">
+          Definitions make grain, time basis, currency treatment, and calculation semantics
+          reviewable.
+        </p>
+        <ReportTable title="Versioned metric catalog" rows={dashboards?.metricCatalog ?? []} />
+      </section>
+      <aside className="info-callout">
+        Gross sales drills into immutable Order snapshots; refunds use completion time; cash comes
+        only from the Finance ledger; gross margin appears only where recognized Costing facts
+        exist.
+      </aside>
     </main>
   );
 }

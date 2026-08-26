@@ -107,7 +107,7 @@ export function registerReviewRoutes(app: FastifyInstance, database: DatabaseCli
   app.get('/admin/reviews', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'reviews.view');
     if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await reviews.listModerationQueue(database.db, a.organizationId) };
+    return { data: await reviews.listAdminReviews(database.db, a.organizationId) };
   });
   app.post(
     '/admin/reviews/:id/moderate',

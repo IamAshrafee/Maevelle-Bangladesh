@@ -66,6 +66,44 @@ export function registerNotificationRoutes(
       }
     },
   );
+  app.get('/admin/notifications/preferences/me', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return {
+      data: await notifications.listNotificationPreferences(database.db, {
+        organizationId: a.organizationId,
+        recipientType: 'MEMBERSHIP',
+        recipientId: a.membershipId,
+      }),
+    };
+  });
+  app.post(
+    '/admin/notifications/preferences/me',
+    {
+      schema: {
+        body: Type.Object({
+          notificationType: Type.String({ minLength: 1, maxLength: 120 }),
+          channel: Type.Union([Type.Literal('IN_APP'), Type.Literal('EMAIL')]),
+          enabled: Type.Boolean(),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.manage');
+      if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+      await notifications.setNotificationPreference(database.db, {
+        organizationId: a.organizationId,
+        recipientType: 'MEMBERSHIP',
+        recipientId: a.membershipId,
+        ...(req.body as {
+          notificationType: string;
+          channel: 'IN_APP' | 'EMAIL';
+          enabled: boolean;
+        }),
+      });
+      return reply.code(204).send();
+    },
+  );
   app.post(
     '/admin/notifications/preferences',
     {

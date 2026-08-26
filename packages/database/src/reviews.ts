@@ -307,6 +307,47 @@ export async function listModerationQueue(db: Kysely<DatabaseSchema>, org: strin
     )
   ).rows;
 }
+
+/** Tenant-scoped operational review history for Admin moderation and response work. */
+export async function listAdminReviews(db: Kysely<DatabaseSchema>, org: string) {
+  return (
+    await sql<{
+      id: string;
+      product_id: string;
+      product_title: string;
+      revision_id: string;
+      revision_number: number;
+      rating: number;
+      title: string | null;
+      body: string | null;
+      public_display_name: string;
+      moderation_status: string;
+      moderation_reason: string | null;
+      visibility_status: string;
+      lifecycle_status: string;
+      verified_purchase: boolean;
+      media_count: number;
+      merchant_response: string | null;
+      submitted_at: string;
+      moderated_at: string | null;
+    }>`
+      select distinct on (review.id)
+        review.id,review.product_id,product.title as product_title,
+        revision.id as revision_id,revision.revision_number,revision.rating,revision.title,revision.body,
+        revision.public_display_name,revision.moderation_status,revision.moderation_reason,
+        review.visibility_status,review.lifecycle_status,
+        (review.verification_order_line_id is not null) as verified_purchase,
+        (select count(*)::int from reviews.review_media media where media.review_revision_id=revision.id) as media_count,
+        response.body as merchant_response,revision.submitted_at::text,revision.moderated_at::text
+      from reviews.reviews review
+      join reviews.review_revisions revision on revision.review_id=review.id
+      join catalog.products product on product.id=review.product_id and product.organization_id=review.organization_id
+      left join reviews.merchant_responses response on response.review_id=review.id and response.organization_id=review.organization_id and response.status='VISIBLE'
+      where review.organization_id=${org}
+      order by review.id,revision.revision_number desc
+    `.execute(db)
+  ).rows;
+}
 export async function verifyReviewIntegrity(db: Kysely<DatabaseSchema>, org: string) {
   const issues: string[] = [];
   const duplicate =

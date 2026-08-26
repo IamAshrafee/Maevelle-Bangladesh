@@ -57,6 +57,19 @@ describe('notifications and integrations', () => {
       channel: 'EMAIL',
       enabled: false,
     });
+    expect(
+      await notifications.listNotificationPreferences(database.db, {
+        organizationId: data.organizationId,
+        recipientType: 'CUSTOMER',
+        recipientId: data.customerId,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        notification_type: 'ORDER_PLACED',
+        channel: 'EMAIL',
+        enabled: false,
+      }),
+    ]);
     await notifications.createNotificationFromOutbox(database.db, data.eventId);
     await notifications.createNotificationFromOutbox(database.db, data.eventId);
     const rows = (await notifications.listNotifications(
