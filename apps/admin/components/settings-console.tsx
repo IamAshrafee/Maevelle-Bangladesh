@@ -41,6 +41,7 @@ export function SettingsConsole() {
   const [tone, setTone] = useState<'success' | 'warning' | 'danger'>('success');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -57,6 +58,37 @@ export function SettingsConsole() {
   useEffect(() => {
     void reload();
   }, [reload]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warning = 'You have unsaved organization settings. Leave without saving?';
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const guardNavigation = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
+      if (!anchor || anchor.target || anchor.href.startsWith('#')) return;
+      if (!window.confirm(warning)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      setDirty(false);
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    document.addEventListener('click', guardNavigation, true);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+      document.removeEventListener('click', guardNavigation, true);
+    };
+  }, [dirty]);
+
+  function refresh() {
+    if (dirty && !window.confirm('Discard unsaved organization settings and refresh?')) return;
+    setDirty(false);
+    void reload();
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -78,9 +110,10 @@ export function SettingsConsole() {
           },
         }),
       });
+      setDirty(false);
+      await reload();
       setMessage('Organization settings updated. Historical business snapshots remain unchanged.');
       setTone('success');
-      await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Settings update was rejected.');
       setTone('danger');
@@ -97,7 +130,7 @@ export function SettingsConsole() {
           title="Organization settings"
           description="Manage typed business and Storefront presentation profiles without mixing secrets into operational settings."
           actions={
-            <button className="button secondary" type="button" onClick={() => void reload()}>
+            <button className="button secondary" type="button" onClick={refresh}>
               <RefreshCw aria-hidden="true" /> Refresh
             </button>
           }
@@ -135,6 +168,7 @@ export function SettingsConsole() {
           <form
             className="settings-grid"
             key={profile.updated_at ?? 'new'}
+            onChange={() => setDirty(true)}
             onSubmit={(event) => void save(event)}
           >
             <section className="panel inset-form">
