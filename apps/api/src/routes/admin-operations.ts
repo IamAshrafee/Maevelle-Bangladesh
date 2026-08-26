@@ -179,6 +179,11 @@ export function registerAdminOperationsRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await operations.listTeam(database.db, active.organizationId) };
   });
+  app.get('/admin/team/capabilities', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'admin.team.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await operations.listCapabilityDefinitions(database.db) };
+  });
   app.patch(
     '/admin/team/:membershipId',
     {

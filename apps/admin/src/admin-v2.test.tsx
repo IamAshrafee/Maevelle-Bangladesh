@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { StatusBadge } from '../components/status-badge';
+import { parseCatalogImportCsv } from '../components/operations-console';
 import {
   filterAndSortWorklist,
   OperationalEmptyState,
@@ -64,5 +65,19 @@ describe('Admin V2 interface contracts', () => {
 
     expect(header).toContain('<h1>Fulfillment worklist</h1>');
     expect(empty).toContain('No matching records');
+  });
+
+  it('parses quoted Catalog CSV without requiring operators to paste internal IDs', () => {
+    expect(
+      parseCatalogImportCsv(
+        'title,handle,description\r\n"Linen, Wrap Dress",linen-wrap,"Light, breathable"',
+      ),
+    ).toEqual([
+      {
+        title: 'Linen, Wrap Dress',
+        handle: 'linen-wrap',
+        description: 'Light, breathable',
+      },
+    ]);
   });
 });

@@ -244,7 +244,7 @@ export async function updateOrganizationProfile(
   )
     throw new AdminOperationsError('Public store name must be text no longer than 160 characters.');
   return (
-    await sql`insert into settings.organization_profiles(organization_id,business_profile,storefront_profile,updated_by) values(${input.organizationId},${JSON.stringify(input.businessProfile)}::jsonb,${JSON.stringify(input.storefrontProfile)}::jsonb,${input.actorId}::uuid) on conflict(organization_id) do update set business_profile=excluded.business_profile,storefront_profile=excluded.storefront_profile,updated_at=now(),updated_by=excluded.updated_by returning updated_at::text`.execute(
+    await sql`insert into settings.organization_profiles(organization_id,business_profile,storefront_profile,updated_by) values(${input.organizationId},${JSON.stringify(input.businessProfile)}::jsonb,${JSON.stringify(input.storefrontProfile)}::jsonb,${input.actorId}::uuid) on conflict(organization_id) do update set business_profile=settings.organization_profiles.business_profile || excluded.business_profile,storefront_profile=settings.organization_profiles.storefront_profile || excluded.storefront_profile,updated_at=now(),updated_by=excluded.updated_by returning updated_at::text`.execute(
       db,
     )
   ).rows[0];
@@ -286,6 +286,19 @@ export async function updateSavedView(
 export async function listTeam(db: Kysely<DatabaseSchema>, organizationId: string) {
   return (
     await sql`select membership.id,membership.user_id,u.name,u.email,u.two_factor_enabled,membership.membership_type,membership.status,membership.created_at::text,coalesce(array_agg(g.capability_code order by g.capability_code) filter(where g.capability_code is not null),'{}') capabilities from iam.organization_memberships membership join iam.users u on u.id=membership.user_id left join iam.membership_capability_grants g on g.membership_id=membership.id where membership.organization_id=${organizationId} group by membership.id,u.id order by membership.created_at`.execute(
+      db,
+    )
+  ).rows;
+}
+
+export async function listCapabilityDefinitions(db: Kysely<DatabaseSchema>) {
+  return (
+    await sql<{
+      capability_code: string;
+      domain: string;
+      description: string;
+      sensitivity: string;
+    }>`select capability_code,domain,description,sensitivity from iam.capability_definitions order by domain,capability_code`.execute(
       db,
     )
   ).rows;

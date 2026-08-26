@@ -11,6 +11,7 @@ import {
   createCatalogImport,
   createExport,
   listSavedViews,
+  listCapabilityDefinitions,
   listTeam,
   processCatalogImports,
   saveView,
@@ -73,8 +74,17 @@ describe('admin operations support', () => {
       businessProfile: { businessName: 'Maevelle Operations' },
       storefrontProfile: { publicStoreName: 'Maevelle' },
     });
+    await updateOrganizationProfile(database.db, {
+      organizationId: organization.id,
+      actorId: user.rows[0]!.id,
+      businessProfile: { lowStockThreshold: 5 },
+      storefrontProfile: { announcement: 'New arrivals' },
+    });
     expect(await getOrganizationProfile(database.db, organization.id)).toEqual(
-      expect.objectContaining({ business_profile: { businessName: 'Maevelle Operations' } }),
+      expect.objectContaining({
+        business_profile: { businessName: 'Maevelle Operations', lowStockThreshold: 5 },
+        storefront_profile: { publicStoreName: 'Maevelle', announcement: 'New arrivals' },
+      }),
     );
     expect(await getOperationsOverview(database.db, organization.id)).toHaveLength(9);
     const view = (await listSavedViews(database.db, organization.id, user.rows[0]!.id))[0] as {
@@ -147,6 +157,11 @@ describe('admin operations support', () => {
   });
 
   it('protects the Owner and prevents cross-tenant or self access mutation', async () => {
+    expect(await listCapabilityDefinitions(database.db)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ capability_code: 'admin.team.view', domain: 'iam' }),
+      ]),
+    );
     const organization = await createOrganization(database.db, {
       code: `team-${crypto.randomUUID().slice(0, 8)}`,
       displayName: 'Team A',
