@@ -782,7 +782,7 @@ export async function ingestProviderEvent(
   const payload = JSON.stringify(input.payload);
   const result = await sql<{
     id: string;
-  }>`insert into integrations.inbound_provider_events(organization_id,integration_account_id,provider_event_id,event_type,provider_status,payload_hash,raw_payload,authentication_status,provider_occurred_at) select ${input.organizationId},a.id,${input.providerEventId ?? null},${input.eventType},${input.providerStatus ?? null},${sha256(payload)},${payload}::jsonb,${input.authenticationStatus},${input.providerOccurredAt ?? null} from integrations.integration_accounts a where a.id=${input.integrationAccountId}::uuid and a.organization_id=${input.organizationId} on conflict(integration_account_id,provider_event_id) do nothing returning id`.execute(
+  }>`insert into integrations.inbound_provider_events(organization_id,integration_account_id,provider_event_id,event_type,provider_status,payload_hash,raw_payload,authentication_status,provider_occurred_at) select ${input.organizationId},a.id,${input.providerEventId ?? null},${input.eventType},${input.providerStatus ?? null},${sha256(payload)},${payload}::jsonb,${input.authenticationStatus},${input.providerOccurredAt ?? null} from integrations.integration_accounts a where a.id=${input.integrationAccountId}::uuid and a.organization_id=${input.organizationId} on conflict do nothing returning id`.execute(
     db,
   );
   return result.rows[0] ? { created: true, id: result.rows[0].id } : { created: false };
