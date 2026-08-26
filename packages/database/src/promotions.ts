@@ -258,6 +258,87 @@ export async function createCouponCode(
   });
 }
 
+export interface AdminPromotionSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly promotionType: 'AUTOMATIC' | 'COUPON';
+  readonly status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  readonly startsAt: string | null;
+  readonly endsAt: string | null;
+  readonly priority: number;
+  readonly combinability: PromotionCombinability;
+  readonly benefitType: PromotionBenefit;
+  readonly benefitValue: string;
+  readonly minimumMerchandiseSubtotal: string | null;
+  readonly coupons: readonly { id: string; code: string; status: string }[];
+  readonly committedUsageCount: number;
+  readonly committedDiscount: string;
+  readonly createdAt: string;
+}
+
+export async function listAdminPromotions(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly AdminPromotionSummary[]> {
+  const [promotions, coupons] = await Promise.all([
+    sql<{
+      id: string;
+      name: string;
+      promotion_type: AdminPromotionSummary['promotionType'];
+      status: AdminPromotionSummary['status'];
+      starts_at: string | null;
+      ends_at: string | null;
+      priority: number;
+      combinability: PromotionCombinability;
+      benefit_type: PromotionBenefit;
+      benefit_value: string;
+      minimum_merchandise_subtotal: string | null;
+      committed_usage_count: string;
+      committed_discount: string;
+      created_at: string;
+    }>`
+      select promotion.id::text,promotion.name,promotion.promotion_type,promotion.status,
+        promotion.starts_at::text,promotion.ends_at::text,promotion.priority,promotion.combinability,
+        revision.benefit_type,revision.benefit_value::text,
+        revision.minimum_merchandise_subtotal::text,
+        count(usage.id) filter (where usage.status='COMMITTED')::text as committed_usage_count,
+        coalesce(sum(usage.discount_amount) filter (where usage.status='COMMITTED'),0)::text as committed_discount,
+        promotion.created_at::text
+      from promotions.promotions promotion
+      join promotions.promotion_revisions revision
+        on revision.promotion_id=promotion.id and revision.status='ACTIVE'
+      left join promotions.promotion_usage usage
+        on usage.promotion_id=promotion.id and usage.organization_id=promotion.organization_id
+      where promotion.organization_id=${organizationId}
+      group by promotion.id,revision.id
+      order by promotion.created_at desc,promotion.id desc
+    `.execute(db),
+    sql<{ id: string; promotion_id: string; code: string; status: string }>`
+      select id::text,promotion_id::text,code,status from promotions.coupon_codes
+      where organization_id=${organizationId} order by created_at,id
+    `.execute(db),
+  ]);
+  return promotions.rows.map((promotion) => ({
+    id: promotion.id,
+    name: promotion.name,
+    promotionType: promotion.promotion_type,
+    status: promotion.status,
+    startsAt: promotion.starts_at,
+    endsAt: promotion.ends_at,
+    priority: promotion.priority,
+    combinability: promotion.combinability,
+    benefitType: promotion.benefit_type,
+    benefitValue: promotion.benefit_value,
+    minimumMerchandiseSubtotal: promotion.minimum_merchandise_subtotal,
+    coupons: coupons.rows
+      .filter((coupon) => coupon.promotion_id === promotion.id)
+      .map((coupon) => ({ id: coupon.id, code: coupon.code, status: coupon.status })),
+    committedUsageCount: Number(promotion.committed_usage_count),
+    committedDiscount: promotion.committed_discount,
+    createdAt: promotion.created_at,
+  }));
+}
+
 /** Evaluates promotions provisionally. It never creates or increments promotion_usage. */
 export async function evaluatePromotions(
   db: Kysely<DatabaseSchema>,

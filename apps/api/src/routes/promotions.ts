@@ -5,6 +5,7 @@ import type { DatabaseClient } from '@maevelle/database';
 import {
   createCouponCode,
   createPromotion,
+  listAdminPromotions,
   PromotionDomainError,
 } from '@maevelle/database/promotions';
 import { findActiveAdminContext } from '@maevelle/database/platform';
@@ -24,11 +25,12 @@ async function capability(
   database: DatabaseClient,
   auth: Auth,
   source: Record<string, string | string[] | undefined>,
+  requiredCapability = 'promotions.manage',
 ) {
   const session = await auth.api.getSession({ headers: headers(source) });
   if (!session?.user?.id) return undefined;
   const active = await findActiveAdminContext(database.db, session.user.id, {
-    requiredCapability: 'promotions.manage',
+    requiredCapability,
   });
   return active ? { ...active, actorId: session.user.id } : undefined;
 }
@@ -46,6 +48,12 @@ export function registerPromotionRoutes(
   database: DatabaseClient,
   auth: Auth,
 ): void {
+  app.get('/admin/promotions', async (request, reply) => {
+    const active = await capability(database, auth, request.headers, 'promotions.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listAdminPromotions(database.db, active.organizationId) };
+  });
+
   app.post(
     '/admin/promotions',
     {

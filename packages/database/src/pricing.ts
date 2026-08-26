@@ -201,6 +201,9 @@ export async function listVariantPrices(
   variantId?: string,
 ): Promise<
   readonly (ResolvedPrice & {
+    productId: string;
+    productTitle: string;
+    sku: string;
     effectiveFrom: string;
     effectiveTo: string | null;
     status: string;
@@ -217,11 +220,21 @@ export async function listVariantPrices(
     effective_to: Date | null;
     status: string;
     version: string;
+    product_id: string;
+    product_title: string;
+    sku: string;
   }>`
-    select id, variant_id, amount::text, compare_at_amount::text, currency_code, effective_from, effective_to, status, version::text
-    from pricing.price_definitions
-    where organization_id = ${organizationId} and (${variantId ?? null}::uuid is null or variant_id = ${variantId ?? null}::uuid)
-    order by variant_id, effective_from desc, id desc
+    select price.id,price.variant_id,price.amount::text,price.compare_at_amount::text,
+      price.currency_code,price.effective_from,price.effective_to,price.status,price.version::text,
+      product.id::text as product_id,product.title as product_title,variant.sku
+    from pricing.price_definitions price
+    join catalog.product_variants variant
+      on variant.id=price.variant_id and variant.organization_id=price.organization_id
+    join catalog.products product
+      on product.id=variant.product_id and product.organization_id=price.organization_id
+    where price.organization_id = ${organizationId}
+      and (${variantId ?? null}::uuid is null or price.variant_id = ${variantId ?? null}::uuid)
+    order by product.title,variant.sku,price.effective_from desc,price.id desc
   `.execute(db);
   return result.rows.map((row) => ({
     priceDefinitionId: row.id,
@@ -229,6 +242,9 @@ export async function listVariantPrices(
     amount: row.amount,
     compareAtAmount: row.compare_at_amount,
     currency: row.currency_code,
+    productId: row.product_id,
+    productTitle: row.product_title,
+    sku: row.sku,
     effectiveFrom: row.effective_from.toISOString(),
     effectiveTo: row.effective_to?.toISOString() ?? null,
     status: row.status,

@@ -23,8 +23,13 @@ import {
 } from './geography.js';
 import { createDatabase } from './index.js';
 import { adjustInventory } from './inventory.js';
-import { createCouponCode, createPromotion, evaluatePromotions } from './promotions.js';
-import { createPriceDefinition, resolveVariantPrice } from './pricing.js';
+import {
+  createCouponCode,
+  createPromotion,
+  evaluatePromotions,
+  listAdminPromotions,
+} from './promotions.js';
+import { createPriceDefinition, listVariantPrices, resolveVariantPrice } from './pricing.js';
 import { createOrganization } from './platform.js';
 import { createLocation } from './warehouse.js';
 
@@ -272,6 +277,23 @@ describe('commercial foundation invariants', () => {
       ],
     });
     expect(result[0]).toMatchObject({ discount: '129.0000' });
+    await expect(listVariantPrices(database.db, fixture.organizationId)).resolves.toEqual([
+      expect.objectContaining({
+        productTitle: 'Commerce Hat',
+        variantId: fixture.variantId,
+        amount: '1290.0000',
+      }),
+    ]);
+    await expect(listAdminPromotions(database.db, fixture.organizationId)).resolves.toEqual([
+      expect.objectContaining({
+        id: promotion.id,
+        name: 'Ten percent',
+        committedUsageCount: 0,
+        committedDiscount: '0',
+        coupons: [expect.objectContaining({ code: 'SAVE10' })],
+      }),
+    ]);
+    expect(await listAdminPromotions(database.db, otherOrganization.organizationId)).toEqual([]);
     const usage = await sql<{
       count: string;
     }>`select count(*)::text as count from promotions.promotion_usage where organization_id = ${fixture.organizationId}`.execute(

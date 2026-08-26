@@ -2921,6 +2921,30 @@ body {
   width: auto;
 }
 
+.commerce-command-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(17rem, 0.55fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.commerce-command-layout > form,
+.commerce-command-layout > aside {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.commerce-command-layout > form > label,
+.commerce-command-layout .form-row > label {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.commerce-command-layout .panel-header svg {
+  width: 1rem;
+  color: oklch(0.42 0.08 165);
+}
+
 @media (max-width: 1180px) {
   .method-grid {
     grid-template-columns: 1fr;
@@ -2943,7 +2967,8 @@ body {
     max-height: none;
   }
   .media-library-layout,
-  .sizing-guide-layout {
+  .sizing-guide-layout,
+  .commerce-command-layout {
     grid-template-columns: 1fr;
   }
   .media-inspector,
