@@ -17,10 +17,12 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useDeferredValue, useEffect, useRef, useState } from 'react';
 
 import type {
   ApiEnvelope,
+  CatalogProductWorkItemDto,
+  CatalogProductWorklistDto,
   CatalogProductSummaryDto,
   CatalogProductWorkspaceDto,
 } from '@maevelle/contracts';
@@ -43,6 +45,14 @@ interface ProductType {
   name: string;
 }
 
+const productStatuses = ['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'] as const;
+const readinessStates = ['ALL', 'READY', 'BLOCKED', 'ATTENTION'] as const;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function allowedUrlValue(value: string | null, allowed: readonly string[]): string {
+  return value && allowed.includes(value) ? value : 'ALL';
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
@@ -61,30 +71,51 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function CatalogConsole() {
-  const [products, setProducts] = useState<readonly CatalogProductSummaryDto[]>([]);
+  const [products, setProducts] = useState<readonly CatalogProductWorkItemDto[]>([]);
   const [types, setTypes] = useState<readonly ProductType[]>([]);
   const [message, setMessage] = useState('Loading Products…');
   const [typeId, setTypeId] = useState('');
   const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
   const [status, setStatus] = useState('ALL');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [readiness, setReadiness] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [urlReady, setUrlReady] = useState(false);
+  const [worklist, setWorklist] = useState<CatalogProductWorklistDto>({
+    items: [],
+    pagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 },
+    summary: { total: 0, published: 0, drafts: 0, archived: 0 },
+  });
   const [createOpen, setCreateOpen] = useState(false);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+  const createDrawerRef = useRef<HTMLElement>(null);
+  const createWasOpen = useRef(false);
   const [selected, setSelected] = useState<CatalogProductSummaryDto>();
   const [workspace, setWorkspace] = useState<CatalogProductWorkspaceDto>();
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const reload = async () => {
+  const reload = async (signal?: AbortSignal) => {
     try {
-      const [productResult, typeResult] = await Promise.all([
-        request<ApiEnvelope<readonly CatalogProductSummaryDto[]>>('/admin/catalog/products'),
-        request<ApiEnvelope<readonly ProductType[]>>('/admin/catalog/product-types'),
-      ]);
-      setProducts(productResult.data);
-      setTypes(typeResult.data);
-      setTypeId((current) => current || typeResult.data[0]?.id || '');
+      const parameters = new URLSearchParams({
+        status,
+        readiness,
+        page: String(page),
+        pageSize: '25',
+      });
+      if (deferredQuery.trim()) parameters.set('q', deferredQuery.trim());
+      if (typeFilter !== 'ALL') parameters.set('productTypeId', typeFilter);
+      const productResult = await request<ApiEnvelope<CatalogProductWorklistDto>>(
+        `/admin/catalog/product-work-items?${parameters.toString()}`,
+        signal ? { signal } : undefined,
+      );
+      setProducts(productResult.data.items);
+      setWorklist(productResult.data);
       setMessage('');
-      return productResult.data;
+      return productResult.data.items;
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return [];
       setMessage(error instanceof Error ? error.message : 'Unable to load the Product catalog.');
       return [];
     }
@@ -93,12 +124,57 @@ export function CatalogConsole() {
   useEffect(() => {
     const parameters = new URLSearchParams(window.location.search);
     setCreateOpen(parameters.get('create') === 'product');
-    void reload().then((loadedProducts) => {
-      const productId = parameters.get('product');
-      const product = loadedProducts.find((candidate) => candidate.id === productId);
-      if (product) void openProduct(product);
-    });
+    setQuery((parameters.get('q') ?? '').slice(0, 120));
+    setStatus(allowedUrlValue(parameters.get('status'), productStatuses));
+    const requestedType = parameters.get('type');
+    setTypeFilter(requestedType && uuidPattern.test(requestedType) ? requestedType : 'ALL');
+    setReadiness(allowedUrlValue(parameters.get('readiness'), readinessStates));
+    setPage(Math.max(1, Number(parameters.get('page') ?? 1) || 1));
+    void request<ApiEnvelope<readonly ProductType[]>>('/admin/catalog/product-types')
+      .then((result) => {
+        setTypes(result.data);
+        setTypeId((current) => current || result.data[0]?.id || '');
+      })
+      .catch((error: unknown) => {
+        setMessage(error instanceof Error ? error.message : 'Unable to load Product types.');
+      });
+    const productId = parameters.get('product');
+    if (productId) {
+      void openProductById(productId).finally(() => setUrlReady(true));
+    } else {
+      setUrlReady(true);
+    }
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void reload(controller.signal);
+    return () => controller.abort();
+  }, [deferredQuery, status, typeFilter, readiness, page]);
+
+  useEffect(() => {
+    if (!urlReady) return;
+    const parameters = new URLSearchParams();
+    if (deferredQuery.trim()) parameters.set('q', deferredQuery.trim());
+    if (status !== 'ALL') parameters.set('status', status);
+    if (typeFilter !== 'ALL') parameters.set('type', typeFilter);
+    if (readiness !== 'ALL') parameters.set('readiness', readiness);
+    if (page > 1) parameters.set('page', String(page));
+    if (selected) parameters.set('product', selected.id);
+    if (createOpen) parameters.set('create', 'product');
+    const next = parameters.size ? `?${parameters.toString()}` : window.location.pathname;
+    window.history.replaceState(null, '', next);
+  }, [urlReady, deferredQuery, status, typeFilter, readiness, page, selected, createOpen]);
+
+  useEffect(() => {
+    if (createOpen) {
+      createWasOpen.current = true;
+      createDrawerRef.current?.focus();
+    } else if (createWasOpen.current) {
+      createWasOpen.current = false;
+      createButtonRef.current?.focus();
+    }
+  }, [createOpen]);
 
   async function openProduct(product: CatalogProductSummaryDto) {
     setSelected(product);
@@ -108,6 +184,7 @@ export function CatalogConsole() {
       const result = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
         `/admin/catalog/products/${product.id}`,
       );
+      setSelected(result.data);
       setWorkspace(result.data);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load Product setup.');
@@ -116,23 +193,26 @@ export function CatalogConsole() {
     }
   }
 
-  const visible = useMemo(
-    () =>
-      products.filter(
-        (product) =>
-          (status === 'ALL' ||
-            (status === 'PUBLISHED'
-              ? product.publicationStatus === 'PUBLISHED'
-              : product.status === status)) &&
-          `${product.title} ${product.handle} ${product.skuPreview ?? ''} ${product.productTypeName ?? ''}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-      ),
-    [products, query, status],
-  );
+  async function openProductById(productId: string) {
+    setWorkspace(undefined);
+    setWorkspaceLoading(true);
+    try {
+      const result = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+        `/admin/catalog/products/${productId}`,
+      );
+      setSelected(result.data);
+      setWorkspace(result.data);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load Product setup.');
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
 
   async function createType(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
+    setBusy(true);
     const data = new FormData(event.currentTarget);
     try {
       await request('/admin/catalog/product-types', {
@@ -144,11 +224,15 @@ export function CatalogConsole() {
       await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create Product type.');
+    } finally {
+      setBusy(false);
     }
   }
 
   async function createProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
+    setBusy(true);
     const data = new FormData(event.currentTarget);
     try {
       await request('/admin/catalog/products', {
@@ -166,12 +250,23 @@ export function CatalogConsole() {
       await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create Product.');
+    } finally {
+      setBusy(false);
     }
   }
 
   async function publication(product: CatalogProductSummaryDto) {
-    setBusy(true);
+    if (busy) return;
     const action = product.publicationStatus === 'PUBLISHED' ? 'unpublish' : 'publish';
+    if (
+      action === 'unpublish' &&
+      !window.confirm(
+        `Unpublish ${product.title}? Customers will no longer be able to discover this Product.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
     try {
       await request(`/admin/catalog/products/${product.id}/${action}`, {
         method: 'POST',
@@ -183,6 +278,7 @@ export function CatalogConsole() {
           : `${product.title} is no longer publicly discoverable.`,
       );
       setSelected(undefined);
+      setWorkspace(undefined);
       await reload();
     } catch (error) {
       setMessage(
@@ -195,7 +291,8 @@ export function CatalogConsole() {
 
   async function createAxis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected || busy) return;
+    setBusy(true);
     const form = event.currentTarget;
     const data = new FormData(form);
     try {
@@ -209,12 +306,15 @@ export function CatalogConsole() {
       await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create option.');
+    } finally {
+      setBusy(false);
     }
   }
 
   async function createOptionValue(event: FormEvent<HTMLFormElement>, axisId: string) {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected || busy) return;
+    setBusy(true);
     const form = event.currentTarget;
     const data = new FormData(form);
     try {
@@ -227,12 +327,14 @@ export function CatalogConsole() {
       await openProduct(selected);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to add option value.');
+    } finally {
+      setBusy(false);
     }
   }
 
   async function createVariant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !workspace) return;
+    if (!selected || !workspace || busy) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const optionValueIds = data.getAll('optionValueId').map(String);
@@ -240,6 +342,7 @@ export function CatalogConsole() {
       setMessage('Choose exactly one value from every option before creating a Variant.');
       return;
     }
+    setBusy(true);
     try {
       await request(`/admin/catalog/products/${selected.id}/variants`, {
         method: 'POST',
@@ -251,6 +354,8 @@ export function CatalogConsole() {
       await reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create Variant.');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -263,10 +368,20 @@ export function CatalogConsole() {
           <p>Build, validate, publish, and maintain the sellable catalog.</p>
         </div>
         <div className="page-actions">
-          <button className="button secondary" type="button" onClick={() => void reload()}>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={busy}
+            onClick={() => void reload()}
+          >
             <RefreshCw /> Refresh
           </button>
-          <button className="button primary" type="button" onClick={() => setCreateOpen(true)}>
+          <button
+            ref={createButtonRef}
+            className="button primary"
+            type="button"
+            onClick={() => setCreateOpen(true)}
+          >
             <Plus /> Create Product
           </button>
         </div>
@@ -279,17 +394,15 @@ export function CatalogConsole() {
       <section className="catalog-summary" aria-label="Catalog summary">
         <article>
           <span>All Products</span>
-          <strong>{products.length}</strong>
+          <strong>{worklist.summary.total}</strong>
         </article>
         <article>
           <span>Published</span>
-          <strong>
-            {products.filter((product) => product.publicationStatus === 'PUBLISHED').length}
-          </strong>
+          <strong>{worklist.summary.published}</strong>
         </article>
         <article>
           <span>Drafts</span>
-          <strong>{products.filter((product) => product.status === 'DRAFT').length}</strong>
+          <strong>{worklist.summary.drafts}</strong>
         </article>
         <article>
           <span>Product types</span>
@@ -302,23 +415,63 @@ export function CatalogConsole() {
           <span className="sr-only">Search Products</span>
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setPage(1);
+            }}
+            name="productSearch"
+            autoComplete="off"
             placeholder="Search name, handle, SKU, or type…"
           />
         </label>
+        <label className="catalog-filter-select">
+          <span>Product Type</span>
+          <select
+            value={typeFilter}
+            onChange={(event) => {
+              setTypeFilter(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="ALL">All Product Types</option>
+            {types.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="filter-chips" role="group" aria-label="Product status">
-          {['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'].map((item) => (
+          {productStatuses.map((item) => (
             <button
               aria-pressed={status === item}
               key={item}
               type="button"
-              onClick={() => setStatus(item)}
+              onClick={() => {
+                setStatus(item);
+                setPage(1);
+              }}
             >
               {item === 'ALL' ? 'All Products' : item}
             </button>
           ))}
         </div>
-        <span className="result-count">{visible.length} results</span>
+        <div className="filter-chips" role="group" aria-label="Product readiness">
+          {readinessStates.map((item) => (
+            <button
+              aria-pressed={readiness === item}
+              key={item}
+              type="button"
+              onClick={() => {
+                setReadiness(item);
+                setPage(1);
+              }}
+            >
+              {item === 'ALL' ? 'Any Readiness' : item}
+            </button>
+          ))}
+        </div>
+        <span className="result-count">{worklist.pagination.totalItems} results</span>
       </section>
       <div className={`product-workspace ${selected ? 'detail-open' : ''}`}>
         <section className="panel product-list-panel">
@@ -329,7 +482,8 @@ export function CatalogConsole() {
                   <th>Product</th>
                   <th>Type</th>
                   <th>Variants</th>
-                  <th>Catalog state</th>
+                  <th>Readiness</th>
+                  <th>Catalog State</th>
                   <th>Updated</th>
                   <th>
                     <span className="sr-only">Actions</span>
@@ -337,7 +491,7 @@ export function CatalogConsole() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((product) => (
+                {products.map((product) => (
                   <tr
                     className={selected?.id === product.id ? 'selected-row' : ''}
                     key={product.id}
@@ -358,6 +512,18 @@ export function CatalogConsole() {
                     </td>
                     <td>{product.productTypeName ?? '—'}</td>
                     <td>{product.variantCount ?? 0}</td>
+                    <td>
+                      <div className="catalog-readiness-cell">
+                        <StatusBadge status={product.readinessState} />
+                        <small>
+                          {product.blockerCount > 0
+                            ? `${product.blockerCount} blocker${product.blockerCount === 1 ? '' : 's'}`
+                            : product.warningCount > 0
+                              ? `${product.warningCount} warning${product.warningCount === 1 ? '' : 's'}`
+                              : 'No setup issues'}
+                        </small>
+                      </div>
+                    </td>
                     <td>
                       <div className="inline-status">
                         <StatusBadge status={product.status} />
@@ -386,7 +552,7 @@ export function CatalogConsole() {
                 ))}
               </tbody>
             </table>
-            {visible.length === 0 ? (
+            {products.length === 0 ? (
               <div className="empty-state">
                 <PackageSearch />
                 <strong>No matching Products</strong>
@@ -397,6 +563,27 @@ export function CatalogConsole() {
               </div>
             ) : null}
           </div>
+          {worklist.pagination.totalPages > 1 ? (
+            <nav className="catalog-pagination" aria-label="Product pages">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                Previous
+              </button>
+              <span>
+                Page {worklist.pagination.page} of {worklist.pagination.totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= worklist.pagination.totalPages}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Next
+              </button>
+            </nav>
+          ) : null}
         </section>
         {selected ? (
           <aside className="product-detail-panel">
@@ -412,7 +599,10 @@ export function CatalogConsole() {
               <button
                 aria-label="Close Product workspace"
                 type="button"
-                onClick={() => setSelected(undefined)}
+                onClick={() => {
+                  setSelected(undefined);
+                  setWorkspace(undefined);
+                }}
               >
                 <X />
               </button>
@@ -420,33 +610,44 @@ export function CatalogConsole() {
             <section className="publish-readiness">
               <div>
                 <strong>Publishing readiness</strong>
-                <p>The server validates every authoritative requirement when you publish.</p>
+                <p>
+                  {workspace?.readiness.canPublish
+                    ? 'The authoritative publication gate passes. Review operational warnings before merchandising.'
+                    : `${workspace?.readiness.blockerCount ?? 0} blocker${workspace?.readiness.blockerCount === 1 ? '' : 's'} must be resolved before publishing.`}
+                </p>
               </div>
               <ul>
-                <li>
-                  <CheckCircle2 /> Product identity
-                </li>
-                <li className={Number(selected.variantCount) ? '' : 'incomplete'}>
-                  <CheckCircle2 /> Sellable Variant
-                </li>
-                <li>
-                  <Tags /> Active price
-                </li>
-                <li>
-                  <Image /> Product media
-                </li>
-                <li>
-                  <Boxes /> Available inventory
-                </li>
+                {workspace?.readiness.checks.map((check) => (
+                  <li className={check.state.toLowerCase()} key={check.code}>
+                    {check.state === 'PASS' ? <CheckCircle2 /> : <AlertTriangle />}
+                    <span>
+                      <strong>{check.label}</strong>
+                      <small>{check.message}</small>
+                    </span>
+                    {check.state !== 'PASS' && check.actionHref ? (
+                      <Link href={check.actionHref}>Resolve</Link>
+                    ) : null}
+                  </li>
+                ))}
               </ul>
-              <button disabled={busy} type="button" onClick={() => void publication(selected)}>
+              <button
+                disabled={
+                  busy ||
+                  workspaceLoading ||
+                  (selected.publicationStatus !== 'PUBLISHED' && !workspace?.readiness.canPublish)
+                }
+                type="button"
+                onClick={() => void publication(selected)}
+              >
                 {selected.publicationStatus === 'PUBLISHED' ? <Archive /> : <CheckCircle2 />}
                 {selected.publicationStatus === 'PUBLISHED'
                   ? 'Unpublish Product'
-                  : 'Validate & publish'}
+                  : workspace?.readiness.canPublish
+                    ? 'Publish Product'
+                    : 'Resolve blockers to publish'}
               </button>
             </section>
-            <section className="variant-workspace">
+            <section className="variant-workspace" id="variants">
               <div className="section-heading">
                 <div>
                   <h3>Options & Variants</h3>
@@ -479,14 +680,24 @@ export function CatalogConsole() {
                           className="inline-create-form"
                           onSubmit={(event) => void createOptionValue(event, axis.id)}
                         >
-                          <input name="displayValue" placeholder="Display value" required />
                           <input
+                            aria-label={`${axis.name} display value`}
+                            autoComplete="off"
+                            name="displayValue"
+                            placeholder="Example: Red…"
+                            required
+                          />
+                          <input
+                            aria-label={`${axis.name} value code`}
+                            autoComplete="off"
                             name="code"
-                            placeholder="code"
+                            placeholder="Example: red…"
                             pattern="[a-z0-9]+(-[a-z0-9]+)*"
                             required
                           />
-                          <button type="submit">Add value</button>
+                          <button disabled={busy} type="submit">
+                            Add Value
+                          </button>
                         </form>
                       </article>
                     ))}
@@ -494,14 +705,24 @@ export function CatalogConsole() {
                   <details className="compact-disclosure" open={workspace.options.length === 0}>
                     <summary>Add Product option</summary>
                     <form className="inline-create-form" onSubmit={createAxis}>
-                      <input name="name" placeholder="Option name (e.g. Color)" required />
                       <input
+                        aria-label="Option name"
+                        autoComplete="off"
+                        name="name"
+                        placeholder="Example: Color…"
+                        required
+                      />
+                      <input
+                        aria-label="Option code"
+                        autoComplete="off"
                         name="code"
-                        placeholder="color"
+                        placeholder="Example: color…"
                         pattern="[a-z0-9]+(-[a-z0-9]+)*"
                         required
                       />
-                      <button type="submit">Add option</button>
+                      <button disabled={busy} type="submit">
+                        Add Option
+                      </button>
                     </form>
                   </details>
                   {workspace.options.length > 0 &&
@@ -513,7 +734,14 @@ export function CatalogConsole() {
                           Choose one value from every option. SKU is normalized by the server.
                         </small>
                       </div>
-                      <input name="sku" placeholder="SKU" required />
+                      <input
+                        aria-label="Variant SKU"
+                        autoComplete="off"
+                        name="sku"
+                        placeholder="Example: DRESS-RED-M…"
+                        spellCheck={false}
+                        required
+                      />
                       {workspace.options.map((axis) => (
                         <label key={axis.id}>
                           <span>{axis.name}</span>
@@ -529,7 +757,7 @@ export function CatalogConsole() {
                           </select>
                         </label>
                       ))}
-                      <button type="submit">
+                      <button disabled={busy} type="submit">
                         <Grid2X2 /> Create Variant
                       </button>
                     </form>
@@ -615,10 +843,15 @@ export function CatalogConsole() {
           onMouseDown={() => setCreateOpen(false)}
         >
           <aside
+            ref={createDrawerRef}
             aria-label="Create Product"
             aria-modal="true"
             className="form-drawer"
             role="dialog"
+            tabIndex={-1}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setCreateOpen(false);
+            }}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
@@ -641,9 +874,9 @@ export function CatalogConsole() {
             <form onSubmit={createProduct}>
               <div className="form-section">
                 <h3>Product identity</h3>
-                <Label>Product type</Label>
+                <Label htmlFor="product-type">Product Type</Label>
                 <Select value={typeId} onValueChange={(value) => setTypeId(value ?? '')}>
-                  <SelectTrigger>
+                  <SelectTrigger id="product-type">
                     <SelectValue placeholder="Choose a type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -655,14 +888,21 @@ export function CatalogConsole() {
                   </SelectContent>
                 </Select>
                 <Label htmlFor="title">Product name</Label>
-                <Input id="title" name="title" required placeholder="Linen wrap dress" />
+                <Input
+                  autoComplete="off"
+                  id="title"
+                  name="title"
+                  required
+                  placeholder="Example: Linen Wrap Dress…"
+                />
                 <Label htmlFor="handle">Storefront handle</Label>
                 <Input
                   id="handle"
                   name="handle"
+                  autoComplete="off"
                   required
                   pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                  placeholder="linen-wrap-dress"
+                  placeholder="Example: linen-wrap-dress…"
                 />
                 <small>
                   Lowercase letters, numbers, and hyphens. Later changes preserve redirect history.
@@ -671,15 +911,16 @@ export function CatalogConsole() {
                 <textarea
                   id="description"
                   name="description"
+                  autoComplete="off"
                   rows={5}
-                  placeholder="Describe material, cut, use, and customer value."
+                  placeholder="Describe material, cut, use, and customer value…"
                 />
               </div>
               <footer>
                 <button type="button" onClick={() => setCreateOpen(false)}>
                   Cancel
                 </button>
-                <Button type="submit" disabled={!typeId}>
+                <Button type="submit" disabled={!typeId || busy}>
                   Create draft <ArrowRight />
                 </Button>
               </footer>
@@ -691,13 +932,22 @@ export function CatalogConsole() {
                 <Input
                   id="type-code"
                   name="code"
-                  placeholder="dress"
+                  autoComplete="off"
+                  placeholder="Example: dress…"
                   required
                   pattern="[a-z0-9]+(-[a-z0-9]+)*"
                 />
                 <Label htmlFor="type-name">Type name</Label>
-                <Input id="type-name" name="name" placeholder="Dress" required />
-                <Button type="submit">Create type</Button>
+                <Input
+                  autoComplete="off"
+                  id="type-name"
+                  name="name"
+                  placeholder="Example: Dress…"
+                  required
+                />
+                <Button disabled={busy} type="submit">
+                  Create Type
+                </Button>
               </form>
             </details>
           </aside>

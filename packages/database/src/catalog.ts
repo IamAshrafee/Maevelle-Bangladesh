@@ -42,6 +42,81 @@ export interface CatalogProductWorkspace extends ProductSummary {
     status: string;
     optionValueIds: readonly string[];
   }[];
+  readonly readiness: CatalogProductReadiness;
+  readonly operationalSignals: CatalogProductOperationalSignals;
+}
+
+export type CatalogReadinessState = 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
+
+export interface CatalogReadinessCheck {
+  readonly code:
+    | 'IDENTITY'
+    | 'ACTIVE_VARIANT'
+    | 'REQUIRED_ATTRIBUTES'
+    | 'OPTION_COMBINATIONS'
+    | 'CURRENT_PRICE'
+    | 'PUBLIC_MEDIA'
+    | 'CATEGORY'
+    | 'AVAILABLE_INVENTORY'
+    | 'DESCRIPTION';
+  readonly label: string;
+  readonly state: 'PASS' | 'BLOCKER' | 'WARNING';
+  readonly message: string;
+  readonly actionHref?: string;
+}
+
+export interface CatalogProductOperationalSignals {
+  readonly defaultCurrency: string;
+  readonly activeVariantCount: number;
+  readonly pricedVariantCount: number;
+  readonly publicMediaCount: number;
+  readonly availableVariantCount: number;
+  readonly categoryCount: number;
+}
+
+export interface CatalogProductReadiness {
+  readonly state: CatalogReadinessState;
+  readonly canPublish: boolean;
+  readonly blockerCount: number;
+  readonly warningCount: number;
+  readonly checks: readonly CatalogReadinessCheck[];
+}
+
+interface CatalogProductFacts {
+  readonly title: string;
+  readonly description: string | null;
+  readonly publicationStatus: ProductSummary['publicationStatus'];
+  readonly defaultCurrency: string;
+  readonly activeVariantCount: number;
+  readonly requiredAttributeMissingCount: number;
+  readonly incompleteVariantCount: number;
+  readonly pricedVariantCount: number;
+  readonly publicMediaCount: number;
+  readonly availableVariantCount: number;
+  readonly categoryCount: number;
+}
+
+export interface CatalogProductWorkItem extends ProductSummary {
+  readonly readinessState: CatalogReadinessState;
+  readonly blockerCount: number;
+  readonly warningCount: number;
+  readonly operationalSignals: CatalogProductOperationalSignals;
+}
+
+export interface CatalogProductWorklist {
+  readonly items: readonly CatalogProductWorkItem[];
+  readonly pagination: {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+  };
+  readonly summary: {
+    readonly total: number;
+    readonly published: number;
+    readonly drafts: number;
+    readonly archived: number;
+  };
 }
 
 export async function createCatalogProductType(
@@ -174,6 +249,260 @@ function asProduct(row: {
   };
 }
 
+async function getCatalogProductFacts(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  productId: string,
+): Promise<CatalogProductFacts | undefined> {
+  const result = await sql<{
+    title: string;
+    description: string | null;
+    publication_status: ProductSummary['publicationStatus'];
+    product_type_active: boolean;
+    default_currency: string;
+    active_variant_count: string;
+    required_attribute_missing_count: string;
+    incomplete_variant_count: string;
+    priced_variant_count: string;
+    public_media_count: string;
+    available_variant_count: string;
+    category_count: string;
+  }>`
+    select product.title,product.description,product.publication_status,
+      (product_type.status='ACTIVE') as product_type_active,
+      organization.default_currency,
+      (select count(*)::text from catalog.product_variants variant
+        where variant.organization_id=product.organization_id and variant.product_id=product.id
+          and variant.status='ACTIVE') as active_variant_count,
+      (select count(*)::text
+        from catalog.product_type_attributes required
+        join catalog.attribute_definitions definition
+          on definition.id=required.attribute_definition_id
+          and definition.organization_id=product.organization_id
+          and definition.status='ACTIVE'
+        left join catalog.product_attribute_values value
+          on value.organization_id=product.organization_id
+          and value.product_id=product.id
+          and value.attribute_definition_id=required.attribute_definition_id
+        where required.product_type_id=product.product_type_id
+          and required.is_required and definition.scope='PRODUCT' and value.id is null
+      ) as required_attribute_missing_count,
+      (select count(*)::text
+        from catalog.product_variants variant
+        where variant.organization_id=product.organization_id
+          and variant.product_id=product.id and variant.status='ACTIVE'
+          and (select count(*)
+            from catalog.variant_option_values link
+            join catalog.product_option_axes axis
+              on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
+              and axis.product_id=product.id and axis.status='ACTIVE'
+            join catalog.product_option_values value
+              on value.id=link.option_value_id and value.organization_id=link.organization_id
+              and value.option_axis_id=axis.id and value.status='ACTIVE'
+            where link.organization_id=product.organization_id and link.variant_id=variant.id
+          ) <> (select count(*) from catalog.product_option_axes axis
+            where axis.organization_id=product.organization_id
+              and axis.product_id=product.id and axis.status='ACTIVE')
+      ) as incomplete_variant_count,
+      (select count(*)::text
+        from catalog.product_variants variant
+        where variant.organization_id=product.organization_id
+          and variant.product_id=product.id and variant.status='ACTIVE'
+          and exists (select 1 from pricing.price_definitions price
+            where price.organization_id=product.organization_id
+              and price.variant_id=variant.id
+              and price.currency_code=organization.default_currency
+              and price.status='ACTIVE' and price.effective_from<=now()
+              and (price.effective_to is null or price.effective_to>now()))
+      ) as priced_variant_count,
+      (select count(*)::text
+        from catalog.product_media product_media
+        join media.media_assets asset
+          on asset.id=product_media.asset_id
+          and asset.organization_id=product_media.organization_id
+        where product_media.organization_id=product.organization_id
+          and product_media.product_id=product.id
+          and asset.status='READY' and asset.visibility_class='PUBLIC'
+      ) as public_media_count,
+      (select count(*)::text
+        from catalog.product_variants variant
+        where variant.organization_id=product.organization_id
+          and variant.product_id=product.id and variant.status='ACTIVE'
+          and exists (select 1
+            from inventory.inventory_items item
+            join inventory.inventory_levels level
+              on level.inventory_item_id=item.id and level.organization_id=item.organization_id
+            where item.organization_id=product.organization_id and item.variant_id=variant.id
+              and level.sellable_quantity-level.reserved_quantity>0)
+      ) as available_variant_count,
+      (select count(*)::text from catalog.product_categories product_category
+        join catalog.categories category
+          on category.id=product_category.category_id
+          and category.organization_id=product_category.organization_id
+        where product_category.organization_id=product.organization_id
+          and product_category.product_id=product.id and category.status='ACTIVE'
+      ) as category_count
+    from catalog.products product
+    join platform.organizations organization on organization.id=product.organization_id
+    join catalog.product_types product_type
+      on product_type.id=product.product_type_id
+      and product_type.organization_id=product.organization_id
+    where product.organization_id=${organizationId} and product.id=${productId}::uuid
+  `.execute(db);
+  const row = result.rows[0];
+  if (!row) return undefined;
+  return {
+    title: row.product_type_active ? row.title : '',
+    description: row.description,
+    publicationStatus: row.publication_status,
+    defaultCurrency: row.default_currency,
+    activeVariantCount: Number(row.active_variant_count),
+    requiredAttributeMissingCount: Number(row.required_attribute_missing_count),
+    incompleteVariantCount: Number(row.incomplete_variant_count),
+    pricedVariantCount: Number(row.priced_variant_count),
+    publicMediaCount: Number(row.public_media_count),
+    availableVariantCount: Number(row.available_variant_count),
+    categoryCount: Number(row.category_count),
+  };
+}
+
+function readinessFromFacts(facts: CatalogProductFacts): {
+  readiness: CatalogProductReadiness;
+  operationalSignals: CatalogProductOperationalSignals;
+} {
+  const checks: CatalogReadinessCheck[] = [
+    {
+      code: 'IDENTITY',
+      label: 'Product identity',
+      state: facts.title.trim() ? 'PASS' : 'BLOCKER',
+      message: facts.title.trim()
+        ? 'The Product has a valid title and active Product Type.'
+        : 'Choose an active Product Type and provide a Product title.',
+    },
+    {
+      code: 'ACTIVE_VARIANT',
+      label: 'Sellable Variant',
+      state: facts.activeVariantCount > 0 ? 'PASS' : 'BLOCKER',
+      message:
+        facts.activeVariantCount > 0
+          ? `${facts.activeVariantCount} active Variant${facts.activeVariantCount === 1 ? '' : 's'} configured.`
+          : 'Create at least one active sellable Variant before publishing.',
+      actionHref: '#variants',
+    },
+    {
+      code: 'REQUIRED_ATTRIBUTES',
+      label: 'Required attributes',
+      state: facts.requiredAttributeMissingCount === 0 ? 'PASS' : 'BLOCKER',
+      message:
+        facts.requiredAttributeMissingCount === 0
+          ? 'All required Product attributes are complete.'
+          : `${facts.requiredAttributeMissingCount} required Product attribute${facts.requiredAttributeMissingCount === 1 ? ' is' : 's are'} missing.`,
+    },
+    {
+      code: 'OPTION_COMBINATIONS',
+      label: 'Variant combinations',
+      state: facts.incompleteVariantCount === 0 ? 'PASS' : 'BLOCKER',
+      message:
+        facts.incompleteVariantCount === 0
+          ? 'Active Variants use one active value from every active option.'
+          : `${facts.incompleteVariantCount} active Variant${facts.incompleteVariantCount === 1 ? ' has' : 's have'} an incomplete option combination.`,
+      actionHref: '#variants',
+    },
+    {
+      code: 'CURRENT_PRICE',
+      label: `Current ${facts.defaultCurrency} price`,
+      state:
+        facts.activeVariantCount > 0 && facts.pricedVariantCount === facts.activeVariantCount
+          ? 'PASS'
+          : 'WARNING',
+      message:
+        facts.activeVariantCount > 0 && facts.pricedVariantCount === facts.activeVariantCount
+          ? 'Every active Variant has a current selling price.'
+          : `${Math.max(facts.activeVariantCount - facts.pricedVariantCount, 0)} active Variant${facts.activeVariantCount - facts.pricedVariantCount === 1 ? '' : 's'} need${facts.activeVariantCount - facts.pricedVariantCount === 1 ? 's' : ''} a current price.`,
+      actionHref: '/pricing',
+    },
+    {
+      code: 'PUBLIC_MEDIA',
+      label: 'Public Product media',
+      state: facts.publicMediaCount > 0 ? 'PASS' : 'WARNING',
+      message:
+        facts.publicMediaCount > 0
+          ? `${facts.publicMediaCount} public-ready media asset${facts.publicMediaCount === 1 ? '' : 's'} attached.`
+          : 'Attach at least one public-ready Product image for customer confidence.',
+      actionHref: '/media',
+    },
+    {
+      code: 'CATEGORY',
+      label: 'Active category',
+      state: facts.categoryCount > 0 ? 'PASS' : 'WARNING',
+      message:
+        facts.categoryCount > 0
+          ? `${facts.categoryCount} active categor${facts.categoryCount === 1 ? 'y' : 'ies'} assigned.`
+          : 'Assign an active category so customers can browse to this Product.',
+    },
+    {
+      code: 'AVAILABLE_INVENTORY',
+      label: 'Available inventory',
+      state: facts.availableVariantCount > 0 ? 'PASS' : 'WARNING',
+      message:
+        facts.availableVariantCount > 0
+          ? `${facts.availableVariantCount} active Variant${facts.availableVariantCount === 1 ? ' is' : 's are'} currently available to sell.`
+          : 'No active Variant is currently available to sell. Publication may still be intentional.',
+      actionHref: '/inventory/stock',
+    },
+    {
+      code: 'DESCRIPTION',
+      label: 'Customer description',
+      state: facts.description?.trim() ? 'PASS' : 'WARNING',
+      message: facts.description?.trim()
+        ? 'A customer-facing Product description is present.'
+        : 'Add a useful customer-facing description before merchandising this Product.',
+    },
+  ];
+  const blockerCount = checks.filter((check) => check.state === 'BLOCKER').length;
+  const warningCount = checks.filter((check) => check.state === 'WARNING').length;
+  const state: CatalogReadinessState =
+    facts.publicationStatus === 'PUBLISHED'
+      ? blockerCount > 0 || warningCount > 0
+        ? 'ATTENTION'
+        : 'PUBLISHED'
+      : blockerCount > 0
+        ? 'BLOCKED'
+        : 'READY';
+  return {
+    readiness: {
+      state,
+      canPublish: blockerCount === 0,
+      blockerCount,
+      warningCount,
+      checks,
+    },
+    operationalSignals: {
+      defaultCurrency: facts.defaultCurrency,
+      activeVariantCount: facts.activeVariantCount,
+      pricedVariantCount: facts.pricedVariantCount,
+      publicMediaCount: facts.publicMediaCount,
+      availableVariantCount: facts.availableVariantCount,
+      categoryCount: facts.categoryCount,
+    },
+  };
+}
+
+export async function getCatalogProductReadiness(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  productId: string,
+): Promise<
+  | {
+      readiness: CatalogProductReadiness;
+      operationalSignals: CatalogProductOperationalSignals;
+    }
+  | undefined
+> {
+  const facts = await getCatalogProductFacts(db, organizationId, productId);
+  return facts ? readinessFromFacts(facts) : undefined;
+}
+
 export async function createCatalogProduct(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -275,31 +604,18 @@ export async function publishCatalogProduct(
   input: { organizationId: string; actorId: string; productId: string; expectedVersion: number },
 ): Promise<ProductSummary> {
   return db.transaction().execute(async (transaction) => {
-    const product = await sql<{ id: string }>`
-      select id from catalog.products where id = ${input.productId} and organization_id = ${input.organizationId}
-    `.execute(transaction);
-    if (!product.rows[0]) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
-    const variants = await sql<{ count: string }>`
-      select count(*)::text as count from catalog.product_variants
-      where product_id = ${input.productId} and organization_id = ${input.organizationId} and status = 'ACTIVE'
-    `.execute(transaction);
-    if (Number(variants.rows[0]?.count ?? 0) < 1) {
+    const validation = await getCatalogProductReadiness(
+      transaction,
+      input.organizationId,
+      input.productId,
+    );
+    if (!validation) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
+    const blockers = validation.readiness.checks.filter((check) => check.state === 'BLOCKER');
+    if (blockers.length > 0)
       throw new CatalogDomainError(
         'VALIDATION_FAILED',
-        'A product needs at least one active variant before publishing.',
+        blockers.map((check) => check.message).join(' '),
       );
-    }
-    const requiredMissing = await sql<{ count: string }>`
-      select count(*)::text as count
-      from catalog.product_type_attributes required
-      join catalog.attribute_definitions definition on definition.id = required.attribute_definition_id
-      left join catalog.product_attribute_values value on value.product_id = ${input.productId} and value.attribute_definition_id = required.attribute_definition_id
-      where required.product_type_id = (select product_type_id from catalog.products where id = ${input.productId})
-        and required.is_required and definition.scope = 'PRODUCT' and value.id is null
-    `.execute(transaction);
-    if (Number(requiredMissing.rows[0]?.count ?? 0) > 0) {
-      throw new CatalogDomainError('VALIDATION_FAILED', 'Required product attributes are missing.');
-    }
     const updated = await sql<{
       id: string;
       handle: string;
@@ -505,6 +821,229 @@ export async function listCatalogProducts(
   return result.rows.map(asProduct);
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
+}
+
+export async function listCatalogProductWorkItems(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    query?: string;
+    status?: 'ALL' | 'DRAFT' | 'ACTIVE' | 'ARCHIVED' | 'PUBLISHED';
+    productTypeId?: string;
+    readiness?: 'ALL' | CatalogReadinessState;
+    page?: number;
+    pageSize?: number;
+  },
+): Promise<CatalogProductWorklist> {
+  const page = Math.max(1, input.page ?? 1);
+  const pageSize = Math.min(100, Math.max(10, input.pageSize ?? 25));
+  const offset = (page - 1) * pageSize;
+  const query = input.query?.trim();
+  const searchPattern = query ? `%${escapeLikePattern(query)}%` : null;
+  const status = input.status ?? 'ALL';
+  const readiness = input.readiness ?? 'ALL';
+  const productTypeId = input.productTypeId ?? null;
+
+  const [workItems, summary] = await Promise.all([
+    sql<{
+      id: string;
+      handle: string;
+      title: string;
+      status: ProductSummary['status'];
+      publication_status: ProductSummary['publicationStatus'];
+      version: string;
+      product_type_name: string;
+      active_variant_count: number;
+      sku_preview: string | null;
+      updated_at: string;
+      default_currency: string;
+      priced_variant_count: number;
+      public_media_count: number;
+      available_variant_count: number;
+      category_count: number;
+      blocker_count: number;
+      warning_count: number;
+      readiness_state: CatalogReadinessState;
+      filtered_total: string;
+    }>`
+      with facts as (
+        select product.id,product.handle,product.title,product.description,product.status,
+          product.publication_status,product.version,product.updated_at,product.product_type_id,
+          product_type.name as product_type_name,product_type.status as product_type_status,
+          organization.default_currency,
+          (select count(*)::integer from catalog.product_variants variant
+            where variant.organization_id=product.organization_id
+              and variant.product_id=product.id and variant.status='ACTIVE') as active_variant_count,
+          (select min(variant.sku) from catalog.product_variants variant
+            where variant.organization_id=product.organization_id
+              and variant.product_id=product.id and variant.status='ACTIVE') as sku_preview,
+          (select count(*)::integer
+            from catalog.product_type_attributes required
+            join catalog.attribute_definitions definition
+              on definition.id=required.attribute_definition_id
+              and definition.organization_id=product.organization_id
+              and definition.status='ACTIVE'
+            left join catalog.product_attribute_values value
+              on value.organization_id=product.organization_id and value.product_id=product.id
+              and value.attribute_definition_id=required.attribute_definition_id
+            where required.product_type_id=product.product_type_id and required.is_required
+              and definition.scope='PRODUCT' and value.id is null
+          ) as required_attribute_missing_count,
+          (select count(*)::integer from catalog.product_variants variant
+            where variant.organization_id=product.organization_id
+              and variant.product_id=product.id and variant.status='ACTIVE'
+              and (select count(*) from catalog.variant_option_values link
+                join catalog.product_option_axes axis
+                  on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
+                  and axis.product_id=product.id and axis.status='ACTIVE'
+                join catalog.product_option_values value
+                  on value.id=link.option_value_id and value.organization_id=link.organization_id
+                  and value.option_axis_id=axis.id and value.status='ACTIVE'
+                where link.organization_id=product.organization_id and link.variant_id=variant.id
+              ) <> (select count(*) from catalog.product_option_axes axis
+                where axis.organization_id=product.organization_id
+                  and axis.product_id=product.id and axis.status='ACTIVE')
+          ) as incomplete_variant_count,
+          (select count(*)::integer from catalog.product_variants variant
+            where variant.organization_id=product.organization_id
+              and variant.product_id=product.id and variant.status='ACTIVE'
+              and exists (select 1 from pricing.price_definitions price
+                where price.organization_id=product.organization_id and price.variant_id=variant.id
+                  and price.currency_code=organization.default_currency and price.status='ACTIVE'
+                  and price.effective_from<=now()
+                  and (price.effective_to is null or price.effective_to>now()))
+          ) as priced_variant_count,
+          (select count(*)::integer from catalog.product_media product_media
+            join media.media_assets asset
+              on asset.id=product_media.asset_id
+              and asset.organization_id=product_media.organization_id
+            where product_media.organization_id=product.organization_id
+              and product_media.product_id=product.id
+              and asset.status='READY' and asset.visibility_class='PUBLIC'
+          ) as public_media_count,
+          (select count(*)::integer from catalog.product_variants variant
+            where variant.organization_id=product.organization_id
+              and variant.product_id=product.id and variant.status='ACTIVE'
+              and exists (select 1 from inventory.inventory_items item
+                join inventory.inventory_levels level
+                  on level.inventory_item_id=item.id and level.organization_id=item.organization_id
+                where item.organization_id=product.organization_id and item.variant_id=variant.id
+                  and level.sellable_quantity-level.reserved_quantity>0)
+          ) as available_variant_count,
+          (select count(*)::integer from catalog.product_categories product_category
+            join catalog.categories category
+              on category.id=product_category.category_id
+              and category.organization_id=product_category.organization_id
+            where product_category.organization_id=product.organization_id
+              and product_category.product_id=product.id and category.status='ACTIVE'
+          ) as category_count
+        from catalog.products product
+        join platform.organizations organization on organization.id=product.organization_id
+        join catalog.product_types product_type
+          on product_type.id=product.product_type_id
+          and product_type.organization_id=product.organization_id
+        where product.organization_id=${input.organizationId}
+          and (${status}='ALL'
+            or (${status}='PUBLISHED' and product.publication_status='PUBLISHED')
+            or (${status}<>'PUBLISHED' and product.status=${status}))
+          and (${productTypeId}::uuid is null or product.product_type_id=${productTypeId}::uuid)
+          and (${searchPattern}::text is null
+            or product.title ilike ${searchPattern} escape '\\'
+            or product.handle ilike ${searchPattern} escape '\\'
+            or exists (select 1 from catalog.product_variants searched_variant
+              where searched_variant.organization_id=product.organization_id
+                and searched_variant.product_id=product.id
+                and searched_variant.sku ilike ${searchPattern} escape '\\'))
+      ), counts as (
+        select facts.*,
+          ((case when length(trim(title))=0 or product_type_status<>'ACTIVE' then 1 else 0 end)
+            + (case when active_variant_count=0 then 1 else 0 end)
+            + (case when required_attribute_missing_count>0 then 1 else 0 end)
+            + (case when incomplete_variant_count>0 then 1 else 0 end))::integer as blocker_count,
+          ((case when active_variant_count=0 or priced_variant_count<active_variant_count then 1 else 0 end)
+            + (case when public_media_count=0 then 1 else 0 end)
+            + (case when category_count=0 then 1 else 0 end)
+            + (case when available_variant_count=0 then 1 else 0 end)
+            + (case when nullif(trim(description),'') is null then 1 else 0 end))::integer as warning_count
+        from facts
+      ), scored as (
+        select counts.*,
+          case
+            when publication_status='PUBLISHED' and (blocker_count>0 or warning_count>0) then 'ATTENTION'
+            when publication_status='PUBLISHED' then 'PUBLISHED'
+            when blocker_count>0 then 'BLOCKED'
+            else 'READY'
+          end as readiness_state
+        from counts
+      ), filtered as (
+        select * from scored
+        where ${readiness}='ALL' or readiness_state=${readiness}
+      )
+      select id::text,handle,title,status,publication_status,version::text,product_type_name,
+        active_variant_count,sku_preview,updated_at::text,default_currency,priced_variant_count,
+        public_media_count,available_variant_count,category_count,blocker_count,warning_count,
+        readiness_state,count(*) over()::text as filtered_total
+      from filtered
+      order by updated_at desc,id desc
+      limit ${pageSize} offset ${offset}
+    `.execute(db),
+    sql<{
+      total: string;
+      published: string;
+      drafts: string;
+      archived: string;
+    }>`
+      select count(*)::text as total,
+        count(*) filter(where publication_status='PUBLISHED')::text as published,
+        count(*) filter(where status='DRAFT')::text as drafts,
+        count(*) filter(where status='ARCHIVED')::text as archived
+      from catalog.products where organization_id=${input.organizationId}
+    `.execute(db),
+  ]);
+
+  // Normalize stale bookmarked pages after filters or deletions shrink the
+  // result set. This keeps the worklist useful without weakening its bounds.
+  if (workItems.rows.length === 0 && page > 1) {
+    return listCatalogProductWorkItems(db, { ...input, page: 1 });
+  }
+
+  const totalItems = Number(workItems.rows[0]?.filtered_total ?? 0);
+  const summaryRow = summary.rows[0];
+  return {
+    items: workItems.rows.map((row) => ({
+      ...asProduct({
+        ...row,
+        variant_count: String(row.active_variant_count),
+      }),
+      readinessState: row.readiness_state,
+      blockerCount: row.blocker_count,
+      warningCount: row.warning_count,
+      operationalSignals: {
+        defaultCurrency: row.default_currency,
+        activeVariantCount: row.active_variant_count,
+        pricedVariantCount: row.priced_variant_count,
+        publicMediaCount: row.public_media_count,
+        availableVariantCount: row.available_variant_count,
+        categoryCount: row.category_count,
+      },
+    })),
+    pagination: {
+      page,
+      pageSize,
+      totalItems,
+      totalPages: Math.ceil(totalItems / pageSize),
+    },
+    summary: {
+      total: Number(summaryRow?.total ?? 0),
+      published: Number(summaryRow?.published ?? 0),
+      drafts: Number(summaryRow?.drafts ?? 0),
+      archived: Number(summaryRow?.archived ?? 0),
+    },
+  };
+}
+
 /** Compact tenant-scoped read model for operational selectors outside Catalog. */
 export async function listCatalogVariantChoices(
   db: Kysely<DatabaseSchema>,
@@ -580,7 +1119,7 @@ export async function getCatalogProductWorkspace(
   const row = product.rows[0];
   if (!row) return undefined;
 
-  const [axes, values, variants] = await Promise.all([
+  const [axes, values, variants, validation] = await Promise.all([
     sql<{ id: string; code: string; name: string }>`
       select id::text,code,name from catalog.product_option_axes
       where organization_id=${organizationId} and product_id=${productId}::uuid and status='ACTIVE'
@@ -605,7 +1144,9 @@ export async function getCatalogProductWorkspace(
       group by variant.id,variant.sku,variant.status
       order by variant.sku,variant.id
     `.execute(db),
+    getCatalogProductReadiness(db, organizationId, productId),
   ]);
+  if (!validation) return undefined;
 
   return {
     id: row.id,
@@ -632,6 +1173,8 @@ export async function getCatalogProductWorkspace(
       status: variant.status,
       optionValueIds: variant.option_value_ids,
     })),
+    readiness: validation.readiness,
+    operationalSignals: validation.operationalSignals,
   };
 }
 

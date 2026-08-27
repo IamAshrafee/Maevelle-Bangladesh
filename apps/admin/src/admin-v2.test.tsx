@@ -13,6 +13,9 @@ import {
 describe('Admin V2 interface contracts', () => {
   it.each([
     ['PUBLISHED', 'status-success'],
+    ['READY', 'status-success'],
+    ['ATTENTION', 'status-warning'],
+    ['BLOCKED', 'status-danger'],
     ['IN_TRANSIT', 'status-warning'],
     ['FAILED', 'status-danger'],
     ['DRAFT', 'status-neutral'],

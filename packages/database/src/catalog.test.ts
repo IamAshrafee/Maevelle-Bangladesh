@@ -6,8 +6,10 @@ import {
   createCatalogCategory,
   createCatalogProduct,
   createCatalogVariant,
+  getCatalogProductReadiness,
   getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
+  listCatalogProductWorkItems,
   moveCatalogCategory,
   publishCatalogProduct,
   unpublishCatalogProduct,
@@ -150,6 +152,81 @@ describe('catalog invariants', () => {
         title: 'Stale update',
       }),
     ).rejects.toMatchObject({ code: 'STALE_VERSION' satisfies CatalogDomainError['code'] });
+  });
+
+  it('provides bounded Product work items with authoritative blockers and separate warnings', async () => {
+    const fixture = await catalogFixture();
+    const handle = `work-item-${crypto.randomUUID().slice(0, 8)}`;
+    const product = await createCatalogProduct(database.db, {
+      ...fixture,
+      title: 'Worklist dress',
+      handle,
+      description: 'A useful customer-facing description.',
+    });
+
+    const blocked = await getCatalogProductReadiness(
+      database.db,
+      fixture.organizationId,
+      product.id,
+    );
+    expect(blocked?.readiness).toMatchObject({
+      state: 'BLOCKED',
+      canPublish: false,
+      blockerCount: 1,
+    });
+    expect(blocked?.readiness.checks).toContainEqual(
+      expect.objectContaining({ code: 'ACTIVE_VARIANT', state: 'BLOCKER' }),
+    );
+
+    const blockedList = await listCatalogProductWorkItems(database.db, {
+      organizationId: fixture.organizationId,
+      query: handle,
+      status: 'DRAFT',
+      readiness: 'BLOCKED',
+      page: 1,
+      pageSize: 10,
+    });
+    expect(blockedList).toMatchObject({
+      items: [expect.objectContaining({ id: product.id, readinessState: 'BLOCKED' })],
+      pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+    });
+    const normalizedStalePage = await listCatalogProductWorkItems(database.db, {
+      organizationId: fixture.organizationId,
+      query: handle,
+      page: 9,
+      pageSize: 10,
+    });
+    expect(normalizedStalePage.pagination).toMatchObject({
+      page: 1,
+      totalItems: 1,
+      totalPages: 1,
+    });
+
+    const axis = await sql<{ id: string }>`
+      insert into catalog.product_option_axes (organization_id, product_id, code, name)
+      values (${fixture.organizationId}, ${product.id}, 'size', 'Size') returning id
+    `.execute(database.db);
+    const value = await sql<{ id: string }>`
+      insert into catalog.product_option_values (organization_id, option_axis_id, code, display_value)
+      values (${fixture.organizationId}, ${axis.rows[0]!.id}, 'm', 'M') returning id
+    `.execute(database.db);
+    await createCatalogVariant(database.db, {
+      organizationId: fixture.organizationId,
+      productId: product.id,
+      sku: `WORK-${crypto.randomUUID().slice(0, 8)}`,
+      optionValueIds: [value.rows[0]!.id],
+    });
+
+    const ready = await getCatalogProductReadiness(database.db, fixture.organizationId, product.id);
+    expect(ready?.readiness).toMatchObject({
+      state: 'READY',
+      canPublish: true,
+      blockerCount: 0,
+    });
+    expect(ready?.readiness.warningCount).toBeGreaterThan(0);
+    expect(ready?.readiness.checks).toContainEqual(
+      expect.objectContaining({ code: 'CURRENT_PRICE', state: 'WARNING' }),
+    );
   });
 
   it('supports arbitrary nested categories but prevents a cycle', async () => {

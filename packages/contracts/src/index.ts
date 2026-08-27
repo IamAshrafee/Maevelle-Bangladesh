@@ -16,6 +16,65 @@ export interface CatalogProductSummaryDto {
   readonly updatedAt?: string;
 }
 
+export type CatalogReadinessState = 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
+
+export interface CatalogReadinessCheckDto {
+  readonly code:
+    | 'IDENTITY'
+    | 'ACTIVE_VARIANT'
+    | 'REQUIRED_ATTRIBUTES'
+    | 'OPTION_COMBINATIONS'
+    | 'CURRENT_PRICE'
+    | 'PUBLIC_MEDIA'
+    | 'CATEGORY'
+    | 'AVAILABLE_INVENTORY'
+    | 'DESCRIPTION';
+  readonly label: string;
+  readonly state: 'PASS' | 'BLOCKER' | 'WARNING';
+  readonly message: string;
+  readonly actionHref?: string;
+}
+
+export interface CatalogProductReadinessDto {
+  readonly state: CatalogReadinessState;
+  readonly canPublish: boolean;
+  readonly blockerCount: number;
+  readonly warningCount: number;
+  readonly checks: readonly CatalogReadinessCheckDto[];
+}
+
+export interface CatalogProductOperationalSignalsDto {
+  readonly defaultCurrency: string;
+  readonly activeVariantCount: number;
+  readonly pricedVariantCount: number;
+  readonly publicMediaCount: number;
+  readonly availableVariantCount: number;
+  readonly categoryCount: number;
+}
+
+export interface CatalogProductWorkItemDto extends CatalogProductSummaryDto {
+  readonly readinessState: CatalogReadinessState;
+  readonly blockerCount: number;
+  readonly warningCount: number;
+  readonly operationalSignals: CatalogProductOperationalSignalsDto;
+}
+
+export interface CatalogProductWorklistDto {
+  readonly items: readonly CatalogProductWorkItemDto[];
+  readonly pagination: {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+  };
+  readonly summary: {
+    readonly total: number;
+    readonly published: number;
+    readonly drafts: number;
+    readonly archived: number;
+  };
+}
+
 export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   readonly description: string | null;
   readonly productTypeId: string;
@@ -35,6 +94,8 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
     readonly status: string;
     readonly optionValueIds: readonly string[];
   }[];
+  readonly readiness: CatalogProductReadinessDto;
+  readonly operationalSignals: CatalogProductOperationalSignalsDto;
 }
 
 export interface CatalogVariantChoiceDto {

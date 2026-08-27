@@ -13,6 +13,7 @@ import {
   getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
   listStorefrontCatalogProducts,
+  listCatalogProductWorkItems,
   listCatalogProducts,
   listCatalogVariantChoices,
   listCatalogProductTypes,
@@ -139,6 +140,56 @@ export function registerCatalogRoutes(
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCatalogProducts(database.db, context.organizationId) };
   });
+
+  app.get(
+    '/admin/catalog/product-work-items',
+    {
+      schema: {
+        querystring: Type.Object({
+          q: Type.Optional(Type.String({ maxLength: 120 })),
+          status: Type.Optional(
+            Type.Union([
+              Type.Literal('ALL'),
+              Type.Literal('DRAFT'),
+              Type.Literal('ACTIVE'),
+              Type.Literal('ARCHIVED'),
+              Type.Literal('PUBLISHED'),
+            ]),
+          ),
+          productTypeId: Type.Optional(organizationIdParameter),
+          readiness: Type.Optional(
+            Type.Union([
+              Type.Literal('ALL'),
+              Type.Literal('READY'),
+              Type.Literal('BLOCKED'),
+              Type.Literal('PUBLISHED'),
+              Type.Literal('ATTENTION'),
+            ]),
+          ),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 10, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as {
+        q?: string;
+        status?: 'ALL' | 'DRAFT' | 'ACTIVE' | 'ARCHIVED' | 'PUBLISHED';
+        productTypeId?: string;
+        readiness?: 'ALL' | 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
+        page?: number;
+        pageSize?: number;
+      };
+      return {
+        data: await listCatalogProductWorkItems(database.db, {
+          organizationId: context.organizationId,
+          ...query,
+        }),
+      };
+    },
+  );
 
   app.get('/admin/catalog/variants', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'catalog.view');
