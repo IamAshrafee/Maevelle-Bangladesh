@@ -101,6 +101,37 @@ describe('API hardening foundation', () => {
       payload: { title: 'Updated Product' },
     });
     expect(protectedRequest.statusCode).toBe(403);
+
+    const invalidCategories = await app.inject({
+      method: 'PUT',
+      url: `/admin/catalog/products/${productId}/categories`,
+      headers: { 'if-match': '"1"' },
+      payload: { categoryIds: ['not-a-category'] },
+    });
+    expect(invalidCategories.statusCode).toBe(400);
+
+    const invalidAttributes = await app.inject({
+      method: 'PUT',
+      url: `/admin/catalog/products/${productId}/attributes`,
+      headers: { 'if-match': '"1"' },
+      payload: {
+        values: [
+          {
+            attributeDefinitionId: '018f1f77-6b10-7cc0-9b11-4fefab124001',
+            value: { unsafe: true },
+          },
+        ],
+      },
+    });
+    expect(invalidAttributes.statusCode).toBe(400);
+
+    const protectedCategories = await app.inject({
+      method: 'PUT',
+      url: `/admin/catalog/products/${productId}/categories`,
+      headers: { 'if-match': '"1"' },
+      payload: { categoryIds: [] },
+    });
+    expect(protectedCategories.statusCode).toBe(403);
     await app.close();
   });
 

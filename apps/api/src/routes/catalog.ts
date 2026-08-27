@@ -13,6 +13,7 @@ import {
   createCatalogVariant,
   getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
+  listCatalogCategoryChoices,
   listStorefrontCatalogProducts,
   listCatalogProductWorkItems,
   listCatalogProducts,
@@ -20,6 +21,8 @@ import {
   listCatalogProductTypes,
   moveCatalogCategory,
   publishCatalogProduct,
+  setCatalogProductAttributes,
+  setCatalogProductCategories,
   unpublishCatalogProduct,
   updateCatalogProduct,
 } from '@maevelle/database/catalog';
@@ -111,6 +114,12 @@ export function registerCatalogRoutes(
     return { data: await listCatalogProductTypes(database.db, context.organizationId) };
   });
 
+  app.get('/admin/catalog/categories', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listCatalogCategoryChoices(database.db, context.organizationId) };
+  });
+
   app.post(
     '/admin/catalog/product-types',
     {
@@ -197,6 +206,95 @@ export function registerCatalogRoutes(
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCatalogVariantChoices(database.db, context.organizationId) };
   });
+
+  app.put(
+    '/admin/catalog/products/:productId/categories',
+    {
+      schema: {
+        body: Type.Object({
+          categoryIds: Type.Array(organizationIdParameter, {
+            maxItems: 50,
+            uniqueItems: true,
+          }),
+          primaryCategoryId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const version = expectedVersion(request.headers['if-match']);
+      if (!version)
+        return reply.code(428).send({
+          error: {
+            code: 'PRECONDITION_REQUIRED',
+            message: 'If-Match must contain the current Product version.',
+          },
+        });
+      try {
+        const body = request.body as {
+          categoryIds: string[];
+          primaryCategoryId?: string | null;
+        };
+        return {
+          data: await setCatalogProductCategories(database.db, {
+            ...body,
+            organizationId: context.organizationId,
+            actorId: context.actorId,
+            productId: (request.params as { productId: string }).productId,
+            expectedVersion: version,
+          }),
+        };
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.put(
+    '/admin/catalog/products/:productId/attributes',
+    {
+      schema: {
+        body: Type.Object({
+          values: Type.Array(
+            Type.Object({
+              attributeDefinitionId: organizationIdParameter,
+              value: Type.Union([Type.String({ maxLength: 2000 }), Type.Boolean(), Type.Null()]),
+            }),
+            { maxItems: 100 },
+          ),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const version = expectedVersion(request.headers['if-match']);
+      if (!version)
+        return reply.code(428).send({
+          error: {
+            code: 'PRECONDITION_REQUIRED',
+            message: 'If-Match must contain the current Product version.',
+          },
+        });
+      try {
+        const body = request.body as {
+          values: { attributeDefinitionId: string; value: string | boolean | null }[];
+        };
+        return {
+          data: await setCatalogProductAttributes(database.db, {
+            ...body,
+            organizationId: context.organizationId,
+            actorId: context.actorId,
+            productId: (request.params as { productId: string }).productId,
+            expectedVersion: version,
+          }),
+        };
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
 
   app.get('/admin/catalog/products/:productId', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'catalog.view');

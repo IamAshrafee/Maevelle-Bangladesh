@@ -82,6 +82,25 @@ export interface CatalogProductWorklistDto {
   };
 }
 
+export interface CatalogCategoryChoiceDto {
+  readonly id: string;
+  readonly name: string;
+  readonly handle: string;
+  readonly path: string;
+  readonly depth: number;
+}
+
+export interface CatalogProductAttributeDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly valueType: 'TEXT' | 'INTEGER' | 'DECIMAL' | 'BOOLEAN' | 'DATE' | 'REFERENCE';
+  readonly required: boolean;
+  readonly filterable: boolean;
+  readonly searchable: boolean;
+  readonly value: string | boolean | null;
+}
+
 export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   readonly description: string | null;
   readonly productTypeId: string;
@@ -103,6 +122,11 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   }[];
   readonly readiness: CatalogProductReadinessDto;
   readonly operationalSignals: CatalogProductOperationalSignalsDto;
+  readonly organization: {
+    readonly categoryIds: readonly string[];
+    readonly primaryCategoryId: string | null;
+    readonly attributes: readonly CatalogProductAttributeDto[];
+  };
 }
 
 export interface CatalogVariantChoiceDto {

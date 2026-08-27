@@ -44,6 +44,22 @@ export interface CatalogProductWorkspace extends ProductSummary {
   }[];
   readonly readiness: CatalogProductReadiness;
   readonly operationalSignals: CatalogProductOperationalSignals;
+  readonly organization: {
+    readonly categoryIds: readonly string[];
+    readonly primaryCategoryId: string | null;
+    readonly attributes: readonly CatalogProductAttribute[];
+  };
+}
+
+export interface CatalogProductAttribute {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly valueType: 'TEXT' | 'INTEGER' | 'DECIMAL' | 'BOOLEAN' | 'DATE' | 'REFERENCE';
+  readonly required: boolean;
+  readonly filterable: boolean;
+  readonly searchable: boolean;
+  readonly value: string | boolean | null;
 }
 
 export type CatalogReadinessState = 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
@@ -767,6 +783,263 @@ export async function moveCatalogCategory(
   });
 }
 
+export async function listCatalogCategoryChoices(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly { id: string; name: string; handle: string; path: string; depth: number }[]> {
+  const result = await sql<{
+    id: string;
+    name: string;
+    handle: string;
+    path: string;
+    depth: number;
+  }>`
+    with recursive category_tree as (
+      select category.id,category.name,category.handle,category.name::text as path,
+        0::integer as depth,array[category.id] as visited
+      from catalog.categories category
+      where category.organization_id=${organizationId} and category.status='ACTIVE'
+        and category.parent_category_id is null
+      union all
+      select child.id,child.name,child.handle,
+        (parent.path || ' / ' || child.name)::text,parent.depth+1,parent.visited || child.id
+      from catalog.categories child
+      join category_tree parent on parent.id=child.parent_category_id
+      where child.organization_id=${organizationId} and child.status='ACTIVE'
+        and not child.id=any(parent.visited)
+    )
+    select id::text,name,handle,path,depth from category_tree order by path,id
+  `.execute(db);
+  return result.rows;
+}
+
+export async function setCatalogProductCategories(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    productId: string;
+    expectedVersion: number;
+    categoryIds: readonly string[];
+    primaryCategoryId?: string | null;
+  },
+): Promise<ProductSummary> {
+  return db.transaction().execute(async (transaction) => {
+    const categoryIds = [...new Set(input.categoryIds)];
+    if (categoryIds.length !== input.categoryIds.length)
+      throw new CatalogDomainError('VALIDATION_FAILED', 'Choose each Category only once.');
+    if (input.primaryCategoryId && !categoryIds.includes(input.primaryCategoryId))
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        'The primary Category must also be assigned to the Product.',
+      );
+    if (categoryIds.length > 0) {
+      const categories = await sql<{ id: string }>`
+        select id::text from catalog.categories
+        where organization_id=${input.organizationId} and status='ACTIVE'
+          and id=any(${categoryIds}::uuid[])
+      `.execute(transaction);
+      if (categories.rows.length !== categoryIds.length)
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Every assigned Category must be active in this organization.',
+        );
+    }
+    const updated = await sql<{
+      id: string;
+      handle: string;
+      title: string;
+      status: ProductSummary['status'];
+      publication_status: ProductSummary['publicationStatus'];
+      version: string;
+    }>`
+      update catalog.products set primary_category_id=${input.primaryCategoryId ?? null}::uuid,
+        version=version+1,updated_at=now()
+      where organization_id=${input.organizationId} and id=${input.productId}::uuid
+        and version=${input.expectedVersion}
+      returning id::text,handle,title,status,publication_status,version::text
+    `.execute(transaction);
+    const product = updated.rows[0];
+    if (!product)
+      throw new CatalogDomainError('STALE_VERSION', 'Product changed; reload Categories.');
+    await sql`delete from catalog.product_categories where organization_id=${input.organizationId} and product_id=${input.productId}::uuid`.execute(
+      transaction,
+    );
+    for (const categoryId of categoryIds)
+      await sql`
+        insert into catalog.product_categories (organization_id,product_id,category_id)
+        values (${input.organizationId},${input.productId}::uuid,${categoryId}::uuid)
+      `.execute(transaction);
+    await emitCatalogEvent(transaction, {
+      organizationId: input.organizationId,
+      productId: input.productId,
+      eventType: 'catalog.product.categories_updated',
+      actorId: input.actorId,
+      auditAction: 'catalog.product.categories_updated',
+    });
+    return asProduct(product);
+  });
+}
+
+function normalizedAttributeValue(
+  definition: { value_type: CatalogProductAttribute['valueType']; name: string },
+  value: string | boolean | null,
+):
+  | {
+      column:
+        | 'value_text'
+        | 'value_integer'
+        | 'value_decimal'
+        | 'value_boolean'
+        | 'value_date'
+        | 'value_reference_id';
+      value: string | boolean;
+    }
+  | undefined {
+  if (value === null || (typeof value === 'string' && !value.trim())) return undefined;
+  if (definition.value_type === 'BOOLEAN') {
+    if (typeof value !== 'boolean')
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        `${definition.name} must be true or false.`,
+      );
+    return { column: 'value_boolean', value };
+  }
+  if (typeof value !== 'string')
+    throw new CatalogDomainError('VALIDATION_FAILED', `${definition.name} has an invalid value.`);
+  const normalized = value.trim();
+  if (definition.value_type === 'REFERENCE')
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      `${definition.name} needs a configured reference selector before it can be edited safely.`,
+    );
+  if (definition.value_type === 'INTEGER') {
+    if (!/^-?\d+$/.test(normalized))
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        `${definition.name} must be a whole number.`,
+      );
+    const integer = BigInt(normalized);
+    if (integer < -9223372036854775808n || integer > 9223372036854775807n)
+      throw new CatalogDomainError('VALIDATION_FAILED', `${definition.name} is outside its range.`);
+  }
+  if (definition.value_type === 'DECIMAL') {
+    const match = /^-?(\d+)(?:\.(\d+))?$/.exec(normalized);
+    if (!match)
+      throw new CatalogDomainError('VALIDATION_FAILED', `${definition.name} must be a number.`);
+    if (match[1]!.length > 16 || (match[2]?.length ?? 0) > 12)
+      throw new CatalogDomainError('VALIDATION_FAILED', `${definition.name} is outside its range.`);
+  }
+  if (definition.value_type === 'DATE') {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(normalized)
+      ? new Date(`${normalized}T00:00:00.000Z`)
+      : null;
+    if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== normalized)
+      throw new CatalogDomainError('VALIDATION_FAILED', `${definition.name} must be a valid date.`);
+  }
+  return {
+    column:
+      definition.value_type === 'TEXT'
+        ? 'value_text'
+        : definition.value_type === 'INTEGER'
+          ? 'value_integer'
+          : definition.value_type === 'DECIMAL'
+            ? 'value_decimal'
+            : definition.value_type === 'DATE'
+              ? 'value_date'
+              : 'value_reference_id',
+    value: normalized,
+  };
+}
+
+export async function setCatalogProductAttributes(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    productId: string;
+    expectedVersion: number;
+    values: readonly { attributeDefinitionId: string; value: string | boolean | null }[];
+  },
+): Promise<ProductSummary> {
+  return db.transaction().execute(async (transaction) => {
+    const definitions = await sql<{
+      id: string;
+      name: string;
+      value_type: CatalogProductAttribute['valueType'];
+      is_required: boolean;
+    }>`
+      select definition.id::text,definition.name,definition.value_type,binding.is_required
+      from catalog.products product
+      join catalog.product_type_attributes binding on binding.product_type_id=product.product_type_id
+      join catalog.attribute_definitions definition
+        on definition.id=binding.attribute_definition_id
+        and definition.organization_id=product.organization_id
+        and definition.scope='PRODUCT' and definition.status='ACTIVE'
+      where product.organization_id=${input.organizationId} and product.id=${input.productId}::uuid
+    `.execute(transaction);
+    const byId = new Map(definitions.rows.map((definition) => [definition.id, definition]));
+    const supplied = new Map<string, string | boolean | null>();
+    for (const entry of input.values) {
+      if (supplied.has(entry.attributeDefinitionId))
+        throw new CatalogDomainError('VALIDATION_FAILED', 'Provide each Product attribute once.');
+      if (!byId.has(entry.attributeDefinitionId))
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'An attribute is not active for this Product Type.',
+        );
+      supplied.set(entry.attributeDefinitionId, entry.value);
+    }
+    const normalized = definitions.rows.map((definition) => ({
+      definition,
+      value: normalizedAttributeValue(definition, supplied.get(definition.id) ?? null),
+    }));
+    const missing = normalized.filter(
+      (entry) => entry.definition.is_required && entry.value === undefined,
+    );
+    if (missing.length > 0)
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        `Complete required attribute${missing.length === 1 ? '' : 's'}: ${missing.map((entry) => entry.definition.name).join(', ')}.`,
+      );
+    const updated = await sql<{
+      id: string;
+      handle: string;
+      title: string;
+      status: ProductSummary['status'];
+      publication_status: ProductSummary['publicationStatus'];
+      version: string;
+    }>`
+      update catalog.products set version=version+1,updated_at=now()
+      where organization_id=${input.organizationId} and id=${input.productId}::uuid
+        and version=${input.expectedVersion}
+      returning id::text,handle,title,status,publication_status,version::text
+    `.execute(transaction);
+    const product = updated.rows[0];
+    if (!product)
+      throw new CatalogDomainError('STALE_VERSION', 'Product changed; reload attributes.');
+    await sql`delete from catalog.product_attribute_values where organization_id=${input.organizationId} and product_id=${input.productId}::uuid`.execute(
+      transaction,
+    );
+    for (const entry of normalized) {
+      if (entry.value === undefined) continue;
+      await sql`
+        insert into catalog.product_attribute_values
+          (organization_id,product_id,attribute_definition_id,${sql.raw(entry.value.column)})
+        values (${input.organizationId},${input.productId}::uuid,${entry.definition.id}::uuid,${entry.value.value})
+      `.execute(transaction);
+    }
+    await emitCatalogEvent(transaction, {
+      organizationId: input.organizationId,
+      productId: input.productId,
+      eventType: 'catalog.product.attributes_updated',
+      actorId: input.actorId,
+      auditAction: 'catalog.product.attributes_updated',
+    });
+    return asProduct(product);
+  });
+}
+
 export async function createCatalogVariant(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -1138,11 +1411,13 @@ export async function getCatalogProductWorkspace(
     version: string;
     product_type_id: string;
     product_type_name: string;
+    primary_category_id: string | null;
     updated_at: string;
   }>`
     select product.id::text,product.handle,product.title,product.description,product.status,
       product.publication_status,product.version::text,product.product_type_id::text,
-      product_type.name as product_type_name,product.updated_at::text
+      product_type.name as product_type_name,product.primary_category_id::text,
+      product.updated_at::text
     from catalog.products product
     join catalog.product_types product_type
       on product_type.id=product.product_type_id and product_type.organization_id=product.organization_id
@@ -1151,7 +1426,7 @@ export async function getCatalogProductWorkspace(
   const row = product.rows[0];
   if (!row) return undefined;
 
-  const [axes, values, variants, validation] = await Promise.all([
+  const [axes, values, variants, validation, categories, attributes] = await Promise.all([
     sql<{ id: string; code: string; name: string }>`
       select id::text,code,name from catalog.product_option_axes
       where organization_id=${organizationId} and product_id=${productId}::uuid and status='ACTIVE'
@@ -1177,6 +1452,42 @@ export async function getCatalogProductWorkspace(
       order by variant.sku,variant.id
     `.execute(db),
     getCatalogProductReadiness(db, organizationId, productId),
+    sql<{ category_id: string }>`
+      select category_id::text from catalog.product_categories
+      where organization_id=${organizationId} and product_id=${productId}::uuid
+      order by category_id
+    `.execute(db),
+    sql<{
+      id: string;
+      code: string;
+      name: string;
+      value_type: CatalogProductAttribute['valueType'];
+      is_required: boolean;
+      is_filterable: boolean;
+      is_searchable: boolean;
+      value_json: string | boolean | null;
+    }>`
+      select definition.id::text,definition.code,definition.name,definition.value_type,
+        binding.is_required,definition.is_filterable,definition.is_searchable,
+        case definition.value_type
+          when 'TEXT' then to_jsonb(value.value_text)
+          when 'INTEGER' then to_jsonb(value.value_integer::text)
+          when 'DECIMAL' then to_jsonb(value.value_decimal::text)
+          when 'BOOLEAN' then to_jsonb(value.value_boolean)
+          when 'DATE' then to_jsonb(value.value_date::text)
+          when 'REFERENCE' then to_jsonb(value.value_reference_id::text)
+        end as value_json
+      from catalog.product_type_attributes binding
+      join catalog.attribute_definitions definition
+        on definition.id=binding.attribute_definition_id
+        and definition.organization_id=${organizationId}
+      left join catalog.product_attribute_values value
+        on value.organization_id=${organizationId} and value.product_id=${productId}::uuid
+        and value.attribute_definition_id=definition.id
+      where binding.product_type_id=${row.product_type_id}::uuid
+        and definition.scope='PRODUCT' and definition.status='ACTIVE'
+      order by binding.is_required desc,definition.name,definition.id
+    `.execute(db),
   ]);
   if (!validation) return undefined;
 
@@ -1207,6 +1518,20 @@ export async function getCatalogProductWorkspace(
     })),
     readiness: validation.readiness,
     operationalSignals: validation.operationalSignals,
+    organization: {
+      categoryIds: categories.rows.map((category) => category.category_id),
+      primaryCategoryId: row.primary_category_id,
+      attributes: attributes.rows.map((attribute) => ({
+        id: attribute.id,
+        code: attribute.code,
+        name: attribute.name,
+        valueType: attribute.value_type,
+        required: attribute.is_required,
+        filterable: attribute.is_filterable,
+        searchable: attribute.is_searchable,
+        value: attribute.value_json,
+      })),
+    },
   };
 }
 

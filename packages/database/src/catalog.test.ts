@@ -9,9 +9,12 @@ import {
   getCatalogProductReadiness,
   getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
+  listCatalogCategoryChoices,
   listCatalogProductWorkItems,
   moveCatalogCategory,
   publishCatalogProduct,
+  setCatalogProductAttributes,
+  setCatalogProductCategories,
   unpublishCatalogProduct,
   updateCatalogProduct,
 } from './catalog.js';
@@ -293,6 +296,99 @@ describe('catalog invariants', () => {
         expectedVersion: 1,
       }),
     ).rejects.toMatchObject({ code: 'CATEGORY_CYCLE' satisfies CatalogDomainError['code'] });
+  });
+
+  it('assigns tenant-scoped taxonomy and typed Product Type attributes atomically', async () => {
+    const fixture = await catalogFixture();
+    const product = await createCatalogProduct(database.db, {
+      ...fixture,
+      title: 'Structured dress',
+      handle: `structured-dress-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const parent = await createCatalogCategory(database.db, {
+      organizationId: fixture.organizationId,
+      name: 'Women',
+      handle: `women-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const child = await createCatalogCategory(database.db, {
+      organizationId: fixture.organizationId,
+      name: 'Dresses',
+      handle: `dresses-${crypto.randomUUID().slice(0, 8)}`,
+      parentCategoryId: parent.id,
+    });
+    const choices = await listCatalogCategoryChoices(database.db, fixture.organizationId);
+    expect(choices).toContainEqual(
+      expect.objectContaining({ id: child.id, path: 'Women / Dresses', depth: 1 }),
+    );
+    const categorized = await setCatalogProductCategories(database.db, {
+      ...fixture,
+      productId: product.id,
+      expectedVersion: product.version,
+      categoryIds: [parent.id, child.id],
+      primaryCategoryId: child.id,
+    });
+
+    const attributes = await sql<{ id: string; code: string }>`
+      insert into catalog.attribute_definitions
+        (organization_id,code,name,value_type,scope,is_filterable,is_searchable)
+      values
+        (${fixture.organizationId},'material','Material','TEXT','PRODUCT',true,true),
+        (${fixture.organizationId},'washable','Machine washable','BOOLEAN','PRODUCT',true,false)
+      returning id::text,code
+    `.execute(database.db);
+    for (const attribute of attributes.rows)
+      await sql`
+        insert into catalog.product_type_attributes
+          (product_type_id,attribute_definition_id,is_required)
+        values (${fixture.productTypeId},${attribute.id}::uuid,${attribute.code === 'material'})
+      `.execute(database.db);
+    const byCode = new Map(attributes.rows.map((attribute) => [attribute.code, attribute.id]));
+    const attributed = await setCatalogProductAttributes(database.db, {
+      ...fixture,
+      productId: product.id,
+      expectedVersion: categorized.version,
+      values: [
+        { attributeDefinitionId: byCode.get('material')!, value: ' Cotton ' },
+        { attributeDefinitionId: byCode.get('washable')!, value: false },
+      ],
+    });
+    const workspace = await getCatalogProductWorkspace(
+      database.db,
+      fixture.organizationId,
+      product.id,
+    );
+    expect(workspace?.organization).toMatchObject({
+      categoryIds: expect.arrayContaining([parent.id, child.id]),
+      primaryCategoryId: child.id,
+      attributes: expect.arrayContaining([
+        expect.objectContaining({ code: 'material', required: true, value: 'Cotton' }),
+        expect.objectContaining({ code: 'washable', value: false }),
+      ]),
+    });
+    await expect(
+      setCatalogProductAttributes(database.db, {
+        ...fixture,
+        productId: product.id,
+        expectedVersion: attributed.version,
+        values: [{ attributeDefinitionId: byCode.get('material')!, value: null }],
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' satisfies CatalogDomainError['code'] });
+    await expect(
+      setCatalogProductCategories(database.db, {
+        ...fixture,
+        productId: product.id,
+        expectedVersion: product.version,
+        categoryIds: [],
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_VERSION' satisfies CatalogDomainError['code'] });
+    const afterStale = await getCatalogProductWorkspace(
+      database.db,
+      fixture.organizationId,
+      product.id,
+    );
+    expect(afterStale?.organization.categoryIds).toEqual(
+      expect.arrayContaining([parent.id, child.id]),
+    );
   });
 
   it('does not expose drafts or another organization’s products through public reads', async () => {
