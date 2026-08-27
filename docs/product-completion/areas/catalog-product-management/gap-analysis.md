@@ -1,13 +1,16 @@
 # Catalog Product Management Gap Analysis
 
-## Immediate defects
+## Resolved in Stage 1 (`2229434`)
 
 - The Product workspace renders price, media, and inventory with success icons
-  without querying those domains.
+  without querying those domains. Resolved with server-derived operational
+  signals and warning states.
 - Publication validation is not exposed as a reusable read model, so operators
-  learn blockers only after pressing Publish.
+  learn blockers only after pressing Publish. Resolved with one shared readiness
+  model used by reads and the publish command.
 - The list downloads every Product and filters in browser memory; there is no
   server pagination, durable URL state, Product Type filter, or blocked-work view.
+  Resolved with the bounded Product worklist endpoint and Admin filters.
 
 ## Domain/application gaps
 
