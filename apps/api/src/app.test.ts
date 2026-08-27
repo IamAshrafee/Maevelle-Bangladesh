@@ -55,6 +55,55 @@ describe('API health endpoints', () => {
 });
 
 describe('API hardening foundation', () => {
+  it('validates Product overview updates and protects valid requests', async () => {
+    const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
+    const app = buildApi({
+      database,
+      logger: false,
+      config: {
+        nodeEnv: 'test',
+        databaseUrl: 'postgresql://test',
+        testDatabaseUrl: 'postgresql://test',
+        databasePoolMax: 1,
+        apiHost: '127.0.0.1',
+        apiPort: 3000,
+        logLevel: 'error',
+        workerHeartbeatIntervalMs: 1000,
+        betterAuthSecret: 'x'.repeat(32),
+        authEncryptionKey: Buffer.alloc(32).toString('base64'),
+        authBaseUrl: 'https://admin.maevelle.example/api',
+        authTrustedOrigins: ['http://localhost:3000'],
+        mediaStoragePath: 'var/media',
+        mediaMaxUploadBytes: 1024,
+        storefrontOrganizationCode: 'maevelle',
+      },
+    });
+    const productId = '018f1f77-6b10-7cc0-9b11-4fefab124000';
+    const empty = await app.inject({
+      method: 'PATCH',
+      url: `/admin/catalog/products/${productId}`,
+      payload: {},
+    });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json()).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+
+    const invalidType = await app.inject({
+      method: 'PATCH',
+      url: `/admin/catalog/products/${productId}`,
+      payload: { productTypeId: 'not-a-product-type' },
+    });
+    expect(invalidType.statusCode).toBe(400);
+
+    const protectedRequest = await app.inject({
+      method: 'PATCH',
+      url: `/admin/catalog/products/${productId}`,
+      headers: { 'if-match': '"1"' },
+      payload: { title: 'Updated Product' },
+    });
+    expect(protectedRequest.statusCode).toBe(403);
+    await app.close();
+  });
+
   it('sets browser hardening headers and rejects an untrusted Admin mutation origin', async () => {
     const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
     const app = buildApi({

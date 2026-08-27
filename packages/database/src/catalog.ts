@@ -378,6 +378,7 @@ function readinessFromFacts(facts: CatalogProductFacts): {
       message: facts.title.trim()
         ? 'The Product has a valid title and active Product Type.'
         : 'Choose an active Product Type and provide a Product title.',
+      actionHref: '#overview',
     },
     {
       code: 'ACTIVE_VARIANT',
@@ -457,6 +458,7 @@ function readinessFromFacts(facts: CatalogProductFacts): {
       message: facts.description?.trim()
         ? 'A customer-facing Product description is present.'
         : 'Add a useful customer-facing description before merchandising this Product.',
+      actionHref: '#overview',
     },
   ];
   const blockerCount = checks.filter((check) => check.state === 'BLOCKER').length;
@@ -555,13 +557,42 @@ export async function updateCatalogProduct(
     title?: string;
     handle?: string;
     description?: string | null;
+    productTypeId?: string;
   },
 ): Promise<ProductSummary> {
   return db.transaction().execute(async (transaction) => {
+    if (
+      input.title === undefined &&
+      input.handle === undefined &&
+      input.description === undefined &&
+      input.productTypeId === undefined
+    )
+      throw new CatalogDomainError('VALIDATION_FAILED', 'Provide at least one Product change.');
     const before = await sql<{ handle: string }>`
       select handle from catalog.products where id = ${input.productId} and organization_id = ${input.organizationId}
     `.execute(transaction);
     if (!before.rows[0]) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
+    const title = input.title?.trim();
+    if (input.title !== undefined && !title)
+      throw new CatalogDomainError('VALIDATION_FAILED', 'Product title is required.');
+    const handle = input.handle?.trim();
+    if (input.handle !== undefined && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle ?? ''))
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        'Storefront handle must use lowercase words separated by hyphens.',
+      );
+    if (input.productTypeId) {
+      const productType = await sql<{ id: string }>`
+        select id from catalog.product_types
+        where id=${input.productTypeId}::uuid and organization_id=${input.organizationId}
+          and status='ACTIVE'
+      `.execute(transaction);
+      if (!productType.rows[0])
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Choose an active Product Type from this organization.',
+        );
+    }
     const updated = await sql<{
       id: string;
       handle: string;
@@ -571,9 +602,10 @@ export async function updateCatalogProduct(
       version: string;
     }>`
       update catalog.products
-      set title = coalesce(${input.title ?? null}, title),
-          handle = coalesce(${input.handle ?? null}, handle),
+      set title = coalesce(${title ?? null}, title),
+          handle = coalesce(${handle ?? null}, handle),
           description = case when ${input.description === undefined} then description else ${input.description ?? null} end,
+          product_type_id = coalesce(${input.productTypeId ?? null}::uuid, product_type_id),
           version = version + 1,
           updated_at = now()
       where id = ${input.productId} and organization_id = ${input.organizationId} and version = ${input.expectedVersion}

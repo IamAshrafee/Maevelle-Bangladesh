@@ -16,6 +16,13 @@ export interface CatalogProductSummaryDto {
   readonly updatedAt?: string;
 }
 
+export interface CatalogProductUpdateDto {
+  readonly title?: string;
+  readonly handle?: string;
+  readonly description?: string | null;
+  readonly productTypeId?: string;
+}
+
 export type CatalogReadinessState = 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
 
 export interface CatalogReadinessCheckDto {

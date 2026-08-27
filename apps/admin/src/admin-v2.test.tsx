@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { StatusBadge } from '../components/status-badge';
+import { isCatalogOverviewDirty, mergeCatalogOverview } from '../components/catalog-overview-state';
 import { parseCatalogImportCsv } from '../components/operations-console';
 import {
   filterAndSortWorklist,
@@ -27,6 +28,30 @@ describe('Admin V2 interface contracts', () => {
     expect(renderToStaticMarkup(<StatusBadge status="PARTIALLY_PAID" />)).toContain(
       'PARTIALLY PAID',
     );
+  });
+
+  it('merges non-conflicting Product edits and exposes true stale-field conflicts', () => {
+    const baseline = {
+      title: 'Linen Dress',
+      handle: 'linen-dress',
+      description: 'Original copy',
+      productTypeId: 'dress',
+    };
+    const merged = mergeCatalogOverview(
+      baseline,
+      { ...baseline, title: 'Linen Wrap Dress', description: 'My revised copy' },
+      { ...baseline, handle: 'linen-midi-dress', description: 'Another operator copy' },
+    );
+
+    expect(merged.draft).toMatchObject({
+      title: 'Linen Wrap Dress',
+      handle: 'linen-midi-dress',
+      description: 'My revised copy',
+    });
+    expect(merged.conflicts).toEqual({
+      description: { local: 'My revised copy', current: 'Another operator copy' },
+    });
+    expect(isCatalogOverviewDirty(baseline, merged.draft)).toBe(true);
   });
 
   it('filters and sorts operational worklists without changing the source array', () => {

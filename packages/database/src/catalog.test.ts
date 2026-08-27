@@ -144,11 +144,48 @@ describe('catalog invariants', () => {
     await expect(
       createCatalogProduct(database.db, { ...fixture, title: 'Duplicate', handle }),
     ).rejects.toThrow();
+    const alternateType = await sql<{ id: string }>`
+      insert into catalog.product_types (organization_id, code, name)
+      values (${fixture.organizationId}, 'cap', 'Cap') returning id
+    `.execute(database.db);
+    const updated = await updateCatalogProduct(database.db, {
+      ...fixture,
+      productId: product.id,
+      expectedVersion: product.version,
+      title: '  Updated hat  ',
+      handle: `updated-${handle}`,
+      productTypeId: alternateType.rows[0]!.id,
+    });
+    expect(updated).toMatchObject({
+      title: 'Updated hat',
+      handle: `updated-${handle}`,
+      version: product.version + 1,
+    });
+    const workspace = await getCatalogProductWorkspace(
+      database.db,
+      fixture.organizationId,
+      product.id,
+    );
+    expect(workspace?.productTypeId).toBe(alternateType.rows[0]!.id);
+    const redirects = await sql<{ old_handle: string }>`
+      select old_handle from catalog.product_handle_history
+      where organization_id=${fixture.organizationId} and product_id=${product.id}
+    `.execute(database.db);
+    expect(redirects.rows).toContainEqual({ old_handle: handle });
+    const otherOrganization = await catalogFixture();
     await expect(
       updateCatalogProduct(database.db, {
         ...fixture,
         productId: product.id,
-        expectedVersion: product.version + 1,
+        expectedVersion: updated.version,
+        productTypeId: otherOrganization.productTypeId,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' satisfies CatalogDomainError['code'] });
+    await expect(
+      updateCatalogProduct(database.db, {
+        ...fixture,
+        productId: product.id,
+        expectedVersion: product.version,
         title: 'Stale update',
       }),
     ).rejects.toMatchObject({ code: 'STALE_VERSION' satisfies CatalogDomainError['code'] });

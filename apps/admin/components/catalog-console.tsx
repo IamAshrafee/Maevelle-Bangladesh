@@ -21,12 +21,21 @@ import { type FormEvent, useDeferredValue, useEffect, useRef, useState } from 'r
 
 import type {
   ApiEnvelope,
+  CatalogProductUpdateDto,
   CatalogProductWorkItemDto,
   CatalogProductWorklistDto,
   CatalogProductSummaryDto,
   CatalogProductWorkspaceDto,
 } from '@maevelle/contracts';
 
+import {
+  catalogOverviewFromWorkspace,
+  isCatalogOverviewDirty,
+  mergeCatalogOverview,
+  type CatalogOverviewConflict,
+  type CatalogOverviewField,
+  type CatalogOverviewValues,
+} from '@/components/catalog-overview-state';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +62,17 @@ function allowedUrlValue(value: string | null, allowed: readonly string[]): stri
   return value && allowed.includes(value) ? value : 'ALL';
 }
 
+class ApiRequestError extends Error {
+  public constructor(
+    message: string,
+    public readonly code: string | undefined,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
@@ -63,9 +83,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = (await response.json().catch(() => ({}))) as {
       error?: { message?: string; code?: string } | string;
     };
-    const detail =
-      typeof body.error === 'object' ? (body.error.message ?? body.error.code) : body.error;
-    throw new Error(detail ?? 'The requested catalog operation could not be completed.');
+    const code = typeof body.error === 'object' ? body.error.code : body.error;
+    const detail = typeof body.error === 'object' ? (body.error.message ?? code) : body.error;
+    throw new ApiRequestError(
+      detail ?? 'The requested catalog operation could not be completed.',
+      code,
+      response.status,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -88,13 +112,22 @@ export function CatalogConsole() {
     summary: { total: 0, published: 0, drafts: 0, archived: 0 },
   });
   const [createOpen, setCreateOpen] = useState(false);
+  const [createDirty, setCreateDirty] = useState(false);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const createDrawerRef = useRef<HTMLElement>(null);
   const createWasOpen = useRef(false);
   const [selected, setSelected] = useState<CatalogProductSummaryDto>();
   const [workspace, setWorkspace] = useState<CatalogProductWorkspaceDto>();
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [overviewBaseline, setOverviewBaseline] = useState<CatalogOverviewValues>();
+  const [overviewDraft, setOverviewDraft] = useState<CatalogOverviewValues>();
+  const [overviewConflicts, setOverviewConflicts] = useState<
+    Partial<Record<CatalogOverviewField, CatalogOverviewConflict>>
+  >({});
+  const [overviewError, setOverviewError] = useState('');
   const [busy, setBusy] = useState(false);
+  const overviewDirty = isCatalogOverviewDirty(overviewBaseline, overviewDraft);
+  const hasUnsavedChanges = overviewDirty || createDirty;
 
   const reload = async (signal?: AbortSignal) => {
     try {
@@ -176,7 +209,76 @@ export function CatalogConsole() {
     }
   }, [createOpen]);
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const preventDraftLoss = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const guardInternalNavigation = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      const href = target?.getAttribute('href');
+      if (!href || href.startsWith('#') || target?.getAttribute('target') === '_blank') return;
+      if (!window.confirm('Leave this page and discard your unsaved Catalog changes?')) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('beforeunload', preventDraftLoss);
+    document.addEventListener('click', guardInternalNavigation, true);
+    return () => {
+      window.removeEventListener('beforeunload', preventDraftLoss);
+      document.removeEventListener('click', guardInternalNavigation, true);
+    };
+  }, [hasUnsavedChanges]);
+
+  function applyWorkspace(nextWorkspace: CatalogProductWorkspaceDto) {
+    const overview = catalogOverviewFromWorkspace(nextWorkspace);
+    setSelected(nextWorkspace);
+    setWorkspace(nextWorkspace);
+    setOverviewBaseline(overview);
+    setOverviewDraft(overview);
+    setOverviewConflicts({});
+    setOverviewError('');
+  }
+
+  function confirmOverviewDiscard(): boolean {
+    return (
+      !overviewDirty ||
+      window.confirm('Discard your unsaved Product overview changes? This cannot be undone.')
+    );
+  }
+
+  function openCreateDrawer() {
+    if (overviewDirty) {
+      setMessage('Save or discard the open Product overview before creating another Product.');
+      return;
+    }
+    setCreateOpen(true);
+  }
+
+  function closeCreateDrawer() {
+    if (
+      createDirty &&
+      !window.confirm('Discard this unsaved Product draft? The entered values will be lost.')
+    )
+      return;
+    setCreateDirty(false);
+    setCreateOpen(false);
+  }
+
+  function closeProductWorkspace() {
+    if (!confirmOverviewDiscard()) return;
+    setSelected(undefined);
+    setWorkspace(undefined);
+    setOverviewBaseline(undefined);
+    setOverviewDraft(undefined);
+    setOverviewConflicts({});
+    setOverviewError('');
+  }
+
   async function openProduct(product: CatalogProductSummaryDto) {
+    if (selected?.id !== product.id && !confirmOverviewDiscard()) return;
     setSelected(product);
     setWorkspace(undefined);
     setWorkspaceLoading(true);
@@ -184,8 +286,7 @@ export function CatalogConsole() {
       const result = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
         `/admin/catalog/products/${product.id}`,
       );
-      setSelected(result.data);
-      setWorkspace(result.data);
+      applyWorkspace(result.data);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load Product setup.');
     } finally {
@@ -200,8 +301,7 @@ export function CatalogConsole() {
       const result = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
         `/admin/catalog/products/${productId}`,
       );
-      setSelected(result.data);
-      setWorkspace(result.data);
+      applyWorkspace(result.data);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load Product setup.');
     } finally {
@@ -215,11 +315,15 @@ export function CatalogConsole() {
     setBusy(true);
     const data = new FormData(event.currentTarget);
     try {
-      await request('/admin/catalog/product-types', {
+      const result = await request<ApiEnvelope<ProductType>>('/admin/catalog/product-types', {
         method: 'POST',
         body: JSON.stringify({ code: data.get('code'), name: data.get('name') }),
       });
       event.currentTarget.reset();
+      setTypes((current) =>
+        [...current, result.data].sort((left, right) => left.name.localeCompare(right.name)),
+      );
+      setTypeId(result.data.id);
       setMessage('Product type created.');
       await reload();
     } catch (error) {
@@ -235,19 +339,24 @@ export function CatalogConsole() {
     setBusy(true);
     const data = new FormData(event.currentTarget);
     try {
-      await request('/admin/catalog/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          productTypeId: typeId,
-          title: data.get('title'),
-          handle: data.get('handle'),
-          description: data.get('description') || undefined,
-        }),
-      });
+      const result = await request<ApiEnvelope<CatalogProductSummaryDto>>(
+        '/admin/catalog/products',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            productTypeId: typeId,
+            title: data.get('title'),
+            handle: data.get('handle'),
+            description: data.get('description') || undefined,
+          }),
+        },
+      );
       event.currentTarget.reset();
+      setCreateDirty(false);
       setCreateOpen(false);
-      setMessage('Draft created. Continue through media, sizing, pricing, variants, and stock.');
       await reload();
+      await openProduct(result.data);
+      setMessage('Draft created. Complete the overview, then options and sellable Variants.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create Product.');
     } finally {
@@ -255,8 +364,124 @@ export function CatalogConsole() {
     }
   }
 
+  function updateOverviewField(field: CatalogOverviewField, value: string) {
+    setOverviewDraft((current) => (current ? { ...current, [field]: value } : current));
+    setOverviewError('');
+    setOverviewConflicts((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  async function saveOverview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspace || !overviewDraft || !overviewBaseline || busy) return;
+    if (Object.keys(overviewConflicts).length > 0) {
+      setOverviewError('Resolve the stale-field choices before saving this Product.');
+      return;
+    }
+    const title = overviewDraft.title.trim();
+    const handle = overviewDraft.handle.trim();
+    if (!title) {
+      setOverviewError('Product name is required.');
+      return;
+    }
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle)) {
+      setOverviewError('Storefront handle must use lowercase words separated by hyphens.');
+      return;
+    }
+    const update: CatalogProductUpdateDto = {
+      title,
+      handle,
+      description: overviewDraft.description.trim() || null,
+      productTypeId: overviewDraft.productTypeId,
+    };
+    setBusy(true);
+    try {
+      await request<ApiEnvelope<CatalogProductSummaryDto>>(
+        `/admin/catalog/products/${workspace.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'if-match': `"${workspace.version}"` },
+          body: JSON.stringify(update),
+        },
+      );
+      const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+        `/admin/catalog/products/${workspace.id}`,
+      );
+      applyWorkspace(refreshed.data);
+      setMessage('Product overview saved. Readiness has been recalculated.');
+      await reload();
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'STALE_VERSION') {
+        try {
+          const current = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+            `/admin/catalog/products/${workspace.id}`,
+          );
+          const currentOverview = catalogOverviewFromWorkspace(current.data);
+          const merged = mergeCatalogOverview(overviewBaseline, overviewDraft, currentOverview);
+          setSelected(current.data);
+          setWorkspace(current.data);
+          setOverviewBaseline(currentOverview);
+          setOverviewDraft(merged.draft);
+          setOverviewConflicts(merged.conflicts);
+          setOverviewError('');
+          const conflictCount = Object.keys(merged.conflicts).length;
+          setMessage(
+            conflictCount > 0
+              ? `A newer Product version was loaded. Resolve ${conflictCount} conflicting field${conflictCount === 1 ? '' : 's'}; your draft is preserved.`
+              : 'A newer Product version was loaded and merged with your draft. Review and save again.',
+          );
+        } catch (refreshError) {
+          const detail =
+            refreshError instanceof Error
+              ? refreshError.message
+              : 'The Product changed, but its latest version could not be loaded.';
+          setOverviewError(detail);
+          setMessage(detail);
+        }
+      } else {
+        const detail = error instanceof Error ? error.message : 'Unable to save Product overview.';
+        setOverviewError(detail);
+        setMessage(detail);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resolveOverviewConflicts(choice: 'LOCAL' | 'CURRENT') {
+    if (!overviewDraft) return;
+    if (choice === 'CURRENT') {
+      setOverviewDraft((draft) => {
+        if (!draft) return draft;
+        const next = { ...draft };
+        for (const [field, conflict] of Object.entries(overviewConflicts) as [
+          CatalogOverviewField,
+          CatalogOverviewConflict,
+        ][]) {
+          next[field] = conflict.current;
+        }
+        return next;
+      });
+    }
+    setOverviewConflicts({});
+    setOverviewError('');
+    setMessage(
+      choice === 'CURRENT'
+        ? 'Current saved values accepted for conflicting fields.'
+        : 'Your draft values retained. Save again to apply them to the current version.',
+    );
+  }
+
   async function publication(product: CatalogProductSummaryDto) {
     if (busy) return;
+    if (overviewDirty) {
+      setMessage('Save or discard the Product overview draft before changing publication.');
+      return;
+    }
     const action = product.publicationStatus === 'PUBLISHED' ? 'unpublish' : 'publish';
     if (
       action === 'unpublish' &&
@@ -279,6 +504,10 @@ export function CatalogConsole() {
       );
       setSelected(undefined);
       setWorkspace(undefined);
+      setOverviewBaseline(undefined);
+      setOverviewDraft(undefined);
+      setOverviewConflicts({});
+      setOverviewError('');
       await reload();
     } catch (error) {
       setMessage(
@@ -292,6 +521,10 @@ export function CatalogConsole() {
   async function createAxis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || busy) return;
+    if (overviewDirty) {
+      setMessage('Save or discard the Product overview draft before adding options.');
+      return;
+    }
     setBusy(true);
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -314,6 +547,10 @@ export function CatalogConsole() {
   async function createOptionValue(event: FormEvent<HTMLFormElement>, axisId: string) {
     event.preventDefault();
     if (!selected || busy) return;
+    if (overviewDirty) {
+      setMessage('Save or discard the Product overview draft before adding option values.');
+      return;
+    }
     setBusy(true);
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -335,6 +572,10 @@ export function CatalogConsole() {
   async function createVariant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || !workspace || busy) return;
+    if (overviewDirty) {
+      setMessage('Save or discard the Product overview draft before creating a Variant.');
+      return;
+    }
     const form = event.currentTarget;
     const data = new FormData(form);
     const optionValueIds = data.getAll('optionValueId').map(String);
@@ -380,7 +621,7 @@ export function CatalogConsole() {
             ref={createButtonRef}
             className="button primary"
             type="button"
-            onClick={() => setCreateOpen(true)}
+            onClick={openCreateDrawer}
           >
             <Plus /> Create Product
           </button>
@@ -557,7 +798,7 @@ export function CatalogConsole() {
                 <PackageSearch />
                 <strong>No matching Products</strong>
                 <p>Create a draft or clear the current filters.</p>
-                <button type="button" onClick={() => setCreateOpen(true)}>
+                <button type="button" onClick={openCreateDrawer}>
                   Create Product
                 </button>
               </div>
@@ -599,14 +840,157 @@ export function CatalogConsole() {
               <button
                 aria-label="Close Product workspace"
                 type="button"
-                onClick={() => {
-                  setSelected(undefined);
-                  setWorkspace(undefined);
-                }}
+                onClick={closeProductWorkspace}
               >
                 <X />
               </button>
             </header>
+            {overviewDraft && overviewBaseline ? (
+              <section className="product-overview-editor" id="overview">
+                <div className="section-heading">
+                  <div>
+                    <h3>Product overview</h3>
+                    <p>Customer identity, merchandising copy, and Catalog classification.</p>
+                  </div>
+                  <StatusBadge
+                    status={overviewDirty ? 'UNSAVED' : `VERSION ${workspace?.version}`}
+                  />
+                </div>
+                <form noValidate onSubmit={(event) => void saveOverview(event)}>
+                  <div className="product-overview-grid">
+                    <label>
+                      <span>Product name</span>
+                      <input
+                        autoComplete="off"
+                        maxLength={180}
+                        required
+                        value={overviewDraft.title}
+                        onChange={(event) => updateOverviewField('title', event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Storefront handle</span>
+                      <input
+                        autoCapitalize="none"
+                        autoComplete="off"
+                        maxLength={160}
+                        pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                        required
+                        spellCheck={false}
+                        value={overviewDraft.handle}
+                        onChange={(event) => updateOverviewField('handle', event.target.value)}
+                      />
+                      <small>Lowercase words and hyphens. Old published handles redirect.</small>
+                    </label>
+                    <label>
+                      <span>Product Type</span>
+                      <select
+                        required
+                        value={overviewDraft.productTypeId}
+                        onChange={(event) =>
+                          updateOverviewField('productTypeId', event.target.value)
+                        }
+                      >
+                        {!types.some((type) => type.id === overviewDraft.productTypeId) ? (
+                          <option disabled value={overviewDraft.productTypeId}>
+                            Current Product Type is unavailable — choose another
+                          </option>
+                        ) : null}
+                        {types.map((type) => (
+                          <option key={type.id} value={type.id}>
+                            {type.name}
+                          </option>
+                        ))}
+                      </select>
+                      <small>Changing type recalculates required Catalog information.</small>
+                    </label>
+                    <label className="product-overview-description">
+                      <span>Customer description</span>
+                      <textarea
+                        maxLength={5000}
+                        rows={5}
+                        value={overviewDraft.description}
+                        onChange={(event) => updateOverviewField('description', event.target.value)}
+                      />
+                      <small>{overviewDraft.description.length}/5000 characters</small>
+                    </label>
+                  </div>
+                  {overviewError ? (
+                    <p className="overview-error" role="alert">
+                      {overviewError}
+                    </p>
+                  ) : null}
+                  {Object.keys(overviewConflicts).length > 0 ? (
+                    <div className="overview-conflict" role="alert">
+                      <strong>Another operator changed the same fields.</strong>
+                      <p>Choose which values to keep. Your draft has not been discarded.</p>
+                      <ul>
+                        {(
+                          Object.entries(overviewConflicts) as [
+                            CatalogOverviewField,
+                            CatalogOverviewConflict,
+                          ][]
+                        ).map(([field, conflict]) => (
+                          <li key={field}>
+                            <strong>
+                              {field === 'productTypeId'
+                                ? 'Product Type'
+                                : field.charAt(0).toUpperCase() + field.slice(1)}
+                            </strong>
+                            <span>
+                              Current:{' '}
+                              {field === 'productTypeId'
+                                ? (types.find((type) => type.id === conflict.current)?.name ??
+                                  conflict.current)
+                                : conflict.current || 'Empty'}
+                            </span>
+                            <span>
+                              Your draft:{' '}
+                              {field === 'productTypeId'
+                                ? (types.find((type) => type.id === conflict.local)?.name ??
+                                  conflict.local)
+                                : conflict.local || 'Empty'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div>
+                        <button type="button" onClick={() => resolveOverviewConflicts('CURRENT')}>
+                          Use current values
+                        </button>
+                        <button type="button" onClick={() => resolveOverviewConflicts('LOCAL')}>
+                          Keep my draft
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <footer>
+                    <span role="status">
+                      {overviewDirty ? 'Unsaved overview changes' : 'Overview is up to date'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!overviewDirty || busy}
+                      onClick={() => {
+                        setOverviewDraft(overviewBaseline);
+                        setOverviewConflicts({});
+                        setOverviewError('');
+                        setMessage('Overview draft discarded.');
+                      }}
+                    >
+                      Discard changes
+                    </button>
+                    <button
+                      className="button primary"
+                      type="submit"
+                      disabled={!overviewDirty || busy || Object.keys(overviewConflicts).length > 0}
+                    >
+                      {busy ? 'Saving…' : 'Save overview'}
+                    </button>
+                  </footer>
+                </form>
+              </section>
+            ) : null}
             <section className="publish-readiness">
               <div>
                 <strong>Publishing readiness</strong>
@@ -634,6 +1018,8 @@ export function CatalogConsole() {
                 disabled={
                   busy ||
                   workspaceLoading ||
+                  overviewDirty ||
+                  Object.keys(overviewConflicts).length > 0 ||
                   (selected.publicationStatus !== 'PUBLISHED' && !workspace?.readiness.canPublish)
                 }
                 type="button"
@@ -641,9 +1027,13 @@ export function CatalogConsole() {
               >
                 {selected.publicationStatus === 'PUBLISHED' ? <Archive /> : <CheckCircle2 />}
                 {selected.publicationStatus === 'PUBLISHED'
-                  ? 'Unpublish Product'
+                  ? overviewDirty
+                    ? 'Save overview before unpublishing'
+                    : 'Unpublish Product'
                   : workspace?.readiness.canPublish
-                    ? 'Publish Product'
+                    ? overviewDirty
+                      ? 'Save overview before publishing'
+                      : 'Publish Product'
                     : 'Resolve blockers to publish'}
               </button>
             </section>
@@ -837,11 +1227,7 @@ export function CatalogConsole() {
         ) : null}
       </div>
       {createOpen ? (
-        <div
-          className="drawer-backdrop"
-          role="presentation"
-          onMouseDown={() => setCreateOpen(false)}
-        >
+        <div className="drawer-backdrop" role="presentation" onMouseDown={closeCreateDrawer}>
           <aside
             ref={createDrawerRef}
             aria-label="Create Product"
@@ -849,8 +1235,9 @@ export function CatalogConsole() {
             className="form-drawer"
             role="dialog"
             tabIndex={-1}
+            onChange={() => setCreateDirty(true)}
             onKeyDown={(event) => {
-              if (event.key === 'Escape') setCreateOpen(false);
+              if (event.key === 'Escape') closeCreateDrawer();
             }}
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -863,11 +1250,7 @@ export function CatalogConsole() {
                   steps.
                 </p>
               </div>
-              <button
-                aria-label="Close create Product"
-                type="button"
-                onClick={() => setCreateOpen(false)}
-              >
+              <button aria-label="Close create Product" type="button" onClick={closeCreateDrawer}>
                 <X />
               </button>
             </header>
@@ -917,7 +1300,7 @@ export function CatalogConsole() {
                 />
               </div>
               <footer>
-                <button type="button" onClick={() => setCreateOpen(false)}>
+                <button type="button" onClick={closeCreateDrawer}>
                   Cancel
                 </button>
                 <Button type="submit" disabled={!typeId || busy}>

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
+import type { CatalogProductUpdateDto } from '@maevelle/contracts';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   CatalogDomainError,
@@ -314,22 +315,27 @@ export function registerCatalogRoutes(
     '/admin/catalog/products/:productId',
     {
       schema: {
-        body: Type.Object({
-          title: Type.Optional(Type.String({ minLength: 1 })),
-          handle: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
-          description: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-        }),
+        body: Type.Object(
+          {
+            title: Type.Optional(Type.String({ minLength: 1, maxLength: 180 })),
+            handle: Type.Optional(
+              Type.String({
+                maxLength: 160,
+                pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$',
+              }),
+            ),
+            description: Type.Optional(Type.Union([Type.String({ maxLength: 5000 }), Type.Null()])),
+            productTypeId: Type.Optional(organizationIdParameter),
+          },
+          { minProperties: 1 },
+        ),
       },
     },
     async (request, reply) => {
       const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
       if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
-        const body = request.body as {
-          title?: string;
-          handle?: string;
-          description?: string | null;
-        };
+        const body = request.body as CatalogProductUpdateDto;
         const version = expectedVersion(request.headers['if-match']);
         if (!version)
           return reply.code(428).send({

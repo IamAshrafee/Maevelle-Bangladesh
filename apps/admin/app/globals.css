@@ -1307,6 +1307,128 @@ body {
     background: white;
     box-shadow: 0 0.7rem 2.5rem rgb(22 50 41 / 8%);
   }
+  .product-overview-editor {
+    margin: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.45rem;
+    padding: 0.75rem;
+  }
+  .product-overview-editor .section-heading {
+    margin-bottom: 0.65rem;
+  }
+  .product-overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+  .product-overview-grid label {
+    display: grid;
+    align-content: start;
+    gap: 0.25rem;
+  }
+  .product-overview-grid label > span {
+    font-size: 0.63rem;
+    font-weight: 680;
+  }
+  .product-overview-grid input,
+  .product-overview-grid select,
+  .product-overview-grid textarea {
+    width: 100%;
+    border: 1px solid var(--input);
+    border-radius: 0.38rem;
+    background: white;
+    color: var(--foreground);
+    padding: 0.48rem 0.55rem;
+    font: inherit;
+    font-size: 0.68rem;
+  }
+  .product-overview-grid input,
+  .product-overview-grid select {
+    min-height: 2.05rem;
+  }
+  .product-overview-grid textarea {
+    min-height: 6.5rem;
+    line-height: 1.45;
+    resize: vertical;
+  }
+  .product-overview-grid input:focus-visible,
+  .product-overview-grid select:focus-visible,
+  .product-overview-grid textarea:focus-visible {
+    border-color: var(--ring);
+    outline: 2px solid color-mix(in oklab, var(--ring) 28%, transparent);
+    outline-offset: 1px;
+  }
+  .product-overview-grid small {
+    color: var(--muted-foreground);
+    font-size: 0.57rem;
+    line-height: 1.35;
+  }
+  .product-overview-description {
+    grid-column: 1 / -1;
+  }
+  .product-overview-editor form > footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    margin-top: 0.7rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.65rem;
+  }
+  .product-overview-editor form > footer > span {
+    margin-right: auto;
+    color: var(--muted-foreground);
+    font-size: 0.6rem;
+  }
+  .product-overview-editor form > footer button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .overview-error {
+    margin: 0.6rem 0 0;
+    border-left: 3px solid oklch(0.55 0.18 25);
+    background: oklch(0.97 0.025 25);
+    padding: 0.45rem 0.55rem;
+    color: oklch(0.45 0.15 25);
+    font-size: 0.63rem;
+  }
+  .overview-conflict {
+    margin-top: 0.65rem;
+    border: 1px solid oklch(0.75 0.12 65);
+    border-radius: 0.4rem;
+    background: oklch(0.97 0.03 80);
+    padding: 0.6rem;
+    color: oklch(0.37 0.08 65);
+  }
+  .overview-conflict > strong {
+    font-size: 0.7rem;
+  }
+  .overview-conflict > p {
+    margin: 0.15rem 0 0;
+    font-size: 0.61rem;
+  }
+  .overview-conflict ul {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.55rem 0;
+    padding: 0;
+    list-style: none;
+  }
+  .overview-conflict li {
+    display: grid;
+    gap: 0.08rem;
+    border-top: 1px solid oklch(0.84 0.06 70);
+    padding-top: 0.35rem;
+    font-size: 0.59rem;
+  }
+  .overview-conflict li strong {
+    font-size: 0.63rem;
+  }
+  .overview-conflict > div {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.4rem;
+  }
   .publish-readiness {
     margin: 0.75rem;
     border: 1px solid var(--border);
@@ -2062,6 +2184,16 @@ body {
   .variant-create-form,
   .variant-matrix-row {
     grid-template-columns: 1fr;
+  }
+  .product-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .product-overview-editor form > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .product-overview-editor form > footer > span {
+    margin-right: 0;
   }
   .variant-matrix-row.header {
     display: none;
