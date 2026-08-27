@@ -1,7 +1,7 @@
 # Catalog Product Management Verification
 
-Status: `ACTIVE_IMPLEMENTATION` — Stages 1–2 and the Stage 3 backend foundation
-verified; area completion gate not yet evaluated.
+Status: `ACTIVE_IMPLEMENTATION` — Stages 1–2 and the Stage 3 Product Organization
+slice verified; area completion gate not yet evaluated.
 
 ## Evidence required before completion
 
@@ -71,3 +71,26 @@ This proves the local Stage 2 code and recovery model, not the Catalog area gate
 
 This is a backend foundation checkpoint. Admin interaction, the full Stage 3 gate,
 and broader regression/build/browser evidence are still pending.
+
+## Stage 3 Product Organization evidence — commit `39e6a67`
+
+- `pnpm typecheck`, focused Prettier/ESLint, and `git diff --check` — passed.
+- Focused API, PostgreSQL Catalog, and Admin tests — 3 files / 26 tests passed.
+- `pnpm test` — 32 files / 142 tests passed, including clean migration proof.
+- `pnpm --filter @maevelle/api build` and
+  `pnpm --filter @maevelle/admin build` — passed; all 41 Admin routes generated.
+- `pnpm check:architecture` — 13 workspace packages passed.
+- `pnpm check:secrets` — passed.
+- Pure Admin state tests prove non-conflicting taxonomy/attribute merging, true
+  same-field conflict detection, and removal of obsolete Product Type fields.
+- PostgreSQL tests prove explicit Boolean `false`, required active Product Type
+  values, stale rollback, and preservation of existing read-only reference values.
+- `docker compose up -d --build api admin storefront bootstrap-owner caddy` —
+  rebuilt successfully; migration and Owner bootstrap exited successfully and
+  API/Admin/Storefront reported healthy.
+- The browser reached the rebuilt Admin shell and then correctly redirected to
+  sign-in. The login surface produced no console errors. Authenticated Product
+  Organization interaction and responsive visual evidence remain unclaimed.
+
+This proves the local Product Organization implementation and recovery model,
+not the full Stage 3 or Catalog area completion gate.

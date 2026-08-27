@@ -17,16 +17,15 @@ Stage 3 — Taxonomy, attributes, structured information, FAQ, and SEO.
 
 ## Last completed action
 
-Stage 3's backend foundation added tenant-scoped category choices and atomic
-Product category/primary-category assignment, plus Product Type-driven typed
-attribute reads and writes with required-value and optimistic-concurrency
-enforcement. Commit: `d90d817`.
+Stage 3's Product Organization slice added tenant-scoped category and primary
+category editing, Product Type-driven typed attribute controls, independent
+draft-preserving saves, and three-way stale-version recovery. Commit: `39e6a67`.
 
 ## Next exact action
 
-Build the Admin Product Organization editor on the verified taxonomy and typed
-attribute commands, including draft-loss protection, stale-version recovery,
-inline validation, and accessible required/optional controls.
+Inventory and implement Product structured information groups, customer FAQ,
+and SEO fields using the same tenant, validation, concurrency, recovery, and
+Storefront projection standards.
 
 ## Do not switch areas
 

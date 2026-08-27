@@ -44,8 +44,21 @@
   before replacing category or attribute rows, so stale commands roll back safely.
 - Verified typecheck, focused lint, API schema boundaries, and 12 focused API and
   PostgreSQL tests.
+- Completed the Stage 3 Product Organization editor in `39e6a67`.
+- Added accessible nested-category selection, a selected-category-only primary
+  choice, and Product Type-driven controls for text, integer, decimal, Boolean,
+  date, and safely read-only reference attributes.
+- Added independent category/attribute saves that preserve other workspace
+  drafts, page/navigation/command guards, inline domain errors, and three-way
+  recovery with explicit current-versus-local conflict choices.
+- Preserved existing reference values while replacing editable typed values and
+  linked category/required-attribute readiness actions to the editor.
+- Verified 142 repository tests, typecheck, focused lint, API/Admin production
+  builds, architecture and secret checks, and a healthy rebuilt Compose stack.
+- The in-app browser reached the rebuilt Admin, was redirected to sign-in by the
+  auth guard, and reported no console errors. Authenticated Organization visual
+  and responsive interaction remain unclaimed.
 
 ## Next
 
-Finish the Stage 3 Admin Organization editor, then implement structured
-information, FAQ, and SEO.
+Implement Stage 3 structured information, FAQ, and SEO.
