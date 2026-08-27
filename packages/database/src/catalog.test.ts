@@ -13,6 +13,7 @@ import {
   listCatalogProductWorkItems,
   moveCatalogCategory,
   publishCatalogProduct,
+  replaceCatalogProductContent,
   setCatalogProductAttributes,
   setCatalogProductCategories,
   unpublishCatalogProduct,
@@ -415,6 +416,99 @@ describe('catalog invariants', () => {
     expect(afterStale?.organization.categoryIds).toEqual(
       expect.arrayContaining([parent.id, child.id]),
     );
+  });
+
+  it('replaces structured Product content atomically and projects SEO, details, and FAQ publicly', async () => {
+    const fixture = await catalogFixture();
+    const handle = `content-hat-${crypto.randomUUID().slice(0, 8)}`;
+    const product = await createCatalogProduct(database.db, {
+      ...fixture,
+      title: 'Content hat',
+      handle,
+      description: 'Fallback customer description.',
+    });
+    const content = await replaceCatalogProductContent(database.db, {
+      ...fixture,
+      productId: product.id,
+      expectedVersion: product.version,
+      informationGroups: [
+        {
+          title: ' Materials ',
+          items: [
+            { label: ' Shell ', value: ' Organic cotton ' },
+            { label: ' Care ', value: ' Hand wash cold ' },
+          ],
+        },
+      ],
+      faqs: [{ question: ' Is it adjustable? ', answer: ' Yes, with a rear strap. ' }],
+      seoTitle: 'Organic Cotton Hat | Maevelle',
+      seoDescription: 'Shop an adjustable organic cotton hat from Maevelle Bangladesh.',
+    });
+    expect(content.version).toBe(product.version + 1);
+    const workspace = await getCatalogProductWorkspace(
+      database.db,
+      fixture.organizationId,
+      product.id,
+    );
+    expect(workspace?.content).toMatchObject({
+      informationGroups: [
+        {
+          title: 'Materials',
+          items: [
+            { label: 'Shell', value: 'Organic cotton' },
+            { label: 'Care', value: 'Hand wash cold' },
+          ],
+        },
+      ],
+      faqs: [{ question: 'Is it adjustable?', answer: 'Yes, with a rear strap.' }],
+      seoTitle: 'Organic Cotton Hat | Maevelle',
+    });
+    await expect(
+      replaceCatalogProductContent(database.db, {
+        ...fixture,
+        productId: product.id,
+        expectedVersion: product.version,
+        informationGroups: [],
+        faqs: [],
+        seoTitle: null,
+        seoDescription: null,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_VERSION' satisfies CatalogDomainError['code'] });
+
+    const axis = await sql<{ id: string }>`
+      insert into catalog.product_option_axes (organization_id,product_id,code,name)
+      values (${fixture.organizationId},${product.id},'size','Size') returning id
+    `.execute(database.db);
+    const value = await sql<{ id: string }>`
+      insert into catalog.product_option_values
+        (organization_id,option_axis_id,code,display_value)
+      values (${fixture.organizationId},${axis.rows[0]!.id},'one-size','One size') returning id
+    `.execute(database.db);
+    await createCatalogVariant(database.db, {
+      organizationId: fixture.organizationId,
+      productId: product.id,
+      sku: `CONTENT-${crypto.randomUUID().slice(0, 8)}`,
+      optionValueIds: [value.rows[0]!.id],
+    });
+    await publishCatalogProduct(database.db, {
+      ...fixture,
+      productId: product.id,
+      expectedVersion: content.version,
+    });
+    const publicProduct = await getStorefrontCatalogProduct(
+      database.db,
+      fixture.organizationId,
+      handle,
+    );
+    expect(publicProduct).toMatchObject({
+      seoTitle: 'Organic Cotton Hat | Maevelle',
+      seoDescription: 'Shop an adjustable organic cotton hat from Maevelle Bangladesh.',
+      details: [
+        { group: 'Materials', label: 'Shell', value: 'Organic cotton' },
+        { group: 'Materials', label: 'Care', value: 'Hand wash cold' },
+      ],
+      faqs: [{ question: 'Is it adjustable?', answer: 'Yes, with a rear strap.' }],
+    });
   });
 
   it('does not expose drafts or another organization’s products through public reads', async () => {

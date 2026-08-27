@@ -26,7 +26,24 @@ export function productJsonLd(product: StorefrontProductDto, canonicalUrl: strin
       new URL(`/api/media/public/${asset.id}`, canonicalUrl).toString(),
     ),
     url: canonicalUrl,
+    additionalProperty: product.details.map((detail) => ({
+      '@type': 'PropertyValue',
+      name: `${detail.group}: ${detail.label}`,
+      value: detail.value,
+    })),
     offers,
+  };
+}
+
+export function faqJsonLd(faqs: StorefrontProductDto['faqs']) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: { '@type': 'Answer', text: faq.answer },
+    })),
   };
 }
 

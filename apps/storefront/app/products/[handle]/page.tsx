@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { ProductPageClient } from '@/components/product-page-client';
-import { productJsonLd, safeJsonLd } from '@/src/seo';
+import { faqJsonLd, productJsonLd, safeJsonLd } from '@/src/seo';
 import { loadPublicProduct, storefrontPublicBaseUrl } from '@/src/server-catalog';
 
 type ProductRoute = { readonly params: Promise<{ handle: string }> };
@@ -16,18 +16,21 @@ export async function generateMetadata({ params }: ProductRoute): Promise<Metada
       alternates: { canonical },
       robots: { index: false, follow: true },
     };
+  const title = product.seoTitle?.trim() || product.title;
   const description =
-    product.description?.trim() || `Shop ${product.title} from Maevelle Bangladesh.`;
+    product.seoDescription?.trim() ||
+    product.description?.trim() ||
+    `Shop ${product.title} from Maevelle Bangladesh.`;
   const images = product.media.map(
     (asset) => `${storefrontPublicBaseUrl}/api/media/public/${asset.id}`,
   );
   return {
-    title: product.title,
+    title,
     description,
     alternates: { canonical },
     openGraph: {
       type: 'website',
-      title: product.title,
+      title,
       description,
       url: canonical,
       ...(images.length > 0 ? { images } : {}),
@@ -58,10 +61,18 @@ export default async function ProductPage({ params }: ProductRoute) {
   return (
     <>
       {product ? (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: safeJsonLd(productJsonLd(product, canonical)) }}
-        />
+        <>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: safeJsonLd(productJsonLd(product, canonical)) }}
+          />
+          {product.faqs.length > 0 ? (
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{ __html: safeJsonLd(faqJsonLd(product.faqs)) }}
+            />
+          ) : null}
+        </>
       ) : null}
       <script
         type="application/ld+json"

@@ -125,6 +125,19 @@ describe('API hardening foundation', () => {
     });
     expect(invalidAttributes.statusCode).toBe(400);
 
+    const invalidContent = await app.inject({
+      method: 'PUT',
+      url: `/admin/catalog/products/${productId}/content`,
+      headers: { 'if-match': '"1"' },
+      payload: {
+        informationGroups: [{ title: 'Care', items: [] }],
+        faqs: [],
+        seoTitle: null,
+        seoDescription: null,
+      },
+    });
+    expect(invalidContent.statusCode).toBe(400);
+
     const protectedCategories = await app.inject({
       method: 'PUT',
       url: `/admin/catalog/products/${productId}/categories`,

@@ -49,6 +49,16 @@ export interface CatalogProductWorkspace extends ProductSummary {
     readonly primaryCategoryId: string | null;
     readonly attributes: readonly CatalogProductAttribute[];
   };
+  readonly content: {
+    readonly informationGroups: readonly {
+      id: string;
+      title: string;
+      items: readonly { id: string; label: string; value: string }[];
+    }[];
+    readonly faqs: readonly { id: string; question: string; answer: string }[];
+    readonly seoTitle: string | null;
+    readonly seoDescription: string | null;
+  };
 }
 
 export interface CatalogProductAttribute {
@@ -1067,6 +1077,175 @@ export async function setCatalogProductAttributes(
   });
 }
 
+function normalizedContentText(value: string, label: string, maximumLength: number): string {
+  const normalized = value.trim();
+  if (!normalized) throw new CatalogDomainError('VALIDATION_FAILED', `${label} cannot be empty.`);
+  if (normalized.length > maximumLength)
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      `${label} cannot exceed ${maximumLength} characters.`,
+    );
+  return normalized;
+}
+
+function normalizedOptionalContentText(
+  value: string | null,
+  label: string,
+  maximumLength: number,
+): string | null {
+  if (value === null || !value.trim()) return null;
+  return normalizedContentText(value, label, maximumLength);
+}
+
+export async function replaceCatalogProductContent(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    productId: string;
+    expectedVersion: number;
+    informationGroups: readonly {
+      title: string;
+      items: readonly { label: string; value: string }[];
+    }[];
+    faqs: readonly { question: string; answer: string }[];
+    seoTitle: string | null;
+    seoDescription: string | null;
+  },
+): Promise<ProductSummary> {
+  if (input.informationGroups.length > 12)
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'A Product can have at most 12 information groups.',
+    );
+  if (input.faqs.length > 30)
+    throw new CatalogDomainError('VALIDATION_FAILED', 'A Product can have at most 30 FAQs.');
+  const informationGroups = input.informationGroups.map((group, groupIndex) => {
+    if (group.items.length === 0)
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        `Information group ${groupIndex + 1} needs at least one item.`,
+      );
+    if (group.items.length > 24)
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        `Information group ${groupIndex + 1} can have at most 24 items.`,
+      );
+    const items = group.items.map((item, itemIndex) => ({
+      label: normalizedContentText(
+        item.label,
+        `Information group ${groupIndex + 1}, item ${itemIndex + 1} label`,
+        120,
+      ),
+      value: normalizedContentText(
+        item.value,
+        `Information group ${groupIndex + 1}, item ${itemIndex + 1} value`,
+        2000,
+      ),
+    }));
+    const labels = items.map((item) => item.label.toLocaleLowerCase('en'));
+    if (new Set(labels).size !== labels.length)
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        `Information group ${groupIndex + 1} contains duplicate labels.`,
+      );
+    return {
+      title: normalizedContentText(group.title, `Information group ${groupIndex + 1} title`, 120),
+      items,
+    };
+  });
+  const groupTitles = informationGroups.map((group) => group.title.toLocaleLowerCase('en'));
+  if (new Set(groupTitles).size !== groupTitles.length)
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'Provide each Product information group once.',
+    );
+  const faqs = input.faqs.map((faq, index) => ({
+    question: normalizedContentText(faq.question, `FAQ ${index + 1} question`, 300),
+    answer: normalizedContentText(faq.answer, `FAQ ${index + 1} answer`, 3000),
+  }));
+  const faqQuestions = faqs.map((faq) => faq.question.toLocaleLowerCase('en'));
+  if (new Set(faqQuestions).size !== faqQuestions.length)
+    throw new CatalogDomainError('VALIDATION_FAILED', 'Provide each FAQ question once.');
+  const seoTitle = normalizedOptionalContentText(input.seoTitle, 'SEO title', 180);
+  const seoDescription = normalizedOptionalContentText(
+    input.seoDescription,
+    'SEO description',
+    500,
+  );
+
+  return db.transaction().execute(async (transaction) => {
+    const updated = await sql<{
+      id: string;
+      handle: string;
+      title: string;
+      status: ProductSummary['status'];
+      publication_status: ProductSummary['publicationStatus'];
+      version: string;
+    }>`
+      update catalog.products
+      set seo_title=${seoTitle},seo_description=${seoDescription},version=version+1,updated_at=now()
+      where organization_id=${input.organizationId} and id=${input.productId}::uuid
+        and version=${input.expectedVersion}
+      returning id::text,handle,title,status,publication_status,version::text
+    `.execute(transaction);
+    const product = updated.rows[0];
+    if (!product) throw new CatalogDomainError('STALE_VERSION', 'Product changed; reload content.');
+
+    await sql`
+      delete from catalog.product_information_items item
+      where item.organization_id=${input.organizationId}
+        and item.group_id in (
+          select id from catalog.product_information_groups
+          where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+        )
+    `.execute(transaction);
+    await sql`
+      delete from catalog.product_information_groups
+      where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+    `.execute(transaction);
+    await sql`
+      delete from catalog.product_faqs
+      where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+    `.execute(transaction);
+
+    for (const [groupIndex, group] of informationGroups.entries()) {
+      const inserted = await sql<{ id: string }>`
+        insert into catalog.product_information_groups
+          (organization_id,product_id,title,position)
+        values (${input.organizationId},${input.productId}::uuid,${group.title},${groupIndex})
+        returning id::text
+      `.execute(transaction);
+      const groupId = inserted.rows[0]?.id;
+      if (!groupId) throw new Error('Information group insert did not return an id.');
+      for (const [itemIndex, item] of group.items.entries())
+        await sql`
+          insert into catalog.product_information_items
+            (organization_id,group_id,label,value_text,position)
+          values (${input.organizationId},${groupId}::uuid,${item.label},${item.value},${itemIndex})
+        `.execute(transaction);
+    }
+    for (const [faqIndex, faq] of faqs.entries())
+      await sql`
+        insert into catalog.product_faqs
+          (organization_id,product_id,question,answer,position)
+        values (
+          ${input.organizationId},${input.productId}::uuid,
+          ${faq.question},${faq.answer},${faqIndex}
+        )
+      `.execute(transaction);
+
+    await emitCatalogEvent(transaction, {
+      organizationId: input.organizationId,
+      productId: input.productId,
+      eventType: 'catalog.product.content_updated',
+      actorId: input.actorId,
+      auditAction: 'catalog.product.content_updated',
+    });
+    return asProduct(product);
+  });
+}
+
 export async function createCatalogVariant(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -1439,11 +1618,14 @@ export async function getCatalogProductWorkspace(
     product_type_id: string;
     product_type_name: string;
     primary_category_id: string | null;
+    seo_title: string | null;
+    seo_description: string | null;
     updated_at: string;
   }>`
     select product.id::text,product.handle,product.title,product.description,product.status,
       product.publication_status,product.version::text,product.product_type_id::text,
       product_type.name as product_type_name,product.primary_category_id::text,
+      product.seo_title,product.seo_description,
       product.updated_at::text
     from catalog.products product
     join catalog.product_types product_type
@@ -1453,13 +1635,14 @@ export async function getCatalogProductWorkspace(
   const row = product.rows[0];
   if (!row) return undefined;
 
-  const [axes, values, variants, validation, categories, attributes] = await Promise.all([
-    sql<{ id: string; code: string; name: string }>`
+  const [axes, values, variants, validation, categories, attributes, information, faqs] =
+    await Promise.all([
+      sql<{ id: string; code: string; name: string }>`
       select id::text,code,name from catalog.product_option_axes
       where organization_id=${organizationId} and product_id=${productId}::uuid and status='ACTIVE'
       order by position,id
     `.execute(db),
-    sql<{ id: string; option_axis_id: string; code: string; label: string }>`
+      sql<{ id: string; option_axis_id: string; code: string; label: string }>`
       select value.id::text,value.option_axis_id::text,value.code,value.display_value as label
       from catalog.product_option_values value
       join catalog.product_option_axes axis
@@ -1468,7 +1651,7 @@ export async function getCatalogProductWorkspace(
         and value.status='ACTIVE' and axis.status='ACTIVE'
       order by value.position,value.id
     `.execute(db),
-    sql<{ id: string; sku: string; status: string; option_value_ids: string[] }>`
+      sql<{ id: string; sku: string; status: string; option_value_ids: string[] }>`
       select variant.id::text,variant.sku,variant.status,
         coalesce(array_agg(link.option_value_id::text order by link.option_value_id)
           filter (where link.option_value_id is not null),'{}') as option_value_ids
@@ -1478,22 +1661,22 @@ export async function getCatalogProductWorkspace(
       group by variant.id,variant.sku,variant.status
       order by variant.sku,variant.id
     `.execute(db),
-    getCatalogProductReadiness(db, organizationId, productId),
-    sql<{ category_id: string }>`
+      getCatalogProductReadiness(db, organizationId, productId),
+      sql<{ category_id: string }>`
       select category_id::text from catalog.product_categories
       where organization_id=${organizationId} and product_id=${productId}::uuid
       order by category_id
     `.execute(db),
-    sql<{
-      id: string;
-      code: string;
-      name: string;
-      value_type: CatalogProductAttribute['valueType'];
-      is_required: boolean;
-      is_filterable: boolean;
-      is_searchable: boolean;
-      value_json: string | boolean | null;
-    }>`
+      sql<{
+        id: string;
+        code: string;
+        name: string;
+        value_type: CatalogProductAttribute['valueType'];
+        is_required: boolean;
+        is_filterable: boolean;
+        is_searchable: boolean;
+        value_json: string | boolean | null;
+      }>`
       select definition.id::text,definition.code,definition.name,definition.value_type,
         binding.is_required,definition.is_filterable,definition.is_searchable,
         case definition.value_type
@@ -1515,7 +1698,29 @@ export async function getCatalogProductWorkspace(
         and definition.scope='PRODUCT' and definition.status='ACTIVE'
       order by binding.is_required desc,definition.name,definition.id
     `.execute(db),
-  ]);
+      sql<{
+        group_id: string;
+        group_title: string;
+        item_id: string | null;
+        item_label: string | null;
+        item_value: string | null;
+      }>`
+      select information_group.id::text as group_id,information_group.title as group_title,
+        item.id::text as item_id,item.label as item_label,item.value_text as item_value
+      from catalog.product_information_groups information_group
+      left join catalog.product_information_items item
+        on item.organization_id=information_group.organization_id
+        and item.group_id=information_group.id
+      where information_group.organization_id=${organizationId}
+        and information_group.product_id=${productId}::uuid
+      order by information_group.position,information_group.id,item.position,item.id
+    `.execute(db),
+      sql<{ id: string; question: string; answer: string }>`
+      select id::text,question,answer from catalog.product_faqs
+      where organization_id=${organizationId} and product_id=${productId}::uuid
+      order by position,id
+    `.execute(db),
+    ]);
   if (!validation) return undefined;
 
   return {
@@ -1559,6 +1764,27 @@ export async function getCatalogProductWorkspace(
         value: attribute.value_json,
       })),
     },
+    content: {
+      informationGroups: information.rows
+        .filter(
+          (entry, index, entries) =>
+            entries.findIndex((candidate) => candidate.group_id === entry.group_id) === index,
+        )
+        .map((group) => ({
+          id: group.group_id,
+          title: group.group_title,
+          items: information.rows
+            .filter((item) => item.group_id === group.group_id && item.item_id)
+            .map((item) => ({
+              id: item.item_id!,
+              label: item.item_label!,
+              value: item.item_value!,
+            })),
+        })),
+      faqs: faqs.rows,
+      seoTitle: row.seo_title,
+      seoDescription: row.seo_description,
+    },
   };
 }
 
@@ -1567,6 +1793,8 @@ export interface StorefrontProduct {
   readonly handle: string;
   readonly title: string;
   readonly description: string | null;
+  readonly seoTitle: string | null;
+  readonly seoDescription: string | null;
   readonly options: readonly {
     id: string;
     code: string;
@@ -1623,15 +1851,18 @@ export async function getStorefrontCatalogProduct(
     handle: string;
     title: string;
     description: string | null;
+    seo_title: string | null;
+    seo_description: string | null;
   }>`
-    select id, handle, title, description from catalog.products
+    select id,handle,title,description,seo_title,seo_description from catalog.products
     where organization_id = ${organizationId} and handle = ${handle} and status = 'ACTIVE' and publication_status = 'PUBLISHED'
   `.execute(db);
   const row = product.rows[0];
   if (!row) return undefined;
   const axes = await sql<{ id: string; code: string; name: string }>`
     select id, code, name from catalog.product_option_axes
-    where product_id = ${row.id} and status = 'ACTIVE' order by position, id
+    where organization_id=${organizationId} and product_id=${row.id}
+      and status='ACTIVE' order by position,id
   `.execute(db);
   const options = await Promise.all(
     axes.rows.map(async (axis) => {
@@ -1643,7 +1874,8 @@ export async function getStorefrontCatalogProduct(
       }>`
         select value.id, value.code, value.display_value, color.hex_value
         from catalog.product_option_values value left join catalog.colors color on color.id = value.color_id
-        where value.option_axis_id = ${axis.id} and value.status = 'ACTIVE' order by value.position, value.id
+        where value.organization_id=${organizationId} and value.option_axis_id=${axis.id}
+          and value.status='ACTIVE' order by value.position,value.id
       `.execute(db);
       return {
         id: axis.id,
@@ -1664,12 +1896,17 @@ export async function getStorefrontCatalogProduct(
     option_value_ids: string[];
     available: boolean;
   }>`
-    select variant.id, variant.sku, array_agg(link.option_value_id order by link.option_value_id) as option_value_ids,
+    select variant.id,variant.sku,
+      coalesce(array_agg(link.option_value_id order by link.option_value_id)
+        filter (where link.option_value_id is not null),'{}') as option_value_ids,
       coalesce(bool_or(level.sellable_quantity-level.reserved_quantity>0),false) as available
-    from catalog.product_variants variant join catalog.variant_option_values link on link.variant_id = variant.id
+    from catalog.product_variants variant
+    left join catalog.variant_option_values link
+      on link.organization_id=variant.organization_id and link.variant_id=variant.id
     left join inventory.inventory_items item on item.variant_id=variant.id and item.organization_id=variant.organization_id
     left join inventory.inventory_levels level on level.inventory_item_id=item.id and level.organization_id=variant.organization_id
-    where variant.product_id = ${row.id} and variant.status = 'ACTIVE'
+    where variant.organization_id=${organizationId} and variant.product_id=${row.id}
+      and variant.status='ACTIVE'
     group by variant.id, variant.sku order by variant.sku
   `.execute(db);
   const media = await sql<{
@@ -1689,18 +1926,23 @@ export async function getStorefrontCatalogProduct(
   const details = await sql<{ group_title: string; label: string; value_text: string }>`
     select information_group.title as group_title, item.label, item.value_text
     from catalog.product_information_groups information_group
-    join catalog.product_information_items item on item.group_id = information_group.id
-    where information_group.product_id = ${row.id}
+    join catalog.product_information_items item
+      on item.organization_id=information_group.organization_id and item.group_id=information_group.id
+    where information_group.organization_id=${organizationId}
+      and information_group.product_id=${row.id}
     order by information_group.position, item.position, item.id
   `.execute(db);
   const faqs = await sql<{ question: string; answer: string }>`
-    select question, answer from catalog.product_faqs where product_id = ${row.id} order by position, id
+    select question,answer from catalog.product_faqs
+    where organization_id=${organizationId} and product_id=${row.id} order by position,id
   `.execute(db);
   return {
     id: row.id,
     handle: row.handle,
     title: row.title,
     description: row.description,
+    seoTitle: row.seo_title,
+    seoDescription: row.seo_description,
     options,
     variants: variants.rows.map((variant) => ({
       id: variant.id,

@@ -21,6 +21,7 @@ import {
   listCatalogProductTypes,
   moveCatalogCategory,
   publishCatalogProduct,
+  replaceCatalogProductContent,
   setCatalogProductAttributes,
   setCatalogProductCategories,
   unpublishCatalogProduct,
@@ -283,6 +284,69 @@ export function registerCatalogRoutes(
         };
         return {
           data: await setCatalogProductAttributes(database.db, {
+            ...body,
+            organizationId: context.organizationId,
+            actorId: context.actorId,
+            productId: (request.params as { productId: string }).productId,
+            expectedVersion: version,
+          }),
+        };
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.put(
+    '/admin/catalog/products/:productId/content',
+    {
+      schema: {
+        body: Type.Object({
+          informationGroups: Type.Array(
+            Type.Object({
+              title: Type.String({ maxLength: 120 }),
+              items: Type.Array(
+                Type.Object({
+                  label: Type.String({ maxLength: 120 }),
+                  value: Type.String({ maxLength: 2000 }),
+                }),
+                { minItems: 1, maxItems: 24 },
+              ),
+            }),
+            { maxItems: 12 },
+          ),
+          faqs: Type.Array(
+            Type.Object({
+              question: Type.String({ maxLength: 300 }),
+              answer: Type.String({ maxLength: 3000 }),
+            }),
+            { maxItems: 30 },
+          ),
+          seoTitle: Type.Union([Type.String({ maxLength: 180 }), Type.Null()]),
+          seoDescription: Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const version = expectedVersion(request.headers['if-match']);
+      if (!version)
+        return reply.code(428).send({
+          error: {
+            code: 'PRECONDITION_REQUIRED',
+            message: 'If-Match must contain the current Product version.',
+          },
+        });
+      try {
+        const body = request.body as {
+          informationGroups: { title: string; items: { label: string; value: string }[] }[];
+          faqs: { question: string; answer: string }[];
+          seoTitle: string | null;
+          seoDescription: string | null;
+        };
+        return {
+          data: await replaceCatalogProductContent(database.db, {
             ...body,
             organizationId: context.organizationId,
             actorId: context.actorId,

@@ -101,6 +101,22 @@ export interface CatalogProductAttributeDto {
   readonly value: string | boolean | null;
 }
 
+export interface CatalogProductInformationGroupDto {
+  readonly id: string;
+  readonly title: string;
+  readonly items: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly value: string;
+  }[];
+}
+
+export interface CatalogProductFaqDto {
+  readonly id: string;
+  readonly question: string;
+  readonly answer: string;
+}
+
 export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   readonly description: string | null;
   readonly productTypeId: string;
@@ -127,6 +143,12 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
     readonly primaryCategoryId: string | null;
     readonly attributes: readonly CatalogProductAttributeDto[];
   };
+  readonly content: {
+    readonly informationGroups: readonly CatalogProductInformationGroupDto[];
+    readonly faqs: readonly CatalogProductFaqDto[];
+    readonly seoTitle: string | null;
+    readonly seoDescription: string | null;
+  };
 }
 
 export interface CatalogVariantChoiceDto {
@@ -143,6 +165,8 @@ export interface StorefrontProductDto {
   readonly handle: string;
   readonly title: string;
   readonly description: string | null;
+  readonly seoTitle: string | null;
+  readonly seoDescription: string | null;
   readonly options: readonly {
     id: string;
     code: string;

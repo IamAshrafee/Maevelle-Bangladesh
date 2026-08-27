@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { productJsonLd, safeJsonLd } from './seo.js';
+import { faqJsonLd, productJsonLd, safeJsonLd } from './seo.js';
 
 describe('Storefront structured data', () => {
   it('matches authoritative public product price and excludes executable markup', () => {
@@ -9,6 +9,8 @@ describe('Storefront structured data', () => {
         handle: 'linen-dress',
         title: 'Linen Dress',
         description: '<script>alert(1)</script>',
+        seoTitle: null,
+        seoDescription: null,
         options: [],
         variants: [
           {
@@ -42,5 +44,20 @@ describe('Storefront structured data', () => {
       'https://shop.example/api/media/public/11111111-1111-4111-8111-111111111111',
     ]);
     expect(safeJsonLd(data)).not.toContain('<script>');
+  });
+
+  it('emits FAQ structured data without copying markup unsafely', () => {
+    const faq = faqJsonLd([{ question: 'Is it safe?', answer: 'Yes <script>alert(1)</script>' }]);
+    expect(faq).toMatchObject({
+      '@type': 'FAQPage',
+      mainEntity: [
+        {
+          '@type': 'Question',
+          name: 'Is it safe?',
+          acceptedAnswer: { '@type': 'Answer' },
+        },
+      ],
+    });
+    expect(safeJsonLd(faq)).not.toContain('<script>');
   });
 });
