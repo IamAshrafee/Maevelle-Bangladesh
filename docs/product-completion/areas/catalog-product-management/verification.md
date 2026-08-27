@@ -1,6 +1,6 @@
 # Catalog Product Management Verification
 
-Status: `ACTIVE_IMPLEMENTATION` — Stage 1 verified; area completion gate not yet
+Status: `ACTIVE_IMPLEMENTATION` — Stages 1–2 verified; area completion gate not yet
 evaluated.
 
 ## Evidence required before completion
@@ -33,3 +33,24 @@ evaluated.
 
 This evidence proves the Stage 1 local implementation. It does not grant Catalog
 area completion, staging readiness, production readiness, or visual acceptance.
+
+## Stage 2 evidence — commit `c364860`
+
+- `pnpm typecheck` and focused ESLint — passed.
+- Focused API, PostgreSQL Catalog, and Admin tests — 3 files / 23 tests passed.
+- `pnpm test` — 32 files / 139 tests passed.
+- `pnpm --filter @maevelle/api build` and
+  `pnpm --filter @maevelle/admin build` — passed.
+- PostgreSQL tests prove trimmed titles, Product Type changes, cross-tenant Type
+  rejection, stale-version rejection, and handle redirect history.
+- Admin pure-state tests prove non-conflicting three-way merges and true
+  same-field conflict detection.
+- API tests prove empty/invalid overview updates are rejected and valid requests
+  remain protected.
+- Architecture and secret checks passed; the rebuilt Compose API, Admin, and
+  Storefront reported healthy after migration and Owner bootstrap.
+- The rebuilt Admin login rendered with no browser console errors. Authenticated
+  interaction and responsive visual proof remain unclaimed because the available
+  browser session was signed out and no connected Chrome session existed.
+
+This proves the local Stage 2 code and recovery model, not the Catalog area gate.

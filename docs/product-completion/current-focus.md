@@ -13,20 +13,21 @@ partial variant drawer. It cannot yet support complete day-to-day catalog work.
 
 ## Current stage
 
-Stage 2 — Product overview editing and safe recovery.
+Stage 3 — Taxonomy, attributes, structured information, FAQ, and SEO.
 
 ## Last completed action
 
-Stage 1 added a bounded tenant-scoped Product worklist, server filtering and URL
-state, shared publication readiness, operational warnings, stale-page recovery,
-and truthful Admin readiness. Commit: `2229434`.
+Stage 2 added explicit Product overview editing, active Product Type changes,
+`If-Match` optimistic concurrency, three-way stale-draft merging, inline conflict
+choices, deep-link preservation, and create/overview draft-loss guards. Commit:
+`c364860`.
 
 ## Next exact action
 
-Add an explicit Product overview editor for title, handle, description, and
-Product Type. Use `If-Match` optimistic concurrency, preserve drafts against
-accidental close/navigation, show field and stale-save recovery inline, and keep
-the selected Product deep-linkable without losing worklist state.
+Inventory existing category, attribute-definition/value, and Storefront metadata
+models. Implement the smallest coherent Product organization slice: category
+assignment plus Product Type-driven required/optional attribute values, with
+tenant-scoped commands, truthful readiness, and Admin editing.
 
 ## Do not switch areas
 

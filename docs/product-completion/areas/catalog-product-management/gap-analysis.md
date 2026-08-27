@@ -23,14 +23,17 @@
 
 ## Admin gaps
 
-- Product master fields cannot be edited despite an API command existing.
-- No dedicated deep-linkable Product route or section navigation.
+- Product master fields could not be edited despite an API command existing.
+  Resolved in Stage 2 with explicit saves and stale-version recovery.
+- No dedicated deep-linkable Product route or section navigation. Product
+  selection and filters are now URL-backed; a dedicated route remains open.
 - Variants do not show current price, stock, media, barcode, physical data, or
   setup issues and cannot be safely batch-edited.
 - Categories, collections/tags/occasions, attributes, information, FAQ, SEO,
   activity, duplicate, archive, and safe bulk work are absent.
-- Drawer focus management, Escape behavior, URL state, async submit prevention,
-  inline errors, and unsaved-change handling are incomplete.
+- Drawer focus recovery, Escape behavior, URL state, async submit prevention,
+  inline overview errors, and overview/create draft-loss handling are now covered;
+  full dialog focus trapping and later-stage forms remain open.
 
 ## Verification gaps
 
