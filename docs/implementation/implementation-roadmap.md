@@ -1,7 +1,11 @@
 # Maevelle Ecommerce — Implementation Roadmap
 
 **Document:** `docs/implementation/implementation-roadmap.md`
-**Status:** Primary Implementation Control Document
+**Status:** Historical implementation sequence and architecture reference
+
+> Current product development is governed by `docs/product-completion/`. Phase
+> and launch milestones below remain historical evidence and operational
+> reference; they no longer define the active work queue or prove completeness.
 **Version:** 0.1
 **Audience:** Owner, developers, AI coding agents, reviewers
 **Authority:** Must be read together with domain/architecture source-of-truth documents.

@@ -1,7 +1,7 @@
 # Maevelle Ecommerce — Execution Playbook
 
 **Document:** `docs/implementation/execution-playbook.md`
-**Status:** Primary Engineering Entry Point
+**Status:** Historical phase execution reference
 **Version:** 0.1
 **Audience:** Owner, human developers, AI coding agents, reviewers
 **Purpose:** Tell contributors exactly where to start, what to read, what to build next, and when they may proceed.
@@ -10,7 +10,19 @@
 
 # 1. Purpose
 
-This document is the **front door to Maevelle implementation**.
+This document preserves the original phase-oriented execution method.
+
+Current product development starts at:
+
+```text
+docs/product-completion/README.md
+docs/product-completion/state.json
+docs/product-completion/current-focus.md
+```
+
+The Product Completion tracker supersedes phase and launch sequencing when
+choosing work. This playbook remains useful for architecture, testing, and
+vertical-slice implementation practices.
 
 It does not replace:
 

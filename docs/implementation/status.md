@@ -1,5 +1,9 @@
 # Maevelle implementation status
 
+> **Historical roadmap status.** Current product development is governed by
+> `docs/product-completion/`. This document preserves phase/release evidence and
+> operational gates; it no longer selects product work or proves an area complete.
+
 Current Phase: Roadmap mega-run — Wave B
 
 Current Milestone: STAGING-UAT-LAUNCH-READINESS — REPOSITORY READY / EXTERNAL GATES PENDING
