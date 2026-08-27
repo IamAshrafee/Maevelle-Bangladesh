@@ -414,6 +414,7 @@ function readinessFromFacts(facts: CatalogProductFacts): {
         facts.requiredAttributeMissingCount === 0
           ? 'All required Product attributes are complete.'
           : `${facts.requiredAttributeMissingCount} required Product attribute${facts.requiredAttributeMissingCount === 1 ? ' is' : 's are'} missing.`,
+      actionHref: '#organization',
     },
     {
       code: 'OPTION_COMBINATIONS',
@@ -456,6 +457,7 @@ function readinessFromFacts(facts: CatalogProductFacts): {
         facts.categoryCount > 0
           ? `${facts.categoryCount} active categor${facts.categoryCount === 1 ? 'y' : 'ies'} assigned.`
           : 'Assign an active category so customers can browse to this Product.',
+      actionHref: '#organization',
     },
     {
       code: 'AVAILABLE_INVENTORY',
@@ -968,8 +970,16 @@ export async function setCatalogProductAttributes(
       name: string;
       value_type: CatalogProductAttribute['valueType'];
       is_required: boolean;
+      has_reference_value: boolean;
     }>`
-      select definition.id::text,definition.name,definition.value_type,binding.is_required
+      select definition.id::text,definition.name,definition.value_type,binding.is_required,
+        exists (
+          select 1 from catalog.product_attribute_values existing
+          where existing.organization_id=product.organization_id
+            and existing.product_id=product.id
+            and existing.attribute_definition_id=definition.id
+            and existing.value_reference_id is not null
+        ) as has_reference_value
       from catalog.products product
       join catalog.product_type_attributes binding on binding.product_type_id=product.product_type_id
       join catalog.attribute_definitions definition
@@ -988,14 +998,26 @@ export async function setCatalogProductAttributes(
           'VALIDATION_FAILED',
           'An attribute is not active for this Product Type.',
         );
+      if (byId.get(entry.attributeDefinitionId)?.value_type === 'REFERENCE')
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Reference attributes require a configured tenant-scoped selector.',
+        );
       supplied.set(entry.attributeDefinitionId, entry.value);
     }
     const normalized = definitions.rows.map((definition) => ({
       definition,
-      value: normalizedAttributeValue(definition, supplied.get(definition.id) ?? null),
+      value:
+        definition.value_type === 'REFERENCE'
+          ? undefined
+          : normalizedAttributeValue(definition, supplied.get(definition.id) ?? null),
     }));
     const missing = normalized.filter(
-      (entry) => entry.definition.is_required && entry.value === undefined,
+      (entry) =>
+        entry.definition.is_required &&
+        (entry.definition.value_type === 'REFERENCE'
+          ? !entry.definition.has_reference_value
+          : entry.value === undefined),
     );
     if (missing.length > 0)
       throw new CatalogDomainError(
@@ -1018,9 +1040,14 @@ export async function setCatalogProductAttributes(
     const product = updated.rows[0];
     if (!product)
       throw new CatalogDomainError('STALE_VERSION', 'Product changed; reload attributes.');
-    await sql`delete from catalog.product_attribute_values where organization_id=${input.organizationId} and product_id=${input.productId}::uuid`.execute(
-      transaction,
-    );
+    await sql`
+      delete from catalog.product_attribute_values value
+      using catalog.attribute_definitions definition
+      where value.attribute_definition_id=definition.id
+        and value.organization_id=${input.organizationId}
+        and value.product_id=${input.productId}::uuid
+        and definition.value_type<>'REFERENCE'
+    `.execute(transaction);
     for (const entry of normalized) {
       if (entry.value === undefined) continue;
       await sql`

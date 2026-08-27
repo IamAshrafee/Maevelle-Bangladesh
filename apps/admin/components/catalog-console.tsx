@@ -21,6 +21,7 @@ import { type FormEvent, useDeferredValue, useEffect, useRef, useState } from 'r
 
 import type {
   ApiEnvelope,
+  CatalogCategoryChoiceDto,
   CatalogProductUpdateDto,
   CatalogProductWorkItemDto,
   CatalogProductWorklistDto,
@@ -36,6 +37,16 @@ import {
   type CatalogOverviewField,
   type CatalogOverviewValues,
 } from '@/components/catalog-overview-state';
+import {
+  areCatalogAttributesDirty,
+  areCatalogCategoriesDirty,
+  catalogOrganizationFromWorkspace,
+  isCatalogOrganizationDirty,
+  mergeCatalogOrganization,
+  useCurrentCatalogOrganizationConflicts,
+  type CatalogOrganizationConflict,
+  type CatalogOrganizationValues,
+} from '@/components/catalog-organization-state';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,6 +108,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function CatalogConsole() {
   const [products, setProducts] = useState<readonly CatalogProductWorkItemDto[]>([]);
   const [types, setTypes] = useState<readonly ProductType[]>([]);
+  const [categories, setCategories] = useState<readonly CatalogCategoryChoiceDto[]>([]);
   const [message, setMessage] = useState('Loading Products…');
   const [typeId, setTypeId] = useState('');
   const [query, setQuery] = useState('');
@@ -125,9 +137,19 @@ export function CatalogConsole() {
     Partial<Record<CatalogOverviewField, CatalogOverviewConflict>>
   >({});
   const [overviewError, setOverviewError] = useState('');
+  const [organizationBaseline, setOrganizationBaseline] = useState<CatalogOrganizationValues>();
+  const [organizationDraft, setOrganizationDraft] = useState<CatalogOrganizationValues>();
+  const [organizationConflicts, setOrganizationConflicts] = useState<
+    readonly CatalogOrganizationConflict[]
+  >([]);
+  const [organizationError, setOrganizationError] = useState('');
   const [busy, setBusy] = useState(false);
   const overviewDirty = isCatalogOverviewDirty(overviewBaseline, overviewDraft);
-  const hasUnsavedChanges = overviewDirty || createDirty;
+  const organizationDirty = isCatalogOrganizationDirty(organizationBaseline, organizationDraft);
+  const categoriesDirty = areCatalogCategoriesDirty(organizationBaseline, organizationDraft);
+  const attributesDirty = areCatalogAttributesDirty(organizationBaseline, organizationDraft);
+  const workspaceDirty = overviewDirty || organizationDirty;
+  const hasUnsavedChanges = workspaceDirty || createDirty;
 
   const reload = async (signal?: AbortSignal) => {
     try {
@@ -170,6 +192,11 @@ export function CatalogConsole() {
       })
       .catch((error: unknown) => {
         setMessage(error instanceof Error ? error.message : 'Unable to load Product types.');
+      });
+    void request<ApiEnvelope<readonly CatalogCategoryChoiceDto[]>>('/admin/catalog/categories')
+      .then((result) => setCategories(result.data))
+      .catch((error: unknown) => {
+        setMessage(error instanceof Error ? error.message : 'Unable to load Product categories.');
       });
     const productId = parameters.get('product');
     if (productId) {
@@ -232,26 +259,56 @@ export function CatalogConsole() {
     };
   }, [hasUnsavedChanges]);
 
-  function applyWorkspace(nextWorkspace: CatalogProductWorkspaceDto) {
+  function applyWorkspace(
+    nextWorkspace: CatalogProductWorkspaceDto,
+    options: { preserveOverview?: boolean; preserveOrganization?: boolean } = {},
+  ) {
     const overview = catalogOverviewFromWorkspace(nextWorkspace);
+    const organization = catalogOrganizationFromWorkspace(nextWorkspace);
     setSelected(nextWorkspace);
     setWorkspace(nextWorkspace);
-    setOverviewBaseline(overview);
-    setOverviewDraft(overview);
-    setOverviewConflicts({});
+    if (options.preserveOverview && overviewBaseline && overviewDraft) {
+      const merged = mergeCatalogOverview(overviewBaseline, overviewDraft, overview);
+      setOverviewBaseline(overview);
+      setOverviewDraft(merged.draft);
+      setOverviewConflicts(merged.conflicts);
+    } else {
+      setOverviewBaseline(overview);
+      setOverviewDraft(overview);
+      setOverviewConflicts({});
+    }
+    if (options.preserveOrganization && organizationBaseline && organizationDraft) {
+      const labels = Object.fromEntries(
+        nextWorkspace.organization.attributes.map((attribute) => [attribute.id, attribute.name]),
+      );
+      const merged = mergeCatalogOrganization(
+        organizationBaseline,
+        organizationDraft,
+        organization,
+        labels,
+      );
+      setOrganizationBaseline(organization);
+      setOrganizationDraft(merged.draft);
+      setOrganizationConflicts(merged.conflicts);
+    } else {
+      setOrganizationBaseline(organization);
+      setOrganizationDraft(organization);
+      setOrganizationConflicts([]);
+    }
     setOverviewError('');
+    setOrganizationError('');
   }
 
-  function confirmOverviewDiscard(): boolean {
+  function confirmWorkspaceDiscard(): boolean {
     return (
-      !overviewDirty ||
-      window.confirm('Discard your unsaved Product overview changes? This cannot be undone.')
+      !workspaceDirty ||
+      window.confirm('Discard your unsaved Product workspace changes? This cannot be undone.')
     );
   }
 
   function openCreateDrawer() {
-    if (overviewDirty) {
-      setMessage('Save or discard the open Product overview before creating another Product.');
+    if (workspaceDirty) {
+      setMessage('Save or discard the open Product changes before creating another Product.');
       return;
     }
     setCreateOpen(true);
@@ -268,17 +325,21 @@ export function CatalogConsole() {
   }
 
   function closeProductWorkspace() {
-    if (!confirmOverviewDiscard()) return;
+    if (!confirmWorkspaceDiscard()) return;
     setSelected(undefined);
     setWorkspace(undefined);
     setOverviewBaseline(undefined);
     setOverviewDraft(undefined);
     setOverviewConflicts({});
     setOverviewError('');
+    setOrganizationBaseline(undefined);
+    setOrganizationDraft(undefined);
+    setOrganizationConflicts([]);
+    setOrganizationError('');
   }
 
   async function openProduct(product: CatalogProductSummaryDto) {
-    if (selected?.id !== product.id && !confirmOverviewDiscard()) return;
+    if (selected?.id !== product.id && !confirmWorkspaceDiscard()) return;
     setSelected(product);
     setWorkspace(undefined);
     setWorkspaceLoading(true);
@@ -411,7 +472,7 @@ export function CatalogConsole() {
       const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
         `/admin/catalog/products/${workspace.id}`,
       );
-      applyWorkspace(refreshed.data);
+      applyWorkspace(refreshed.data, { preserveOrganization: true });
       setMessage('Product overview saved. Readiness has been recalculated.');
       await reload();
     } catch (error) {
@@ -422,11 +483,7 @@ export function CatalogConsole() {
           );
           const currentOverview = catalogOverviewFromWorkspace(current.data);
           const merged = mergeCatalogOverview(overviewBaseline, overviewDraft, currentOverview);
-          setSelected(current.data);
-          setWorkspace(current.data);
-          setOverviewBaseline(currentOverview);
-          setOverviewDraft(merged.draft);
-          setOverviewConflicts(merged.conflicts);
+          applyWorkspace(current.data, { preserveOverview: true, preserveOrganization: true });
           setOverviewError('');
           const conflictCount = Object.keys(merged.conflicts).length;
           setMessage(
@@ -476,10 +533,180 @@ export function CatalogConsole() {
     );
   }
 
+  function toggleCategory(categoryId: string, checked: boolean) {
+    setOrganizationDraft((current) => {
+      if (!current) return current;
+      const categoryIds = checked
+        ? [...new Set([...current.categoryIds, categoryId])].sort()
+        : current.categoryIds.filter((id) => id !== categoryId);
+      return {
+        ...current,
+        categoryIds,
+        primaryCategoryId:
+          !checked && current.primaryCategoryId === categoryId ? null : current.primaryCategoryId,
+      };
+    });
+    setOrganizationError('');
+  }
+
+  function updateAttribute(attributeId: string, value: string | boolean | null) {
+    setOrganizationDraft((current) =>
+      current
+        ? { ...current, attributeValues: { ...current.attributeValues, [attributeId]: value } }
+        : current,
+    );
+    setOrganizationError('');
+  }
+
+  async function recoverOrganizationDraft() {
+    if (
+      !workspace ||
+      !overviewBaseline ||
+      !overviewDraft ||
+      !organizationBaseline ||
+      !organizationDraft
+    )
+      return;
+    const current = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+      `/admin/catalog/products/${workspace.id}`,
+    );
+    const labels = Object.fromEntries(
+      current.data.organization.attributes.map((attribute) => [attribute.id, attribute.name]),
+    );
+    const organizationMerge = mergeCatalogOrganization(
+      organizationBaseline,
+      organizationDraft,
+      catalogOrganizationFromWorkspace(current.data),
+      labels,
+    );
+    const overviewMerge = mergeCatalogOverview(
+      overviewBaseline,
+      overviewDraft,
+      catalogOverviewFromWorkspace(current.data),
+    );
+    applyWorkspace(current.data, { preserveOverview: true, preserveOrganization: true });
+    const conflictCount =
+      organizationMerge.conflicts.length + Object.keys(overviewMerge.conflicts).length;
+    setMessage(
+      conflictCount > 0
+        ? `A newer Product version was loaded. Resolve ${conflictCount} conflicting workspace change${conflictCount === 1 ? '' : 's'}; your draft is preserved.`
+        : 'A newer Product version was loaded and merged with your draft. Review and save again.',
+    );
+  }
+
+  async function saveCategories(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspace || !organizationDraft || busy || !categoriesDirty) return;
+    if (organizationConflicts.length > 0) {
+      setOrganizationError('Resolve the stale workspace choices before saving categories.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await request(`/admin/catalog/products/${workspace.id}/categories`, {
+        method: 'PUT',
+        headers: { 'if-match': `"${workspace.version}"` },
+        body: JSON.stringify({
+          categoryIds: organizationDraft.categoryIds,
+          primaryCategoryId: organizationDraft.primaryCategoryId,
+        }),
+      });
+      const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+        `/admin/catalog/products/${workspace.id}`,
+      );
+      applyWorkspace(refreshed.data, { preserveOverview: true, preserveOrganization: true });
+      setMessage('Product categories saved. Your other workspace drafts were preserved.');
+      await reload();
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'STALE_VERSION') {
+        try {
+          await recoverOrganizationDraft();
+        } catch (refreshError) {
+          setOrganizationError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : 'The Product changed, but its latest version could not be loaded.',
+          );
+        }
+      } else {
+        setOrganizationError(error instanceof Error ? error.message : 'Unable to save categories.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveAttributes(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspace || !organizationDraft || busy || !attributesDirty) return;
+    if (organizationConflicts.length > 0) {
+      setOrganizationError('Resolve the stale workspace choices before saving attributes.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await request(`/admin/catalog/products/${workspace.id}/attributes`, {
+        method: 'PUT',
+        headers: { 'if-match': `"${workspace.version}"` },
+        body: JSON.stringify({
+          values: workspace.organization.attributes
+            .filter((attribute) => attribute.valueType !== 'REFERENCE')
+            .map((attribute) => ({
+              attributeDefinitionId: attribute.id,
+              value: organizationDraft.attributeValues[attribute.id] ?? null,
+            })),
+        }),
+      });
+      const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+        `/admin/catalog/products/${workspace.id}`,
+      );
+      applyWorkspace(refreshed.data, { preserveOverview: true, preserveOrganization: true });
+      setMessage('Product attributes saved. Your other workspace drafts were preserved.');
+      await reload();
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'STALE_VERSION') {
+        try {
+          await recoverOrganizationDraft();
+        } catch (refreshError) {
+          setOrganizationError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : 'The Product changed, but its latest version could not be loaded.',
+          );
+        }
+      } else {
+        setOrganizationError(
+          error instanceof Error ? error.message : 'Unable to save Product attributes.',
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resolveOrganizationConflicts(choice: 'LOCAL' | 'CURRENT') {
+    if (!organizationDraft || !organizationBaseline) return;
+    if (choice === 'CURRENT')
+      setOrganizationDraft(
+        useCurrentCatalogOrganizationConflicts(
+          organizationDraft,
+          organizationBaseline,
+          organizationConflicts,
+        ),
+      );
+    setOrganizationConflicts([]);
+    setOrganizationError('');
+    setMessage(
+      choice === 'CURRENT'
+        ? 'Current saved organization values accepted for conflicting fields.'
+        : 'Your organization draft retained. Save again to apply it to the current version.',
+    );
+  }
+
   async function publication(product: CatalogProductSummaryDto) {
     if (busy) return;
-    if (overviewDirty) {
-      setMessage('Save or discard the Product overview draft before changing publication.');
+    if (workspaceDirty) {
+      setMessage('Save or discard Product workspace changes before changing publication.');
       return;
     }
     const action = product.publicationStatus === 'PUBLISHED' ? 'unpublish' : 'publish';
@@ -508,6 +735,10 @@ export function CatalogConsole() {
       setOverviewDraft(undefined);
       setOverviewConflicts({});
       setOverviewError('');
+      setOrganizationBaseline(undefined);
+      setOrganizationDraft(undefined);
+      setOrganizationConflicts([]);
+      setOrganizationError('');
       await reload();
     } catch (error) {
       setMessage(
@@ -521,8 +752,8 @@ export function CatalogConsole() {
   async function createAxis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || busy) return;
-    if (overviewDirty) {
-      setMessage('Save or discard the Product overview draft before adding options.');
+    if (workspaceDirty) {
+      setMessage('Save or discard Product workspace changes before adding options.');
       return;
     }
     setBusy(true);
@@ -547,8 +778,8 @@ export function CatalogConsole() {
   async function createOptionValue(event: FormEvent<HTMLFormElement>, axisId: string) {
     event.preventDefault();
     if (!selected || busy) return;
-    if (overviewDirty) {
-      setMessage('Save or discard the Product overview draft before adding option values.');
+    if (workspaceDirty) {
+      setMessage('Save or discard Product workspace changes before adding option values.');
       return;
     }
     setBusy(true);
@@ -572,8 +803,8 @@ export function CatalogConsole() {
   async function createVariant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || !workspace || busy) return;
-    if (overviewDirty) {
-      setMessage('Save or discard the Product overview draft before creating a Variant.');
+    if (workspaceDirty) {
+      setMessage('Save or discard Product workspace changes before creating a Variant.');
       return;
     }
     const form = event.currentTarget;
@@ -991,6 +1222,249 @@ export function CatalogConsole() {
                 </form>
               </section>
             ) : null}
+            {workspace && organizationDraft && organizationBaseline ? (
+              <section className="product-organization-editor" id="organization">
+                <div className="section-heading">
+                  <div>
+                    <h3>Product organization</h3>
+                    <p>Assign discovery categories and complete this Product Type’s attributes.</p>
+                  </div>
+                  <StatusBadge status={organizationDirty ? 'UNSAVED' : 'UP TO DATE'} />
+                </div>
+                {organizationError ? (
+                  <p className="overview-error" role="alert">
+                    {organizationError}
+                  </p>
+                ) : null}
+                {organizationConflicts.length > 0 ? (
+                  <div className="overview-conflict" role="alert">
+                    <strong>Another operator changed the same organization details.</strong>
+                    <p>Choose which values to keep. Your draft has not been discarded.</p>
+                    <ul>
+                      {organizationConflicts.map((conflict) => (
+                        <li key={conflict.key}>
+                          <strong>{conflict.label}</strong>
+                          <span>
+                            Current:{' '}
+                            {Array.isArray(conflict.current)
+                              ? `${conflict.current.length} selected`
+                              : String(conflict.current ?? 'Empty')}
+                          </span>
+                          <span>
+                            Your draft:{' '}
+                            {Array.isArray(conflict.local)
+                              ? `${conflict.local.length} selected`
+                              : String(conflict.local ?? 'Empty')}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div>
+                      <button type="button" onClick={() => resolveOrganizationConflicts('CURRENT')}>
+                        Use current values
+                      </button>
+                      <button type="button" onClick={() => resolveOrganizationConflicts('LOCAL')}>
+                        Keep my draft
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                <form
+                  className="organization-form"
+                  onSubmit={(event) => void saveCategories(event)}
+                >
+                  <fieldset>
+                    <legend>Categories</legend>
+                    <p>Choose all relevant paths. A primary category defines the main placement.</p>
+                    <div className="category-choice-list">
+                      {categories.map((category) => (
+                        <label key={category.id}>
+                          <input
+                            checked={organizationDraft.categoryIds.includes(category.id)}
+                            type="checkbox"
+                            onChange={(event) => toggleCategory(category.id, event.target.checked)}
+                          />
+                          <span>{category.path}</span>
+                        </label>
+                      ))}
+                      {categories.length === 0 ? (
+                        <p>
+                          No active categories are available. Create taxonomy before assignment.
+                        </p>
+                      ) : null}
+                    </div>
+                    <label className="primary-category-field">
+                      <span>Primary category</span>
+                      <select
+                        disabled={organizationDraft.categoryIds.length === 0}
+                        value={organizationDraft.primaryCategoryId ?? ''}
+                        onChange={(event) =>
+                          setOrganizationDraft((current) =>
+                            current
+                              ? { ...current, primaryCategoryId: event.target.value || null }
+                              : current,
+                          )
+                        }
+                      >
+                        <option value="">No primary category</option>
+                        {categories
+                          .filter((category) => organizationDraft.categoryIds.includes(category.id))
+                          .map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.path}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </fieldset>
+                  <footer>
+                    <span role="status">
+                      {categoriesDirty ? 'Unsaved category changes' : 'Categories are up to date'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!categoriesDirty || busy}
+                      onClick={() =>
+                        setOrganizationDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                categoryIds: organizationBaseline.categoryIds,
+                                primaryCategoryId: organizationBaseline.primaryCategoryId,
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      Discard categories
+                    </button>
+                    <button
+                      className="button primary"
+                      type="submit"
+                      disabled={!categoriesDirty || busy || organizationConflicts.length > 0}
+                    >
+                      {busy ? 'Saving…' : 'Save categories'}
+                    </button>
+                  </footer>
+                </form>
+                <form
+                  className="organization-form"
+                  onSubmit={(event) => void saveAttributes(event)}
+                >
+                  <fieldset>
+                    <legend>Product Type attributes</legend>
+                    <p>
+                      Required fields are marked. These values power structured merchandising and
+                      filtering.
+                    </p>
+                    <div className="attribute-field-grid">
+                      {workspace.organization.attributes.map((attribute) => {
+                        const value = organizationDraft.attributeValues[attribute.id] ?? null;
+                        return (
+                          <label key={attribute.id}>
+                            <span>
+                              {attribute.name}
+                              {attribute.required ? <b aria-label="required"> *</b> : null}
+                            </span>
+                            {attribute.valueType === 'BOOLEAN' ? (
+                              <select
+                                required={attribute.required}
+                                value={value === null ? '' : String(value)}
+                                onChange={(event) =>
+                                  updateAttribute(
+                                    attribute.id,
+                                    event.target.value === ''
+                                      ? null
+                                      : event.target.value === 'true',
+                                  )
+                                }
+                              >
+                                <option value="">Not specified</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                              </select>
+                            ) : attribute.valueType === 'REFERENCE' ? (
+                              <input
+                                disabled
+                                value={typeof value === 'string' ? value : ''}
+                                placeholder="Reference selector not configured"
+                              />
+                            ) : attribute.valueType === 'TEXT' ? (
+                              <textarea
+                                maxLength={2000}
+                                required={attribute.required}
+                                rows={3}
+                                value={typeof value === 'string' ? value : ''}
+                                onChange={(event) =>
+                                  updateAttribute(attribute.id, event.target.value || null)
+                                }
+                              />
+                            ) : (
+                              <input
+                                inputMode={
+                                  attribute.valueType === 'DECIMAL' ? 'decimal' : undefined
+                                }
+                                maxLength={80}
+                                required={attribute.required}
+                                type={attribute.valueType === 'DATE' ? 'date' : 'text'}
+                                value={typeof value === 'string' ? value : ''}
+                                onChange={(event) =>
+                                  updateAttribute(attribute.id, event.target.value || null)
+                                }
+                              />
+                            )}
+                            <small>
+                              {attribute.valueType === 'REFERENCE'
+                                ? 'Read-only until a tenant-scoped reference selector is configured.'
+                                : [
+                                    attribute.valueType.toLowerCase(),
+                                    attribute.filterable ? 'filterable' : '',
+                                    attribute.searchable ? 'searchable' : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                            </small>
+                          </label>
+                        );
+                      })}
+                      {workspace.organization.attributes.length === 0 ? (
+                        <p className="empty-inline">
+                          This Product Type has no active Product attributes.
+                        </p>
+                      ) : null}
+                    </div>
+                  </fieldset>
+                  <footer>
+                    <span role="status">
+                      {attributesDirty ? 'Unsaved attribute changes' : 'Attributes are up to date'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!attributesDirty || busy}
+                      onClick={() =>
+                        setOrganizationDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                attributeValues: organizationBaseline.attributeValues,
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      Discard attributes
+                    </button>
+                    <button
+                      className="button primary"
+                      type="submit"
+                      disabled={!attributesDirty || busy || organizationConflicts.length > 0}
+                    >
+                      {busy ? 'Saving…' : 'Save attributes'}
+                    </button>
+                  </footer>
+                </form>
+              </section>
+            ) : null}
             <section className="publish-readiness">
               <div>
                 <strong>Publishing readiness</strong>
@@ -1018,7 +1492,7 @@ export function CatalogConsole() {
                 disabled={
                   busy ||
                   workspaceLoading ||
-                  overviewDirty ||
+                  workspaceDirty ||
                   Object.keys(overviewConflicts).length > 0 ||
                   (selected.publicationStatus !== 'PUBLISHED' && !workspace?.readiness.canPublish)
                 }
@@ -1027,12 +1501,12 @@ export function CatalogConsole() {
               >
                 {selected.publicationStatus === 'PUBLISHED' ? <Archive /> : <CheckCircle2 />}
                 {selected.publicationStatus === 'PUBLISHED'
-                  ? overviewDirty
-                    ? 'Save overview before unpublishing'
+                  ? workspaceDirty
+                    ? 'Save Product changes before unpublishing'
                     : 'Unpublish Product'
                   : workspace?.readiness.canPublish
-                    ? overviewDirty
-                      ? 'Save overview before publishing'
+                    ? workspaceDirty
+                      ? 'Save Product changes before publishing'
                       : 'Publish Product'
                     : 'Resolve blockers to publish'}
               </button>

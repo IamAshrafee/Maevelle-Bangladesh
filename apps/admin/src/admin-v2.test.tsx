@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 import { StatusBadge } from '../components/status-badge';
 import { isCatalogOverviewDirty, mergeCatalogOverview } from '../components/catalog-overview-state';
+import {
+  isCatalogOrganizationDirty,
+  mergeCatalogOrganization,
+} from '../components/catalog-organization-state';
 import { parseCatalogImportCsv } from '../components/operations-console';
 import {
   filterAndSortWorklist,
@@ -52,6 +56,54 @@ describe('Admin V2 interface contracts', () => {
       description: { local: 'My revised copy', current: 'Another operator copy' },
     });
     expect(isCatalogOverviewDirty(baseline, merged.draft)).toBe(true);
+  });
+
+  it('preserves local Product organization edits while merging unrelated current changes', () => {
+    const baseline = {
+      categoryIds: ['dresses'],
+      primaryCategoryId: 'dresses',
+      attributeValues: { material: 'Cotton', washable: false },
+    };
+    const merged = mergeCatalogOrganization(
+      baseline,
+      {
+        ...baseline,
+        categoryIds: ['dresses', 'occasion'],
+        attributeValues: { ...baseline.attributeValues, material: 'Linen' },
+      },
+      {
+        ...baseline,
+        attributeValues: { material: 'Silk', washable: true },
+      },
+      { material: 'Material', washable: 'Machine washable' },
+    );
+
+    expect(merged.draft).toEqual({
+      categoryIds: ['dresses', 'occasion'],
+      primaryCategoryId: 'dresses',
+      attributeValues: { material: 'Linen', washable: true },
+    });
+    expect(merged.conflicts).toEqual([
+      { key: 'material', label: 'Material', local: 'Linen', current: 'Silk' },
+    ]);
+    expect(isCatalogOrganizationDirty(baseline, merged.draft)).toBe(true);
+  });
+
+  it('drops attributes that do not belong to the current Product Type during recovery', () => {
+    const previous = {
+      categoryIds: [],
+      primaryCategoryId: null,
+      attributeValues: { obsolete: 'Old type value' },
+    };
+    const merged = mergeCatalogOrganization(
+      previous,
+      previous,
+      { categoryIds: [], primaryCategoryId: null, attributeValues: { current: null } },
+      { current: 'Current field' },
+    );
+
+    expect(merged.draft.attributeValues).toEqual({ current: null });
+    expect(merged.conflicts).toEqual([]);
   });
 
   it('filters and sorts operational worklists without changing the source array', () => {

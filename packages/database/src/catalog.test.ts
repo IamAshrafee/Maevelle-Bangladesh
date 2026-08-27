@@ -343,6 +343,25 @@ describe('catalog invariants', () => {
         values (${fixture.productTypeId},${attribute.id}::uuid,${attribute.code === 'material'})
       `.execute(database.db);
     const byCode = new Map(attributes.rows.map((attribute) => [attribute.code, attribute.id]));
+    const legacyReference = await sql<{ id: string }>`
+      insert into catalog.attribute_definitions
+        (organization_id,code,name,value_type,scope)
+      values (${fixture.organizationId},'legacy-reference','Legacy reference','REFERENCE','PRODUCT')
+      returning id::text
+    `.execute(database.db);
+    await sql`
+      insert into catalog.product_type_attributes
+        (product_type_id,attribute_definition_id,is_required)
+      values (${fixture.productTypeId},${legacyReference.rows[0]!.id}::uuid,true)
+    `.execute(database.db);
+    await sql`
+      insert into catalog.product_attribute_values
+        (organization_id,product_id,attribute_definition_id,value_reference_id)
+      values (
+        ${fixture.organizationId},${product.id}::uuid,
+        ${legacyReference.rows[0]!.id}::uuid,${crypto.randomUUID()}::uuid
+      )
+    `.execute(database.db);
     const attributed = await setCatalogProductAttributes(database.db, {
       ...fixture,
       productId: product.id,
@@ -365,6 +384,13 @@ describe('catalog invariants', () => {
         expect.objectContaining({ code: 'washable', value: false }),
       ]),
     });
+    const preservedReference = await sql<{ count: string }>`
+      select count(*)::text as count from catalog.product_attribute_values
+      where organization_id=${fixture.organizationId} and product_id=${product.id}::uuid
+        and attribute_definition_id=${legacyReference.rows[0]!.id}::uuid
+        and value_reference_id is not null
+    `.execute(database.db);
+    expect(preservedReference.rows[0]?.count).toBe('1');
     await expect(
       setCatalogProductAttributes(database.db, {
         ...fixture,
