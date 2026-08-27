@@ -17,17 +17,16 @@ Stage 3 — Taxonomy, attributes, structured information, FAQ, and SEO.
 
 ## Last completed action
 
-Stage 2 added explicit Product overview editing, active Product Type changes,
-`If-Match` optimistic concurrency, three-way stale-draft merging, inline conflict
-choices, deep-link preservation, and create/overview draft-loss guards. Commit:
-`c364860`.
+Stage 3's backend foundation added tenant-scoped category choices and atomic
+Product category/primary-category assignment, plus Product Type-driven typed
+attribute reads and writes with required-value and optimistic-concurrency
+enforcement. Commit: `d90d817`.
 
 ## Next exact action
 
-Inventory existing category, attribute-definition/value, and Storefront metadata
-models. Implement the smallest coherent Product organization slice: category
-assignment plus Product Type-driven required/optional attribute values, with
-tenant-scoped commands, truthful readiness, and Admin editing.
+Build the Admin Product Organization editor on the verified taxonomy and typed
+attribute commands, including draft-loss protection, stale-version recovery,
+inline validation, and accessible required/optional controls.
 
 ## Do not switch areas
 

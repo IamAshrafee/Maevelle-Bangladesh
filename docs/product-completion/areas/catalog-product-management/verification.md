@@ -1,7 +1,7 @@
 # Catalog Product Management Verification
 
-Status: `ACTIVE_IMPLEMENTATION` — Stages 1–2 verified; area completion gate not yet
-evaluated.
+Status: `ACTIVE_IMPLEMENTATION` — Stages 1–2 and the Stage 3 backend foundation
+verified; area completion gate not yet evaluated.
 
 ## Evidence required before completion
 
@@ -54,3 +54,20 @@ area completion, staging readiness, production readiness, or visual acceptance.
   browser session was signed out and no connected Chrome session existed.
 
 This proves the local Stage 2 code and recovery model, not the Catalog area gate.
+
+## Stage 3 backend foundation evidence — commit `d90d817`
+
+- `pnpm typecheck`, focused Prettier, focused ESLint, and `git diff --check` —
+  passed.
+- Focused API and PostgreSQL Catalog tests — 2 files / 12 tests passed.
+- PostgreSQL tests prove nested active-category paths, category and primary
+  assignment, typed text and Boolean persistence, required-value rejection,
+  stale-version rollback, and preservation of explicit Boolean `false`.
+- API tests prove invalid category IDs and unsafe attribute payload shapes are
+  rejected before authorization/database execution; valid shapes remain protected.
+- Integer, decimal, and date values are bounded and validated before typed-column
+  insertion. Reference values remain deliberately non-editable until a scoped
+  reference selector exists.
+
+This is a backend foundation checkpoint. Admin interaction, the full Stage 3 gate,
+and broader regression/build/browser evidence are still pending.

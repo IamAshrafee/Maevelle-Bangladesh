@@ -34,8 +34,18 @@
   overview or create-drawer drafts on close, internal navigation, or page exit.
 - Verified 139 tests, API/Admin builds, typecheck, lint, architecture and secret
   checks, a healthy rebuilt Compose stack, and an error-free Admin login surface.
+- Completed the Stage 3 backend foundation in `d90d817`.
+- Added a tenant-scoped active category tree, atomic category and primary-category
+  assignment, and Product Type-driven active Product attribute reads and writes.
+- Persisted text, integer, decimal, Boolean, and date values through their typed
+  columns; rejected unconfigured reference editing, invalid ranges/dates,
+  cross-tenant or inactive inputs, missing required values, and stale commands.
+- Preserved explicit Boolean `false` values and serialized optimistic updates
+  before replacing category or attribute rows, so stale commands roll back safely.
+- Verified typecheck, focused lint, API schema boundaries, and 12 focused API and
+  PostgreSQL tests.
 
 ## Next
 
-Implement Stage 3 taxonomy assignment and Product Type-driven attribute values,
-then structured information, FAQ, and SEO.
+Finish the Stage 3 Admin Organization editor, then implement structured
+information, FAQ, and SEO.
