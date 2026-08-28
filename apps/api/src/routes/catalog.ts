@@ -13,6 +13,8 @@ import {
   createCatalogVariant,
   getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
+  listCatalogCategories,
+  updateCatalogCategory,
   listCatalogCategoryChoices,
   listStorefrontCatalogProducts,
   listCatalogProductWorkItems,
@@ -120,6 +122,55 @@ export function registerCatalogRoutes(
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCatalogCategoryChoices(database.db, context.organizationId) };
   });
+
+  app.get('/admin/catalog/category-tree', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listCatalogCategories(database.db, context.organizationId) };
+  });
+
+  app.patch(
+    '/admin/catalog/categories/:categoryId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          name: Type.Optional(Type.String({ minLength: 1 })),
+          handle: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
+          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('INACTIVE'), Type.Literal('ARCHIVED')])),
+          parentCategoryId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          position: Type.Optional(Type.Integer({ minimum: 0 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          version: number;
+          name?: string;
+          handle?: string;
+          status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+          parentCategoryId?: string | null;
+          position?: number;
+        };
+        await updateCatalogCategory(database.db, {
+          organizationId: context.organizationId,
+          categoryId: (request.params as { categoryId: string }).categoryId,
+          expectedVersion: body.version,
+          ...(body.name !== undefined ? { name: body.name } : {}),
+          ...(body.handle !== undefined ? { handle: body.handle } : {}),
+          ...(body.status !== undefined ? { status: body.status } : {}),
+          ...(body.parentCategoryId !== undefined ? { parentCategoryId: body.parentCategoryId } : {}),
+          ...(body.position !== undefined ? { position: body.position } : {}),
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
 
   app.post(
     '/admin/catalog/product-types',

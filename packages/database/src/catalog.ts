@@ -1964,3 +1964,205 @@ export async function getStorefrontCatalogProduct(
     faqs: faqs.rows.map((faq) => ({ question: faq.question, answer: faq.answer })),
   };
 }
+export async function listCatalogCategories(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly {
+  id: string;
+  name: string;
+  handle: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  effectiveStatus: 'ACTIVE' | 'INACTIVE';
+  effectiveStatusReason: 'ACTIVE' | 'SELF_INACTIVE' | 'ANCESTOR_INACTIVE';
+  parentCategoryId: string | null;
+  path: string;
+  depth: number;
+  position: number;
+  productCount: number;
+  childCount: number;
+  version: number;
+  updatedAt: string;
+}[]> {
+  const result = await sql<{
+    id: string;
+    name: string;
+    handle: string;
+    status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+    parent_category_id: string | null;
+    position: number;
+    effective_status: 'ACTIVE' | 'INACTIVE';
+    effective_status_reason: 'ACTIVE' | 'SELF_INACTIVE' | 'ANCESTOR_INACTIVE';
+    path: string;
+    depth: number;
+    version: number;
+    updated_at: Date;
+    product_count: string;
+    child_count: string;
+  }>`
+    with recursive category_tree as (
+      select 
+        category.id,
+        category.name,
+        category.handle,
+        category.status,
+        category.parent_category_id,
+        category.position,
+        category.version,
+        category.updated_at,
+        case 
+          when category.status = 'ACTIVE' then 'ACTIVE' 
+          else 'INACTIVE' 
+        end::text as effective_status,
+        case 
+          when category.status = 'ACTIVE' then 'ACTIVE' 
+          else 'SELF_INACTIVE' 
+        end::text as effective_status_reason,
+        category.name::text as path,
+        0::integer as depth,
+        array[category.id] as visited
+      from catalog.categories category
+      where category.organization_id=${organizationId}
+        and category.parent_category_id is null
+        
+      union all
+      
+      select 
+        child.id,
+        child.name,
+        child.handle,
+        child.status,
+        child.parent_category_id,
+        child.position,
+        child.version,
+        child.updated_at,
+        case 
+          when parent.effective_status = 'INACTIVE' or parent.status = 'ARCHIVED' then 'INACTIVE'
+          when child.status = 'ACTIVE' then 'ACTIVE' 
+          else 'INACTIVE' 
+        end::text as effective_status,
+        case 
+          when parent.effective_status = 'INACTIVE' or parent.status = 'ARCHIVED' then 'ANCESTOR_INACTIVE'
+          when child.status = 'ACTIVE' then 'ACTIVE' 
+          else 'SELF_INACTIVE' 
+        end::text as effective_status_reason,
+        (parent.path || ' / ' || child.name)::text,
+        parent.depth+1,
+        parent.visited || child.id
+      from catalog.categories child
+      join category_tree parent on parent.id=child.parent_category_id
+      where child.organization_id=${organizationId}
+        and not child.id=any(parent.visited)
+    )
+    select 
+      tree.id::text,
+      tree.name,
+      tree.handle,
+      tree.status,
+      tree.parent_category_id::text,
+      tree.position::integer,
+      tree.version::integer,
+      tree.updated_at,
+      tree.effective_status,
+      tree.effective_status_reason,
+      tree.path,
+      tree.depth,
+      (select count(*)::text from catalog.product_categories pc where pc.category_id = tree.id and pc.organization_id = ${organizationId}) as product_count,
+      (select count(*)::text from catalog.categories c where c.parent_category_id = tree.id and c.organization_id = ${organizationId}) as child_count
+    from category_tree tree
+    order by tree.path, tree.position, tree.id
+  `.execute(db);
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    handle: row.handle,
+    status: row.status,
+    effectiveStatus: row.effective_status as 'ACTIVE' | 'INACTIVE',
+    effectiveStatusReason: row.effective_status_reason as 'ACTIVE' | 'SELF_INACTIVE' | 'ANCESTOR_INACTIVE',
+    parentCategoryId: row.parent_category_id,
+    path: row.path,
+    depth: row.depth,
+    position: row.position,
+    productCount: Number(row.product_count),
+    childCount: Number(row.child_count),
+    version: row.version,
+    updatedAt: row.updated_at.toISOString(),
+  }));
+}
+
+export async function updateCatalogCategory(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    categoryId: string;
+    name?: string;
+    handle?: string;
+    status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+    parentCategoryId?: string | null;
+    position?: number;
+    expectedVersion: number;
+  },
+): Promise<void> {
+  await db.transaction().execute(async (transaction) => {
+    // 1. check cycle if parentCategoryId is provided and different
+    if (input.parentCategoryId !== undefined) {
+      if (input.parentCategoryId) {
+        const invalid = await sql<{ found: boolean }>`
+          with recursive descendants as (
+            select id from catalog.categories where id = ${input.categoryId} and organization_id = ${input.organizationId}
+            union all
+            select child.id from catalog.categories child join descendants on child.parent_category_id = descendants.id
+            where child.organization_id = ${input.organizationId}
+          ) select exists(select 1 from descendants where id = ${input.parentCategoryId}) as found
+        `.execute(transaction);
+        if (invalid.rows[0]?.found)
+          throw new CatalogDomainError(
+            'CATEGORY_CYCLE',
+            'A category cannot be moved under itself or a descendant.',
+          );
+      }
+    }
+
+    // 2. if handle is updated, handle history
+    if (input.handle) {
+      const current = await sql<{ handle: string }>`
+        select handle from catalog.categories where id=${input.categoryId} and organization_id=${input.organizationId}
+      `.execute(transaction);
+      if (current.rows.length === 0) throw new CatalogDomainError('NOT_FOUND', 'Category not found');
+      
+      const oldHandle = current.rows[0]?.handle;
+      if (oldHandle && oldHandle !== input.handle) {
+        await sql`
+          insert into catalog.category_handle_history (organization_id, category_id, old_handle)
+          values (${input.organizationId}, ${input.categoryId}, ${oldHandle})
+          on conflict do nothing
+        `.execute(transaction);
+      }
+    }
+
+    // 3. Update category
+    const parts = [];
+    if (input.name !== undefined) parts.push(sql`name = ${input.name}`);
+    if (input.handle !== undefined) parts.push(sql`handle = ${input.handle}`);
+    if (input.status !== undefined) parts.push(sql`status = ${input.status}`);
+    if (input.parentCategoryId !== undefined) parts.push(sql`parent_category_id = ${input.parentCategoryId ?? null}`);
+    if (input.position !== undefined) parts.push(sql`position = ${input.position}`);
+
+    if (parts.length === 0) return;
+
+    parts.push(sql`version = version + 1`, sql`updated_at = now()`);
+
+    const updateQuery = sql`
+      update catalog.categories
+      set ${sql.join(parts, sql`, `)}
+      where id = ${input.categoryId} 
+        and organization_id = ${input.organizationId} 
+        and version = ${input.expectedVersion}
+    `;
+
+    const result = await updateQuery.execute(transaction);
+    if (Number(result.numAffectedRows) !== 1) {
+      throw new CatalogDomainError('STALE_VERSION', 'Category was not found or has changed.');
+    }
+  });
+}
