@@ -1,671 +1,696 @@
 'use client';
 
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { BookOpen, Loader2, Plus, RefreshCw, Search } from 'lucide-react';
+import { type FormEvent, useEffect, useState } from 'react';
 
 import type {
   ApiEnvelope,
   CatalogVariantChoiceDto,
+  InboundReceiptDto,
+  InboundShipmentDto,
+  PurchaseDto,
+  SupplierDto,
+  SupplyOverviewDto,
   WarehouseLocationDto,
 } from '@maevelle/contracts';
 
-type Screen = 'suppliers' | 'purchases' | 'shipments' | 'receiving';
+import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
+import {
+  PurchaseForm,
+  ReceiptForm,
+  ShipmentForm,
+  SupplierForm,
+} from '@/components/supply/supply-forms';
+import { SupplyField as Field } from '@/components/supply/supply-field';
+import { SupplyNavigation } from '@/components/supply/supply-navigation';
+import {
+  HowToDialog,
+  PAGE_SIZE,
+  Pager,
+  screenCopy,
+  StatCards,
+} from '@/components/supply/supply-page-ui';
+import {
+  PurchasesTable,
+  ReceiptsTable,
+  ShipmentsTable,
+  SuppliersTable,
+} from '@/components/supply/supply-tables';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { supplyRequest as request } from '@/lib/supply/api';
+import type {
+  ConfirmSupplyAction,
+  PagedEnvelope,
+  ReceiptDraftLine,
+  ShipmentDraftLine,
+  SupplyNotice,
+  SupplyScreen,
+} from '@/lib/supply/types';
 
-interface Supplier {
-  id: string;
-  code: string;
-  name: string;
-  status: string;
-  contactName?: string;
-  contactEmail?: string;
-  contactPhone?: string;
-  version: number;
-}
-interface Purchase {
-  id: string;
-  purchaseNumber: string;
-  supplierName: string;
-  currencyCode: string;
-  status: string;
-  version: number;
-  lines: readonly {
-    id: string;
-    sku: string;
-    productTitle: string;
-    quantity: string;
-    unitPrice: string;
-  }[];
-}
-interface Shipment {
-  id: string;
-  shipmentNumber: string;
-  receivingLocationName: string;
-  transportMode: string;
-  status: string;
-  receivingStatus: string;
-  version: number;
-  allocations: readonly {
-    id: string;
-    purchaseNumber: string;
-    sku: string;
-    productTitle: string;
-    supplierName: string;
-    allocatedQuantity: string;
-    receivedQuantity: string;
-  }[];
-}
-interface Receipt {
-  id: string;
-  receiptNumber: string;
-  shipmentId: string;
-  status: string;
-  lines: readonly { condition: string; quantity: string }[];
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    credentials: 'include',
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  const body = (await response.json().catch(() => ({}))) as T & {
-    error?: { message?: string } | string;
-  };
-  if (!response.ok) {
-    const error = body.error;
-    throw new Error(
-      typeof error === 'string' ? error : (error?.message ?? 'The command was rejected.'),
-    );
-  }
-  return body;
-}
-
-function formatMoney(amount: string, currency: string) {
-  return new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 4,
-  }).format(Number(amount));
-}
-
-export function ProcurementConsole({ screen }: { readonly screen: Screen }) {
-  const [suppliers, setSuppliers] = useState<readonly Supplier[]>([]);
-  const [purchases, setPurchases] = useState<readonly Purchase[]>([]);
-  const [shipments, setShipments] = useState<readonly Shipment[]>([]);
-  const [receipts, setReceipts] = useState<readonly Receipt[]>([]);
+export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }) {
+  const [suppliers, setSuppliers] = useState<readonly SupplierDto[]>([]);
+  const [purchases, setPurchases] = useState<readonly PurchaseDto[]>([]);
+  const [shipments, setShipments] = useState<readonly InboundShipmentDto[]>([]);
+  const [receipts, setReceipts] = useState<readonly InboundReceiptDto[]>([]);
   const [variants, setVariants] = useState<readonly CatalogVariantChoiceDto[]>([]);
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
-  const [message, setMessage] = useState('');
+  const [overview, setOverview] = useState<SupplyOverviewDto>();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<SupplyNotice>();
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<SupplierDto>();
+  const [linePurchase, setLinePurchase] = useState<PurchaseDto>();
+  const [expandedPurchase, setExpandedPurchase] = useState<string>();
+  const [expandedShipment, setExpandedShipment] = useState<string>();
+  const [confirmAction, setConfirmAction] = useState<ConfirmSupplyAction>();
+  const [shipmentLines, setShipmentLines] = useState<ShipmentDraftLine[]>([]);
+  const [receiptShipmentId, setReceiptShipmentId] = useState('');
+  const [receiptLines, setReceiptLines] = useState<ReceiptDraftLine[]>([]);
 
-  const reload = async () => {
+  async function reload() {
     setLoading(true);
-    setMessage('');
     try {
-      const tasks: Promise<void>[] = [];
-      if (screen === 'suppliers' || screen === 'purchases')
-        tasks.push(
-          request<ApiEnvelope<readonly Supplier[]>>('/admin/suppliers').then((value) =>
-            setSuppliers(value.data),
-          ),
-        );
-      if (screen === 'suppliers' || screen === 'purchases' || screen === 'shipments')
-        tasks.push(
-          request<ApiEnvelope<readonly Purchase[]>>('/admin/purchases').then((value) =>
-            setPurchases(value.data),
-          ),
-        );
-      if (screen === 'purchases')
-        tasks.push(
-          request<ApiEnvelope<readonly CatalogVariantChoiceDto[]>>('/admin/catalog/variants').then(
-            (value) => setVariants(value.data),
-          ),
-        );
-      if (screen === 'shipments' || screen === 'receiving')
-        tasks.push(
-          request<ApiEnvelope<readonly Shipment[]>>('/admin/inbound-shipments').then((value) =>
-            setShipments(value.data),
-          ),
-        );
-      if (screen === 'shipments')
-        tasks.push(
-          request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations').then(
-            (value) => setLocations(value.data),
-          ),
-        );
-      if (screen === 'receiving')
-        tasks.push(
-          request<ApiEnvelope<readonly Receipt[]>>('/admin/inbound-receipts').then((value) =>
-            setReceipts(value.data),
-          ),
-        );
-      await Promise.all(tasks);
+      const summary = request<ApiEnvelope<SupplyOverviewDto>>('/admin/supply/overview');
+      if (screen === 'suppliers') {
+        const [a, b, c] = await Promise.all([
+          summary,
+          request<PagedEnvelope<SupplierDto>>('/admin/suppliers?pageSize=100'),
+          request<PagedEnvelope<PurchaseDto>>('/admin/purchases?pageSize=100'),
+        ]);
+        setOverview(a.data);
+        setSuppliers(b.data);
+        setPurchases(c.data);
+      } else if (screen === 'purchases') {
+        const [a, b, c, d, e] = await Promise.all([
+          summary,
+          request<PagedEnvelope<SupplierDto>>('/admin/suppliers?pageSize=100'),
+          request<PagedEnvelope<PurchaseDto>>('/admin/purchases?pageSize=100'),
+          request<ApiEnvelope<readonly CatalogVariantChoiceDto[]>>('/admin/catalog/variants'),
+          request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations'),
+        ]);
+        setOverview(a.data);
+        setSuppliers(b.data);
+        setPurchases(c.data);
+        setVariants(d.data);
+        setLocations(e.data);
+      } else if (screen === 'shipments') {
+        const [a, b, c, d] = await Promise.all([
+          summary,
+          request<PagedEnvelope<PurchaseDto>>('/admin/purchases?pageSize=100'),
+          request<PagedEnvelope<InboundShipmentDto>>('/admin/inbound-shipments?pageSize=100'),
+          request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations'),
+        ]);
+        setOverview(a.data);
+        setPurchases(b.data);
+        setShipments(c.data);
+        setLocations(d.data);
+      } else {
+        const [a, b, c] = await Promise.all([
+          summary,
+          request<PagedEnvelope<InboundShipmentDto>>('/admin/inbound-shipments?pageSize=100'),
+          request<PagedEnvelope<InboundReceiptDto>>('/admin/inbound-receipts?pageSize=100'),
+        ]);
+        setOverview(a.data);
+        setShipments(b.data);
+        setReceipts(c.data);
+      }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to load this operation.');
+      setNotice({
+        tone: 'danger',
+        message: error instanceof Error ? error.message : 'Supply data could not be loaded.',
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }
+
   useEffect(() => {
     void reload();
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('create')) setCreateOpen(true);
   }, [screen]);
 
-  const draftPurchases = purchases.filter((purchase) => purchase.status === 'DRAFT');
+  const allItems =
+    screen === 'suppliers'
+      ? suppliers
+      : screen === 'purchases'
+        ? purchases
+        : screen === 'shipments'
+          ? shipments
+          : receipts;
+  const statuses = [...new Set(allItems.map((item) => item.status))];
+  const filtered = allItems.filter((item) => {
+    const text =
+      screen === 'suppliers'
+        ? `${(item as SupplierDto).name} ${(item as SupplierDto).code} ${(item as SupplierDto).contactName ?? ''}`
+        : screen === 'purchases'
+          ? `${(item as PurchaseDto).purchaseNumber} ${(item as PurchaseDto).supplierName} ${(item as PurchaseDto).lines.map((line) => `${line.productTitle} ${line.sku}`).join(' ')}`
+          : screen === 'shipments'
+            ? `${(item as InboundShipmentDto).shipmentNumber} ${(item as InboundShipmentDto).trackingReference ?? ''} ${(item as InboundShipmentDto).receivingLocationName}`
+            : `${(item as InboundReceiptDto).receiptNumber} ${shipments.find((shipment) => shipment.id === (item as InboundReceiptDto).shipmentId)?.shipmentNumber ?? ''}`;
+    return (
+      (!query.trim() || text.toLowerCase().includes(query.trim().toLowerCase())) &&
+      (status === 'ALL' || item.status === status)
+    );
+  });
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const shippableLines = purchases.flatMap((purchase) =>
     purchase.status === 'PLACED'
-      ? purchase.lines.map((line) => ({ ...line, purchaseNumber: purchase.purchaseNumber }))
+      ? purchase.lines
+          .filter((line) => Number(line.allocatedQuantity) < Number(line.quantity))
+          .map((line) => ({ ...line, purchase }))
       : [],
   );
-  const receivableAllocations = useMemo(
-    () =>
-      shipments.flatMap((shipment) =>
-        shipment.status === 'ARRIVED'
-          ? shipment.allocations
-              .filter(
-                (allocation) =>
-                  Number(allocation.allocatedQuantity) > Number(allocation.receivedQuantity),
-              )
-              .map((allocation) => ({ ...allocation, shipment }))
-          : [],
-      ),
-    [shipments],
+  const receivableShipments = shipments.filter(
+    (shipment) => shipment.status === 'ARRIVED' && shipment.receivingStatus !== 'RECEIVED',
   );
-
-  async function createSupplier(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      await request('/admin/suppliers', {
-        method: 'POST',
-        body: JSON.stringify({
-          code: form.get('code'),
-          name: form.get('name'),
-          contactName: form.get('contactName') || undefined,
-          contactEmail: form.get('contactEmail') || undefined,
-          contactPhone: form.get('contactPhone') || undefined,
-        }),
-      });
-      event.currentTarget.reset();
-      setMessage('Supplier created.');
-      await reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Supplier could not be created.');
-    }
-  }
-
-  async function createPurchase(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      await request('/admin/purchases', {
-        method: 'POST',
-        body: JSON.stringify({
-          supplierId: form.get('supplierId'),
-          currencyCode: form.get('currencyCode'),
-        }),
-      });
-      event.currentTarget.reset();
-      setMessage('Draft purchase created. Add catalog lines, then place it when ready.');
-      await reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Purchase could not be created.');
-    }
-  }
-
-  async function addPurchaseLine(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const purchaseId = String(form.get('purchaseId'));
-    try {
-      await request(`/admin/purchases/${purchaseId}/lines`, {
-        method: 'POST',
-        body: JSON.stringify({
-          variantId: form.get('variantId'),
-          quantity: form.get('quantity'),
-          unitPrice: form.get('unitPrice'),
-        }),
-      });
-      event.currentTarget.reset();
-      setMessage('Purchase line added.');
-      await reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Purchase line could not be added.');
-    }
-  }
-
-  async function placePurchase(purchase: Purchase) {
-    try {
-      await request(`/admin/purchases/${purchase.id}/place`, {
-        method: 'POST',
-        body: JSON.stringify({ version: purchase.version }),
-      });
-      setMessage('Purchase placed. It can now be allocated to an inbound shipment.');
-      await reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Purchase could not be placed.');
-    }
-  }
-
-  async function createShipment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      await request('/admin/inbound-shipments', {
-        method: 'POST',
-        body: JSON.stringify({
-          receivingLocationId: form.get('receivingLocationId'),
-          transportMode: form.get('transportMode'),
-          allocations: [
-            { purchaseLineId: form.get('purchaseLineId'), quantity: form.get('quantity') },
-          ],
-        }),
-      });
-      event.currentTarget.reset();
-      setMessage('Inbound shipment planned. Arrival does not change stock.');
-      await reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Shipment could not be planned.');
-    }
-  }
-
-  async function arrive(shipment: Shipment) {
-    try {
-      await request(`/admin/inbound-shipments/${shipment.id}/arrive`, {
-        method: 'POST',
-        headers: { 'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({ version: shipment.version }),
-      });
-      setMessage('Shipment arrival recorded. Stock changes only after receipt posting.');
-      await reload();
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'Shipment arrival could not be recorded.',
-      );
-    }
-  }
-
-  async function postReceipt(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const selection = receivableAllocations.find(
-      (allocation) => allocation.id === form.get('shipmentAllocationId'),
+  const receivableAllocations = receivableShipments
+    .filter((shipment) => !receiptShipmentId || shipment.id === receiptShipmentId)
+    .flatMap((shipment) =>
+      shipment.allocations
+        .filter((line) => Number(line.receivedQuantity) < Number(line.allocatedQuantity))
+        .map((line) => ({ ...line, shipment })),
     );
-    if (!selection) {
-      setMessage('Choose an arrived shipment line that still has quantity to receive.');
+
+  async function run(action: () => Promise<unknown>, success: string, close?: () => void) {
+    setSaving(true);
+    setNotice(undefined);
+    try {
+      await action();
+      close?.();
+      setNotice({ tone: 'success', message: success });
+      await reload();
+    } catch (error) {
+      setNotice({
+        tone: 'danger',
+        message: error instanceof Error ? error.message : 'This action could not be completed.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function createSupplier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void run(
+      () =>
+        request('/admin/suppliers', {
+          method: 'POST',
+          body: JSON.stringify({
+            code: form.get('code'),
+            name: form.get('name'),
+            supplierType: form.get('supplierType'),
+            countryCode: form.get('countryCode') || undefined,
+            preferredCurrencyCode: form.get('preferredCurrencyCode') || undefined,
+            leadTimeDays: form.get('leadTimeDays') ? Number(form.get('leadTimeDays')) : undefined,
+            paymentTerms: form.get('paymentTerms') || undefined,
+            websiteUrl: form.get('websiteUrl') || undefined,
+            contactName: form.get('contactName') || undefined,
+            contactEmail: form.get('contactEmail') || undefined,
+            contactPhone: form.get('contactPhone') || undefined,
+            notes: form.get('notes') || undefined,
+          }),
+        }),
+      'Supplier added. It is ready for new purchases.',
+      () => setCreateOpen(false),
+    );
+  }
+
+  function saveSupplier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingSupplier) return;
+    const form = new FormData(event.currentTarget);
+    void run(
+      () =>
+        request(`/admin/suppliers/${editingSupplier.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            version: editingSupplier.version,
+            name: form.get('name'),
+            status: form.get('status'),
+            supplierType: form.get('supplierType'),
+            countryCode: form.get('countryCode') || null,
+            preferredCurrencyCode: form.get('preferredCurrencyCode') || null,
+            leadTimeDays: form.get('leadTimeDays') ? Number(form.get('leadTimeDays')) : null,
+            paymentTerms: form.get('paymentTerms') || null,
+            websiteUrl: form.get('websiteUrl') || null,
+            contactName: form.get('contactName') || null,
+            contactEmail: form.get('contactEmail') || null,
+            contactPhone: form.get('contactPhone') || null,
+            notes: form.get('notes') || null,
+          }),
+        }),
+      'Supplier details saved.',
+      () => setEditingSupplier(undefined),
+    );
+  }
+
+  function createPurchase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void run(
+      () =>
+        request('/admin/purchases', {
+          method: 'POST',
+          body: JSON.stringify({
+            supplierId: form.get('supplierId'),
+            currencyCode: form.get('currencyCode'),
+            supplierReference: form.get('supplierReference') || undefined,
+            orderDate: form.get('orderDate') || undefined,
+            expectedDate: form.get('expectedDate') || undefined,
+            destinationLocationId: form.get('destinationLocationId') || undefined,
+            notes: form.get('notes') || undefined,
+          }),
+        }),
+      'Draft purchase created. Add its product lines next.',
+      () => setCreateOpen(false),
+    );
+  }
+
+  function addPurchaseLine(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!linePurchase) return;
+    const form = new FormData(event.currentTarget);
+    void run(
+      () =>
+        request(`/admin/purchases/${linePurchase.id}/lines`, {
+          method: 'POST',
+          body: JSON.stringify({
+            variantId: form.get('variantId'),
+            quantity: form.get('quantity'),
+            unitPrice: form.get('unitPrice'),
+          }),
+        }),
+      'Purchase line added.',
+      () => setLinePurchase(undefined),
+    );
+  }
+
+  function createShipment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (!shipmentLines.length) {
+      setNotice({ tone: 'warning', message: 'Add at least one purchase line.' });
       return;
     }
-    try {
-      await request(`/admin/inbound-shipments/${selection.shipment.id}/receipts`, {
-        method: 'POST',
-        headers: { 'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({
-          lines: [
-            {
-              shipmentAllocationId: selection.id,
-              condition: form.get('condition'),
-              quantity: form.get('quantity'),
-            },
-          ],
+    void run(
+      () =>
+        request('/admin/inbound-shipments', {
+          method: 'POST',
+          body: JSON.stringify({
+            receivingLocationId: form.get('receivingLocationId'),
+            transportMode: form.get('transportMode'),
+            originText: form.get('originText') || undefined,
+            trackingReference: form.get('trackingReference') || undefined,
+            expectedArrivalDate: form.get('expectedArrivalDate') || undefined,
+            allocations: shipmentLines,
+          }),
         }),
-      });
-      event.currentTarget.reset();
-      setMessage('Receipt posted to the immutable inventory ledger.');
-      await reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Receipt could not be posted.');
-    }
+      'Shipment planned. Record departure when the goods start moving.',
+      () => {
+        setCreateOpen(false);
+        setShipmentLines([]);
+      },
+    );
   }
 
+  function postReceipt(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (!receiptShipmentId || !receiptLines.length) {
+      setNotice({
+        tone: 'warning',
+        message: 'Choose a shipment and add at least one counted line.',
+      });
+      return;
+    }
+    void run(
+      () =>
+        request(`/admin/inbound-shipments/${receiptShipmentId}/receipts`, {
+          method: 'POST',
+          headers: { 'idempotency-key': crypto.randomUUID() },
+          body: JSON.stringify({
+            packingSlipReference: form.get('packingSlipReference') || undefined,
+            notes: form.get('notes') || undefined,
+            lines: receiptLines,
+          }),
+        }),
+      'Receipt posted. Inventory and provisional cost evidence match the physical count.',
+      () => {
+        setCreateOpen(false);
+        setReceiptShipmentId('');
+        setReceiptLines([]);
+      },
+    );
+  }
+
+  function transition(path: string, version: number, success: string, idempotent = false) {
+    void run(
+      () =>
+        request(path, {
+          method: 'POST',
+          ...(idempotent ? { headers: { 'idempotency-key': crypto.randomUUID() } } : {}),
+          body: JSON.stringify({ version }),
+        }),
+      success,
+    );
+  }
+
+  const [title, description, actionLabel] = screenCopy[screen];
   return (
-    <main>
-      <section className="shell">
-        <p className="eyebrow">Supply operations</p>
-        <h1>
-          {screen === 'suppliers'
-            ? 'Suppliers'
-            : screen === 'purchases'
-              ? 'Purchases'
-              : screen === 'shipments'
-                ? 'Inbound shipments'
-                : 'Receiving'}
-        </h1>
-        <p>
-          {screen === 'receiving'
-            ? 'Review what was expected and received before posting an immutable stock receipt.'
-            : 'Procurement, transit, and physical receipt remain separate operational facts.'}
-        </p>
-        {message ? <p role="status">{message}</p> : null}
-        {loading ? <p aria-live="polite">Loading authoritative supply records…</p> : null}
-
-        {screen === 'suppliers' && !loading ? (
-          <>
-            <form onSubmit={(event) => void createSupplier(event)}>
-              <h2>Create supplier</h2>
-              <label>
-                Supplier code <input name="code" required placeholder="SHENZHEN-TEXTILES" />
-              </label>
-              <label>
-                Supplier name <input name="name" required autoComplete="organization" />
-              </label>
-              <label>
-                Contact name <input name="contactName" autoComplete="name" />
-              </label>
-              <label>
-                Contact email <input name="contactEmail" type="email" autoComplete="email" />
-              </label>
-              <label>
-                Contact phone <input name="contactPhone" type="tel" autoComplete="tel" />
-              </label>
-              <button type="submit">Create supplier</button>
-            </form>
-            {suppliers.length === 0 ? <p>No suppliers yet.</p> : null}
-            {suppliers.map((supplier) => {
-              const related = purchases.filter(
-                (purchase) => purchase.supplierName === supplier.name,
-              );
-              return (
-                <article key={supplier.id}>
-                  <p className="eyebrow">{supplier.code}</p>
-                  <h2>{supplier.name}</h2>
-                  <p>{supplier.status}</p>
-                  {supplier.contactName || supplier.contactEmail || supplier.contactPhone ? (
-                    <p>
-                      {[supplier.contactName, supplier.contactEmail, supplier.contactPhone]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  ) : null}
-                  <p>
-                    {related.length} purchase{related.length === 1 ? '' : 's'} ·{' '}
-                    {related
-                      .slice(0, 3)
-                      .map((purchase) => purchase.purchaseNumber)
-                      .join(', ') || 'No recent purchasing activity'}
-                  </p>
-                </article>
-              );
-            })}
-          </>
+    <main className="min-h-screen bg-muted/30 p-4 md:p-6">
+      <div className="mx-auto grid max-w-7xl gap-5">
+        <SupplyNavigation
+          activePath={
+            screen === 'shipments'
+              ? '/inbound-shipments'
+              : screen === 'receiving'
+                ? '/receiving'
+                : `/${screen}`
+          }
+        />
+        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="eyebrow">Supply / {title}</p>
+            <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setHelpOpen(true)}
+              title={`Learn how ${title.toLowerCase()} works`}
+            >
+              <BookOpen /> How it works
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void reload()}
+              disabled={loading}
+              title="Reload current records"
+            >
+              <RefreshCw className={loading ? 'animate-spin' : ''} /> Refresh
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} title={actionLabel}>
+              <Plus /> {actionLabel}
+            </Button>
+          </div>
+        </header>
+        <StatCards overview={overview} screen={screen} />
+        {notice ? (
+          <OperationalFeedback tone={notice.tone}>{notice.message}</OperationalFeedback>
         ) : null}
-
-        {screen === 'purchases' && !loading ? (
-          <>
-            <form onSubmit={(event) => void createPurchase(event)}>
-              <h2>Create draft purchase</h2>
-              <label>
-                Supplier
-                <select name="supplierId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose an active supplier
-                  </option>
-                  {suppliers
-                    .filter((supplier) => supplier.status === 'ACTIVE')
-                    .map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.name} · {supplier.code}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                Currency
-                <select defaultValue="CNY" name="currencyCode">
-                  <option value="BDT">BDT — Bangladeshi taka</option>
-                  <option value="CNY">CNY — Chinese yuan</option>
-                  <option value="USD">USD — US dollar</option>
-                </select>
-              </label>
-              <button disabled={suppliers.length === 0} type="submit">
-                Create draft purchase
-              </button>
-            </form>
-            <form onSubmit={(event) => void addPurchaseLine(event)}>
-              <h2>Add a purchase line</h2>
-              <label>
-                Draft purchase
-                <select name="purchaseId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose a draft purchase
-                  </option>
-                  {draftPurchases.map((purchase) => (
-                    <option key={purchase.id} value={purchase.id}>
-                      {purchase.purchaseNumber} · {purchase.supplierName} · {purchase.currencyCode}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Product variant
-                <select name="variantId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose a product and SKU
-                  </option>
-                  {variants
-                    .filter((variant) => variant.status === 'ACTIVE')
-                    .map((variant) => (
-                      <option key={variant.id} value={variant.id}>
-                        {variant.productTitle} · {variant.sku}
-                        {variant.optionSummary ? ` · ${variant.optionSummary}` : ''}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                Quantity{' '}
-                <input
-                  defaultValue="1"
-                  min="0.000001"
-                  name="quantity"
-                  required
-                  step="0.000001"
-                  type="number"
-                />
-              </label>
-              <label>
-                Unit cost{' '}
-                <input
-                  defaultValue="0"
-                  min="0"
-                  name="unitPrice"
-                  required
-                  step="0.0001"
-                  type="number"
-                  inputMode="decimal"
-                />
-              </label>
-              <button disabled={draftPurchases.length === 0 || variants.length === 0} type="submit">
-                Add purchase line
-              </button>
-            </form>
-            {purchases.length === 0 ? <p>No purchases yet.</p> : null}
-            {purchases.map((purchase) => (
-              <article key={purchase.id}>
-                <p className="eyebrow">{purchase.status}</p>
-                <h2>{purchase.purchaseNumber}</h2>
-                <p>
-                  {purchase.supplierName} · {purchase.currencyCode}
-                </p>
-                {purchase.lines.length === 0 ? <p>No lines have been added.</p> : null}
-                {purchase.lines.map((line) => (
-                  <p key={line.id}>
-                    {line.productTitle} · {line.sku} · {line.quantity} ×{' '}
-                    {formatMoney(line.unitPrice, purchase.currencyCode)}
-                  </p>
-                ))}
-                {purchase.status === 'DRAFT' ? (
-                  <button
-                    disabled={purchase.lines.length === 0}
-                    onClick={() => void placePurchase(purchase)}
-                    type="button"
-                  >
-                    Place purchase
-                  </button>
-                ) : null}
-              </article>
-            ))}
-          </>
-        ) : null}
-
-        {screen === 'shipments' && !loading ? (
-          <>
-            <form onSubmit={(event) => void createShipment(event)}>
-              <h2>Plan an inbound shipment</h2>
-              <label>
-                Receiving location
-                <select name="receivingLocationId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose a receiving warehouse
-                  </option>
-                  {locations
-                    .filter(
-                      (location) =>
-                        location.status === 'ACTIVE' &&
-                        location.capabilities.includes('PURCHASE_RECEIVING'),
-                    )
-                    .map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name} · {location.code}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                Purchase line
-                <select name="purchaseLineId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose a placed purchase line
-                  </option>
-                  {shippableLines.map((line) => (
-                    <option key={line.id} value={line.id}>
-                      {line.purchaseNumber} · {line.productTitle} · {line.sku} · ordered{' '}
-                      {line.quantity}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Quantity{' '}
-                <input
-                  defaultValue="1"
-                  min="0.000001"
-                  name="quantity"
-                  required
-                  step="0.000001"
-                  type="number"
-                />
-              </label>
-              <label>
-                Transport
-                <select defaultValue="SEA" name="transportMode">
-                  <option value="AIR">Air</option>
-                  <option value="SEA">Sea</option>
-                  <option value="ROAD">Road</option>
-                  <option value="RAIL">Rail</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </label>
-              <button
-                disabled={shippableLines.length === 0 || locations.length === 0}
-                type="submit"
+        <section className="overflow-hidden rounded-xl border bg-card">
+          <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center">
+            <label className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
+              <span className="sr-only">Search {title.toLowerCase()}</span>
+              <Input
+                className="pl-9"
+                type="search"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                placeholder={`Search ${title.toLowerCase()}…`}
+                title={`Search ${title.toLowerCase()}`}
+              />
+            </label>
+            <label>
+              <span className="sr-only">Filter by status</span>
+              <select
+                className="h-8 rounded-lg border bg-background px-3 text-sm"
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value);
+                  setPage(1);
+                }}
+                title="Filter by status"
               >
-                Plan inbound shipment
-              </button>
-            </form>
-            {shipments.length === 0 ? <p>No inbound shipments yet.</p> : null}
-            {shipments.map((shipment) => (
-              <article key={shipment.id}>
-                <p className="eyebrow">
-                  {shipment.status} · {shipment.receivingStatus}
-                </p>
-                <h2>{shipment.shipmentNumber}</h2>
-                <p>
-                  {shipment.receivingLocationName} · {shipment.transportMode}
-                </p>
-                {shipment.allocations.map((allocation) => (
-                  <p key={allocation.id}>
-                    {allocation.purchaseNumber} · {allocation.productTitle} · {allocation.sku} ·{' '}
-                    {allocation.supplierName} · planned {allocation.allocatedQuantity} · received{' '}
-                    {allocation.receivedQuantity}
-                  </p>
-                ))}
-                {shipment.status !== 'ARRIVED' && shipment.status !== 'CANCELLED' ? (
-                  <button onClick={() => void arrive(shipment)} type="button">
-                    Mark arrived
-                  </button>
-                ) : null}
-              </article>
-            ))}
-          </>
-        ) : null}
-
-        {screen === 'receiving' && !loading ? (
-          <>
-            <form onSubmit={(event) => void postReceipt(event)}>
-              <h2>Post a receipt</h2>
-              <label>
-                Arrived shipment line
-                <select name="shipmentAllocationId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose a line with quantity remaining
+                <option value="ALL">All statuses</option>
+                {statuses.map((value) => (
+                  <option key={value} value={value}>
+                    {value.replaceAll('_', ' ')}
                   </option>
-                  {receivableAllocations.map((allocation) => (
-                    <option key={allocation.id} value={allocation.id}>
-                      {allocation.shipment.shipmentNumber} · {allocation.productTitle} ·{' '}
-                      {allocation.sku} · expected {allocation.allocatedQuantity} · received{' '}
-                      {allocation.receivedQuantity}
+                ))}
+              </select>
+            </label>
+            <span className="text-sm text-muted-foreground">
+              {filtered.length} result{filtered.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 p-12 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Loading supply records…
+            </div>
+          ) : !visible.length ? (
+            <OperationalEmptyState
+              title={
+                query || status !== 'ALL' ? 'No matching records' : `No ${title.toLowerCase()} yet`
+              }
+              description={
+                query || status !== 'ALL'
+                  ? 'Clear the search or status filter.'
+                  : `Use “${actionLabel}” to begin this workflow.`
+              }
+              action={
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> {actionLabel}
+                </Button>
+              }
+            />
+          ) : screen === 'suppliers' ? (
+            <SuppliersTable
+              items={visible as SupplierDto[]}
+              purchases={purchases}
+              onEdit={setEditingSupplier}
+            />
+          ) : screen === 'purchases' ? (
+            <PurchasesTable
+              items={visible as PurchaseDto[]}
+              expanded={expandedPurchase}
+              setExpanded={setExpandedPurchase}
+              onLine={setLinePurchase}
+              onCancel={(purchase) => setConfirmAction({ kind: 'cancel-purchase', purchase })}
+              transition={transition}
+              run={run}
+            />
+          ) : screen === 'shipments' ? (
+            <ShipmentsTable
+              items={visible as InboundShipmentDto[]}
+              expanded={expandedShipment}
+              setExpanded={setExpandedShipment}
+              onCancel={(shipment) => setConfirmAction({ kind: 'cancel-shipment', shipment })}
+              transition={transition}
+            />
+          ) : (
+            <ReceiptsTable items={visible as InboundReceiptDto[]} shipments={shipments} />
+          )}
+          {!loading && filtered.length ? (
+            <Pager page={page} total={filtered.length} onChange={setPage} />
+          ) : null}
+        </section>
+      </div>
+
+      <HowToDialog screen={screen} open={helpOpen} onOpenChange={setHelpOpen} />
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{actionLabel}</DialogTitle>
+            <DialogDescription>
+              {screen === 'receiving'
+                ? 'Record the physical count. Expected quantity is only a guide.'
+                : 'Only useful details are shown here.'}
+            </DialogDescription>
+          </DialogHeader>
+          {screen === 'suppliers' ? (
+            <SupplierForm onSubmit={createSupplier} saving={saving} />
+          ) : null}
+          {screen === 'purchases' ? (
+            <PurchaseForm
+              suppliers={suppliers}
+              locations={locations}
+              onSubmit={createPurchase}
+              saving={saving}
+            />
+          ) : null}
+          {screen === 'shipments' ? (
+            <ShipmentForm
+              locations={locations}
+              shippableLines={shippableLines}
+              lines={shipmentLines}
+              setLines={setShipmentLines}
+              onSubmit={createShipment}
+              saving={saving}
+            />
+          ) : null}
+          {screen === 'receiving' ? (
+            <ReceiptForm
+              shipments={receivableShipments}
+              allocations={receivableAllocations}
+              shipmentId={receiptShipmentId}
+              setShipmentId={setReceiptShipmentId}
+              lines={receiptLines}
+              setLines={setReceiptLines}
+              onSubmit={postReceipt}
+              saving={saving}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(editingSupplier)}
+        onOpenChange={(open) => !open && setEditingSupplier(undefined)}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          {editingSupplier ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Edit {editingSupplier.name}</DialogTitle>
+                <DialogDescription>
+                  Changes keep every purchase and shipment in history.
+                </DialogDescription>
+              </DialogHeader>
+              <SupplierForm supplier={editingSupplier} onSubmit={saveSupplier} saving={saving} />
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(linePurchase)}
+        onOpenChange={(open) => !open && setLinePurchase(undefined)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add a purchase line</DialogTitle>
+            <DialogDescription>
+              {linePurchase?.purchaseNumber} · choose the SKU and enter supplier quantity and unit
+              cost.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="grid gap-4" onSubmit={addPurchaseLine}>
+            <Field label="Product and SKU" hint="Only active catalog variants appear.">
+              <select
+                className="h-9 rounded-lg border bg-background px-3 text-sm"
+                name="variantId"
+                required
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Choose a product variant
+                </option>
+                {variants
+                  .filter((variant) => variant.status === 'ACTIVE')
+                  .map((variant) => (
+                    <option key={variant.id} value={variant.id}>
+                      {variant.productTitle} · {variant.sku}
+                      {variant.optionSummary ? ` · ${variant.optionSummary}` : ''}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label>
-                Condition
-                <select defaultValue="SELLABLE" name="condition">
-                  <option value="SELLABLE">Sellable</option>
-                  <option value="DAMAGED">Damaged</option>
-                  <option value="QUARANTINE">Quarantine</option>
-                  <option value="INSPECTION">Inspection</option>
-                </select>
-              </label>
-              <label>
-                Receive now{' '}
-                <input
-                  defaultValue="1"
-                  min="0.000001"
+              </select>
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Quantity">
+                <Input
                   name="quantity"
-                  required
-                  step="0.000001"
                   type="number"
+                  min="0.000001"
+                  step="0.000001"
+                  defaultValue="1"
+                  required
                 />
-              </label>
-              <button disabled={receivableAllocations.length === 0} type="submit">
-                Review and post receipt
-              </button>
-              <p>
-                Posting creates an immutable physical inventory movement. Verify the count and
-                condition first.
-              </p>
-            </form>
-            {receipts.length === 0 ? <p>No receipts have been posted.</p> : null}
-            {receipts.map((receipt) => {
-              const shipment = shipments.find((item) => item.id === receipt.shipmentId);
-              return (
-                <article key={receipt.id}>
-                  <p className="eyebrow">{receipt.status}</p>
-                  <h2>{receipt.receiptNumber}</h2>
-                  <p>
-                    {shipment?.shipmentNumber ?? 'Inbound shipment'} ·{' '}
-                    {shipment?.receivingLocationName ?? 'Receiving location'}
-                  </p>
-                  {receipt.lines.map((line, index) => (
-                    <p key={`${receipt.id}-${index}`}>
-                      {line.condition} · {line.quantity}
-                    </p>
-                  ))}
-                </article>
+              </Field>
+              <Field
+                label={`Unit cost (${linePurchase?.currencyCode ?? ''})`}
+                hint="Supplier cost for one unit, before shared shipment costs."
+              >
+                <Input
+                  name="unitPrice"
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  defaultValue="0"
+                  required
+                />
+              </Field>
+            </div>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
+              <Button type="submit" disabled={saving}>
+                {saving ? <Loader2 className="animate-spin" /> : <Plus />} Add line
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(confirmAction)}
+        onOpenChange={(open) => !open && setConfirmAction(undefined)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Cancel this {confirmAction?.kind === 'cancel-purchase' ? 'purchase' : 'shipment'}?
+            </DialogTitle>
+            <DialogDescription>
+              History stays visible. Add a reason so another operator understands what happened.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!confirmAction) return;
+              const reason = String(new FormData(event.currentTarget).get('reason'));
+              const path =
+                confirmAction.kind === 'cancel-purchase'
+                  ? `/admin/purchases/${confirmAction.purchase.id}/cancel`
+                  : `/admin/inbound-shipments/${confirmAction.shipment.id}/cancel`;
+              const version =
+                confirmAction.kind === 'cancel-purchase'
+                  ? confirmAction.purchase.version
+                  : confirmAction.shipment.version;
+              void run(
+                () => request(path, { method: 'POST', body: JSON.stringify({ version, reason }) }),
+                'Cancellation recorded. History remains available.',
+                () => setConfirmAction(undefined),
               );
-            })}
-          </>
-        ) : null}
-      </section>
+            }}
+          >
+            <Field label="Reason">
+              <Textarea
+                name="reason"
+                required
+                placeholder="Example: Supplier could not fulfill the order"
+              />
+            </Field>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" type="button" />}>Keep it</DialogClose>
+              <Button variant="destructive" type="submit" disabled={saving}>
+                Cancel and keep history
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

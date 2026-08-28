@@ -1,8 +1,6 @@
 # Maevelle Ecommerce — Blocking Technical ADR Pack
 
 **Directory:** `docs/adr/`
-**Status:** Accepted for Initial Implementation
-**Version:** 0.1
 **Decision Date:** 2026-08-20
 
 This pack contains:

@@ -1,141 +1,35 @@
 'use client';
 
-import Link from 'next/link';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
 
-type Screen = 'landed-cost' | 'costing';
-type Notice = { tone: 'error' | 'success'; message: string } | undefined;
-interface Shipment {
-  id: string;
-  shipmentNumber: string;
-  receivingLocationName: string;
-  status: string;
-  allocations: readonly {
-    id: string;
-    purchaseNumber: string;
-    supplierName: string;
-    sku: string;
-    productTitle: string;
-    allocatedQuantity: string;
-    receivedQuantity: string;
-  }[];
-}
-interface Worksheet {
-  id: string;
-  shipment_id: string;
-  worksheet_number: string;
-  base_currency_code: string;
-  status: string;
-  current_revision_id: string | null;
-  finalized_at: string | null;
-  revisions: readonly {
-    id: string;
-    revision_number: string;
-    revision_kind: string;
-    status: string;
-    created_at: string;
-    finalized_at: string | null;
-    total_effect: string;
-  }[];
-  components: readonly {
-    id: string;
-    cost_type: string;
-    original_amount: string;
-    original_currency_code: string;
-    value_status: string;
-    allocation_method: string;
-    fx_rate: string | null;
-    fx_rate_recorded_at: string | null;
-    fx_source: string | null;
-    reference: string | null;
-  }[];
-  results: readonly {
-    allocation_target_id: string;
-    purchase_cost: string;
-    additional_cost: string;
-    total_acquisition_cost: string;
-    unit_acquisition_cost: string;
-    currency_code: string;
-    sku: string;
-    product_title: string;
-    quantity: string;
-  }[];
-}
-interface Layer {
-  id: string;
-  remaining_quantity: string;
-  original_quantity: string;
-  effective_cost: string;
-  currency_code: string;
-  location_name: string;
-  condition_code: string;
-  product_title: string;
-  sku: string;
-  receipt_number: string;
-  received_at: string;
-  cost_state: string;
-}
-interface Assignment {
-  id: string;
-  fulfillment_id: string;
-  status: string;
-  total_cost: string;
-  currency_code: string;
-  quantity: string;
-  order_number: string;
-  product_title: string;
-  sku: string;
-  created_at: string;
-}
-interface Cogs {
-  id: string;
-  delivery_id: string | null;
-  fulfillment_id: string;
-  order_number: string;
-  total_cost: string;
-  currency_code: string;
-  created_at: string;
-}
-interface Valuation {
-  inventory_item_id: string;
-  location_id: string;
-  product_title: string;
-  sku: string;
-  location_name: string;
-  condition_code: string;
-  currency_code: string;
-  quantity: string;
-  value: string;
-}
-interface Preview {
-  components: readonly {
-    id: string;
-    allocations: readonly { shipmentAllocationId: string; amount: string }[];
-  }[];
-}
+import { CostingEvidence } from '@/components/supply/costing-evidence';
+import {
+  CostingHelpButton,
+  CostingHelpDialog,
+  CostingSummary,
+  LandedCostHelpDialog,
+  LandedCostSummary,
+} from '@/components/supply/costing-page-ui';
+import { CostComponentDialog, WorksheetDialog } from '@/components/supply/landed-cost-dialogs';
+import { SupplyNavigation } from '@/components/supply/supply-navigation';
+import { Button } from '@/components/ui/button';
+import { formatSupplyMoney as money, supplyRequest as request } from '@/lib/supply/api';
+import type {
+  Assignment,
+  Cogs,
+  CostingNotice as Notice,
+  CostingScreen as Screen,
+  Layer,
+  Preview,
+  Shipment,
+  Valuation,
+  Worksheet,
+} from '@/lib/supply/costing-types';
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    credentials: 'include',
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  const body = (await response.json().catch(() => ({}))) as T & {
-    error?: { message?: string } | string;
-  };
-  if (!response.ok)
-    throw new Error(
-      typeof body.error === 'string'
-        ? body.error
-        : (body.error?.message ?? 'The command was rejected.'),
-    );
-  return body;
-}
 const message = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
-const money = (amount: string, currency: string) => `${currency} ${amount}`;
 const date = (value: string | null) =>
   value
     ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
@@ -153,11 +47,11 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
   const [shipmentId, setShipmentId] = useState('');
   const [worksheetId, setWorksheetId] = useState('');
   const [preview, setPreview] = useState<Preview>();
-  const [tab, setTab] = useState<'layers' | 'positions' | 'outbound' | 'cogs' | 'valuation'>(
-    'layers',
-  );
   const [notice, setNotice] = useState<Notice>();
   const [loading, setLoading] = useState(true);
+  const [worksheetDialogOpen, setWorksheetDialogOpen] = useState(false);
+  const [componentDialogOpen, setComponentDialogOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const worksheet = useMemo(
     () => worksheets.find((item) => item.id === worksheetId),
     [worksheetId, worksheets],
@@ -178,7 +72,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
     try {
       if (section === 'landed-cost') {
         const [shipmentResult, worksheetResult] = await Promise.all([
-          request<ApiEnvelope<readonly Shipment[]>>('/admin/inbound-shipments'),
+          request<ApiEnvelope<readonly Shipment[]>>('/admin/inbound-shipments?pageSize=100'),
           request<ApiEnvelope<readonly Worksheet[]>>('/admin/landed-cost/worksheets'),
         ]);
         setShipments(shipmentResult.data);
@@ -220,6 +114,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
         }),
       });
       setWorksheetId(result.data.id);
+      setWorksheetDialogOpen(false);
       setPreview(undefined);
       setNotice({
         tone: 'success',
@@ -254,6 +149,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
         }),
       });
       event.currentTarget.reset();
+      setComponentDialogOpen(false);
       setPreview(undefined);
       setNotice({
         tone: 'success',
@@ -307,15 +203,6 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
       setNotice({ tone: 'error', message: message(error, 'Revision could not be created.') });
     }
   }
-  const empty =
-    tab === 'layers' || tab === 'positions'
-      ? !layers.length
-      : tab === 'outbound'
-        ? !assignments.length
-        : tab === 'cogs'
-          ? !cogs.length
-          : !valuation.length;
-
   return (
     <main className="min-h-screen bg-muted/30 p-6">
       <div className="mx-auto grid max-w-7xl gap-6">
@@ -331,16 +218,9 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
                 : 'Read-only FIFO, outbound-cost, COGS, and valuation facts.'}
             </p>
           </div>
-          <nav className="flex flex-wrap gap-2">
-            <Link className="rounded-md border px-3 py-2 text-sm" href="/inbound-shipments">
-              Inbound shipments
-            </Link>
-            <Link className="rounded-md border px-3 py-2 text-sm" href="/landed-cost">
-              Landed Cost
-            </Link>
-            <Link className="rounded-md border px-3 py-2 text-sm" href="/costing">
-              Costing
-            </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <SupplyNavigation activePath={`/${section}`} />
+            <CostingHelpButton onClick={() => setHelpOpen(true)} />
             <button
               className="rounded-md border px-3 py-2 text-sm"
               onClick={() => void reload()}
@@ -348,7 +228,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
             >
               Refresh
             </button>
-          </nav>
+          </div>
         </header>
         {notice ? (
           <p
@@ -366,6 +246,17 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
           <p className="rounded-md border bg-background p-6 text-sm text-muted-foreground">
             Loading operational costing data…
           </p>
+        ) : null}
+        {!loading && section === 'landed-cost' ? (
+          <LandedCostSummary shipments={shipments} worksheets={worksheets} />
+        ) : null}
+        {!loading && section === 'costing' ? (
+          <CostingSummary
+            layers={layers}
+            assignments={assignments}
+            cogs={cogs}
+            valuation={valuation}
+          />
         ) : null}
         {!loading && section === 'landed-cost' ? (
           <>
@@ -407,32 +298,19 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
                 </section>
                 <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
                   <h2 className="font-semibold">2. Create worksheet</h2>
-                  <form
-                    className="mt-3 grid gap-3"
-                    onSubmit={(event) => void createWorksheet(event)}
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Start a revisioned workspace for the selected shipment. Creation opens in a
+                    focused dialog so this page stays easy to scan.
+                  </p>
+                  <Button
+                    className="mt-3"
+                    disabled={!shipmentId}
+                    onClick={() => setWorksheetDialogOpen(true)}
+                    title="Create a landed cost worksheet"
+                    type="button"
                   >
-                    <input name="shipmentId" readOnly type="hidden" value={shipmentId} />
-                    <label className="grid gap-1 text-sm">
-                      Base currency{' '}
-                      <input
-                        className="rounded-md border p-2"
-                        defaultValue="CNY"
-                        maxLength={3}
-                        name="baseCurrencyCode"
-                        required
-                      />
-                    </label>
-                    <label className="grid gap-1 text-sm">
-                      Notes <textarea className="rounded-md border p-2" name="notes" />
-                    </label>
-                    <button
-                      className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50"
-                      disabled={!shipmentId}
-                      type="submit"
-                    >
-                      Create draft worksheet
-                    </button>
-                  </form>
+                    Create draft worksheet
+                  </Button>
                 </section>
               </div>
               <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
@@ -504,129 +382,26 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
                 <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
                   <h2 className="font-semibold">3. Add cost component</h2>
                   {mutable ? (
-                    <form
-                      className="mt-3 grid gap-3"
-                      onSubmit={(event) => void addComponent(event)}
-                    >
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="grid gap-1 text-sm">
-                          Type{' '}
-                          <select
-                            className="rounded-md border bg-background p-2"
-                            defaultValue="INTERNATIONAL_FREIGHT"
-                            name="costType"
-                          >
-                            <option>INTERNATIONAL_FREIGHT</option>
-                            <option>LOCAL_FREIGHT</option>
-                            <option>CUSTOMS_DUTY</option>
-                            <option>TAX_OR_IMPORT_FEE</option>
-                            <option>FORWARDER_FEE</option>
-                            <option>HANDLING</option>
-                            <option>INSURANCE</option>
-                            <option>OTHER_ACQUISITION_COST</option>
-                          </select>
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                          Amount{' '}
-                          <input
-                            className="rounded-md border p-2"
-                            defaultValue="0.0000"
-                            name="amount"
-                            required
-                            step="0.0001"
-                            type="number"
-                          />
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                          Currency{' '}
-                          <input
-                            className="rounded-md border p-2"
-                            defaultValue={worksheet.base_currency_code}
-                            maxLength={3}
-                            name="currencyCode"
-                            required
-                          />
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                          Value status{' '}
-                          <select
-                            className="rounded-md border bg-background p-2"
-                            defaultValue="ACTUAL"
-                            name="valueStatus"
-                          >
-                            <option>ESTIMATED</option>
-                            <option>ACTUAL</option>
-                            <option>CREDIT</option>
-                          </select>
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                          Scope{' '}
-                          <select
-                            className="rounded-md border bg-background p-2"
-                            defaultValue="GLOBAL"
-                            name="scope"
-                          >
-                            <option>GLOBAL</option>
-                            <option>DIRECT</option>
-                          </select>
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                          Allocation{' '}
-                          <select
-                            className="rounded-md border bg-background p-2"
-                            defaultValue="QUANTITY"
-                            name="allocationMethod"
-                          >
-                            <option>QUANTITY</option>
-                            <option>EQUAL</option>
-                            <option>PURCHASE_VALUE</option>
-                            <option>WEIGHT</option>
-                            <option>VOLUME</option>
-                            <option>CHARGEABLE_WEIGHT</option>
-                            <option>PERCENTAGE</option>
-                            <option>MANUAL</option>
-                          </select>
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                          FX rate{' '}
-                          <input
-                            className="rounded-md border p-2"
-                            name="fxRate"
-                            step="0.000000000001"
-                            type="number"
-                          />
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                          FX source <input className="rounded-md border p-2" name="fxSource" />
-                        </label>
-                      </div>
-                      <label className="grid gap-1 text-sm">
-                        Direct item (for DIRECT only){' '}
-                        <select
-                          className="rounded-md border bg-background p-2"
-                          name="directShipmentAllocationId"
-                        >
-                          <option value="">Choose item</option>
-                          {worksheetShipment?.allocations.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.productTitle} · {item.sku}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="grid gap-1 text-sm">
-                        Reference <input className="rounded-md border p-2" name="reference" />
-                      </label>
-                      <label className="grid gap-1 text-sm">
-                        Notes <textarea className="rounded-md border p-2" name="notes" />
-                      </label>
-                      <button
-                        className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
-                        type="submit"
+                    <>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Add freight, duty, handling, or another acquisition cost in a focused form.
+                      </p>
+                      <Button
+                        className="mt-3"
+                        onClick={() => setComponentDialogOpen(true)}
+                        title="Add a landed cost component"
+                        type="button"
                       >
-                        Add component
-                      </button>
-                    </form>
+                        Add cost component
+                      </Button>
+                      <CostComponentDialog
+                        open={componentDialogOpen}
+                        onOpenChange={setComponentDialogOpen}
+                        worksheet={worksheet}
+                        shipment={worksheetShipment}
+                        onSubmit={(event) => void addComponent(event)}
+                      />
+                    </>
                   ) : (
                     <p className="mt-3 rounded-md bg-muted p-3 text-sm">
                       Finalized facts are read-only. Create an adjustment or credit revision for a
@@ -737,173 +512,25 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
           </>
         ) : null}
         {!loading && section === 'costing' ? (
-          <>
-            <section className="flex flex-wrap gap-2" aria-label="Costing views">
-              {(['layers', 'positions', 'outbound', 'cogs', 'valuation'] as const).map((item) => (
-                <button
-                  className={
-                    tab === item
-                      ? 'rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground'
-                      : 'rounded-md border px-3 py-2 text-sm'
-                  }
-                  key={item}
-                  onClick={() => setTab(item)}
-                  type="button"
-                >
-                  {item === 'positions'
-                    ? 'FIFO positions'
-                    : item === 'outbound'
-                      ? 'Outbound assignments'
-                      : item === 'cogs'
-                        ? 'COGS'
-                        : item === 'valuation'
-                          ? 'Inventory valuation'
-                          : 'Cost layers'}
-                </button>
-              ))}
-            </section>
-            <section className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
-              {tab === 'layers' || tab === 'positions' ? (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="p-3">Product / SKU</th>
-                      <th className="p-3">Receipt</th>
-                      <th className="p-3">Condition</th>
-                      <th className="p-3">Original</th>
-                      <th className="p-3">Remaining</th>
-                      <th className="p-3">Effective cost</th>
-                      <th className="p-3">FIFO receipt time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {layers.map((item) => (
-                      <tr className="border-b" key={item.id}>
-                        <td className="p-3">
-                          {item.product_title}
-                          <br />
-                          <span className="text-muted-foreground">{item.sku}</span>
-                        </td>
-                        <td className="p-3">
-                          {item.receipt_number}
-                          <br />
-                          <span className="text-muted-foreground">{item.location_name}</span>
-                        </td>
-                        <td className="p-3">{item.condition_code}</td>
-                        <td className="p-3">{item.original_quantity}</td>
-                        <td className="p-3">{item.remaining_quantity}</td>
-                        <td className="p-3">
-                          {money(item.effective_cost, item.currency_code)}
-                          <br />
-                          <span className="text-muted-foreground">{item.cost_state}</span>
-                        </td>
-                        <td className="p-3">{date(item.received_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : null}
-              {tab === 'outbound' ? (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="p-3">Order / Fulfillment</th>
-                      <th className="p-3">Product</th>
-                      <th className="p-3">Qty</th>
-                      <th className="p-3">Assigned cost</th>
-                      <th className="p-3">State</th>
-                      <th className="p-3">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assignments.map((item) => (
-                      <tr className="border-b" key={item.id}>
-                        <td className="p-3">
-                          {item.order_number}
-                          <br />
-                          <span className="text-muted-foreground">
-                            {item.fulfillment_id.slice(0, 8)}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          {item.product_title}
-                          <br />
-                          <span className="text-muted-foreground">{item.sku}</span>
-                        </td>
-                        <td className="p-3">{item.quantity}</td>
-                        <td className="p-3">{money(item.total_cost, item.currency_code)}</td>
-                        <td className="p-3">{item.status}</td>
-                        <td className="p-3">{date(item.created_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : null}
-              {tab === 'cogs' ? (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="p-3">Order</th>
-                      <th className="p-3">Fulfillment</th>
-                      <th className="p-3">Delivery</th>
-                      <th className="p-3">Recognized cost</th>
-                      <th className="p-3">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cogs.map((item) => (
-                      <tr className="border-b" key={item.id}>
-                        <td className="p-3">{item.order_number}</td>
-                        <td className="p-3">{item.fulfillment_id.slice(0, 8)}</td>
-                        <td className="p-3">{item.delivery_id?.slice(0, 8) ?? '—'}</td>
-                        <td className="p-3">{money(item.total_cost, item.currency_code)}</td>
-                        <td className="p-3">{date(item.created_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : null}
-              {tab === 'valuation' ? (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="p-3">Product / SKU</th>
-                      <th className="p-3">Location</th>
-                      <th className="p-3">Condition</th>
-                      <th className="p-3">Costed quantity</th>
-                      <th className="p-3">Valuation</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {valuation.map((item) => (
-                      <tr
-                        className="border-b"
-                        key={`${item.inventory_item_id}-${item.location_id}-${item.condition_code}`}
-                      >
-                        <td className="p-3">
-                          {item.product_title}
-                          <br />
-                          <span className="text-muted-foreground">{item.sku}</span>
-                        </td>
-                        <td className="p-3">{item.location_name}</td>
-                        <td className="p-3">{item.condition_code}</td>
-                        <td className="p-3">{item.quantity}</td>
-                        <td className="p-3">{money(item.value, item.currency_code)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : null}
-              {empty ? (
-                <p className="p-6 text-sm text-muted-foreground">
-                  No authoritative costing facts exist for this view. Physical inventory without a
-                  Cost Layer is intentionally not presented as zero-valued inventory.
-                </p>
-              ) : null}
-            </section>
-          </>
+          <CostingEvidence
+            layers={layers}
+            assignments={assignments}
+            cogs={cogs}
+            valuation={valuation}
+          />
         ) : null}
       </div>
+      <WorksheetDialog
+        open={worksheetDialogOpen}
+        onOpenChange={setWorksheetDialogOpen}
+        shipmentId={shipmentId}
+        onSubmit={(event) => void createWorksheet(event)}
+      />
+      {section === 'landed-cost' ? (
+        <LandedCostHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      ) : (
+        <CostingHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      )}
     </main>
   );
 }

@@ -90,6 +90,25 @@ export interface CatalogCategoryChoiceDto {
   readonly depth: number;
 }
 
+export type CatalogCategoryStatusDto = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+
+export interface CatalogCategoryDto {
+  readonly id: string;
+  readonly name: string;
+  readonly handle: string;
+  readonly status: CatalogCategoryStatusDto;
+  readonly effectiveStatus: 'ACTIVE' | 'INACTIVE';
+  readonly effectiveStatusReason: 'ACTIVE' | 'SELF_INACTIVE' | 'ANCESTOR_INACTIVE';
+  readonly parentCategoryId: string | null;
+  readonly path: string;
+  readonly depth: number;
+  readonly position: number;
+  readonly productCount: number;
+  readonly childCount: number;
+  readonly version: number;
+  readonly updatedAt: string;
+}
+
 export interface CatalogProductAttributeDto {
   readonly id: string;
   readonly code: string;
@@ -251,4 +270,118 @@ export interface WarehouseLocationDto {
   readonly status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   readonly capabilities: readonly string[];
   readonly version: number;
+}
+
+export type SupplierStatusDto = 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'ARCHIVED';
+export type SupplierTypeDto =
+  'MANUFACTURER' | 'WHOLESALER' | 'DISTRIBUTOR' | 'AGENT' | 'LOCAL_VENDOR' | 'OTHER';
+
+export interface SupplierDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly status: SupplierStatusDto;
+  readonly supplierType: SupplierTypeDto;
+  readonly countryCode?: string;
+  readonly preferredCurrencyCode?: 'BDT' | 'CNY' | 'USD';
+  readonly paymentTerms?: string;
+  readonly leadTimeDays?: number;
+  readonly websiteUrl?: string;
+  readonly contactName?: string;
+  readonly contactEmail?: string;
+  readonly contactPhone?: string;
+  readonly notes?: string;
+  readonly version: number;
+}
+
+export interface PurchaseDto {
+  readonly id: string;
+  readonly purchaseNumber: string;
+  readonly supplierId: string;
+  readonly supplierName: string;
+  readonly currencyCode: 'BDT' | 'CNY' | 'USD';
+  readonly status: 'DRAFT' | 'PLACED' | 'CANCELLED';
+  readonly supplierReference?: string;
+  readonly orderDate: string;
+  readonly expectedDate?: string;
+  readonly destinationLocationId?: string;
+  readonly destinationLocationName?: string;
+  readonly notes?: string;
+  readonly createdAt: string;
+  readonly totalAmount: string;
+  readonly version: number;
+  readonly lines: readonly {
+    readonly id: string;
+    readonly variantId: string;
+    readonly sku: string;
+    readonly productTitle: string;
+    readonly quantity: string;
+    readonly unitPrice: string;
+    readonly allocatedQuantity: string;
+    readonly receivedQuantity: string;
+  }[];
+}
+
+export interface InboundShipmentDto {
+  readonly id: string;
+  readonly shipmentNumber: string;
+  readonly receivingLocationId: string;
+  readonly receivingLocationName: string;
+  readonly transportMode: string;
+  readonly originText?: string;
+  readonly trackingReference?: string;
+  readonly expectedArrivalDate?: string;
+  readonly arrivedAt?: string;
+  readonly createdAt: string;
+  readonly status: 'PLANNED' | 'IN_TRANSIT' | 'ARRIVED' | 'CANCELLED';
+  readonly receivingStatus: 'NOT_RECEIVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED';
+  readonly version: number;
+  readonly allocations: readonly {
+    readonly id: string;
+    readonly purchaseLineId: string;
+    readonly purchaseNumber: string;
+    readonly supplierName: string;
+    readonly variantId: string;
+    readonly sku: string;
+    readonly productTitle: string;
+    readonly allocatedQuantity: string;
+    readonly receivedQuantity: string;
+  }[];
+}
+
+export interface InboundReceiptDto {
+  readonly id: string;
+  readonly receiptNumber: string;
+  readonly shipmentId: string;
+  readonly locationId: string;
+  readonly inventoryTransactionId: string;
+  readonly status: 'POSTED';
+  readonly packingSlipReference?: string;
+  readonly notes?: string;
+  readonly postedAt: string;
+  readonly lines: readonly {
+    readonly id: string;
+    readonly shipmentAllocationId: string;
+    readonly variantId: string;
+    readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+    readonly quantity: string;
+  }[];
+}
+
+export interface SupplyOverviewDto {
+  readonly activeSuppliers: number;
+  readonly draftPurchases: number;
+  readonly openPurchases: number;
+  readonly plannedShipments: number;
+  readonly inTransitShipments: number;
+  readonly awaitingReceiptShipments: number;
+  readonly receiptsToday: number;
+  readonly overdueShipments: number;
+}
+
+export interface PaginationDto {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly totalItems: number;
+  readonly totalPages: number;
 }

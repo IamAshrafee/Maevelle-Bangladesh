@@ -43,6 +43,8 @@ import * as adminOperations from './2600_admin_operations.js';
 import * as adminOperationsComplete from './2603_admin_operations_complete.js';
 import * as storefrontSearch from './2700_storefront_search.js';
 import * as operationalControls from './2701_operational_controls.js';
+import * as supplyOperations from './2800_supply_operations.js';
+import * as catalogCategoryManagement from './2820_catalog_category_management.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -92,6 +94,8 @@ export const migrations = {
   '2603_admin_operations_complete': adminOperationsComplete,
   '2700_storefront_search': storefrontSearch,
   '2701_operational_controls': operationalControls,
+  '2800_supply_operations': supplyOperations,
+  '2820_catalog_category_management': catalogCategoryManagement,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

@@ -5,13 +5,19 @@ import { createDatabase } from './index.js';
 import { listInventoryBalances } from './inventory.js';
 import {
   addPurchaseLine,
+  cancelPurchase,
+  cancelShipment,
   createPurchase,
   createShipment,
   createSupplier,
   getShipment,
   markShipmentArrived,
+  markShipmentInTransit,
   placePurchase,
   postInboundReceipt,
+  removePurchaseLine,
+  updatePurchaseLine,
+  updateSupplier,
 } from './procurement.js';
 import { createOrganization } from './platform.js';
 import { createLocation } from './warehouse.js';
@@ -86,6 +92,8 @@ async function fixture() {
     locationId: location.id,
     variantId: variant.rows[0]!.id,
     purchaseLineId: placed.lines[0]!.id,
+    purchaseId: placed.id,
+    supplier,
   };
 }
 
@@ -100,6 +108,99 @@ async function shipmentFor(input: Awaited<ReturnType<typeof fixture>>, quantity 
 }
 
 describe('procurement, shipment allocation, and canonical inbound receiving', () => {
+  it('supports supplier setup, draft correction, and controlled cancellation workflows', async () => {
+    const input = await fixture();
+    const supplier = await updateSupplier(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: input.supplier.id,
+      expectedVersion: input.supplier.version,
+      supplierType: 'MANUFACTURER',
+      countryCode: 'CN',
+      preferredCurrencyCode: 'CNY',
+      leadTimeDays: 18,
+      paymentTerms: '30% deposit, 70% before shipment',
+    });
+    expect(supplier).toMatchObject({
+      supplierType: 'MANUFACTURER',
+      countryCode: 'CN',
+      preferredCurrencyCode: 'CNY',
+      leadTimeDays: 18,
+    });
+
+    const draft = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: supplier.id,
+      currencyCode: 'CNY',
+      supplierReference: 'SUP-ORDER-42',
+      expectedDate: '2026-09-30',
+    });
+    const withLine = await addPurchaseLine(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: draft.id,
+      variantId: input.variantId,
+      quantity: '3',
+      unitPrice: '12.5000',
+    });
+    const corrected = await updatePurchaseLine(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: draft.id,
+      lineId: withLine.lines[0]!.id,
+      quantity: '4',
+      unitPrice: '11.7500',
+    });
+    expect(corrected).toMatchObject({ supplierReference: 'SUP-ORDER-42', totalAmount: '47.0000' });
+    const emptyDraft = await removePurchaseLine(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: draft.id,
+      lineId: corrected.lines[0]!.id,
+    });
+    const cancelled = await cancelPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: draft.id,
+      expectedVersion: emptyDraft.version,
+      reason: 'Supplier could not fulfill the order',
+    });
+    expect(cancelled.status).toBe('CANCELLED');
+  });
+
+  it('records shipment departure and only allows planned shipments to cancel', async () => {
+    const input = await fixture();
+    const departing = await shipmentFor(input, '1');
+    const inTransit = await markShipmentInTransit(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: departing.id,
+      expectedVersion: departing.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(inTransit.status).toBe('IN_TRANSIT');
+    await expect(
+      cancelShipment(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        shipmentId: inTransit.id,
+        expectedVersion: inTransit.version,
+        reason: 'Do not erase physical transit',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+
+    const planned = await shipmentFor(input, '1');
+    const cancelled = await cancelShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: planned.id,
+      expectedVersion: planned.version,
+      reason: 'Shipment booking was duplicated',
+    });
+    expect(cancelled.status).toBe('CANCELLED');
+  });
+
   it('serializes purchase-line allocation and keeps shipment arrival separate from physical inventory', async () => {
     const input = await fixture();
     const results = await Promise.allSettled([shipmentFor(input, '5'), shipmentFor(input, '5')]);
