@@ -13,7 +13,6 @@ import {
   LandedCostSummary,
 } from '@/components/supply/costing-page-ui';
 import { CostComponentDialog, WorksheetDialog } from '@/components/supply/landed-cost-dialogs';
-import { SupplyNavigation } from '@/components/supply/supply-navigation';
 import { Button } from '@/components/ui/button';
 import { formatSupplyMoney as money, supplyRequest as request } from '@/lib/supply/api';
 import type {
@@ -219,7 +218,6 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <SupplyNavigation activePath={`/${section}`} />
             <CostingHelpButton onClick={() => setHelpOpen(true)} />
             <button
               className="rounded-md border px-3 py-2 text-sm"

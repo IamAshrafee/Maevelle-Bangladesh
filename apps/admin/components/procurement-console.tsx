@@ -22,7 +22,6 @@ import {
   SupplierForm,
 } from '@/components/supply/supply-forms';
 import { SupplyField as Field } from '@/components/supply/supply-field';
-import { SupplyNavigation } from '@/components/supply/supply-navigation';
 import {
   HowToDialog,
   PAGE_SIZE,
@@ -377,15 +376,6 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
   return (
     <main className="min-h-screen bg-muted/30 p-4 md:p-6">
       <div className="mx-auto grid max-w-7xl gap-5">
-        <SupplyNavigation
-          activePath={
-            screen === 'shipments'
-              ? '/inbound-shipments'
-              : screen === 'receiving'
-                ? '/receiving'
-                : `/${screen}`
-          }
-        />
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="eyebrow">Supply / {title}</p>
