@@ -13,19 +13,21 @@ partial variant drawer. It cannot yet support complete day-to-day catalog work.
 
 ## Current stage
 
-Stage 3 — Taxonomy, attributes, structured information, FAQ, and SEO.
+Stage 3 — Product Types, taxonomy, attributes, structured information, FAQ, and SEO.
 
 ## Last completed action
 
-Stage 3's Product Organization slice added tenant-scoped category and primary
-category editing, Product Type-driven typed attribute controls, independent
-draft-preserving saves, and three-way stale-version recovery. Commit: `39e6a67`.
+The customer-content slice now provides popup editors for structured information
+groups, FAQs, and SEO, section-level drafts and concurrency recovery, a shared
+transport contract, and verified public Product/SEO/FAQ projection. Commit:
+`9d52f61`.
 
 ## Next exact action
 
-Inventory and implement Product structured information groups, customer FAQ,
-and SEO fields using the same tenant, validation, concurrency, recovery, and
-Storefront projection standards.
+Complete Product Type and attribute-definition management. Define a normalized,
+tenant-scoped reference-option source and selector so `REFERENCE` attributes are
+no longer a schema capability that operators cannot configure or edit. Then run
+the Stage 3 closure checks and begin the Variant matrix.
 
 ## Continuity note
 

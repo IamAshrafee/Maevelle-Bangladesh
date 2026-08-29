@@ -8,5 +8,9 @@
 6. Activity/audit, cleanup, accessibility, responsive and performance hardening.
 7. Realistic end-to-end operator and Storefront verification.
 
+Stage 3 remains active until Product Type/attribute-definition configuration and
+tenant-scoped `REFERENCE` attribute selection are operator-usable. Structured
+information, FAQ, and SEO are complete within this stage.
+
 Only this parent area is active. Cross-domain changes are allowed when needed to
 complete these stages.

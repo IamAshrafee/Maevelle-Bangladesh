@@ -1,7 +1,7 @@
 # Catalog Product Management Verification
 
-Status: `ACTIVE_IMPLEMENTATION` — Stages 1–2 and the Stage 3 Product Organization
-slice verified; area completion gate not yet evaluated.
+Status: `ACTIVE_IMPLEMENTATION` — Stages 1–2 plus Stage 3 Product Organization
+and customer-content slices verified; area completion gate not yet evaluated.
 
 ## Evidence required before completion
 
@@ -94,3 +94,27 @@ and broader regression/build/browser evidence are still pending.
 
 This proves the local Product Organization implementation and recovery model,
 not the full Stage 3 or Catalog area completion gate.
+
+## Stage 3 customer-content evidence — commit `9d52f61`
+
+- Focused Catalog PostgreSQL, API, and Admin state tests — 3 files / 15 tests
+  passed after reconstructing the missing disposable `maevelle_test` database
+  from the checked-in migration baseline.
+- PostgreSQL proof covers atomic information/FAQ/SEO replacement, stale-version
+  rejection, normalized content, public detail and FAQ projection, SEO metadata,
+  publication isolation, and tenant isolation.
+- Admin pure-state tests prove semantic dirty checking independent of regenerated
+  database IDs, additive request mapping, independent three-way merging, and
+  explicit conflict detection.
+- Repository TypeScript build, focused Prettier/ESLint, `git diff --check`, API
+  TypeScript build, architecture check, and secret scan passed.
+- Admin production build passed with Next.js 16.3.1 using webpack and generated
+  all 42 routes. Turbopack could not bind its internal CSS worker port in the
+  restricted execution environment; this was an environment restriction, not a
+  compilation error.
+- Browser testing was intentionally not run per owner instruction. No visual or
+  browser-interaction claim is made.
+
+This proves the structured customer-content vertical from database through
+Storefront and its Admin implementation. Product Type/attribute-definition and
+configured `REFERENCE` attribute workflows still prevent Stage 3 closure.

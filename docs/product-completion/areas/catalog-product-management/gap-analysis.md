@@ -14,8 +14,10 @@
 
 ## Domain/application gaps
 
-- No Product archive/reactivate, Variant update/archive, duplicate, taxonomy
-  assignment, attribute value, structured information/FAQ, or SEO commands.
+- No Product archive/reactivate, Variant update/archive, or duplicate commands.
+- Structured information, FAQ, and SEO commands are implemented and now have a
+  complete Admin editing surface. Product Type/attribute-definition management
+  and configured `REFERENCE` attribute options remain incomplete.
 - Product Type and attribute-definition management is only a minimal create/list.
 - Adding option axes after Variants can make combinations incomplete; the UI
   does not surface that integrity risk before publication.
@@ -29,11 +31,14 @@
   selection and filters are now URL-backed; a dedicated route remains open.
 - Variants do not show current price, stock, media, barcode, physical data, or
   setup issues and cannot be safely batch-edited.
-- Categories, collections/tags/occasions, attributes, information, FAQ, SEO,
-  activity, duplicate, archive, and safe bulk work are absent.
+- Information groups, FAQs, and SEO are now editable through focused popup forms
+  with ordering, validation, search preview, draft protection, and stale recovery.
+- Product Type/attribute-definition management, activity, duplicate, archive,
+  and safe bulk work remain absent.
 - Drawer focus recovery, Escape behavior, URL state, async submit prevention,
-  inline overview errors, and overview/create draft-loss handling are now covered;
-  full dialog focus trapping and later-stage forms remain open.
+  inline errors, and overview/create/content draft-loss handling are covered.
+  Content popup forms use the shared accessible dialog primitive; later-stage
+  forms remain open.
 
 ## Verification gaps
 

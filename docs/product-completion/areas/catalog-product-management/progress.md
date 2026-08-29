@@ -59,6 +59,29 @@
   auth guard, and reported no console errors. Authenticated Organization visual
   and responsive interaction remain unclaimed.
 
+## 2026-08-30
+
+- Reconciled stale tracking against commits after `39e6a67`: the database/API
+  structured-content command and Storefront SEO/details/FAQ projection already
+  existed in `8aa1b1f`, while the Admin surface was still missing.
+- Completed the Admin customer-content vertical in `9d52f61` with composed popup
+  editors for information groups, individual details, FAQs, and SEO overrides.
+- Added ordering, empty states, character guidance, search-result preview,
+  duplicate validation, staged removal, explicit save/discard, and protection
+  for unsaved popup state.
+- Added content-specific three-way merging for stale Product versions. Independent
+  server changes merge into the local draft; competing information, FAQ, title,
+  or description edits require an explicit local/current choice.
+- Added the shared `CatalogProductContentUpdateDto` so Admin and API use one
+  additive transport contract, and split content dialogs/state/presentation from
+  the legacy Product workspace controller.
+- Verified the existing PostgreSQL atomic replacement and Storefront projection,
+  API schema boundary, Admin state model, TypeScript, focused lint, architecture,
+  secret scan, and the Admin production build. Per owner instruction, browser
+  testing is not part of the workflow.
+
 ## Next
 
-Implement Stage 3 structured information, FAQ, and SEO.
+Complete Stage 3 Product Type and attribute-definition management, including a
+tenant-scoped configured selector for `REFERENCE` attributes. Then close Stage 3
+and begin the Variant matrix and lifecycle stage.
