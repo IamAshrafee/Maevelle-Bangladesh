@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Command,
   CreditCard,
+  FolderTree,
   Gauge,
   HandCoins,
   HeartHandshake,
@@ -84,7 +85,13 @@ const navigation: readonly NavGroup[] = [
     label: 'Catalog',
     items: [
       { label: 'Products', href: '/products', icon: PackageSearch, capability: 'catalog.view' },
-      { label: 'Categories', href: '/categories', icon: Tags, capability: 'catalog.manage' },
+      {
+        label: 'Product organization',
+        href: '/categories',
+        icon: FolderTree,
+        capability: 'catalog.manage',
+        keywords: 'categories tags occasions events collections taxonomy',
+      },
       { label: 'Media', href: '/media', icon: Image, capability: 'media.view' },
       { label: 'Sizing', href: '/sizing', icon: Ruler, capability: 'sizing.view' },
       { label: 'Pricing', href: '/pricing', icon: Tags, capability: 'pricing.view' },

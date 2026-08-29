@@ -23,18 +23,71 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table catalog.categories (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
-      parent_category_id uuid references catalog.categories(id),
+      parent_category_id uuid,
       handle text not null,
       name text not null,
-      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE', 'ARCHIVED')),
       position integer not null default 0,
       version bigint not null default 1,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       check (parent_category_id is null or parent_category_id <> id),
-      unique (organization_id, handle)
+      check (position >= 0),
+      unique (organization_id, id),
+      unique (organization_id, handle),
+      foreign key (organization_id, parent_category_id) references catalog.categories(organization_id, id)
     );
     create index categories_organization_parent_position on catalog.categories (organization_id, parent_category_id, position, id);
+    create index categories_organization_status_updated on catalog.categories (organization_id, status, updated_at desc, id);
+
+    create table catalog.tags (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      handle text not null,
+      name text not null check (length(trim(name)) > 0),
+      description text,
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE', 'ARCHIVED')),
+      version bigint not null default 1,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (organization_id, id),
+      unique (organization_id, handle),
+      check (handle ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$')
+    );
+    create index tags_organization_status_name on catalog.tags (organization_id, status, name, id);
+
+    create table catalog.occasions (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      handle text not null,
+      name text not null check (length(trim(name)) > 0),
+      description text,
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE', 'ARCHIVED')),
+      version bigint not null default 1,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (organization_id, id),
+      unique (organization_id, handle),
+      check (handle ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$')
+    );
+    create index occasions_organization_status_name on catalog.occasions (organization_id, status, name, id);
+
+    create table catalog.collections (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      handle text not null,
+      name text not null check (length(trim(name)) > 0),
+      description text,
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE', 'ARCHIVED')),
+      position integer not null default 0 check (position >= 0),
+      version bigint not null default 1,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (organization_id, id),
+      unique (organization_id, handle),
+      check (handle ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$')
+    );
+    create index collections_organization_status_position on catalog.collections (organization_id, status, position, name, id);
 
     create table catalog.attribute_definitions (
       id uuid primary key default uuidv7(),
@@ -69,14 +122,16 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       description text,
       status text not null default 'DRAFT' check (status in ('DRAFT', 'ACTIVE', 'ARCHIVED')),
       publication_status text not null default 'UNPUBLISHED' check (publication_status in ('UNPUBLISHED', 'PUBLISHED')),
-      primary_category_id uuid references catalog.categories(id),
+      primary_category_id uuid,
       published_at timestamptz,
       seo_title text,
       seo_description text,
       version bigint not null default 1,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
+      unique (organization_id, id),
       unique (organization_id, handle),
+      foreign key (organization_id, primary_category_id) references catalog.categories(organization_id, id),
       check (handle ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
       check ((publication_status = 'PUBLISHED' and status = 'ACTIVE' and published_at is not null) or (publication_status = 'UNPUBLISHED'))
     );
@@ -91,6 +146,17 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       changed_at timestamptz not null default now(),
       unique (organization_id, old_handle)
     );
+
+    create table catalog.category_handle_history (
+      id bigint generated always as identity primary key,
+      organization_id uuid not null references platform.organizations(id),
+      category_id uuid not null,
+      old_handle text not null,
+      changed_at timestamptz not null default now(),
+      unique (organization_id, old_handle),
+      foreign key (organization_id, category_id) references catalog.categories(organization_id, id)
+    );
+    create index category_handle_history_category on catalog.category_handle_history (organization_id, category_id, changed_at desc);
 
     create table catalog.product_option_axes (
       id uuid primary key default uuidv7(),
@@ -174,11 +240,44 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
 
     create table catalog.product_categories (
       organization_id uuid not null references platform.organizations(id),
-      product_id uuid not null references catalog.products(id),
-      category_id uuid not null references catalog.categories(id),
-      primary key (product_id, category_id)
+      product_id uuid not null,
+      category_id uuid not null,
+      primary key (organization_id, product_id, category_id),
+      foreign key (organization_id, product_id) references catalog.products(organization_id, id),
+      foreign key (organization_id, category_id) references catalog.categories(organization_id, id)
     );
     create index product_categories_category_product on catalog.product_categories (category_id, product_id);
+
+    create table catalog.product_tags (
+      organization_id uuid not null references platform.organizations(id),
+      product_id uuid not null,
+      tag_id uuid not null,
+      primary key (organization_id, product_id, tag_id),
+      foreign key (organization_id, product_id) references catalog.products(organization_id, id),
+      foreign key (organization_id, tag_id) references catalog.tags(organization_id, id)
+    );
+    create index product_tags_tag_product on catalog.product_tags (organization_id, tag_id, product_id);
+
+    create table catalog.product_occasions (
+      organization_id uuid not null references platform.organizations(id),
+      product_id uuid not null,
+      occasion_id uuid not null,
+      primary key (organization_id, product_id, occasion_id),
+      foreign key (organization_id, product_id) references catalog.products(organization_id, id),
+      foreign key (organization_id, occasion_id) references catalog.occasions(organization_id, id)
+    );
+    create index product_occasions_occasion_product on catalog.product_occasions (organization_id, occasion_id, product_id);
+
+    create table catalog.product_collections (
+      organization_id uuid not null references platform.organizations(id),
+      product_id uuid not null,
+      collection_id uuid not null,
+      position integer not null default 0 check (position >= 0),
+      primary key (organization_id, product_id, collection_id),
+      foreign key (organization_id, product_id) references catalog.products(organization_id, id),
+      foreign key (organization_id, collection_id) references catalog.collections(organization_id, id)
+    );
+    create index product_collections_collection_position on catalog.product_collections (organization_id, collection_id, position, product_id);
 
     create table catalog.product_attribute_values (
       id uuid primary key default uuidv7(),

@@ -4,8 +4,6 @@ import { Type } from 'typebox';
 import type { CatalogProductUpdateDto } from '@maevelle/contracts';
 import type { DatabaseClient } from '@maevelle/database';
 import {
-  CatalogDomainError,
-  createCatalogCategory,
   createCatalogProductType,
   createProductOptionAxis,
   createProductOptionValue,
@@ -13,15 +11,12 @@ import {
   createCatalogVariant,
   getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
-  listCatalogCategories,
-  updateCatalogCategory,
   listCatalogCategoryChoices,
   listStorefrontCatalogProducts,
   listCatalogProductWorkItems,
   listCatalogProducts,
   listCatalogVariantChoices,
   listCatalogProductTypes,
-  moveCatalogCategory,
   publishCatalogProduct,
   replaceCatalogProductContent,
   setCatalogProductAttributes,
@@ -29,7 +24,6 @@ import {
   unpublishCatalogProduct,
   updateCatalogProduct,
 } from '@maevelle/database/catalog';
-import { findActiveAdminContext } from '@maevelle/database/platform';
 import { getPublicSizeGuideForProduct } from '@maevelle/database/sizing';
 import { resolveVariantPrice } from '@maevelle/database/pricing';
 import {
@@ -40,55 +34,15 @@ import {
   resolveStorefrontContext,
 } from '@maevelle/database/storefront';
 
-import type { createAuth } from '../auth/auth.js';
-
-type Auth = ReturnType<typeof createAuth>;
+import { registerCatalogClassificationRoutes } from './catalog-classification.js';
+import {
+  type CatalogAuth as Auth,
+  requireCatalogCapability as requireCapability,
+  sendCatalogDomainError as domainError,
+} from './catalog-support.js';
 const organizationIdParameter = Type.String({
   pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
 });
-
-function toHeaders(headers: Record<string, string | string[] | undefined>): Headers {
-  return new Headers(
-    Object.entries(headers).flatMap(([name, value]) =>
-      typeof value === 'string' ? [[name, value]] : [],
-    ),
-  );
-}
-
-async function requireCapability(
-  database: DatabaseClient,
-  auth: Auth,
-  headers: Record<string, string | string[] | undefined>,
-  capability: string,
-) {
-  const session = await auth.api.getSession({ headers: toHeaders(headers) });
-  if (!session?.user?.id) return undefined;
-  const context = await findActiveAdminContext(database.db, session.user.id, {
-    requiredCapability: capability,
-  });
-  return context ? { ...context, actorId: session.user.id } : undefined;
-}
-
-function domainError(
-  reply: { code(statusCode: number): { send(body: unknown): unknown } },
-  error: unknown,
-) {
-  if (!(error instanceof CatalogDomainError)) {
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
-      return reply
-        .code(409)
-        .send({ error: { code: 'CONFLICT', message: 'That value is already in use.' } });
-    }
-    throw error;
-  }
-  const statusCode =
-    error.code === 'NOT_FOUND'
-      ? 404
-      : error.code === 'STALE_VERSION' || error.code === 'CONFLICT'
-        ? 409
-        : 422;
-  return reply.code(statusCode).send({ error: { code: error.code, message: error.message } });
-}
 
 function expectedVersion(header: string | string[] | undefined): number | undefined {
   const value = Array.isArray(header) ? header[0] : header;
@@ -102,6 +56,7 @@ export function registerCatalogRoutes(
   auth: Auth,
   storefrontOrganizationCode = 'maevelle',
 ): void {
+  registerCatalogClassificationRoutes(app, database, auth);
   app.get('/storefront/v1/context', async (_request, reply) => {
     const context = await resolveStorefrontContext(database.db, storefrontOrganizationCode);
     if (!context)
@@ -122,55 +77,6 @@ export function registerCatalogRoutes(
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCatalogCategoryChoices(database.db, context.organizationId) };
   });
-
-  app.get('/admin/catalog/category-tree', async (request, reply) => {
-    const context = await requireCapability(database, auth, request.headers, 'catalog.view');
-    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listCatalogCategories(database.db, context.organizationId) };
-  });
-
-  app.patch(
-    '/admin/catalog/categories/:categoryId',
-    {
-      schema: {
-        body: Type.Object({
-          version: Type.Integer({ minimum: 1 }),
-          name: Type.Optional(Type.String({ minLength: 1 })),
-          handle: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
-          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('INACTIVE'), Type.Literal('ARCHIVED')])),
-          parentCategoryId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-          position: Type.Optional(Type.Integer({ minimum: 0 })),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
-      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        const body = request.body as {
-          version: number;
-          name?: string;
-          handle?: string;
-          status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
-          parentCategoryId?: string | null;
-          position?: number;
-        };
-        await updateCatalogCategory(database.db, {
-          organizationId: context.organizationId,
-          categoryId: (request.params as { categoryId: string }).categoryId,
-          expectedVersion: body.version,
-          ...(body.name !== undefined ? { name: body.name } : {}),
-          ...(body.handle !== undefined ? { handle: body.handle } : {}),
-          ...(body.status !== undefined ? { status: body.status } : {}),
-          ...(body.parentCategoryId !== undefined ? { parentCategoryId: body.parentCategoryId } : {}),
-          ...(body.position !== undefined ? { position: body.position } : {}),
-        });
-        return reply.code(204).send();
-      } catch (error) {
-        return domainError(reply, error);
-      }
-    },
-  );
 
   app.post(
     '/admin/catalog/product-types',
@@ -435,6 +341,11 @@ export function registerCatalogRoutes(
           title: Type.String({ minLength: 1 }),
           handle: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
           description: Type.Optional(Type.String()),
+          categoryIds: Type.Optional(Type.Array(organizationIdParameter, { uniqueItems: true })),
+          primaryCategoryId: Type.Optional(organizationIdParameter),
+          tagIds: Type.Optional(Type.Array(organizationIdParameter, { uniqueItems: true })),
+          occasionIds: Type.Optional(Type.Array(organizationIdParameter, { uniqueItems: true })),
+          collectionIds: Type.Optional(Type.Array(organizationIdParameter, { uniqueItems: true })),
         }),
       },
     },
@@ -447,6 +358,11 @@ export function registerCatalogRoutes(
           title: string;
           handle: string;
           description?: string;
+          categoryIds?: string[];
+          primaryCategoryId?: string;
+          tagIds?: string[];
+          occasionIds?: string[];
+          collectionIds?: string[];
         };
         const product = await createCatalogProduct(database.db, {
           ...body,
@@ -603,62 +519,6 @@ export function registerCatalogRoutes(
       },
     );
   }
-
-  app.post(
-    '/admin/catalog/categories',
-    {
-      schema: {
-        body: Type.Object({
-          name: Type.String({ minLength: 1 }),
-          handle: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
-          parentCategoryId: Type.Optional(Type.String()),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
-      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        const category = await createCatalogCategory(database.db, {
-          ...(request.body as { name: string; handle: string; parentCategoryId?: string }),
-          organizationId: context.organizationId,
-        });
-        return reply.code(201).send({ data: category });
-      } catch (error) {
-        return domainError(reply, error);
-      }
-    },
-  );
-
-  app.post(
-    '/admin/catalog/categories/:categoryId/move',
-    {
-      schema: {
-        body: Type.Object({
-          version: Type.Integer({ minimum: 1 }),
-          parentCategoryId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
-      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        const body = request.body as { version: number; parentCategoryId?: string | null };
-        await moveCatalogCategory(database.db, {
-          organizationId: context.organizationId,
-          categoryId: (request.params as { categoryId: string }).categoryId,
-          ...(body.parentCategoryId === undefined
-            ? {}
-            : { parentCategoryId: body.parentCategoryId }),
-          expectedVersion: body.version,
-        });
-        return reply.code(204).send();
-      } catch (error) {
-        return domainError(reply, error);
-      }
-    },
-  );
 
   app.post(
     '/admin/catalog/products/:productId/variants',

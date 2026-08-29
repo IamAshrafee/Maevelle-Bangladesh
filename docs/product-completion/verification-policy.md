@@ -1,5 +1,12 @@
 # Verification Policy
 
+This document defines an **area-closure gate**, not the required workload for
+every implementation task or commit. While the repository remains in solo,
+heavy-development mode, follow the
+[development working policy](../development-working-policy.md): use focused
+verification during implementation and defer this full evidence set until a
+meaningful area-closure or release checkpoint.
+
 An area passes only with relevant proof across business purpose, lifecycle,
 schema/invariants, commands, queries, API validation, authorization and tenant
 isolation, Admin/Storefront UX, cross-domain effects, failure recovery,

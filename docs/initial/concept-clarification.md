@@ -1,9 +1,14 @@
 Maevelle Ecommerce — Concept Clarification
 
-Status: Initial / Living Document
+Status: Historical concept discovery; not current scope or sequence authority
 Version: 0.1
 Project type: E-commerce Platform + Business Operations Platform
 Initial business: Maevelle Bangladesh
+
+Supersession notice (2026-08-29): retain this document for product and domain
+reasoning, but ignore any MVP, future, phase, roadmap, deferred, or scoped
+implementation boundary it contains. Current development targets the complete
+platform under the repository-root AGENTS.md and current engineering standards.
 
 1. What is Maevelle Ecommerce?
 

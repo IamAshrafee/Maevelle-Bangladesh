@@ -15,6 +15,13 @@ recreation. To intentionally erase all local PostgreSQL data, run
 `docker compose down --volumes` from the repository root, then start the
 service again. This is destructive and must never be used for production.
 
+During the current solo heavy-development phase, the migration set is a mutable
+schema baseline. Prefer updating the relevant existing domain migration and
+rebuilding this disposable volume instead of writing incremental migrations
+whose only purpose is to preserve local development data. See the repository
+[development working policy](../../docs/development-working-policy.md). This
+exception ends when any real or shared dataset must survive schema upgrades.
+
 `pg_stat_statements` is preloaded at the server level so TASK-018 can create
 the extension through its migration. This baseline creates no extensions,
 schemas, tables, or Maevelle migrations.

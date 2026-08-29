@@ -47,6 +47,9 @@ export interface CatalogProductWorkspace extends ProductSummary {
   readonly organization: {
     readonly categoryIds: readonly string[];
     readonly primaryCategoryId: string | null;
+    readonly tagIds: readonly string[];
+    readonly occasionIds: readonly string[];
+    readonly collectionIds: readonly string[];
     readonly attributes: readonly CatalogProductAttribute[];
   };
   readonly content: {
@@ -542,6 +545,11 @@ export async function createCatalogProduct(
     title: string;
     handle: string;
     description?: string;
+    categoryIds?: readonly string[];
+    primaryCategoryId?: string;
+    tagIds?: readonly string[];
+    occasionIds?: readonly string[];
+    collectionIds?: readonly string[];
   },
 ): Promise<ProductSummary> {
   return db.transaction().execute(async (transaction) => {
@@ -550,6 +558,54 @@ export async function createCatalogProduct(
     `.execute(transaction);
     if (!productType.rows[0])
       throw new CatalogDomainError('VALIDATION_FAILED', 'Product type is not available.');
+    const categoryIds = [...new Set(input.categoryIds ?? [])];
+    const tagIds = [...new Set(input.tagIds ?? [])];
+    const occasionIds = [...new Set(input.occasionIds ?? [])];
+    const collectionIds = [...new Set(input.collectionIds ?? [])];
+    if (input.primaryCategoryId && !categoryIds.includes(input.primaryCategoryId))
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        'The primary Category must also be assigned to the Product.',
+      );
+    if (categoryIds.length > 0) {
+      const categories = await sql<{ id: string }>`with recursive lineage as (
+        select selected.id category_id,category.id ancestor_id,category.parent_category_id,category.status
+        from unnest(${categoryIds}::uuid[]) selected(id)
+        join catalog.categories category on category.id=selected.id
+          and category.organization_id=${input.organizationId}
+        union all
+        select lineage.category_id,parent.id,parent.parent_category_id,parent.status
+        from lineage join catalog.categories parent on parent.id=lineage.parent_category_id
+          and parent.organization_id=${input.organizationId}
+      ) select category_id::text id from lineage group by category_id
+        having bool_and(status='ACTIVE')`.execute(transaction);
+      if (categories.rows.length !== categoryIds.length)
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Every assigned Category and its parent path must be active.',
+        );
+    }
+    for (const [table, ids] of [
+      ['tags', tagIds],
+      ['occasions', occasionIds],
+      ['collections', collectionIds],
+    ] as const) {
+      if (ids.length === 0) continue;
+      const source =
+        table === 'tags'
+          ? sql`catalog.tags`
+          : table === 'occasions'
+            ? sql`catalog.occasions`
+            : sql`catalog.collections`;
+      const available = await sql<{ id: string }>`select id::text from ${source}
+        where organization_id=${input.organizationId} and status='ACTIVE'
+          and id=any(${ids}::uuid[])`.execute(transaction);
+      if (available.rows.length !== ids.length)
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          `Every selected ${table.slice(0, -1)} must be active.`,
+        );
+    }
     const created = await sql<{
       id: string;
       handle: string;
@@ -558,12 +614,27 @@ export async function createCatalogProduct(
       publication_status: ProductSummary['publicationStatus'];
       version: string;
     }>`
-      insert into catalog.products (organization_id, product_type_id, handle, title, description)
-      values (${input.organizationId}, ${input.productTypeId}, ${input.handle}, ${input.title}, ${input.description ?? null})
+      insert into catalog.products
+        (organization_id,product_type_id,handle,title,description,primary_category_id)
+      values (${input.organizationId},${input.productTypeId},${input.handle},${input.title},
+        ${input.description ?? null},${input.primaryCategoryId ?? null}::uuid)
       returning id, handle, title, status, publication_status, version::text
     `.execute(transaction);
     const product = created.rows[0];
     if (!product) throw new Error('Product creation did not return a product.');
+    for (const categoryId of categoryIds)
+      await sql`insert into catalog.product_categories (organization_id,product_id,category_id)
+        values (${input.organizationId},${product.id},${categoryId})`.execute(transaction);
+    for (const tagId of tagIds)
+      await sql`insert into catalog.product_tags (organization_id,product_id,tag_id)
+        values (${input.organizationId},${product.id},${tagId})`.execute(transaction);
+    for (const occasionId of occasionIds)
+      await sql`insert into catalog.product_occasions (organization_id,product_id,occasion_id)
+        values (${input.organizationId},${product.id},${occasionId})`.execute(transaction);
+    for (const collectionId of collectionIds)
+      await sql`insert into catalog.product_collections
+        (organization_id,product_id,collection_id)
+        values (${input.organizationId},${product.id},${collectionId})`.execute(transaction);
     await emitCatalogEvent(transaction, {
       organizationId: input.organizationId,
       productId: product.id,
@@ -846,15 +917,21 @@ export async function setCatalogProductCategories(
         'The primary Category must also be assigned to the Product.',
       );
     if (categoryIds.length > 0) {
-      const categories = await sql<{ id: string }>`
-        select id::text from catalog.categories
-        where organization_id=${input.organizationId} and status='ACTIVE'
-          and id=any(${categoryIds}::uuid[])
-      `.execute(transaction);
+      const categories = await sql<{ id: string }>`with recursive lineage as (
+        select selected.id category_id,category.id ancestor_id,category.parent_category_id,category.status
+        from unnest(${categoryIds}::uuid[]) selected(id)
+        join catalog.categories category on category.id=selected.id
+          and category.organization_id=${input.organizationId}
+        union all
+        select lineage.category_id,parent.id,parent.parent_category_id,parent.status
+        from lineage join catalog.categories parent on parent.id=lineage.parent_category_id
+          and parent.organization_id=${input.organizationId}
+      ) select category_id::text id from lineage group by category_id
+        having bool_and(status='ACTIVE')`.execute(transaction);
       if (categories.rows.length !== categoryIds.length)
         throw new CatalogDomainError(
           'VALIDATION_FAILED',
-          'Every assigned Category must be active in this organization.',
+          'Every assigned Category and its parent path must be active.',
         );
     }
     const updated = await sql<{
@@ -1635,14 +1712,25 @@ export async function getCatalogProductWorkspace(
   const row = product.rows[0];
   if (!row) return undefined;
 
-  const [axes, values, variants, validation, categories, attributes, information, faqs] =
-    await Promise.all([
-      sql<{ id: string; code: string; name: string }>`
+  const [
+    axes,
+    values,
+    variants,
+    validation,
+    categories,
+    tags,
+    occasions,
+    collections,
+    attributes,
+    information,
+    faqs,
+  ] = await Promise.all([
+    sql<{ id: string; code: string; name: string }>`
       select id::text,code,name from catalog.product_option_axes
       where organization_id=${organizationId} and product_id=${productId}::uuid and status='ACTIVE'
       order by position,id
     `.execute(db),
-      sql<{ id: string; option_axis_id: string; code: string; label: string }>`
+    sql<{ id: string; option_axis_id: string; code: string; label: string }>`
       select value.id::text,value.option_axis_id::text,value.code,value.display_value as label
       from catalog.product_option_values value
       join catalog.product_option_axes axis
@@ -1651,7 +1739,7 @@ export async function getCatalogProductWorkspace(
         and value.status='ACTIVE' and axis.status='ACTIVE'
       order by value.position,value.id
     `.execute(db),
-      sql<{ id: string; sku: string; status: string; option_value_ids: string[] }>`
+    sql<{ id: string; sku: string; status: string; option_value_ids: string[] }>`
       select variant.id::text,variant.sku,variant.status,
         coalesce(array_agg(link.option_value_id::text order by link.option_value_id)
           filter (where link.option_value_id is not null),'{}') as option_value_ids
@@ -1661,22 +1749,37 @@ export async function getCatalogProductWorkspace(
       group by variant.id,variant.sku,variant.status
       order by variant.sku,variant.id
     `.execute(db),
-      getCatalogProductReadiness(db, organizationId, productId),
-      sql<{ category_id: string }>`
+    getCatalogProductReadiness(db, organizationId, productId),
+    sql<{ category_id: string }>`
       select category_id::text from catalog.product_categories
       where organization_id=${organizationId} and product_id=${productId}::uuid
       order by category_id
     `.execute(db),
-      sql<{
-        id: string;
-        code: string;
-        name: string;
-        value_type: CatalogProductAttribute['valueType'];
-        is_required: boolean;
-        is_filterable: boolean;
-        is_searchable: boolean;
-        value_json: string | boolean | null;
-      }>`
+    sql<{ tag_id: string }>`
+      select tag_id::text from catalog.product_tags
+      where organization_id=${organizationId} and product_id=${productId}::uuid
+      order by tag_id
+    `.execute(db),
+    sql<{ occasion_id: string }>`
+      select occasion_id::text from catalog.product_occasions
+      where organization_id=${organizationId} and product_id=${productId}::uuid
+      order by occasion_id
+    `.execute(db),
+    sql<{ collection_id: string }>`
+      select collection_id::text from catalog.product_collections
+      where organization_id=${organizationId} and product_id=${productId}::uuid
+      order by collection_id
+    `.execute(db),
+    sql<{
+      id: string;
+      code: string;
+      name: string;
+      value_type: CatalogProductAttribute['valueType'];
+      is_required: boolean;
+      is_filterable: boolean;
+      is_searchable: boolean;
+      value_json: string | boolean | null;
+    }>`
       select definition.id::text,definition.code,definition.name,definition.value_type,
         binding.is_required,definition.is_filterable,definition.is_searchable,
         case definition.value_type
@@ -1698,13 +1801,13 @@ export async function getCatalogProductWorkspace(
         and definition.scope='PRODUCT' and definition.status='ACTIVE'
       order by binding.is_required desc,definition.name,definition.id
     `.execute(db),
-      sql<{
-        group_id: string;
-        group_title: string;
-        item_id: string | null;
-        item_label: string | null;
-        item_value: string | null;
-      }>`
+    sql<{
+      group_id: string;
+      group_title: string;
+      item_id: string | null;
+      item_label: string | null;
+      item_value: string | null;
+    }>`
       select information_group.id::text as group_id,information_group.title as group_title,
         item.id::text as item_id,item.label as item_label,item.value_text as item_value
       from catalog.product_information_groups information_group
@@ -1715,12 +1818,12 @@ export async function getCatalogProductWorkspace(
         and information_group.product_id=${productId}::uuid
       order by information_group.position,information_group.id,item.position,item.id
     `.execute(db),
-      sql<{ id: string; question: string; answer: string }>`
+    sql<{ id: string; question: string; answer: string }>`
       select id::text,question,answer from catalog.product_faqs
       where organization_id=${organizationId} and product_id=${productId}::uuid
       order by position,id
     `.execute(db),
-    ]);
+  ]);
   if (!validation) return undefined;
 
   return {
@@ -1753,6 +1856,9 @@ export async function getCatalogProductWorkspace(
     organization: {
       categoryIds: categories.rows.map((category) => category.category_id),
       primaryCategoryId: row.primary_category_id,
+      tagIds: tags.rows.map((tag) => tag.tag_id),
+      occasionIds: occasions.rows.map((occasion) => occasion.occasion_id),
+      collectionIds: collections.rows.map((collection) => collection.collection_id),
       attributes: attributes.rows.map((attribute) => ({
         id: attribute.id,
         code: attribute.code,
@@ -1967,22 +2073,24 @@ export async function getStorefrontCatalogProduct(
 export async function listCatalogCategories(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-): Promise<readonly {
-  id: string;
-  name: string;
-  handle: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
-  effectiveStatus: 'ACTIVE' | 'INACTIVE';
-  effectiveStatusReason: 'ACTIVE' | 'SELF_INACTIVE' | 'ANCESTOR_INACTIVE';
-  parentCategoryId: string | null;
-  path: string;
-  depth: number;
-  position: number;
-  productCount: number;
-  childCount: number;
-  version: number;
-  updatedAt: string;
-}[]> {
+): Promise<
+  readonly {
+    id: string;
+    name: string;
+    handle: string;
+    status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+    effectiveStatus: 'ACTIVE' | 'INACTIVE';
+    effectiveStatusReason: 'ACTIVE' | 'SELF_INACTIVE' | 'ANCESTOR_INACTIVE';
+    parentCategoryId: string | null;
+    path: string;
+    depth: number;
+    position: number;
+    productCount: number;
+    childCount: number;
+    version: number;
+    updatedAt: string;
+  }[]
+> {
   const result = await sql<{
     id: string;
     name: string;
@@ -2078,7 +2186,8 @@ export async function listCatalogCategories(
     handle: row.handle,
     status: row.status,
     effectiveStatus: row.effective_status as 'ACTIVE' | 'INACTIVE',
-    effectiveStatusReason: row.effective_status_reason as 'ACTIVE' | 'SELF_INACTIVE' | 'ANCESTOR_INACTIVE',
+    effectiveStatusReason: row.effective_status_reason as
+      'ACTIVE' | 'SELF_INACTIVE' | 'ANCESTOR_INACTIVE',
     parentCategoryId: row.parent_category_id,
     path: row.path,
     depth: row.depth,
@@ -2128,8 +2237,9 @@ export async function updateCatalogCategory(
       const current = await sql<{ handle: string }>`
         select handle from catalog.categories where id=${input.categoryId} and organization_id=${input.organizationId}
       `.execute(transaction);
-      if (current.rows.length === 0) throw new CatalogDomainError('NOT_FOUND', 'Category not found');
-      
+      if (current.rows.length === 0)
+        throw new CatalogDomainError('NOT_FOUND', 'Category not found');
+
       const oldHandle = current.rows[0]?.handle;
       if (oldHandle && oldHandle !== input.handle) {
         await sql`
@@ -2145,7 +2255,8 @@ export async function updateCatalogCategory(
     if (input.name !== undefined) parts.push(sql`name = ${input.name}`);
     if (input.handle !== undefined) parts.push(sql`handle = ${input.handle}`);
     if (input.status !== undefined) parts.push(sql`status = ${input.status}`);
-    if (input.parentCategoryId !== undefined) parts.push(sql`parent_category_id = ${input.parentCategoryId ?? null}`);
+    if (input.parentCategoryId !== undefined)
+      parts.push(sql`parent_category_id = ${input.parentCategoryId ?? null}`);
     if (input.position !== undefined) parts.push(sql`position = ${input.position}`);
 
     if (parts.length === 0) return;

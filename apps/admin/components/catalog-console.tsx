@@ -27,6 +27,8 @@ import type {
   CatalogProductWorklistDto,
   CatalogProductSummaryDto,
   CatalogProductWorkspaceDto,
+  CatalogVocabularyItemDto,
+  CatalogVocabularyListDto,
 } from '@maevelle/contracts';
 
 import {
@@ -40,6 +42,7 @@ import {
 import {
   areCatalogAttributesDirty,
   areCatalogCategoriesDirty,
+  areCatalogVocabularyDirty,
   catalogOrganizationFromWorkspace,
   isCatalogOrganizationDirty,
   mergeCatalogOrganization,
@@ -109,6 +112,11 @@ export function CatalogConsole() {
   const [products, setProducts] = useState<readonly CatalogProductWorkItemDto[]>([]);
   const [types, setTypes] = useState<readonly ProductType[]>([]);
   const [categories, setCategories] = useState<readonly CatalogCategoryChoiceDto[]>([]);
+  const [vocabularyChoices, setVocabularyChoices] = useState<{
+    readonly tags: readonly CatalogVocabularyItemDto[];
+    readonly occasions: readonly CatalogVocabularyItemDto[];
+    readonly collections: readonly CatalogVocabularyItemDto[];
+  }>({ tags: [], occasions: [], collections: [] });
   const [message, setMessage] = useState('Loading Products…');
   const [typeId, setTypeId] = useState('');
   const [query, setQuery] = useState('');
@@ -125,6 +133,13 @@ export function CatalogConsole() {
   });
   const [createOpen, setCreateOpen] = useState(false);
   const [createDirty, setCreateDirty] = useState(false);
+  const [createCategoryIds, setCreateCategoryIds] = useState<readonly string[]>([]);
+  const [createPrimaryCategoryId, setCreatePrimaryCategoryId] = useState('');
+  const [createVocabulary, setCreateVocabulary] = useState<{
+    readonly tagIds: readonly string[];
+    readonly occasionIds: readonly string[];
+    readonly collectionIds: readonly string[];
+  }>({ tagIds: [], occasionIds: [], collectionIds: [] });
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const createDrawerRef = useRef<HTMLElement>(null);
   const createWasOpen = useRef(false);
@@ -147,6 +162,7 @@ export function CatalogConsole() {
   const overviewDirty = isCatalogOverviewDirty(overviewBaseline, overviewDraft);
   const organizationDirty = isCatalogOrganizationDirty(organizationBaseline, organizationDraft);
   const categoriesDirty = areCatalogCategoriesDirty(organizationBaseline, organizationDraft);
+  const vocabularyDirty = areCatalogVocabularyDirty(organizationBaseline, organizationDraft);
   const attributesDirty = areCatalogAttributesDirty(organizationBaseline, organizationDraft);
   const workspaceDirty = overviewDirty || organizationDirty;
   const hasUnsavedChanges = workspaceDirty || createDirty;
@@ -197,6 +213,29 @@ export function CatalogConsole() {
       .then((result) => setCategories(result.data))
       .catch((error: unknown) => {
         setMessage(error instanceof Error ? error.message : 'Unable to load Product categories.');
+      });
+    void Promise.all([
+      request<ApiEnvelope<CatalogVocabularyListDto>>(
+        '/admin/catalog/vocabulary/TAG?status=ACTIVE&page=1&pageSize=100',
+      ),
+      request<ApiEnvelope<CatalogVocabularyListDto>>(
+        '/admin/catalog/vocabulary/OCCASION?status=ACTIVE&page=1&pageSize=100',
+      ),
+      request<ApiEnvelope<CatalogVocabularyListDto>>(
+        '/admin/catalog/vocabulary/COLLECTION?status=ACTIVE&page=1&pageSize=100',
+      ),
+    ])
+      .then(([tags, occasions, collections]) =>
+        setVocabularyChoices({
+          tags: tags.data.items,
+          occasions: occasions.data.items,
+          collections: collections.data.items,
+        }),
+      )
+      .catch((error: unknown) => {
+        setMessage(
+          error instanceof Error ? error.message : 'Unable to load Product labels and occasions.',
+        );
       });
     const productId = parameters.get('product');
     if (productId) {
@@ -321,6 +360,9 @@ export function CatalogConsole() {
     )
       return;
     setCreateDirty(false);
+    setCreateCategoryIds([]);
+    setCreatePrimaryCategoryId('');
+    setCreateVocabulary({ tagIds: [], occasionIds: [], collectionIds: [] });
     setCreateOpen(false);
   }
 
@@ -409,11 +451,19 @@ export function CatalogConsole() {
             title: data.get('title'),
             handle: data.get('handle'),
             description: data.get('description') || undefined,
+            categoryIds: createCategoryIds,
+            primaryCategoryId: createPrimaryCategoryId || undefined,
+            tagIds: createVocabulary.tagIds,
+            occasionIds: createVocabulary.occasionIds,
+            collectionIds: createVocabulary.collectionIds,
           }),
         },
       );
       event.currentTarget.reset();
       setCreateDirty(false);
+      setCreateCategoryIds([]);
+      setCreatePrimaryCategoryId('');
+      setCreateVocabulary({ tagIds: [], occasionIds: [], collectionIds: [] });
       setCreateOpen(false);
       await reload();
       await openProduct(result.data);
@@ -558,6 +608,45 @@ export function CatalogConsole() {
     setOrganizationError('');
   }
 
+  function toggleVocabulary(
+    field: 'tagIds' | 'occasionIds' | 'collectionIds',
+    id: string,
+    checked: boolean,
+  ) {
+    setOrganizationDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        [field]: checked
+          ? [...new Set([...current[field], id])].sort()
+          : current[field].filter((selectedId) => selectedId !== id),
+      };
+    });
+    setOrganizationError('');
+  }
+
+  function toggleCreateCategory(categoryId: string, checked: boolean) {
+    setCreateCategoryIds((current) =>
+      checked
+        ? [...new Set([...current, categoryId])].sort()
+        : current.filter((id) => id !== categoryId),
+    );
+    if (!checked && createPrimaryCategoryId === categoryId) setCreatePrimaryCategoryId('');
+  }
+
+  function toggleCreateVocabulary(
+    field: 'tagIds' | 'occasionIds' | 'collectionIds',
+    id: string,
+    checked: boolean,
+  ) {
+    setCreateVocabulary((current) => ({
+      ...current,
+      [field]: checked
+        ? [...new Set([...current[field], id])].sort()
+        : current[field].filter((selectedId) => selectedId !== id),
+    }));
+  }
+
   async function recoverOrganizationDraft() {
     if (
       !workspace ||
@@ -677,6 +766,51 @@ export function CatalogConsole() {
       } else {
         setOrganizationError(
           error instanceof Error ? error.message : 'Unable to save Product attributes.',
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveVocabulary(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspace || !organizationDraft || busy || !vocabularyDirty) return;
+    if (organizationConflicts.length > 0) {
+      setOrganizationError('Resolve the stale workspace choices before saving product labels.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await request(`/admin/catalog/products/${workspace.id}/vocabulary`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          version: workspace.version,
+          tagIds: organizationDraft.tagIds,
+          occasionIds: organizationDraft.occasionIds,
+          collectionIds: organizationDraft.collectionIds,
+        }),
+      });
+      const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+        `/admin/catalog/products/${workspace.id}`,
+      );
+      applyWorkspace(refreshed.data, { preserveOverview: true, preserveOrganization: true });
+      setMessage('Tags, occasions, and collections saved. Your other drafts were preserved.');
+      await reload();
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'STALE_VERSION') {
+        try {
+          await recoverOrganizationDraft();
+        } catch (refreshError) {
+          setOrganizationError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : 'The Product changed, but its latest version could not be loaded.',
+          );
+        }
+      } else {
+        setOrganizationError(
+          error instanceof Error ? error.message : 'Unable to save Product labels.',
         );
       }
     } finally {
@@ -1275,7 +1409,12 @@ export function CatalogConsole() {
                 >
                   <fieldset>
                     <legend>Categories</legend>
-                    <p>Choose all relevant paths. A primary category defines the main placement.</p>
+                    <p>
+                      Choose all relevant paths. A primary category defines the main placement.{' '}
+                      <Link href="/categories" title="Create or edit categories">
+                        Manage categories
+                      </Link>
+                    </p>
                     <div className="category-choice-list">
                       {categories.map((category) => (
                         <label key={category.id}>
@@ -1289,7 +1428,9 @@ export function CatalogConsole() {
                       ))}
                       {categories.length === 0 ? (
                         <p>
-                          No active categories are available. Create taxonomy before assignment.
+                          No active categories are available.{' '}
+                          <Link href="/categories">Create the first category</Link> before
+                          assignment.
                         </p>
                       ) : null}
                     </div>
@@ -1344,6 +1485,98 @@ export function CatalogConsole() {
                       disabled={!categoriesDirty || busy || organizationConflicts.length > 0}
                     >
                       {busy ? 'Saving…' : 'Save categories'}
+                    </button>
+                  </footer>
+                </form>
+                <form
+                  className="organization-form"
+                  onSubmit={(event) => void saveVocabulary(event)}
+                >
+                  <fieldset>
+                    <legend>Tags, occasions, and collections</legend>
+                    <p>
+                      Add useful discovery and merchandising labels.{' '}
+                      <Link href="/categories" title="Manage product organization values">
+                        Manage available values
+                      </Link>
+                    </p>
+                    <div className="attribute-field-grid">
+                      {(
+                        [
+                          {
+                            label: 'Tags',
+                            help: 'Flexible labels, such as bestseller or hand-finished.',
+                            field: 'tagIds',
+                            items: vocabularyChoices.tags,
+                          },
+                          {
+                            label: 'Occasions or events',
+                            help: 'When this product is suitable, such as Wedding, Eid, or Party.',
+                            field: 'occasionIds',
+                            items: vocabularyChoices.occasions,
+                          },
+                          {
+                            label: 'Collections',
+                            help: 'Campaign or curated groups, such as Festive Edit.',
+                            field: 'collectionIds',
+                            items: vocabularyChoices.collections,
+                          },
+                        ] as const
+                      ).map((group) => (
+                        <fieldset key={group.field}>
+                          <legend title={group.help}>{group.label}</legend>
+                          <p>{group.help}</p>
+                          <div className="category-choice-list">
+                            {group.items.map((item) => (
+                              <label key={item.id} title={item.description ?? group.help}>
+                                <input
+                                  checked={organizationDraft[group.field].includes(item.id)}
+                                  type="checkbox"
+                                  onChange={(event) =>
+                                    toggleVocabulary(group.field, item.id, event.target.checked)
+                                  }
+                                />
+                                <span>{item.name}</span>
+                              </label>
+                            ))}
+                            {group.items.length === 0 ? (
+                              <p>No active {group.label.toLowerCase()} are available.</p>
+                            ) : null}
+                          </div>
+                        </fieldset>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <footer>
+                    <span role="status">
+                      {vocabularyDirty
+                        ? 'Unsaved label changes'
+                        : 'Tags, occasions, and collections are up to date'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!vocabularyDirty || busy}
+                      onClick={() =>
+                        setOrganizationDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                tagIds: organizationBaseline.tagIds,
+                                occasionIds: organizationBaseline.occasionIds,
+                                collectionIds: organizationBaseline.collectionIds,
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      Discard labels
+                    </button>
+                    <button
+                      className="button primary"
+                      type="submit"
+                      disabled={!vocabularyDirty || busy || organizationConflicts.length > 0}
+                    >
+                      {busy ? 'Saving…' : 'Save labels'}
                     </button>
                   </footer>
                 </form>
@@ -1772,6 +2005,104 @@ export function CatalogConsole() {
                   rows={5}
                   placeholder="Describe material, cut, use, and customer value…"
                 />
+              </div>
+              <div className="form-section">
+                <div className="section-heading">
+                  <div>
+                    <h3>Product organization</h3>
+                    <p>Optional now. Assigning these here saves setup steps after creation.</p>
+                  </div>
+                  <Link
+                    href="/categories"
+                    title="Create categories, tags, occasions, or collections"
+                  >
+                    Manage values
+                  </Link>
+                </div>
+                <details className="compact-disclosure" open>
+                  <summary>Categories ({createCategoryIds.length} selected)</summary>
+                  <div className="category-choice-list">
+                    {categories.map((category) => (
+                      <label key={category.id}>
+                        <input
+                          checked={createCategoryIds.includes(category.id)}
+                          type="checkbox"
+                          onChange={(event) =>
+                            toggleCreateCategory(category.id, event.target.checked)
+                          }
+                        />
+                        <span>{category.path}</span>
+                      </label>
+                    ))}
+                    {categories.length === 0 ? (
+                      <p>
+                        No active categories yet. <Link href="/categories">Create one</Link>.
+                      </p>
+                    ) : null}
+                  </div>
+                  <Label htmlFor="create-primary-category">Primary category</Label>
+                  <select
+                    id="create-primary-category"
+                    disabled={createCategoryIds.length === 0}
+                    value={createPrimaryCategoryId}
+                    onChange={(event) => setCreatePrimaryCategoryId(event.target.value)}
+                  >
+                    <option value="">No primary category</option>
+                    {categories
+                      .filter((category) => createCategoryIds.includes(category.id))
+                      .map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.path}
+                        </option>
+                      ))}
+                  </select>
+                </details>
+                {(
+                  [
+                    {
+                      label: 'Tags',
+                      field: 'tagIds',
+                      items: vocabularyChoices.tags,
+                      help: 'Flexible labels such as bestseller or hand-finished.',
+                    },
+                    {
+                      label: 'Occasions or events',
+                      field: 'occasionIds',
+                      items: vocabularyChoices.occasions,
+                      help: 'When the item is suitable, such as Wedding, Eid, or Party.',
+                    },
+                    {
+                      label: 'Collections',
+                      field: 'collectionIds',
+                      items: vocabularyChoices.collections,
+                      help: 'Campaign or curated groups, such as Festive Edit.',
+                    },
+                  ] as const
+                ).map((group) => (
+                  <details className="compact-disclosure" key={group.field}>
+                    <summary>
+                      {group.label} ({createVocabulary[group.field].length} selected)
+                    </summary>
+                    <p title={group.help}>{group.help}</p>
+                    <div className="category-choice-list">
+                      {group.items.map((item) => (
+                        <label key={item.id} title={item.description ?? group.help}>
+                          <input
+                            checked={createVocabulary[group.field].includes(item.id)}
+                            type="checkbox"
+                            onChange={(event) =>
+                              toggleCreateVocabulary(group.field, item.id, event.target.checked)
+                            }
+                          />
+                          <span>{item.name}</span>
+                        </label>
+                      ))}
+                      {group.items.length === 0 ? (
+                        <p>No active {group.label.toLowerCase()} are available.</p>
+                      ) : null}
+                    </div>
+                  </details>
+                ))}
               </div>
               <footer>
                 <button type="button" onClick={closeCreateDrawer}>

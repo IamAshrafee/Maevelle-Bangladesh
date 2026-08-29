@@ -1,12 +1,19 @@
 # Maevelle Ecommerce — Initial Requirements Specification
 
 **Document:** `docs/initial/requirements.md`
-**Status:** Living Document
+**Status:** Historical requirements discovery; not current scope authority
 **Version:** 0.1
 **Initial Business:** Maevelle Bangladesh
 **Platform Direction:** Reusable Commerce + Business Operations Platform
 
 ---
+
+> **Superseded scope notice (2026-08-29):** This document's `CURRENT`,
+> `FOUNDATION`, `FUTURE`, MVP, phase, and implement-later classifications no
+> longer constrain development. Retain the requirements and domain reasoning,
+> but use the repository-root `AGENTS.md`, current product evidence, and the
+> complete-platform engineering standards to decide what to build.
+
 
 # 1. Purpose
 
@@ -30,7 +37,9 @@ Individual domains will receive deeper specifications later.
 
 # 2. Requirement Classification
 
-Requirements use three classifications.
+Requirements historically used three classifications. These labels describe
+the original planning context; they are no longer an implementation priority or
+deferral mechanism.
 
 ### `CURRENT`
 
@@ -3415,9 +3424,10 @@ BUX-018
 
 ---
 
-# 63. Current Scope vs Architectural Preparation
+# 63. Historical Scope Model (Superseded)
 
-A crucial rule for this project:
+The following grouping records an early planning model. It no longer excludes
+"Prepare Now" or "Implement Later" capabilities from current development.
 
 ## Build Now
 
@@ -3522,19 +3532,22 @@ If implementation reveals that a requirement should change:
 
 ---
 
-# 66. Next Documentation Step
+# 66. Historical Next Documentation Step (Completed and Superseded)
 
-The next document should be:
+The original next step was planned as:
 
 ```text
 docs/initial/scope.md
 ```
 
-It will convert this large requirement universe into an implementation-oriented scope.
+This is no longer an active instruction. Current work is governed by the
+complete-platform policy and current repository evidence.
 
-However, it **must not create a weak “tiny MVP.”**
+The historical intent was to convert this large requirement universe into an
+implementation-oriented scope. The planned document was explicitly not
+supposed to create a weak "tiny MVP."
 
-Its purpose will be to determine:
+Its planned purpose was to determine:
 
 - what must exist for Maevelle to operate the business properly;
 - what capability can be introduced progressively;
@@ -3545,7 +3558,8 @@ Its purpose will be to determine:
 - what can be deferred without creating technical debt;
 - what belongs to post-launch expansion.
 
-After scope stabilization, the highest-risk domains should be designed separately before database modeling.
+The plan then called for the highest-risk domains to be designed separately
+before database modeling.
 
 Recommended domain-design order:
 
@@ -3565,7 +3579,8 @@ Recommended domain-design order:
 13. Access Control Architecture
 ```
 
-Only after these interconnected domains are sufficiently understood should the project move into serious relational database/schema design.
+This historical sequence has been completed and no longer gates current
+implementation.
 
 ---
 

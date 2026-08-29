@@ -90,7 +90,8 @@ export interface CatalogCategoryChoiceDto {
   readonly depth: number;
 }
 
-export type CatalogCategoryStatusDto = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type CatalogClassificationStatusDto = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type CatalogCategoryStatusDto = CatalogClassificationStatusDto;
 
 export interface CatalogCategoryDto {
   readonly id: string;
@@ -107,6 +108,43 @@ export interface CatalogCategoryDto {
   readonly childCount: number;
   readonly version: number;
   readonly updatedAt: string;
+}
+
+export interface CatalogCategoryListDto {
+  readonly items: readonly CatalogCategoryDto[];
+  readonly pagination: PaginationDto;
+  readonly summary: {
+    readonly total: number;
+    readonly active: number;
+    readonly inactive: number;
+    readonly archived: number;
+  };
+}
+
+export type CatalogVocabularyKindDto = 'TAG' | 'OCCASION' | 'COLLECTION';
+
+export interface CatalogVocabularyItemDto {
+  readonly id: string;
+  readonly kind: CatalogVocabularyKindDto;
+  readonly name: string;
+  readonly handle: string;
+  readonly description: string | null;
+  readonly status: CatalogClassificationStatusDto;
+  readonly position: number;
+  readonly productCount: number;
+  readonly version: number;
+  readonly updatedAt: string;
+}
+
+export interface CatalogVocabularyListDto {
+  readonly items: readonly CatalogVocabularyItemDto[];
+  readonly pagination: PaginationDto;
+  readonly summary: {
+    readonly total: number;
+    readonly active: number;
+    readonly inactive: number;
+    readonly archived: number;
+  };
 }
 
 export interface CatalogProductAttributeDto {
@@ -160,6 +198,9 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   readonly organization: {
     readonly categoryIds: readonly string[];
     readonly primaryCategoryId: string | null;
+    readonly tagIds: readonly string[];
+    readonly occasionIds: readonly string[];
+    readonly collectionIds: readonly string[];
     readonly attributes: readonly CatalogProductAttributeDto[];
   };
   readonly content: {

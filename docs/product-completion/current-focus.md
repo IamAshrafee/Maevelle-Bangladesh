@@ -27,6 +27,8 @@ Inventory and implement Product structured information groups, customer FAQ,
 and SEO fields using the same tenant, validation, concurrency, recovery, and
 Storefront projection standards.
 
-## Do not switch areas
+## Continuity note
 
-Catalog Product Management remains active until its completion gate passes.
+Catalog Product Management is the recommended resume point when no newer user
+instruction selects another module. It is not a restriction against working in
+another area.
