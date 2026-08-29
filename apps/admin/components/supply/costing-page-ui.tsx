@@ -4,6 +4,7 @@ import { BookOpen, Boxes, CircleDollarSign, FileCheck2, Layers3, ReceiptText } f
 import type { ComponentType } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
@@ -28,22 +29,20 @@ function SummaryCards({
   cards: readonly [string, string | number, string, ComponentType<{ className?: string }>][];
 }) {
   return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Cost snapshot">
+    <Stats aria-label="Cost snapshot">
       {cards.map(([label, value, detail, Icon]) => (
-        <Card key={label} size="sm">
-          <CardContent className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">{label}</p>
-              <strong className="mt-1 block text-2xl tracking-tight">{value}</strong>
-              <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-            </div>
-            <span className="rounded-lg bg-primary/10 p-2 text-primary">
-              <Icon className="size-4" />
-            </span>
-          </CardContent>
-        </Card>
+        <StatsCard key={label} className="flex items-start justify-between gap-3">
+          <div>
+            <StatsTitle>{label}</StatsTitle>
+            <StatsValue>{value}</StatsValue>
+            <StatsDescription>{detail}</StatsDescription>
+          </div>
+          <span className="rounded-lg bg-primary/10 p-2 text-primary shrink-0">
+            <Icon className="size-4" />
+          </span>
+        </StatsCard>
       ))}
-    </section>
+    </Stats>
   );
 }
 

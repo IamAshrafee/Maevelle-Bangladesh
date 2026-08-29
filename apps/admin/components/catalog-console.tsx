@@ -51,6 +51,7 @@ import {
   type CatalogOrganizationValues,
 } from '@/components/catalog-organization-state';
 import { StatusBadge } from '@/components/status-badge';
+import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -997,24 +998,24 @@ export function CatalogConsole() {
           <AlertTriangle /> {message}
         </div>
       ) : null}
-      <section className="catalog-summary" aria-label="Catalog summary">
-        <article>
-          <span>All Products</span>
-          <strong>{worklist.summary.total}</strong>
-        </article>
-        <article>
-          <span>Published</span>
-          <strong>{worklist.summary.published}</strong>
-        </article>
-        <article>
-          <span>Drafts</span>
-          <strong>{worklist.summary.drafts}</strong>
-        </article>
-        <article>
-          <span>Product types</span>
-          <strong>{types.length}</strong>
-        </article>
-      </section>
+      <Stats aria-label="Catalog summary">
+        <StatsCard>
+          <StatsTitle>All Products</StatsTitle>
+          <StatsValue>{worklist.summary.total}</StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Published</StatsTitle>
+          <StatsValue>{worklist.summary.published}</StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Drafts</StatsTitle>
+          <StatsValue>{worklist.summary.drafts}</StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Product types</StatsTitle>
+          <StatsValue>{types.length}</StatsValue>
+        </StatsCard>
+      </Stats>
       <section className="orders-filterbar" aria-label="Product filters">
         <label className="table-search">
           <Search />

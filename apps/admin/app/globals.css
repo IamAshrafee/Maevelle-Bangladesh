@@ -555,35 +555,7 @@ body {
     color: var(--foreground);
   }
 
-  .metric-strip {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--border);
-    border-radius: 0.55rem;
-    background: white;
-    box-shadow: 0 1px 2px rgb(16 42 34 / 4%);
-  }
-  .metric-strip article {
-    min-width: 0;
-    padding: 0.85rem 1rem;
-  }
-  .metric-strip article + article {
-    border-left: 1px solid var(--border);
-  }
-  .metric-strip span,
-  .metric-strip small {
-    display: block;
-    color: var(--muted-foreground);
-    font-size: 0.65rem;
-  }
-  .metric-strip strong {
-    display: block;
-    margin: 0.2rem 0 0.12rem;
-    overflow: hidden;
-    font-size: clamp(1.05rem, 2vw, 1.42rem);
-    letter-spacing: -0.035em;
-    text-overflow: ellipsis;
-  }
+
   .dashboard-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.65fr) minmax(16rem, 0.7fr);
@@ -1207,29 +1179,7 @@ body {
     color: oklch(0.48 0.17 25) !important;
   }
 
-  .catalog-summary {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--border);
-    border-radius: 0.5rem;
-    background: white;
-  }
-  .catalog-summary article {
-    padding: 0.65rem 0.85rem;
-  }
-  .catalog-summary article + article {
-    border-left: 1px solid var(--border);
-  }
-  .catalog-summary span {
-    display: block;
-    color: var(--muted-foreground);
-    font-size: 0.62rem;
-  }
-  .catalog-summary strong {
-    display: block;
-    margin-top: 0.15rem;
-    font-size: 1.12rem;
-  }
+
   .product-workspace {
     display: grid;
     min-width: 0;
@@ -2288,18 +2238,7 @@ body {
     align-items: flex-start;
     flex-direction: column;
   }
-  .metric-strip {
-    grid-template-columns: 1fr 1fr;
-  }
-  .metric-strip article + article {
-    border-left: 0;
-  }
-  .metric-strip article:nth-child(even) {
-    border-left: 1px solid var(--border);
-  }
-  .metric-strip article:nth-child(n + 3) {
-    border-top: 1px solid var(--border);
-  }
+
   .data-table-shell table,
   .admin-content table {
     min-width: 42rem;
@@ -2318,18 +2257,7 @@ body {
   .filter-chips {
     width: 100%;
   }
-  .catalog-summary {
-    grid-template-columns: 1fr 1fr;
-  }
-  .catalog-summary article + article {
-    border-left: 0;
-  }
-  .catalog-summary article:nth-child(even) {
-    border-left: 1px solid var(--border);
-  }
-  .catalog-summary article:nth-child(n + 3) {
-    border-top: 1px solid var(--border);
-  }
+
   .catalog-pagination {
     justify-content: space-between;
   }

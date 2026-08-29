@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import type { ApiEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 
 type Attention = { domain: string; reason: string; severity: string; count: string; href: string };
 type Metric = {
@@ -127,28 +128,28 @@ export function DashboardConsole() {
           {message}
         </div>
       ) : null}
-      <section className="metric-strip" aria-label="Business snapshot">
-        <article>
-          <span>Net sales</span>
-          <strong>{money(primaryMetric?.netSales, primaryMetric?.currencyCode)}</strong>
-          <small>Projected authoritative Order facts</small>
-        </article>
-        <article>
-          <span>Gross margin</span>
-          <strong>{money(primaryMetric?.grossMargin, primaryMetric?.currencyCode)}</strong>
-          <small>Where recognized cost is available</small>
-        </article>
-        <article>
-          <span>Discounts</span>
-          <strong>{money(primaryMetric?.discounts, primaryMetric?.currencyCode)}</strong>
-          <small>Applied promotion value</small>
-        </article>
-        <article>
-          <span>Recent orders</span>
-          <strong>{orderCount}</strong>
-          <small>Latest visible operational records</small>
-        </article>
-      </section>
+      <Stats aria-label="Business snapshot">
+        <StatsCard>
+          <StatsTitle>Net sales</StatsTitle>
+          <StatsValue>{money(primaryMetric?.netSales, primaryMetric?.currencyCode)}</StatsValue>
+          <StatsDescription>Projected authoritative Order facts</StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Gross margin</StatsTitle>
+          <StatsValue>{money(primaryMetric?.grossMargin, primaryMetric?.currencyCode)}</StatsValue>
+          <StatsDescription>Where recognized cost is available</StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Discounts</StatsTitle>
+          <StatsValue>{money(primaryMetric?.discounts, primaryMetric?.currencyCode)}</StatsValue>
+          <StatsDescription>Applied promotion value</StatsDescription>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Recent orders</StatsTitle>
+          <StatsValue>{orderCount}</StatsValue>
+          <StatsDescription>Latest visible operational records</StatsDescription>
+        </StatsCard>
+      </Stats>
       <div className="dashboard-grid">
         <section className="panel attention-panel">
           <header className="panel-header">

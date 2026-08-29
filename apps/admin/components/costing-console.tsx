@@ -203,7 +203,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
     }
   }
   return (
-    <main className="min-h-screen bg-muted/30 p-6">
+    <main >
       <div className="mx-auto grid max-w-7xl gap-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>

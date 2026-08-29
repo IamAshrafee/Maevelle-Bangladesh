@@ -374,7 +374,7 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
 
   const [title, description, actionLabel] = screenCopy[screen];
   return (
-    <main className="min-h-screen bg-muted/30 p-4 md:p-6">
+    <main>
       <div className="mx-auto grid max-w-7xl gap-5">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
