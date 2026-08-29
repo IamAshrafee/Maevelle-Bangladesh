@@ -271,6 +271,78 @@ export interface CatalogVariantChoiceDto {
   readonly optionSummary: string;
 }
 
+export interface CatalogVariantMatrixDto {
+  readonly product: {
+    readonly id: string;
+    readonly title: string;
+    readonly version: number;
+    readonly defaultCurrency: string;
+  };
+  readonly axes: readonly {
+    readonly id: string;
+    readonly code: string;
+    readonly name: string;
+    readonly status: 'ACTIVE' | 'ARCHIVED';
+    readonly position: number;
+    readonly version: number;
+    readonly values: readonly {
+      readonly id: string;
+      readonly code: string;
+      readonly label: string;
+      readonly status: 'ACTIVE' | 'ARCHIVED';
+      readonly position: number;
+      readonly version: number;
+    }[];
+  }[];
+  readonly rows: readonly {
+    readonly combinationKey: string;
+    readonly values: readonly {
+      readonly axisId: string;
+      readonly axisName: string;
+      readonly valueId: string;
+      readonly valueLabel: string;
+    }[];
+    readonly state: 'MISSING' | 'ACTIVE' | 'ARCHIVED';
+    readonly variant: {
+      readonly id: string;
+      readonly sku: string;
+      readonly status: 'ACTIVE' | 'ARCHIVED';
+      readonly version: number;
+      readonly barcode: string | null;
+      readonly weight: { readonly value: string; readonly unit: string } | null;
+      readonly dimensions: {
+        readonly length: string;
+        readonly width: string;
+        readonly height: string;
+        readonly unit: string;
+      } | null;
+      readonly currentPrice: {
+        readonly amount: string;
+        readonly compareAtAmount: string | null;
+        readonly currency: string;
+      } | null;
+      readonly sellableQuantity: string;
+      readonly variantMediaCount: number;
+      readonly usesProductMedia: boolean;
+      readonly setupIssues: readonly ('PRICE' | 'MEDIA' | 'INVENTORY')[];
+    } | null;
+  }[];
+  readonly pagination: PaginationDto;
+  readonly summary: {
+    readonly potentialCombinations: number;
+    readonly activeVariants: number;
+    readonly archivedVariants: number;
+    readonly missingCombinations: number;
+    readonly incompleteVariants: number;
+  };
+  readonly incompleteVariants: readonly {
+    readonly id: string;
+    readonly sku: string;
+    readonly status: 'ACTIVE' | 'ARCHIVED';
+    readonly reasons: readonly ('MISSING_AXIS' | 'ARCHIVED_AXIS' | 'ARCHIVED_VALUE')[];
+  }[];
+}
+
 export interface StorefrontProductDto {
   readonly id: string;
   readonly handle: string;

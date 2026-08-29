@@ -20,6 +20,10 @@
       "types": "./src/catalog-product-types.ts",
       "default": "./dist/src/catalog-product-types.js"
     },
+    "./catalog-variants": {
+      "types": "./src/catalog-variants.ts",
+      "default": "./dist/src/catalog-variants.js"
+    },
     "./media": {
       "types": "./src/media.ts",
       "default": "./dist/src/media.js"

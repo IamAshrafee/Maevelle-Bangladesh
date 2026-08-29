@@ -191,12 +191,18 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table catalog.product_option_axes (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
-      product_id uuid not null references catalog.products(id),
-      code text not null,
-      name text not null,
+      product_id uuid not null,
+      code text not null check (code ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
+      name text not null check (length(trim(name)) > 0),
       position integer not null default 0,
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
-      unique (product_id, code)
+      version bigint not null default 1,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      check (position >= 0),
+      unique (organization_id, id),
+      unique (product_id, code),
+      foreign key (organization_id, product_id) references catalog.products(organization_id, id)
     );
     create index product_option_axes_product_position on catalog.product_option_axes (product_id, position, id);
 
@@ -214,14 +220,22 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table catalog.product_option_values (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
-      option_axis_id uuid not null references catalog.product_option_axes(id),
-      code text not null,
-      display_value text not null,
+      option_axis_id uuid not null,
+      code text not null check (code ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
+      display_value text not null check (length(trim(display_value)) > 0),
       color_id uuid references catalog.colors(id),
       size_definition_id uuid,
       position integer not null default 0,
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
-      unique (option_axis_id, code)
+      version bigint not null default 1,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      check (position >= 0),
+      unique (organization_id, id),
+      unique (organization_id, option_axis_id, id),
+      unique (option_axis_id, code),
+      foreign key (organization_id, option_axis_id)
+        references catalog.product_option_axes(organization_id, id)
     );
     create index product_option_values_axis_position on catalog.product_option_values (option_axis_id, position, id);
 
@@ -243,20 +257,38 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       version bigint not null default 1,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
+      check (length(trim(sku)) > 0),
+      check (sku_normalized=upper(trim(sku))),
+      check (barcode is null or length(trim(barcode)) > 0),
+      check (weight_value is null or weight_value > 0),
+      check ((weight_value is null)=(weight_unit is null)),
+      check (weight_unit is null or weight_unit in ('G', 'KG', 'OZ', 'LB')),
+      check ((length_value is null and width_value is null and height_value is null and dimension_unit is null)
+        or (length_value > 0 and width_value > 0 and height_value > 0
+          and dimension_unit in ('MM', 'CM', 'IN'))),
+      check (length(option_signature) > 0),
       unique (organization_id, id),
       unique (organization_id, sku_normalized),
       unique (product_id, option_signature),
       foreign key (organization_id, product_id) references catalog.products(organization_id, id)
     );
+    create unique index product_variants_barcode_unique
+      on catalog.product_variants (organization_id, barcode) where barcode is not null;
     create index product_variants_product_status on catalog.product_variants (product_id, status);
 
     create table catalog.variant_option_values (
       organization_id uuid not null references platform.organizations(id),
-      variant_id uuid not null references catalog.product_variants(id),
-      option_axis_id uuid not null references catalog.product_option_axes(id),
-      option_value_id uuid not null references catalog.product_option_values(id),
-      primary key (variant_id, option_axis_id),
-      unique (variant_id, option_value_id)
+      variant_id uuid not null,
+      option_axis_id uuid not null,
+      option_value_id uuid not null,
+      primary key (organization_id, variant_id, option_axis_id),
+      unique (organization_id, variant_id, option_value_id),
+      foreign key (organization_id, variant_id)
+        references catalog.product_variants(organization_id, id),
+      foreign key (organization_id, option_axis_id)
+        references catalog.product_option_axes(organization_id, id),
+      foreign key (organization_id, option_axis_id, option_value_id)
+        references catalog.product_option_values(organization_id, option_axis_id, id)
     );
     create index variant_option_values_option_value on catalog.variant_option_values (option_value_id, variant_id);
 

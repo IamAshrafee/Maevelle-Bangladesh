@@ -36,6 +36,7 @@ import {
 
 import { registerCatalogClassificationRoutes } from './catalog-classification.js';
 import { registerCatalogProductTypeRoutes } from './catalog-product-types.js';
+import { registerCatalogVariantRoutes } from './catalog-variants.js';
 import {
   type CatalogAuth as Auth,
   requireCatalogCapability as requireCapability,
@@ -59,6 +60,7 @@ export function registerCatalogRoutes(
 ): void {
   registerCatalogClassificationRoutes(app, database, auth);
   registerCatalogProductTypeRoutes(app, database, auth);
+  registerCatalogVariantRoutes(app, database, auth);
   app.get('/storefront/v1/context', async (_request, reply) => {
     const context = await resolveStorefrontContext(database.db, storefrontOrganizationCode);
     if (!context)

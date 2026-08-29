@@ -163,6 +163,18 @@ describe('API hardening foundation', () => {
     });
     expect(protectedDefinitions.statusCode).toBe(403);
 
+    const invalidMatrix = await app.inject({
+      method: 'GET',
+      url: '/admin/catalog/products/not-a-product/variant-matrix',
+    });
+    expect(invalidMatrix.statusCode).toBe(400);
+
+    const protectedMatrix = await app.inject({
+      method: 'GET',
+      url: `/admin/catalog/products/${productId}/variant-matrix?page=1&pageSize=25`,
+    });
+    expect(protectedMatrix.statusCode).toBe(403);
+
     const protectedCategories = await app.inject({
       method: 'PUT',
       url: `/admin/catalog/products/${productId}/categories`,
