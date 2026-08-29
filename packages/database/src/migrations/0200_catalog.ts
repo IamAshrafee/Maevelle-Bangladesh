@@ -16,6 +16,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       version bigint not null default 1,
+      unique (organization_id, id),
       unique (organization_id, code)
     );
     create index product_types_organization_status on catalog.product_types (organization_id, status);
@@ -103,20 +104,47 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       version bigint not null default 1,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
+      unique (organization_id, id),
       unique (organization_id, code),
       check (validation_config is null or jsonb_typeof(validation_config) = 'object')
     );
-    create table catalog.product_type_attributes (
-      product_type_id uuid not null references catalog.product_types(id),
-      attribute_definition_id uuid not null references catalog.attribute_definitions(id),
-      is_required boolean not null default false,
-      primary key (product_type_id, attribute_definition_id)
+    create table catalog.attribute_reference_options (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      attribute_definition_id uuid not null,
+      code text not null check (code ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
+      label text not null check (length(trim(label)) > 0),
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
+      position integer not null default 0 check (position >= 0),
+      version bigint not null default 1,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (organization_id, attribute_definition_id, id),
+      unique (attribute_definition_id, code),
+      foreign key (organization_id, attribute_definition_id)
+        references catalog.attribute_definitions(organization_id, id)
     );
+    create index attribute_reference_options_definition_status
+      on catalog.attribute_reference_options
+        (organization_id, attribute_definition_id, status, position, id);
+    create table catalog.product_type_attributes (
+      organization_id uuid not null references platform.organizations(id),
+      product_type_id uuid not null,
+      attribute_definition_id uuid not null,
+      is_required boolean not null default false,
+      primary key (organization_id, product_type_id, attribute_definition_id),
+      foreign key (organization_id, product_type_id)
+        references catalog.product_types(organization_id, id),
+      foreign key (organization_id, attribute_definition_id)
+        references catalog.attribute_definitions(organization_id, id)
+    );
+    create index product_type_attributes_definition
+      on catalog.product_type_attributes (organization_id, attribute_definition_id, product_type_id);
 
     create table catalog.products (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
-      product_type_id uuid not null references catalog.product_types(id),
+      product_type_id uuid not null,
       handle text not null,
       title text not null check (length(trim(title)) > 0),
       description text,
@@ -131,6 +159,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       updated_at timestamptz not null default now(),
       unique (organization_id, id),
       unique (organization_id, handle),
+      foreign key (organization_id, product_type_id)
+        references catalog.product_types(organization_id, id),
       foreign key (organization_id, primary_category_id) references catalog.categories(organization_id, id),
       check (handle ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
       check ((publication_status = 'PUBLISHED' and status = 'ACTIVE' and published_at is not null) or (publication_status = 'UNPUBLISHED'))
@@ -213,8 +243,10 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       version bigint not null default 1,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
+      unique (organization_id, id),
       unique (organization_id, sku_normalized),
-      unique (product_id, option_signature)
+      unique (product_id, option_signature),
+      foreign key (organization_id, product_id) references catalog.products(organization_id, id)
     );
     create index product_variants_product_status on catalog.product_variants (product_id, status);
 
@@ -282,29 +314,40 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table catalog.product_attribute_values (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
-      product_id uuid not null references catalog.products(id),
-      attribute_definition_id uuid not null references catalog.attribute_definitions(id),
+      product_id uuid not null,
+      attribute_definition_id uuid not null,
       value_text text,
       value_integer bigint,
       value_decimal numeric(28,12),
       value_boolean boolean,
       value_date date,
       value_reference_id uuid,
-      unique (product_id, attribute_definition_id),
+      unique (organization_id, product_id, attribute_definition_id),
+      foreign key (organization_id, product_id) references catalog.products(organization_id, id),
+      foreign key (organization_id, attribute_definition_id)
+        references catalog.attribute_definitions(organization_id, id),
+      foreign key (organization_id, attribute_definition_id, value_reference_id)
+        references catalog.attribute_reference_options(organization_id, attribute_definition_id, id),
       check (num_nonnulls(value_text, value_integer, value_decimal, value_boolean, value_date, value_reference_id) = 1)
     );
     create table catalog.variant_attribute_values (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
-      variant_id uuid not null references catalog.product_variants(id),
-      attribute_definition_id uuid not null references catalog.attribute_definitions(id),
+      variant_id uuid not null,
+      attribute_definition_id uuid not null,
       value_text text,
       value_integer bigint,
       value_decimal numeric(28,12),
       value_boolean boolean,
       value_date date,
       value_reference_id uuid,
-      unique (variant_id, attribute_definition_id),
+      unique (organization_id, variant_id, attribute_definition_id),
+      foreign key (organization_id, variant_id)
+        references catalog.product_variants(organization_id, id),
+      foreign key (organization_id, attribute_definition_id)
+        references catalog.attribute_definitions(organization_id, id),
+      foreign key (organization_id, attribute_definition_id, value_reference_id)
+        references catalog.attribute_reference_options(organization_id, attribute_definition_id, id),
       check (num_nonnulls(value_text, value_integer, value_decimal, value_boolean, value_date, value_reference_id) = 1)
     );
 

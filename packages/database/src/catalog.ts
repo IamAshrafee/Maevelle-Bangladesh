@@ -73,6 +73,15 @@ export interface CatalogProductAttribute {
   readonly filterable: boolean;
   readonly searchable: boolean;
   readonly value: string | boolean | null;
+  readonly referenceOptions: readonly {
+    id: string;
+    code: string;
+    label: string;
+    status: 'ACTIVE' | 'ARCHIVED';
+    position: number;
+    version: number;
+    selectionCount: number;
+  }[];
 }
 
 export type CatalogReadinessState = 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
@@ -313,7 +322,8 @@ async function getCatalogProductFacts(
           on value.organization_id=product.organization_id
           and value.product_id=product.id
           and value.attribute_definition_id=required.attribute_definition_id
-        where required.product_type_id=product.product_type_id
+        where required.organization_id=product.organization_id
+          and required.product_type_id=product.product_type_id
           and required.is_required and definition.scope='PRODUCT' and value.id is null
       ) as required_attribute_missing_count,
       (select count(*)::text
@@ -997,11 +1007,16 @@ function normalizedAttributeValue(
   if (typeof value !== 'string')
     throw new CatalogDomainError('VALIDATION_FAILED', `${definition.name} has an invalid value.`);
   const normalized = value.trim();
-  if (definition.value_type === 'REFERENCE')
-    throw new CatalogDomainError(
-      'VALIDATION_FAILED',
-      `${definition.name} needs a configured reference selector before it can be edited safely.`,
-    );
+  if (definition.value_type === 'REFERENCE') {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)
+    )
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        `${definition.name} has an invalid selection.`,
+      );
+    return { column: 'value_reference_id', value: normalized };
+  }
   if (definition.value_type === 'INTEGER') {
     if (!/^-?\d+$/.test(normalized))
       throw new CatalogDomainError(
@@ -1057,18 +1072,22 @@ export async function setCatalogProductAttributes(
       name: string;
       value_type: CatalogProductAttribute['valueType'];
       is_required: boolean;
-      has_reference_value: boolean;
+      reference_option_ids: string[];
     }>`
       select definition.id::text,definition.name,definition.value_type,binding.is_required,
-        exists (
-          select 1 from catalog.product_attribute_values existing
-          where existing.organization_id=product.organization_id
+        array(select option.id::text from catalog.attribute_reference_options option
+          left join catalog.product_attribute_values existing
+            on existing.organization_id=option.organization_id
             and existing.product_id=product.id
             and existing.attribute_definition_id=definition.id
-            and existing.value_reference_id is not null
-        ) as has_reference_value
+            and existing.value_reference_id=option.id
+          where option.organization_id=product.organization_id
+            and option.attribute_definition_id=definition.id
+            and (option.status='ACTIVE' or existing.id is not null)) as reference_option_ids
       from catalog.products product
-      join catalog.product_type_attributes binding on binding.product_type_id=product.product_type_id
+      join catalog.product_type_attributes binding
+        on binding.organization_id=product.organization_id
+        and binding.product_type_id=product.product_type_id
       join catalog.attribute_definitions definition
         on definition.id=binding.attribute_definition_id
         and definition.organization_id=product.organization_id
@@ -1085,26 +1104,23 @@ export async function setCatalogProductAttributes(
           'VALIDATION_FAILED',
           'An attribute is not active for this Product Type.',
         );
-      if (byId.get(entry.attributeDefinitionId)?.value_type === 'REFERENCE')
-        throw new CatalogDomainError(
-          'VALIDATION_FAILED',
-          'Reference attributes require a configured tenant-scoped selector.',
-        );
       supplied.set(entry.attributeDefinitionId, entry.value);
     }
-    const normalized = definitions.rows.map((definition) => ({
-      definition,
-      value:
-        definition.value_type === 'REFERENCE'
-          ? undefined
-          : normalizedAttributeValue(definition, supplied.get(definition.id) ?? null),
-    }));
+    const normalized = definitions.rows.map((definition) => {
+      const value = normalizedAttributeValue(definition, supplied.get(definition.id) ?? null);
+      if (
+        definition.value_type === 'REFERENCE' &&
+        value !== undefined &&
+        !definition.reference_option_ids.includes(String(value.value))
+      )
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          `${definition.name} selection is not available for this tenant attribute.`,
+        );
+      return { definition, value };
+    });
     const missing = normalized.filter(
-      (entry) =>
-        entry.definition.is_required &&
-        (entry.definition.value_type === 'REFERENCE'
-          ? !entry.definition.has_reference_value
-          : entry.value === undefined),
+      (entry) => entry.definition.is_required && entry.value === undefined,
     );
     if (missing.length > 0)
       throw new CatalogDomainError(
@@ -1133,15 +1149,32 @@ export async function setCatalogProductAttributes(
       where value.attribute_definition_id=definition.id
         and value.organization_id=${input.organizationId}
         and value.product_id=${input.productId}::uuid
-        and definition.value_type<>'REFERENCE'
+        and definition.scope='PRODUCT' and definition.status='ACTIVE'
+        and exists (
+          select 1 from catalog.products product
+          join catalog.product_type_attributes binding
+            on binding.organization_id=product.organization_id
+            and binding.product_type_id=product.product_type_id
+            and binding.attribute_definition_id=definition.id
+          where product.organization_id=${input.organizationId}
+            and product.id=${input.productId}::uuid
+        )
     `.execute(transaction);
     for (const entry of normalized) {
       if (entry.value === undefined) continue;
-      await sql`
-        insert into catalog.product_attribute_values
-          (organization_id,product_id,attribute_definition_id,${sql.raw(entry.value.column)})
-        values (${input.organizationId},${input.productId}::uuid,${entry.definition.id}::uuid,${entry.value.value})
-      `.execute(transaction);
+      if (entry.value.column === 'value_reference_id')
+        await sql`
+          insert into catalog.product_attribute_values
+            (organization_id,product_id,attribute_definition_id,value_reference_id)
+          values (${input.organizationId},${input.productId}::uuid,
+            ${entry.definition.id}::uuid,${entry.value.value}::uuid)
+        `.execute(transaction);
+      else
+        await sql`
+          insert into catalog.product_attribute_values
+            (organization_id,product_id,attribute_definition_id,${sql.raw(entry.value.column)})
+          values (${input.organizationId},${input.productId}::uuid,${entry.definition.id}::uuid,${entry.value.value})
+        `.execute(transaction);
     }
     await emitCatalogEvent(transaction, {
       organizationId: input.organizationId,
@@ -1476,7 +1509,8 @@ export async function listCatalogProductWorkItems(
             left join catalog.product_attribute_values value
               on value.organization_id=product.organization_id and value.product_id=product.id
               and value.attribute_definition_id=required.attribute_definition_id
-            where required.product_type_id=product.product_type_id and required.is_required
+            where required.organization_id=product.organization_id
+              and required.product_type_id=product.product_type_id and required.is_required
               and definition.scope='PRODUCT' and value.id is null
           ) as required_attribute_missing_count,
           (select count(*)::integer from catalog.product_variants variant
@@ -1779,6 +1813,15 @@ export async function getCatalogProductWorkspace(
       is_filterable: boolean;
       is_searchable: boolean;
       value_json: string | boolean | null;
+      reference_options: {
+        id: string;
+        code: string;
+        label: string;
+        status: 'ACTIVE' | 'ARCHIVED';
+        position: number;
+        version: number;
+        selectionCount: number;
+      }[];
     }>`
       select definition.id::text,definition.code,definition.name,definition.value_type,
         binding.is_required,definition.is_filterable,definition.is_searchable,
@@ -1789,7 +1832,22 @@ export async function getCatalogProductWorkspace(
           when 'BOOLEAN' then to_jsonb(value.value_boolean)
           when 'DATE' then to_jsonb(value.value_date::text)
           when 'REFERENCE' then to_jsonb(value.value_reference_id::text)
-        end as value_json
+        end as value_json,
+        coalesce((select jsonb_agg(jsonb_build_object(
+          'id',option.id::text,'code',option.code,'label',option.label,'status',option.status,
+          'position',option.position,'version',option.version,'selectionCount',
+          (select count(*) from catalog.product_attribute_values selection
+            where selection.organization_id=option.organization_id
+              and selection.value_reference_id=option.id)
+          + (select count(*) from catalog.variant_attribute_values selection
+            where selection.organization_id=option.organization_id
+              and selection.value_reference_id=option.id))
+          order by option.status,option.position,option.label,option.id)
+          from catalog.attribute_reference_options option
+          where option.organization_id=${organizationId}
+            and option.attribute_definition_id=definition.id
+            and (option.status='ACTIVE' or option.id=value.value_reference_id)),'[]'::jsonb)
+          as reference_options
       from catalog.product_type_attributes binding
       join catalog.attribute_definitions definition
         on definition.id=binding.attribute_definition_id
@@ -1797,7 +1855,8 @@ export async function getCatalogProductWorkspace(
       left join catalog.product_attribute_values value
         on value.organization_id=${organizationId} and value.product_id=${productId}::uuid
         and value.attribute_definition_id=definition.id
-      where binding.product_type_id=${row.product_type_id}::uuid
+      where binding.organization_id=${organizationId}
+        and binding.product_type_id=${row.product_type_id}::uuid
         and definition.scope='PRODUCT' and definition.status='ACTIVE'
       order by binding.is_required desc,definition.name,definition.id
     `.execute(db),
@@ -1868,6 +1927,7 @@ export async function getCatalogProductWorkspace(
         filterable: attribute.is_filterable,
         searchable: attribute.is_searchable,
         value: attribute.value_json,
+        referenceOptions: attribute.reference_options,
       })),
     },
     content: {

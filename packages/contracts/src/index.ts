@@ -156,6 +156,47 @@ export interface CatalogProductAttributeDto {
   readonly filterable: boolean;
   readonly searchable: boolean;
   readonly value: string | boolean | null;
+  readonly referenceOptions: readonly CatalogReferenceOptionDto[];
+}
+
+export type CatalogDefinitionStatusDto = 'ACTIVE' | 'ARCHIVED';
+export type CatalogAttributeValueTypeDto =
+  'TEXT' | 'INTEGER' | 'DECIMAL' | 'BOOLEAN' | 'DATE' | 'REFERENCE';
+export type CatalogAttributeScopeDto = 'PRODUCT' | 'VARIANT';
+
+export interface CatalogReferenceOptionDto {
+  readonly id: string;
+  readonly code: string;
+  readonly label: string;
+  readonly status: CatalogDefinitionStatusDto;
+  readonly position: number;
+  readonly version: number;
+  readonly selectionCount: number;
+}
+
+export interface CatalogAttributeDefinitionDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly valueType: CatalogAttributeValueTypeDto;
+  readonly scope: CatalogAttributeScopeDto;
+  readonly status: CatalogDefinitionStatusDto;
+  readonly required: boolean;
+  readonly filterable: boolean;
+  readonly searchable: boolean;
+  readonly version: number;
+  readonly valueCount: number;
+  readonly referenceOptions: readonly CatalogReferenceOptionDto[];
+}
+
+export interface CatalogProductTypeDefinitionDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly status: CatalogDefinitionStatusDto;
+  readonly version: number;
+  readonly productCount: number;
+  readonly attributes: readonly CatalogAttributeDefinitionDto[];
 }
 
 export interface CatalogProductInformationGroupDto {

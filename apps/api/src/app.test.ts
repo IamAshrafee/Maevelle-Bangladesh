@@ -138,6 +138,31 @@ describe('API hardening foundation', () => {
     });
     expect(invalidContent.statusCode).toBe(400);
 
+    const invalidProductType = await app.inject({
+      method: 'PATCH',
+      url: '/admin/catalog/product-types/not-a-type',
+      payload: { version: 1, name: 'Dress', status: 'ACTIVE' },
+    });
+    expect(invalidProductType.statusCode).toBe(400);
+
+    const invalidAttribute = await app.inject({
+      method: 'POST',
+      url: `/admin/catalog/product-types/${productId}/attributes`,
+      payload: {
+        code: 'Fabric Family',
+        name: 'Fabric family',
+        valueType: 'REFERENCE',
+        scope: 'PRODUCT',
+      },
+    });
+    expect(invalidAttribute.statusCode).toBe(400);
+
+    const protectedDefinitions = await app.inject({
+      method: 'GET',
+      url: '/admin/catalog/product-type-definitions',
+    });
+    expect(protectedDefinitions.statusCode).toBe(403);
+
     const protectedCategories = await app.inject({
       method: 'PUT',
       url: `/admin/catalog/products/${productId}/categories`,

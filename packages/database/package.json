@@ -16,6 +16,10 @@
       "types": "./src/catalog-classification.ts",
       "default": "./dist/src/catalog-classification.js"
     },
+    "./catalog-product-types": {
+      "types": "./src/catalog-product-types.ts",
+      "default": "./dist/src/catalog-product-types.js"
+    },
     "./media": {
       "types": "./src/media.ts",
       "default": "./dist/src/media.js"

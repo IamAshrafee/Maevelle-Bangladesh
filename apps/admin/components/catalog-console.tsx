@@ -41,6 +41,7 @@ import {
   type CatalogContentValues,
 } from '@/components/catalog-content-state';
 import { CatalogContentEditor } from '@/components/catalog-content-editor';
+import { ProductTypeManager } from '@/components/catalog-product-types/product-type-manager';
 import {
   catalogOverviewFromWorkspace,
   isCatalogOverviewDirty,
@@ -184,6 +185,26 @@ export function CatalogConsole() {
   const workspaceDirty = overviewDirty || organizationDirty || contentDirty || contentDialogDirty;
   const hasUnsavedChanges = workspaceDirty || createDirty;
 
+  const loadProductTypes = async () => {
+    const result = await request<ApiEnvelope<readonly ProductType[]>>(
+      '/admin/catalog/product-types',
+    );
+    setTypes(result.data);
+    setTypeId((current) =>
+      result.data.some((type) => type.id === current) ? current : (result.data[0]?.id ?? ''),
+    );
+    if (typeFilter !== 'ALL' && !result.data.some((type) => type.id === typeFilter))
+      setTypeFilter('ALL');
+    return result.data;
+  };
+
+  const productTypesChanged = async () => {
+    await loadProductTypes();
+    if (selected) await openProductById(selected.id);
+    await reload();
+    setMessage('Product Type definitions updated.');
+  };
+
   const reload = async (signal?: AbortSignal) => {
     try {
       const parameters = new URLSearchParams({
@@ -218,14 +239,9 @@ export function CatalogConsole() {
     setTypeFilter(requestedType && uuidPattern.test(requestedType) ? requestedType : 'ALL');
     setReadiness(allowedUrlValue(parameters.get('readiness'), readinessStates));
     setPage(Math.max(1, Number(parameters.get('page') ?? 1) || 1));
-    void request<ApiEnvelope<readonly ProductType[]>>('/admin/catalog/product-types')
-      .then((result) => {
-        setTypes(result.data);
-        setTypeId((current) => current || result.data[0]?.id || '');
-      })
-      .catch((error: unknown) => {
-        setMessage(error instanceof Error ? error.message : 'Unable to load Product types.');
-      });
+    void loadProductTypes().catch((error: unknown) => {
+      setMessage(error instanceof Error ? error.message : 'Unable to load Product types.');
+    });
     void request<ApiEnvelope<readonly CatalogCategoryChoiceDto[]>>('/admin/catalog/categories')
       .then((result) => setCategories(result.data))
       .catch((error: unknown) => {
@@ -447,30 +463,6 @@ export function CatalogConsole() {
       setMessage(error instanceof Error ? error.message : 'Unable to load Product setup.');
     } finally {
       setWorkspaceLoading(false);
-    }
-  }
-
-  async function createType(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    const data = new FormData(event.currentTarget);
-    try {
-      const result = await request<ApiEnvelope<ProductType>>('/admin/catalog/product-types', {
-        method: 'POST',
-        body: JSON.stringify({ code: data.get('code'), name: data.get('name') }),
-      });
-      event.currentTarget.reset();
-      setTypes((current) =>
-        [...current, result.data].sort((left, right) => left.name.localeCompare(right.name)),
-      );
-      setTypeId(result.data.id);
-      setMessage('Product type created.');
-      await reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to create Product type.');
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -788,12 +780,10 @@ export function CatalogConsole() {
         method: 'PUT',
         headers: { 'if-match': `"${workspace.version}"` },
         body: JSON.stringify({
-          values: workspace.organization.attributes
-            .filter((attribute) => attribute.valueType !== 'REFERENCE')
-            .map((attribute) => ({
-              attributeDefinitionId: attribute.id,
-              value: organizationDraft.attributeValues[attribute.id] ?? null,
-            })),
+          values: workspace.organization.attributes.map((attribute) => ({
+            attributeDefinitionId: attribute.id,
+            value: organizationDraft.attributeValues[attribute.id] ?? null,
+          })),
         }),
       });
       const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
@@ -1110,6 +1100,10 @@ export function CatalogConsole() {
           <p>Build, validate, publish, and maintain the sellable catalog.</p>
         </div>
         <div className="page-actions">
+          <ProductTypeManager
+            disabled={workspaceDirty || createDirty}
+            onChanged={productTypesChanged}
+          />
           <button
             className="button secondary"
             type="button"
@@ -1753,11 +1747,21 @@ export function CatalogConsole() {
                                 <option value="false">No</option>
                               </select>
                             ) : attribute.valueType === 'REFERENCE' ? (
-                              <input
-                                disabled
+                              <select
+                                required={attribute.required}
                                 value={typeof value === 'string' ? value : ''}
-                                placeholder="Reference selector not configured"
-                              />
+                                onChange={(event) =>
+                                  updateAttribute(attribute.id, event.target.value || null)
+                                }
+                              >
+                                <option value="">Not specified</option>
+                                {attribute.referenceOptions.map((option) => (
+                                  <option key={option.id} value={option.id}>
+                                    {option.label}
+                                    {option.status === 'ARCHIVED' ? ' (archived)' : ''}
+                                  </option>
+                                ))}
+                              </select>
                             ) : attribute.valueType === 'TEXT' ? (
                               <textarea
                                 maxLength={2000}
@@ -1784,7 +1788,7 @@ export function CatalogConsole() {
                             )}
                             <small>
                               {attribute.valueType === 'REFERENCE'
-                                ? 'Read-only until a tenant-scoped reference selector is configured.'
+                                ? `${attribute.referenceOptions.length} tenant-scoped selector option${attribute.referenceOptions.length === 1 ? '' : 's'}`
                                 : [
                                     attribute.valueType.toLowerCase(),
                                     attribute.filterable ? 'filterable' : '',
@@ -2274,31 +2278,10 @@ export function CatalogConsole() {
                 </Button>
               </footer>
             </form>
-            <details className="type-creator">
-              <summary>Need another Product type?</summary>
-              <form onSubmit={createType}>
-                <Label htmlFor="type-code">Type code</Label>
-                <Input
-                  id="type-code"
-                  name="code"
-                  autoComplete="off"
-                  placeholder="Example: dress…"
-                  required
-                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                />
-                <Label htmlFor="type-name">Type name</Label>
-                <Input
-                  autoComplete="off"
-                  id="type-name"
-                  name="name"
-                  placeholder="Example: Dress…"
-                  required
-                />
-                <Button disabled={busy} type="submit">
-                  Create Type
-                </Button>
-              </form>
-            </details>
+            <div className="type-creator">
+              <p>Need a new type or structured field?</p>
+              <ProductTypeManager compact disabled={createDirty} onChanged={productTypesChanged} />
+            </div>
           </aside>
         </div>
       ) : null}

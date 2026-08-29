@@ -4,7 +4,6 @@ import { Type } from 'typebox';
 import type { CatalogProductContentUpdateDto, CatalogProductUpdateDto } from '@maevelle/contracts';
 import type { DatabaseClient } from '@maevelle/database';
 import {
-  createCatalogProductType,
   createProductOptionAxis,
   createProductOptionValue,
   createCatalogProduct,
@@ -24,6 +23,7 @@ import {
   unpublishCatalogProduct,
   updateCatalogProduct,
 } from '@maevelle/database/catalog';
+import { createManagedCatalogProductType } from '@maevelle/database/catalog-product-types';
 import { getPublicSizeGuideForProduct } from '@maevelle/database/sizing';
 import { resolveVariantPrice } from '@maevelle/database/pricing';
 import {
@@ -35,6 +35,7 @@ import {
 } from '@maevelle/database/storefront';
 
 import { registerCatalogClassificationRoutes } from './catalog-classification.js';
+import { registerCatalogProductTypeRoutes } from './catalog-product-types.js';
 import {
   type CatalogAuth as Auth,
   requireCatalogCapability as requireCapability,
@@ -57,6 +58,7 @@ export function registerCatalogRoutes(
   storefrontOrganizationCode = 'maevelle',
 ): void {
   registerCatalogClassificationRoutes(app, database, auth);
+  registerCatalogProductTypeRoutes(app, database, auth);
   app.get('/storefront/v1/context', async (_request, reply) => {
     const context = await resolveStorefrontContext(database.db, storefrontOrganizationCode);
     if (!context)
@@ -93,8 +95,8 @@ export function registerCatalogRoutes(
       if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
         return reply.code(201).send({
-          data: await createCatalogProductType(database.db, {
-            organizationId: context.organizationId,
+          data: await createManagedCatalogProductType(database.db, {
+            ...context,
             ...(request.body as { code: string; name: string }),
           }),
         });
