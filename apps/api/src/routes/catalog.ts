@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
-import type { CatalogProductUpdateDto } from '@maevelle/contracts';
+import type { CatalogProductContentUpdateDto, CatalogProductUpdateDto } from '@maevelle/contracts';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   createCatalogProductType,
@@ -296,12 +296,7 @@ export function registerCatalogRoutes(
           },
         });
       try {
-        const body = request.body as {
-          informationGroups: { title: string; items: { label: string; value: string }[] }[];
-          faqs: { question: string; answer: string }[];
-          seoTitle: string | null;
-          seoDescription: string | null;
-        };
+        const body = request.body as CatalogProductContentUpdateDto;
         return {
           data: await replaceCatalogProductContent(database.db, {
             ...body,

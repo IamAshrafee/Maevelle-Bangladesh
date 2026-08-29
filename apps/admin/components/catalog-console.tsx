@@ -32,6 +32,16 @@ import type {
 } from '@maevelle/contracts';
 
 import {
+  catalogContentFromWorkspace,
+  catalogContentPayload,
+  isCatalogContentDirty,
+  mergeCatalogContent,
+  useCurrentCatalogContentConflicts,
+  type CatalogContentConflict,
+  type CatalogContentValues,
+} from '@/components/catalog-content-state';
+import { CatalogContentEditor } from '@/components/catalog-content-editor';
+import {
   catalogOverviewFromWorkspace,
   isCatalogOverviewDirty,
   mergeCatalogOverview,
@@ -159,13 +169,19 @@ export function CatalogConsole() {
     readonly CatalogOrganizationConflict[]
   >([]);
   const [organizationError, setOrganizationError] = useState('');
+  const [contentBaseline, setContentBaseline] = useState<CatalogContentValues>();
+  const [contentDraft, setContentDraft] = useState<CatalogContentValues>();
+  const [contentConflicts, setContentConflicts] = useState<readonly CatalogContentConflict[]>([]);
+  const [contentError, setContentError] = useState('');
+  const [contentDialogDirty, setContentDialogDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const overviewDirty = isCatalogOverviewDirty(overviewBaseline, overviewDraft);
   const organizationDirty = isCatalogOrganizationDirty(organizationBaseline, organizationDraft);
   const categoriesDirty = areCatalogCategoriesDirty(organizationBaseline, organizationDraft);
   const vocabularyDirty = areCatalogVocabularyDirty(organizationBaseline, organizationDraft);
   const attributesDirty = areCatalogAttributesDirty(organizationBaseline, organizationDraft);
-  const workspaceDirty = overviewDirty || organizationDirty;
+  const contentDirty = isCatalogContentDirty(contentBaseline, contentDraft);
+  const workspaceDirty = overviewDirty || organizationDirty || contentDirty || contentDialogDirty;
   const hasUnsavedChanges = workspaceDirty || createDirty;
 
   const reload = async (signal?: AbortSignal) => {
@@ -301,10 +317,15 @@ export function CatalogConsole() {
 
   function applyWorkspace(
     nextWorkspace: CatalogProductWorkspaceDto,
-    options: { preserveOverview?: boolean; preserveOrganization?: boolean } = {},
+    options: {
+      preserveOverview?: boolean;
+      preserveOrganization?: boolean;
+      preserveContent?: boolean;
+    } = {},
   ) {
     const overview = catalogOverviewFromWorkspace(nextWorkspace);
     const organization = catalogOrganizationFromWorkspace(nextWorkspace);
+    const content = catalogContentFromWorkspace(nextWorkspace);
     setSelected(nextWorkspace);
     setWorkspace(nextWorkspace);
     if (options.preserveOverview && overviewBaseline && overviewDraft) {
@@ -335,8 +356,19 @@ export function CatalogConsole() {
       setOrganizationDraft(organization);
       setOrganizationConflicts([]);
     }
+    if (options.preserveContent && contentBaseline && contentDraft) {
+      const merged = mergeCatalogContent(contentBaseline, contentDraft, content);
+      setContentBaseline(content);
+      setContentDraft(merged.draft);
+      setContentConflicts(merged.conflicts);
+    } else {
+      setContentBaseline(content);
+      setContentDraft(content);
+      setContentConflicts([]);
+    }
     setOverviewError('');
     setOrganizationError('');
+    setContentError('');
   }
 
   function confirmWorkspaceDiscard(): boolean {
@@ -379,6 +411,11 @@ export function CatalogConsole() {
     setOrganizationDraft(undefined);
     setOrganizationConflicts([]);
     setOrganizationError('');
+    setContentBaseline(undefined);
+    setContentDraft(undefined);
+    setContentConflicts([]);
+    setContentError('');
+    setContentDialogDirty(false);
   }
 
   async function openProduct(product: CatalogProductSummaryDto) {
@@ -523,7 +560,7 @@ export function CatalogConsole() {
       const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
         `/admin/catalog/products/${workspace.id}`,
       );
-      applyWorkspace(refreshed.data, { preserveOrganization: true });
+      applyWorkspace(refreshed.data, { preserveOrganization: true, preserveContent: true });
       setMessage('Product overview saved. Readiness has been recalculated.');
       await reload();
     } catch (error) {
@@ -534,7 +571,11 @@ export function CatalogConsole() {
           );
           const currentOverview = catalogOverviewFromWorkspace(current.data);
           const merged = mergeCatalogOverview(overviewBaseline, overviewDraft, currentOverview);
-          applyWorkspace(current.data, { preserveOverview: true, preserveOrganization: true });
+          applyWorkspace(current.data, {
+            preserveOverview: true,
+            preserveOrganization: true,
+            preserveContent: true,
+          });
           setOverviewError('');
           const conflictCount = Object.keys(merged.conflicts).length;
           setMessage(
@@ -674,7 +715,11 @@ export function CatalogConsole() {
       overviewDraft,
       catalogOverviewFromWorkspace(current.data),
     );
-    applyWorkspace(current.data, { preserveOverview: true, preserveOrganization: true });
+    applyWorkspace(current.data, {
+      preserveOverview: true,
+      preserveOrganization: true,
+      preserveContent: true,
+    });
     const conflictCount =
       organizationMerge.conflicts.length + Object.keys(overviewMerge.conflicts).length;
     setMessage(
@@ -704,7 +749,11 @@ export function CatalogConsole() {
       const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
         `/admin/catalog/products/${workspace.id}`,
       );
-      applyWorkspace(refreshed.data, { preserveOverview: true, preserveOrganization: true });
+      applyWorkspace(refreshed.data, {
+        preserveOverview: true,
+        preserveOrganization: true,
+        preserveContent: true,
+      });
       setMessage('Product categories saved. Your other workspace drafts were preserved.');
       await reload();
     } catch (error) {
@@ -750,7 +799,11 @@ export function CatalogConsole() {
       const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
         `/admin/catalog/products/${workspace.id}`,
       );
-      applyWorkspace(refreshed.data, { preserveOverview: true, preserveOrganization: true });
+      applyWorkspace(refreshed.data, {
+        preserveOverview: true,
+        preserveOrganization: true,
+        preserveContent: true,
+      });
       setMessage('Product attributes saved. Your other workspace drafts were preserved.');
       await reload();
     } catch (error) {
@@ -795,7 +848,11 @@ export function CatalogConsole() {
       const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
         `/admin/catalog/products/${workspace.id}`,
       );
-      applyWorkspace(refreshed.data, { preserveOverview: true, preserveOrganization: true });
+      applyWorkspace(refreshed.data, {
+        preserveOverview: true,
+        preserveOrganization: true,
+        preserveContent: true,
+      });
       setMessage('Tags, occasions, and collections saved. Your other drafts were preserved.');
       await reload();
     } catch (error) {
@@ -838,6 +895,79 @@ export function CatalogConsole() {
     );
   }
 
+  async function saveContent() {
+    if (!workspace || !contentDraft || !contentBaseline || busy || !contentDirty) return;
+    if (contentConflicts.length > 0) {
+      setContentError('Resolve the stale customer-content choices before saving.');
+      return;
+    }
+    setBusy(true);
+    setContentError('');
+    try {
+      await request(`/admin/catalog/products/${workspace.id}/content`, {
+        method: 'PUT',
+        headers: { 'if-match': `"${workspace.version}"` },
+        body: JSON.stringify(catalogContentPayload(contentDraft)),
+      });
+      const refreshed = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+        `/admin/catalog/products/${workspace.id}`,
+      );
+      applyWorkspace(refreshed.data, { preserveOverview: true, preserveOrganization: true });
+      setMessage(
+        'Customer information, FAQs, and search preview saved. Other drafts were preserved.',
+      );
+      await reload();
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'STALE_VERSION') {
+        try {
+          const current = await request<ApiEnvelope<CatalogProductWorkspaceDto>>(
+            `/admin/catalog/products/${workspace.id}`,
+          );
+          const currentContent = catalogContentFromWorkspace(current.data);
+          const merged = mergeCatalogContent(contentBaseline, contentDraft, currentContent);
+          applyWorkspace(current.data, {
+            preserveOverview: true,
+            preserveOrganization: true,
+            preserveContent: true,
+          });
+          const conflictCount = merged.conflicts.length;
+          setMessage(
+            conflictCount > 0
+              ? `A newer Product version was loaded. Resolve ${conflictCount} conflicting customer-content section${conflictCount === 1 ? '' : 's'}; your draft is preserved.`
+              : 'A newer Product version was loaded and merged with your customer-content draft. Review and save again.',
+          );
+        } catch (refreshError) {
+          setContentError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : 'The Product changed, but its latest customer content could not be loaded.',
+          );
+        }
+      } else {
+        setContentError(
+          error instanceof Error ? error.message : 'Unable to save Product customer content.',
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resolveContentConflicts(choice: 'LOCAL' | 'CURRENT') {
+    if (!contentDraft || !contentBaseline) return;
+    if (choice === 'CURRENT')
+      setContentDraft(
+        useCurrentCatalogContentConflicts(contentDraft, contentBaseline, contentConflicts),
+      );
+    setContentConflicts([]);
+    setContentError('');
+    setMessage(
+      choice === 'CURRENT'
+        ? 'Current saved customer content accepted for conflicting sections.'
+        : 'Your customer-content draft retained. Save again to apply it to the current version.',
+    );
+  }
+
   async function publication(product: CatalogProductSummaryDto) {
     if (busy) return;
     if (workspaceDirty) {
@@ -874,6 +1004,11 @@ export function CatalogConsole() {
       setOrganizationDraft(undefined);
       setOrganizationConflicts([]);
       setOrganizationError('');
+      setContentBaseline(undefined);
+      setContentDraft(undefined);
+      setContentConflicts([]);
+      setContentError('');
+      setContentDialogDirty(false);
       await reload();
     } catch (error) {
       setMessage(
@@ -1698,6 +1833,31 @@ export function CatalogConsole() {
                   </footer>
                 </form>
               </section>
+            ) : null}
+            {workspace && contentDraft ? (
+              <CatalogContentEditor
+                busy={busy}
+                conflicts={contentConflicts}
+                dirty={contentDirty}
+                draft={contentDraft}
+                error={contentError}
+                handle={overviewDraft?.handle ?? workspace.handle}
+                productDescription={overviewDraft?.description ?? workspace.description ?? ''}
+                productTitle={overviewDraft?.title ?? workspace.title}
+                onChange={(content) => {
+                  setContentDraft(content);
+                  setContentError('');
+                }}
+                onDiscard={() => {
+                  if (!contentBaseline) return;
+                  setContentDraft(contentBaseline);
+                  setContentConflicts([]);
+                  setContentError('');
+                }}
+                onResolveConflicts={resolveContentConflicts}
+                onSave={() => void saveContent()}
+                onTransientDirtyChange={setContentDialogDirty}
+              />
             ) : null}
             <section className="publish-readiness">
               <div>

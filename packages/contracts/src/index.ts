@@ -174,6 +174,16 @@ export interface CatalogProductFaqDto {
   readonly answer: string;
 }
 
+export interface CatalogProductContentUpdateDto {
+  readonly informationGroups: readonly {
+    readonly title: string;
+    readonly items: readonly { readonly label: string; readonly value: string }[];
+  }[];
+  readonly faqs: readonly { readonly question: string; readonly answer: string }[];
+  readonly seoTitle: string | null;
+  readonly seoDescription: string | null;
+}
+
 export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   readonly description: string | null;
   readonly productTypeId: string;
