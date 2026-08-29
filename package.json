@@ -32,6 +32,10 @@
     "bootstrap:owner": "pnpm --filter @maevelle/api bootstrap:owner",
     "dev:admin": "pnpm --filter @maevelle/admin dev",
     "dev:storefront": "pnpm --filter @maevelle/storefront dev",
+    "dev:api": "pnpm --filter @maevelle/api dev",
+    "dev:worker": "pnpm --filter @maevelle/worker dev",
+    "dev:all": "concurrently -c \"cyan,magenta,yellow,blue\" -n \"api,worker,admin,storefront\" \"pnpm dev:api\" \"pnpm dev:worker\" \"pnpm dev:admin\" \"pnpm dev:storefront\"",
+    "dev": "pnpm db:up && pnpm dev:all",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -40,9 +44,12 @@
     "@types/node": "24.13.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
     "eslint": "9.39.5",
     "eslint-config-prettier": "10.1.8",
     "prettier": "3.9.6",
+    "tsx": "^4.23.12",
     "typescript": "5.9.3",
     "typescript-eslint": "8.67.0",
     "vitest": "3.2.7"
