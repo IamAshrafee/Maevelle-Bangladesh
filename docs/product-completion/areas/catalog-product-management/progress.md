@@ -79,9 +79,27 @@
   API schema boundary, Admin state model, TypeScript, focused lint, architecture,
   secret scan, and the Admin production build. Per owner instruction, browser
   testing is not part of the workflow.
+- Closed Stage 3 in `8fa0e78` with complete Product Type and attribute-definition
+  management through composed Admin dialogs and tenant-authoritative API commands.
+- Added optimistic versions, status lifecycle, active-use archive protection,
+  immutable integration keys, required/filter/search behavior, audit events, and
+  outbox events for Product Types, attributes, and reference options.
+- Added normalized `attribute_reference_options` and composite tenant foreign keys
+  across Product Types, attributes, Products, Variants, bindings, and typed values.
+- Made `REFERENCE` Product attributes editable through real selectors. Active
+  options plus an already-selected archived option are projected to the workspace;
+  arbitrary, cross-attribute, and cross-tenant reference IDs are rejected.
+- Preserved archived attribute values during active-definition replacement and
+  kept stale Product saves atomic.
+- Rebuilt only the disposable test database from the mutable baseline. The clean
+  migration, 15 focused PostgreSQL/API tests, repository TypeScript build,
+  focused lint/format/diff checks, architecture and secret checks, and Admin
+  production build all passed. Browser testing was intentionally omitted per
+  owner instruction.
 
 ## Next
 
-Complete Stage 3 Product Type and attribute-definition management, including a
-tenant-scoped configured selector for `REFERENCE` attributes. Then close Stage 3
-and begin the Variant matrix and lifecycle stage.
+Begin Stage 4 with an authoritative Variant matrix read model and atomic option,
+value, and combination synchronization commands. Replace one-at-a-time Variant
+creation with a matrix workflow that exposes real price, stock, media, identifier,
+physical-data, and lifecycle state.

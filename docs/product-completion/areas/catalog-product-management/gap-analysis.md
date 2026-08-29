@@ -15,10 +15,8 @@
 ## Domain/application gaps
 
 - No Product archive/reactivate, Variant update/archive, or duplicate commands.
-- Structured information, FAQ, and SEO commands are implemented and now have a
-  complete Admin editing surface. Product Type/attribute-definition management
-  and configured `REFERENCE` attribute options remain incomplete.
-- Product Type and attribute-definition management is only a minimal create/list.
+- Structured information, FAQ, SEO, Product Types, attribute definitions, and
+  configured tenant-scoped `REFERENCE` selectors are complete in Stage 3.
 - Adding option axes after Variants can make combinations incomplete; the UI
   does not surface that integrity risk before publication.
 - Outbox aggregate version is currently hard-coded in Catalog events.
@@ -33,12 +31,12 @@
   setup issues and cannot be safely batch-edited.
 - Information groups, FAQs, and SEO are now editable through focused popup forms
   with ordering, validation, search preview, draft protection, and stale recovery.
-- Product Type/attribute-definition management, activity, duplicate, archive,
-  and safe bulk work remain absent.
+- Product activity, duplicate, Product archive/reactivate, and safe bulk work
+  remain absent.
 - Drawer focus recovery, Escape behavior, URL state, async submit prevention,
   inline errors, and overview/create/content draft-loss handling are covered.
-  Content popup forms use the shared accessible dialog primitive; later-stage
-  forms remain open.
+  Product Type/attribute/reference-option and content popup forms use the shared
+  accessible dialog primitive; later-stage forms remain open.
 
 ## Verification gaps
 

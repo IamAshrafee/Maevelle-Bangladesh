@@ -1,7 +1,7 @@
 # Catalog Product Management Verification
 
-Status: `ACTIVE_IMPLEMENTATION` — Stages 1–2 plus Stage 3 Product Organization
-and customer-content slices verified; area completion gate not yet evaluated.
+Status: `ACTIVE_IMPLEMENTATION` — Stages 1–3 verified; Stage 4 Variant matrix and
+lifecycle is active. Area completion gate has not been evaluated.
 
 ## Evidence required before completion
 
@@ -116,5 +116,28 @@ not the full Stage 3 or Catalog area completion gate.
   browser-interaction claim is made.
 
 This proves the structured customer-content vertical from database through
-Storefront and its Admin implementation. Product Type/attribute-definition and
-configured `REFERENCE` attribute workflows still prevent Stage 3 closure.
+Storefront and its Admin implementation.
+
+## Stage 3 Product Type and reference-option closure — commit `8fa0e78`
+
+- Reconstructed only the disposable `maevelle_test` database and applied the
+  complete clean migration baseline successfully.
+- Focused Catalog PostgreSQL and API tests — 3 files / 15 tests passed. A final
+  Catalog regression after archived-value preservation was added — 1 file / 7
+  tests passed.
+- PostgreSQL proof covers Product Type/attribute/reference-option creation and
+  update, optimistic stale rejection, active-use archive protection, normalized
+  option lifecycle, cross-tenant binding rejection, cross-attribute reference
+  rejection, required references, and preservation of archived attribute values.
+- API request-schema tests cover Product Type IDs, attribute codes and shapes,
+  and authorization of the management read model.
+- Repository TypeScript build, focused Prettier/ESLint, `git diff --check`, the
+  13-package architecture check, and secret scan passed.
+- Admin production build passed with Next.js 16.3.1 using webpack and generated
+  all 42 routes.
+- Browser testing was intentionally not run per owner instruction. No visual or
+  browser-interaction claim is made.
+
+This closes Stage 3. It does not complete the Catalog area; Variant matrix,
+lifecycle, bulk/archive/duplicate, activity, and final operator/Storefront proof
+remain in Stages 4–7.

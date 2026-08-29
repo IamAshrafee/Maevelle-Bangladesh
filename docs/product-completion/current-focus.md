@@ -13,21 +13,21 @@ partial variant drawer. It cannot yet support complete day-to-day catalog work.
 
 ## Current stage
 
-Stage 3 — Product Types, taxonomy, attributes, structured information, FAQ, and SEO.
+Stage 4 — Variant matrix, lifecycle, identifiers, and cross-domain price/stock/media.
 
 ## Last completed action
 
-The customer-content slice now provides popup editors for structured information
-groups, FAQs, and SEO, section-level drafts and concurrency recovery, a shared
-transport contract, and verified public Product/SEO/FAQ projection. Commit:
-`9d52f61`.
+Stage 3 is complete. Product Types, attribute definitions, required/filter/search
+behavior, normalized reference options, Product selectors, taxonomy, structured
+information, FAQs, and SEO are operator-usable across the database, API, Admin,
+and public Product projection. Commit: `8fa0e78`.
 
 ## Next exact action
 
-Complete Product Type and attribute-definition management. Define a normalized,
-tenant-scoped reference-option source and selector so `REFERENCE` attributes are
-no longer a schema capability that operators cannot configure or edit. Then run
-the Stage 3 closure checks and begin the Variant matrix.
+Implement the authoritative Variant matrix read model and atomic option/value and
+combination synchronization commands. The read model must distinguish existing,
+missing, archived, duplicate-risk, and incomplete combinations and expose the
+real price, stock, and media setup state needed by the Admin matrix.
 
 ## Continuity note
 

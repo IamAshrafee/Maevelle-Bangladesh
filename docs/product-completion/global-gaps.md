@@ -5,8 +5,9 @@ These are initial repository-level findings, not a complete audit.
 ## P0
 
 - No area has been re-verified under the Product Completion standard.
-- Browser-level realistic business proof is sparse relative to the number of
-  operational workflows and must be established area by area.
+- Realistic business-flow proof is sparse relative to the number of operational
+  workflows and must be established area by area using the owner-approved
+  verification methods for each workstream.
 
 ## P1
 
@@ -25,7 +26,7 @@ revisited rather than through a destructive bulk rewrite.
 
 ## Active-area priorities
 
-- Catalog Products shows simulated readiness for facts it does not query.
-- Product listing is unbounded and filters only after downloading all Products.
-- Product editor lacks master-data editing, taxonomy/attributes/information/SEO,
-  archive/duplicate/bulk commands, structured variant operations, and activity.
+- Catalog Product worklisting, readiness, overview, taxonomy, Product Types,
+  attributes, structured information, FAQs, and SEO are complete through Stage 3.
+- Catalog still lacks the complete Variant matrix/lifecycle, Product
+  archive/duplicate/bulk commands, activity, and final business-flow proof.
