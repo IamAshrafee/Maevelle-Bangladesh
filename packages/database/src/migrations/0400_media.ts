@@ -17,7 +17,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       alt_text text,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
-      version bigint not null default 1
+      version bigint not null default 1,
+      unique (organization_id, id)
     );
     create table media.media_objects (
       id uuid primary key default uuidv7(),
@@ -57,15 +58,35 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table catalog.product_media (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
-      product_id uuid not null references catalog.products(id),
-      variant_id uuid references catalog.product_variants(id),
-      asset_id uuid not null references media.media_assets(id),
+      product_id uuid not null,
+      variant_id uuid,
+      option_value_id uuid,
+      asset_id uuid not null,
       role text not null check (role in ('GALLERY', 'THUMBNAIL', 'COLOR_GALLERY', 'SIZE_DIAGRAM')),
+      is_primary boolean not null default false,
       position integer not null default 0,
       created_at timestamptz not null default now(),
-      unique (product_id, variant_id, asset_id, role)
+      unique (organization_id, id),
+      foreign key (organization_id, product_id)
+        references catalog.products(organization_id, id),
+      foreign key (organization_id, variant_id)
+        references catalog.product_variants(organization_id, id),
+      foreign key (organization_id, option_value_id)
+        references catalog.product_option_values(organization_id, id),
+      foreign key (organization_id, asset_id)
+        references media.media_assets(organization_id, id),
+      check (num_nonnulls(variant_id, option_value_id) <= 1),
+      check (position >= 0)
     );
-    create index product_media_product_variant_position on catalog.product_media (product_id, variant_id, position, id);
+    create unique index product_media_unique_placement on catalog.product_media
+      (organization_id, product_id, coalesce(variant_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        coalesce(option_value_id, '00000000-0000-0000-0000-000000000000'::uuid), asset_id, role);
+    create unique index product_media_one_primary_per_scope on catalog.product_media
+      (organization_id, product_id, coalesce(variant_id, '00000000-0000-0000-0000-000000000000'::uuid),
+        coalesce(option_value_id, '00000000-0000-0000-0000-000000000000'::uuid))
+      where is_primary;
+    create index product_media_product_variant_position on catalog.product_media
+      (organization_id, product_id, variant_id, option_value_id, position, id);
     create table media.media_usage_projection (
       id bigint generated always as identity primary key,
       organization_id uuid not null references platform.organizations(id),

@@ -158,6 +158,71 @@ export async function createPriceDefinition(
   });
 }
 
+/** Replaces the current default price atomically while retaining prior definitions as history. */
+export async function setCurrentVariantPrice(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    variantId: string;
+    currency: string;
+    amount: string;
+    compareAtAmount?: string | null;
+  },
+): Promise<ResolvedPrice & { version: number }> {
+  assertCurrency(input.currency);
+  assertMoney(input.amount, 'Amount');
+  if (input.compareAtAmount !== undefined && input.compareAtAmount !== null) {
+    assertMoney(input.compareAtAmount, 'Compare-at amount');
+    if (Number(input.compareAtAmount) < Number(input.amount))
+      throw new PricingDomainError(
+        'VALIDATION_FAILED',
+        'Compare-at amount must be greater than or equal to the selling amount.',
+      );
+  }
+  return db.transaction().execute(async (transaction) => {
+    const variant = await sql<{ id: string }>`select id::text from catalog.product_variants
+      where organization_id=${input.organizationId} and id=${input.variantId}::uuid`.execute(
+      transaction,
+    );
+    if (!variant.rows[0])
+      throw new PricingDomainError('NOT_FOUND', 'Catalog Variant was not found.');
+    await sql`update pricing.price_definitions set status='ARCHIVED',updated_at=now(),version=version+1
+      where organization_id=${input.organizationId} and variant_id=${input.variantId}::uuid
+        and currency_code=${input.currency} and status='ACTIVE'
+        and effective_from<=now() and (effective_to is null or effective_to>now())`.execute(transaction);
+    const result = await sql<{
+      id: string;
+      variant_id: string;
+      amount: string;
+      compare_at_amount: string | null;
+      currency_code: string;
+      version: string;
+    }>`insert into pricing.price_definitions
+        (organization_id,variant_id,currency_code,amount,compare_at_amount,effective_from,status)
+      values (${input.organizationId},${input.variantId},${input.currency},${input.amount}::numeric,
+        ${input.compareAtAmount ?? null}::numeric,now(),'ACTIVE')
+      returning id::text,variant_id::text,amount::text,compare_at_amount::text,
+        currency_code,version::text`.execute(transaction);
+    const price = result.rows[0];
+    if (!price) throw new Error('Current price replacement did not return a Price.');
+    await emitPriceEvent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      priceDefinitionId: price.id,
+      action: 'pricing.price_definition.replaced',
+    });
+    return {
+      priceDefinitionId: price.id,
+      variantId: price.variant_id,
+      amount: price.amount,
+      compareAtAmount: price.compare_at_amount,
+      currency: price.currency_code,
+      version: Number(price.version),
+    };
+  });
+}
+
 /** The sole V1 price resolver shared by storefront, Cart, and Promotion calculation. */
 export async function resolveVariantPrice(
   db: Kysely<DatabaseSchema>,

@@ -96,11 +96,18 @@ export function ProductPageClient() {
   const shownMedia = useMemo(() => {
     if (!product) return [];
     const matched = selectedVariant
-      ? product.media.filter((asset) => asset.variantId === selectedVariant.id)
+      ? product.media.filter(
+          (asset) =>
+            asset.variantId === selectedVariant.id ||
+            (asset.optionValueId !== null &&
+              selectedVariant.optionValueIds.includes(asset.optionValueId)),
+        )
       : [];
     const general = product.media.filter((asset) => asset.variantId === null);
     return [
-      ...matched,
+      ...matched.toSorted(
+        (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
+      ),
       ...general.filter((asset) => !matched.some((candidate) => candidate.id === asset.id)),
     ];
   }, [product, selectedVariant]);

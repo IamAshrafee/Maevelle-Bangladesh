@@ -2,7 +2,11 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
 
 import { createDatabase } from './index.js';
-import { createCatalogProduct } from './catalog.js';
+import {
+  createCatalogProduct,
+  createProductOptionAxis,
+  createProductOptionValue,
+} from './catalog.js';
 import {
   attachMediaToProduct,
   detachMediaFromProduct,
@@ -142,5 +146,75 @@ describe('media tenant ownership', () => {
     expect(
       (await listMediaLibrary(database.db, owner.id)).find((item) => item.id === asset.id)?.usages,
     ).toEqual([]);
+  });
+
+  it('shares a primary gallery through an option value and keeps one primary per scope', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `media-option-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Option gallery owner',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const productType = await sql<{ id: string }>`insert into catalog.product_types
+      (organization_id,code,name) values (${owner.id},'shoe','Shoe') returning id::text`.execute(
+      database.db,
+    );
+    const product = await createCatalogProduct(database.db, {
+      organizationId: owner.id,
+      actorId: crypto.randomUUID(),
+      productTypeId: productType.rows[0]!.id,
+      title: 'Gallery shoe',
+      handle: `gallery-shoe-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const axis = await createProductOptionAxis(database.db, {
+      organizationId: owner.id,
+      productId: product.id,
+      code: 'color',
+      name: 'Color',
+    });
+    const red = await createProductOptionValue(database.db, {
+      organizationId: owner.id,
+      optionAxisId: axis.id,
+      code: 'red',
+      displayValue: 'Red',
+    });
+    const assets = await Promise.all(
+      ['c', 'd'].map((checksum) =>
+        registerUploadedMedia(database.db, {
+          organizationId: owner.id,
+          objectKey: `images/${crypto.randomUUID()}.webp`,
+          mimeType: 'image/webp',
+          byteSize: 100,
+          checksumSha256: checksum.repeat(64),
+          visibility: 'PUBLIC',
+        }),
+      ),
+    );
+    await attachMediaToProduct(database.db, {
+      organizationId: owner.id,
+      productId: product.id,
+      optionValueId: red.id,
+      assetId: assets[0]!.id,
+      role: 'COLOR_GALLERY',
+      isPrimary: true,
+    });
+    await attachMediaToProduct(database.db, {
+      organizationId: owner.id,
+      productId: product.id,
+      optionValueId: red.id,
+      assetId: assets[1]!.id,
+      role: 'COLOR_GALLERY',
+      isPrimary: true,
+      position: 1,
+    });
+
+    const placements = (await listMediaLibrary(database.db, owner.id))
+      .flatMap((asset) => asset.usages.map((usage) => ({ ...usage, assetId: asset.id })))
+      .filter((usage) => usage.optionValueId === red.id);
+    expect(placements).toHaveLength(2);
+    expect(placements.filter((usage) => usage.isPrimary)).toEqual([
+      expect.objectContaining({ assetId: assets[1]!.id, optionValueId: red.id }),
+    ]);
   });
 });

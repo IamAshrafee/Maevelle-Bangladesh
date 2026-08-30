@@ -40,7 +40,10 @@ export interface MediaLibraryAsset {
     readonly productTitle: string;
     readonly variantId: string | null;
     readonly variantSku: string | null;
+    readonly optionValueId: string | null;
+    readonly optionValueLabel: string | null;
     readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+    readonly isPrimary: boolean;
     readonly position: number;
   }[];
 }
@@ -176,17 +179,23 @@ export async function listMediaLibrary(
       product_title: string;
       variant_id: string | null;
       variant_sku: string | null;
+      option_value_id: string | null;
+      option_value_label: string | null;
       role: MediaLibraryAsset['usages'][number]['role'];
+      is_primary: boolean;
       position: number;
     }>`
       select link.id::text,link.asset_id::text,link.product_id::text,
         product.title as product_title,link.variant_id::text,variant.sku as variant_sku,
-        link.role,link.position
+        link.option_value_id::text,value.display_value option_value_label,
+        link.role,link.is_primary,link.position
       from catalog.product_media link
       join catalog.products product
         on product.id=link.product_id and product.organization_id=link.organization_id
       left join catalog.product_variants variant
         on variant.id=link.variant_id and variant.organization_id=link.organization_id
+      left join catalog.product_option_values value
+        on value.id=link.option_value_id and value.organization_id=link.organization_id
       where link.organization_id=${organizationId}
       order by link.position,link.id
     `.execute(db),
@@ -211,7 +220,10 @@ export async function listMediaLibrary(
         productTitle: usage.product_title,
         variantId: usage.variant_id,
         variantSku: usage.variant_sku,
+        optionValueId: usage.option_value_id,
+        optionValueLabel: usage.option_value_label,
         role: usage.role,
+        isPrimary: usage.is_primary,
         position: usage.position,
       })),
   }));
@@ -248,8 +260,15 @@ export async function attachMediaToProduct(
     role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
     position?: number;
     variantId?: string;
+    optionValueId?: string;
+    isPrimary?: boolean;
   },
 ): Promise<void> {
+  if (input.variantId && input.optionValueId)
+    throw new MediaDomainError(
+      'VALIDATION_FAILED',
+      'Choose either a Variant gallery or an option-value gallery, not both.',
+    );
   const asset = await findMediaAsset(db, input.assetId, input.organizationId);
   if (!asset) throw new MediaDomainError('NOT_FOUND', 'Media asset was not found.');
   const product = await sql<{
@@ -267,11 +286,38 @@ export async function attachMediaToProduct(
     if (!variant.rows[0])
       throw new MediaDomainError('VALIDATION_FAILED', 'Variant is not available for this Product.');
   }
-  await sql`
-    insert into catalog.product_media (organization_id, product_id, variant_id, asset_id, role, position)
-    values (${input.organizationId}, ${input.productId}, ${input.variantId ?? null}, ${input.assetId}, ${input.role}, ${input.position ?? 0})
-    on conflict (product_id, variant_id, asset_id, role) do update set position = excluded.position
-  `.execute(db);
+  if (input.optionValueId) {
+    const value = await sql<{ id: string }>`select value.id::text from catalog.product_option_values value
+      join catalog.product_option_axes axis
+        on axis.organization_id=value.organization_id and axis.id=value.option_axis_id
+      where value.organization_id=${input.organizationId} and value.id=${input.optionValueId}::uuid
+        and axis.product_id=${input.productId}::uuid`.execute(db);
+    if (!value.rows[0])
+      throw new MediaDomainError(
+        'VALIDATION_FAILED',
+        'Option value is not available for this Product.',
+      );
+  }
+  await db.transaction().execute(async (transaction) => {
+    if (input.isPrimary)
+      await sql`update catalog.product_media set is_primary=false
+        where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+          and variant_id is not distinct from ${input.variantId ?? null}::uuid
+          and option_value_id is not distinct from ${input.optionValueId ?? null}::uuid`.execute(
+        transaction,
+      );
+    await sql`insert into catalog.product_media
+      (organization_id,product_id,variant_id,option_value_id,asset_id,role,is_primary,position)
+      values (${input.organizationId},${input.productId},${input.variantId ?? null},
+        ${input.optionValueId ?? null},${input.assetId},${input.role},${input.isPrimary ?? false},
+        ${input.position ?? 0}) on conflict do nothing`.execute(transaction);
+    await sql`update catalog.product_media set position=${input.position ?? 0},
+        is_primary=${input.isPrimary ?? false}
+      where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+        and variant_id is not distinct from ${input.variantId ?? null}::uuid
+        and option_value_id is not distinct from ${input.optionValueId ?? null}::uuid
+        and asset_id=${input.assetId}::uuid and role=${input.role}`.execute(transaction);
+  });
 }
 
 export async function detachMediaFromProduct(

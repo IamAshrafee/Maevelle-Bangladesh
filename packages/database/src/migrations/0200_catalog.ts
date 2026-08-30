@@ -213,9 +213,16 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       name text not null,
       hex_value text,
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1,
+      unique (organization_id, id),
       unique (organization_id, code),
+      check (code ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
+      check (length(trim(name)) > 0),
       check (hex_value is null or hex_value ~ '^#[0-9a-fA-F]{6}$')
     );
+    create index colors_organization_status_name on catalog.colors (organization_id, status, name, id);
 
     create table catalog.product_option_values (
       id uuid primary key default uuidv7(),
@@ -243,6 +250,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
       product_id uuid not null references catalog.products(id),
+      title text,
       sku text not null,
       sku_normalized text not null,
       barcode text,
@@ -258,6 +266,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       check (length(trim(sku)) > 0),
+      check (title is null or length(trim(title)) > 0),
       check (sku_normalized=upper(trim(sku))),
       check (barcode is null or length(trim(barcode)) > 0),
       check (weight_value is null or weight_value > 0),
@@ -294,13 +303,19 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
 
     create table catalog.variant_colors (
       organization_id uuid not null references platform.organizations(id),
-      variant_id uuid not null references catalog.product_variants(id),
-      color_id uuid not null references catalog.colors(id),
+      variant_id uuid not null,
+      color_id uuid not null,
       role text not null check (role in ('PRIMARY', 'ASSOCIATED')),
       position integer not null default 0,
-      primary key (variant_id, color_id, role)
+      primary key (organization_id, variant_id, color_id, role),
+      foreign key (organization_id, variant_id)
+        references catalog.product_variants(organization_id, id),
+      foreign key (organization_id, color_id)
+        references catalog.colors(organization_id, id),
+      check (position >= 0)
     );
-    create unique index variant_colors_one_primary on catalog.variant_colors (variant_id) where role = 'PRIMARY';
+    create unique index variant_colors_one_primary on catalog.variant_colors (organization_id, variant_id) where role = 'PRIMARY';
+    create index variant_colors_color on catalog.variant_colors (organization_id, color_id, variant_id);
 
     create table catalog.product_categories (
       organization_id uuid not null references platform.organizations(id),

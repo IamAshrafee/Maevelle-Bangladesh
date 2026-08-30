@@ -34,14 +34,37 @@ export interface CatalogProductWorkspace extends ProductSummary {
     id: string;
     code: string;
     name: string;
-    values: readonly { id: string; code: string; label: string }[];
+    status: 'ACTIVE' | 'ARCHIVED';
+    position: number;
+    version: number;
+    values: readonly {
+      id: string;
+      code: string;
+      label: string;
+      status: 'ACTIVE' | 'ARCHIVED';
+      position: number;
+      version: number;
+      color: CatalogColor | null;
+      sizeDefinitionId: string | null;
+    }[];
   }[];
   readonly variants: readonly {
     id: string;
+    title: string | null;
     sku: string;
-    status: string;
+    barcode: string | null;
+    status: 'ACTIVE' | 'ARCHIVED';
+    version: number;
     optionValueIds: readonly string[];
+    primaryColor: CatalogColor | null;
+    associatedColors: readonly CatalogColor[];
+    weight: { value: string; unit: string } | null;
+    dimensions: { length: string; width: string; height: string; unit: string } | null;
+    currentPrice: { amount: string; compareAtAmount: string | null; currency: string } | null;
+    sellableQuantity: string;
+    media: readonly CatalogProductMedia[];
   }[];
+  readonly media: readonly CatalogProductMedia[];
   readonly readiness: CatalogProductReadiness;
   readonly operationalSignals: CatalogProductOperationalSignals;
   readonly organization: {
@@ -62,6 +85,30 @@ export interface CatalogProductWorkspace extends ProductSummary {
     readonly seoTitle: string | null;
     readonly seoDescription: string | null;
   };
+}
+
+export interface CatalogColor {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly hexValue: string | null;
+  readonly status: 'ACTIVE' | 'ARCHIVED';
+  readonly version: number;
+}
+
+export interface CatalogProductMedia {
+  readonly id: string;
+  readonly assetId: string;
+  readonly variantId: string | null;
+  readonly optionValueId: string | null;
+  readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+  readonly isPrimary: boolean;
+  readonly position: number;
+  readonly title: string | null;
+  readonly altText: string | null;
+  readonly visibility: 'PUBLIC' | 'PRIVATE';
+  readonly width: number | null;
+  readonly height: number | null;
 }
 
 export interface CatalogProductAttribute {
@@ -139,6 +186,9 @@ export interface CatalogProductWorkItem extends ProductSummary {
   readonly blockerCount: number;
   readonly warningCount: number;
   readonly operationalSignals: CatalogProductOperationalSignals;
+  readonly primaryMediaId: string | null;
+  readonly priceRange: { minimum: string; maximum: string; currency: string } | null;
+  readonly availableQuantity: string;
 }
 
 export interface CatalogProductWorklist {
@@ -183,6 +233,109 @@ export async function listCatalogProductTypes(
   return result.rows;
 }
 
+export async function listCatalogColors(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly CatalogColor[]> {
+  const result = await sql<{
+    id: string;
+    code: string;
+    name: string;
+    hex_value: string | null;
+    status: CatalogColor['status'];
+    version: string;
+  }>`select id::text,code,name,hex_value,status,version::text from catalog.colors
+    where organization_id=${organizationId} order by status,name,id`.execute(db);
+  return result.rows.map((color) => ({
+    id: color.id,
+    code: color.code,
+    name: color.name,
+    hexValue: color.hex_value,
+    status: color.status,
+    version: Number(color.version),
+  }));
+}
+
+export async function createCatalogColor(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; code: string; name: string; hexValue?: string | null },
+): Promise<CatalogColor> {
+  const code = input.code.trim().toLowerCase();
+  const name = input.name.trim();
+  const hexValue = input.hexValue?.trim().toUpperCase() || null;
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(code) || !name)
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'Color name is required and its code must use lowercase words separated by hyphens.',
+    );
+  if (hexValue && !/^#[0-9A-F]{6}$/.test(hexValue))
+    throw new CatalogDomainError('VALIDATION_FAILED', 'Color HEX must use the format #RRGGBB.');
+  const result = await sql<{
+    id: string;
+    code: string;
+    name: string;
+    hex_value: string | null;
+    status: CatalogColor['status'];
+    version: string;
+  }>`insert into catalog.colors (organization_id,code,name,hex_value)
+    values (${input.organizationId},${code},${name},${hexValue})
+    returning id::text,code,name,hex_value,status,version::text`.execute(db);
+  const color = result.rows[0];
+  if (!color) throw new Error('Color creation did not return a Color.');
+  return {
+    id: color.id,
+    code: color.code,
+    name: color.name,
+    hexValue: color.hex_value,
+    status: color.status,
+    version: Number(color.version),
+  };
+}
+
+export async function updateCatalogColor(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    colorId: string;
+    expectedVersion: number;
+    name?: string;
+    hexValue?: string | null;
+    status?: 'ACTIVE' | 'ARCHIVED';
+  },
+): Promise<CatalogColor> {
+  const name = input.name?.trim();
+  const hexValue = input.hexValue?.trim().toUpperCase() || null;
+  if (input.name !== undefined && !name)
+    throw new CatalogDomainError('VALIDATION_FAILED', 'Color name is required.');
+  if (input.hexValue && !/^#[0-9A-F]{6}$/.test(hexValue ?? ''))
+    throw new CatalogDomainError('VALIDATION_FAILED', 'Color HEX must use the format #RRGGBB.');
+  const result = await sql<{
+    id: string;
+    code: string;
+    name: string;
+    hex_value: string | null;
+    status: CatalogColor['status'];
+    version: string;
+  }>`update catalog.colors set
+      name=case when ${input.name !== undefined} then ${name ?? ''} else name end,
+      hex_value=case when ${input.hexValue !== undefined} then ${hexValue} else hex_value end,
+      status=coalesce(${input.status ?? null},status),version=version+1,updated_at=now()
+    where organization_id=${input.organizationId} and id=${input.colorId}::uuid
+      and version=${input.expectedVersion}
+    returning id::text,code,name,hex_value,status,version::text`.execute(db);
+  const color = result.rows[0];
+  if (!color)
+    throw new CatalogDomainError('STALE_VERSION', 'Color changed while you were editing it.');
+  return {
+    id: color.id,
+    code: color.code,
+    name: color.name,
+    hexValue: color.hex_value,
+    status: color.status,
+    version: Number(color.version),
+  };
+}
+
 export async function createProductOptionAxis(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -221,6 +374,83 @@ export async function createProductOptionValue(
   const row = result.rows[0];
   if (!row) throw new Error('Option value creation did not return an id.');
   return row;
+}
+
+export async function updateProductOptionAxis(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    productId: string;
+    axisId: string;
+    expectedVersion: number;
+    name?: string;
+    code?: string;
+    position?: number;
+    status?: 'ACTIVE' | 'ARCHIVED';
+  },
+): Promise<void> {
+  const name = input.name?.trim();
+  const code = input.code?.trim().toLowerCase();
+  if (input.name !== undefined && !name)
+    throw new CatalogDomainError('VALIDATION_FAILED', 'Option name is required.');
+  if (input.code !== undefined && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(code ?? ''))
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'Option code must use lowercase words separated by hyphens.',
+    );
+  const result = await sql`update catalog.product_option_axes set
+      name=coalesce(${name ?? null},name),code=coalesce(${code ?? null},code),
+      position=coalesce(${input.position ?? null},position),status=coalesce(${input.status ?? null},status),
+      version=version+1,updated_at=now()
+    where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+      and id=${input.axisId}::uuid and version=${input.expectedVersion}`.execute(db);
+  if (Number(result.numAffectedRows) !== 1)
+    throw new CatalogDomainError('STALE_VERSION', 'Product option changed while you were editing.');
+}
+
+export async function updateProductOptionValue(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    axisId: string;
+    valueId: string;
+    expectedVersion: number;
+    displayValue?: string;
+    code?: string;
+    position?: number;
+    status?: 'ACTIVE' | 'ARCHIVED';
+    colorId?: string | null;
+    sizeDefinitionId?: string | null;
+  },
+): Promise<void> {
+  const displayValue = input.displayValue?.trim();
+  const code = input.code?.trim().toLowerCase();
+  if (input.displayValue !== undefined && !displayValue)
+    throw new CatalogDomainError('VALIDATION_FAILED', 'Option value label is required.');
+  if (input.code !== undefined && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(code ?? ''))
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'Option value code must use lowercase words separated by hyphens.',
+    );
+  if (input.colorId) {
+    const color = await sql<{ id: string }>`select color.id::text from catalog.colors color
+      join catalog.product_option_axes axis on axis.organization_id=color.organization_id
+      where color.organization_id=${input.organizationId} and color.id=${input.colorId}::uuid
+        and color.status='ACTIVE' and axis.id=${input.axisId}::uuid`.execute(db);
+    if (!color.rows[0]) throw new CatalogDomainError('VALIDATION_FAILED', 'Color is unavailable.');
+  }
+  const result = await sql`update catalog.product_option_values set
+      display_value=coalesce(${displayValue ?? null},display_value),
+      code=coalesce(${code ?? null},code),position=coalesce(${input.position ?? null},position),
+      status=coalesce(${input.status ?? null},status),
+      color_id=case when ${input.colorId !== undefined} then ${input.colorId ?? null}::uuid else color_id end,
+      size_definition_id=case when ${input.sizeDefinitionId !== undefined}
+        then ${input.sizeDefinitionId ?? null}::uuid else size_definition_id end,
+      version=version+1,updated_at=now()
+    where organization_id=${input.organizationId} and option_axis_id=${input.axisId}::uuid
+      and id=${input.valueId}::uuid and version=${input.expectedVersion}`.execute(db);
+  if (Number(result.numAffectedRows) !== 1)
+    throw new CatalogDomainError('STALE_VERSION', 'Option value changed while you were editing.');
 }
 
 function normalizeSku(value: string): string {
@@ -819,6 +1049,68 @@ export async function unpublishCatalogProduct(
   });
 }
 
+export async function archiveCatalogProduct(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; productId: string; expectedVersion: number },
+): Promise<ProductSummary> {
+  return db.transaction().execute(async (transaction) => {
+    const updated = await sql<{
+      id: string;
+      handle: string;
+      title: string;
+      status: ProductSummary['status'];
+      publication_status: ProductSummary['publicationStatus'];
+      version: string;
+    }>`update catalog.products set status='ARCHIVED',publication_status='UNPUBLISHED',
+        published_at=null,version=version+1,updated_at=now()
+      where id=${input.productId}::uuid and organization_id=${input.organizationId}
+        and version=${input.expectedVersion} and status<>'ARCHIVED'
+      returning id::text,handle,title,status,publication_status,version::text`.execute(transaction);
+    const product = updated.rows[0];
+    if (!product)
+      throw new CatalogDomainError('STALE_VERSION', 'Product was not found or has changed.');
+    await emitCatalogEvent(transaction, {
+      organizationId: input.organizationId,
+      productId: input.productId,
+      eventType: 'catalog.product.archived',
+      actorId: input.actorId,
+      auditAction: 'catalog.product.archived',
+    });
+    return asProduct(product);
+  });
+}
+
+export async function restoreCatalogProduct(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; productId: string; expectedVersion: number },
+): Promise<ProductSummary> {
+  return db.transaction().execute(async (transaction) => {
+    const updated = await sql<{
+      id: string;
+      handle: string;
+      title: string;
+      status: ProductSummary['status'];
+      publication_status: ProductSummary['publicationStatus'];
+      version: string;
+    }>`update catalog.products set status='DRAFT',publication_status='UNPUBLISHED',
+        published_at=null,version=version+1,updated_at=now()
+      where id=${input.productId}::uuid and organization_id=${input.organizationId}
+        and version=${input.expectedVersion} and status='ARCHIVED'
+      returning id::text,handle,title,status,publication_status,version::text`.execute(transaction);
+    const product = updated.rows[0];
+    if (!product)
+      throw new CatalogDomainError('STALE_VERSION', 'Archived Product was not found or changed.');
+    await emitCatalogEvent(transaction, {
+      organizationId: input.organizationId,
+      productId: input.productId,
+      eventType: 'catalog.product.restored',
+      actorId: input.actorId,
+      auditAction: 'catalog.product.restored',
+    });
+    return asProduct(product);
+  });
+}
+
 export async function createCatalogCategory(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; name: string; handle: string; parentCategoryId?: string },
@@ -1356,55 +1648,296 @@ export async function replaceCatalogProductContent(
   });
 }
 
-export async function createCatalogVariant(
+export interface CatalogVariantWrite {
+  readonly sku: string;
+  readonly title?: string;
+  readonly optionValueIds: readonly string[];
+  readonly barcode?: string;
+  readonly primaryColorId?: string;
+  readonly associatedColorIds?: readonly string[];
+  readonly weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' };
+  readonly dimensions?: {
+    readonly length: string;
+    readonly width: string;
+    readonly height: string;
+    readonly unit: 'MM' | 'CM' | 'IN';
+  };
+}
+
+async function validateVariantOptionSelection(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; productId: string; optionValueIds: readonly string[] },
+): Promise<readonly { option_value_id: string; option_axis_id: string }[]> {
+  const axisCount = await sql<{ count: string }>`select count(*)::text count
+    from catalog.product_option_axes where organization_id=${input.organizationId}
+      and product_id=${input.productId}::uuid and status='ACTIVE'`.execute(db);
+  const expected = Number(axisCount.rows[0]?.count ?? 0);
+  if (input.optionValueIds.length !== expected)
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      expected === 0
+        ? 'This Product has no customer options; create its single default Variant without option values.'
+        : `Choose exactly one value from each of the Product's ${expected} active options.`,
+    );
+  if (expected === 0) return [];
+  const uniqueIds = [...new Set(input.optionValueIds)];
+  if (uniqueIds.length !== input.optionValueIds.length)
+    throw new CatalogDomainError('VALIDATION_FAILED', 'A Variant cannot repeat an option value.');
+  const selected = await sql<{ option_value_id: string; option_axis_id: string }>`
+    select value.id::text as option_value_id,axis.id::text as option_axis_id
+    from catalog.product_option_values value
+    join catalog.product_option_axes axis
+      on axis.id=value.option_axis_id and axis.organization_id=value.organization_id
+    where value.id=any(${uniqueIds}::uuid[]) and axis.product_id=${input.productId}::uuid
+      and value.organization_id=${input.organizationId} and value.status='ACTIVE' and axis.status='ACTIVE'
+  `.execute(db);
+  if (
+    selected.rows.length !== expected ||
+    new Set(selected.rows.map((row) => row.option_axis_id)).size !== expected
+  )
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'Variant options must be active values from distinct options on this Product.',
+    );
+  return selected.rows;
+}
+
+async function validateVariantColors(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    primaryColorId?: string | null;
+    associatedColorIds?: readonly string[];
+  },
+): Promise<readonly string[]> {
+  const ids = [
+    ...(input.primaryColorId ? [input.primaryColorId] : []),
+    ...new Set(input.associatedColorIds ?? []),
+  ];
+  if (new Set(ids).size !== ids.length)
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'The primary Color cannot also be an associated Color.',
+    );
+  if (ids.length === 0) return ids;
+  const colors = await sql<{ id: string }>`select id::text from catalog.colors
+    where organization_id=${input.organizationId} and status='ACTIVE' and id=any(${ids}::uuid[])`.execute(
+    db,
+  );
+  if (colors.rows.length !== ids.length)
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'Every Variant Color must be active and belong to this organization.',
+    );
+  return ids;
+}
+
+export async function createCatalogVariants(
   db: Kysely<DatabaseSchema>,
   input: {
     organizationId: string;
     productId: string;
-    sku: string;
-    optionValueIds: readonly string[];
+    variants: readonly CatalogVariantWrite[];
+  },
+): Promise<readonly { id: string; sku: string; version: number }[]> {
+  if (input.variants.length === 0 || input.variants.length > 250)
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'Create between 1 and 250 Variants in one operation.',
+    );
+  const normalizedSkus = input.variants.map((variant) => normalizeSku(variant.sku));
+  if (normalizedSkus.some((sku) => !sku))
+    throw new CatalogDomainError('VALIDATION_FAILED', 'Every Variant needs an SKU.');
+  if (new Set(normalizedSkus).size !== normalizedSkus.length)
+    throw new CatalogDomainError('VALIDATION_FAILED', 'Variant SKUs must be unique.');
+
+  return db.transaction().execute(async (transaction) => {
+    const product = await sql<{ id: string }>`select id::text from catalog.products
+      where organization_id=${input.organizationId} and id=${input.productId}::uuid
+        and status<>'ARCHIVED'`.execute(transaction);
+    if (!product.rows[0])
+      throw new CatalogDomainError('NOT_FOUND', 'Product was not found or is archived.');
+    const created: { id: string; sku: string; version: number }[] = [];
+    for (const [index, variantInput] of input.variants.entries()) {
+      const selected = await validateVariantOptionSelection(transaction, {
+        organizationId: input.organizationId,
+        productId: input.productId,
+        optionValueIds: variantInput.optionValueIds,
+      });
+      await validateVariantColors(transaction, {
+        organizationId: input.organizationId,
+        ...(variantInput.primaryColorId ? { primaryColorId: variantInput.primaryColorId } : {}),
+        ...(variantInput.associatedColorIds
+          ? { associatedColorIds: variantInput.associatedColorIds }
+          : {}),
+      });
+      const title = variantInput.title?.trim() || null;
+      const barcode = variantInput.barcode?.trim() || null;
+      const signature = selected.length > 0 ? optionSignature(variantInput.optionValueIds) : 'default';
+      const row = await sql<{ id: string; sku: string; version: string }>`
+        insert into catalog.product_variants
+          (organization_id,product_id,title,sku,sku_normalized,barcode,option_signature,
+            weight_value,weight_unit,length_value,width_value,height_value,dimension_unit)
+        values (${input.organizationId},${input.productId},${title},${variantInput.sku.trim()},
+          ${normalizedSkus[index]!},${barcode},${signature},${variantInput.weight?.value ?? null},
+          ${variantInput.weight?.unit ?? null},${variantInput.dimensions?.length ?? null},
+          ${variantInput.dimensions?.width ?? null},${variantInput.dimensions?.height ?? null},
+          ${variantInput.dimensions?.unit ?? null})
+        returning id::text,sku,version::text`.execute(transaction);
+      const variant = row.rows[0];
+      if (!variant) throw new Error('Variant creation did not return a Variant.');
+      for (const value of selected)
+        await sql`insert into catalog.variant_option_values
+          (organization_id,variant_id,option_axis_id,option_value_id)
+          values (${input.organizationId},${variant.id},${value.option_axis_id},${value.option_value_id})`.execute(
+          transaction,
+        );
+      if (variantInput.primaryColorId)
+        await sql`insert into catalog.variant_colors
+          (organization_id,variant_id,color_id,role,position)
+          values (${input.organizationId},${variant.id},${variantInput.primaryColorId},'PRIMARY',0)`.execute(
+          transaction,
+        );
+      for (const [position, colorId] of (variantInput.associatedColorIds ?? []).entries())
+        await sql`insert into catalog.variant_colors
+          (organization_id,variant_id,color_id,role,position)
+          values (${input.organizationId},${variant.id},${colorId},'ASSOCIATED',${position})`.execute(
+          transaction,
+        );
+      // Catalog establishes the inventory identity; stock remains owned by Inventory.
+      await sql`insert into inventory.inventory_items (organization_id,variant_id)
+        values (${input.organizationId},${variant.id}) on conflict (variant_id) do nothing`.execute(
+        transaction,
+      );
+      created.push({ id: variant.id, sku: variant.sku, version: Number(variant.version) });
+    }
+    return created;
+  });
+}
+
+export async function createCatalogVariant(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; productId: string } & CatalogVariantWrite,
+): Promise<{ id: string; sku: string; version: number }> {
+  const [variant] = await createCatalogVariants(db, {
+    organizationId: input.organizationId,
+    productId: input.productId,
+    variants: [input],
+  });
+  if (!variant) throw new Error('Variant creation did not return a Variant.');
+  return variant;
+}
+
+export async function updateCatalogVariant(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    productId: string;
+    variantId: string;
+    expectedVersion: number;
+    sku?: string;
+    title?: string | null;
+    optionValueIds?: readonly string[];
+    barcode?: string | null;
+    status?: 'ACTIVE' | 'ARCHIVED';
+    primaryColorId?: string | null;
+    associatedColorIds?: readonly string[];
+    weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+    dimensions?:
+      | {
+          readonly length: string;
+          readonly width: string;
+          readonly height: string;
+          readonly unit: 'MM' | 'CM' | 'IN';
+        }
+      | null;
   },
 ): Promise<{ id: string; sku: string; version: number }> {
-  if (input.optionValueIds.length === 0)
-    throw new CatalogDomainError('VALIDATION_FAILED', 'A variant needs an option combination.');
   return db.transaction().execute(async (transaction) => {
-    const selected = await sql<{ option_value_id: string; option_axis_id: string }>`
-      select value.id as option_value_id, axis.id as option_axis_id
-      from catalog.product_option_values value
-      join catalog.product_option_axes axis on axis.id = value.option_axis_id
-      where value.id = any(${input.optionValueIds}::uuid[]) and axis.product_id = ${input.productId}
-        and value.organization_id = ${input.organizationId} and value.status = 'ACTIVE' and axis.status = 'ACTIVE'
-    `.execute(transaction);
-    if (
-      selected.rows.length !== input.optionValueIds.length ||
-      new Set(selected.rows.map((row) => row.option_axis_id)).size !== selected.rows.length
-    ) {
-      throw new CatalogDomainError(
-        'VALIDATION_FAILED',
-        'Variant options must be active values from distinct axes on this product.',
-      );
+    const current = await sql<{ id: string; sku: string }>`select id::text,sku
+      from catalog.product_variants where organization_id=${input.organizationId}
+        and product_id=${input.productId}::uuid and id=${input.variantId}::uuid`.execute(transaction);
+    if (!current.rows[0]) throw new CatalogDomainError('NOT_FOUND', 'Variant was not found.');
+    const sku = input.sku === undefined ? undefined : normalizeSku(input.sku);
+    if (sku !== undefined && !sku)
+      throw new CatalogDomainError('VALIDATION_FAILED', 'Variant SKU is required.');
+    const selected =
+      input.optionValueIds === undefined
+        ? undefined
+        : await validateVariantOptionSelection(transaction, {
+            organizationId: input.organizationId,
+            productId: input.productId,
+            optionValueIds: input.optionValueIds,
+          });
+    if (input.primaryColorId !== undefined || input.associatedColorIds !== undefined) {
+      const existing = await sql<{ color_id: string; role: 'PRIMARY' | 'ASSOCIATED' }>`
+        select color_id::text,role from catalog.variant_colors
+        where organization_id=${input.organizationId} and variant_id=${input.variantId}::uuid
+        order by role,position,color_id`.execute(transaction);
+      const primaryColorId =
+        input.primaryColorId === undefined
+          ? (existing.rows.find((color) => color.role === 'PRIMARY')?.color_id ?? null)
+          : input.primaryColorId;
+      const associatedColorIds =
+        input.associatedColorIds === undefined
+          ? existing.rows
+              .filter((color) => color.role === 'ASSOCIATED')
+              .map((color) => color.color_id)
+          : [...new Set(input.associatedColorIds)];
+      await validateVariantColors(transaction, {
+        organizationId: input.organizationId,
+        primaryColorId,
+        associatedColorIds,
+      });
+      await sql`delete from catalog.variant_colors where organization_id=${input.organizationId}
+        and variant_id=${input.variantId}::uuid`.execute(transaction);
+      if (primaryColorId)
+        await sql`insert into catalog.variant_colors
+          (organization_id,variant_id,color_id,role,position)
+          values (${input.organizationId},${input.variantId},${primaryColorId},'PRIMARY',0)`.execute(
+          transaction,
+        );
+      for (const [position, colorId] of associatedColorIds.entries())
+        await sql`insert into catalog.variant_colors
+          (organization_id,variant_id,color_id,role,position)
+          values (${input.organizationId},${input.variantId},${colorId},'ASSOCIATED',${position})`.execute(
+          transaction,
+        );
     }
-    const sku = normalizeSku(input.sku);
-    const created = await sql<{ id: string; sku: string; version: string }>`
-      insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature)
-      values (${input.organizationId}, ${input.productId}, ${input.sku.trim()}, ${sku}, ${optionSignature(input.optionValueIds)})
-      returning id, sku, version::text
-    `.execute(transaction);
-    const variant = created.rows[0];
-    if (!variant) throw new Error('Variant creation did not return a variant.');
-    for (const selectedValue of selected.rows) {
-      await sql`
-        insert into catalog.variant_option_values (organization_id, variant_id, option_axis_id, option_value_id)
-        values (${input.organizationId}, ${variant.id}, ${selectedValue.option_axis_id}, ${selectedValue.option_value_id})
-      `.execute(transaction);
+    const title = input.title === undefined ? undefined : input.title?.trim() || null;
+    const barcode = input.barcode === undefined ? undefined : input.barcode?.trim() || null;
+    const updated = await sql<{ id: string; sku: string; version: string }>`update catalog.product_variants
+      set sku=case when ${input.sku !== undefined} then ${input.sku?.trim() ?? ''} else sku end,
+        sku_normalized=case when ${input.sku !== undefined} then ${sku ?? ''} else sku_normalized end,
+        title=case when ${input.title !== undefined} then ${title ?? null} else title end,
+        barcode=case when ${input.barcode !== undefined} then ${barcode ?? null} else barcode end,
+        status=coalesce(${input.status ?? null},status),
+        option_signature=case when ${input.optionValueIds !== undefined}
+          then ${selected && selected.length > 0 ? optionSignature(input.optionValueIds ?? []) : 'default'}
+          else option_signature end,
+        weight_value=case when ${input.weight !== undefined} then ${input.weight?.value ?? null} else weight_value end,
+        weight_unit=case when ${input.weight !== undefined} then ${input.weight?.unit ?? null} else weight_unit end,
+        length_value=case when ${input.dimensions !== undefined} then ${input.dimensions?.length ?? null} else length_value end,
+        width_value=case when ${input.dimensions !== undefined} then ${input.dimensions?.width ?? null} else width_value end,
+        height_value=case when ${input.dimensions !== undefined} then ${input.dimensions?.height ?? null} else height_value end,
+        dimension_unit=case when ${input.dimensions !== undefined} then ${input.dimensions?.unit ?? null} else dimension_unit end,
+        version=version+1,updated_at=now()
+      where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+        and id=${input.variantId}::uuid and version=${input.expectedVersion}
+      returning id::text,sku,version::text`.execute(transaction);
+    const variant = updated.rows[0];
+    if (!variant)
+      throw new CatalogDomainError('STALE_VERSION', 'Variant changed while you were editing it.');
+    if (selected) {
+      await sql`delete from catalog.variant_option_values where organization_id=${input.organizationId}
+        and variant_id=${input.variantId}::uuid`.execute(transaction);
+      for (const value of selected)
+        await sql`insert into catalog.variant_option_values
+          (organization_id,variant_id,option_axis_id,option_value_id)
+          values (${input.organizationId},${input.variantId},${value.option_axis_id},${value.option_value_id})`.execute(
+          transaction,
+        );
     }
-    // Controlled Catalog → Inventory coordination: a sellable Variant always
-    // receives its separate inventory identity without Catalog owning stock.
-    await sql`
-      insert into inventory.inventory_items (organization_id, variant_id)
-      values (${input.organizationId}, ${variant.id})
-      on conflict (variant_id) do nothing
-    `.execute(transaction);
     return { id: variant.id, sku: variant.sku, version: Number(variant.version) };
   });
 }
@@ -1488,12 +2021,50 @@ export async function listCatalogProductWorkItems(
       warning_count: number;
       readiness_state: CatalogReadinessState;
       filtered_total: string;
+      primary_media_id: string | null;
+      minimum_price: string | null;
+      maximum_price: string | null;
+      available_quantity: string;
     }>`
       with facts as (
         select product.id,product.handle,product.title,product.description,product.status,
           product.publication_status,product.version,product.updated_at,product.product_type_id,
           product_type.name as product_type_name,product_type.status as product_type_status,
           organization.default_currency,
+          (select placement.asset_id::text from catalog.product_media placement
+            join media.media_assets asset on asset.organization_id=placement.organization_id
+              and asset.id=placement.asset_id and asset.status='READY'
+            where placement.organization_id=product.organization_id
+              and placement.product_id=product.id
+            order by placement.is_primary desc,placement.position,placement.id limit 1
+          ) primary_media_id,
+          (select min(price.amount)::text from pricing.price_definitions price
+            join catalog.product_variants priced_variant
+              on priced_variant.organization_id=price.organization_id
+              and priced_variant.id=price.variant_id and priced_variant.product_id=product.id
+              and priced_variant.status='ACTIVE'
+            where price.organization_id=product.organization_id
+              and price.currency_code=organization.default_currency and price.status='ACTIVE'
+              and price.effective_from<=now()
+              and (price.effective_to is null or price.effective_to>now())) minimum_price,
+          (select max(price.amount)::text from pricing.price_definitions price
+            join catalog.product_variants priced_variant
+              on priced_variant.organization_id=price.organization_id
+              and priced_variant.id=price.variant_id and priced_variant.product_id=product.id
+              and priced_variant.status='ACTIVE'
+            where price.organization_id=product.organization_id
+              and price.currency_code=organization.default_currency and price.status='ACTIVE'
+              and price.effective_from<=now()
+              and (price.effective_to is null or price.effective_to>now())) maximum_price,
+          (select coalesce(sum(level.sellable_quantity-level.reserved_quantity),0)::text
+            from catalog.product_variants stock_variant
+            join inventory.inventory_items item
+              on item.organization_id=stock_variant.organization_id and item.variant_id=stock_variant.id
+            left join inventory.inventory_levels level
+              on level.organization_id=item.organization_id and level.inventory_item_id=item.id
+            where stock_variant.organization_id=product.organization_id
+              and stock_variant.product_id=product.id and stock_variant.status='ACTIVE'
+          ) available_quantity,
           (select count(*)::integer from catalog.product_variants variant
             where variant.organization_id=product.organization_id
               and variant.product_id=product.id and variant.status='ACTIVE') as active_variant_count,
@@ -1606,7 +2177,8 @@ export async function listCatalogProductWorkItems(
       select id::text,handle,title,status,publication_status,version::text,product_type_name,
         active_variant_count,sku_preview,updated_at::text,default_currency,priced_variant_count,
         public_media_count,available_variant_count,category_count,blocker_count,warning_count,
-        readiness_state,count(*) over()::text as filtered_total
+        readiness_state,primary_media_id,minimum_price,maximum_price,available_quantity,
+        count(*) over()::text as filtered_total
       from filtered
       order by updated_at desc,id desc
       limit ${pageSize} offset ${offset}
@@ -1642,6 +2214,16 @@ export async function listCatalogProductWorkItems(
       readinessState: row.readiness_state,
       blockerCount: row.blocker_count,
       warningCount: row.warning_count,
+      primaryMediaId: row.primary_media_id,
+      priceRange:
+        row.minimum_price && row.maximum_price
+          ? {
+              minimum: row.minimum_price,
+              maximum: row.maximum_price,
+              currency: row.default_currency,
+            }
+          : null,
+      availableQuantity: row.available_quantity,
       operationalSignals: {
         defaultCurrency: row.default_currency,
         activeVariantCount: row.active_variant_count,
@@ -1758,29 +2340,98 @@ export async function getCatalogProductWorkspace(
     attributes,
     information,
     faqs,
+    media,
   ] = await Promise.all([
-    sql<{ id: string; code: string; name: string }>`
-      select id::text,code,name from catalog.product_option_axes
-      where organization_id=${organizationId} and product_id=${productId}::uuid and status='ACTIVE'
-      order by position,id
+    sql<{ id: string; code: string; name: string; status: 'ACTIVE' | 'ARCHIVED'; position: number; version: string }>`
+      select id::text,code,name,status,position,version::text from catalog.product_option_axes
+      where organization_id=${organizationId} and product_id=${productId}::uuid
+      order by status,position,id
     `.execute(db),
-    sql<{ id: string; option_axis_id: string; code: string; label: string }>`
-      select value.id::text,value.option_axis_id::text,value.code,value.display_value as label
+    sql<{
+      id: string;
+      option_axis_id: string;
+      code: string;
+      label: string;
+      size_definition_id: string | null;
+      color_id: string | null;
+      color_code: string | null;
+      color_name: string | null;
+      color_hex: string | null;
+      color_status: CatalogColor['status'] | null;
+      color_version: string | null;
+      status: 'ACTIVE' | 'ARCHIVED';
+      position: number;
+      version: string;
+    }>`
+      select value.id::text,value.option_axis_id::text,value.code,value.display_value as label,
+        value.size_definition_id::text,color.id::text color_id,color.code color_code,
+        color.name color_name,color.hex_value color_hex,color.status color_status,
+        color.version::text color_version,value.status,value.position,value.version::text
       from catalog.product_option_values value
       join catalog.product_option_axes axis
         on axis.id=value.option_axis_id and axis.organization_id=value.organization_id
+      left join catalog.colors color
+        on color.id=value.color_id and color.organization_id=value.organization_id
       where value.organization_id=${organizationId} and axis.product_id=${productId}::uuid
-        and value.status='ACTIVE' and axis.status='ACTIVE'
-      order by value.position,value.id
+      order by value.status,value.position,value.id
     `.execute(db),
-    sql<{ id: string; sku: string; status: string; option_value_ids: string[] }>`
-      select variant.id::text,variant.sku,variant.status,
-        coalesce(array_agg(link.option_value_id::text order by link.option_value_id)
-          filter (where link.option_value_id is not null),'{}') as option_value_ids
+    sql<{
+      id: string;
+      title: string | null;
+      sku: string;
+      barcode: string | null;
+      status: 'ACTIVE' | 'ARCHIVED';
+      version: string;
+      option_value_ids: string[];
+      weight_value: string | null;
+      weight_unit: string | null;
+      length_value: string | null;
+      width_value: string | null;
+      height_value: string | null;
+      dimension_unit: string | null;
+      current_price_amount: string | null;
+      current_compare_at_amount: string | null;
+      default_currency: string;
+      sellable_quantity: string;
+      colors: {
+        id: string;
+        code: string;
+        name: string;
+        hexValue: string | null;
+        status: CatalogColor['status'];
+        version: number;
+        role: 'PRIMARY' | 'ASSOCIATED';
+      }[];
+    }>`
+      select variant.id::text,variant.title,variant.sku,variant.barcode,variant.status,
+        variant.version::text,variant.weight_value::text,variant.weight_unit,
+        variant.length_value::text,variant.width_value::text,variant.height_value::text,
+        variant.dimension_unit,organization.default_currency,
+        coalesce((select array_agg(link.option_value_id::text order by link.option_value_id)
+          from catalog.variant_option_values link where link.organization_id=variant.organization_id
+            and link.variant_id=variant.id),'{}') option_value_ids,
+        price.amount::text current_price_amount,price.compare_at_amount::text current_compare_at_amount,
+        coalesce(stock.sellable_quantity,0)::text sellable_quantity,
+        coalesce((select jsonb_agg(jsonb_build_object('id',color.id::text,'code',color.code,
+          'name',color.name,'hexValue',color.hex_value,'status',color.status,
+          'version',color.version,'role',link.role) order by link.role desc,link.position,color.name)
+          from catalog.variant_colors link join catalog.colors color
+            on color.organization_id=link.organization_id and color.id=link.color_id
+          where link.organization_id=variant.organization_id and link.variant_id=variant.id),'[]'::jsonb) colors
       from catalog.product_variants variant
-      left join catalog.variant_option_values link on link.variant_id=variant.id
+      join platform.organizations organization on organization.id=variant.organization_id
+      left join lateral (select definition.amount,definition.compare_at_amount
+        from pricing.price_definitions definition
+        where definition.organization_id=variant.organization_id and definition.variant_id=variant.id
+          and definition.currency_code=organization.default_currency and definition.status='ACTIVE'
+          and definition.effective_from<=now()
+          and (definition.effective_to is null or definition.effective_to>now())
+        order by definition.effective_from desc,definition.id desc limit 1) price on true
+      left join lateral (select sum(level.sellable_quantity-level.reserved_quantity) sellable_quantity
+        from inventory.inventory_items item left join inventory.inventory_levels level
+          on level.organization_id=item.organization_id and level.inventory_item_id=item.id
+        where item.organization_id=variant.organization_id and item.variant_id=variant.id) stock on true
       where variant.organization_id=${organizationId} and variant.product_id=${productId}::uuid
-      group by variant.id,variant.sku,variant.status
       order by variant.sku,variant.id
     `.execute(db),
     getCatalogProductReadiness(db, organizationId, productId),
@@ -1882,6 +2533,29 @@ export async function getCatalogProductWorkspace(
       where organization_id=${organizationId} and product_id=${productId}::uuid
       order by position,id
     `.execute(db),
+    sql<{
+      id: string;
+      asset_id: string;
+      variant_id: string | null;
+      option_value_id: string | null;
+      role: CatalogProductMedia['role'];
+      is_primary: boolean;
+      position: number;
+      title: string | null;
+      alt_text: string | null;
+      visibility_class: CatalogProductMedia['visibility'];
+      width_px: number | null;
+      height_px: number | null;
+    }>`select placement.id::text,placement.asset_id::text,placement.variant_id::text,
+        placement.option_value_id::text,placement.role,placement.is_primary,placement.position,
+        asset.title,asset.alt_text,asset.visibility_class,object.width_px,object.height_px
+      from catalog.product_media placement join media.media_assets asset
+        on asset.organization_id=placement.organization_id and asset.id=placement.asset_id
+      join media.media_objects object on object.organization_id=asset.organization_id
+        and object.id=asset.current_object_id
+      where placement.organization_id=${organizationId} and placement.product_id=${productId}::uuid
+        and asset.status='READY'
+      order by placement.is_primary desc,placement.position,placement.id`.execute(db),
   ]);
   if (!validation) return undefined;
 
@@ -1899,16 +2573,100 @@ export async function getCatalogProductWorkspace(
     skuPreview: variants.rows[0]?.sku ?? null,
     updatedAt: row.updated_at,
     options: axes.rows.map((axis) => ({
-      ...axis,
+      id: axis.id,
+      code: axis.code,
+      name: axis.name,
+      status: axis.status,
+      position: axis.position,
+      version: Number(axis.version),
       values: values.rows
         .filter((value) => value.option_axis_id === axis.id)
-        .map(({ id, code, label }) => ({ id, code, label })),
+        .map((value) => ({
+          id: value.id,
+          code: value.code,
+          label: value.label,
+          status: value.status,
+          position: value.position,
+          version: Number(value.version),
+          sizeDefinitionId: value.size_definition_id,
+          color:
+            value.color_id && value.color_code && value.color_name && value.color_status
+              ? {
+                  id: value.color_id,
+                  code: value.color_code,
+                  name: value.color_name,
+                  hexValue: value.color_hex,
+                  status: value.color_status,
+                  version: Number(value.color_version),
+                }
+              : null,
+        })),
     })),
     variants: variants.rows.map((variant) => ({
       id: variant.id,
+      title: variant.title,
       sku: variant.sku,
+      barcode: variant.barcode,
       status: variant.status,
+      version: Number(variant.version),
       optionValueIds: variant.option_value_ids,
+      primaryColor:
+        variant.colors.find((color) => color.role === 'PRIMARY') ?? null,
+      associatedColors: variant.colors.filter((color) => color.role === 'ASSOCIATED'),
+      weight:
+        variant.weight_value && variant.weight_unit
+          ? { value: variant.weight_value, unit: variant.weight_unit }
+          : null,
+      dimensions:
+        variant.length_value &&
+        variant.width_value &&
+        variant.height_value &&
+        variant.dimension_unit
+          ? {
+              length: variant.length_value,
+              width: variant.width_value,
+              height: variant.height_value,
+              unit: variant.dimension_unit,
+            }
+          : null,
+      currentPrice: variant.current_price_amount
+        ? {
+            amount: variant.current_price_amount,
+            compareAtAmount: variant.current_compare_at_amount,
+            currency: variant.default_currency,
+          }
+        : null,
+      sellableQuantity: variant.sellable_quantity,
+      media: media.rows
+        .filter((placement) => placement.variant_id === variant.id)
+        .map((placement) => ({
+          id: placement.id,
+          assetId: placement.asset_id,
+          variantId: placement.variant_id,
+          optionValueId: placement.option_value_id,
+          role: placement.role,
+          isPrimary: placement.is_primary,
+          position: placement.position,
+          title: placement.title,
+          altText: placement.alt_text,
+          visibility: placement.visibility_class,
+          width: placement.width_px,
+          height: placement.height_px,
+        })),
+    })),
+    media: media.rows.map((placement) => ({
+      id: placement.id,
+      assetId: placement.asset_id,
+      variantId: placement.variant_id,
+      optionValueId: placement.option_value_id,
+      role: placement.role,
+      isPrimary: placement.is_primary,
+      position: placement.position,
+      title: placement.title,
+      altText: placement.alt_text,
+      visibility: placement.visibility_class,
+      width: placement.width_px,
+      height: placement.height_px,
     })),
     readiness: validation.readiness,
     operationalSignals: validation.operationalSignals,
@@ -1976,8 +2734,10 @@ export interface StorefrontProduct {
   readonly media: readonly {
     id: string;
     variantId: string | null;
+    optionValueId: string | null;
     role: string;
     altText: string | null;
+    isPrimary: boolean;
   }[];
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
@@ -2078,16 +2838,19 @@ export async function getStorefrontCatalogProduct(
   const media = await sql<{
     id: string;
     variant_id: string | null;
+    option_value_id: string | null;
     role: string;
     alt_text: string | null;
+    is_primary: boolean;
   }>`
-    select link.asset_id::text as id,link.variant_id::text,link.role,asset.alt_text
+    select link.asset_id::text as id,link.variant_id::text,link.option_value_id::text,
+      link.role,asset.alt_text,link.is_primary
     from catalog.product_media link
     join media.media_assets asset
       on asset.id=link.asset_id and asset.organization_id=link.organization_id
     where link.organization_id=${organizationId} and link.product_id=${row.id}
       and asset.status='READY' and asset.visibility_class='PUBLIC'
-    order by link.position,link.id
+    order by link.is_primary desc,link.position,link.id
   `.execute(db);
   const details = await sql<{ group_title: string; label: string; value_text: string }>`
     select information_group.title as group_title, item.label, item.value_text
@@ -2119,8 +2882,10 @@ export async function getStorefrontCatalogProduct(
     media: media.rows.map((asset) => ({
       id: asset.id,
       variantId: asset.variant_id,
+      optionValueId: asset.option_value_id,
       role: asset.role,
       altText: asset.alt_text,
+      isPrimary: asset.is_primary,
     })),
     details: details.rows.map((detail) => ({
       group: detail.group_title,

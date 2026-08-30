@@ -113,7 +113,7 @@ export function DashboardConsole() {
             <RefreshCw />
             Refresh
           </button>
-          <Link className="button primary" href="/products?create=product">
+          <Link className="button primary" href="/products/new">
             <Sparkles />
             Create product
           </Link>

@@ -5,6 +5,10 @@
 **Version:** 0.1
 **Related:** `concept-clarification.md`, `requirements.md`, `scope.md`
 
+The current Admin operating model is defined in
+[`product-admin-workflow.md`](product-admin-workflow.md). It supersedes older
+mockups or terminology that describe a user-facing "Product workspace."
+
 ---
 
 # 1. Purpose

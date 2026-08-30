@@ -25,8 +25,10 @@ describe('Storefront structured data', () => {
           {
             id: '11111111-1111-4111-8111-111111111111',
             variantId: null,
+            optionValueId: null,
             role: 'PRIMARY',
             altText: 'Linen dress',
+            isPrimary: true,
           },
         ],
         details: [],

@@ -126,6 +126,8 @@ export function registerMediaRoutes(
           ]),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
           variantId: Type.Optional(Type.String()),
+          optionValueId: Type.Optional(Type.String()),
+          isPrimary: Type.Optional(Type.Boolean()),
         }),
       },
     },
@@ -138,6 +140,8 @@ export function registerMediaRoutes(
           role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
           position?: number;
           variantId?: string;
+          optionValueId?: string;
+          isPrimary?: boolean;
         };
         await attachMediaToProduct(database.db, {
           organizationId: context.organizationId,

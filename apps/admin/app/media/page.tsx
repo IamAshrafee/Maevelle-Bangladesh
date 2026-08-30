@@ -127,7 +127,7 @@ export default function MediaPage() {
         cache: 'no-store',
       });
       if (!response.ok)
-        throw new Error(await errorMessage(response, 'Product workspace could not be loaded.'));
+        throw new Error(await errorMessage(response, 'Product could not be loaded.'));
       setProduct(((await response.json()) as { data: ProductWorkspace }).data);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Product could not be loaded.');

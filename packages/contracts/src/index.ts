@@ -23,6 +23,80 @@ export interface CatalogProductUpdateDto {
   readonly productTypeId?: string;
 }
 
+export interface CatalogProductCreateDto {
+  readonly productTypeId: string;
+  readonly title: string;
+  readonly handle: string;
+  readonly description?: string;
+  readonly categoryIds?: readonly string[];
+  readonly primaryCategoryId?: string;
+  readonly tagIds?: readonly string[];
+  readonly occasionIds?: readonly string[];
+  readonly collectionIds?: readonly string[];
+}
+
+export interface CatalogColorDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly hexValue: string | null;
+  readonly status: 'ACTIVE' | 'ARCHIVED';
+  readonly version: number;
+}
+
+export interface CatalogProductMediaDto {
+  readonly id: string;
+  readonly assetId: string;
+  readonly variantId: string | null;
+  readonly optionValueId: string | null;
+  readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+  readonly isPrimary: boolean;
+  readonly position: number;
+  readonly title: string | null;
+  readonly altText: string | null;
+  readonly visibility: 'PUBLIC' | 'PRIVATE';
+  readonly width: number | null;
+  readonly height: number | null;
+}
+
+export interface CatalogVariantCreateDto {
+  readonly sku: string;
+  readonly title?: string;
+  readonly optionValueIds: readonly string[];
+  readonly barcode?: string;
+  readonly primaryColorId?: string;
+  readonly associatedColorIds?: readonly string[];
+  readonly weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' };
+  readonly dimensions?: {
+    readonly length: string;
+    readonly width: string;
+    readonly height: string;
+    readonly unit: 'MM' | 'CM' | 'IN';
+  };
+}
+
+export interface CatalogVariantUpdateDto {
+  readonly version: number;
+  readonly sku?: string;
+  readonly title?: string | null;
+  readonly optionValueIds?: readonly string[];
+  readonly barcode?: string | null;
+  readonly status?: 'ACTIVE' | 'ARCHIVED';
+  readonly primaryColorId?: string | null;
+  readonly associatedColorIds?: readonly string[];
+  readonly weight?:
+    | { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' }
+    | null;
+  readonly dimensions?:
+    | {
+        readonly length: string;
+        readonly width: string;
+        readonly height: string;
+        readonly unit: 'MM' | 'CM' | 'IN';
+      }
+    | null;
+}
+
 export type CatalogReadinessState = 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
 
 export interface CatalogReadinessCheckDto {
@@ -64,6 +138,13 @@ export interface CatalogProductWorkItemDto extends CatalogProductSummaryDto {
   readonly blockerCount: number;
   readonly warningCount: number;
   readonly operationalSignals: CatalogProductOperationalSignalsDto;
+  readonly primaryMediaId: string | null;
+  readonly priceRange: {
+    readonly minimum: string;
+    readonly maximum: string;
+    readonly currency: string;
+  } | null;
+  readonly availableQuantity: string;
 }
 
 export interface CatalogProductWorklistDto {
@@ -232,18 +313,46 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
     readonly id: string;
     readonly code: string;
     readonly name: string;
+    readonly status: 'ACTIVE' | 'ARCHIVED';
+    readonly position: number;
+    readonly version: number;
     readonly values: readonly {
       readonly id: string;
       readonly code: string;
       readonly label: string;
+      readonly status: 'ACTIVE' | 'ARCHIVED';
+      readonly position: number;
+      readonly version: number;
+      readonly color: CatalogColorDto | null;
+      readonly sizeDefinitionId: string | null;
     }[];
   }[];
   readonly variants: readonly {
     readonly id: string;
+    readonly title: string | null;
     readonly sku: string;
-    readonly status: string;
+    readonly barcode: string | null;
+    readonly status: 'ACTIVE' | 'ARCHIVED';
+    readonly version: number;
     readonly optionValueIds: readonly string[];
+    readonly primaryColor: CatalogColorDto | null;
+    readonly associatedColors: readonly CatalogColorDto[];
+    readonly weight: { readonly value: string; readonly unit: string } | null;
+    readonly dimensions: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: string;
+    } | null;
+    readonly currentPrice: {
+      readonly amount: string;
+      readonly compareAtAmount: string | null;
+      readonly currency: string;
+    } | null;
+    readonly sellableQuantity: string;
+    readonly media: readonly CatalogProductMediaDto[];
   }[];
+  readonly media: readonly CatalogProductMediaDto[];
   readonly readiness: CatalogProductReadinessDto;
   readonly operationalSignals: CatalogProductOperationalSignalsDto;
   readonly organization: {
@@ -366,8 +475,10 @@ export interface StorefrontProductDto {
   readonly media: readonly {
     id: string;
     variantId: string | null;
+    optionValueId: string | null;
     role: string;
     altText: string | null;
+    isPrimary: boolean;
   }[];
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];

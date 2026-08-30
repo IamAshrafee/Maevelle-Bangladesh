@@ -235,7 +235,7 @@ const navigation: readonly NavGroup[] = [
 const quickCommands: readonly NavItem[] = [
   {
     label: 'Create a product',
-    href: '/products?create=product',
+    href: '/products/new',
     icon: PackageSearch,
     capability: 'catalog.manage',
     keywords: 'new draft catalog',

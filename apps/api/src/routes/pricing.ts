@@ -7,6 +7,7 @@ import {
   createPriceDefinition,
   PricingDomainError,
   resolveVariantPrice,
+  setCurrentVariantPrice,
 } from '@maevelle/database/pricing';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
@@ -117,6 +118,42 @@ export function registerPricingRoutes(
                 : {}),
           }),
         });
+      } catch (caught) {
+        return error(reply, caught);
+      }
+    },
+  );
+  app.put(
+    '/admin/pricing/variants/:variantId/current',
+    {
+      schema: {
+        body: Type.Object({
+          currency: Type.String({ pattern: '^[A-Z]{3}$' }),
+          amount: Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }),
+          compareAtAmount: Type.Optional(
+            Type.Union([
+              Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }),
+              Type.Null(),
+            ]),
+          ),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await requireCapability(database, auth, request.headers, 'pricing.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return {
+          data: await setCurrentVariantPrice(database.db, {
+            ...active,
+            variantId: (request.params as { variantId: string }).variantId,
+            ...(request.body as {
+              currency: string;
+              amount: string;
+              compareAtAmount?: string | null;
+            }),
+          }),
+        };
       } catch (caught) {
         return error(reply, caught);
       }

@@ -3,9 +3,14 @@ import { sql } from 'kysely';
 
 import {
   createCatalogProduct,
+  createCatalogColor,
   createCatalogVariant,
+  createCatalogVariants,
   createProductOptionAxis,
   createProductOptionValue,
+  getCatalogProductWorkspace,
+  updateCatalogColor,
+  updateCatalogVariant,
 } from './catalog.js';
 import { getCatalogVariantMatrix } from './catalog-variants.js';
 import { createDatabase } from './index.js';
@@ -130,5 +135,138 @@ describe('Catalog Variant matrix', () => {
       }),
     );
     expect(matrix.rows.filter((row) => row.state === 'MISSING')).toHaveLength(3);
+  });
+
+  it('creates a complete matrix atomically and updates variant identity, colors, and physical data', async () => {
+    const organization = await createOrganization(database.db, {
+      code: `variant-write-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Variant write test',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const productType = await sql<{ id: string }>`insert into catalog.product_types
+      (organization_id,code,name) values (${organization.id},'shirt','Shirt') returning id::text`.execute(
+      database.db,
+    );
+    const product = await createCatalogProduct(database.db, {
+      organizationId: organization.id,
+      actorId: crypto.randomUUID(),
+      productTypeId: productType.rows[0]!.id,
+      title: 'Variant shirt',
+      handle: `variant-shirt-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const red = await createCatalogColor(database.db, {
+      organizationId: organization.id,
+      code: 'red',
+      name: 'Red',
+      hexValue: '#D9272E',
+    });
+    const burgundy = await createCatalogColor(database.db, {
+      organizationId: organization.id,
+      code: 'burgundy',
+      name: 'Burgundy',
+      hexValue: '#722F37',
+    });
+    const renamedRed = await updateCatalogColor(database.db, {
+      organizationId: organization.id,
+      colorId: red.id,
+      expectedVersion: red.version,
+      name: 'Crimson',
+      hexValue: '#DC143C',
+    });
+    expect(renamedRed).toMatchObject({
+      id: red.id,
+      name: 'Crimson',
+      hexValue: '#DC143C',
+      version: red.version + 1,
+    });
+    await expect(
+      updateCatalogColor(database.db, {
+        organizationId: organization.id,
+        colorId: red.id,
+        expectedVersion: red.version,
+        status: 'ARCHIVED',
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_VERSION' });
+    const color = await createProductOptionAxis(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      code: 'color',
+      name: 'Color',
+    });
+    const redValue = await createProductOptionValue(database.db, {
+      organizationId: organization.id,
+      optionAxisId: color.id,
+      code: 'red',
+      displayValue: 'Red',
+      colorId: red.id,
+    });
+    const size = await createProductOptionAxis(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      code: 'size',
+      name: 'Size',
+      position: 1,
+    });
+    const small = await createProductOptionValue(database.db, {
+      organizationId: organization.id,
+      optionAxisId: size.id,
+      code: 's',
+      displayValue: 'Small',
+    });
+    const medium = await createProductOptionValue(database.db, {
+      organizationId: organization.id,
+      optionAxisId: size.id,
+      code: 'm',
+      displayValue: 'Medium',
+      position: 1,
+    });
+
+    const created = await createCatalogVariants(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      variants: [small, medium].map((sizeValue) => ({
+        sku: `SHIRT-RED-${sizeValue.id === small.id ? 'S' : 'M'}-${crypto.randomUUID().slice(0, 5)}`,
+        title: `Red / ${sizeValue.id === small.id ? 'Small' : 'Medium'}`,
+        optionValueIds: [redValue.id, sizeValue.id],
+        primaryColorId: red.id,
+        associatedColorIds: [burgundy.id],
+      })),
+    });
+    expect(created).toHaveLength(2);
+
+    const updated = await updateCatalogVariant(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      variantId: created[0]!.id,
+      expectedVersion: created[0]!.version,
+      title: 'Scarlet / Small',
+      barcode: '8901234567890',
+      primaryColorId: burgundy.id,
+      associatedColorIds: [red.id],
+      weight: { value: '245.500', unit: 'G' },
+      dimensions: { length: '30.000', width: '22.000', height: '4.000', unit: 'CM' },
+    });
+    expect(updated.version).toBe(created[0]!.version + 1);
+
+    const workspace = await getCatalogProductWorkspace(database.db, organization.id, product.id);
+    expect(workspace?.variants.find((variant) => variant.id === updated.id)).toMatchObject({
+      title: 'Scarlet / Small',
+      barcode: '8901234567890',
+      primaryColor: { id: burgundy.id, hexValue: '#722F37' },
+      associatedColors: [expect.objectContaining({ id: red.id, name: 'Crimson' })],
+      weight: { value: '245.500000', unit: 'G' },
+      dimensions: { length: '30.000000', width: '22.000000', height: '4.000000', unit: 'CM' },
+    });
+    await expect(
+      updateCatalogVariant(database.db, {
+        organizationId: organization.id,
+        productId: product.id,
+        variantId: updated.id,
+        expectedVersion: created[0]!.version,
+        title: 'Stale overwrite',
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_VERSION' });
   });
 });

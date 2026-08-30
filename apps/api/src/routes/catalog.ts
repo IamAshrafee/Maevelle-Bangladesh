@@ -1,13 +1,22 @@
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
-import type { CatalogProductContentUpdateDto, CatalogProductUpdateDto } from '@maevelle/contracts';
+import type {
+  CatalogProductContentUpdateDto,
+  CatalogProductCreateDto,
+  CatalogProductUpdateDto,
+  CatalogVariantCreateDto,
+  CatalogVariantUpdateDto,
+} from '@maevelle/contracts';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   createProductOptionAxis,
   createProductOptionValue,
+  archiveCatalogProduct,
+  createCatalogColor,
   createCatalogProduct,
   createCatalogVariant,
+  createCatalogVariants,
   getCatalogProductWorkspace,
   getStorefrontCatalogProduct,
   listCatalogCategoryChoices,
@@ -16,12 +25,18 @@ import {
   listCatalogProducts,
   listCatalogVariantChoices,
   listCatalogProductTypes,
+  listCatalogColors,
   publishCatalogProduct,
   replaceCatalogProductContent,
+  restoreCatalogProduct,
   setCatalogProductAttributes,
   setCatalogProductCategories,
   unpublishCatalogProduct,
   updateCatalogProduct,
+  updateCatalogColor,
+  updateCatalogVariant,
+  updateProductOptionAxis,
+  updateProductOptionValue,
 } from '@maevelle/database/catalog';
 import { createManagedCatalogProductType } from '@maevelle/database/catalog-product-types';
 import { getPublicSizeGuideForProduct } from '@maevelle/database/sizing';
@@ -44,6 +59,35 @@ import {
 } from './catalog-support.js';
 const organizationIdParameter = Type.String({
   pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+});
+const variantWriteSchema = Type.Object({
+  sku: Type.String({ minLength: 1, maxLength: 120 }),
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 180 })),
+  optionValueIds: Type.Array(organizationIdParameter, { maxItems: 8, uniqueItems: true }),
+  barcode: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+  primaryColorId: Type.Optional(organizationIdParameter),
+  associatedColorIds: Type.Optional(
+    Type.Array(organizationIdParameter, { maxItems: 12, uniqueItems: true }),
+  ),
+  weight: Type.Optional(
+    Type.Object({
+      value: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+      unit: Type.Union([
+        Type.Literal('G'),
+        Type.Literal('KG'),
+        Type.Literal('OZ'),
+        Type.Literal('LB'),
+      ]),
+    }),
+  ),
+  dimensions: Type.Optional(
+    Type.Object({
+      length: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+      width: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+      height: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+      unit: Type.Union([Type.Literal('MM'), Type.Literal('CM'), Type.Literal('IN')]),
+    }),
+  ),
 });
 
 function expectedVersion(header: string | string[] | undefined): number | undefined {
@@ -75,6 +119,81 @@ export function registerCatalogRoutes(
     if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listCatalogProductTypes(database.db, context.organizationId) };
   });
+
+  app.get('/admin/catalog/colors', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listCatalogColors(database.db, context.organizationId) };
+  });
+
+  app.post(
+    '/admin/catalog/colors',
+    {
+      schema: {
+        body: Type.Object({
+          code: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
+          name: Type.String({ minLength: 1, maxLength: 120 }),
+          hexValue: Type.Optional(
+            Type.Union([Type.String({ pattern: '^#[0-9a-fA-F]{6}$' }), Type.Null()]),
+          ),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await createCatalogColor(database.db, {
+            organizationId: context.organizationId,
+            ...(request.body as { code: string; name: string; hexValue?: string | null }),
+          }),
+        });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.patch(
+    '/admin/catalog/colors/:colorId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+          hexValue: Type.Optional(
+            Type.Union([Type.String({ pattern: '^#[0-9a-fA-F]{6}$' }), Type.Null()]),
+          ),
+          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          version: number;
+          name?: string;
+          hexValue?: string | null;
+          status?: 'ACTIVE' | 'ARCHIVED';
+        };
+        return {
+          data: await updateCatalogColor(database.db, {
+            organizationId: context.organizationId,
+            colorId: (request.params as { colorId: string }).colorId,
+            expectedVersion: body.version,
+            ...(body.name !== undefined ? { name: body.name } : {}),
+            ...(body.hexValue !== undefined ? { hexValue: body.hexValue } : {}),
+            ...(body.status !== undefined ? { status: body.status } : {}),
+          }),
+        };
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
 
   app.get('/admin/catalog/categories', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'catalog.view');
@@ -352,17 +471,7 @@ export function registerCatalogRoutes(
       const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
       if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
-        const body = request.body as {
-          productTypeId: string;
-          title: string;
-          handle: string;
-          description?: string;
-          categoryIds?: string[];
-          primaryCategoryId?: string;
-          tagIds?: string[];
-          occasionIds?: string[];
-          collectionIds?: string[];
-        };
+        const body = request.body as CatalogProductCreateDto;
         const product = await createCatalogProduct(database.db, {
           ...body,
           organizationId: context.organizationId,
@@ -433,6 +542,89 @@ export function registerCatalogRoutes(
             }),
           }),
         });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.patch(
+    '/admin/catalog/products/:productId/option-axes/:axisId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
+          name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+          position: Type.Optional(Type.Integer({ minimum: 0 })),
+          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          version: number;
+          code?: string;
+          name?: string;
+          position?: number;
+          status?: 'ACTIVE' | 'ARCHIVED';
+        };
+        const { version, ...changes } = body;
+        const params = request.params as { productId: string; axisId: string };
+        await updateProductOptionAxis(database.db, {
+          organizationId: context.organizationId,
+          productId: params.productId,
+          axisId: params.axisId,
+          expectedVersion: version,
+          ...changes,
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.patch(
+    '/admin/catalog/option-axes/:axisId/values/:valueId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
+          displayValue: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+          position: Type.Optional(Type.Integer({ minimum: 0 })),
+          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')])),
+          colorId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+          sizeDefinitionId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          version: number;
+          code?: string;
+          displayValue?: string;
+          position?: number;
+          status?: 'ACTIVE' | 'ARCHIVED';
+          colorId?: string | null;
+          sizeDefinitionId?: string | null;
+        };
+        const { version, ...changes } = body;
+        await updateProductOptionValue(database.db, {
+          organizationId: context.organizationId,
+          axisId: (request.params as { axisId: string }).axisId,
+          valueId: (request.params as { valueId: string }).valueId,
+          expectedVersion: version,
+          ...changes,
+        });
+        return reply.code(204).send();
       } catch (error) {
         return domainError(reply, error);
       }
@@ -519,27 +711,131 @@ export function registerCatalogRoutes(
     );
   }
 
+  for (const action of ['archive', 'restore'] as const) {
+    app.post(
+      `/admin/catalog/products/:productId/${action}`,
+      { schema: { body: Type.Object({ version: Type.Integer({ minimum: 1 }) }) } },
+      async (request, reply) => {
+        const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+        if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+        try {
+          const input = {
+            organizationId: context.organizationId,
+            actorId: context.actorId,
+            productId: (request.params as { productId: string }).productId,
+            expectedVersion: (request.body as { version: number }).version,
+          };
+          return {
+            data:
+              action === 'archive'
+                ? await archiveCatalogProduct(database.db, input)
+                : await restoreCatalogProduct(database.db, input),
+          };
+        } catch (error) {
+          return domainError(reply, error);
+        }
+      },
+    );
+  }
+
   app.post(
     '/admin/catalog/products/:productId/variants',
     {
-      schema: {
-        body: Type.Object({
-          sku: Type.String({ minLength: 1 }),
-          optionValueIds: Type.Array(Type.String(), { minItems: 1 }),
-        }),
-      },
+      schema: { body: variantWriteSchema },
     },
     async (request, reply) => {
       const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
       if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
-        const body = request.body as { sku: string; optionValueIds: string[] };
+        const body = request.body as CatalogVariantCreateDto;
         const variant = await createCatalogVariant(database.db, {
           ...body,
           organizationId: context.organizationId,
           productId: (request.params as { productId: string }).productId,
         });
         return reply.code(201).send({ data: variant });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/catalog/products/:productId/variants/bulk',
+    {
+      schema: {
+        body: Type.Object({ variants: Type.Array(variantWriteSchema, { minItems: 1, maxItems: 250 }) }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as { variants: readonly CatalogVariantCreateDto[] };
+        return reply.code(201).send({
+          data: await createCatalogVariants(database.db, {
+            organizationId: context.organizationId,
+            productId: (request.params as { productId: string }).productId,
+            variants: body.variants,
+          }),
+        });
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.patch(
+    '/admin/catalog/products/:productId/variants/:variantId',
+    {
+      schema: {
+        body: Type.Object(
+          {
+            version: Type.Integer({ minimum: 1 }),
+            sku: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+            title: Type.Optional(
+              Type.Union([Type.String({ minLength: 1, maxLength: 180 }), Type.Null()]),
+            ),
+            optionValueIds: Type.Optional(
+              Type.Array(organizationIdParameter, { maxItems: 8, uniqueItems: true }),
+            ),
+            barcode: Type.Optional(
+              Type.Union([Type.String({ minLength: 1, maxLength: 120 }), Type.Null()]),
+            ),
+            status: Type.Optional(
+              Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')]),
+            ),
+            primaryColorId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+            associatedColorIds: Type.Optional(
+              Type.Array(organizationIdParameter, { maxItems: 12, uniqueItems: true }),
+            ),
+            weight: Type.Optional(
+              Type.Union([variantWriteSchema.properties.weight, Type.Null()]),
+            ),
+            dimensions: Type.Optional(
+              Type.Union([variantWriteSchema.properties.dimensions, Type.Null()]),
+            ),
+          },
+          { minProperties: 2 },
+        ),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as CatalogVariantUpdateDto;
+        const { version, ...changes } = body;
+        const params = request.params as { productId: string; variantId: string };
+        return {
+          data: await updateCatalogVariant(database.db, {
+            organizationId: context.organizationId,
+            productId: params.productId,
+            variantId: params.variantId,
+            expectedVersion: version,
+            ...changes,
+          }),
+        };
       } catch (error) {
         return domainError(reply, error);
       }
