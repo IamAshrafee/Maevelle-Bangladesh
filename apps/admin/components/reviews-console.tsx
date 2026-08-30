@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
+
 import type { ApiEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from './status-badge';
@@ -162,30 +164,30 @@ export function ReviewsConsole() {
         </nav>
       </header>
 
-      <section className="metric-grid" aria-label="Review queue summary">
-        <article>
-          <strong>{reviews.filter((item) => item.moderation_status === 'PENDING').length}</strong>
-          <span>Awaiting decision</span>
-        </article>
-        <article>
-          <strong>{reviews.filter((item) => item.visibility_status === 'VISIBLE').length}</strong>
-          <span>Visible</span>
-        </article>
-        <article>
-          <strong>
+      <Stats aria-label="Review queue summary">
+        <StatsCard>
+          <StatsTitle>Awaiting decision</StatsTitle>
+          <StatsValue>{reviews.filter((item) => item.moderation_status === 'PENDING').length}</StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Visible</StatsTitle>
+          <StatsValue>{reviews.filter((item) => item.visibility_status === 'VISIBLE').length}</StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Needs response</StatsTitle>
+          <StatsValue>
             {
               reviews.filter(
                 (item) => item.moderation_status === 'APPROVED' && !item.merchant_response,
               ).length
             }
-          </strong>
-          <span>Needs response</span>
-        </article>
-        <article>
-          <strong>{reviews.filter((item) => item.media_count > 0).length}</strong>
-          <span>With media</span>
-        </article>
-      </section>
+          </StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>With media</StatsTitle>
+          <StatsValue>{reviews.filter((item) => item.media_count > 0).length}</StatsValue>
+        </StatsCard>
+      </Stats>
 
       {message ? (
         <p className="success-message" role="status">

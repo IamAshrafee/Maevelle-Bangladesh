@@ -1,6 +1,7 @@
 'use client';
 
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
 import {
   AlertTriangle,
   Mail,
@@ -232,16 +233,16 @@ export function CustomersConsole() {
                 <X />
               </button>
             </header>
-            <section className="customer-metrics">
-              <article>
-                <span>Orders</span>
-                <strong>{selected.orderCount ?? 0}</strong>
-              </article>
-              <article>
-                <span>Lifetime spend</span>
-                <strong>{money(selected.totalSpend)}</strong>
-              </article>
-            </section>
+            <Stats>
+              <StatsCard>
+                <StatsTitle>Orders</StatsTitle>
+                <StatsValue>{selected.orderCount ?? 0}</StatsValue>
+              </StatsCard>
+              <StatsCard>
+                <StatsTitle>Lifetime spend</StatsTitle>
+                <StatsValue>{money(selected.totalSpend)}</StatsValue>
+              </StatsCard>
+            </Stats>
             <section className="customer-contact-list">
               <h3>Primary contact</h3>
               <p>
