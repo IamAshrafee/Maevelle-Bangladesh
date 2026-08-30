@@ -180,28 +180,28 @@ export function DeliveryConsole() {
             </Link>
           }
         />
-        <section className="metric-strip" aria-label="Delivery summary">
-          <article>
-            <span>All deliveries</span>
-            <strong>{deliveries.length}</strong>
-            <small>Current tenant</small>
-          </article>
-          <article>
-            <span>Needs booking</span>
-            <strong>{needsBooking}</strong>
-            <small>Ready for carrier assignment</small>
-          </article>
-          <article>
-            <span>In transit</span>
-            <strong>{inTransit}</strong>
-            <small>Awaiting a terminal outcome</small>
-          </article>
-          <article>
-            <span>Exceptions</span>
-            <strong>{exceptions}</strong>
-            <small>Failed deliveries requiring RTO review</small>
-          </article>
-        </section>
+        <Stats aria-label="Delivery summary">
+          <StatsCard>
+            <StatsTitle>All deliveries</StatsTitle>
+            <StatsValue>{deliveries.length}</StatsValue>
+            <StatsDescription>Current tenant</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Needs booking</StatsTitle>
+            <StatsValue>{needsBooking}</StatsValue>
+            <StatsDescription>Ready for carrier assignment</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>In transit</StatsTitle>
+            <StatsValue>{inTransit}</StatsValue>
+            <StatsDescription>Awaiting a terminal outcome</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Exceptions</StatsTitle>
+            <StatsValue>{exceptions}</StatsValue>
+            <StatsDescription>Failed deliveries requiring RTO review</StatsDescription>
+          </StatsCard>
+        </Stats>
         {message ? <OperationalFeedback tone={messageTone}>{message}</OperationalFeedback> : null}
         <OperationalWorklistToolbar
           query={worklist.query}

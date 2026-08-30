@@ -3,6 +3,7 @@
 import { BadgePercent, CalendarClock, Plus, RefreshCw, Tags } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import {
   OperationalEmptyState,
   OperationalFeedback,
@@ -468,28 +469,28 @@ export function PromotionsConsole() {
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        <section className="metric-strip">
-          <article>
-            <span>Promotions</span>
-            <strong>{promotions.length}</strong>
-            <small>all lifecycle states</small>
-          </article>
-          <article>
-            <span>Active</span>
-            <strong>{promotions.filter((item) => item.status === 'ACTIVE').length}</strong>
-            <small>currently eligible</small>
-          </article>
-          <article>
-            <span>Committed usage</span>
-            <strong>{committedTotal}</strong>
-            <small>Orders only</small>
-          </article>
-          <article>
-            <span>Coupons</span>
-            <strong>{promotions.reduce((total, item) => total + item.coupons.length, 0)}</strong>
-            <small>reserved codes</small>
-          </article>
-        </section>
+        <Stats>
+          <StatsCard>
+            <StatsTitle>Promotions</StatsTitle>
+            <StatsValue>{promotions.length}</StatsValue>
+            <StatsDescription>all lifecycle states</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Active</StatsTitle>
+            <StatsValue>{promotions.filter((item) => item.status === 'ACTIVE').length}</StatsValue>
+            <StatsDescription>currently eligible</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Committed usage</StatsTitle>
+            <StatsValue>{committedTotal}</StatsValue>
+            <StatsDescription>Orders only</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Coupons</StatsTitle>
+            <StatsValue>{promotions.reduce((total, item) => total + item.coupons.length, 0)}</StatsValue>
+            <StatsDescription>reserved codes</StatsDescription>
+          </StatsCard>
+        </Stats>
         <section className="commerce-command-layout">
           <form className="panel inset-form" onSubmit={(event) => void submit(event)}>
             <div className="panel-header">

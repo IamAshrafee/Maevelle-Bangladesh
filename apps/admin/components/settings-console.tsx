@@ -3,6 +3,7 @@
 import { Building2, RefreshCw, Save, Store } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { OperationalFeedback, OperationalPageHeader } from './operational-worklist';
 
 type Profile = {
@@ -136,28 +137,28 @@ export function SettingsConsole() {
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        <section className="metric-strip">
-          <article>
-            <span>Organization</span>
-            <strong>{profile?.display_name ?? '—'}</strong>
-            <small>tenant identity</small>
-          </article>
-          <article>
-            <span>Timezone</span>
-            <strong>{profile?.timezone ?? '—'}</strong>
-            <small>operational display</small>
-          </article>
-          <article>
-            <span>Locale</span>
-            <strong>{profile?.default_locale ?? '—'}</strong>
-            <small>default language</small>
-          </article>
-          <article>
-            <span>Currency</span>
-            <strong>{profile?.default_currency ?? '—'}</strong>
-            <small>commercial default</small>
-          </article>
-        </section>
+        <Stats>
+          <StatsCard>
+            <StatsTitle>Organization</StatsTitle>
+            <StatsValue>{profile?.display_name ?? '—'}</StatsValue>
+            <StatsDescription>tenant identity</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Timezone</StatsTitle>
+            <StatsValue>{profile?.timezone ?? '—'}</StatsValue>
+            <StatsDescription>operational display</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Locale</StatsTitle>
+            <StatsValue>{profile?.default_locale ?? '—'}</StatsValue>
+            <StatsDescription>default language</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Currency</StatsTitle>
+            <StatsValue>{profile?.default_currency ?? '—'}</StatsValue>
+            <StatsDescription>commercial default</StatsDescription>
+          </StatsCard>
+        </Stats>
         {loading ? (
           <div className="skeleton-list" aria-label="Loading settings">
             <span />

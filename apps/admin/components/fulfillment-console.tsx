@@ -2,7 +2,9 @@
 
 import { ArrowRight, Boxes, PackageCheck, Truck, Warehouse } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 
 import type { ApiEnvelope, WarehouseLocationDto } from '@maevelle/contracts';
 
@@ -183,28 +185,28 @@ export function FulfillmentConsole() {
             </Link>
           }
         />
-        <section className="metric-strip" aria-label="Fulfillment summary">
-          <article>
-            <span>All fulfillments</span>
-            <strong>{fulfillments.length}</strong>
-            <small>Across every lifecycle state</small>
-          </article>
-          <article>
-            <span>In progress</span>
-            <strong>{inProgress}</strong>
-            <small>Ready, picking, or packed</small>
-          </article>
-          <article>
-            <span>Ready to dispatch</span>
-            <strong>{awaitingDispatch}</strong>
-            <small>Physical stock not yet consumed</small>
-          </article>
-          <article>
-            <span>Stock-holding locations</span>
-            <strong>{locations.length}</strong>
-            <small>Eligible fulfillment warehouses</small>
-          </article>
-        </section>
+        <Stats aria-label="Fulfillment summary">
+          <StatsCard>
+            <StatsTitle>All fulfillments</StatsTitle>
+            <StatsValue>{fulfillments.length}</StatsValue>
+            <StatsDescription>Across every lifecycle state</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>In progress</StatsTitle>
+            <StatsValue>{inProgress}</StatsValue>
+            <StatsDescription>Ready, picking, or packed</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Ready to dispatch</StatsTitle>
+            <StatsValue>{awaitingDispatch}</StatsValue>
+            <StatsDescription>Physical stock not yet consumed</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Stock-holding locations</StatsTitle>
+            <StatsValue>{locations.length}</StatsValue>
+            <StatsDescription>Eligible fulfillment warehouses</StatsDescription>
+          </StatsCard>
+        </Stats>
         {locations.length === 0 && !loading ? (
           <OperationalFeedback tone="warning">
             Create an active stock-holding warehouse before fulfilling orders.

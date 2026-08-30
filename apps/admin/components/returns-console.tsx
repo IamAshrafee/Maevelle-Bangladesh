@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
+
 import type { ApiEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from './status-badge';
@@ -187,28 +189,24 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
           <Link href="/payments">Refunds</Link> · <Link href="/costing">Costing</Link>
         </nav>
       </header>
-      <section className="metric-grid">
-        <article>
-          <strong>{visible.filter((item) => item.case_status === 'OPEN').length}</strong>
-          <span>Open</span>
-        </article>
-        <article>
-          <strong>
-            {visible.filter((item) => item.authorization_status === 'PENDING').length}
-          </strong>
-          <span>Awaiting authorization</span>
-        </article>
-        <article>
-          <strong>
-            {visible.filter((item) => item.receipt_status === 'PARTIALLY_RECEIVED').length}
-          </strong>
-          <span>Partial receipts</span>
-        </article>
-        <article>
-          <strong>{visible.filter((item) => item.case_status === 'RESOLVED').length}</strong>
-          <span>Resolved</span>
-        </article>
-      </section>
+      <Stats>
+        <StatsCard>
+          <StatsTitle>Open</StatsTitle>
+          <StatsValue>{visible.filter((item) => item.case_status === 'OPEN').length}</StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Awaiting authorization</StatsTitle>
+          <StatsValue>{visible.filter((item) => item.authorization_status === 'PENDING').length}</StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Partial receipts</StatsTitle>
+          <StatsValue>{visible.filter((item) => item.receipt_status === 'PARTIALLY_RECEIVED').length}</StatsValue>
+        </StatsCard>
+        <StatsCard>
+          <StatsTitle>Resolved</StatsTitle>
+          <StatsValue>{visible.filter((item) => item.case_status === 'RESOLVED').length}</StatsValue>
+        </StatsCard>
+      </Stats>
       {message ? (
         <p className="success-message" role="status">
           {message}

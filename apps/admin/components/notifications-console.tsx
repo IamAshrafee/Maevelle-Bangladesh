@@ -1,5 +1,7 @@
 'use client';
 
+import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -244,33 +246,33 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
 
       {integrations && integrationData ? (
         <>
-          <section className="metric-grid">
-            <article>
-              <strong>
+          <Stats>
+            <StatsCard>
+              <StatsTitle>Healthy accounts</StatsTitle>
+              <StatsValue>
                 {integrationData.health.filter((row) => row.status === 'HEALTHY').length}
-              </strong>
-              <span>Healthy accounts</span>
-            </article>
-            <article>
-              <strong>
+              </StatsValue>
+            </StatsCard>
+            <StatsCard>
+              <StatsTitle>Unknown outcomes</StatsTitle>
+              <StatsValue>
                 {
                   integrationData.operations.filter((row) => row.status === 'UNKNOWN_OUTCOME')
                     .length
                 }
-              </strong>
-              <span>Unknown outcomes</span>
-            </article>
-            <article>
-              <strong>{integrationData.exceptions.length}</strong>
-              <span>Exceptions</span>
-            </article>
-            <article>
-              <strong>
+              </StatsValue>
+            </StatsCard>
+            <StatsCard>
+              <StatsTitle>Exceptions</StatsTitle>
+              <StatsValue>{integrationData.exceptions.length}</StatsValue>
+            </StatsCard>
+            <StatsCard>
+              <StatsTitle>Failed webhooks</StatsTitle>
+              <StatsValue>
                 {integrationData.webhookDeliveries.filter((row) => row.status === 'FAILED').length}
-              </strong>
-              <span>Failed webhooks</span>
-            </article>
-          </section>
+              </StatsValue>
+            </StatsCard>
+          </Stats>
           {oneTimeSecret ? (
             <aside className="warning-callout" role="status">
               <strong>Copy the webhook signing secret now.</strong>
@@ -386,24 +388,24 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
 
       {!integrations ? (
         <>
-          <section className="metric-grid">
-            <article>
-              <strong>{notifications.filter((item) => !item.read_at).length}</strong>
-              <span>Unread</span>
-            </article>
-            <article>
-              <strong>{notifications.filter((item) => item.status === 'FAILED').length}</strong>
-              <span>Failed delivery</span>
-            </article>
-            <article>
-              <strong>{notifications.filter((item) => item.status === 'PENDING').length}</strong>
-              <span>Pending</span>
-            </article>
-            <article>
-              <strong>{notifications.length}</strong>
-              <span>Recent total</span>
-            </article>
-          </section>
+          <Stats>
+            <StatsCard>
+              <StatsTitle>Unread</StatsTitle>
+              <StatsValue>{notifications.filter((item) => !item.read_at).length}</StatsValue>
+            </StatsCard>
+            <StatsCard>
+              <StatsTitle>Failed delivery</StatsTitle>
+              <StatsValue>{notifications.filter((item) => item.status === 'FAILED').length}</StatsValue>
+            </StatsCard>
+            <StatsCard>
+              <StatsTitle>Pending</StatsTitle>
+              <StatsValue>{notifications.filter((item) => item.status === 'PENDING').length}</StatsValue>
+            </StatsCard>
+            <StatsCard>
+              <StatsTitle>Recent total</StatsTitle>
+              <StatsValue>{notifications.length}</StatsValue>
+            </StatsCard>
+          </Stats>
           <section className="worklist-toolbar">
             <label>
               View

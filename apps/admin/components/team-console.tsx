@@ -3,6 +3,8 @@
 import { KeyRound, RefreshCw, ShieldCheck, UserRoundCheck, UserRoundX } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+
 import {
   OperationalEmptyState,
   OperationalFeedback,
@@ -127,28 +129,28 @@ export function TeamConsole() {
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        <section className="metric-strip">
-          <article>
-            <span>Members</span>
-            <strong>{members.length}</strong>
-            <small>current organization</small>
-          </article>
-          <article>
-            <span>Active</span>
-            <strong>{members.filter((member) => member.status === 'ACTIVE').length}</strong>
-            <small>can authenticate</small>
-          </article>
-          <article>
-            <span>MFA enabled</span>
-            <strong>{members.filter((member) => member.two_factor_enabled).length}</strong>
-            <small>account security</small>
-          </article>
-          <article>
-            <span>Owners</span>
-            <strong>{members.filter((member) => member.membership_type === 'OWNER').length}</strong>
-            <small>protected memberships</small>
-          </article>
-        </section>
+        <Stats>
+          <StatsCard>
+            <StatsTitle>Members</StatsTitle>
+            <StatsValue>{members.length}</StatsValue>
+            <StatsDescription>current organization</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Active</StatsTitle>
+            <StatsValue>{members.filter((member) => member.status === 'ACTIVE').length}</StatsValue>
+            <StatsDescription>can authenticate</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>MFA enabled</StatsTitle>
+            <StatsValue>{members.filter((member) => member.two_factor_enabled).length}</StatsValue>
+            <StatsDescription>account security</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Owners</StatsTitle>
+            <StatsValue>{members.filter((member) => member.membership_type === 'OWNER').length}</StatsValue>
+            <StatsDescription>protected memberships</StatsDescription>
+          </StatsCard>
+        </Stats>
         <OperationalWorklistToolbar
           query={worklist.query}
           onQueryChange={worklist.setQuery}

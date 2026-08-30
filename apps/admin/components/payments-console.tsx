@@ -3,6 +3,8 @@
 import { Banknote, CheckCircle2, CreditCard, ReceiptText, RotateCcw, X } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+
 import type { ApiEnvelope } from '@maevelle/contracts';
 
 import {
@@ -276,28 +278,28 @@ export function PaymentsConsole() {
           title="Payment operations"
           description="Verify manual submissions, inspect collected funds, and record refunds without conflating payment facts with order lifecycle."
         />
-        <section className="metric-strip" aria-label="Payment summary">
-          <article>
-            <span>Needs verification</span>
-            <strong>{pending.length}</strong>
-            <small>Manual submissions awaiting a decision</small>
-          </article>
-          <article>
-            <span>Collected payments</span>
-            <strong>{payments.length}</strong>
-            <small>Authoritative payment records</small>
-          </article>
-          <article>
-            <span>Refunds</span>
-            <strong>{refunds.length}</strong>
-            <small>Requested and completed</small>
-          </article>
-          <article>
-            <span>Active methods</span>
-            <strong>{methods.filter((method) => method.status === 'ACTIVE').length}</strong>
-            <small>Available at checkout</small>
-          </article>
-        </section>
+        <Stats aria-label="Payment summary">
+          <StatsCard>
+            <StatsTitle>Needs verification</StatsTitle>
+            <StatsValue>{pending.length}</StatsValue>
+            <StatsDescription>Manual submissions awaiting a decision</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Collected payments</StatsTitle>
+            <StatsValue>{payments.length}</StatsValue>
+            <StatsDescription>Authoritative payment records</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Refunds</StatsTitle>
+            <StatsValue>{refunds.length}</StatsValue>
+            <StatsDescription>Requested and completed</StatsDescription>
+          </StatsCard>
+          <StatsCard>
+            <StatsTitle>Active methods</StatsTitle>
+            <StatsValue>{methods.filter((method) => method.status === 'ACTIVE').length}</StatsValue>
+            <StatsDescription>Available at checkout</StatsDescription>
+          </StatsCard>
+        </Stats>
         {message ? <OperationalFeedback tone={messageTone}>{message}</OperationalFeedback> : null}
         <nav className="workspace-tabs" aria-label="Payment operations">
           {(

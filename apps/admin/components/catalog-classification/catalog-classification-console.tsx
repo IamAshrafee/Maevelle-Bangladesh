@@ -23,6 +23,7 @@ import type {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -270,10 +271,7 @@ export function CatalogClassificationConsole() {
         </TabsList>
       </Tabs>
 
-      <section
-        aria-label="Classification totals"
-        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-      >
+      <Stats aria-label="Classification totals">
         {(
           [
             ['Total', summary.total],
@@ -282,16 +280,12 @@ export function CatalogClassificationConsole() {
             ['Archived', summary.archived],
           ] as const
         ).map(([label, value]) => (
-          <Card key={label} size="sm">
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">{label}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <strong className="text-2xl">{value}</strong>
-            </CardContent>
-          </Card>
+          <StatsCard key={label}>
+            <StatsTitle>{label}</StatsTitle>
+            <StatsValue>{value}</StatsValue>
+          </StatsCard>
         ))}
-      </section>
+      </Stats>
 
       <Card>
         <CardHeader className="gap-4 border-b md:grid-cols-[1fr_auto]">
