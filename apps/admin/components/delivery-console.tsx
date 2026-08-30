@@ -4,6 +4,8 @@ import { ArrowRight, MapPin, PackageCheck, Route, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+
 import type { ApiEnvelope } from '@maevelle/contracts';
 
 import {
