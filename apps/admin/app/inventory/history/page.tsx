@@ -1,5 +1,6 @@
-import { InventoryConsole } from '@/components/inventory-console';
+import { MovementHistory } from '@/components/inventory/movement-history';
 
 export default function InventoryHistoryPage() {
-  return <InventoryConsole section="history" />;
+  return <MovementHistory />;
 }
+

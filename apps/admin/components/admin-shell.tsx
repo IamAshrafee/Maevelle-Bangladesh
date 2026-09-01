@@ -126,6 +126,18 @@ const navigation: readonly NavGroup[] = [
         icon: Activity,
         capability: 'inventory.view',
       },
+      {
+        label: 'Adjustments',
+        href: '/inventory/adjustments',
+        icon: ReceiptText, // Or another icon
+        capability: 'inventory.adjust',
+      },
+      {
+        label: 'Reservations',
+        href: '/inventory/reservations',
+        icon: PackageOpen,
+        capability: 'inventory.view',
+      },
     ],
   },
   {

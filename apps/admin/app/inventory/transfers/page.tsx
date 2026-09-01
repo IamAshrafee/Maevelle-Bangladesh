@@ -1,5 +1,6 @@
-import { InventoryConsole } from '@/components/inventory-console';
+import { TransferOverview } from '@/components/inventory/transfer-overview';
 
 export default function TransfersPage() {
-  return <InventoryConsole section="transfers" />;
+  return <TransferOverview />;
 }
+

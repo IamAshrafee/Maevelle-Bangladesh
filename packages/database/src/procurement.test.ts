@@ -248,7 +248,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       idempotencyKey: crypto.randomUUID(),
     });
     expect(receipt.status).toBe('POSTED');
-    const balances = await listInventoryBalances(database.db, input.organizationId, {
+    const { items: balances } = await listInventoryBalances(database.db, input.organizationId, {
       locationId: input.locationId,
     });
     expect(balances.map((balance) => [balance.condition, balance.onHand])).toEqual([

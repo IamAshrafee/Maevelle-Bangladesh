@@ -1,5 +1,6 @@
-import { InventoryConsole } from '@/components/inventory-console';
+import { StocktakeOverview } from '@/components/inventory/stocktake-overview';
 
 export default function StocktakesPage() {
-  return <InventoryConsole section="stocktakes" />;
+  return <StocktakeOverview />;
 }
+

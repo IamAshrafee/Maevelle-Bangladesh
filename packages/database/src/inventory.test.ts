@@ -54,9 +54,10 @@ async function fixture() {
   }>`insert into catalog.product_option_values (organization_id, option_axis_id, code, display_value) values (${organization.id}, ${axis.rows[0]!.id}, 'm', 'M') returning id`.execute(
     database.db,
   );
+  const skuString = `SKU-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const variant = await sql<{
     id: string;
-  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${`SKU-${crypto.randomUUID().slice(0, 8)}`}, ${`SKU-${crypto.randomUUID().slice(0, 8)}`}, ${value.rows[0]!.id}) returning id`.execute(
+  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${skuString}, ${skuString}, ${value.rows[0]!.id}) returning id`.execute(
     database.db,
   );
   const actorId = crypto.randomUUID();
@@ -113,7 +114,7 @@ describe('ledger-backed inventory', () => {
       idempotencyKey: crypto.randomUUID(),
     });
     const balances = await listInventoryBalances(database.db, f.organizationId);
-    expect(balances).toEqual(
+    expect(balances.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ condition: 'SELLABLE', onHand: '8', availableToSell: '8' }),
         expect.objectContaining({ condition: 'DAMAGED', onHand: '2', availableToSell: '0' }),
@@ -154,7 +155,7 @@ describe('ledger-backed inventory', () => {
       }),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-    const balance = (await listInventoryBalances(database.db, f.organizationId)).find(
+    const balance = (await listInventoryBalances(database.db, f.organizationId)).items.find(
       (row) => row.condition === 'SELLABLE',
     )!;
     expect(balance).toMatchObject({ onHand: '1', reserved: '1', availableToSell: '0' });
@@ -267,7 +268,7 @@ describe('ledger-backed inventory', () => {
       }),
     ]);
     expect(released.filter((result) => result.released)).toHaveLength(1);
-    const balance = (await listInventoryBalances(database.db, f.organizationId)).find(
+    const balance = (await listInventoryBalances(database.db, f.organizationId)).items.find(
       (row) => row.condition === 'SELLABLE',
     )!;
     expect(balance).toMatchObject({ onHand: '4', reserved: '0', availableToSell: '4' });
@@ -373,7 +374,7 @@ describe('ledger-backed inventory', () => {
       }),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-    const balance = (await listInventoryBalances(database.db, f.organizationId)).find(
+    const balance = (await listInventoryBalances(database.db, f.organizationId)).items.find(
       (row) => row.condition === 'SELLABLE',
     )!;
     expect(balance.onHand).toBe('4');

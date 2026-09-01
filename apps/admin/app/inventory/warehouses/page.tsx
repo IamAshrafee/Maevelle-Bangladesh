@@ -1,5 +1,6 @@
-import { InventoryConsole } from '@/components/inventory-console';
+import { LocationOverview } from '@/components/inventory/location-overview';
 
 export default function WarehousesPage() {
-  return <InventoryConsole section="warehouses" />;
+  return <LocationOverview />;
 }
+

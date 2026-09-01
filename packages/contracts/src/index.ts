@@ -547,6 +547,132 @@ export interface WarehouseLocationDto {
   readonly version: number;
 }
 
+export interface PaginatedDto<T> {
+  readonly items: readonly T[];
+  readonly nextCursor?: string | null;
+  readonly totalCount?: number;
+}
+
+export interface InventoryStatsDto {
+  readonly totalOnHand: string;
+  readonly totalAvailable: string;
+  readonly totalReserved: string;
+  readonly totalDamaged: string;
+  readonly lowStockCount: number;
+  readonly outOfStockCount: number;
+}
+
+export interface InventoryItemDetailDto {
+  readonly id: string;
+  readonly variantId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly optionSummary?: string;
+  readonly trackingMode: 'STANDARD' | 'LOT' | 'SERIAL';
+  readonly unitCode: string;
+  readonly balances: readonly InventoryBalanceDto[];
+  readonly recentHistory: readonly InventoryHistoryDto[];
+  readonly activeReservations: readonly InventoryReservationDto[];
+}
+
+export interface WarehouseLocationDetailDto extends WarehouseLocationDto {
+  readonly address?: Record<string, unknown>;
+  readonly inventorySummary: {
+    readonly totalOnHand: string;
+    readonly totalAvailable: string;
+    readonly totalReserved: string;
+    readonly totalDamaged: string;
+    readonly totalIncoming: string;
+    readonly lowStockSkus: number;
+  };
+}
+
+export interface WarehouseTransferDto {
+  readonly id: string;
+  readonly transferNumber: string;
+  readonly sourceLocationId: string;
+  readonly sourceLocationName: string;
+  readonly destinationLocationId: string;
+  readonly destinationLocationName: string;
+  readonly status: 'DRAFT' | 'READY' | 'IN_TRANSIT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+  readonly version: number;
+  readonly totalRequested: string;
+  readonly totalDispatched: string;
+  readonly totalReceived: string;
+  readonly lineCount: number;
+  readonly createdAt: string;
+  readonly dispatchedAt?: string;
+  readonly completedAt?: string;
+}
+
+export interface WarehouseTransferDetailDto extends WarehouseTransferDto {
+  readonly notes?: string;
+  readonly createdByActorId?: string;
+  readonly approvedAt?: string;
+  readonly lines: readonly WarehouseTransferLineDto[];
+}
+
+export interface WarehouseTransferLineDto {
+  readonly id: string;
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly requestedQuantity: string;
+  readonly dispatchedQuantity: string;
+  readonly receivedQuantity: string;
+  readonly cancelledQuantity: string;
+}
+
+export interface StocktakeSessionDto {
+  readonly id: string;
+  readonly stocktakeNumber: string;
+  readonly locationId: string;
+  readonly locationName: string;
+  readonly status: 'DRAFT' | 'COUNTING' | 'REVIEW' | 'POSTED' | 'CANCELLED';
+  readonly snapshotAt: string;
+  readonly postedAt?: string;
+  readonly version: number;
+  readonly totalLines: number;
+  readonly countedLines: number;
+}
+
+export interface StocktakeDetailDto extends StocktakeSessionDto {
+  readonly createdByActorId?: string;
+  readonly postedInventoryTransactionId?: string;
+  readonly lines: readonly StocktakeLineDto[];
+}
+
+export interface StocktakeLineDto {
+  readonly id: string;
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly expectedQuantityAtSnapshot: string;
+  readonly countedQuantity?: string | null;
+  readonly movementsAfterSnapshot: string;
+  readonly finalExpectedQuantity?: string | null;
+  readonly varianceQuantity?: string | null;
+  readonly status: 'PENDING' | 'COUNTED' | 'POSTED';
+}
+
+export interface InventoryReservationDto {
+  readonly id: string;
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly locationId: string;
+  readonly locationName: string;
+  readonly quantity: string;
+  readonly status: 'ACTIVE' | 'CONSUMED' | 'RELEASED' | 'EXPIRED';
+  readonly sourceType: string;
+  readonly sourceReference: string;
+  readonly expiresAt?: string;
+  readonly createdAt: string;
+}
+
 export type SupplierStatusDto = 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'ARCHIVED';
 export type SupplierTypeDto =
   'MANUFACTURER' | 'WHOLESALER' | 'DISTRIBUTOR' | 'AGENT' | 'LOCAL_VENDOR' | 'OTHER';

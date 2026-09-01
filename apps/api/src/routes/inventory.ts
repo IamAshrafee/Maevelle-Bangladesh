@@ -18,13 +18,19 @@ import {
   approveWarehouseTransfer,
   cancelWarehouseTransfer,
   getStocktakeWorkspace,
-  listWarehouseTransfers,
+  listStocktakeSessions,
+  getInventoryStats,
+  getInventoryItemDetail,
+  listInventoryReservations,
   InventoryDomainError,
 } from '@maevelle/database/inventory';
 import {
   createLocation,
   listLocations,
   updateLocation,
+  getLocationDetail,
+  getTransferDetail,
+  listWarehouseTransfers,
   WarehouseDomainError,
 } from '@maevelle/database/warehouse';
 import { findActiveAdminContext } from '@maevelle/database/platform';
@@ -202,6 +208,14 @@ export function registerInventoryRoutes(
         querystring: Type.Object({
           locationId: Type.Optional(Type.String()),
           search: Type.Optional(Type.String()),
+          condition: Type.Optional(condition),
+          availability: Type.Optional(Type.Union([
+            Type.Literal('IN_STOCK'),
+            Type.Literal('LOW_STOCK'),
+            Type.Literal('OUT_OF_STOCK'),
+          ])),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
       },
     },
@@ -212,16 +226,49 @@ export function registerInventoryRoutes(
         data: await listInventoryBalances(
           database.db,
           active.organizationId,
-          request.query as { locationId?: string; search?: string },
+          request.query as {
+            locationId?: string;
+            search?: string;
+            condition?: any;
+            availability?: any;
+            page?: number;
+            limit?: number;
+          },
         ),
       };
     },
   );
-  app.get('/admin/inventory/history', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'inventory.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listInventoryHistory(database.db, active.organizationId) };
-  });
+  app.get(
+    '/admin/inventory/history',
+    {
+      schema: {
+        querystring: Type.Object({
+          inventoryItemId: Type.Optional(Type.String()),
+          locationId: Type.Optional(Type.String()),
+          transactionType: Type.Optional(Type.String()),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      return {
+        data: await listInventoryHistory(
+          database.db,
+          active.organizationId,
+          request.query as {
+            inventoryItemId?: string;
+            locationId?: string;
+            transactionType?: string;
+            page?: number;
+            limit?: number;
+          },
+        ),
+      };
+    }
+  );
   app.post(
     '/admin/inventory/adjustments',
     {
@@ -395,11 +442,26 @@ export function registerInventoryRoutes(
       }
     },
   );
-  app.get('/admin/warehouse/transfers', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'warehouse.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listWarehouseTransfers(database.db, active.organizationId) };
-  });
+  app.get(
+    '/admin/warehouse/transfers',
+    {
+      schema: {
+        querystring: Type.Object({
+          search: Type.Optional(Type.String()),
+          status: Type.Optional(Type.String()),
+          sourceLocationId: Type.Optional(Type.String()),
+          destinationLocationId: Type.Optional(Type.String()),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'warehouse.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      return { data: await listWarehouseTransfers(database.db, active.organizationId, request.query as any) };
+    }
+  );
   app.post(
     '/admin/warehouse/transfers/:transferId/approve',
     { schema: { body: Type.Object({ version: Type.Integer({ minimum: 1 }) }) } },
@@ -568,4 +630,93 @@ export function registerInventoryRoutes(
       return sendError(reply, error);
     }
   });
+
+  app.get('/admin/inventory/stats', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'inventory.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await getInventoryStats(database.db, active.organizationId) };
+  });
+
+  app.get('/admin/inventory/stock/:inventoryItemId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'inventory.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const detail = await getInventoryItemDetail(
+      database.db,
+      active.organizationId,
+      (request.params as { inventoryItemId: string }).inventoryItemId,
+    );
+    return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
+  });
+
+  app.get(
+    '/admin/inventory/reservations',
+    {
+      schema: {
+        querystring: Type.Object({
+          locationId: Type.Optional(Type.String()),
+          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ALL')])),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      return {
+        data: await listInventoryReservations(
+          database.db,
+          active.organizationId,
+          request.query as any,
+        ),
+      };
+    }
+  );
+
+  app.get('/admin/warehouse/locations/:locationId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'warehouse.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const detail = await getLocationDetail(
+      database.db,
+      active.organizationId,
+      (request.params as { locationId: string }).locationId,
+    );
+    return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
+  });
+
+  app.get('/admin/warehouse/transfers/:transferId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'inventory.transfer');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const detail = await getTransferDetail(
+      database.db,
+      active.organizationId,
+      (request.params as { transferId: string }).transferId,
+    );
+    return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
+  });
+
+  app.get(
+    '/admin/inventory/stocktakes',
+    {
+      schema: {
+        querystring: Type.Object({
+          locationId: Type.Optional(Type.String()),
+          status: Type.Optional(Type.String()),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.stocktake');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      return {
+        data: await listStocktakeSessions(
+          database.db,
+          active.organizationId,
+          request.query as any,
+        ),
+      };
+    }
+  );
 }

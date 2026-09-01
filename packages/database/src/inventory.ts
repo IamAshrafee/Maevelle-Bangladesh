@@ -898,15 +898,49 @@ export async function consumeReservationAllocationInTransaction(
 export async function listInventoryBalances(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-  input: { locationId?: string; search?: string } = {},
-): Promise<
-  readonly (InventoryBalance & {
+  input: {
+    locationId?: string;
+    search?: string;
+    condition?: InventoryCondition;
+    availability?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+    page?: number;
+    limit?: number;
+  } = {},
+): Promise<{
+  items: readonly (InventoryBalance & {
     variantId: string;
     sku: string;
     productTitle: string;
     locationName: string;
-  })[]
-> {
+  })[];
+  totalCount: number;
+}> {
+  const offset = ((input.page || 1) - 1) * (input.limit || 25);
+  
+  const locationFilter = input.locationId ? sql`condition.location_id = ${input.locationId}::uuid` : sql`1=1`;
+  const conditionFilter = input.condition ? sql`condition.condition_code = ${input.condition}` : sql`1=1`;
+  const searchFilter = input.search ? sql`(variant.sku ilike '%' || ${input.search} || '%' or product.title ilike '%' || ${input.search} || '%')` : sql`1=1`;
+  
+  const availabilityFilter = 
+    input.availability === 'IN_STOCK' ? sql`level.sellable_quantity - level.reserved_quantity > 0` :
+    input.availability === 'LOW_STOCK' ? sql`level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= 5` :
+    input.availability === 'OUT_OF_STOCK' ? sql`level.sellable_quantity - level.reserved_quantity <= 0` :
+    sql`1=1`;
+
+  const countResult = await sql<{ count: string }>`
+    select count(*)::text as count
+    from inventory.inventory_level_conditions condition
+    join inventory.inventory_levels level on level.organization_id = condition.organization_id and level.inventory_item_id = condition.inventory_item_id and level.location_id = condition.location_id
+    join inventory.inventory_items item on item.id = condition.inventory_item_id and item.organization_id = condition.organization_id
+    join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
+    join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
+    where condition.organization_id = ${organizationId}
+      and ${locationFilter}
+      and ${conditionFilter}
+      and ${searchFilter}
+      and ${availabilityFilter}
+  `.execute(db);
+
   const result = await sql<{
     inventory_item_id: string;
     location_id: string;
@@ -927,25 +961,40 @@ export async function listInventoryBalances(
     join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
     join warehouse.locations location on location.id = condition.location_id and location.organization_id = condition.organization_id
     where condition.organization_id = ${organizationId}
-      and (${input.locationId ?? null}::uuid is null or condition.location_id = ${input.locationId ?? null}::uuid)
-      and (${input.search ?? null}::text is null or variant.sku ilike '%' || ${input.search ?? null} || '%' or product.title ilike '%' || ${input.search ?? null} || '%')
+      and ${locationFilter}
+      and ${conditionFilter}
+      and ${searchFilter}
+      and ${availabilityFilter}
     order by product.title, variant.sku, location.name, condition.condition_code
+    limit ${input.limit || 25} offset ${offset}
   `.execute(db);
-  return result.rows.map((row) => ({
-    ...rowBalance(row),
-    variantId: row.variant_id,
-    sku: row.sku,
-    productTitle: row.product_title,
-    locationName: row.location_name,
-  }));
+
+  return {
+    items: result.rows.map((row) => ({
+      ...rowBalance(row),
+      variantId: row.variant_id,
+      sku: row.sku,
+      productTitle: row.product_title,
+      locationName: row.location_name,
+    })),
+    totalCount: Number(countResult.rows[0]?.count ?? '0'),
+  };
 }
 
 export async function listInventoryHistory(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-  limit = 100,
-): Promise<
-  readonly {
+  input: {
+    inventoryItemId?: string;
+    locationId?: string;
+    transactionType?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    page?: number;
+    limit?: number;
+  } = {},
+): Promise<{
+  items: readonly {
     id: string;
     occurredAt: Date;
     transactionType: string;
@@ -954,8 +1003,29 @@ export async function listInventoryHistory(
     condition: InventoryCondition;
     quantityDelta: string;
     reasonCode: string | null;
-  }[]
-> {
+  }[];
+  totalCount: number;
+}> {
+  const offset = ((input.page || 1) - 1) * (input.limit || 25);
+  
+  const itemFilter = input.inventoryItemId ? sql`line.inventory_item_id = ${input.inventoryItemId}::uuid` : sql`1=1`;
+  const locationFilter = input.locationId ? sql`line.location_id = ${input.locationId}::uuid` : sql`1=1`;
+  const typeFilter = input.transactionType ? sql`transaction.transaction_type = ${input.transactionType}` : sql`1=1`;
+  const dateFromFilter = input.dateFrom ? sql`transaction.occurred_at >= ${input.dateFrom}` : sql`1=1`;
+  const dateToFilter = input.dateTo ? sql`transaction.occurred_at <= ${input.dateTo}` : sql`1=1`;
+
+  const countResult = await sql<{ count: string }>`
+    select count(*)::text as count
+    from inventory.inventory_movement_lines line
+    join inventory.inventory_transactions transaction on transaction.id = line.inventory_transaction_id
+    where line.organization_id = ${organizationId}
+      and ${itemFilter}
+      and ${locationFilter}
+      and ${typeFilter}
+      and ${dateFromFilter}
+      and ${dateToFilter}
+  `.execute(db);
+
   const result = await sql<{
     id: string;
     occurred_at: Date;
@@ -972,18 +1042,29 @@ export async function listInventoryHistory(
     join inventory.inventory_items item on item.id = line.inventory_item_id
     join catalog.product_variants variant on variant.id = item.variant_id
     join warehouse.locations location on location.id = line.location_id
-    where line.organization_id = ${organizationId} order by transaction.occurred_at desc, line.id desc limit ${Math.min(Math.max(limit, 1), 250)}
+    where line.organization_id = ${organizationId}
+      and ${itemFilter}
+      and ${locationFilter}
+      and ${typeFilter}
+      and ${dateFromFilter}
+      and ${dateToFilter}
+    order by transaction.occurred_at desc, line.id desc
+    limit ${input.limit || 25} offset ${offset}
   `.execute(db);
-  return result.rows.map((row) => ({
-    id: row.id,
-    occurredAt: row.occurred_at,
-    transactionType: row.transaction_type,
-    sku: row.sku,
-    locationName: row.location_name,
-    condition: row.condition_code,
-    quantityDelta: row.quantity_delta,
-    reasonCode: row.reason_code,
-  }));
+  
+  return {
+    items: result.rows.map((row) => ({
+      id: row.id,
+      occurredAt: row.occurred_at,
+      transactionType: row.transaction_type,
+      sku: row.sku,
+      locationName: row.location_name,
+      condition: row.condition_code,
+      quantityDelta: row.quantity_delta,
+      reasonCode: row.reason_code,
+    })),
+    totalCount: Number(countResult.rows[0]?.count ?? '0'),
+  };
 }
 
 export async function reconcileInventoryItem(
@@ -1518,65 +1599,7 @@ export async function postStocktake(
   });
 }
 
-export async function listWarehouseTransfers(
-  db: Kysely<DatabaseSchema>,
-  organizationId: string,
-): Promise<
-  readonly {
-    id: string;
-    transferNumber: string;
-    sourceLocationId: string;
-    destinationLocationId: string;
-    status: string;
-    version: number;
-    lines: readonly {
-      id: string;
-      inventoryItemId: string;
-      requestedQuantity: string;
-      dispatchedQuantity: string;
-      receivedQuantity: string;
-    }[];
-  }[]
-> {
-  const transfers = await sql<{
-    id: string;
-    transfer_number: string;
-    source_location_id: string;
-    destination_location_id: string;
-    status: string;
-    version: string;
-  }>`select id, transfer_number, source_location_id, destination_location_id, status, version::text from warehouse.transfers where organization_id = ${organizationId} order by created_at desc`.execute(
-    db,
-  );
-  return Promise.all(
-    transfers.rows.map(async (transfer) => {
-      const lines = await sql<{
-        id: string;
-        inventory_item_id: string;
-        requested_quantity: string;
-        dispatched_quantity: string;
-        received_quantity: string;
-      }>`select id, inventory_item_id, requested_quantity::text, dispatched_quantity::text, received_quantity::text from warehouse.transfer_lines where organization_id = ${organizationId} and transfer_id = ${transfer.id} order by id`.execute(
-        db,
-      );
-      return {
-        id: transfer.id,
-        transferNumber: transfer.transfer_number,
-        sourceLocationId: transfer.source_location_id,
-        destinationLocationId: transfer.destination_location_id,
-        status: transfer.status,
-        version: Number(transfer.version),
-        lines: lines.rows.map((line) => ({
-          id: line.id,
-          inventoryItemId: line.inventory_item_id,
-          requestedQuantity: subtract(line.requested_quantity, '0'),
-          dispatchedQuantity: subtract(line.dispatched_quantity, '0'),
-          receivedQuantity: subtract(line.received_quantity, '0'),
-        })),
-      };
-    }),
-  );
-}
+
 
 export async function getStocktakeWorkspace(
   db: Kysely<DatabaseSchema>,
@@ -1622,6 +1645,260 @@ export async function getStocktakeWorkspace(
       inventoryItemId: line.inventory_item_id,
       expectedQuantity: subtract(line.expected_quantity_at_snapshot, '0'),
       countedQuantity: line.counted_quantity === null ? null : subtract(line.counted_quantity, '0'),
+    })),
+  };
+}
+
+export async function getInventoryStats(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<{
+  totalOnHand: string;
+  totalAvailable: string;
+  totalReserved: string;
+  totalDamaged: string;
+  lowStockCount: number;
+  outOfStockCount: number;
+}> {
+  const result = await sql<{
+    total_on_hand: string;
+    total_available: string;
+    total_reserved: string;
+    total_damaged: string;
+    low_stock_count: string;
+    out_of_stock_count: string;
+  }>`
+    select 
+      coalesce(sum(level.sellable_quantity + level.unavailable_quantity + level.reserved_quantity), 0)::text as total_on_hand,
+      coalesce(sum(level.sellable_quantity - level.reserved_quantity), 0)::text as total_available,
+      coalesce(sum(level.reserved_quantity), 0)::text as total_reserved,
+      coalesce((select sum(quantity) from inventory.inventory_level_conditions where organization_id = ${organizationId} and condition_code = 'DAMAGED'), 0)::text as total_damaged,
+      count(case when level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= 5 then 1 end)::text as low_stock_count,
+      count(case when level.sellable_quantity - level.reserved_quantity <= 0 then 1 end)::text as out_of_stock_count
+    from inventory.inventory_levels level
+    where level.organization_id = ${organizationId}
+  `.execute(db);
+  const row = result.rows[0];
+  return {
+    totalOnHand: subtract(row?.total_on_hand ?? '0', '0'),
+    totalAvailable: subtract(row?.total_available ?? '0', '0'),
+    totalReserved: subtract(row?.total_reserved ?? '0', '0'),
+    totalDamaged: subtract(row?.total_damaged ?? '0', '0'),
+    lowStockCount: Number(row?.low_stock_count ?? '0'),
+    outOfStockCount: Number(row?.out_of_stock_count ?? '0'),
+  };
+}
+
+export async function listInventoryReservations(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  input: { locationId?: string; status?: 'ACTIVE' | 'ALL'; page?: number; limit?: number } = {},
+): Promise<{
+  items: readonly any[];
+  totalCount: number;
+}> {
+  const offset = ((input.page || 1) - 1) * (input.limit || 25);
+  const statusFilter = input.status === 'ALL' ? sql`1=1` : sql`res.status = 'ACTIVE'`;
+  const locationFilter = input.locationId ? sql`res.location_id = ${input.locationId}::uuid` : sql`1=1`;
+  
+  const countResult = await sql<{ count: string }>`
+    select count(*)::text as count
+    from inventory.inventory_reservations res
+    where res.organization_id = ${organizationId}
+      and ${statusFilter}
+      and ${locationFilter}
+  `.execute(db);
+  
+  const result = await sql<any>`
+    select res.id, res.inventory_item_id, res.location_id, res.quantity::text, res.status, res.source_type, res.source_reference, res.expires_at, res.created_at,
+      variant.id as variant_id, variant.sku, product.title as product_title, location.name as location_name
+    from inventory.inventory_reservations res
+    join inventory.inventory_items item on item.id = res.inventory_item_id
+    join catalog.product_variants variant on variant.id = item.variant_id
+    join catalog.products product on product.id = variant.product_id
+    join warehouse.locations location on location.id = res.location_id
+    where res.organization_id = ${organizationId}
+      and ${statusFilter}
+      and ${locationFilter}
+    order by res.created_at desc
+    limit ${input.limit || 25} offset ${offset}
+  `.execute(db);
+  
+  return {
+    items: result.rows.map((row) => ({
+      id: row.id,
+      inventoryItemId: row.inventory_item_id,
+      variantId: row.variant_id,
+      sku: row.sku,
+      productTitle: row.product_title,
+      locationId: row.location_id,
+      locationName: row.location_name,
+      quantity: subtract(row.quantity, '0'),
+      status: row.status,
+      sourceType: row.source_type,
+      sourceReference: row.source_reference,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+    })),
+    totalCount: Number(countResult.rows[0]?.count ?? '0'),
+  };
+}
+
+export async function listStocktakeSessions(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  input: { locationId?: string; status?: string; page?: number; limit?: number } = {},
+): Promise<{
+  items: readonly any[];
+  totalCount: number;
+}> {
+  const offset = ((input.page || 1) - 1) * (input.limit || 25);
+  const locationFilter = input.locationId ? sql`session.location_id = ${input.locationId}::uuid` : sql`1=1`;
+  const statusFilter = input.status ? sql`session.status = ${input.status}` : sql`1=1`;
+  
+  const countResult = await sql<{ count: string }>`
+    select count(*)::text as count
+    from inventory.stocktake_sessions session
+    where session.organization_id = ${organizationId}
+      and ${locationFilter}
+      and ${statusFilter}
+  `.execute(db);
+  
+  const result = await sql<any>`
+    select session.id, session.stocktake_number, session.location_id, session.status, session.snapshot_at, session.posted_at, session.version::text, location.name as location_name,
+      (select count(*) from inventory.stocktake_lines where stocktake_session_id = session.id) as total_lines,
+      (select count(*) from inventory.stocktake_lines where stocktake_session_id = session.id and counted_quantity is not null) as counted_lines
+    from inventory.stocktake_sessions session
+    join warehouse.locations location on location.id = session.location_id
+    where session.organization_id = ${organizationId}
+      and ${locationFilter}
+      and ${statusFilter}
+    order by session.created_at desc
+    limit ${input.limit || 25} offset ${offset}
+  `.execute(db);
+  
+  return {
+    items: result.rows.map((row) => ({
+      id: row.id,
+      stocktakeNumber: row.stocktake_number,
+      locationId: row.location_id,
+      locationName: row.location_name,
+      status: row.status,
+      snapshotAt: row.snapshot_at,
+      postedAt: row.posted_at,
+      version: Number(row.version),
+      totalLines: Number(row.total_lines),
+      countedLines: Number(row.counted_lines),
+    })),
+    totalCount: Number(countResult.rows[0]?.count ?? '0'),
+  };
+}
+
+export async function getInventoryItemDetail(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  inventoryItemId: string,
+): Promise<{
+  id: string;
+  variantId: string;
+  sku: string;
+  productTitle: string;
+  trackingMode: 'STANDARD' | 'LOT' | 'SERIAL';
+  unitCode: string;
+  balances: readonly any[];
+  recentHistory: readonly any[];
+  activeReservations: readonly any[];
+} | undefined> {
+  const itemResult = await sql<{
+    id: string;
+    variant_id: string;
+    sku: string;
+    product_title: string;
+    tracking_mode: 'STANDARD' | 'LOT' | 'SERIAL';
+    unit_code: string;
+  }>`
+    select item.id, item.variant_id, item.tracking_mode, item.unit_code,
+      variant.sku, product.title as product_title
+    from inventory.inventory_items item
+    join catalog.product_variants variant on variant.id = item.variant_id
+    join catalog.products product on product.id = variant.product_id
+    where item.id = ${inventoryItemId} and item.organization_id = ${organizationId}
+  `.execute(db);
+  const item = itemResult.rows[0];
+  if (!item) return undefined;
+
+  const balancesResult = await sql<any>`
+    select condition.location_id, condition.condition_code, condition.quantity::text, level.reserved_quantity::text,
+      location.name as location_name
+    from inventory.inventory_level_conditions condition
+    join inventory.inventory_levels level on level.organization_id = condition.organization_id and level.inventory_item_id = condition.inventory_item_id and level.location_id = condition.location_id
+    join warehouse.locations location on location.id = condition.location_id
+    where condition.inventory_item_id = ${inventoryItemId} and condition.organization_id = ${organizationId}
+    order by location.name, condition.condition_code
+  `.execute(db);
+
+  const historyResult = await sql<any>`
+    select line.id::text, transaction.occurred_at, transaction.transaction_type, location.name as location_name, line.condition_code, line.quantity_delta::text, transaction.reason_code
+    from inventory.inventory_movement_lines line
+    join inventory.inventory_transactions transaction on transaction.id = line.inventory_transaction_id
+    join warehouse.locations location on location.id = line.location_id
+    where line.inventory_item_id = ${inventoryItemId} and line.organization_id = ${organizationId}
+    order by transaction.occurred_at desc, line.id desc
+    limit 25
+  `.execute(db);
+
+  const reservationsResult = await sql<any>`
+    select res.id, res.location_id, res.quantity::text, res.status, res.source_type, res.source_reference, res.expires_at, res.created_at,
+      location.name as location_name
+    from inventory.inventory_reservations res
+    join warehouse.locations location on location.id = res.location_id
+    where res.inventory_item_id = ${inventoryItemId} and res.organization_id = ${organizationId} and res.status = 'ACTIVE'
+    order by res.created_at desc
+  `.execute(db);
+
+  return {
+    id: item.id,
+    variantId: item.variant_id,
+    sku: item.sku,
+    productTitle: item.product_title,
+    trackingMode: item.tracking_mode,
+    unitCode: item.unit_code,
+    balances: balancesResult.rows.map((row) => ({
+      inventoryItemId: item.id,
+      variantId: item.variant_id,
+      sku: item.sku,
+      productTitle: item.product_title,
+      locationId: row.location_id,
+      locationName: row.location_name,
+      condition: row.condition_code,
+      onHand: subtract(row.quantity, '0'),
+      reserved: row.condition_code === 'SELLABLE' ? subtract(row.reserved_quantity, '0') : '0',
+      availableToSell: row.condition_code === 'SELLABLE' ? subtract(subtract(row.quantity, '0'), subtract(row.reserved_quantity, '0')) : '0',
+    })),
+    recentHistory: historyResult.rows.map((row) => ({
+      id: row.id,
+      occurredAt: row.occurred_at,
+      transactionType: row.transaction_type,
+      sku: item.sku,
+      locationName: row.location_name,
+      condition: row.condition_code,
+      quantityDelta: row.quantity_delta,
+      reasonCode: row.reason_code,
+    })),
+    activeReservations: reservationsResult.rows.map((row) => ({
+      id: row.id,
+      inventoryItemId: item.id,
+      variantId: item.variant_id,
+      sku: item.sku,
+      productTitle: item.product_title,
+      locationId: row.location_id,
+      locationName: row.location_name,
+      quantity: subtract(row.quantity, '0'),
+      status: row.status,
+      sourceType: row.source_type,
+      sourceReference: row.source_reference,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
     })),
   };
 }
