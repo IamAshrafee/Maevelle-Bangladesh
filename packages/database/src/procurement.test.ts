@@ -47,9 +47,10 @@ async function fixture() {
   }>`insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status) values (${organization.id}, ${productType.rows[0]!.id}, ${`inbound-${crypto.randomUUID().slice(0, 8)}`}, 'Inbound Product', 'ACTIVE', 'UNPUBLISHED') returning id`.execute(
     database.db,
   );
+  const skuString = `IN-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const variant = await sql<{
     id: string;
-  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${`IN-${crypto.randomUUID().slice(0, 8)}`}, ${`IN-${crypto.randomUUID().slice(0, 8)}`}, ${crypto.randomUUID()}) returning id`.execute(
+  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${skuString}, ${skuString}, ${crypto.randomUUID()}) returning id`.execute(
     database.db,
   );
   const location = await createLocation(database.db, {
@@ -210,7 +211,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     const before = await listInventoryBalances(database.db, input.organizationId, {
       locationId: input.locationId,
     });
-    expect(before).toEqual([]);
+    expect(before.items).toEqual([]);
     const arrived = await markShipmentArrived(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -223,7 +224,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       await listInventoryBalances(database.db, input.organizationId, {
         locationId: input.locationId,
       }),
-    ).toEqual([]);
+    ).toEqual({ items: [], totalCount: 0 });
   });
 
   it('posts partial condition-aware receipts atomically and prevents over-receipt', async () => {
@@ -384,7 +385,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     expect(
       await listInventoryBalances(database.db, second.organizationId, {
         locationId: second.locationId,
-      }),
+      }).then(res => res.items),
     ).toEqual([]);
   });
 

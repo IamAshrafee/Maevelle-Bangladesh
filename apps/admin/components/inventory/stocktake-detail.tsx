@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, MapPin, Package, CheckCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
+import type { StocktakeDetailDto } from '@maevelle/contracts';
 
 import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
 import { InventoryEmptyState } from './inventory-page-ui';
@@ -14,19 +15,19 @@ import { Input } from '@/components/ui/input';
 
 export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
   const router = useRouter();
-  const [stocktake, setStocktake] = useState<any | null>(null);
+  const [stocktake, setStocktake] = useState<StocktakeDetailDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [counts, setCounts] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    inventoryRequest<{ data: any }>(`/inventory/stocktakes/${stocktakeId}`)
+    inventoryRequest<{ data: StocktakeDetailDto }>(`/inventory/stocktakes/${stocktakeId}`)
       .then((res) => {
         setStocktake(res.data);
         setError(null);
         // Initialize counts
         const initialCounts: Record<string, string> = {};
-        res.data.lines.forEach((line: any) => {
+        res.data.lines.forEach((line) => {
           if (line.countedQuantity) initialCounts[line.id] = line.countedQuantity;
         });
         setCounts(initialCounts);

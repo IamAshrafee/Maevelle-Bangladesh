@@ -44,9 +44,10 @@ async function fixture(quantity = '2') {
   }>`insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status, published_at) values (${organization.id}, ${productType.rows[0]!.id}, ${`order-hat-${crypto.randomUUID().slice(0, 8)}`}, 'Order Hat', 'ACTIVE', 'PUBLISHED', now()) returning id`.execute(
     database.db,
   );
+  const skuString = `ORDER-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const variant = await sql<{
     id: string;
-  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${`ORDER-${crypto.randomUUID().slice(0, 8)}`}, ${`ORDERSKU-${crypto.randomUUID().slice(0, 8)}`}, ${crypto.randomUUID()}) returning id`.execute(
+  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${skuString}, ${skuString}, ${crypto.randomUUID()}) returning id`.execute(
     database.db,
   );
   const location = await createLocation(database.db, {
@@ -165,7 +166,7 @@ describe('atomic guest checkout and COD Orders', () => {
     await sql`update catalog.products set title = 'Changed after order' where organization_id = ${input.organizationId}`.execute(
       database.db,
     );
-    await sql`update catalog.product_variants set sku = 'CHANGED-SKU' where id = ${input.variantId}`.execute(
+    await sql`update catalog.product_variants set sku = 'CHANGED-SKU', sku_normalized = 'CHANGED-SKU' where id = ${input.variantId}`.execute(
       database.db,
     );
     expect((await getOrderForCheckout(database.db, flow.checkout.token)).lines[0]).toMatchObject({
@@ -454,5 +455,228 @@ describe('atomic guest checkout and COD Orders', () => {
       .map((number) => Number(number.slice(-6)))
       .toSorted((left, right) => left - right);
     expect(counters[2]! - counters[0]!).toBe(2);
+  });
+
+  describe('Manual Orders and Fulfillment', () => {
+    it('creates a manual order successfully', async () => {
+      const input = await fixture('10');
+      const customer = await sql<{ id: string }>`insert into customers.customers (organization_id, customer_number, display_name, status) values (${input.organizationId}, 'C-0001', 'Admin Customer', 'ACTIVE') returning id`.execute(database.db);
+      
+      const { createManualOrder } = await import('./orders.js');
+      const order = await createManualOrder(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        customerId: customer.rows[0]!.id,
+        locationId: (await sql<{ id: string }>`select id from warehouse.locations where organization_id = ${input.organizationId} limit 1`.execute(database.db)).rows[0]!.id,
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '2',
+            unitPrice: '100.00',
+          }
+        ],
+        deliveryAddress: {
+          recipientName: 'Manual Admin',
+          phone: '01711223344',
+          addressLine1: 'Test Avenue',
+          countryCode: 'BD',
+        },
+        deliveryAmount: '60.00',
+        paymentMethod: 'COD',
+        idempotencyKey: crypto.randomUUID(),
+      });
+
+      expect(order.status).toBe('PENDING');
+      expect(order.payment.expected).toBe('260.0000'); // (2 * 100) + 60
+      expect(order.lines).toHaveLength(1);
+    });
+
+    it('adds an order note', async () => {
+      const input = await fixture('10');
+      const customer = await sql<{ id: string }>`insert into customers.customers (organization_id, customer_number, display_name, status) values (${input.organizationId}, 'C-0002', 'Note Customer', 'ACTIVE') returning id`.execute(database.db);
+      
+      const { createManualOrder, addOrderNote, getOrderForAdmin } = await import('./orders.js');
+      const order = await createManualOrder(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        customerId: customer.rows[0]!.id,
+        locationId: (await sql<{ id: string }>`select id from warehouse.locations where organization_id = ${input.organizationId} limit 1`.execute(database.db)).rows[0]!.id,
+        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        deliveryAddress: { recipientName: 'Recip', phone: '01700', addressLine1: 'Add', countryCode: 'BD' },
+        deliveryAmount: '0',
+        paymentMethod: 'COD',
+        idempotencyKey: crypto.randomUUID(),
+      });
+
+      const note = await addOrderNote(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        orderId: order.id,
+        noteType: 'INTERNAL',
+        body: 'Please verify this order.',
+      });
+      expect(note.id).toBeDefined();
+
+      const adminOrder = await getOrderForAdmin(database.db, { organizationId: input.organizationId, orderId: order.id });
+      expect(adminOrder.notes).toHaveLength(1);
+      expect(adminOrder.notes[0]?.body).toBe('Please verify this order.');
+    });
+  });
+
+  describe('Order Completion and Status Transitions', () => {
+    it('prevents completing an order that is already completed (idempotency)', async () => {
+      const input = await fixture('10');
+      const { createManualOrder, completeOrder } = await import('./orders.js');
+      const customer = await sql<{ id: string }>`insert into customers.customers (organization_id, customer_number, display_name, status) values (${input.organizationId}, 'C-COMP1', 'Complete Customer', 'ACTIVE') returning id`.execute(database.db);
+      
+      const locationId = (await sql<{ id: string }>`select id from warehouse.locations where organization_id = ${input.organizationId} limit 1`.execute(database.db)).rows[0]!.id;
+      
+      const order = await createManualOrder(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, customerId: customer.rows[0]!.id,
+        locationId,
+        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        deliveryAddress: { recipientName: 'R', phone: '017', addressLine1: 'A', countryCode: 'BD' },
+        deliveryAmount: '0', paymentMethod: 'COD', idempotencyKey: crypto.randomUUID(),
+      });
+
+      // Transition to CONFIRMED first
+      await updateOrderStatus(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, orderId: order.id,
+        expectedVersion: order.version, nextStatus: 'CONFIRMED',
+      });
+      
+      // Force lines to DELIVERED to simulate fulfillment machinery
+      const deliveryMethod = await sql<{ id: string }>`insert into delivery.delivery_methods (organization_id, code, name, method_type) values (${input.organizationId}, 'HOME_DELIVERY', 'Home Delivery', 'HOME_DELIVERY') returning id`.execute(database.db);
+      const fulfillment = await sql<{ id: string }>`insert into fulfillment.fulfillments (organization_id, fulfillment_number, order_id, location_id, status) values (${input.organizationId}, 'F-1234', ${order.id}, ${locationId}, 'DISPATCHED') returning id`.execute(database.db);
+      const delivery = await sql<{ id: string }>`insert into delivery.deliveries (organization_id, delivery_number, order_id, fulfillment_id, delivery_method_id, outcome_status, recipient_name, recipient_phone, address_snapshot, currency_code) values (${input.organizationId}, 'D-1234', ${order.id}, ${fulfillment.rows[0]!.id}, ${deliveryMethod.rows[0]!.id}, 'DELIVERED', 'Test', '123', '{}'::jsonb, 'BDT') returning id`.execute(database.db);
+      const orderLines = await sql<{ id: string, quantity: number }>`select id, quantity from orders.order_lines where order_id = ${order.id}`.execute(database.db);
+      for (const line of orderLines.rows) {
+        const fl = await sql<{ id: string }>`insert into fulfillment.fulfillment_lines (organization_id, fulfillment_id, order_line_id, quantity) values (${input.organizationId}, ${fulfillment.rows[0]!.id}, ${line.id}, ${line.quantity}) returning id`.execute(database.db);
+        await sql`insert into delivery.delivery_lines (organization_id, delivery_id, fulfillment_line_id, order_line_id, quantity, delivered_quantity) values (${input.organizationId}, ${delivery.rows[0]!.id}, ${fl.rows[0]!.id}, ${line.id}, ${line.quantity}, ${line.quantity})`.execute(database.db);
+      }
+
+      // Complete once
+      const idempotencyKey = crypto.randomUUID();
+      await completeOrder(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, orderId: order.id,
+        idempotencyKey,
+      });
+
+      // Complete twice should be idempotent and not throw
+      const result2 = await completeOrder(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, orderId: order.id,
+        idempotencyKey,
+      });
+      expect(result2.status).toBe('COMPLETED'); // Returns idempotent result
+    });
+
+    it('rejects version mismatch on resumeOrderFromHold', async () => {
+      const input = await fixture('10');
+      const { createManualOrder, updateOrderStatus, resumeOrderFromHold } = await import('./orders.js');
+      const customer = await sql<{ id: string }>`insert into customers.customers (organization_id, customer_number, display_name, status) values (${input.organizationId}, 'C-HOLD', 'Hold Customer', 'ACTIVE') returning id`.execute(database.db);
+      
+      const order = await createManualOrder(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, customerId: customer.rows[0]!.id,
+        locationId: (await sql<{ id: string }>`select id from warehouse.locations where organization_id = ${input.organizationId} limit 1`.execute(database.db)).rows[0]!.id,
+        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        deliveryAddress: { recipientName: 'R', phone: '017', addressLine1: 'A', countryCode: 'BD' },
+        deliveryAmount: '0', paymentMethod: 'COD', idempotencyKey: crypto.randomUUID(),
+      });
+
+      // Transition to CONFIRMED first
+      const confirmed = await updateOrderStatus(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, orderId: order.id,
+        expectedVersion: order.version, nextStatus: 'CONFIRMED',
+      });
+
+      // Hold it
+      const held = await updateOrderStatus(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, orderId: order.id,
+        expectedVersion: confirmed.version, nextStatus: 'ON_HOLD',
+      });
+
+      // Try resume with bad version
+      await expect(resumeOrderFromHold(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, orderId: order.id,
+        expectedVersion: 999, // Bad version
+      })).rejects.toThrow('Order has changed');
+
+      // Try resume with good version
+      const resumed = await resumeOrderFromHold(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, orderId: order.id,
+        expectedVersion: held.version,
+      });
+      expect(resumed.status).toBe('CONFIRMED'); // Returns to confirmed
+    });
+
+    it('prevents concurrent stock reservation on last unit', async () => {
+      const input = await fixture('1'); // EXACTLY 1 IN STOCK
+      const { createManualOrder } = await import('./orders.js');
+      const customer = await sql<{ id: string }>`insert into customers.customers (organization_id, customer_number, display_name, status) values (${input.organizationId}, 'C-CONC', 'Conc Customer', 'ACTIVE') returning id`.execute(database.db);
+      const locationId = (await sql<{ id: string }>`select id from warehouse.locations where organization_id = ${input.organizationId} limit 1`.execute(database.db)).rows[0]!.id;
+      
+      const order1Promise = createManualOrder(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, customerId: customer.rows[0]!.id,
+        locationId,
+        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        deliveryAddress: { recipientName: 'R1', phone: '017', addressLine1: 'A1', countryCode: 'BD' },
+        deliveryAmount: '0', paymentMethod: 'COD', idempotencyKey: crypto.randomUUID(),
+      });
+
+      const order2Promise = createManualOrder(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, customerId: customer.rows[0]!.id,
+        locationId,
+        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        deliveryAddress: { recipientName: 'R2', phone: '017', addressLine1: 'A2', countryCode: 'BD' },
+        deliveryAmount: '0', paymentMethod: 'COD', idempotencyKey: crypto.randomUUID(),
+      });
+
+      const results = await Promise.allSettled([order1Promise, order2Promise]);
+      const fulfilled = results.filter(r => r.status === 'fulfilled');
+      const rejected = results.filter(r => r.status === 'rejected');
+      
+      // Exactly one succeeds, the other rejects due to insufficient stock
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason.message).toContain('Insufficient stock for variant');
+    });
+
+    it('resolves merged alias orders in listOrders', async () => {
+      const input = await fixture('10');
+      const { createManualOrder, listOrders } = await import('./orders.js');
+      
+      const canonicalCustomer = await sql<{ id: string }>`insert into customers.customers (organization_id, customer_number, display_name, status) values (${input.organizationId}, 'C-CANON', 'Canonical', 'ACTIVE') returning id`.execute(database.db);
+      const aliasCustomer = await sql<{ id: string }>`insert into customers.customers (organization_id, customer_number, display_name, status) values (${input.organizationId}, 'C-ALIAS', 'Alias', 'ACTIVE') returning id`.execute(database.db);
+      // We force it to MERGED bypassing the app layer if the schema allows it, or just leave it ACTIVE.
+      // Wait, the test is just about alias resolution. Even if status is ACTIVE, the alias map resolves it.
+      
+      // Create alias map
+      await sql`insert into customers.customer_aliases (organization_id, canonical_customer_id, alias_customer_id, created_at) values (${input.organizationId}, ${canonicalCustomer.rows[0]!.id}, ${aliasCustomer.rows[0]!.id}, now())`.execute(database.db);
+
+      const locationId = (await sql<{ id: string }>`select id from warehouse.locations where organization_id = ${input.organizationId} limit 1`.execute(database.db)).rows[0]!.id;
+
+      // Create order under canonical
+      await createManualOrder(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, customerId: canonicalCustomer.rows[0]!.id, locationId,
+        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        deliveryAddress: { recipientName: 'R1', phone: '017', addressLine1: 'A1', countryCode: 'BD' },
+        deliveryAmount: '0', paymentMethod: 'COD', idempotencyKey: crypto.randomUUID(),
+      });
+
+      // Create order under alias (historical)
+      await createManualOrder(database.db, {
+        organizationId: input.organizationId, actorId: input.actorId, customerId: aliasCustomer.rows[0]!.id, locationId,
+        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        deliveryAddress: { recipientName: 'R2', phone: '017', addressLine1: 'A2', countryCode: 'BD' },
+        deliveryAmount: '0', paymentMethod: 'COD', idempotencyKey: crypto.randomUUID(),
+      });
+
+      // List orders for canonical should return BOTH
+      const listResult = await listOrders(database.db, input.organizationId, {
+        customerId: canonicalCustomer.rows[0]!.id,
+      });
+
+      expect(listResult.data).toHaveLength(2);
+    });
   });
 });

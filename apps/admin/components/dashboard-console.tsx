@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import type { ApiEnvelope } from '@maevelle/contracts';
+import type { ApiEnvelope, PaginatedEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
@@ -77,11 +77,11 @@ export function DashboardConsole() {
     const results = await Promise.allSettled([
       get<ApiEnvelope<readonly Attention[]>>('/admin/operations/overview'),
       get<ApiEnvelope<Analytics>>('/admin/analytics/overview'),
-      get<ApiEnvelope<readonly Order[]>>('/admin/orders'),
+      get<ApiEnvelope<PaginatedEnvelope<Order>>>('/admin/orders'),
     ]);
     if (results[0].status === 'fulfilled') setAttention(results[0].value.data);
     if (results[1].status === 'fulfilled') setAnalytics(results[1].value.data);
-    if (results[2].status === 'fulfilled') setOrders(results[2].value.data.slice(0, 8));
+    if (results[2].status === 'fulfilled') setOrders(results[2].value.data.items.slice(0, 8));
     const passed = results.filter((result) => result.status === 'fulfilled').length;
     setState(passed === results.length ? 'ready' : passed > 0 ? 'partial' : 'error');
     setMessage(

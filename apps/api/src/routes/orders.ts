@@ -18,6 +18,7 @@ import {
   updateCheckoutContact,
   updateCheckoutPaymentMethod,
   updateOrderStatus,
+  createManualOrder,
 } from '@maevelle/database/orders';
 import {
   completeManualRefund,
@@ -456,11 +457,26 @@ export function registerOrderRoutes(
       }
     },
   );
-  app.get('/admin/orders', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'orders.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listOrders(database.db, active.organizationId) };
-  });
+  app.get(
+    '/admin/orders',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          q: Type.Optional(Type.String()),
+          status: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'orders.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as { page?: number; pageSize?: number; q?: string; status?: string };
+      const result = await listOrders(database.db, active.organizationId, query);
+      return { data: { items: result.data, totalCount: result.pagination.totalItems } };
+    }
+  );
   app.get('/admin/orders/:orderId', async (request, reply) => {
     const active = await admin(database, auth, request.headers, 'orders.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -747,6 +763,64 @@ export function registerOrderRoutes(
             actorId: active.actorId,
             refundId: (request.params as { refundId: string }).refundId,
             externalReference: (request.body as { externalReference: string }).externalReference,
+            idempotencyKey: key,
+          }),
+        };
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/orders',
+    {
+      schema: {
+        body: Type.Object({
+          customerId: Type.Optional(Type.String()),
+          lines: Type.Array(
+            Type.Object({
+              variantId: Type.String(),
+              quantity: Type.Number({ minimum: 1 }),
+            }),
+            { minItems: 1 },
+          ),
+          shippingAddress: Type.Object({
+            recipientName: Type.String(),
+            phone: Type.String(),
+            addressLine1: Type.String(),
+            addressLine2: Type.Optional(Type.String()),
+            city: Type.Optional(Type.String()),
+            district: Type.Optional(Type.String()),
+            postalCode: Type.Optional(Type.String()),
+          }),
+          billingContact: Type.Object({
+            name: Type.String(),
+            phone: Type.String(),
+            email: Type.Optional(Type.String()),
+          }),
+          shippingMethodId: Type.Optional(Type.String()),
+          paymentMethod: Type.Optional(Type.String()),
+          codExpectedAmount: Type.Optional(Type.String()),
+          notes: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'orders.create');
+      const key = request.headers['idempotency-key'];
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      if (typeof key !== 'string' || !key.trim())
+        return reply
+          .code(422)
+          .send({ error: { code: 'VALIDATION_FAILED', message: 'Idempotency-Key is required.' } });
+      try {
+        const body = request.body as Parameters<typeof createManualOrder>[1];
+        return {
+          data: await createManualOrder(database.db, {
+            ...body,
+            organizationId: active.organizationId,
+            actorId: active.actorId,
             idempotencyKey: key,
           }),
         };

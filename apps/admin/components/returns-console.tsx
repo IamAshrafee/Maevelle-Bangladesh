@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
 
-import type { ApiEnvelope } from '@maevelle/contracts';
+import type { ApiEnvelope, PaginatedEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from './status-badge';
 
@@ -107,13 +107,13 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
     try {
       const [caseRows, orderRows, deliveryRows, locationRows, refundRows] = await Promise.all([
         request<ApiEnvelope<readonly ReturnCase[]>>('/admin/returns'),
-        request<ApiEnvelope<readonly OrderSummary[]>>('/admin/orders'),
+        request<ApiEnvelope<PaginatedEnvelope<OrderSummary>>>('/admin/orders'),
         request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries'),
         request<ApiEnvelope<readonly Location[]>>('/admin/warehouse/locations'),
         request<ApiEnvelope<readonly Refund[]>>('/admin/refunds'),
       ]);
       setCases(caseRows.data);
-      setOrders(orderRows.data);
+      setOrders(orderRows.data.items);
       setDeliveries(deliveryRows.data);
       setLocations(locationRows.data.filter((item) => item.capabilities.includes('STOCK_HOLDING')));
       setRefunds(refundRows.data);

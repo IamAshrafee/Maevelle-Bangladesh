@@ -10,6 +10,19 @@ import {
   CustomerDomainError,
   findCustomerDuplicateCandidates,
   listCustomers,
+  getCustomerDetail,
+  updateCustomer,
+  removeCustomerPhone,
+  removeCustomerEmail,
+  removeCustomerAddress,
+  addCustomerNote,
+  listCustomerOrders,
+  listCustomerReturns,
+  listCustomerRefunds,
+  listOrgTags,
+  createTag,
+  assignTagToCustomer,
+  removeTagFromCustomer,
 } from '@maevelle/database/customers';
 import { searchGeography } from '@maevelle/database/geography';
 import { findActiveAdminContext } from '@maevelle/database/platform';
@@ -73,17 +86,26 @@ export function registerCustomerRoutes(
 
   app.get(
     '/admin/customers',
-    { schema: { querystring: Type.Object({ q: Type.Optional(Type.String()) }) } },
+    {
+      schema: {
+        querystring: Type.Object({
+          q: Type.Optional(Type.String()),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'customers.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      return {
-        data: await listCustomers(
-          database.db,
-          active.organizationId,
-          (request.query as { q?: string }).q,
-        ),
-      };
+      const query = request.query as { q?: string; page?: number; pageSize?: number };
+      const filters: { q?: string; page?: number; pageSize?: number } = {};
+      if (query.q) filters.q = query.q;
+      if (query.page) filters.page = query.page;
+      if (query.pageSize) filters.pageSize = query.pageSize;
+      
+      const result = await listCustomers(database.db, active.organizationId, filters);
+      return { data: { items: result.data, totalCount: result.pagination.totalItems } };
     },
   );
 
@@ -210,4 +232,154 @@ export function registerCustomerRoutes(
       }),
     };
   });
+
+  app.get('/admin/customers/:customerId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      return {
+        data: await getCustomerDetail(
+          database.db,
+          active.organizationId,
+          (request.params as { customerId: string }).customerId,
+        ),
+      };
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  app.put(
+    '/admin/customers/:customerId',
+    {
+      schema: {
+        body: Type.Object({
+          expectedVersion: Type.Number(),
+          displayName: Type.Optional(Type.String({ minLength: 1 })),
+          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('INACTIVE'), Type.Literal('BLOCKED')])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return {
+          data: await updateCustomer(database.db, {
+            ...active,
+            customerId: (request.params as { customerId: string }).customerId,
+            ...(request.body as { expectedVersion: number; displayName?: string; status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' }),
+          }),
+        };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.delete('/admin/customers/:customerId/phones/:phoneId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string; phoneId: string };
+    try {
+      await removeCustomerPhone(database.db, { ...active, customerId: params.customerId, phoneId: params.phoneId });
+      return reply.code(204).send();
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  app.delete('/admin/customers/:customerId/emails/:emailId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string; emailId: string };
+    try {
+      await removeCustomerEmail(database.db, { ...active, customerId: params.customerId, emailId: params.emailId });
+      return reply.code(204).send();
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  app.delete('/admin/customers/:customerId/addresses/:addressId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string; addressId: string };
+    try {
+      await removeCustomerAddress(database.db, { ...active, customerId: params.customerId, addressId: params.addressId });
+      return reply.code(204).send();
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  app.post(
+    '/admin/customers/:customerId/notes',
+    { schema: { body: Type.Object({ body: Type.String({ minLength: 1 }) }) } },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await addCustomerNote(database.db, {
+            ...active,
+            customerId: (request.params as { customerId: string }).customerId,
+            ...(request.body as { body: string }),
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.get('/admin/tags', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listOrgTags(database.db, active.organizationId) };
+  });
+
+  app.post(
+    '/admin/tags',
+    { schema: { body: Type.Object({ label: Type.String({ minLength: 1 }), color: Type.Optional(Type.String()) }) } },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await createTag(database.db, {
+            organizationId: active.organizationId,
+            ...(request.body as { label: string; color?: string }),
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post('/admin/customers/:customerId/tags/:tagId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string; tagId: string };
+    try {
+      await assignTagToCustomer(database.db, { ...active, customerId: params.customerId, tagId: params.tagId });
+      return reply.code(204).send();
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  app.delete('/admin/customers/:customerId/tags/:tagId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string; tagId: string };
+    try {
+      await removeTagFromCustomer(database.db, { ...active, customerId: params.customerId, tagId: params.tagId });
+      return reply.code(204).send();
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
 }

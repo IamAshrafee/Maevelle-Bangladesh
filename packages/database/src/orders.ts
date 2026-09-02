@@ -955,69 +955,374 @@ export async function getOrderForCheckoutContext(
   };
 }
 
+export interface AdminOrderDetailView extends OrderView {
+  readonly deliveryAmount: string;
+  readonly notes: readonly {
+    id: string;
+    authorActorId: string;
+    noteType: string;
+    body: string;
+    createdAt: string;
+  }[];
+  readonly timeline: readonly {
+    id: string;
+    eventType: string;
+    aggregateType: string;
+    aggregateId: string;
+    occurredAt: string;
+    payload: Record<string, unknown>;
+  }[];
+  readonly fulfillments: readonly {
+    id: string;
+    fulfillmentNumber: string;
+    status: string;
+    locationId: string;
+    dispatchedAt: string | null;
+  }[];
+  readonly deliveries: readonly {
+    id: string;
+    deliveryNumber: string;
+    status: string;
+    outcomeStatus: string | null;
+    trackingNumber: string | null;
+    dispatchedAt: string | null;
+    deliveredAt: string | null;
+  }[];
+  readonly returnCases: readonly {
+    id: string;
+    caseNumber: string;
+    status: string;
+    returnType: string;
+    createdAt: string;
+  }[];
+  readonly refunds: readonly {
+    id: string;
+    amount: string;
+    status: string;
+    createdAt: string;
+  }[];
+  readonly discountApplications: readonly {
+    promotionName: string;
+    couponCode: string | null;
+    benefitType: string;
+    benefitValue: string;
+    discountAmount: string;
+  }[];
+  readonly cancellation: {
+    reasonCode: string;
+    reasonText: string | null;
+    createdAt: string;
+  } | null;
+}
+
 export async function getOrderForAdmin(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; orderId: string },
-): Promise<OrderView> {
+): Promise<AdminOrderDetailView> {
   const exists = await sql<{
     id: string;
-  }>`select id from orders.orders where id = ${input.orderId} and organization_id = ${input.organizationId}`.execute(
+    delivery_amount: string;
+  }>`select id, delivery_amount::text from orders.orders where id = ${input.orderId} and organization_id = ${input.organizationId}`.execute(
     db,
   );
   if (!exists.rows[0]) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
-  return orderView(db, input.orderId);
+
+  const baseOrderPromise = orderView(db, input.orderId);
+
+  const [
+    baseOrder,
+    notesQuery,
+    timelineQuery,
+    fulfillmentsQuery,
+    deliveriesQuery,
+    returnsQuery,
+    refundsQuery,
+    discountsQuery,
+    cancellationQuery,
+  ] = await Promise.all([
+    baseOrderPromise,
+    sql<{ id: string; author_actor_id: string; note_type: string; body: string; created_at: Date }>`
+      select id, author_actor_id, note_type, body, created_at
+      from orders.order_notes
+      where order_id = ${input.orderId}
+      order by created_at desc limit 20
+    `.execute(db),
+    sql<{ id: string; event_type: string; aggregate_type: string; aggregate_id: string; occurred_at: Date; payload: Record<string, unknown> }>`
+      select id, event_type, aggregate_type, aggregate_id, occurred_at, payload
+      from platform.outbox_events
+      where aggregate_type in ('orders.order', 'fulfillment.fulfillment', 'delivery.delivery', 'returns.return_case')
+        and payload->>'orderId' = ${input.orderId}
+      order by occurred_at desc limit 30
+    `.execute(db),
+    sql<{ id: string; fulfillment_number: string; status: string; location_id: string; dispatched_at: Date | null }>`
+      select id, fulfillment_number, status, location_id, dispatched_at
+      from fulfillment.fulfillments
+      where order_id = ${input.orderId}
+      order by created_at desc
+    `.execute(db),
+    sql<{ id: string; delivery_number: string; operational_status: string; outcome_status: string | null; tracking_reference: string | null; dispatched_at: Date | null; delivered_at: Date | null }>`
+      select d.id, d.delivery_number, d.operational_status, d.outcome_status, d.tracking_reference, f.dispatched_at, null as delivered_at
+      from delivery.deliveries d
+      join fulfillment.fulfillments f on f.id = d.fulfillment_id
+      where d.order_id = ${input.orderId}
+      order by d.created_at desc
+    `.execute(db),
+    sql<{ id: string; return_number: string; case_status: string; case_type: string; created_at: Date }>`
+      select id, return_number, case_status, case_type, created_at
+      from returns.return_cases
+      where order_id = ${input.orderId}
+      order by created_at desc
+    `.execute(db),
+    sql<{ id: string; amount: string; status: string; created_at: Date }>`
+      select r.id, r.amount::text, r.status, r.created_at
+      from payments.refunds r
+      join payments.payments p on p.id = r.payment_id
+      join payments.payment_attempts pa on pa.id = p.source_attempt_id
+      join payments.payment_intents pi on pi.id = pa.payment_intent_id
+      where pi.order_id = ${input.orderId}
+      order by r.created_at desc
+    `.execute(db),
+    sql<{ promotion_name: string; coupon_code: string | null; benefit_type: string; benefit_value: string; discount_amount: string }>`
+      select promotion_name_snapshot as promotion_name, coupon_code_snapshot as coupon_code,
+             benefit_type_snapshot as benefit_type, benefit_value_snapshot::text as benefit_value,
+             discount_amount::text as discount_amount
+      from orders.order_discount_applications
+      where order_id = ${input.orderId}
+      order by created_at desc
+    `.execute(db),
+    sql<{ reason_code: string; reason_text: string | null; created_at: Date }>`
+      select reason_code, reason_text, created_at
+      from orders.order_cancellations
+      where order_id = ${input.orderId}
+    `.execute(db),
+  ]);
+
+  return {
+    ...baseOrder,
+    deliveryAmount: exists.rows[0].delivery_amount,
+    notes: notesQuery.rows.map((row) => ({
+      id: row.id,
+      authorActorId: row.author_actor_id,
+      noteType: row.note_type,
+      body: row.body,
+      createdAt: row.created_at.toISOString(),
+    })),
+    timeline: timelineQuery.rows.map((row) => ({
+      id: row.id,
+      eventType: row.event_type,
+      aggregateType: row.aggregate_type,
+      aggregateId: row.aggregate_id,
+      occurredAt: row.occurred_at.toISOString(),
+      payload: row.payload,
+    })),
+    fulfillments: fulfillmentsQuery.rows.map((row) => ({
+      id: row.id,
+      fulfillmentNumber: row.fulfillment_number,
+      status: row.status,
+      locationId: row.location_id,
+      dispatchedAt: row.dispatched_at?.toISOString() ?? null,
+    })),
+    deliveries: deliveriesQuery.rows.map((row) => ({
+      id: row.id,
+      deliveryNumber: row.delivery_number,
+      status: row.operational_status,
+      outcomeStatus: row.outcome_status,
+      trackingNumber: row.tracking_reference,
+      dispatchedAt: row.dispatched_at?.toISOString() ?? null,
+      deliveredAt: row.delivered_at?.toISOString() ?? null,
+    })),
+    returnCases: returnsQuery.rows.map(row => ({
+      id: row.id,
+      caseNumber: row.return_number,
+      status: row.case_status,
+      returnType: row.case_type,
+      createdAt: row.created_at.toISOString(),
+    })),
+    refunds: refundsQuery.rows.map((row) => ({
+      id: row.id,
+      amount: row.amount,
+      status: row.status,
+      createdAt: row.created_at.toISOString(),
+    })),
+    discountApplications: discountsQuery.rows.map((row) => ({
+      promotionName: row.promotion_name,
+      couponCode: row.coupon_code,
+      benefitType: row.benefit_type,
+      benefitValue: row.benefit_value,
+      discountAmount: row.discount_amount,
+    })),
+    cancellation: cancellationQuery.rows[0]
+      ? {
+          reasonCode: cancellationQuery.rows[0].reason_code,
+          reasonText: cancellationQuery.rows[0].reason_text,
+          createdAt: cancellationQuery.rows[0].created_at.toISOString(),
+        }
+      : null,
+  };
+}
+
+export interface OrderListFilters {
+  readonly page?: number;
+  readonly pageSize?: number;
+  readonly status?: string;
+  /** Searched against order_number prefix, snapshot display_name ILIKE, and normalized phone. */
+  readonly q?: string;
+  readonly from?: string;
+  readonly to?: string;
+  /** When provided, also resolves MERGED alias customers to include their orders. */
+  readonly customerId?: string;
+}
+
+export interface OrderListItem {
+  readonly id: string;
+  readonly orderNumber: string;
+  readonly source: string;
+  readonly status: string;
+  readonly paymentMethod: PaymentMethodCode;
+  readonly paymentStatus: string;
+  readonly total: string;
+  readonly deliveryAmount: string;
+  readonly currency: string;
+  readonly customerName: string;
+  readonly customerId: string | null;
+  readonly createdAt: string;
+}
+
+export interface PaginationMeta {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly totalItems: number;
+  readonly totalPages: number;
 }
 
 export async function listOrders(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-): Promise<
-  readonly {
-    id: string;
-    orderNumber: string;
-    status: string;
-    paymentMethod: PaymentMethodCode;
-    paymentStatus: PaymentSummary['status'];
-    total: string;
-    customerName: string;
-    customerId: string;
-    createdAt: string;
-  }[]
-> {
+  filters?: OrderListFilters,
+): Promise<{ data: readonly OrderListItem[]; pagination: PaginationMeta }> {
+  const page = Math.max(1, filters?.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, filters?.pageSize ?? 25));
+  const offset = (page - 1) * pageSize;
+
+  // Resolve alias customer IDs so that scoping to a canonical customer
+  // also surfaces orders placed while the customer was a separate record.
+  let customerIds: string[] | null = null;
+  if (filters?.customerId) {
+    const aliasResult = await sql<{ customer_id: string }>`
+      select ${filters.customerId}::uuid as customer_id
+      union all
+      select alias_customer_id as customer_id
+      from customers.customer_aliases
+      where canonical_customer_id = ${filters.customerId}
+        or alias_customer_id = ${filters.customerId}
+    `.execute(db);
+    customerIds = aliasResult.rows.map((r) => r.customer_id);
+  }
+
+  const searchTerm = filters?.q?.trim() ?? null;
+
   const result = await sql<{
     id: string;
     order_number: string;
+    source: string;
     order_status: string;
     payment_method: PaymentMethodCode;
     total_amount: string;
+    delivery_amount: string;
+    currency_code: string;
     display_name: string;
-    customer_id: string;
+    customer_id: string | null;
     created_at: Date;
+    // Inline payment summary from LEFT JOIN LATERAL — no per-row async call.
+    payment_intent_status: string | null;
+    collected: string | null;
+    refunded: string | null;
+    total_count: string;
   }>`
-    select order_row.id, order_row.order_number, order_row.order_status, order_row.payment_method, order_row.total_amount::text, customer.display_name,customer.customer_id::text,order_row.created_at
-    from orders.orders order_row join orders.order_customer_snapshots customer on customer.order_id = order_row.id
-    where order_row.organization_id = ${organizationId} order by order_row.created_at desc, order_row.id desc limit 100
+    select
+      o.id, o.order_number, o.source, o.order_status, o.payment_method,
+      o.total_amount::text, o.delivery_amount::text, o.currency_code,
+      snap.display_name, snap.customer_id,
+      o.created_at,
+      pay.status           as payment_intent_status,
+      pay.collected        as collected,
+      pay.refunded         as refunded,
+      count(*) over ()::text as total_count
+    from orders.orders o
+    join orders.order_customer_snapshots snap on snap.order_id = o.id
+    left join lateral (
+      select
+        pi.status,
+        coalesce((select sum(p.amount) from payments.payments p join payments.payment_attempts pa on pa.id = p.source_attempt_id where pa.payment_intent_id = pi.id), 0)::text as collected,
+        coalesce((select sum(r.amount) from payments.refunds r where r.payment_id in (
+          select p2.id from payments.payments p2 join payments.payment_attempts pa2 on pa2.id = p2.source_attempt_id where pa2.payment_intent_id = pi.id
+        )), 0)::text as refunded
+      from payments.payment_intents pi
+      where pi.order_id = o.id
+      order by pi.created_at desc
+      limit 1
+    ) pay on true
+    where o.organization_id = ${organizationId}
+      and (${filters?.status ?? null}::text is null or o.order_status = ${filters?.status ?? null})
+      and (${filters?.from ?? null}::text is null or o.created_at >= (${filters?.from ?? null})::timestamptz)
+      and (${filters?.to ?? null}::text is null or o.created_at <= (${filters?.to ?? null})::timestamptz)
+      and (
+        ${customerIds ?? null}::uuid[] is null
+        or snap.customer_id = any(${customerIds ?? null}::uuid[])
+      )
+      and (
+        ${searchTerm ?? null}::text is null
+        or o.order_number ilike ${searchTerm ? `${searchTerm}%` : ''}
+        or lower(snap.display_name) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
+        or snap.phone = (select normalized_value from customers.customer_phones
+          where normalized_value = ${searchTerm ?? ''} limit 1)
+      )
+    order by o.created_at desc, o.id desc
+    limit ${pageSize} offset ${offset}
   `.execute(db);
-  return Promise.all(
-    result.rows.map(async (row) => ({
+
+  const totalItems = Number(result.rows[0]?.total_count ?? 0);
+
+  const data: OrderListItem[] = result.rows.map((row) => {
+    // Derive a human-readable payment status from the intent status and collected amounts.
+    const collected = Number(row.collected ?? 0);
+    const refunded = Number(row.refunded ?? 0);
+    const expected = Number(row.total_amount);
+    let paymentStatus = row.payment_intent_status ?? 'UNPAID';
+    if (paymentStatus === 'ACTIVE') {
+      if (collected === 0) paymentStatus = 'UNPAID';
+      else if (collected - refunded >= expected) paymentStatus = 'PAID';
+      else paymentStatus = 'PARTIALLY_PAID';
+    } else if (paymentStatus === 'CAPTURED' || paymentStatus === 'COLLECTED') {
+      if (refunded > 0 && refunded >= expected) paymentStatus = 'REFUNDED';
+      else if (refunded > 0) paymentStatus = 'PARTIALLY_REFUNDED';
+      else paymentStatus = 'PAID';
+    }
+    return {
       id: row.id,
       orderNumber: row.order_number,
+      source: row.source,
       status: row.order_status,
       paymentMethod: row.payment_method,
-      paymentStatus: (
-        await getOrderPaymentSummary(db, {
-          organizationId,
-          orderId: row.id,
-          paymentMethod: row.payment_method,
-          expectedAmount: row.total_amount,
-        })
-      ).status,
+      paymentStatus,
       total: row.total_amount,
+      deliveryAmount: row.delivery_amount,
+      currency: row.currency_code,
       customerName: row.display_name,
-      customerId: row.customer_id,
+      customerId: row.customer_id ?? null,
       createdAt: row.created_at.toISOString(),
-    })),
-  );
+    };
+  });
+
+  return {
+    data,
+    pagination: {
+      page,
+      pageSize,
+      totalItems,
+      totalPages: totalItems === 0 ? 1 : Math.ceil(totalItems / pageSize),
+    },
+  };
 }
 
 export async function updateOrderStatus(
@@ -1132,4 +1437,670 @@ export async function cancelOrder(
     );
     return { order: await orderView(transaction, input.orderId), releasedReservations };
   });
+}
+
+/**
+ * Adds an operator note to an order. Notes are append-only \u2014 there is no edit/delete.
+ * INTERNAL notes are visible only to admin staff; CUSTOMER_VISIBLE may be surfaced
+ * to the customer in future notification workflows.
+ */
+export async function addOrderNote(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    orderId: string;
+    noteType: 'INTERNAL' | 'CUSTOMER_VISIBLE';
+    body: string;
+  },
+): Promise<{ id: string }> {
+  const body = input.body.trim();
+  if (!body) throw new OrderDomainError('VALIDATION_FAILED', 'Note body cannot be empty.');
+  // Verify the order exists and belongs to this organization.
+  const exists = await sql<{ id: string }>`
+    select id from orders.orders where id = ${input.orderId} and organization_id = ${input.organizationId}
+  `.execute(db);
+  if (!exists.rows[0]) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
+
+  const created = await sql<{ id: string }>`
+    insert into orders.order_notes (organization_id, order_id, author_actor_id, note_type, body)
+    values (${input.organizationId}, ${input.orderId}, ${input.actorId}, ${input.noteType}, ${body})
+    returning id
+  `.execute(db);
+  const id = created.rows[0]?.id;
+  if (!id) throw new Error('Note creation did not return an id.');
+  await appendAuditEvent(db, {
+    organizationId: input.organizationId,
+    actorType: 'USER',
+    actorId: input.actorId,
+    action: 'orders.order.note_added',
+    targetType: 'orders.order',
+    targetId: input.orderId,
+    metadata: { noteType: input.noteType },
+  });
+  return { id };
+}
+
+/**
+ * Transitions an ON_HOLD order back to CONFIRMED, resuming normal processing.
+ * Version-checked to prevent lost-update races.
+ */
+export async function resumeOrderFromHold(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    orderId: string;
+    expectedVersion: number;
+  },
+): Promise<OrderView> {
+  return db.transaction().execute(async (transaction) => {
+    const order = await sql<{ order_status: string; version: string }>`
+      select order_status, version::text from orders.orders
+      where id = ${input.orderId} and organization_id = ${input.organizationId}
+      for update
+    `.execute(transaction);
+    const row = order.rows[0];
+    if (!row) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
+    if (Number(row.version) !== input.expectedVersion)
+      throw new OrderDomainError('STALE_VERSION', 'Order has changed; reload before updating.');
+    if (row.order_status !== 'ON_HOLD')
+      throw new OrderDomainError('INVALID_TRANSITION', 'Only ON_HOLD orders can be resumed.');
+    await sql`
+      update orders.orders
+      set order_status = 'CONFIRMED', version = version + 1, updated_at = now()
+      where id = ${input.orderId}
+    `.execute(transaction);
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'orders.order.confirmed',
+      targetType: 'orders.order',
+      targetId: input.orderId,
+      metadata: { resumedFromHold: true },
+    });
+    await sql`
+      insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at)
+      values (${input.organizationId}, 'orders.order.resumed', 1, 'orders.order', ${input.orderId}, 1,
+        ${JSON.stringify({ orderId: input.orderId })}::jsonb, now())
+    `.execute(transaction);
+    return orderView(transaction, input.orderId);
+  });
+}
+
+/**
+ * Transitions a CONFIRMED order to COMPLETED.
+ *
+ * Normally triggered automatically by the background consumer when it receives
+ * the `delivery.all_lines_delivered` outbox event — in that case, pass the
+ * outbox event ID as the `idempotencyKey` and `triggerOutboxEventId`.
+ *
+ * Can also be called manually by an admin (e.g., for partially-delivered orders
+ * where the customer confirmed receipt). In that case, `actorId` is set and
+ * `triggerOutboxEventId` is null.
+ *
+ * Guard: all order lines must have sufficient delivered quantity before completing.
+ */
+export async function completeOrder(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    orderId: string;
+    actorId: string | null;
+    idempotencyKey: string;
+    triggerOutboxEventId?: string | null;
+  },
+): Promise<OrderView> {
+  return db.transaction().execute(async (transaction) => {
+    const order = await sql<{ order_status: string; version: string; organization_id: string }>`
+      select order_status, version::text, organization_id
+      from orders.orders
+      where id = ${input.orderId} and organization_id = ${input.organizationId}
+      for update
+    `.execute(transaction);
+    const row = order.rows[0];
+    if (!row) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
+
+    // Idempotency: if already completed, return current state without error.
+    if (row.order_status === 'COMPLETED') return orderView(transaction, input.orderId);
+
+    if (row.order_status !== 'CONFIRMED')
+      throw new OrderDomainError(
+        'INVALID_TRANSITION',
+        `Cannot complete an order in ${row.order_status} status.`,
+      );
+
+    // Guard: all ordered lines must be covered by delivered delivery lines.
+    // An order line is covered when sum(delivery_line.delivered_quantity) >= order_line.quantity.
+    const undelivered = await sql<{ count: string }>`
+      select count(*)::text as count
+      from orders.order_lines ol
+      where ol.order_id = ${input.orderId}
+        and (
+          select coalesce(sum(dl.delivered_quantity), 0)
+          from delivery.delivery_lines dl
+          join delivery.deliveries d on d.id = dl.delivery_id
+          where dl.order_line_id = ol.id
+            and d.outcome_status = 'DELIVERED'
+        ) < ol.quantity
+    `.execute(transaction);
+    if (Number(undelivered.rows[0]?.count ?? 1) > 0)
+      throw new OrderDomainError(
+        'INVALID_TRANSITION',
+        'Not all order lines have been delivered. Cannot complete.',
+      );
+
+    // Idempotency check against explicit key (handles retry of auto-completion event).
+    let recordId: string | undefined;
+    try {
+      const record = await claimIdempotencyRecord(transaction, {
+        organizationId: input.organizationId,
+        principalType: 'USER',
+        principalId: input.actorId ?? input.orderId,
+        operationType: 'orders.complete',
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint: input.orderId,
+      });
+      if (!record.created && record.status === 'SUCCEEDED')
+        return orderView(transaction, input.orderId);
+      recordId = record.id;
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError)
+        throw new OrderDomainError('IDEMPOTENCY_CONFLICT', 'Idempotency key reused.');
+      throw error;
+    }
+
+    await sql`
+      update orders.orders
+      set order_status = 'COMPLETED', completed_at = now(), version = version + 1, updated_at = now()
+      where id = ${input.orderId}
+    `.execute(transaction);
+
+    // Record completion traceability \u2014 links to the delivery event that triggered this, if any.
+    await sql`
+      insert into orders.order_completion_events (order_id, organization_id, trigger_outbox_event_id, completed_by_actor_id)
+      values (${input.orderId}, ${input.organizationId}, ${input.triggerOutboxEventId ?? null}, ${input.actorId ?? null})
+      on conflict (order_id) do nothing
+    `.execute(transaction);
+
+    await sql`
+      update platform.idempotency_records
+      set status = 'SUCCEEDED', result_entity_type = 'orders.order', result_entity_id = ${input.orderId}::uuid,
+          safe_response = ${JSON.stringify({ orderId: input.orderId })}::jsonb, completed_at = now()
+      where id = ${recordId}
+    `.execute(transaction);
+
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: input.actorId ? 'USER' : 'SYSTEM',
+      actorId: input.actorId ?? 'system',
+      action: 'orders.order.completed',
+      targetType: 'orders.order',
+      targetId: input.orderId,
+      metadata: { triggerOutboxEventId: input.triggerOutboxEventId ?? null },
+    });
+
+    await sql`
+      insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at)
+      values (${input.organizationId}, 'orders.order.completed', 1, 'orders.order', ${input.orderId}, 1,
+        ${JSON.stringify({ orderId: input.orderId })}::jsonb, now())
+    `.execute(transaction);
+
+    return orderView(transaction, input.orderId);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Manual order creation inputs
+// ---------------------------------------------------------------------------
+
+export interface ManualOrderLine {
+  readonly variantId: string;
+  /** Must be > 0. Decimal string, e.g. "2" or "1.5". */
+  readonly quantity: string;
+  /** Admin-set price. Must be >= 0. Decimal string, e.g. "1200.00". */
+  readonly unitPrice: string;
+}
+
+export interface ManualOrderDeliveryAddress {
+  readonly recipientName: string;
+  readonly phone: string;
+  readonly addressLine1: string;
+  readonly addressLine2?: string;
+  readonly geographyNodeId?: string;
+  readonly area?: string;
+  readonly city?: string;
+  readonly district?: string;
+  readonly postalCode?: string;
+  readonly countryCode: string;
+  /**
+   * When true, saves this address to the customer's address book within the
+   * same transaction. When false, the address is used for this order only.
+   */
+  readonly saveToCustomer?: boolean;
+}
+
+export interface CreateManualOrderInput {
+  readonly organizationId: string;
+  readonly actorId: string;
+  readonly customerId: string;
+  /** Must reference a STOCK_HOLDING location. Single location per order (v1). */
+  readonly locationId: string;
+  readonly lines: readonly ManualOrderLine[];
+  readonly deliveryAddress: ManualOrderDeliveryAddress;
+  /** Shipping charge in the order currency. Must be >= 0. */
+  readonly deliveryAmount: string;
+  readonly paymentMethod: PaymentMethodCode;
+  /**
+   * Client-generated UUID. Required. The same key returns the same order
+   * if the request is replayed after a network failure.
+   */
+  readonly idempotencyKey: string;
+  readonly currency?: string;
+}
+
+const decimalPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/;
+const positiveDecimalPattern = /^(?:(?:[1-9]\d*)(?:\.\d{1,4})?|(?:0\.\d*[1-9]\d*))$/;
+
+/**
+ * Creates an order initiated by an admin operator, bypassing the storefront
+ * checkout flow. Unlike placeOrder:
+ *
+ * - Prices are admin-set (no promotion evaluation).
+ * - Customer must be ACTIVE (not INACTIVE, BLOCKED, MERGED, or ANONYMIZED).
+ * - Admin selects the warehouse location explicitly.
+ * - A delivery charge can be specified.
+ * - No promotion discounts are applied (discount_amount = 0 on all lines).
+ *
+ * All inventory reservation logic uses the same primitive as placeOrder so
+ * the two paths cannot diverge independently.
+ */
+export async function createManualOrder(
+  db: Kysely<DatabaseSchema>,
+  input: CreateManualOrderInput,
+): Promise<OrderView> {
+  // ---- Input validation (server-enforced, not UI-only) -------------------
+
+  if (!input.lines.length)
+    throw new OrderDomainError('VALIDATION_FAILED', 'At least one line item is required.');
+
+  const deliveryAmountRaw = input.deliveryAmount.trim();
+  if (!decimalPattern.test(deliveryAmountRaw))
+    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery amount must be a non-negative decimal.');
+
+  ensureAddress(input.deliveryAddress);
+
+  for (const line of input.lines) {
+    const qty = line.quantity.trim();
+    const price = line.unitPrice.trim();
+    if (!positiveDecimalPattern.test(qty))
+      throw new OrderDomainError('VALIDATION_FAILED', 'Line quantity must be a positive decimal.');
+    if (!decimalPattern.test(price))
+      throw new OrderDomainError('VALIDATION_FAILED', 'Line unit price must be a non-negative decimal.');
+  }
+
+  const currency = input.currency ?? 'BDT';
+
+  return db.transaction().execute(async (transaction) => {
+    // ---- Idempotency -------------------------------------------------------
+    let recordId: string;
+    try {
+      const record = await claimIdempotencyRecord(transaction, {
+        organizationId: input.organizationId,
+        principalType: 'USER',
+        principalId: input.actorId,
+        operationType: 'orders.manual-create',
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint: hashToken(
+          JSON.stringify({
+            customerId: input.customerId,
+            locationId: input.locationId,
+            lines: input.lines,
+            deliveryAmount: deliveryAmountRaw,
+            paymentMethod: input.paymentMethod,
+          }),
+        ),
+      });
+      if (!record.created) {
+        if (record.status === 'SUCCEEDED') {
+          const idRecord = await sql<{ result_entity_id: string | null }>`select result_entity_id::text from platform.idempotency_records where id = ${record.id}`.execute(transaction);
+          if (idRecord.rows[0]?.result_entity_id) {
+            return orderView(transaction, idRecord.rows[0].result_entity_id);
+          }
+        }
+        throw new OrderDomainError('IDEMPOTENCY_CONFLICT', 'This manual order request is already in progress.');
+      }
+      recordId = record.id;
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError)
+        throw new OrderDomainError('IDEMPOTENCY_CONFLICT', 'The idempotency key was reused for different order details.');
+      throw error;
+    }
+
+    // ---- Customer guard ----------------------------------------------------
+    const customerRow = await sql<{ id: string; status: string; display_name: string }>`
+      select id, status, display_name
+      from customers.customers
+      where id = ${input.customerId} and organization_id = ${input.organizationId}
+      for share
+    `.execute(transaction);
+    const customer = customerRow.rows[0];
+    if (!customer)
+      throw new OrderDomainError('NOT_FOUND', 'Customer was not found.');
+    if (!['ACTIVE'].includes(customer.status))
+      throw new OrderDomainError(
+        'VALIDATION_FAILED',
+        `Manual orders cannot be created for a customer with status ${customer.status}.`,
+      );
+
+    // ---- Location guard ----------------------------------------------------
+    const locationRow = await sql<{ id: string }>`
+      select loc.id
+      from warehouse.locations loc
+      join warehouse.location_capabilities cap
+        on cap.location_id = loc.id and cap.organization_id = loc.organization_id
+        and cap.capability_code = 'STOCK_HOLDING'
+      where loc.id = ${input.locationId}
+        and loc.organization_id = ${input.organizationId}
+        and loc.status = 'ACTIVE'
+    `.execute(transaction);
+    if (!locationRow.rows[0])
+      throw new OrderDomainError('VALIDATION_FAILED', 'Location was not found or is not a STOCK_HOLDING location.');
+
+    // ---- Variant resolution ------------------------------------------------
+    // Resolve each variant to its inventory item. Sort by variantId to ensure
+    // a consistent lock acquisition order and prevent deadlocks.
+    const sortedLines = [...input.lines].sort((a, b) => a.variantId.localeCompare(b.variantId));
+
+    const resolvedLines: {
+      variantId: string;
+      productId: string;
+      inventoryItemId: string;
+      sku: string;
+      productTitle: string;
+      variantTitle: string | null;
+      optionSnapshot: readonly { name: string; value: string }[];
+      quantity: string;
+      unitPrice: string;
+      gross: string;
+    }[] = [];
+
+    for (const line of sortedLines) {
+      const variantRow = await sql<{
+        variant_id: string;
+        product_id: string;
+        inventory_item_id: string;
+        sku: string;
+        product_title: string;
+        variant_title: string | null;
+        option_snapshot: readonly { name: string; value: string }[];
+      }>`
+        select
+          v.id as variant_id, p.id as product_id, item.id as inventory_item_id,
+          v.sku, p.title as product_title, v.title as variant_title,
+          coalesce(
+            (select jsonb_agg(jsonb_build_object('name', opt.name, 'value', val.display_value) order by opt.position)
+             from catalog.variant_option_values assignment
+             join catalog.product_option_values val on val.id = assignment.option_value_id
+             join catalog.product_option_axes opt on opt.id = val.option_axis_id
+             where assignment.variant_id = v.id), '[]'::jsonb
+          ) as option_snapshot
+        from catalog.product_variants v
+        join catalog.products p on p.id = v.product_id
+        join inventory.inventory_items item on item.variant_id = v.id and item.organization_id = ${input.organizationId}
+        where v.id = ${line.variantId}
+          and v.status = 'ACTIVE'
+          and p.status = 'ACTIVE'
+          and item.status = 'ACTIVE'
+      `.execute(transaction);
+      const variant = variantRow.rows[0];
+      if (!variant)
+        throw new OrderDomainError(
+          'VALIDATION_FAILED',
+          `Variant ${line.variantId} was not found or is not active.`,
+        );
+      const gross = (Number(line.quantity) * Number(line.unitPrice)).toFixed(4);
+      resolvedLines.push({
+        variantId: variant.variant_id,
+        productId: variant.product_id,
+        inventoryItemId: variant.inventory_item_id,
+        sku: variant.sku,
+        productTitle: variant.product_title,
+        variantTitle: variant.variant_title,
+        optionSnapshot: variant.option_snapshot,
+        quantity: line.quantity.trim(),
+        unitPrice: line.unitPrice.trim(),
+        gross,
+      });
+    }
+
+    // ---- Compute totals ---------------------------------------------------
+    const subtotalAmount = resolvedLines
+      .reduce((sum, l) => sum + Number(l.gross), 0)
+      .toFixed(4);
+    const totalAmount = (Number(subtotalAmount) + Number(deliveryAmountRaw)).toFixed(4);
+
+    // ---- Insert order header -----------------------------------------------
+    const orderNumber = await nextOrderNumber(transaction, input.organizationId);
+    const orderCreated = await sql<{ id: string }>`
+      insert into orders.orders (
+        organization_id, order_number, customer_id, source, currency_code,
+        order_status, payment_method,
+        subtotal_amount, discount_amount, delivery_amount, tax_amount, total_amount
+      ) values (
+        ${input.organizationId}, ${orderNumber}, ${input.customerId}, 'MANUAL',
+        ${currency}, 'PENDING', ${input.paymentMethod},
+        ${subtotalAmount}::numeric, 0::numeric,
+        ${deliveryAmountRaw}::numeric, 0::numeric,
+        ${totalAmount}::numeric
+      ) returning id
+    `.execute(transaction);
+    const orderId = orderCreated.rows[0]?.id;
+    if (!orderId) throw new Error('Manual order creation did not return an id.');
+
+    // ---- Customer and address snapshots -----------------------------------
+    // Fetch primary contact details from the customer's profile.
+    const primaryContact = await sql<{ phone: string | null; email: string | null }>`
+      select
+        (select raw_value from customers.customer_phones where customer_id = ${input.customerId} and is_primary order by created_at limit 1) as phone,
+        (select raw_value from customers.customer_emails where customer_id = ${input.customerId} and is_primary order by created_at limit 1) as email
+    `.execute(transaction);
+    const phone = primaryContact.rows[0]?.phone ?? input.deliveryAddress.phone;
+    const email = primaryContact.rows[0]?.email ?? null;
+
+    await sql`
+      insert into orders.order_customer_snapshots
+        (order_id, organization_id, customer_id, display_name, phone, email)
+      values (${orderId}, ${input.organizationId}, ${input.customerId},
+        ${customer.display_name}, ${phone}, ${email})
+    `.execute(transaction);
+    await sql`
+      insert into orders.order_addresses (
+        organization_id, order_id, address_type,
+        geography_node_id, recipient_name, phone,
+        address_line_1, address_line_2, area, city, district, postal_code, country_code
+      ) values (
+        ${input.organizationId}, ${orderId}, 'DELIVERY',
+        ${input.deliveryAddress.geographyNodeId ?? null},
+        ${input.deliveryAddress.recipientName.trim()},
+        ${input.deliveryAddress.phone.trim()},
+        ${input.deliveryAddress.addressLine1.trim()},
+        ${input.deliveryAddress.addressLine2?.trim() ?? null},
+        ${input.deliveryAddress.area?.trim() ?? null},
+        ${input.deliveryAddress.city?.trim() ?? null},
+        ${input.deliveryAddress.district?.trim() ?? null},
+        ${input.deliveryAddress.postalCode?.trim() ?? null},
+        ${input.deliveryAddress.countryCode}
+      )
+    `.execute(transaction);
+
+    // Optionally save address to customer profile.
+    if (input.deliveryAddress.saveToCustomer) {
+      await sql`
+        insert into customers.customer_addresses (
+          organization_id, customer_id, recipient_name, phone,
+          address_line_1, address_line_2, geography_node_id,
+          area, city, district, postal_code, country_code, is_default
+        ) values (
+          ${input.organizationId}, ${input.customerId},
+          ${input.deliveryAddress.recipientName.trim()},
+          ${input.deliveryAddress.phone.trim()},
+          ${input.deliveryAddress.addressLine1.trim()},
+          ${input.deliveryAddress.addressLine2?.trim() ?? null},
+          ${input.deliveryAddress.geographyNodeId ?? null},
+          ${input.deliveryAddress.area?.trim() ?? null},
+          ${input.deliveryAddress.city?.trim() ?? null},
+          ${input.deliveryAddress.district?.trim() ?? null},
+          ${input.deliveryAddress.postalCode?.trim() ?? null},
+          ${input.deliveryAddress.countryCode},
+          false
+        )
+      `.execute(transaction);
+    }
+
+    // ---- Order lines + inventory reservations ----------------------------
+    // Lines are processed in variantId sort order (consistent with lock ordering above).
+    for (const line of resolvedLines) {
+      const created = await sql<{ id: string }>`
+        insert into orders.order_lines (
+          organization_id, order_id, product_id, variant_id, inventory_item_id,
+          quantity, sku_snapshot, product_title_snapshot, variant_title_snapshot, option_snapshot,
+          unit_price, gross_amount, discount_amount, net_amount
+        ) values (
+          ${input.organizationId}, ${orderId}, ${line.productId}, ${line.variantId},
+          ${line.inventoryItemId},
+          ${line.quantity}::numeric, ${line.sku}, ${line.productTitle},
+          ${line.variantTitle}, ${JSON.stringify(line.optionSnapshot)}::jsonb,
+          ${line.unitPrice}::numeric, ${line.gross}::numeric,
+          0::numeric, ${line.gross}::numeric
+        ) returning id
+      `.execute(transaction);
+      const lineId = created.rows[0]?.id;
+      if (!lineId) throw new Error('Order line creation did not return an id.');
+
+      // Shared reservation primitive \u2014 same function used by placeOrder.
+      try {
+        const reservation = await createInventoryReservationInTransaction(transaction, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          variantId: line.variantId,
+          locationId: input.locationId,
+          quantity: line.quantity,
+          sourceType: 'ORDER_LINE',
+          sourceReference: lineId,
+          idempotencyKey: `manual-order:${orderId}:${lineId}`,
+        });
+        await sql`
+          insert into orders.order_inventory_reservations
+            (organization_id, order_id, order_line_id, reservation_id)
+          values (${input.organizationId}, ${orderId}, ${lineId}, ${reservation.reservationId})
+        `.execute(transaction);
+        await sql`
+          insert into inventory.inventory_reservation_allocations
+            (organization_id, reservation_id, order_line_id, inventory_item_id, location_id, reserved_quantity)
+          values (${input.organizationId}, ${reservation.reservationId}, ${lineId},
+            ${reservation.inventoryItemId}, ${input.locationId}, ${line.quantity}::numeric)
+        `.execute(transaction);
+      } catch (error) {
+        if (error instanceof InventoryDomainError && error.code === 'INSUFFICIENT_STOCK')
+          throw new OrderDomainError(
+            'OUT_OF_STOCK',
+            `Insufficient stock for variant ${line.variantId} at the selected location.`,
+          );
+        throw error;
+      }
+    }
+
+    // ---- Payment intent ---------------------------------------------------
+    await createPaymentIntentForOrder(transaction, {
+      organizationId: input.organizationId,
+      orderId,
+      orderNumber,
+      paymentMethod: input.paymentMethod,
+      currency,
+      expectedAmount: totalAmount,
+    });
+
+    // ---- Finalize idempotency record -------------------------------------
+    await sql`
+      update platform.idempotency_records
+      set status = 'SUCCEEDED', result_entity_type = 'orders.order',
+          result_entity_id = ${orderId}::uuid,
+          safe_response = ${JSON.stringify({ orderId, orderNumber })}::jsonb,
+          completed_at = now()
+      where id = ${recordId}
+    `.execute(transaction);
+
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'orders.order.placed',
+      targetType: 'orders.order',
+      targetId: orderId,
+      metadata: { orderNumber, source: 'MANUAL', paymentMethod: input.paymentMethod },
+    });
+    await sql`
+      insert into platform.outbox_events (
+        organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at
+      ) values (
+        ${input.organizationId}, 'orders.order.placed', 1, 'orders.order', ${orderId}, 1,
+        ${JSON.stringify({ orderId, orderNumber, source: 'MANUAL' })}::jsonb, now()
+      )
+    `.execute(transaction);
+
+    return orderView(transaction, orderId);
+  });
+}
+
+export async function processOrderOutbox(db: Kysely<DatabaseSchema>): Promise<number> {
+  const result = await sql<{
+    event_id: string;
+    organization_id: string;
+    aggregate_id: string;
+  }>`
+    with next_batch as (
+      select event.id, event.organization_id, event.aggregate_id
+      from platform.outbox_events event
+      left join platform.event_consumer_receipts receipt 
+        on receipt.outbox_event_id = event.id 
+        and receipt.consumer_name = 'orders.autocomplete.v1'
+      where event.event_type = 'delivery.all_lines_delivered'
+        and receipt.id is null
+      order by event.occurred_at asc
+      limit 100
+      for update of event skip locked
+    ),
+    marked as (
+      insert into platform.event_consumer_receipts (outbox_event_id, consumer_name, status, processed_at)
+      select id, 'orders.autocomplete.v1', 'COMPLETED', now()
+      from next_batch
+    )
+    select id as event_id, organization_id, aggregate_id from next_batch
+  `.execute(db);
+
+  let processed = 0;
+  for (const row of result.rows) {
+    try {
+      await completeOrder(db, {
+        organizationId: row.organization_id,
+        orderId: row.aggregate_id,
+        actorId: null,
+        idempotencyKey: `auto-complete:${row.event_id}`,
+        triggerOutboxEventId: row.event_id,
+      });
+      processed++;
+    } catch (error) {
+      if (error instanceof OrderDomainError) {
+        // Skip invalid transition errors (already completed or changed)
+        processed++;
+      } else {
+        // We log and let the lease expire if it was an infrastructure error, or just continue
+        console.error('Failed to auto-complete order', row.aggregate_id, error);
+      }
+    }
+  }
+
+  return processed;
 }

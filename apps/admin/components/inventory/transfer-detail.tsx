@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, MapPin, Package, Settings, Truck, ArrowRight, CheckCircle, FileText, Ban } from 'lucide-react';
 import Link from 'next/link';
+import type { WarehouseTransferDetailDto } from '@maevelle/contracts';
 
 import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
 import { InventoryEmptyState } from './inventory-page-ui';
@@ -13,12 +14,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 
 export function TransferDetail({ transferId }: { transferId: string }) {
   const router = useRouter();
-  const [transfer, setTransfer] = useState<any | null>(null);
+  const [transfer, setTransfer] = useState<WarehouseTransferDetailDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    inventoryRequest<{ data: any }>(`/warehouse/transfers/${transferId}`)
+    inventoryRequest<{ data: WarehouseTransferDetailDto }>(`/warehouse/transfers/${transferId}`)
       .then((res) => {
         setTransfer(res.data);
         setError(null);

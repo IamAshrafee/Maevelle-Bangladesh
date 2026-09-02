@@ -54,9 +54,10 @@ async function fixture(onHand = '10') {
     values (${organization.id}, ${type.rows[0]!.id}, ${`fulfillment-${crypto.randomUUID().slice(0, 10)}`}, 'Fulfillment Product', 'ACTIVE', 'PUBLISHED', now())
     returning id
   `.execute(database.db);
+  const skuId = crypto.randomUUID().slice(0, 10);
   const variant = await sql<{ id: string }>`
     insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature)
-    values (${organization.id}, ${product.rows[0]!.id}, ${`FUL-${crypto.randomUUID().slice(0, 10)}`}, ${`FUL-${crypto.randomUUID().slice(0, 10)}`}, ${crypto.randomUUID()})
+    values (${organization.id}, ${product.rows[0]!.id}, ${`FUL-${skuId.toUpperCase()}`}, ${`FUL-${skuId.toUpperCase()}`}, ${crypto.randomUUID()})
     returning id
   `.execute(database.db);
   const location = await createLocation(database.db, {

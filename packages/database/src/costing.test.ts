@@ -68,9 +68,10 @@ async function receivedShipment() {
   }>`insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status, published_at) values (${organization.id}, ${type.rows[0]!.id}, ${`cost-${crypto.randomUUID().slice(0, 8)}`}, 'Cost product', 'ACTIVE', 'PUBLISHED', now()) returning id`.execute(
     database.db,
   );
+  const skuString = `COST-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const variant = await sql<{
     id: string;
-  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${`COST-${crypto.randomUUID().slice(0, 8)}`}, ${`COST-${crypto.randomUUID().slice(0, 8)}`}, ${crypto.randomUUID()}) returning id`.execute(
+  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${skuString}, ${skuString}, ${crypto.randomUUID()}) returning id`.execute(
     database.db,
   );
   const location = await createLocation(database.db, {

@@ -786,3 +786,123 @@ export interface PaginationDto {
   readonly totalItems: number;
   readonly totalPages: number;
 }
+
+export interface PaginatedEnvelope<T> {
+  readonly items: readonly T[];
+  readonly totalCount: number;
+}
+
+export interface OrderSummaryDto {
+  readonly id: string;
+  readonly orderNumber: string;
+  readonly status: string;
+  readonly total: string;
+  readonly currency: string;
+  readonly createdAt: string;
+  readonly customerId?: string;
+  readonly customerName?: string;
+  readonly customerEmail?: string;
+}
+
+export interface OrderDetailDto extends OrderSummaryDto {
+  readonly version: number;
+  readonly lines: readonly OrderLineDto[];
+  readonly notes: readonly OrderNoteDto[];
+  readonly timeline: readonly OrderTimelineEventDto[];
+  readonly payment: OrderPaymentSummaryDto;
+  readonly fulfillments?: readonly any[];
+  readonly deliveries?: readonly any[];
+  readonly returnCases?: readonly any[];
+  readonly refunds?: readonly any[];
+  readonly discountApplications?: readonly any[];
+}
+
+export interface OrderLineDto {
+  readonly id: string;
+  readonly variantId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly quantity: number;
+  readonly unitPrice: string;
+  readonly total: string;
+}
+
+export interface OrderNoteDto {
+  readonly id: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly authorId: string;
+}
+
+export interface OrderTimelineEventDto {
+  readonly id: string;
+  readonly eventType: string;
+  readonly occurredAt: string;
+  readonly payload: Record<string, unknown>;
+}
+
+export interface OrderPaymentSummaryDto {
+  readonly method: string;
+  readonly expected: string;
+  readonly collected: string;
+  readonly refunded: string;
+  readonly outstanding: string;
+  readonly status: string;
+}
+
+export interface CustomerSummaryDto {
+  readonly id: string;
+  readonly displayName: string;
+  readonly email?: string;
+  readonly phone?: string;
+  readonly status: string;
+  readonly createdAt: string;
+}
+
+export interface CustomerDetailDto extends CustomerSummaryDto {
+  readonly version: number;
+  readonly addresses: readonly CustomerAddressDto[];
+  readonly phones: readonly CustomerPhoneDto[];
+  readonly emails: readonly CustomerEmailDto[];
+  readonly tags: readonly CustomerTagDto[];
+  readonly notes: readonly CustomerNoteDto[];
+}
+
+export interface CustomerPhoneDto {
+  readonly id: string;
+  readonly phone: string;
+  readonly isPrimary: boolean;
+}
+
+export interface CustomerEmailDto {
+  readonly id: string;
+  readonly email: string;
+  readonly isPrimary: boolean;
+  readonly isVerified: boolean;
+}
+
+export interface CustomerAddressDto {
+  readonly id: string;
+  readonly addressLine1: string;
+  readonly addressLine2?: string;
+  readonly city?: string;
+  readonly isDefault: boolean;
+  readonly version: number;
+  readonly label?: string;
+  readonly recipientName?: string;
+  readonly phone?: string;
+  readonly status: string;
+}
+
+export interface CustomerTagDto {
+  readonly id: string;
+  readonly label: string;
+  readonly color?: string;
+}
+
+export interface CustomerNoteDto {
+  readonly id: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly authorId: string;
+}

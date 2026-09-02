@@ -68,7 +68,7 @@ async function returnFixture() {
   }>`insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status, published_at) values (${organization.id}, ${type.rows[0]!.id}, ${`return-${crypto.randomUUID().slice(0, 8)}`}, 'Return product', 'ACTIVE', 'PUBLISHED', now()) returning id`.execute(
     database.db,
   );
-  const sku = `RET-${crypto.randomUUID().slice(0, 8)}`;
+  const sku = `RET-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const variant = await sql<{
     id: string;
   }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${sku}, ${sku}, ${crypto.randomUUID()}) returning id`.execute(

@@ -58,9 +58,10 @@ async function commerceFixture() {
   }>`insert into catalog.products (organization_id, product_type_id, handle, title, status, publication_status, published_at) values (${organization.id}, ${productType.rows[0]!.id}, ${`hat-${crypto.randomUUID().slice(0, 10)}`}, 'Commerce Hat', 'ACTIVE', 'PUBLISHED', now()) returning id`.execute(
     database.db,
   );
+  const skuString = `SKU-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const variant = await sql<{
     id: string;
-  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${`SKU-${crypto.randomUUID().slice(0, 8)}`}, ${`SKU-${crypto.randomUUID().slice(0, 8)}`}, ${crypto.randomUUID()}) returning id`.execute(
+  }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${skuString}, ${skuString}, ${crypto.randomUUID()}) returning id`.execute(
     database.db,
   );
   const location = await createLocation(database.db, {
@@ -171,14 +172,18 @@ describe('commercial foundation invariants', () => {
       isPrimary: true,
     });
     await addCustomerPhone(database.db, { ...fixture, customerId: two.id, phone: '+01700000000' });
-    await expect(listCustomers(database.db, fixture.organizationId, 'First')).resolves.toEqual([
+    await expect(listCustomers(database.db, fixture.organizationId, { q: 'First' })).resolves.toEqual(
       expect.objectContaining({
-        id: one.id,
-        primaryPhone: '01700 000000',
-        orderCount: 0,
-        totalSpend: '0',
-      }),
-    ]);
+        data: [
+          expect.objectContaining({
+            id: one.id,
+            primaryPhone: '01700 000000',
+            orderCount: 0,
+            totalSpend: '0',
+          }),
+        ],
+      })
+    );
     expect(
       await findCustomerDuplicateCandidates(database.db, {
         organizationId: fixture.organizationId,
@@ -403,5 +408,102 @@ describe('commercial foundation invariants', () => {
       }),
     ).rejects.toMatchObject({ code: 'STALE_VERSION' });
     expect((await getGuestCart(database.db, first.token)).lines).toHaveLength(1);
+  });
+});
+
+describe('Customers Domain Extensions (Phase 3)', () => {
+  it('supports full customer detail and status updates', async () => {
+    const fixtureData = await commerceFixture();
+    const { createCustomer, getCustomerDetail, updateCustomer } = await import('./customers.js');
+    
+    const customer = await createCustomer(database.db, {
+      organizationId: fixtureData.organizationId,
+      actorId: fixtureData.actorId,
+      displayName: 'Detail Test',
+    });
+
+    const initialDetail = await getCustomerDetail(database.db, fixtureData.organizationId, customer.id);
+    expect(initialDetail.displayName).toBe('Detail Test');
+    expect(initialDetail.status).toBe('ACTIVE');
+
+    const update = await updateCustomer(database.db, {
+      organizationId: fixtureData.organizationId,
+      actorId: fixtureData.actorId,
+      customerId: customer.id,
+      expectedVersion: initialDetail.version,
+      displayName: 'Updated Test',
+      status: 'INACTIVE',
+    });
+
+    const updatedDetail = await getCustomerDetail(database.db, fixtureData.organizationId, customer.id);
+    expect(updatedDetail.displayName).toBe('Updated Test');
+    expect(updatedDetail.status).toBe('INACTIVE');
+    expect(updatedDetail.version).toBe(update.version);
+  });
+
+  it('supports notes, tags, and contact deletion', async () => {
+    const fixtureData = await commerceFixture();
+    const { 
+      createCustomer, addCustomerPhone, removeCustomerPhone, 
+      addCustomerNote, createTag, assignTagToCustomer, getCustomerDetail 
+    } = await import('./customers.js');
+
+    const customer = await createCustomer(database.db, {
+      organizationId: fixtureData.organizationId,
+      actorId: fixtureData.actorId,
+      displayName: 'Features Test',
+    });
+
+    const phone1 = await addCustomerPhone(database.db, {
+      organizationId: fixtureData.organizationId,
+      actorId: fixtureData.actorId,
+      customerId: customer.id,
+      phone: '01711223344',
+      isPrimary: true,
+    });
+    
+    const phone2 = await addCustomerPhone(database.db, {
+      organizationId: fixtureData.organizationId,
+      actorId: fixtureData.actorId,
+      customerId: customer.id,
+      phone: '01799887766',
+      isPrimary: false,
+    });
+
+    await addCustomerNote(database.db, {
+      organizationId: fixtureData.organizationId,
+      actorId: fixtureData.actorId,
+      customerId: customer.id,
+      body: 'Test Note',
+    });
+
+    const tag = await createTag(database.db, {
+      organizationId: fixtureData.organizationId,
+      label: 'VIP',
+      color: '#ff0000',
+    });
+
+    await assignTagToCustomer(database.db, {
+      organizationId: fixtureData.organizationId,
+      actorId: fixtureData.actorId,
+      customerId: customer.id,
+      tagId: tag.id,
+    });
+
+    // Remove the secondary phone
+    await removeCustomerPhone(database.db, {
+      organizationId: fixtureData.organizationId,
+      actorId: fixtureData.actorId,
+      customerId: customer.id,
+      phoneId: phone2.id,
+    });
+
+    const detail = await getCustomerDetail(database.db, fixtureData.organizationId, customer.id);
+    expect(detail.phones).toHaveLength(1);
+    expect(detail.phones[0]?.phone).toBe('01711223344');
+    expect(detail.notes).toHaveLength(1);
+    expect(detail.notes[0]?.body).toBe('Test Note');
+    expect(detail.tags).toHaveLength(1);
+    expect(detail.tags[0]?.label).toBe('VIP');
   });
 });

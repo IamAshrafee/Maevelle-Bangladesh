@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, MapPin, Package, Settings, Truck } from 'lucide-react';
 import Link from 'next/link';
 
-import type { WarehouseLocationDto } from '@maevelle/contracts';
+import type { WarehouseLocationDto, InventoryStockViewDto } from '@maevelle/contracts';
 
 import { inventoryRequest } from '@/lib/inventory/api';
 import { InventoryEmptyState } from './inventory-page-ui';
@@ -17,17 +17,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export function LocationDetail({ locationId }: { locationId: string }) {
   const router = useRouter();
-  const [location, setLocation] = useState<any | null>(null);
+  const [location, setLocation] = useState<WarehouseLocationDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   // We fetch stock for this specific location to display in the stock table tab
-  const [stock, setStock] = useState<any[]>([]);
+  const [stock, setStock] = useState<InventoryStockViewDto[]>([]);
   const [stockLoading, setStockLoading] = useState(true);
 
   useEffect(() => {
     // Fetch Location Details
-    inventoryRequest<{ data: any }>(`/warehouse/locations/${locationId}`)
+    inventoryRequest<{ data: WarehouseLocationDto }>(`/warehouse/locations/${locationId}`)
       .then((res) => {
         setLocation(res.data);
         setError(null);
@@ -36,7 +36,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
       .finally(() => setIsLoading(false));
       
     // Fetch Stock for this location
-    inventoryRequest<{ data: any }>(`/inventory/stock?locationId=${locationId}&limit=100`)
+    inventoryRequest<{ data: { items: InventoryStockViewDto[] } }>(`/inventory/stock?locationId=${locationId}&limit=100`)
       .then((res) => {
         setStock(res.data.items);
       })

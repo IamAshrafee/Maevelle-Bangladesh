@@ -53,10 +53,10 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       source text not null default 'STOREFRONT' check (source in ('STOREFRONT', 'MANUAL')),
       currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
       order_status text not null default 'PENDING' check (order_status in ('PENDING', 'CONFIRMED', 'ON_HOLD', 'COMPLETED', 'CANCELLED')),
-      payment_method text not null check (payment_method = 'COD'),
+      payment_method text not null check (payment_method in ('COD', 'BKASH_MANUAL', 'NAGAD_MANUAL')),
       subtotal_amount numeric(20,4) not null check (subtotal_amount >= 0),
       discount_amount numeric(20,4) not null check (discount_amount >= 0),
-      delivery_amount numeric(20,4) not null default 0 check (delivery_amount = 0),
+      delivery_amount numeric(20,4) not null default 0 check (delivery_amount >= 0),
       tax_amount numeric(20,4) not null default 0 check (tax_amount = 0),
       total_amount numeric(20,4) not null check (total_amount >= 0),
       confirmed_at timestamptz,
@@ -177,14 +177,40 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       on promotions.promotion_usage (coupon_code_id, customer_id, order_id)
       where status = 'COMMITTED' and coupon_code_id is not null;
 
+    -- Internal and customer-visible notes on an order.
+    -- Distinct from the audit log: notes are operator-authored commentary.
+    create table orders.order_notes (
+      id              uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      order_id        uuid not null references orders.orders(id),
+      author_actor_id uuid not null,
+      note_type       text not null default 'INTERNAL'
+                        check (note_type in ('INTERNAL', 'CUSTOMER_VISIBLE')),
+      body            text not null check (length(trim(body)) > 0),
+      created_at      timestamptz not null default now(),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id)
+    );
+    create index order_notes_order_idx on orders.order_notes (order_id, created_at desc);
+
+    -- Traceability record linking order completion to the triggering event.
+    -- trigger_outbox_event_id is null when an admin manually completes an order.
+    create table orders.order_completion_events (
+      order_id                uuid primary key references orders.orders(id),
+      organization_id         uuid not null references platform.organizations(id),
+      trigger_outbox_event_id uuid,
+      completed_by_actor_id   uuid,
+      created_at              timestamptz not null default now()
+    );
+
     insert into iam.capability_definitions (capability_code, domain, description, sensitivity) values
-      ('orders.view', 'orders', 'View Orders and historical commercial snapshots.', 'INTERNAL'),
-      ('orders.manage', 'orders', 'Confirm, hold, and cancel eligible Orders.', 'HIGH')
+      ('orders.view',   'orders', 'View Orders and historical commercial snapshots.', 'INTERNAL'),
+      ('orders.manage', 'orders', 'Confirm, hold, resume, cancel, complete, and annotate eligible Orders.', 'HIGH'),
+      ('orders.create', 'orders', 'Create manual Orders from the admin panel.', 'HIGH')
     on conflict (capability_code) do nothing;
     insert into iam.membership_capability_grants (membership_id, capability_code)
       select membership.id, capability.capability_code
       from iam.organization_memberships membership
-      cross join (values ('orders.view'), ('orders.manage')) as capability(capability_code)
+      cross join (values ('orders.view'), ('orders.manage'), ('orders.create')) as capability(capability_code)
       where membership.membership_type = 'OWNER' and membership.status = 'ACTIVE'
     on conflict do nothing;
   `.execute(db);

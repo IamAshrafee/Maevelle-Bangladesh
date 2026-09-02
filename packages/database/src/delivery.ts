@@ -636,15 +636,37 @@ async function recordOutcome(
       await sql`update delivery.deliveries set operational_status = 'DELIVERED', outcome_status = 'DELIVERED', delivered_at = now(), version = version + 1, updated_at = now() where id = ${input.deliveryId}`.execute(
         transaction,
       );
-      const fulfillment = await sql<{
+      const deliveryInfo = await sql<{
         fulfillment_id: string;
-      }>`select fulfillment_id from delivery.deliveries where id = ${input.deliveryId}`.execute(
+        order_id: string;
+      }>`select fulfillment_id, order_id from delivery.deliveries where id = ${input.deliveryId}`.execute(
         transaction,
       );
       await recognizeCogsForDeliveredFulfillmentInTransaction(transaction, {
         organizationId: input.organizationId,
-        fulfillmentId: fulfillment.rows[0]!.fulfillment_id,
+        fulfillmentId: deliveryInfo.rows[0]!.fulfillment_id,
       });
+
+      const undelivered = await sql<{ count: string }>`
+        select count(*)::text as count
+        from orders.order_lines ol
+        where ol.order_id = ${deliveryInfo.rows[0]!.order_id}
+          and (
+            select coalesce(sum(dl.delivered_quantity), 0)
+            from delivery.delivery_lines dl
+            join delivery.deliveries d on d.id = dl.delivery_id
+            where dl.order_line_id = ol.id
+              and d.outcome_status = 'DELIVERED'
+          ) < ol.quantity
+      `.execute(transaction);
+
+      if (Number(undelivered.rows[0]?.count ?? 1) === 0) {
+        await sql`
+          insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at)
+          values (${input.organizationId}, 'delivery.all_lines_delivered', 1, 'orders.order', ${deliveryInfo.rows[0]!.order_id}, 1,
+            ${JSON.stringify({ orderId: deliveryInfo.rows[0]!.order_id, deliveryId: input.deliveryId })}::jsonb, now())
+        `.execute(transaction);
+      }
     } else {
       await sql`update delivery.delivery_lines set failed_quantity = quantity, version = version + 1, updated_at = now() where organization_id = ${input.organizationId} and delivery_id = ${input.deliveryId}`.execute(
         transaction,

@@ -126,9 +126,43 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       check (alias_customer_id <> canonical_customer_id)
     );
 
+    -- Operator-authored notes attached to a customer record.
+    create table customers.customer_notes (
+      id              uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      customer_id     uuid not null,
+      author_actor_id uuid not null,
+      body            text not null check (length(trim(body)) > 0),
+      created_at      timestamptz not null default now(),
+      foreign key (organization_id, customer_id) references customers.customers(organization_id, id)
+    );
+    create index customer_notes_customer_idx on customers.customer_notes (customer_id, created_at desc);
+
+    -- Organisation-level tag registry: tags are shared across customers, not free-form per record.
+    -- Shared registry allows filtering, reporting, and consistent naming without typo variants.
+    create table customers.customer_tags (
+      id              uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      label           text not null check (length(trim(label)) > 0),
+      color           text,
+      created_at      timestamptz not null default now()
+    );
+    create unique index customer_tags_label_unique_idx on customers.customer_tags (organization_id, lower(label));
+
+    -- Many-to-many assignment of org tags to individual customers.
+    create table customers.customer_tag_assignments (
+      organization_id uuid not null references platform.organizations(id),
+      customer_id     uuid not null,
+      tag_id          uuid not null references customers.customer_tags(id),
+      created_at      timestamptz not null default now(),
+      primary key (organization_id, customer_id, tag_id),
+      foreign key (organization_id, customer_id) references customers.customers(organization_id, id)
+    );
+    create index customer_tag_customer_idx on customers.customer_tag_assignments (customer_id);
+
     insert into iam.capability_definitions (capability_code, domain, description, sensitivity) values
-      ('customers.view', 'customers', 'View customer administration data.', 'HIGH'),
-      ('customers.manage', 'customers', 'Create and manage commercial customers.', 'HIGH')
+      ('customers.view',   'customers', 'View customer administration data.', 'HIGH'),
+      ('customers.manage', 'customers', 'Create and manage commercial customers, contacts, addresses, notes, and tags.', 'HIGH')
     on conflict (capability_code) do nothing;
     insert into iam.membership_capability_grants (membership_id, capability_code)
       select membership.id, capability.capability_code

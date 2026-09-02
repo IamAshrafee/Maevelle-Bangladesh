@@ -136,13 +136,13 @@ export function TransferOverview() {
                       <Badge variant="outline">{transfer.status}</Badge>
                     </td>
                     <td className="p-4 align-middle">
-                      {transfer.sourceLocationId} {/* TODO: Map location names if they exist */}
+                      {transfer.sourceLocationName || transfer.sourceLocationId}
                     </td>
                     <td className="p-4 align-middle text-muted-foreground">
                       <ArrowRight className="h-4 w-4" />
                     </td>
                     <td className="p-4 align-middle">
-                      {transfer.destinationLocationId}
+                      {transfer.destinationLocationName || transfer.destinationLocationId}
                     </td>
                     <td className="p-4 align-middle text-muted-foreground">
                       {formatInventoryDate(transfer.createdAt)}
