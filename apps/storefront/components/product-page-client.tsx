@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ApiEnvelope, PublicSizeGuideDto, StorefrontProductDto } from '@maevelle/contracts';
 import { ProductReviews } from '@/components/product-reviews';
+import { SizeGuideDialog } from '@/components/size-guide-dialog';
 import { notifyCartChanged, useStorefrontContext } from '@/components/storefront-context';
 
 interface CartView {
@@ -22,8 +23,17 @@ function money(amount: string, currency = 'BDT') {
   }).format(Number(amount));
 }
 
+function formatMeasurementNumber(val: string | null | undefined): string {
+  if (!val) return '';
+  const n = Number(val);
+  return Number.isFinite(n) ? (Number.isInteger(n) ? n.toString() : n.toFixed(1).replace(/\.0$/, '')) : val;
+}
+
 function measurement(value: PublicSizeGuideDto['rows'][number]['measurements'][number]) {
-  return `${value.exact ?? `${value.min}–${value.max}`} ${value.unit}${value.approximate ? ' approx.' : ''}`;
+  const exact = formatMeasurementNumber(value.exact);
+  const min = formatMeasurementNumber(value.min);
+  const max = formatMeasurementNumber(value.max);
+  return `${exact || `${min}–${max}`} ${value.unit}${value.approximate ? ' approx.' : ''}`;
 }
 
 export function ProductPageClient() {
@@ -423,47 +433,38 @@ export function ProductPageClient() {
           <ProductReviews productId={product.id} organizationId={context.organizationId} />
         </div>
       </article>
-      <dialog className="size-guide-dialog" ref={sizeDialog}>
-        <header>
-          <div>
-            <p className="eyebrow">Find your fit</p>
-            <h2>{guide?.name ?? 'Size guide'}</h2>
-          </div>
-          <button
-            type="button"
-            aria-label="Close size guide"
-            onClick={() => sizeDialog.current?.close()}
-          >
-            ✕
-          </button>
-        </header>
-        {guide?.instructions ? <p>{guide.instructions}</p> : null}
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Size</th>
-                <th>Measurements</th>
-              </tr>
-            </thead>
-            <tbody>
-              {guide?.rows.map((row) => (
-                <tr key={row.label}>
-                  <th scope="row">{row.label}</th>
-                  <td>
-                    {row.measurements
-                      .map((item) => `${item.name}: ${measurement(item)}`)
-                      .join(' · ')}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="dialog-note">
-          Measurements are product-specific. Choose the closest fit for your preferred ease.
-        </p>
-      </dialog>
+      <SizeGuideDialog
+        guide={guide}
+        dialogRef={sizeDialog}
+        productTitle={product.title}
+        selectedSizeLabel={
+          product.options
+            .find((a) => a.code.toLowerCase().includes('size') || a.name.toLowerCase().includes('size'))
+            ?.values.find(
+              (v) =>
+                v.id ===
+                selected[
+                  product.options.find(
+                    (a) => a.code.toLowerCase().includes('size') || a.name.toLowerCase().includes('size'),
+                  )?.id ?? ''
+                ],
+            )?.label
+        }
+        onSelectSize={(label) => {
+          const axis = product.options.find(
+            (a) => a.code.toLowerCase().includes('size') || a.name.toLowerCase().includes('size'),
+          );
+          if (!axis) return;
+          const match = axis.values.find(
+            (v) =>
+              v.label.trim().toLowerCase() === label.trim().toLowerCase() ||
+              v.code.trim().toLowerCase() === label.trim().toLowerCase(),
+          );
+          if (match) {
+            setSelected((prev) => ({ ...prev, [axis.id]: match.id }));
+          }
+        }}
+      />
       <dialog className="gallery-dialog" ref={galleryDialog}>
         <button
           type="button"

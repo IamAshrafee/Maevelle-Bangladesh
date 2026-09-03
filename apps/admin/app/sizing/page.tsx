@@ -1,141 +1,62 @@
 'use client';
 
-import { CheckCircle2, Plus, RefreshCw, Ruler, Send, ShieldCheck } from 'lucide-react';
+import {
+  ShieldCheck,
+  AlertCircle,
+  FileWarning,
+  Layers,
+  ArrowRight,
+  Check,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+} from 'lucide-react';
 import Link from 'next/link';
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import {
+  fetchSizingQualityChecks,
+  fetchSizeOptionValues,
+  fetchSizingWorkspace,
+  linkOptionValueToSizeDefinition,
+} from '@/lib/sizing/api';
+import type {
+  SizingQualityChecksDto,
+  SizeOptionValueMappingDto,
+  SizeDefinitionDto,
+} from '@maevelle/contracts';
+
+import {
+  OperationalPageHeader,
   OperationalEmptyState,
   OperationalFeedback,
-  OperationalPageHeader,
 } from '../../components/operational-worklist';
-import { StatusBadge } from '../../components/status-badge';
 
-type SizingWorkspace = {
-  readonly domains: readonly {
-    id: string;
-    code: string;
-    name: string;
-    subjectType: 'BODY' | 'GARMENT' | 'PRODUCT';
-    status: string;
-  }[];
-  readonly systems: readonly {
-    id: string;
-    sizingDomainId: string;
-    code: string;
-    name: string;
-    regionCode: string | null;
-    status: string;
-  }[];
-  readonly sizeDefinitions: readonly {
-    id: string;
-    sizeSystemId: string;
-    code: string;
-    label: string;
-    sortOrder: number;
-  }[];
-  readonly measurementDefinitions: readonly {
-    id: string;
-    sizingDomainId: string;
-    code: string;
-    name: string;
-    subjectType: string;
-    defaultUnit: 'cm' | 'inch';
-  }[];
-  readonly guides: readonly {
-    id: string;
-    name: string;
-    sizingDomainId: string;
-    status: string;
-    currentPublishedRevisionId: string | null;
-    version: number;
-    revisions: readonly {
-      id: string;
-      revisionNumber: number;
-      status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
-      instructions: string | null;
-      createdAt: string;
-      publishedAt: string | null;
-      rows: readonly {
-        id: string;
-        displayLabel: string;
-        position: number;
-        sizeDefinitionId: string | null;
-        measurements: readonly {
-          measurementDefinitionId: string;
-          exact: string | null;
-          min: string | null;
-          max: string | null;
-          unit: 'cm' | 'inch';
-          approximate: boolean;
-        }[];
-      }[];
-    }[];
-  }[];
-  readonly productConfigurations: readonly {
-    productId: string;
-    productTitle: string;
-    sizeSystemId: string;
-    sizeGuideId: string | null;
-    status: string;
-  }[];
-};
-
-type Product = { readonly id: string; readonly title: string; readonly handle: string };
-const emptyWorkspace: SizingWorkspace = {
-  domains: [],
-  systems: [],
-  sizeDefinitions: [],
-  measurementDefinitions: [],
-  guides: [],
-  productConfigurations: [],
-};
-
-async function responseError(response: Response, fallback: string) {
-  const payload = (await response.json().catch(() => ({}))) as {
-    error?: string | { message?: string };
-  };
-  return typeof payload.error === 'string' ? payload.error : (payload.error?.message ?? fallback);
-}
-
-function slug(value: FormDataEntryValue | null) {
-  return String(value ?? '')
-    .trim()
-    .toLocaleLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, '-')
-    .replaceAll(/^-|-$/g, '');
-}
-
-export default function SizingPage() {
-  const [workspace, setWorkspace] = useState<SizingWorkspace>(emptyWorkspace);
-  const [products, setProducts] = useState<readonly Product[]>([]);
-  const [selectedGuideId, setSelectedGuideId] = useState('');
-  const [selectedRevisionId, setSelectedRevisionId] = useState('');
-  const [message, setMessage] = useState('');
-  const [tone, setTone] = useState<'success' | 'warning' | 'danger'>('success');
+export default function SizingDashboardPage() {
+  const [checks, setChecks] = useState<SizingQualityChecksDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  // Unlinked Option Values Mapping Tool
+  const [optionValues, setOptionValues] = useState<readonly SizeOptionValueMappingDto[]>([]);
+  const [sizeDefinitions, setSizeDefinitions] = useState<readonly SizeDefinitionDto[]>([]);
+  const [mappingBusyId, setMappingBusyId] = useState<string | null>(null);
+  const [mappingMessage, setMappingMessage] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [sizingResponse, productsResponse] = await Promise.all([
-        fetch('/api/admin/sizing', { credentials: 'include', cache: 'no-store' }),
-        fetch('/api/admin/catalog/products', { credentials: 'include', cache: 'no-store' }),
+      const [checksData, optionsData, workspaceData] = await Promise.all([
+        fetchSizingQualityChecks(),
+        fetchSizeOptionValues(),
+        fetchSizingWorkspace(),
       ]);
-      if (!sizingResponse.ok)
-        throw new Error(
-          await responseError(sizingResponse, 'Sizing workspace could not be loaded.'),
-        );
-      if (!productsResponse.ok)
-        throw new Error(await responseError(productsResponse, 'Products could not be loaded.'));
-      const next = ((await sizingResponse.json()) as { data: SizingWorkspace }).data;
-      setWorkspace(next);
-      setProducts(((await productsResponse.json()) as { data: readonly Product[] }).data);
-      setSelectedGuideId((current) => current || next.guides[0]?.id || '');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Sizing workspace could not be loaded.');
-      setTone('danger');
+
+      setChecks(checksData);
+      setOptionValues(optionsData);
+      setSizeDefinitions(workspaceData.sizeDefinitions ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load checks');
     } finally {
       setLoading(false);
     }
@@ -145,779 +66,261 @@ export default function SizingPage() {
     void load();
   }, [load]);
 
-  const selectedGuide = useMemo(
-    () => workspace.guides.find((guide) => guide.id === selectedGuideId),
-    [selectedGuideId, workspace.guides],
-  );
-  const selectedRevision = useMemo(
-    () =>
-      selectedGuide?.revisions.find((revision) => revision.id === selectedRevisionId) ??
-      selectedGuide?.revisions[0],
-    [selectedGuide, selectedRevisionId],
-  );
-  const guideDomainId = selectedGuide?.sizingDomainId;
-  const domainSystems = workspace.systems.filter(
-    (system) => system.sizingDomainId === guideDomainId,
-  );
-  const domainMeasurements = workspace.measurementDefinitions.filter(
-    (definition) => definition.sizingDomainId === guideDomainId,
-  );
-  const guideDefinitions = workspace.sizeDefinitions.filter((definition) =>
-    domainSystems.some((system) => system.id === definition.sizeSystemId),
-  );
-
-  async function command(
-    path: string,
-    options: { method?: 'POST' | 'PUT'; body?: Record<string, unknown> },
-    success: string,
-  ) {
-    setBusy(true);
-    setMessage('');
+  const handleMapOptionValue = async (optionValueId: string, sizeDefinitionId: string) => {
+    setMappingBusyId(optionValueId);
+    setMappingMessage('');
     try {
-      const response = await fetch(path, {
-        method: options.method ?? 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(options.body ?? {}),
-      });
-      if (!response.ok) throw new Error(await responseError(response, 'Sizing command failed.'));
-      const payload =
-        response.status === 204
-          ? undefined
-          : ((await response.json()) as { data?: { id?: string; revisionId?: string } });
-      if (payload?.data?.id && path === '/api/admin/sizing/guides') {
-        setSelectedGuideId(payload.data.id);
-        setSelectedRevisionId(payload.data.revisionId ?? '');
-      }
-      setMessage(success);
-      setTone('success');
+      await linkOptionValueToSizeDefinition(optionValueId, sizeDefinitionId || null);
+      setMappingMessage('Size option linked successfully.');
       await load();
-      return true;
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Sizing command failed.');
-      setTone('danger');
-      return false;
+    } catch (err) {
+      setMappingMessage(err instanceof Error ? err.message : 'Failed to map option.');
     } finally {
-      setBusy(false);
+      setMappingBusyId(null);
     }
-  }
+  };
 
-  async function submitDomain(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    if (
-      await command(
-        '/api/admin/sizing/domains',
-        {
-          body: {
-            code: slug(form.get('code')),
-            name: form.get('name'),
-            subjectType: form.get('subjectType'),
-          },
-        },
-        'Sizing domain created.',
-      )
-    )
-      event.currentTarget.reset();
-  }
-  async function submitSystem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    if (
-      await command(
-        '/api/admin/sizing/systems',
-        {
-          body: {
-            sizingDomainId: form.get('sizingDomainId'),
-            code: slug(form.get('code')),
-            name: form.get('name'),
-            regionCode: form.get('regionCode') || undefined,
-          },
-        },
-        'Size system created.',
-      )
-    )
-      event.currentTarget.reset();
-  }
-  async function submitSize(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    if (
-      await command(
-        '/api/admin/sizing/definitions',
-        {
-          body: {
-            sizeSystemId: form.get('sizeSystemId'),
-            code: slug(form.get('code')),
-            label: form.get('label'),
-            sortOrder: Number(form.get('sortOrder') ?? 0),
-          },
-        },
-        'Size definition created.',
-      )
-    )
-      event.currentTarget.reset();
-  }
-  async function submitMeasurement(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    if (
-      await command(
-        '/api/admin/sizing/measurements',
-        {
-          body: {
-            sizingDomainId: form.get('sizingDomainId'),
-            code: slug(form.get('code')),
-            name: form.get('name'),
-            subjectType: form.get('subjectType'),
-            defaultUnit: form.get('defaultUnit'),
-          },
-        },
-        'Measurement definition created.',
-      )
-    )
-      event.currentTarget.reset();
-  }
-  async function submitGuide(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    if (
-      await command(
-        '/api/admin/sizing/guides',
-        { body: { sizingDomainId: form.get('sizingDomainId'), name: form.get('name') } },
-        'Draft Size Guide created.',
-      )
-    )
-      event.currentTarget.reset();
-  }
-  async function submitRevision(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedGuide) return;
-    const form = new FormData(event.currentTarget);
-    if (
-      await command(
-        `/api/admin/sizing/guides/${selectedGuide.id}/revisions`,
-        { body: { instructions: form.get('instructions') || undefined } },
-        'New draft revision created.',
-      )
-    )
-      event.currentTarget.reset();
-  }
-  async function submitRow(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedRevision) return;
-    const form = new FormData(event.currentTarget);
-    const sizeDefinitionId = String(form.get('sizeDefinitionId') ?? '');
-    if (
-      await command(
-        `/api/admin/sizing/revisions/${selectedRevision.id}/rows`,
-        {
-          body: {
-            displayLabel: form.get('displayLabel'),
-            position: Number(form.get('position') ?? 0),
-            ...(sizeDefinitionId ? { sizeDefinitionId } : {}),
-          },
-        },
-        'Guide row added.',
-      )
-    )
-      event.currentTarget.reset();
-  }
-  async function submitValue(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedRevision) return;
-    const form = new FormData(event.currentTarget);
-    const exact = String(form.get('exact') ?? '').trim();
-    const min = String(form.get('min') ?? '').trim();
-    const max = String(form.get('max') ?? '').trim();
-    const rowId = String(form.get('rowId'));
-    const measurementDefinitionId = String(form.get('measurementDefinitionId'));
-    if (
-      await command(
-        `/api/admin/sizing/revisions/${selectedRevision.id}/rows/${rowId}/measurements/${measurementDefinitionId}`,
-        {
-          method: 'PUT',
-          body: {
-            unitCode: form.get('unitCode'),
-            ...(exact ? { exact } : { min, max }),
-            isApproximate: form.get('isApproximate') === 'on',
-          },
-        },
-        'Measurement saved.',
-      )
-    )
-      event.currentTarget.reset();
-  }
-  async function submitProduct(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const guideId = String(form.get('sizeGuideId') ?? '');
-    if (
-      await command(
-        `/api/admin/catalog/products/${String(form.get('productId'))}/size-configuration`,
-        {
-          body: {
-            sizeSystemId: form.get('sizeSystemId'),
-            ...(guideId ? { sizeGuideId: guideId } : {}),
-          },
-        },
-        'Product sizing configuration saved.',
-      )
-    )
-      event.currentTarget.reset();
-  }
+  const unlinkedOptions = optionValues.filter((ov) => !ov.sizeDefinitionId);
 
   return (
-    <main>
-      <section className="shell admin-page">
-        <OperationalPageHeader
-          eyebrow="Catalog / Fit"
-          title="Sizing and Size Guides"
-          description="Build reusable Size Systems and revisioned guides with named selections—never UUID copy and paste."
-          actions={
-            <>
-              <button className="button secondary" type="button" onClick={() => void load()}>
-                <RefreshCw aria-hidden="true" /> Refresh
-              </button>
-              <Link className="button secondary" href="/products">
-                Open Products
-              </Link>
-            </>
-          }
-        />
-        {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        <OperationalFeedback tone="warning">
-          Published guide revisions are immutable. Create a new draft revision to make later
-          changes.
-        </OperationalFeedback>
+    <div className="flex h-full flex-col">
+      <OperationalPageHeader
+        eyebrow="Dashboard"
+        title="Sizing Overview"
+        description="Monitor data quality, catalog coverage, and standardized size mappings."
+      />
+      <div className="flex-1 overflow-y-auto p-6 space-y-8">
         {loading ? (
-          <div className="skeleton-list" aria-label="Loading Sizing workspace">
-            <span />
-            <span />
-            <span />
+          <div className="animate-pulse space-y-4">
+            <div className="h-28 rounded-xl bg-slate-100" />
+            <div className="h-28 rounded-xl bg-slate-100" />
           </div>
-        ) : null}
-
-        <section className="sizing-foundation-grid">
-          <form className="panel inset-form" onSubmit={(event) => void submitDomain(event)}>
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Step 1</p>
-                <h2>Sizing domain</h2>
-              </div>
-              <Ruler aria-hidden="true" />
-            </div>
-            <label>
-              Name
-              <input name="name" required placeholder="Women’s dress" />
-            </label>
-            <label>
-              Code
-              <input
-                name="code"
-                required
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                placeholder="women-dress"
-              />
-            </label>
-            <label>
-              Subject
-              <select name="subjectType" defaultValue="GARMENT">
-                <option value="GARMENT">Garment</option>
-                <option value="BODY">Body</option>
-                <option value="PRODUCT">Product</option>
-              </select>
-            </label>
-            <button className="button secondary" disabled={busy} type="submit">
-              <Plus aria-hidden="true" /> Add domain
-            </button>
-          </form>
-          <form className="panel inset-form" onSubmit={(event) => void submitSystem(event)}>
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Step 2</p>
-                <h2>Size system</h2>
-              </div>
-            </div>
-            <label>
-              Domain
-              <select name="sizingDomainId" required defaultValue="">
-                <option value="" disabled>
-                  Choose domain
-                </option>
-                {workspace.domains.map((domain) => (
-                  <option key={domain.id} value={domain.id}>
-                    {domain.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Name
-              <input name="name" required placeholder="International women’s" />
-            </label>
-            <label>
-              Code
-              <input
-                name="code"
-                required
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                placeholder="intl-women"
-              />
-            </label>
-            <label>
-              Region (optional)
-              <input name="regionCode" placeholder="BD" />
-            </label>
-            <button
-              className="button secondary"
-              disabled={busy || workspace.domains.length === 0}
-              type="submit"
-            >
-              <Plus aria-hidden="true" /> Add system
-            </button>
-          </form>
-          <form className="panel inset-form" onSubmit={(event) => void submitSize(event)}>
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Step 3</p>
-                <h2>Size definition</h2>
-              </div>
-            </div>
-            <label>
-              System
-              <select name="sizeSystemId" required defaultValue="">
-                <option value="" disabled>
-                  Choose system
-                </option>
-                {workspace.systems.map((system) => (
-                  <option key={system.id} value={system.id}>
-                    {system.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Label
-              <input name="label" required placeholder="Medium" />
-            </label>
-            <label>
-              Code
-              <input name="code" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="m" />
-            </label>
-            <label>
-              Order
-              <input name="sortOrder" type="number" min={0} defaultValue={0} />
-            </label>
-            <button
-              className="button secondary"
-              disabled={busy || workspace.systems.length === 0}
-              type="submit"
-            >
-              <Plus aria-hidden="true" /> Add size
-            </button>
-          </form>
-          <form className="panel inset-form" onSubmit={(event) => void submitMeasurement(event)}>
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Step 4</p>
-                <h2>Measurement</h2>
-              </div>
-            </div>
-            <label>
-              Domain
-              <select name="sizingDomainId" required defaultValue="">
-                <option value="" disabled>
-                  Choose domain
-                </option>
-                {workspace.domains.map((domain) => (
-                  <option key={domain.id} value={domain.id}>
-                    {domain.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Name
-              <input name="name" required placeholder="Chest circumference" />
-            </label>
-            <label>
-              Code
-              <input name="code" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="chest" />
-            </label>
-            <div className="form-row">
-              <label>
-                Subject
-                <select name="subjectType" defaultValue="GARMENT">
-                  <option value="GARMENT">Garment</option>
-                  <option value="BODY">Body</option>
-                  <option value="PRODUCT">Product</option>
-                </select>
-              </label>
-              <label>
-                Unit
-                <select name="defaultUnit" defaultValue="cm">
-                  <option value="cm">cm</option>
-                  <option value="inch">inch</option>
-                </select>
-              </label>
-            </div>
-            <button
-              className="button secondary"
-              disabled={busy || workspace.domains.length === 0}
-              type="submit"
-            >
-              <Plus aria-hidden="true" /> Add measurement
-            </button>
-          </form>
-        </section>
-
-        <section className="sizing-guide-layout">
-          <div className="panel sizing-guide-list">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Guides</p>
-                <h2>Revisioned Size Guides</h2>
-              </div>
-              <span className="result-count">{workspace.guides.length}</span>
-            </div>
-            <form className="inset-form" onSubmit={(event) => void submitGuide(event)}>
-              <label>
-                Domain
-                <select name="sizingDomainId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose domain
-                  </option>
-                  {workspace.domains.map((domain) => (
-                    <option key={domain.id} value={domain.id}>
-                      {domain.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Guide name
-                <input name="name" required placeholder="Women’s dress fit guide" />
-              </label>
+        ) : error ? (
+          <OperationalEmptyState title="Could not load dashboard" description={error} />
+        ) : checks ? (
+          <>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
+                Data Quality Signals
+              </h2>
               <button
-                className="button primary"
-                disabled={busy || workspace.domains.length === 0}
-                type="submit"
+                onClick={() => void load()}
+                className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800"
               >
-                <Plus aria-hidden="true" /> Create guide
+                <RefreshCw className="h-3 w-3" /> Refresh
               </button>
-            </form>
-            {workspace.guides.length ? (
-              <div className="sizing-guide-buttons">
-                {workspace.guides.map((guide) => (
-                  <button
-                    aria-pressed={guide.id === selectedGuideId}
-                    key={guide.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedGuideId(guide.id);
-                      setSelectedRevisionId('');
-                    }}
-                  >
-                    <span>
-                      <strong>{guide.name}</strong>
-                      <small>
-                        {workspace.domains.find((domain) => domain.id === guide.sizingDomainId)
-                          ?.name ?? 'Sizing domain'}{' '}
-                        · {guide.revisions.length} revision{guide.revisions.length === 1 ? '' : 's'}
-                      </small>
-                    </span>
-                    <StatusBadge
-                      status={guide.currentPublishedRevisionId ? 'PUBLISHED' : 'DRAFT'}
-                    />
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <OperationalEmptyState
-                title="No Size Guides"
-                description="Create a guide after defining the reusable sizing vocabulary."
-              />
-            )}
-          </div>
+            </div>
 
-          <div className="panel sizing-guide-editor">
-            {selectedGuide ? (
-              <>
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Guide workspace</p>
-                    <h2>{selectedGuide.name}</h2>
+            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+              <MetricCard
+                title="Missing Size Configurations"
+                value={checks.productsWithSizeAxisButNoSizingConfig}
+                description="Products with a 'Size' option axis but no sizing system or guide attached."
+                icon={<Layers className="h-5 w-5 text-amber-500" />}
+                status={checks.productsWithSizeAxisButNoSizingConfig > 0 ? 'warning' : 'ok'}
+                actionHref="/products"
+                actionLabel="Review Products"
+              />
+              <MetricCard
+                title="Missing Published Guides"
+                value={checks.productsWithConfigButNoPublishedGuide}
+                description="Products referencing a guide that has not yet been published."
+                icon={<FileWarning className="h-5 w-5 text-amber-500" />}
+                status={checks.productsWithConfigButNoPublishedGuide > 0 ? 'warning' : 'ok'}
+                actionHref="/sizing/guides"
+                actionLabel="Publish Guides"
+              />
+              <MetricCard
+                title="Archived Guides in Use"
+                value={checks.productsUsingArchivedGuide}
+                description="Products that are currently referencing an archived size guide."
+                icon={<AlertCircle className="h-5 w-5 text-red-500" />}
+                status={checks.productsUsingArchivedGuide > 0 ? 'danger' : 'ok'}
+                actionHref="/sizing/guides"
+                actionLabel="Update Configurations"
+              />
+              <MetricCard
+                title="Empty Published Revisions"
+                value={checks.publishedRevisionsWithEmptyRows}
+                description="Published guides that have 0 measurement rows."
+                icon={<ShieldCheck className="h-5 w-5 text-amber-500" />}
+                status={checks.publishedRevisionsWithEmptyRows > 0 ? 'warning' : 'ok'}
+                actionHref="/sizing/guides"
+                actionLabel="Fix Guides"
+              />
+              <MetricCard
+                title="Unlinked Size Options"
+                value={checks.optionValuesInSizeAxisWithoutSizeDefinitionLink}
+                description="Variant size choices not mapped to standardized size definitions."
+                icon={<AlertCircle className="h-5 w-5 text-amber-500" />}
+                status={
+                  checks.optionValuesInSizeAxisWithoutSizeDefinitionLink > 0 ? 'warning' : 'ok'
+                }
+              />
+            </div>
+
+            {/* Interactive Standardization Section */}
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-blue-600" />
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Standardize Product Size Options
+                    </h3>
                   </div>
-                  <StatusBadge status={selectedRevision?.status ?? 'DRAFT'} />
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Map individual product variant sizes (e.g. &ldquo;M&rdquo; on Linen Dress) to
+                    canonical size definitions to enable accurate filtering, returns, and analytics.
+                  </p>
                 </div>
-                <label>
-                  Revision
-                  <select
-                    value={selectedRevision?.id ?? ''}
-                    onChange={(event) => setSelectedRevisionId(event.target.value)}
-                  >
-                    {selectedGuide.revisions.map((revision) => (
-                      <option key={revision.id} value={revision.id}>
-                        Revision {revision.revisionNumber} — {revision.status}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <form className="inset-form" onSubmit={(event) => void submitRevision(event)}>
-                  <h3>Create a new draft revision</h3>
-                  <label>
-                    Customer instructions
-                    <textarea
-                      name="instructions"
-                      rows={2}
-                      placeholder="Measure around the fullest part…"
-                    />
-                  </label>
-                  <button className="button secondary" disabled={busy} type="submit">
-                    <Plus aria-hidden="true" /> New revision
-                  </button>
-                </form>
-                {selectedRevision?.status === 'DRAFT' ? (
-                  <>
-                    <form className="inset-form" onSubmit={(event) => void submitRow(event)}>
-                      <h3>Add size row</h3>
-                      <div className="form-row">
-                        <label>
-                          Display label
-                          <input name="displayLabel" required placeholder="M" />
-                        </label>
-                        <label>
-                          Definition
-                          <select name="sizeDefinitionId" defaultValue="">
-                            <option value="">Custom label</option>
-                            {guideDefinitions.map((definition) => (
-                              <option key={definition.id} value={definition.id}>
-                                {definition.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Position
-                          <input
-                            name="position"
-                            type="number"
-                            min={0}
-                            defaultValue={selectedRevision.rows.length}
-                          />
-                        </label>
-                      </div>
-                      <button className="button secondary" disabled={busy} type="submit">
-                        <Plus aria-hidden="true" /> Add row
-                      </button>
-                    </form>
-                    {selectedRevision.rows.length && domainMeasurements.length ? (
-                      <form className="inset-form" onSubmit={(event) => void submitValue(event)}>
-                        <h3>Set row measurement</h3>
-                        <div className="form-row">
-                          <label>
-                            Row
-                            <select name="rowId" required>
-                              {selectedRevision.rows.map((row) => (
-                                <option key={row.id} value={row.id}>
-                                  {row.displayLabel}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Measurement
-                            <select name="measurementDefinitionId" required>
-                              {domainMeasurements.map((definition) => (
-                                <option key={definition.id} value={definition.id}>
-                                  {definition.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Unit
-                            <select name="unitCode" defaultValue="cm">
-                              <option value="cm">cm</option>
-                              <option value="inch">inch</option>
-                            </select>
-                          </label>
-                        </div>
-                        <div className="form-row">
-                          <label>
-                            Exact
-                            <input name="exact" inputMode="decimal" placeholder="92" />
-                          </label>
-                          <label>
-                            Minimum
-                            <input name="min" inputMode="decimal" placeholder="90" />
-                          </label>
-                          <label>
-                            Maximum
-                            <input name="max" inputMode="decimal" placeholder="94" />
-                          </label>
-                        </div>
-                        <label className="checkbox-row">
-                          <input name="isApproximate" type="checkbox" /> Approximate measurement
-                        </label>
-                        <button className="button secondary" disabled={busy} type="submit">
-                          Save measurement
-                        </button>
-                      </form>
-                    ) : null}
-                    <button
-                      className="button primary"
-                      disabled={busy || selectedRevision.rows.length === 0}
-                      type="button"
-                      onClick={() =>
-                        void command(
-                          `/api/admin/sizing/guides/${selectedGuide.id}/revisions/${selectedRevision.id}/publish`,
-                          {},
-                          'Size Guide published. Published values are now immutable.',
-                        )
-                      }
-                    >
-                      <Send aria-hidden="true" /> Publish revision
-                    </button>
-                  </>
-                ) : (
-                  <OperationalFeedback>
-                    <ShieldCheck aria-hidden="true" /> This revision is published and read-only.
-                  </OperationalFeedback>
-                )}
-                <div className="data-table-shell">
-                  <table>
-                    <thead>
+                <div className="text-xs font-medium text-slate-500">
+                  {unlinkedOptions.length} unlinked option{unlinkedOptions.length === 1 ? '' : 's'}
+                </div>
+              </div>
+
+              {mappingMessage && (
+                <OperationalFeedback tone="success">{mappingMessage}</OperationalFeedback>
+              )}
+
+              {optionValues.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  No active products with size option axes found in the catalog.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold">
                       <tr>
-                        <th>Size</th>
-                        {domainMeasurements.map((definition) => (
-                          <th key={definition.id}>{definition.name}</th>
-                        ))}
+                        <th className="px-3 py-2.5">Product</th>
+                        <th className="px-3 py-2.5">Option Axis</th>
+                        <th className="px-3 py-2.5">Variant Size</th>
+                        <th className="px-3 py-2.5">Canonical Size Definition</th>
+                        <th className="px-3 py-2.5 text-right">Status</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {selectedRevision?.rows.map((row) => (
-                        <tr key={row.id}>
-                          <th>{row.displayLabel}</th>
-                          {domainMeasurements.map((definition) => {
-                            const value = row.measurements.find(
-                              (measurement) =>
-                                measurement.measurementDefinitionId === definition.id,
-                            );
-                            return (
-                              <td key={definition.id}>
-                                {value ? (value.exact ?? `${value.min}–${value.max}`) : '—'}{' '}
-                                {value?.unit}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
+                    <tbody className="divide-y divide-slate-100">
+                      {optionValues.slice(0, 15).map((ov) => {
+                        const isBusy = mappingBusyId === ov.optionValueId;
+                        return (
+                          <tr key={ov.optionValueId} className="hover:bg-slate-50/60">
+                            <td className="px-3 py-2 font-medium text-slate-900">
+                              <Link
+                                href={`/products/${ov.productId}`}
+                                className="hover:underline"
+                              >
+                                {ov.productTitle}
+                              </Link>
+                            </td>
+                            <td className="px-3 py-2 text-slate-500">{ov.optionAxisName}</td>
+                            <td className="px-3 py-2 font-semibold text-slate-800">
+                              {ov.optionValueLabel}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <select
+                                  disabled={isBusy}
+                                  value={ov.sizeDefinitionId ?? ''}
+                                  onChange={(e) =>
+                                    void handleMapOptionValue(ov.optionValueId, e.target.value)
+                                  }
+                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-slate-600"
+                                >
+                                  <option value="">Unlinked</option>
+                                  {sizeDefinitions.map((sd) => (
+                                    <option key={sd.id} value={sd.id}>
+                                      {sd.label} ({sd.code})
+                                    </option>
+                                  ))}
+                                </select>
+                                {isBusy && (
+                                  <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {ov.sizeDefinitionId ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                                  <Check className="h-3 w-3" /> Mapped
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                                  Unlinked
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
+                  {optionValues.length > 15 && (
+                    <p className="mt-2 text-center text-[11px] text-slate-400">
+                      Showing first 15 of {optionValues.length} size options.
+                    </p>
+                  )}
                 </div>
-              </>
-            ) : (
-              <OperationalEmptyState
-                title="Select a Size Guide"
-                description="Choose a guide to manage its drafts, measurements, and publication."
-              />
-            )}
-          </div>
-        </section>
+              )}
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Catalog assignment</p>
-              <h2>Attach published sizing to a Product</h2>
-            </div>
-            <CheckCircle2 aria-hidden="true" />
-          </div>
-          <form className="form-row" onSubmit={(event) => void submitProduct(event)}>
-            <label>
-              Product
-              <select name="productId" required defaultValue="">
-                <option value="" disabled>
-                  Choose Product
-                </option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Size system
-              <select name="sizeSystemId" required defaultValue="">
-                <option value="" disabled>
-                  Choose system
-                </option>
-                {workspace.systems.map((system) => (
-                  <option key={system.id} value={system.id}>
-                    {system.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Published guide
-              <select name="sizeGuideId" defaultValue="">
-                <option value="">No guide</option>
-                {workspace.guides
-                  .filter((guide) => guide.currentPublishedRevisionId)
-                  .map((guide) => (
-                    <option key={guide.id} value={guide.id}>
-                      {guide.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <button
-              className="button primary"
-              disabled={busy || products.length === 0}
-              type="submit"
-            >
-              Save Product sizing
-            </button>
-          </form>
-          {workspace.productConfigurations.length ? (
-            <div className="data-table-shell">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>System</th>
-                    <th>Guide</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {workspace.productConfigurations.map((configuration) => (
-                    <tr key={configuration.productId}>
-                      <td>{configuration.productTitle}</td>
-                      <td>
-                        {workspace.systems.find(
-                          (system) => system.id === configuration.sizeSystemId,
-                        )?.name ?? 'Unknown system'}
-                      </td>
-                      <td>
-                        {workspace.guides.find((guide) => guide.id === configuration.sizeGuideId)
-                          ?.name ?? 'No guide'}
-                      </td>
-                      <td>
-                        <StatusBadge status={configuration.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </section>
-      </section>
-    </main>
+function MetricCard({
+  title,
+  value,
+  description,
+  icon,
+  status,
+  actionHref,
+  actionLabel,
+}: {
+  title: string;
+  value: number;
+  description: string;
+  icon: React.ReactNode;
+  status: 'ok' | 'warning' | 'danger';
+  actionHref?: string;
+  actionLabel?: string;
+}) {
+  const bgClass =
+    status === 'ok'
+      ? 'bg-emerald-50/50 border-emerald-200'
+      : status === 'warning'
+        ? 'bg-amber-50/50 border-amber-200'
+        : 'bg-red-50/50 border-red-200';
+
+  const textClass =
+    status === 'ok'
+      ? 'text-emerald-700'
+      : status === 'warning'
+        ? 'text-amber-700'
+        : 'text-red-700';
+
+  return (
+    <div className={`flex flex-col justify-between rounded-xl border p-5 shadow-2xs ${bgClass}`}>
+      <div>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-800">{title}</h3>
+          {icon}
+        </div>
+        <div className={`mt-2 text-3xl font-extrabold tracking-tight ${textClass}`}>{value}</div>
+        <p className="mt-1 text-xs text-slate-600 leading-relaxed">{description}</p>
+      </div>
+
+      {actionHref && value > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-200/60">
+          <Link
+            href={actionHref}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-900 hover:underline"
+          >
+            {actionLabel ?? 'Resolve'} <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }

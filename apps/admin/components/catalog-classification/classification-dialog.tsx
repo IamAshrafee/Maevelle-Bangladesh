@@ -39,6 +39,7 @@ export interface ClassificationFormValue {
   readonly description?: string;
   readonly status: CatalogCategoryStatusDto;
   readonly parentCategoryId?: string;
+  readonly defaultSizeGuideId?: string | null;
   readonly position: number;
 }
 
@@ -54,6 +55,7 @@ export function ClassificationDialog(props: {
   kind: CatalogVocabularyKindDto;
   item?: EditableItem;
   categories: readonly CatalogCategoryDto[];
+  sizeGuides?: readonly { readonly id: string; readonly name: string }[];
   saving: boolean;
   error?: string;
   onOpenChange: (open: boolean) => void;
@@ -65,6 +67,7 @@ export function ClassificationDialog(props: {
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<CatalogCategoryStatusDto>('ACTIVE');
   const [parentCategoryId, setParentCategoryId] = useState('NONE');
+  const [defaultSizeGuideId, setDefaultSizeGuideId] = useState('NONE');
   const [position, setPosition] = useState(0);
 
   useEffect(() => {
@@ -76,6 +79,7 @@ export function ClassificationDialog(props: {
     setDescription(vocabulary?.description ?? '');
     setStatus(props.item?.status ?? 'ACTIVE');
     setParentCategoryId(category?.parentCategoryId ?? 'NONE');
+    setDefaultSizeGuideId(category?.defaultSizeGuideId ?? 'NONE');
     setPosition(props.item?.position ?? 0);
   }, [props.item, props.open]);
 
@@ -101,6 +105,7 @@ export function ClassificationDialog(props: {
       description: description.trim(),
       status,
       ...(parentCategoryId === 'NONE' ? {} : { parentCategoryId }),
+      defaultSizeGuideId: defaultSizeGuideId === 'NONE' ? null : defaultSizeGuideId,
       position,
     });
   }
@@ -143,65 +148,95 @@ export function ClassificationDialog(props: {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="classification-slug" title="A short, URL-safe identifier.">
+            <Label
+              htmlFor="classification-handle"
+              title="A unique, URL-safe identifier for this item."
+            >
               Slug
             </Label>
             <Input
-              id="classification-slug"
+              id="classification-handle"
               maxLength={160}
-              pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
-              placeholder="evening-dresses"
+              placeholder="example-name"
               required
-              title="Use lowercase letters, numbers, and single hyphens."
               value={handle}
               onChange={(event) => {
                 setHandleEdited(true);
-                setHandle(event.target.value.toLowerCase());
+                setHandle(slugify(event.target.value));
               }}
             />
-            <p className="text-xs text-muted-foreground">
-              Used in URLs and integrations. Changing a category slug keeps redirect history.
-            </p>
           </div>
           {!props.categoryMode ? (
             <div className="grid gap-2">
-              <Label htmlFor="classification-description">Description</Label>
+              <Label
+                htmlFor="classification-description"
+                title="Visible to buyers when browsing collections or used by merchandisers internally."
+              >
+                Description
+              </Label>
               <Textarea
                 id="classification-description"
                 maxLength={1000}
-                placeholder="Explain when your team should use this label."
+                placeholder={`A helpful description for this ${noun}…`}
+                rows={3}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />
             </div>
           ) : null}
           {props.categoryMode ? (
-            <div className="grid gap-2">
-              <Label
-                htmlFor="classification-parent"
-                title="Leave empty to create a top-level category."
-              >
-                Parent category
-              </Label>
-              <Select
-                value={parentCategoryId}
-                onValueChange={(value) => setParentCategoryId(value ?? 'NONE')}
-              >
-                <SelectTrigger id="classification-parent">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">No parent — top level</SelectItem>
-                  {props.categories
-                    .filter((category) => !invalidParentIds.has(category.id))
-                    .map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.path}
+            <>
+              <div className="grid gap-2">
+                <Label
+                  htmlFor="classification-parent"
+                  title="Leave empty to create a top-level category."
+                >
+                  Parent category
+                </Label>
+                <Select
+                  value={parentCategoryId}
+                  onValueChange={(value) => setParentCategoryId(value ?? 'NONE')}
+                >
+                  <SelectTrigger id="classification-parent">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">No parent — top level</SelectItem>
+                    {props.categories
+                      .filter((category) => !invalidParentIds.has(category.id))
+                      .map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.path}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label
+                  htmlFor="classification-size-guide"
+                  title="Products in this category inherit this size guide unless specifically overridden."
+                >
+                  Default Size Guide
+                </Label>
+                <Select
+                  value={defaultSizeGuideId}
+                  onValueChange={(value) => setDefaultSizeGuideId(value ?? 'NONE')}
+                >
+                  <SelectTrigger id="classification-size-guide">
+                    <SelectValue placeholder="No default size guide" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">None / Inherit from parent</SelectItem>
+                    {props.sizeGuides?.map((guide) => (
+                      <SelectItem key={guide.id} value={guide.id}>
+                        {guide.name}
                       </SelectItem>
                     ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">

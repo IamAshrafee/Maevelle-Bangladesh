@@ -82,6 +82,7 @@ export function registerCatalogClassificationRoutes(
           parentCategoryId: Type.Optional(Type.String()),
           status: Type.Optional(status),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
+          defaultSizeGuideId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
         }),
       },
     },
@@ -103,6 +104,7 @@ export function registerCatalogClassificationRoutes(
               parentCategoryId?: string;
               status?: CatalogClassificationStatus;
               position?: number;
+              defaultSizeGuideId?: string | null;
             }),
           }),
         });
@@ -123,6 +125,7 @@ export function registerCatalogClassificationRoutes(
           status: Type.Optional(status),
           parentCategoryId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
+          defaultSizeGuideId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
         }),
       },
     },
@@ -142,6 +145,7 @@ export function registerCatalogClassificationRoutes(
           status?: CatalogClassificationStatus;
           parentCategoryId?: string | null;
           position?: number;
+          defaultSizeGuideId?: string | null;
         };
         const { version, ...changes } = body;
         await updateManagedCategory(database.db, {

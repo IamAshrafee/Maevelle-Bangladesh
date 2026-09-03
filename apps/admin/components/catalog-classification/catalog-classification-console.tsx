@@ -19,7 +19,10 @@ import type {
   CatalogVocabularyItemDto,
   CatalogVocabularyKindDto,
   CatalogVocabularyListDto,
+  SizeGuideSummaryDto,
 } from '@maevelle/contracts';
+
+import { fetchSizeGuides } from '@/lib/sizing/api';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -88,6 +91,7 @@ export function CatalogClassificationConsole() {
   const [categories, setCategories] = useState<readonly CatalogCategoryDto[]>([]);
   const [vocabulary, setVocabulary] = useState<readonly CatalogVocabularyItemDto[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<readonly CatalogCategoryDto[]>([]);
+  const [sizeGuides, setSizeGuides] = useState<readonly SizeGuideSummaryDto[]>([]);
   const [summary, setSummary] = useState(emptySummary);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -156,6 +160,7 @@ export function CatalogClassificationConsole() {
 
   useEffect(() => {
     void refreshCategoryOptions().catch(() => undefined);
+    void fetchSizeGuides().then(setSizeGuides).catch(() => undefined);
   }, []);
 
   function switchTab(next: TabKey) {
@@ -188,6 +193,7 @@ export function CatalogClassificationConsole() {
           status: value.status,
           parentCategoryId: value.parentCategoryId,
           position: value.position,
+          defaultSizeGuideId: value.defaultSizeGuideId ?? null,
         };
         await classificationRequest(
           editing ? `/admin/catalog/categories/${editing.id}` : '/admin/catalog/categories',
@@ -199,6 +205,7 @@ export function CatalogClassificationConsole() {
                     ...body,
                     version: editing.version,
                     parentCategoryId: value.parentCategoryId ?? null,
+                    defaultSizeGuideId: value.defaultSizeGuideId ?? null,
                   }
                 : body,
             ),
@@ -342,6 +349,7 @@ export function CatalogClassificationConsole() {
                   <>
                     <TableHead>Children</TableHead>
                     <TableHead>Products</TableHead>
+                    <TableHead>Size Guide</TableHead>
                   </>
                 ) : (
                   <>
@@ -390,6 +398,15 @@ export function CatalogClassificationConsole() {
                       <>
                         <TableCell>{category.childCount}</TableCell>
                         <TableCell>{category.productCount}</TableCell>
+                        <TableCell>
+                          {category.defaultSizeGuideName ? (
+                            <Badge className="font-normal text-xs" variant="outline">
+                              {category.defaultSizeGuideName}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                       </>
                     ) : (
                       <>
@@ -459,6 +476,7 @@ export function CatalogClassificationConsole() {
       <ClassificationDialog
         categoryMode={tab === 'CATEGORY'}
         categories={categoryOptions}
+        sizeGuides={sizeGuides}
         {...(formError === undefined ? {} : { error: formError })}
         {...(editing === undefined ? {} : { item: editing })}
         kind={tab === 'CATEGORY' ? 'TAG' : tab}

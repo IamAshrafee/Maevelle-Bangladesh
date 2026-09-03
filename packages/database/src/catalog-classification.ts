@@ -20,6 +20,8 @@ export interface CatalogCategoryView {
   readonly position: number;
   readonly productCount: number;
   readonly childCount: number;
+  readonly defaultSizeGuideId: string | null;
+  readonly defaultSizeGuideName: string | null;
   readonly version: number;
   readonly updatedAt: string;
 }
@@ -116,30 +118,37 @@ export async function listCatalogCategories(
     position: number;
     product_count: number;
     child_count: number;
+    default_size_guide_id: string | null;
+    default_size_guide_name: string | null;
     version: string;
     updated_at: string;
     total_count: string;
   }>`
     with recursive tree as (
       select category.id,category.name,category.handle,category.status,category.parent_category_id,
-        category.position,category.version,category.updated_at,category.name::text path,0::integer depth,
+        category.position,category.version,category.updated_at,category.default_size_guide_id,
+        category.name::text path,0::integer depth,
         (category.status='ACTIVE') effective_active,false ancestor_inactive,array[category.id] visited
       from catalog.categories category
       where category.organization_id=${input.organizationId} and category.parent_category_id is null
       union all
       select child.id,child.name,child.handle,child.status,child.parent_category_id,
-        child.position,child.version,child.updated_at,(parent.path || ' / ' || child.name)::text,
+        child.position,child.version,child.updated_at,child.default_size_guide_id,
+        (parent.path || ' / ' || child.name)::text,
         parent.depth+1,(parent.effective_active and child.status='ACTIVE'),
         (not parent.effective_active),parent.visited || child.id
       from catalog.categories child join tree parent on parent.id=child.parent_category_id
       where child.organization_id=${input.organizationId} and not child.id=any(parent.visited)
     ), filtered as (
       select tree.*,
+        tree.default_size_guide_id::text as default_guide_id,
+        g.name as default_size_guide_name,
         (select count(*)::integer from catalog.product_categories pc
          where pc.organization_id=${input.organizationId} and pc.category_id=tree.id) product_count,
         (select count(*)::integer from catalog.categories child
          where child.organization_id=${input.organizationId} and child.parent_category_id=tree.id) child_count
       from tree
+      left join sizing.size_guides g on g.id = tree.default_size_guide_id
       where (${status}::text is null or tree.status=${status})
         and (${query}::text is null or tree.name ilike ('%' || ${query} || '%')
           or tree.handle ilike ('%' || ${query} || '%') or tree.path ilike ('%' || ${query} || '%'))
@@ -177,6 +186,8 @@ export async function listCatalogCategories(
       position: row.position,
       productCount: row.product_count,
       childCount: row.child_count,
+      defaultSizeGuideId: row.default_size_guide_id,
+      defaultSizeGuideName: row.default_size_guide_name ?? null,
       version: Number(row.version),
       updatedAt: row.updated_at,
     })),
@@ -205,6 +216,7 @@ export async function createManagedCategory(
     parentCategoryId?: string;
     status?: CatalogClassificationStatus;
     position?: number;
+    defaultSizeGuideId?: string | null;
   },
 ): Promise<{ id: string }> {
   const identity = validateIdentity(input.name, input.handle);
@@ -218,16 +230,16 @@ export async function createManagedCategory(
         throw new CatalogDomainError('NOT_FOUND', 'Parent category was not found.');
     }
     const created = await sql<{ id: string }>`insert into catalog.categories
-      (organization_id,name,handle,parent_category_id,status,position)
+      (organization_id,name,handle,parent_category_id,status,position,default_size_guide_id)
       values (${input.organizationId},${identity.name},${identity.handle},${input.parentCategoryId ?? null},
-        ${input.status ?? 'ACTIVE'},${input.position ?? 0}) returning id`.execute(transaction);
+        ${input.status ?? 'ACTIVE'},${input.position ?? 0},${input.defaultSizeGuideId ?? null}::uuid) returning id`.execute(transaction);
     const id = created.rows[0]!.id;
     await emitClassificationEvent(transaction, {
       ...input,
       action: 'catalog.category.created',
       targetType: 'catalog.category',
       targetId: id,
-      metadata: { handle: identity.handle, parentCategoryId: input.parentCategoryId },
+      metadata: { handle: identity.handle, parentCategoryId: input.parentCategoryId, defaultSizeGuideId: input.defaultSizeGuideId },
     });
     return { id };
   });
@@ -245,6 +257,7 @@ export async function updateManagedCategory(
     status?: CatalogClassificationStatus;
     parentCategoryId?: string | null;
     position?: number;
+    defaultSizeGuideId?: string | null;
   },
 ): Promise<void> {
   await db.transaction().execute(async (transaction) => {
@@ -282,9 +295,11 @@ export async function updateManagedCategory(
         (organization_id,category_id,old_handle) values
         (${input.organizationId},${input.categoryId},${category.handle})`.execute(transaction);
     const parentProvided = input.parentCategoryId !== undefined;
+    const guideProvided = input.defaultSizeGuideId !== undefined;
     const updated = await sql`update catalog.categories set
       name=${identity.name},handle=${identity.handle},status=coalesce(${input.status ?? null},status),
       parent_category_id=case when ${parentProvided} then ${input.parentCategoryId ?? null}::uuid else parent_category_id end,
+      default_size_guide_id=case when ${guideProvided} then ${input.defaultSizeGuideId ?? null}::uuid else default_size_guide_id end,
       position=coalesce(${input.position ?? null},position),version=version+1,updated_at=now()
       where organization_id=${input.organizationId} and id=${input.categoryId}
         and version=${input.expectedVersion}`.execute(transaction);
@@ -295,7 +310,7 @@ export async function updateManagedCategory(
       action: 'catalog.category.updated',
       targetType: 'catalog.category',
       targetId: input.categoryId,
-      metadata: { status: input.status, parentCategoryId: input.parentCategoryId },
+      metadata: { status: input.status, parentCategoryId: input.parentCategoryId, defaultSizeGuideId: input.defaultSizeGuideId },
     });
   });
 }

@@ -31,16 +31,20 @@ import { ProductMediaForm } from '@/components/products/product-media-form';
 import { ProductOrganizationForm } from '@/components/products/product-organization-form';
 import { ProductOverviewForm } from '@/components/products/product-overview-form';
 import { ProductReview } from '@/components/products/product-review';
+import { ProductSizingForm } from '@/components/products/product-sizing-form';
 import { ProductVariantsForm } from '@/components/products/product-variants-form';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { catalogData } from '@/lib/catalog/api';
+
+import { Ruler } from 'lucide-react';
 
 const editorSections = [
   { id: 'overview', label: 'Overview', help: 'Identity and description', icon: PackageOpen },
   { id: 'organization', label: 'Organization', help: 'Categories and attributes', icon: Layers3 },
   { id: 'variants', label: 'Variants', help: 'Options, SKUs, price, stock', icon: Settings2 },
   { id: 'media', label: 'Media', help: 'Product and color galleries', icon: ImageIcon },
+  { id: 'sizing', label: 'Sizing', help: 'Size system and guides', icon: Ruler },
   { id: 'content', label: 'Content', help: 'Information, FAQs, and SEO', icon: FileText },
   { id: 'review', label: 'Review', help: 'Readiness and publishing', icon: Check },
 ] as const satisfies ReadonlyArray<{
@@ -331,6 +335,7 @@ export function ProductEditor({ productId }: { productId: string }) {
           {section === 'organization' ? <ProductOrganizationForm {...sectionProps} /> : null}
           {section === 'variants' ? <ProductVariantsForm {...sectionProps} /> : null}
           {section === 'media' ? <ProductMediaForm {...sectionProps} /> : null}
+          {section === 'sizing' ? <ProductSizingForm {...sectionProps} /> : null}
           {section === 'content' ? <ProductContentForm {...sectionProps} /> : null}
           {section === 'review' ? <ProductReview {...sectionProps} /> : null}
 

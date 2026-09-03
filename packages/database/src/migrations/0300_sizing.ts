@@ -42,6 +42,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       sizing_domain_id uuid not null references sizing.sizing_domains(id),
       code text not null,
       name text not null,
+      description text,
+      instructions text,
+      sort_order integer not null default 0,
       subject_type text not null check (subject_type in ('BODY', 'GARMENT', 'PRODUCT')),
       default_unit text not null check (default_unit in ('cm', 'inch')),
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
@@ -51,6 +54,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
       name text not null,
+      description text,
       sizing_domain_id uuid not null references sizing.sizing_domains(id),
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
       current_published_revision_id uuid,
@@ -65,6 +69,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       revision_number integer not null,
       status text not null default 'DRAFT' check (status in ('DRAFT', 'PUBLISHED', 'ARCHIVED')),
       instructions text,
+      fit_notes text,
       created_at timestamptz not null default now(),
       published_at timestamptz,
       created_by uuid references iam.users(id),
@@ -105,6 +110,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       unique (product_id)
     );
     alter table catalog.product_option_values add constraint product_option_values_size_definition_fk foreign key (size_definition_id) references sizing.size_definitions(id);
+
+    -- Performance indexes for efficient guide management and storefront queries
+    create index size_guide_revisions_guide_status on sizing.size_guide_revisions (size_guide_id, status);
+    create index product_size_configurations_org_status on sizing.product_size_configurations (organization_id, status);
+    create index measurement_definitions_domain_sort on sizing.measurement_definitions (sizing_domain_id, sort_order, id);
+    create index size_definitions_system_sort on sizing.size_definitions (size_system_id, sort_order, id);
   `.execute(db);
 }
 

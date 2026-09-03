@@ -75,7 +75,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
           {transfer.status === 'READY' && (
             <Button onClick={() => {}}>Dispatch Transfer</Button>
           )}
-          {transfer.status === 'DISPATCHED' || transfer.status === 'IN_TRANSIT' ? (
+          {transfer.status === 'IN_TRANSIT' ? (
             <Button onClick={() => {}}>Receive Transfer</Button>
           ) : null}
         </div>

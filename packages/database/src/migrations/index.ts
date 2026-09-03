@@ -8,6 +8,7 @@ import * as iam from './0004_iam_and_authentication.js';
 import * as emailNormalization from './0005_iam_user_normalization.js';
 import * as catalog from './0200_catalog.js';
 import * as sizing from './0300_sizing.js';
+import * as sizingCategoryDefaults from './0301_sizing_category_defaults.js';
 import * as media from './0400_media.js';
 import * as warehouse from './0500_warehouse.js';
 import * as inventory from './0600_inventory.js';
@@ -58,6 +59,7 @@ export const migrations = {
   '0005_iam_user_normalization': emailNormalization,
   '0200_catalog': catalog,
   '0300_sizing': sizing,
+  '0301_sizing_category_defaults': sizingCategoryDefaults,
   '0400_media': media,
   '0500_warehouse': warehouse,
   '0600_inventory': inventory,

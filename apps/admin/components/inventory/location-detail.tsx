@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, MapPin, Package, Settings, Truck } from 'lucide-react';
 import Link from 'next/link';
 
-import type { WarehouseLocationDto, InventoryStockViewDto } from '@maevelle/contracts';
+import type { WarehouseLocationDto, InventoryBalanceDto } from '@maevelle/contracts';
 
 import { inventoryRequest } from '@/lib/inventory/api';
 import { InventoryEmptyState } from './inventory-page-ui';
@@ -22,7 +22,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
   const [error, setError] = useState<Error | null>(null);
 
   // We fetch stock for this specific location to display in the stock table tab
-  const [stock, setStock] = useState<InventoryStockViewDto[]>([]);
+  const [stock, setStock] = useState<InventoryBalanceDto[]>([]);
   const [stockLoading, setStockLoading] = useState(true);
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
       .finally(() => setIsLoading(false));
       
     // Fetch Stock for this location
-    inventoryRequest<{ data: { items: InventoryStockViewDto[] } }>(`/inventory/stock?locationId=${locationId}&limit=100`)
+    inventoryRequest<{ data: { items: InventoryBalanceDto[] } }>(`/inventory/stock?locationId=${locationId}&limit=100`)
       .then((res) => {
         setStock(res.data.items);
       })
@@ -103,7 +103,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{location.inventorySummary?.totalOnHand || '0'}</div>
+            <div className="text-2xl font-bold">{(location as any).inventorySummary?.totalOnHand || '0'}</div>
           </CardContent>
         </Card>
         <Card>
@@ -111,7 +111,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
             <CardTitle className="text-sm font-medium">Available to Sell</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{location.inventorySummary?.totalAvailable || '0'}</div>
+            <div className="text-2xl font-bold text-green-600">{(location as any).inventorySummary?.totalAvailable || '0'}</div>
           </CardContent>
         </Card>
         <Card>
@@ -119,7 +119,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
             <CardTitle className="text-sm font-medium">Reserved</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{location.inventorySummary?.totalReserved || '0'}</div>
+            <div className="text-2xl font-bold">{(location as any).inventorySummary?.totalReserved || '0'}</div>
           </CardContent>
         </Card>
         <Card>

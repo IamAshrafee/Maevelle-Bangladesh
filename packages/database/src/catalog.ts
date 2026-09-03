@@ -28,6 +28,8 @@ export interface ProductSummary {
 }
 
 export interface CatalogProductWorkspace extends ProductSummary {
+  readonly sizeSystemId: string | null;
+  readonly sizeGuideId: string | null;
   readonly description: string | null;
   readonly productTypeId: string;
   readonly options: readonly {
@@ -2314,15 +2316,20 @@ export async function getCatalogProductWorkspace(
     seo_title: string | null;
     seo_description: string | null;
     updated_at: string;
+    size_system_id: string | null;
+    size_guide_id: string | null;
   }>`
     select product.id::text,product.handle,product.title,product.description,product.status,
       product.publication_status,product.version::text,product.product_type_id::text,
       product_type.name as product_type_name,product.primary_category_id::text,
       product.seo_title,product.seo_description,
-      product.updated_at::text
+      product.updated_at::text,
+      sc.size_system_id::text as size_system_id, sc.size_guide_id::text as size_guide_id
     from catalog.products product
     join catalog.product_types product_type
       on product_type.id=product.product_type_id and product_type.organization_id=product.organization_id
+    left join sizing.product_size_configurations sc 
+      on sc.product_id=product.id and sc.organization_id=product.organization_id and sc.status='ACTIVE'
     where product.organization_id=${organizationId} and product.id=${productId}::uuid
   `.execute(db);
   const row = product.rows[0];
@@ -2569,6 +2576,8 @@ export async function getCatalogProductWorkspace(
     version: Number(row.version),
     productTypeId: row.product_type_id,
     productTypeName: row.product_type_name,
+    sizeSystemId: row.size_system_id,
+    sizeGuideId: row.size_guide_id,
     variantCount: variants.rows.length,
     skuPreview: variants.rows[0]?.sku ?? null,
     updatedAt: row.updated_at,

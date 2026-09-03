@@ -16,7 +16,12 @@ import {
   getAdminSizingWorkspace,
   publishSizeGuideRevision,
   setSizeGuideMeasurement,
+  duplicateSizeGuide,
+  removeSizeGuideRow,
+  setCategoryDefaultSizeGuide,
+  getPublicSizeGuideForProduct,
 } from './sizing.js';
+import { createCatalogCategory } from './catalog.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -203,5 +208,137 @@ describe('revisioned sizing', () => {
     expect((await getAdminSizingWorkspace(database.db, owner.id)).domains).toEqual([
       expect.objectContaining({ id: domain.id, name: 'Owner garment' }),
     ]);
+  });
+
+  it('can duplicate an existing size guide and its contents', async () => {
+    const organization = await createOrganization(database.db, {
+      code: `sizing-dup-${crypto.randomUUID().slice(0, 10)}`,
+      displayName: 'Sizing Dup',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const user1 = await sql<{ id: string }>`
+      insert into iam.users (name, email, email_normalized)
+      values ('Sizing Dup User', ${`sizing-dup-${crypto.randomUUID()}@test.local`}, ${`sizing-dup-${crypto.randomUUID()}@test.local`})
+      returning id
+    `.execute(database.db);
+    const actorId = user1.rows[0]!.id;
+    const domain = await createSizingDomain(database.db, {
+      organizationId: organization.id,
+      code: 'garment-dup',
+      name: 'Garment',
+      subjectType: 'GARMENT',
+    });
+    const guide = await createSizeGuide(database.db, {
+      organizationId: organization.id,
+      actorId,
+      name: 'Original Guide',
+      sizingDomainId: domain.id,
+    });
+    await addSizeGuideRow(database.db, {
+      organizationId: organization.id,
+      revisionId: guide.revisionId,
+      displayLabel: 'L',
+      position: 0,
+    });
+    const duplicated = await duplicateSizeGuide(database.db, {
+      organizationId: organization.id,
+      actorId,
+      id: guide.id,
+      name: 'Duplicated Guide',
+    });
+    expect(duplicated.id).not.toBe(guide.id);
+    const workspace = await getAdminSizingWorkspace(database.db, organization.id);
+    const dupGuide = workspace.guides.find((g) => g.id === duplicated.id);
+    expect(dupGuide?.name).toBe('Duplicated Guide');
+    expect(dupGuide?.revisions[0]?.rows).toHaveLength(1);
+    expect(dupGuide?.revisions[0]?.rows[0]?.displayLabel).toBe('L');
+  });
+
+  it('can set and retrieve a category default size guide', async () => {
+    const organization = await createOrganization(database.db, {
+      code: `sizing-cat-${crypto.randomUUID().slice(0, 10)}`,
+      displayName: 'Sizing Cat',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const user2 = await sql<{ id: string }>`
+      insert into iam.users (name, email, email_normalized)
+      values ('Sizing Cat User', ${`sizing-cat-${crypto.randomUUID()}@test.local`}, ${`sizing-cat-${crypto.randomUUID()}@test.local`})
+      returning id
+    `.execute(database.db);
+    const actorId = user2.rows[0]!.id;
+    const domain = await createSizingDomain(database.db, {
+      organizationId: organization.id,
+      code: 'garment-cat',
+      name: 'Garment',
+      subjectType: 'GARMENT',
+    });
+    const guide = await createSizeGuide(database.db, {
+      organizationId: organization.id,
+      actorId,
+      name: 'Category Default Guide',
+      sizingDomainId: domain.id,
+    });
+    const measurement = await createMeasurementDefinition(database.db, {
+      organizationId: organization.id,
+      sizingDomainId: domain.id,
+      code: 'bust-cat',
+      name: 'Bust',
+      subjectType: 'GARMENT',
+      defaultUnit: 'cm',
+      sortOrder: 0,
+    });
+    const row = await addSizeGuideRow(database.db, {
+      organizationId: organization.id,
+      revisionId: guide.revisionId,
+      displayLabel: 'M',
+      position: 0,
+    });
+    await setSizeGuideMeasurement(database.db, {
+      organizationId: organization.id,
+      revisionId: guide.revisionId,
+      rowId: row.id,
+      measurementDefinitionId: measurement.id,
+      unitCode: 'cm',
+      exact: '90',
+    });
+    await publishSizeGuideRevision(database.db, {
+      organizationId: organization.id,
+      sizeGuideId: guide.id,
+      revisionId: guide.revisionId,
+      actorId,
+    });
+    const category = await createCatalogCategory(database.db, {
+      organizationId: organization.id,
+      actorId,
+      handle: 'tops',
+      name: 'Tops',
+      position: 1,
+    });
+    await setCategoryDefaultSizeGuide(database.db, {
+      organizationId: organization.id,
+      categoryId: category.id,
+      sizeGuideId: guide.id,
+      actorId,
+    });
+    const type = await sql<{ id: string }>`insert into catalog.product_types (organization_id, code, name) values (${organization.id}, 'tee', 'Tee') returning id`.execute(database.db);
+    const product = await createCatalogProduct(database.db, {
+      organizationId: organization.id,
+      actorId,
+      productTypeId: type.rows[0]!.id,
+      title: 'Basic Tee',
+      handle: `tee-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    await sql`insert into catalog.product_categories (organization_id, product_id, category_id) values (${organization.id}, ${product.id}, ${category.id})`.execute(database.db);
+    
+    const publicGuide = await getPublicSizeGuideForProduct(
+      database.db,
+      organization.id,
+      product.id,
+    );
+    expect(publicGuide).toMatchObject({ name: 'Category Default Guide' });
   });
 });
