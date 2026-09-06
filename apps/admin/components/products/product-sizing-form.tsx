@@ -24,10 +24,10 @@ export function ProductSizingForm({
 
   useEffect(() => {
     let active = true;
-    void catalogData<{ data: SizeGuideSummaryDto[] }>('/admin/sizing/guides')
+    void catalogData<SizeGuideSummaryDto[]>('/admin/sizing/guides')
       .then((res) => {
         if (active) {
-          setGuides(res.data);
+          setGuides(res ?? []);
           setLoadingGuides(false);
         }
       })

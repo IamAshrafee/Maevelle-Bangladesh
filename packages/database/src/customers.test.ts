@@ -35,8 +35,6 @@ describe('Customers Domain', () => {
       organizationId,
       actorId,
       displayName: 'Test Customer',
-      phone: '01711223344',
-      email: 'test@maevelle.local',
     });
     
     expect(customer.id).toBeDefined();

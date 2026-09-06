@@ -79,10 +79,11 @@ export function registerCatalogClassificationRoutes(
         body: Type.Object({
           name: Type.String({ minLength: 1 }),
           handle: slug,
-          parentCategoryId: Type.Optional(Type.String()),
+          parentCategoryId: Type.Optional(Type.String({ minLength: 1 })),
           status: Type.Optional(status),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
-          defaultSizeGuideId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          // minLength:1 prevents AJV from coercing null → "" when value is null
+          defaultSizeGuideId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
         }),
       },
     },
@@ -95,17 +96,21 @@ export function registerCatalogClassificationRoutes(
       );
       if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
+        const body = request.body as {
+          name: string;
+          handle: string;
+          parentCategoryId?: string;
+          status?: CatalogClassificationStatus;
+          position?: number;
+          defaultSizeGuideId?: string | null;
+        };
         return reply.code(201).send({
           data: await createManagedCategory(database.db, {
             ...context,
-            ...(request.body as {
-              name: string;
-              handle: string;
-              parentCategoryId?: string;
-              status?: CatalogClassificationStatus;
-              position?: number;
-              defaultSizeGuideId?: string | null;
-            }),
+            ...body,
+            // Belt-and-suspenders: coerce empty strings to null for UUID fields
+            parentCategoryId: body.parentCategoryId || undefined,
+            defaultSizeGuideId: body.defaultSizeGuideId || null,
           }),
         });
       } catch (error) {
@@ -123,9 +128,10 @@ export function registerCatalogClassificationRoutes(
           name: Type.Optional(Type.String({ minLength: 1 })),
           handle: Type.Optional(slug),
           status: Type.Optional(status),
-          parentCategoryId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          // minLength:1 prevents AJV from coercing null → "" when value is null
+          parentCategoryId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
-          defaultSizeGuideId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          defaultSizeGuideId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
         }),
       },
     },
@@ -151,6 +157,9 @@ export function registerCatalogClassificationRoutes(
         await updateManagedCategory(database.db, {
           ...context,
           ...changes,
+          // Belt-and-suspenders: coerce empty strings to null for UUID fields
+          parentCategoryId: changes.parentCategoryId || null,
+          defaultSizeGuideId: changes.defaultSizeGuideId || null,
           categoryId: (request.params as { categoryId: string }).categoryId,
           expectedVersion: version,
         });

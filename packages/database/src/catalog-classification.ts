@@ -231,8 +231,8 @@ export async function createManagedCategory(
     }
     const created = await sql<{ id: string }>`insert into catalog.categories
       (organization_id,name,handle,parent_category_id,status,position,default_size_guide_id)
-      values (${input.organizationId},${identity.name},${identity.handle},${input.parentCategoryId ?? null},
-        ${input.status ?? 'ACTIVE'},${input.position ?? 0},${input.defaultSizeGuideId ?? null}::uuid) returning id`.execute(transaction);
+      values (${input.organizationId},${identity.name},${identity.handle},${input.parentCategoryId || null}::uuid,
+        ${input.status ?? 'ACTIVE'},${input.position ?? 0},${input.defaultSizeGuideId || null}::uuid) returning id`.execute(transaction);
     const id = created.rows[0]!.id;
     await emitClassificationEvent(transaction, {
       ...input,
@@ -298,8 +298,8 @@ export async function updateManagedCategory(
     const guideProvided = input.defaultSizeGuideId !== undefined;
     const updated = await sql`update catalog.categories set
       name=${identity.name},handle=${identity.handle},status=coalesce(${input.status ?? null},status),
-      parent_category_id=case when ${parentProvided} then ${input.parentCategoryId ?? null}::uuid else parent_category_id end,
-      default_size_guide_id=case when ${guideProvided} then ${input.defaultSizeGuideId ?? null}::uuid else default_size_guide_id end,
+      parent_category_id=case when ${parentProvided} then ${input.parentCategoryId || null}::uuid else parent_category_id end,
+      default_size_guide_id=case when ${guideProvided} then ${input.defaultSizeGuideId || null}::uuid else default_size_guide_id end,
       position=coalesce(${input.position ?? null},position),version=version+1,updated_at=now()
       where organization_id=${input.organizationId} and id=${input.categoryId}
         and version=${input.expectedVersion}`.execute(transaction);

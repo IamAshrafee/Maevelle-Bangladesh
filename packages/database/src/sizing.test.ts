@@ -95,6 +95,7 @@ describe('revisioned sizing', () => {
       organizationId: organization.id,
       sizeGuideId: guide.id,
       revisionId: guide.revisionId,
+      actorId,
     });
     await expect(
       addSizeGuideRow(database.db, {
@@ -128,6 +129,7 @@ describe('revisioned sizing', () => {
       productId: product.id,
       sizeSystemId: system.id,
       sizeGuideId: guide.id,
+      actorId,
     });
     const attached = await sql<{
       count: string;
@@ -313,10 +315,8 @@ describe('revisioned sizing', () => {
     });
     const category = await createCatalogCategory(database.db, {
       organizationId: organization.id,
-      actorId,
       handle: 'tops',
       name: 'Tops',
-      position: 1,
     });
     await setCategoryDefaultSizeGuide(database.db, {
       organizationId: organization.id,
