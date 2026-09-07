@@ -1,4 +1,4 @@
-import { LocationForm } from '@/components/inventory/location-form';
+import { LocationForm } from './_components/location-form';
 
 export default function NewLocationPage() {
   return <LocationForm />;

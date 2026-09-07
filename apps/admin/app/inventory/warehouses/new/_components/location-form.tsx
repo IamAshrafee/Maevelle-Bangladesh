@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 import { inventoryRequest } from '@/lib/inventory/api';
 import { Button } from '@/components/ui/button';
@@ -18,20 +20,30 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+const formSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  code: z.string().min(1, 'Location code is required'),
+  locationType: z.string().min(1, 'Location type is required'),
+  fullAddress: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
 export function LocationForm() {
   const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [locationType, setLocationType] = useState('WAREHOUSE');
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+      code: '',
+      locationType: 'WAREHOUSE',
+      fullAddress: '',
+    },
+  });
 
-  const [fullAddress, setFullAddress] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const onSubmit = async (values: FormValues) => {
     setError(null);
 
     try {
@@ -39,12 +51,12 @@ export function LocationForm() {
       const result = await inventoryRequest<{ data: { id: string } }>('/warehouse/locations', {
         method: 'POST',
         body: JSON.stringify({
-          name,
-          code,
-          locationType,
+          name: values.name,
+          code: values.code,
+          locationType: values.locationType,
           capabilities: ['STOCK_HOLDING', 'TRANSFER_SEND', 'TRANSFER_RECEIVE', 'INTERNAL_STORAGE'],
           address: {
-            fullAddress: fullAddress || undefined,
+            fullAddress: values.fullAddress || undefined,
             countryCode: 'BD', // default for Maevelle Bangladesh
           },
         }),
@@ -53,7 +65,6 @@ export function LocationForm() {
       router.push(`/inventory/warehouses/${result.data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
-      setIsSubmitting(false);
     }
   };
 
@@ -77,7 +88,7 @@ export function LocationForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>General Information</CardTitle>
@@ -88,11 +99,12 @@ export function LocationForm() {
               <Label htmlFor="name">Name <span className="text-destructive">*</span></Label>
               <Input 
                 id="name" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                required 
                 placeholder="e.g. Main Warehouse Dhaka" 
+                {...form.register('name')} 
               />
+              {form.formState.errors.name && (
+                <p className="text-sm font-medium text-destructive">{form.formState.errors.name.message}</p>
+              )}
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -100,22 +112,22 @@ export function LocationForm() {
                 <Label htmlFor="code">Location Code <span className="text-destructive">*</span></Label>
                 <Input 
                   id="code" 
-                  value={code} 
-                  onChange={(e) => setCode(e.target.value)} 
-                  required 
                   placeholder="e.g. WH-DHAKA-01" 
+                  {...form.register('code')} 
                 />
+                {form.formState.errors.code && (
+                  <p className="text-sm font-medium text-destructive">{form.formState.errors.code.message}</p>
+                )}
               </div>
+              
               <div className="grid gap-2">
                 <Label htmlFor="type">Location Type</Label>
-                <Select value={locationType} onValueChange={(v) => setLocationType(v || '')}>
+                <Select 
+                  onValueChange={(val) => form.setValue('locationType', val || '', { shouldValidate: true })}
+                  value={form.watch('locationType')}
+                >
                   <SelectTrigger id="type">
-                    <SelectValue placeholder="Select type">
-                      {locationType === 'WAREHOUSE' ? 'Warehouse' :
-                       locationType === 'FULFILLMENT_CENTER' ? 'Fulfillment Center' :
-                       locationType === 'STORE' ? 'Retail Store' :
-                       locationType === 'DROPSHIPPER' ? 'Dropshipper' : undefined}
-                    </SelectValue>
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="WAREHOUSE">Warehouse</SelectItem>
@@ -124,6 +136,9 @@ export function LocationForm() {
                     <SelectItem value="DROPSHIPPER">Dropshipper</SelectItem>
                   </SelectContent>
                 </Select>
+                {form.formState.errors.locationType && (
+                  <p className="text-sm font-medium text-destructive">{form.formState.errors.locationType.message}</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -139,16 +154,18 @@ export function LocationForm() {
               <Label htmlFor="fullAddress">Full Address</Label>
               <Input 
                 id="fullAddress" 
-                value={fullAddress} 
-                onChange={(e) => setFullAddress(e.target.value)} 
                 placeholder="e.g. 123 Logistics Way, Dhaka 1200, Bangladesh" 
+                {...form.register('fullAddress')} 
               />
+              {form.formState.errors.fullAddress && (
+                <p className="text-sm font-medium text-destructive">{form.formState.errors.fullAddress.message}</p>
+              )}
             </div>
 
             <div className="pt-6 flex justify-end">
-              <Button type="submit" disabled={isSubmitting || !name || !code}>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
                 <Save className="mr-2 h-4 w-4" />
-                {isSubmitting ? 'Creating...' : 'Create Location'}
+                {form.formState.isSubmitting ? 'Creating...' : 'Create Location'}
               </Button>
             </div>
           </CardContent>
