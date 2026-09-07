@@ -33,6 +33,7 @@ import { ProductOverviewForm } from '@/components/products/product-overview-form
 import { ProductReview } from '@/components/products/product-review';
 import { ProductVariantsForm } from '@/components/products/product-variants-form';
 import { StatusBadge } from '@/components/status-badge';
+import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { catalogData } from '@/lib/catalog/api';
 
@@ -266,27 +267,17 @@ export function ProductEditor({ productId }: { productId: string }) {
 
   return (
     <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
-      <nav
-        className="mb-4 flex items-center gap-2 text-sm text-muted-foreground"
-        aria-label="Breadcrumb"
-      >
-        <Link className="hover:text-foreground" href="/products">
-          Products
-        </Link>
-        <span aria-hidden="true">/</span>
-        {isNew ? (
-          <span className="max-w-72 truncate">{workspace.title || 'New Product'}</span>
-        ) : (
-          <Link
-            className="max-w-72 truncate hover:text-foreground"
-            href={`/products/${workspace.id}`}
-          >
-            {workspace.title}
-          </Link>
-        )}
-        <span aria-hidden="true">/</span>
-        <span className="text-foreground">{isNew ? 'Create' : 'Edit'}</span>
-      </nav>
+      <Breadcrumb
+        className="mb-4"
+        items={[
+          { label: 'Products', href: '/products' },
+          ...(isNew
+            ? [{ label: workspace.title || 'New Product' }]
+            : [{ label: workspace.title, href: `/products/${workspace.id}` }]),
+          { label: isNew ? 'Create' : 'Edit', current: true },
+        ]}
+        maxLabelWidth="18rem"
+      />
       <header className="mb-5 flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

@@ -11,6 +11,7 @@ import { CancelOrderDialog } from './cancel-order-dialog';
 import { CreateFulfillmentDialog } from './create-fulfillment-dialog';
 import { HoldOrderDialog } from './hold-order-dialog';
 import { StatusBadge } from '@/components/status-badge';
+import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -90,12 +91,13 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
       <header className="flex flex-col gap-4 border-b pb-5">
         <div className="flex items-center justify-between">
           <div>
-            <nav className="mb-2 text-xs font-medium text-muted-foreground" aria-label="Breadcrumb">
-              <Link href="/orders" className="hover:underline">
-                Orders
-              </Link>{' '}
-              <span aria-hidden="true">/</span> {order.orderNumber}
-            </nav>
+            <Breadcrumb
+              items={[
+                { label: 'Orders', href: '/orders' },
+                { label: order.orderNumber, current: true },
+              ]}
+              className="mb-2"
+            />
             <h1 className="flex items-center gap-3 text-balance text-2xl font-semibold tracking-tight">
               Order {order.orderNumber}
               <StatusBadge status={order.status} />

@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import type { CustomerDetailDto } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
+import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { fetchApiData } from '@/lib/api';
 import { EditCustomerDialog } from './edit-customer-dialog';
@@ -58,12 +59,13 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
       <header className="flex flex-col gap-4 border-b pb-5">
         <div className="flex items-center justify-between">
           <div>
-            <nav className="mb-2 text-xs font-medium text-muted-foreground" aria-label="Breadcrumb">
-              <Link href="/customers" className="hover:underline">
-                Customers
-              </Link>{' '}
-              <span aria-hidden="true">/</span> {customer.displayName}
-            </nav>
+            <Breadcrumb
+              items={[
+                { label: 'Customers', href: '/customers' },
+                { label: customer.displayName, current: true },
+              ]}
+              className="mb-2"
+            />
             <h1 className="flex items-center gap-3 text-balance text-2xl font-semibold tracking-tight">
               {customer.displayName}
               <StatusBadge status={customer.status} />

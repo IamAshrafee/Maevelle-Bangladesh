@@ -26,6 +26,7 @@ import type {
 
 import { ProductReadiness } from '@/components/products/product-readiness';
 import { StatusBadge } from '@/components/status-badge';
+import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { catalogData, formatCatalogMoney, productMediaUrl } from '@/lib/catalog/api';
 
@@ -177,16 +178,13 @@ export function ProductDetails({ productId }: { productId: string }) {
 
   return (
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-      <nav
-        className="flex items-center gap-2 text-sm text-muted-foreground"
-        aria-label="Breadcrumb"
-      >
-        <Link className="hover:text-foreground" href="/products">
-          Products
-        </Link>
-        <span aria-hidden="true">/</span>
-        <span className="max-w-[50vw] truncate text-foreground">{workspace.title}</span>
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: 'Products', href: '/products' },
+          { label: workspace.title, current: true },
+        ]}
+        maxLabelWidth="50vw"
+      />
       <header className="flex flex-col gap-4 border-b pb-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="flex min-w-0 items-center gap-4">
           <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/10">

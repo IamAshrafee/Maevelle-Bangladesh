@@ -23,6 +23,7 @@ import type {
 
 import { ProductTypeManager } from '@/components/catalog-product-types/product-type-manager';
 import { StatusBadge } from '@/components/status-badge';
+import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { catalogData, formatCatalogMoney } from '@/lib/catalog/api';
 
@@ -172,9 +173,13 @@ export function ProductList() {
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <nav className="mb-2 text-xs font-medium text-muted-foreground" aria-label="Breadcrumb">
-            Catalog <span aria-hidden="true">/</span> Products
-          </nav>
+          <Breadcrumb
+            items={[
+              { label: 'Catalog', href: '/products' },
+              { label: 'Products', current: true },
+            ]}
+            className="mb-2"
+          />
           <h1 className="text-balance text-2xl font-semibold tracking-tight">Products</h1>
           <p className="mt-1 max-w-2xl text-pretty text-sm text-muted-foreground">
             Create, prepare, publish, and maintain every sellable item from one catalog.
