@@ -5,18 +5,13 @@ import type { DatabaseClient } from '@maevelle/database';
 import {
   adjustInventory,
   createInventoryReservation,
-  createWarehouseTransfer,
-  dispatchWarehouseTransfer,
   listInventoryBalances,
   listInventoryHistory,
   moveInventoryCondition,
   postStocktake,
-  receiveWarehouseTransfer,
   recordStocktakeCount,
   releaseInventoryReservation,
   startStocktake,
-  approveWarehouseTransfer,
-  cancelWarehouseTransfer,
   getStocktakeWorkspace,
   listStocktakeSessions,
   getInventoryStats,
@@ -24,15 +19,7 @@ import {
   listInventoryReservations,
   InventoryDomainError,
 } from '@maevelle/database/inventory';
-import {
-  createLocation,
-  listLocations,
-  updateLocation,
-  getLocationDetail,
-  getTransferDetail,
-  listWarehouseTransfers,
-  WarehouseDomainError,
-} from '@maevelle/database/warehouse';
+import { WarehouseDomainError } from '@maevelle/database/warehouse';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
@@ -117,90 +104,6 @@ export function registerInventoryRoutes(
   database: DatabaseClient,
   auth: Auth,
 ): void {
-  app.get('/admin/warehouse/locations', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'warehouse.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listLocations(database.db, active.organizationId) };
-  });
-  app.post(
-    '/admin/warehouse/locations',
-    {
-      schema: {
-        body: Type.Object({
-          code: Type.String({ minLength: 1 }),
-          name: Type.String({ minLength: 1 }),
-          locationType: Type.String(),
-          capabilities: Type.Array(Type.String(), { minItems: 1 }),
-          address: Type.Optional(Type.Object({}, { additionalProperties: true })),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'warehouse.manage');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        return reply.code(201).send({
-          data: await createLocation(database.db, {
-            organizationId: active.organizationId,
-            actorId: active.actorId,
-            ...(request.body as {
-              code: string;
-              name: string;
-              locationType: string;
-              capabilities: never[];
-              address?: Record<string, unknown>;
-            }),
-          }),
-        });
-      } catch (error) {
-        return sendError(reply, error);
-      }
-    },
-  );
-  app.patch(
-    '/admin/warehouse/locations/:locationId',
-    {
-      schema: {
-        body: Type.Object({
-          version: Type.Integer({ minimum: 1 }),
-          name: Type.Optional(Type.String({ minLength: 1 })),
-          status: Type.Optional(
-            Type.Union([
-              Type.Literal('ACTIVE'),
-              Type.Literal('INACTIVE'),
-              Type.Literal('ARCHIVED'),
-            ]),
-          ),
-          capabilities: Type.Optional(Type.Array(Type.String(), { minItems: 1 })),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'warehouse.manage');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        const body = request.body as {
-          version: number;
-          name?: string;
-          status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
-          capabilities?: never[];
-        };
-        return {
-          data: await updateLocation(database.db, {
-            organizationId: active.organizationId,
-            actorId: active.actorId,
-            locationId: (request.params as { locationId: string }).locationId,
-            expectedVersion: body.version,
-            ...(body.name === undefined ? {} : { name: body.name }),
-            ...(body.status === undefined ? {} : { status: body.status }),
-            ...(body.capabilities === undefined ? {} : { capabilities: body.capabilities }),
-          }),
-        };
-      } catch (error) {
-        return sendError(reply, error);
-      }
-    },
-  );
   app.get(
     '/admin/inventory/stock',
     {
@@ -412,153 +315,6 @@ export function registerInventoryRoutes(
     }
   });
   app.post(
-    '/admin/warehouse/transfers',
-    {
-      schema: {
-        body: Type.Object({
-          sourceLocationId: Type.String(),
-          destinationLocationId: Type.String(),
-          lines: Type.Array(Type.Object({ variantId: Type.String(), quantity }), { minItems: 1 }),
-          notes: Type.Optional(Type.String()),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'warehouse.manage');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        return reply.code(201).send({
-          data: await createWarehouseTransfer(database.db, {
-            organizationId: active.organizationId,
-            actorId: active.actorId,
-            ...(request.body as Omit<
-              Parameters<typeof createWarehouseTransfer>[1],
-              'organizationId' | 'actorId'
-            >),
-          }),
-        });
-      } catch (error) {
-        return sendError(reply, error);
-      }
-    },
-  );
-  app.get(
-    '/admin/warehouse/transfers',
-    {
-      schema: {
-        querystring: Type.Object({
-          search: Type.Optional(Type.String()),
-          status: Type.Optional(Type.String()),
-          sourceLocationId: Type.Optional(Type.String()),
-          destinationLocationId: Type.Optional(Type.String()),
-          page: Type.Optional(Type.Integer({ minimum: 1 })),
-          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'warehouse.view');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      return { data: await listWarehouseTransfers(database.db, active.organizationId, request.query as any) };
-    }
-  );
-  app.post(
-    '/admin/warehouse/transfers/:transferId/approve',
-    { schema: { body: Type.Object({ version: Type.Integer({ minimum: 1 }) }) } },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'warehouse.manage');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        return {
-          data: await approveWarehouseTransfer(database.db, {
-            organizationId: active.organizationId,
-            actorId: active.actorId,
-            transferId: (request.params as { transferId: string }).transferId,
-            expectedVersion: (request.body as { version: number }).version,
-          }),
-        };
-      } catch (error) {
-        return sendError(reply, error);
-      }
-    },
-  );
-  app.post(
-    '/admin/warehouse/transfers/:transferId/cancel',
-    { schema: { body: Type.Object({ version: Type.Integer({ minimum: 1 }) }) } },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'warehouse.manage');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        return {
-          data: await cancelWarehouseTransfer(database.db, {
-            organizationId: active.organizationId,
-            actorId: active.actorId,
-            transferId: (request.params as { transferId: string }).transferId,
-            expectedVersion: (request.body as { version: number }).version,
-          }),
-        };
-      } catch (error) {
-        return sendError(reply, error);
-      }
-    },
-  );
-  app.post('/admin/warehouse/transfers/:transferId/dispatch', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'inventory.transfer');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
-    if (!key || typeof key !== 'string') return key;
-    try {
-      return {
-        data: await dispatchWarehouseTransfer(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          transferId: (request.params as { transferId: string }).transferId,
-          idempotencyKey: key,
-        }),
-      };
-    } catch (error) {
-      return sendError(reply, error);
-    }
-  });
-  app.post(
-    '/admin/warehouse/transfers/:transferId/receive',
-    {
-      schema: {
-        body: Type.Object({
-          lines: Type.Array(
-            Type.Object({
-              transferLineId: Type.String(),
-              sellableQuantity: quantity,
-              damagedQuantity: Type.Optional(quantity),
-              quarantineQuantity: Type.Optional(quantity),
-              inspectionQuantity: Type.Optional(quantity),
-            }),
-            { minItems: 1 },
-          ),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'inventory.transfer');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
-      if (!key || typeof key !== 'string') return key;
-      try {
-        return {
-          data: await receiveWarehouseTransfer(database.db, {
-            organizationId: active.organizationId,
-            actorId: active.actorId,
-            transferId: (request.params as { transferId: string }).transferId,
-            lines: (request.body as { lines: never[] }).lines,
-            idempotencyKey: key,
-          }),
-        };
-      } catch (error) {
-        return sendError(reply, error);
-      }
-    },
-  );
-  app.post(
     '/admin/inventory/stocktakes',
     { schema: { body: Type.Object({ locationId: Type.String() }) } },
     async (request, reply) => {
@@ -672,28 +428,6 @@ export function registerInventoryRoutes(
       };
     }
   );
-
-  app.get('/admin/warehouse/locations/:locationId', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'warehouse.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    const detail = await getLocationDetail(
-      database.db,
-      active.organizationId,
-      (request.params as { locationId: string }).locationId,
-    );
-    return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
-  });
-
-  app.get('/admin/warehouse/transfers/:transferId', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'inventory.transfer');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    const detail = await getTransferDetail(
-      database.db,
-      active.organizationId,
-      (request.params as { transferId: string }).transferId,
-    );
-    return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
-  });
 
   app.get(
     '/admin/inventory/stocktakes',
