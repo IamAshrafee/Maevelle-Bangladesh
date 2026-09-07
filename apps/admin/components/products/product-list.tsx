@@ -25,6 +25,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
+import { SearchInput } from '@/components/ui/search-input';
 import { catalogData, formatCatalogMoney } from '@/lib/catalog/api';
 
 const statuses = ['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'] as const;
@@ -66,6 +67,30 @@ export function ProductList() {
     : 'ALL';
   const productTypeId = searchParameters.get('type') ?? 'ALL';
   const page = Math.max(1, Number(searchParameters.get('page') ?? 1) || 1);
+
+  const productTypeItems = useMemo(() => {
+    const map: Record<string, string> = { ALL: 'All Product Types' };
+    for (const t of types) {
+      map[t.id] = t.name;
+    }
+    return map;
+  }, [types]);
+
+  const statusItems = useMemo(() => {
+    const map: Record<string, string> = { ALL: 'Any Catalog State' };
+    for (const s of statuses) {
+      if (s !== 'ALL') map[s] = s.replaceAll('_', ' ');
+    }
+    return map;
+  }, []);
+
+  const readinessItems = useMemo(() => {
+    const map: Record<string, string> = { ALL: 'Any Readiness' };
+    for (const r of readinessStates) {
+      if (r !== 'ALL') map[r] = r.replaceAll('_', ' ');
+    }
+    return map;
+  }, []);
 
   function replaceQuery(changes: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParameters.toString());
@@ -224,24 +249,26 @@ export function ProductList() {
       <section className="space-y-3" aria-label="Product filters">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
           {/* ── Search input ── */}
-          <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border bg-card px-3 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/20">
-            <Search className="size-4 text-muted-foreground" aria-hidden="true" />
-            <span className="sr-only">Search Products</span>
-            <input
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          <div className="flex-1 min-w-0">
+            <SearchInput
               name="productSearch"
               autoComplete="off"
               placeholder="Search name, handle, SKU, or Product Type…"
               value={query}
-              onChange={(event) => setQuery(event.target.value.slice(0, 120))}
+              onChange={(val) => setQuery(val.slice(0, 120))}
+              onClear={() => setQuery('')}
+              shortcut="/"
+              isLoading={deferredQuery !== query}
+              aria-label="Search Products"
             />
-          </label>
+          </div>
 
           <div className="flex flex-wrap gap-2">
             {/* ── Product Type — Select ── */}
             <Select
               value={productTypeId}
               onValueChange={(val: string | null) => replaceQuery({ type: val ?? 'ALL', page: '1' })}
+              items={productTypeItems}
             >
               <SelectTrigger
                 aria-label="Filter by Product Type"
@@ -261,6 +288,7 @@ export function ProductList() {
             <Select
               value={status}
               onValueChange={(val: string | null) => replaceQuery({ status: val ?? 'ALL', page: '1' })}
+              items={statusItems}
             >
               <SelectTrigger
                 aria-label="Filter by Catalog State"
@@ -279,6 +307,7 @@ export function ProductList() {
             <Select
               value={readiness}
               onValueChange={(val: string | null) => replaceQuery({ readiness: val ?? 'ALL', page: '1' })}
+              items={readinessItems}
             >
               <SelectTrigger
                 aria-label="Filter by Readiness"

@@ -256,9 +256,11 @@ type SelectItemProps = SelectPrimitive.Item.Props & {
 };
 
 function SelectItem({ className, children, icon, description, ...props }: SelectItemProps) {
+  const textLabel = typeof children === 'string' ? children : undefined;
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
+      label={textLabel}
       className={cn(
         // layout
         'relative flex w-full cursor-default items-start gap-2 rounded-md py-1.5 pr-8 pl-2',
