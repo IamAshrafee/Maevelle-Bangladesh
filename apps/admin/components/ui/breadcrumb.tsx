@@ -170,6 +170,7 @@ function BreadcrumbLink({
   disabled,
   maxLabelWidth,
   children,
+  onClick,
   ...props
 }: BreadcrumbLinkProps) {
   const { size } = useBreadcrumbContext();
@@ -195,7 +196,7 @@ function BreadcrumbLink({
       tabIndex={disabled ? -1 : undefined}
       aria-disabled={disabled || undefined}
       className={cn(breadcrumbLinkVariants({ size }), className)}
-      {...(disabled ? { onClick: (e: any) => e.preventDefault() } : {})}
+      onClick={disabled ? (e: React.MouseEvent) => e.preventDefault() : onClick}
       {...props}
     >
       {inner}
