@@ -109,7 +109,7 @@ export function registerCatalogClassificationRoutes(
             ...context,
             ...body,
             // Belt-and-suspenders: coerce empty strings to null for UUID fields
-            parentCategoryId: body.parentCategoryId || undefined,
+            ...(body.parentCategoryId ? { parentCategoryId: body.parentCategoryId } : {}),
             defaultSizeGuideId: body.defaultSizeGuideId || null,
           }),
         });
