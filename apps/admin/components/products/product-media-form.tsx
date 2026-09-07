@@ -1,538 +1,291 @@
 'use client';
 
 import {
-  Check,
-  ImagePlus,
-  Images,
-  Library,
-  Link2,
-  LoaderCircle,
+  ImageIcon,
+  Loader2,
   Star,
   Trash2,
-  Upload,
+  UploadCloud,
 } from 'lucide-react';
 import Image from 'next/image';
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useRef, useState } from 'react';
 
 import type { ApiEnvelope, CatalogProductMediaDto } from '@maevelle/contracts';
-
 import type { ProductEditorSectionProps } from '@/components/products/product-editor-types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { catalogData, catalogRequest, productMediaUrl } from '@/lib/catalog/api';
 
-type MediaAsset = {
-  readonly id: string;
-  readonly title: string | null;
-  readonly altText: string | null;
-  readonly mimeType: string;
-  readonly visibility: 'PUBLIC' | 'PRIVATE';
-  readonly status: 'READY' | 'ARCHIVED';
-  readonly widthPx: number | null;
-  readonly heightPx: number | null;
-};
+type MediaAsset = { id: string };
 
-type MediaRole = CatalogProductMediaDto['role'];
+function GallerySection({
+  title,
+  description,
+  media,
+  onUpload,
+  onRemove,
+  onMakePrimary,
+  isUploading,
+}: {
+  title: string;
+  description: string;
+  media: CatalogProductMediaDto[];
+  onUpload: (files: FileList) => void;
+  onRemove: (mediaId: string) => void;
+  onMakePrimary: (m: CatalogProductMediaDto) => void;
+  isUploading: boolean;
+}) {
+  const [dragActive, setDragActive] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-function scopeLabel(
-  workspace: ProductEditorSectionProps['workspace'],
-  media: CatalogProductMediaDto,
-): string {
-  if (media.variantId)
-    return `Variant · ${workspace.variants.find((variant) => variant.id === media.variantId)?.sku ?? 'Unavailable'}`;
-  if (media.optionValueId) {
-    const value = workspace.options
-      .flatMap((axis) => axis.values)
-      .find((item) => item.id === media.optionValueId);
-    return `Option · ${value?.label ?? 'Unavailable'}`;
-  }
-  return 'Whole Product';
+  const handleDrag = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      onUpload(e.dataTransfer.files);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border bg-card overflow-hidden">
+      <div className="border-b bg-muted/20 px-4 py-3">
+        <h3 className="font-semibold">{title}</h3>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      
+      <div className="p-4">
+        <div 
+          className={`grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 ${dragActive ? 'bg-primary/5' : ''}`}
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+        >
+          {media.map((m) => (
+            <div key={m.id} className="group relative aspect-square rounded-lg border bg-muted overflow-hidden">
+              <Image
+                alt={m.altText ?? ''}
+                className="object-cover"
+                fill
+                sizes="150px"
+                src={productMediaUrl(m.assetId, m.visibility)}
+                unoptimized
+              />
+              
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                {!m.isPrimary && (
+                  <button
+                    type="button"
+                    title="Make Primary"
+                    className="p-1.5 bg-background text-foreground rounded-full hover:scale-110 transition-transform"
+                    onClick={() => onMakePrimary(m)}
+                  >
+                    <Star className="size-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  title="Remove"
+                  className="p-1.5 bg-destructive text-destructive-foreground rounded-full hover:scale-110 transition-transform"
+                  onClick={() => onRemove(m.id)}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+
+              {m.isPrimary && (
+                <div className="absolute top-2 left-2 bg-foreground text-background text-[10px] px-1.5 py-0.5 rounded-sm font-bold flex items-center gap-1">
+                  <Star className="size-3 fill-current" /> PRIMARY
+                </div>
+              )}
+            </div>
+          ))}
+
+          <button
+            type="button"
+            disabled={isUploading}
+            onClick={() => inputRef.current?.click()}
+            className={`aspect-square rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-muted-foreground hover:bg-muted/50 transition-colors ${dragActive ? 'border-primary text-primary' : 'border-muted-foreground/25'}`}
+          >
+            {isUploading ? (
+              <Loader2 className="size-6 animate-spin mb-2" />
+            ) : (
+              <UploadCloud className="size-6 mb-2" />
+            )}
+            <span className="text-xs font-medium px-2 text-center">
+              {isUploading ? 'Uploading...' : 'Click or drop files'}
+            </span>
+          </button>
+          
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) {
+                onUpload(e.target.files);
+              }
+              // reset so same file can be selected again if needed
+              if (inputRef.current) inputRef.current.value = '';
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ProductMediaForm({
   workspace,
   onRefresh,
-  onDirtyChange,
+  onMessage,
 }: ProductEditorSectionProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [assets, setAssets] = useState<readonly MediaAsset[]>([]);
-  const [selectedAssetIds, setSelectedAssetIds] = useState<readonly string[]>([]);
-  const [scope, setScope] = useState('product');
-  const [role, setRole] = useState<MediaRole>('GALLERY');
-  const [makePrimary, setMakePrimary] = useState(false);
-  const [publicVisibility, setPublicVisibility] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState('');
-  const [error, setError] = useState('');
-  const attachedIds = useMemo(
-    () => new Set(workspace.media.map((media) => media.assetId)),
-    [workspace.media],
-  );
+  const [uploadingScope, setUploadingScope] = useState<string | null>(null);
 
-  async function loadLibrary(signal?: AbortSignal) {
+  const mainMedia = workspace.media.filter(m => !m.variantId && !m.optionValueId);
+  const colorAxes = workspace.options.filter(a => a.name.toLowerCase() === 'color' || a.name.toLowerCase() === 'colour');
+  const colorOptions = colorAxes.flatMap(a => a.values);
+
+  async function handleUpload(files: FileList, scopeType: 'PRODUCT' | 'OPTION', optionValueId?: string) {
+    const scopeId = scopeType === 'PRODUCT' ? 'product' : `option:${optionValueId}`;
+    setUploadingScope(scopeId);
+    
     try {
-      setAssets(
-        await catalogData<readonly MediaAsset[]>('/admin/media', signal ? { signal } : undefined),
-      );
-    } catch (caught) {
-      if (!(caught instanceof DOMException && caught.name === 'AbortError'))
-        setError(caught instanceof Error ? caught.message : 'Media library could not be loaded.');
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadLibrary(controller.signal);
-    onDirtyChange(false);
-    return () => controller.abort();
-  }, [onDirtyChange, workspace.id]);
-
-  function scopePayload(selectedScope = scope) {
-    if (selectedScope.startsWith('variant:')) return { variantId: selectedScope.slice(8) };
-    if (selectedScope.startsWith('option:')) return { optionValueId: selectedScope.slice(7) };
-    return {};
-  }
-
-  async function attach(assetIds = selectedAssetIds) {
-    if (assetIds.length === 0 || busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      for (const [position, assetId] of assetIds.entries()) {
-        setProgress(`Attaching image ${position + 1} of ${assetIds.length}…`);
-        await catalogData(`/admin/catalog/products/${workspace.id}/media`, {
-          method: 'POST',
-          body: JSON.stringify({
-            assetId,
-            role: scope.startsWith('option:') && role === 'GALLERY' ? 'COLOR_GALLERY' : role,
-            position: workspace.media.length + position,
-            isPrimary: makePrimary && position === 0,
-            ...scopePayload(),
-          }),
-        });
-      }
-      setSelectedAssetIds([]);
-      setMakePrimary(false);
-      await Promise.all([
-        onRefresh(`${assetIds.length} image${assetIds.length === 1 ? '' : 's'} attached.`),
-        loadLibrary(),
-      ]);
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? `${caught.message} Completed attachments remain saved.`
-          : 'Images could not be attached.',
-      );
-    } finally {
-      setBusy(false);
-      setProgress('');
-    }
-  }
-
-  async function upload(files: readonly File[]) {
-    if (files.length === 0 || busy) return;
-    setBusy(true);
-    setError('');
-    const uploaded: string[] = [];
-    try {
-      for (const [index, file] of files.entries()) {
-        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
-          throw new Error(`${file.name} is not a JPEG, PNG, or WebP image.`);
-        setProgress(`Uploading image ${index + 1} of ${files.length}…`);
+      const filesArray = Array.from(files);
+      const uploadedAssets: string[] = [];
+      
+      // Upload each file
+      for (const file of filesArray) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) continue;
+        
         const response = await catalogRequest<ApiEnvelope<MediaAsset>>('/admin/media/images', {
           method: 'POST',
-          headers: { 'x-media-visibility': publicVisibility ? 'public' : 'private' },
+          headers: { 'x-media-visibility': 'public' },
           body: file,
         });
-        uploaded.push(response.data.id);
+        
+        uploadedAssets.push(response.data.id);
+        
+        // Patch basic metadata
         await catalogData(`/admin/media/${response.data.id}`, {
           method: 'PATCH',
           body: JSON.stringify({
             title: file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
             altText: workspace.title,
-            visibility: publicVisibility ? 'PUBLIC' : 'PRIVATE',
+            visibility: 'PUBLIC',
           }),
         });
       }
-      setSelectedAssetIds(uploaded);
-      setProgress('Attaching uploaded images…');
-      setBusy(false);
-      await attach(uploaded);
-      if (inputRef.current) inputRef.current.value = '';
+
+      // Attach each uploaded file to the product
+      for (const [position, assetId] of uploadedAssets.entries()) {
+        const payload: any = {
+          assetId,
+          role: scopeType === 'OPTION' ? 'COLOR_GALLERY' : 'GALLERY',
+          position: workspace.media.length + position,
+          isPrimary: position === 0 && mainMedia.length === 0, // Make primary if it's the first one ever
+        };
+        
+        if (scopeType === 'OPTION') {
+          payload.optionValueId = optionValueId;
+        }
+
+        await catalogData(`/admin/catalog/products/${workspace.id}/media`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      }
+
+      await onRefresh(`${uploadedAssets.length} image(s) attached.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Images could not be uploaded.');
-      setBusy(false);
-      setProgress('');
-      await loadLibrary();
+      onMessage(caught instanceof Error ? caught.message : 'Images could not be uploaded.');
+    } finally {
+      setUploadingScope(null);
     }
   }
 
-  async function detach(media: CatalogProductMediaDto) {
-    if (
-      !window.confirm(
-        `Remove this image from ${scopeLabel(workspace, media)}? The asset remains in the media library.`,
-      )
-    )
-      return;
-    setBusy(true);
+  async function handleRemove(mediaId: string) {
+    if (!window.confirm('Remove this image from the gallery?')) return;
     try {
-      await catalogData(`/admin/catalog/products/${workspace.id}/media/${media.id}`, {
+      await catalogData(`/admin/catalog/products/${workspace.id}/media/${mediaId}`, {
         method: 'DELETE',
       });
-      await onRefresh('Image removed from this Product.');
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Image could not be removed.');
-    } finally {
-      setBusy(false);
+      await onRefresh('Image removed.');
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Could not remove image.');
     }
   }
 
-  async function setPrimary(media: CatalogProductMediaDto) {
-    setBusy(true);
+  async function handleMakePrimary(m: CatalogProductMediaDto) {
     try {
-      const mediaScope = media.variantId
-        ? `variant:${media.variantId}`
-        : media.optionValueId
-          ? `option:${media.optionValueId}`
-          : 'product';
+      const payload: any = {
+        assetId: m.assetId,
+        role: m.role,
+        position: m.position,
+        isPrimary: true,
+      };
+      
+      if (m.variantId) payload.variantId = m.variantId;
+      if (m.optionValueId) payload.optionValueId = m.optionValueId;
+
       await catalogData(`/admin/catalog/products/${workspace.id}/media`, {
         method: 'POST',
-        body: JSON.stringify({
-          assetId: media.assetId,
-          role: media.role,
-          position: media.position,
-          isPrimary: true,
-          ...scopePayload(mediaScope),
-        }),
+        body: JSON.stringify(payload),
       });
-      await onRefresh('Primary image updated for this gallery.');
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Primary image could not be updated.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveMetadata(event: FormEvent<HTMLFormElement>, media: CatalogProductMediaDto) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    setBusy(true);
-    try {
-      await catalogData(`/admin/media/${media.assetId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          title: String(data.get('title') ?? '').trim() || null,
-          altText: String(data.get('altText') ?? '').trim() || null,
-          visibility: data.get('visibility'),
-        }),
-      });
-      await onRefresh('Image title, alt text, and visibility saved.');
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Image metadata could not be saved.');
-    } finally {
-      setBusy(false);
+      await onRefresh('Primary image updated.');
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Could not update primary image.');
     }
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h2 className="flex items-center gap-2 font-semibold">
-              <Upload className="size-4" aria-hidden="true" /> Upload Product Images
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Upload several images at once. They are attached in order, and the first can become
-              the primary image for its selected gallery.
-            </p>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              checked={publicVisibility}
-              type="checkbox"
-              onChange={(event) => setPublicVisibility(event.target.checked)}
-            />{' '}
-            Public and publish-ready
-          </label>
-        </div>
-        <div className="mt-4 rounded-xl border border-dashed p-6 text-center">
-          <ImagePlus className="mx-auto size-7 text-muted-foreground" aria-hidden="true" />
-          <p className="mt-2 text-sm font-medium">JPEG, PNG, or WebP</p>
-          <p className="text-xs text-muted-foreground">
-            Select one or many files. Add useful alt text after upload.
-          </p>
-          <input
-            ref={inputRef}
-            className="sr-only"
-            id="product-image-files"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            type="file"
-            onChange={(event) => void upload(Array.from(event.target.files ?? []))}
-          />
-          <Button className="mt-3" disabled={busy} render={<label htmlFor="product-image-files" />}>
-            <Upload aria-hidden="true" /> Choose Images
-          </Button>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-        <header className="border-b px-5 py-4">
-          <h2 className="flex items-center gap-2 font-semibold">
-            <Library className="size-4" aria-hidden="true" /> Attach from Media Library
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Reuse an existing asset and scope it to the Product, a shared option value such as Red,
-            or one exact Variant.
-          </p>
-        </header>
-        <div className="grid gap-4 border-b p-5 md:grid-cols-4">
-          <div>
-            <Label htmlFor="media-scope">Gallery Scope</Label>
-            <select
-              className="mt-2 h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
-              id="media-scope"
-              value={scope}
-              onChange={(event) => {
-                setScope(event.target.value);
-                if (event.target.value.startsWith('option:')) setRole('COLOR_GALLERY');
-              }}
-            >
-              <option value="product">Whole Product</option>
-              <optgroup label="Shared option gallery">
-                {workspace.options
-                  .filter((axis) => axis.status === 'ACTIVE')
-                  .flatMap((axis) =>
-                    axis.values
-                      .filter((value) => value.status === 'ACTIVE')
-                      .map((value) => (
-                        <option key={value.id} value={`option:${value.id}`}>
-                          {axis.name} · {value.label}
-                        </option>
-                      )),
-                  )}
-              </optgroup>
-              <optgroup label="Exact variant gallery">
-                {workspace.variants
-                  .filter((variant) => variant.status === 'ACTIVE')
-                  .map((variant) => (
-                    <option key={variant.id} value={`variant:${variant.id}`}>
-                      {variant.title ?? variant.sku} · {variant.sku}
-                    </option>
-                  ))}
-              </optgroup>
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="media-role">Image Role</Label>
-            <select
-              className="mt-2 h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
-              id="media-role"
-              value={role}
-              onChange={(event) => setRole(event.target.value as MediaRole)}
-            >
-              <option value="GALLERY">Gallery</option>
-              <option value="THUMBNAIL">Thumbnail</option>
-              <option value="COLOR_GALLERY">Color Gallery</option>
-              <option value="SIZE_DIAGRAM">Size Diagram</option>
-            </select>
-          </div>
-          <label className="flex items-end gap-2 pb-2 text-sm">
-            <input
-              checked={makePrimary}
-              type="checkbox"
-              onChange={(event) => setMakePrimary(event.target.checked)}
-            />{' '}
-            Make first selected primary
-          </label>
-          <Button
-            className="self-end"
-            disabled={busy || selectedAssetIds.length === 0}
-            onClick={() => void attach()}
-          >
-            <Link2 aria-hidden="true" /> Attach {selectedAssetIds.length || ''}
-          </Button>
-        </div>
-        <div className="grid max-h-[31rem] grid-cols-2 gap-2 overflow-y-auto p-4 sm:grid-cols-3 lg:grid-cols-5">
-          {assets
-            .filter((asset) => asset.status === 'READY')
-            .map((asset) => {
-              const selected = selectedAssetIds.includes(asset.id);
-              return (
-                <button
-                  aria-pressed={selected}
-                  className={`group relative overflow-hidden rounded-lg border text-left focus-visible:ring-3 focus-visible:ring-ring/30 ${selected ? 'border-primary ring-2 ring-primary/25' : ''}`}
-                  key={asset.id}
-                  type="button"
-                  onClick={() =>
-                    setSelectedAssetIds((current) =>
-                      current.includes(asset.id)
-                        ? current.filter((id) => id !== asset.id)
-                        : [...current, asset.id],
-                    )
-                  }
-                >
-                  <div className="relative aspect-square bg-muted">
-                    <Image
-                      alt={asset.altText ?? ''}
-                      className="object-cover"
-                      fill
-                      sizes="(max-width: 640px) 50vw, 15vw"
-                      src={productMediaUrl(asset.id, asset.visibility)}
-                      unoptimized
-                    />
-                    {selected ? (
-                      <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                        <Check className="size-4" aria-hidden="true" />
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="p-2">
-                    <p className="truncate text-xs font-medium">
-                      {asset.title ?? 'Untitled image'}
-                    </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {attachedIds.has(asset.id) ? 'Already used · ' : ''}
-                      {asset.visibility}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          {assets.length === 0 ? (
-            <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
-              The media library is empty.
-            </p>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-        <header className="border-b px-5 py-4">
-          <h2 className="flex items-center gap-2 font-semibold">
-            <Images className="size-4" aria-hidden="true" /> Attached Galleries
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Customers see Product images first, then matching option and exact Variant images.
-            Primary images lead each scope.
-          </p>
-        </header>
-        <div className="grid gap-4 p-5 lg:grid-cols-2">
-          {[...workspace.media]
-            .sort(
-              (left, right) =>
-                Number(right.isPrimary) - Number(left.isPrimary) || left.position - right.position,
-            )
-            .map((media) => (
-              <article
-                className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[9rem_minmax(0,1fr)]"
-                key={media.id}
-              >
-                <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
-                  <Image
-                    alt={media.altText ?? ''}
-                    className="object-cover"
-                    fill
-                    sizes="144px"
-                    src={productMediaUrl(media.assetId, media.visibility)}
-                    unoptimized
-                  />
-                  {media.isPrimary ? (
-                    <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-foreground px-2 py-1 text-[10px] font-semibold text-background">
-                      <Star className="size-3 fill-current" aria-hidden="true" /> PRIMARY
-                    </span>
-                  ) : null}
-                </div>
-                <form
-                  className="min-w-0 space-y-3"
-                  onSubmit={(event) => void saveMetadata(event, media)}
-                >
-                  <div>
-                    <p className="truncate text-sm font-semibold">{scopeLabel(workspace, media)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {media.role.replaceAll('_', ' ')} · Position {media.position + 1}
-                    </p>
-                  </div>
-                  <Input
-                    aria-label="Image title"
-                    autoComplete="off"
-                    defaultValue={media.title ?? ''}
-                    name="title"
-                    placeholder="Image title"
-                  />
-                  <Input
-                    aria-label="Alternative text"
-                    autoComplete="off"
-                    defaultValue={media.altText ?? ''}
-                    name="altText"
-                    placeholder="Describe what the image shows"
-                  />
-                  <select
-                    aria-label="Image visibility"
-                    className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"
-                    defaultValue={media.visibility}
-                    name="visibility"
-                  >
-                    <option value="PUBLIC">Public</option>
-                    <option value="PRIVATE">Private</option>
-                  </select>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" type="submit" disabled={busy}>
-                      Save Metadata
-                    </Button>
-                    {!media.isPrimary ? (
-                      <Button
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => void setPrimary(media)}
-                      >
-                        <Star aria-hidden="true" /> Make Primary
-                      </Button>
-                    ) : null}
-                    <Button
-                      aria-label="Detach image"
-                      size="icon-sm"
-                      type="button"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => void detach(media)}
-                    >
-                      <Trash2 aria-hidden="true" />
-                    </Button>
-                  </div>
-                </form>
-              </article>
-            ))}
-          {workspace.media.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground lg:col-span-2">
-              <Images className="mx-auto mb-2 size-8 opacity-40" aria-hidden="true" />
-              No images are attached to this Product yet.
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      {progress ? (
-        <p
-          className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm"
-          role="status"
-          aria-live="polite"
-        >
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> {progress}
+    <div className="space-y-6">
+      <header>
+        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground">
+          <ImageIcon className="h-5 w-5 text-muted-foreground" />
+          Product Galleries
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Drag and drop images directly into the appropriate gallery to upload and attach them instantly.
         </p>
-      ) : null}
-      {error ? (
-        <p
-          className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
+      </header>
+
+      <GallerySection
+        title="Main Product Gallery"
+        description="Shown on the product detail page regardless of variant selected."
+        media={mainMedia.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.position - b.position)}
+        onUpload={(files) => handleUpload(files, 'PRODUCT')}
+        onRemove={handleRemove}
+        onMakePrimary={handleMakePrimary}
+        isUploading={uploadingScope === 'product'}
+      />
+
+      {colorOptions.map((opt) => (
+        <GallerySection
+          key={opt.id}
+          title={`${opt.label} Gallery`}
+          description={`Images specific to the ${opt.label} color option.`}
+          media={workspace.media
+            .filter(m => m.optionValueId === opt.id)
+            .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.position - b.position)}
+          onUpload={(files) => handleUpload(files, 'OPTION', opt.id)}
+          onRemove={handleRemove}
+          onMakePrimary={handleMakePrimary}
+          isUploading={uploadingScope === `option:${opt.id}`}
+        />
+      ))}
     </div>
   );
 }

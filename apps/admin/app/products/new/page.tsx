@@ -1,9 +1,14 @@
 import type { Metadata } from 'next';
 
-import { ProductCreate } from '@/components/products/product-create';
+import { Suspense } from 'react';
+import { ProductEditor } from '@/components/products/product-editor';
 
 export const metadata: Metadata = { title: 'Create Product' };
 
 export default function CreateProductPage() {
-  return <ProductCreate />;
+  return (
+    <Suspense fallback={<main className="px-8 py-12 text-sm text-muted-foreground">Loading Product editor…</main>}>
+      <ProductEditor productId="new" />
+    </Suspense>
+  );
 }

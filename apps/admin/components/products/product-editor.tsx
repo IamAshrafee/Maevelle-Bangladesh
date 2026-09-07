@@ -31,7 +31,6 @@ import { ProductMediaForm } from '@/components/products/product-media-form';
 import { ProductOrganizationForm } from '@/components/products/product-organization-form';
 import { ProductOverviewForm } from '@/components/products/product-overview-form';
 import { ProductReview } from '@/components/products/product-review';
-import { ProductSizingForm } from '@/components/products/product-sizing-form';
 import { ProductVariantsForm } from '@/components/products/product-variants-form';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -44,7 +43,6 @@ const editorSections = [
   { id: 'organization', label: 'Organization', help: 'Categories and attributes', icon: Layers3 },
   { id: 'variants', label: 'Variants', help: 'Options, SKUs, price, stock', icon: Settings2 },
   { id: 'media', label: 'Media', help: 'Product and color galleries', icon: ImageIcon },
-  { id: 'sizing', label: 'Sizing', help: 'Size system and guides', icon: Ruler },
   { id: 'content', label: 'Content', help: 'Information, FAQs, and SEO', icon: FileText },
   { id: 'review', label: 'Review', help: 'Readiness and publishing', icon: Check },
 ] as const satisfies ReadonlyArray<{
@@ -84,10 +82,51 @@ export function ProductEditor({ productId }: { productId: string }) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  const isNew = productId === 'new';
+
+  const emptyWorkspace = useMemo(() => ({
+    id: '',
+    version: 1,
+    title: '',
+    handle: '',
+    productTypeId: '',
+    description: null,
+    status: 'DRAFT',
+    readiness: 'BLOCKED',
+    blockers: [],
+    optionAxes: [],
+    variants: [],
+    categories: [],
+    attributes: [],
+    organization: {
+      categoryIds: [],
+      primaryCategoryId: null,
+      tagIds: [],
+      occasionIds: [],
+      collectionIds: [],
+      attributes: [],
+    },
+    content: {
+      informationGroups: [],
+      faqs: [],
+      seoTitle: null,
+      seoDescription: null,
+    },
+    operationalSignals: {
+      hasDraftChanges: false,
+      hasPublishedVersion: false,
+      isFullyStocked: false,
+      isMissingImages: false,
+      isMissingPrices: false,
+      isMissingWeights: false,
+    },
+    media: [],
+  } as unknown as CatalogProductWorkspaceDto), []);
+
   const loadWorkspace = useCallback(
     async (successMessage?: string) => {
       try {
-        const next = await catalogData<CatalogProductWorkspaceDto>(
+        const next = isNew ? emptyWorkspace : await catalogData<CatalogProductWorkspaceDto>(
           `/admin/catalog/products/${productId}`,
         );
         setWorkspace(next);
@@ -98,14 +137,14 @@ export function ProductEditor({ productId }: { productId: string }) {
         setError(caught instanceof Error ? caught.message : 'Product could not be loaded.');
       }
     },
-    [productId],
+    [productId, isNew, emptyWorkspace],
   );
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     void Promise.all([
-      catalogData<CatalogProductWorkspaceDto>(`/admin/catalog/products/${productId}`, {
+      isNew ? Promise.resolve(emptyWorkspace) : catalogData<CatalogProductWorkspaceDto>(`/admin/catalog/products/${productId}`, {
         signal: controller.signal,
       }),
       catalogData<readonly CatalogProductTypeDefinitionDto[]>(
@@ -139,6 +178,7 @@ export function ProductEditor({ productId }: { productId: string }) {
       })),
     ])
       .then(([product, types, categories, colors, tags, occasions, collections, sizing]) => {
+        if (controller.signal.aborted) return;
         setWorkspace(product);
         setReferences({
           types,
@@ -152,12 +192,17 @@ export function ProductEditor({ productId }: { productId: string }) {
         });
       })
       .catch((caught: unknown) => {
+        if (controller.signal.aborted) return;
         if (!(caught instanceof DOMException && caught.name === 'AbortError'))
           setError(
             caught instanceof Error ? caught.message : 'Product editor could not be loaded.',
           );
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
     return () => controller.abort();
   }, [productId]);
 
@@ -229,21 +274,25 @@ export function ProductEditor({ productId }: { productId: string }) {
           Products
         </Link>
         <span aria-hidden="true">/</span>
-        <Link
-          className="max-w-72 truncate hover:text-foreground"
-          href={`/products/${workspace.id}`}
-        >
-          {workspace.title}
-        </Link>
+        {isNew ? (
+          <span className="max-w-72 truncate">{workspace.title || 'New Product'}</span>
+        ) : (
+          <Link
+            className="max-w-72 truncate hover:text-foreground"
+            href={`/products/${workspace.id}`}
+          >
+            {workspace.title}
+          </Link>
+        )}
         <span aria-hidden="true">/</span>
-        <span className="text-foreground">Edit</span>
+        <span className="text-foreground">{isNew ? 'Create' : 'Edit'}</span>
       </nav>
       <header className="mb-5 flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{workspace.title}</h1>
-            <StatusBadge status={workspace.status} />
-            <StatusBadge status={workspace.publicationStatus} />
+            <h1 className="truncate text-2xl font-semibold tracking-tight">{workspace.title || 'Create a Publish-Ready Product'}</h1>
+            {!isNew && <StatusBadge status={workspace.status} />}
+            {!isNew && <StatusBadge status={workspace.publicationStatus} />}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {guidedSetup ? 'Guided Product setup' : 'Product editor'} · {workspace.productTypeName}{' '}
@@ -251,9 +300,11 @@ export function ProductEditor({ productId }: { productId: string }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" render={<Link href={`/products/${workspace.id}`} />}>
-            <ArrowLeft aria-hidden="true" /> Product Details
-          </Button>
+          {!isNew && (
+            <Button variant="outline" render={<Link href={`/products/${workspace.id}`} />}>
+              <ArrowLeft aria-hidden="true" /> Product Details
+            </Button>
+          )}
           <Button variant="outline" render={<Link href="/products" />}>
             Save Draft & Exit
           </Button>
@@ -335,7 +386,6 @@ export function ProductEditor({ productId }: { productId: string }) {
           {section === 'organization' ? <ProductOrganizationForm {...sectionProps} /> : null}
           {section === 'variants' ? <ProductVariantsForm {...sectionProps} /> : null}
           {section === 'media' ? <ProductMediaForm {...sectionProps} /> : null}
-          {section === 'sizing' ? <ProductSizingForm {...sectionProps} /> : null}
           {section === 'content' ? <ProductContentForm {...sectionProps} /> : null}
           {section === 'review' ? <ProductReview {...sectionProps} /> : null}
 
@@ -343,7 +393,7 @@ export function ProductEditor({ productId }: { productId: string }) {
             <footer className="mt-5 flex flex-col-reverse gap-2 rounded-xl border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <Button
                 variant="outline"
-                disabled={!previous}
+                disabled={!previous || (productId === 'new' && (previous?.id !== 'overview'))}
                 onClick={() => previous && navigate(previous.id)}
               >
                 <ArrowLeft aria-hidden="true" /> Previous
