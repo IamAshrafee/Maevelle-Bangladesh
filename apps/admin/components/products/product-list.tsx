@@ -9,7 +9,6 @@ import {
   PackagePlus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -25,6 +24,7 @@ import { ProductTypeManager } from '@/components/catalog-product-types/product-t
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
 import { catalogData, formatCatalogMoney } from '@/lib/catalog/api';
 
 const statuses = ['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'] as const;
@@ -223,6 +223,7 @@ export function ProductList() {
 
       <section className="space-y-3" aria-label="Product filters">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+          {/* ── Search input ── */}
           <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border bg-card px-3 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/20">
             <Search className="size-4 text-muted-foreground" aria-hidden="true" />
             <span className="sr-only">Search Products</span>
@@ -235,54 +236,63 @@ export function ProductList() {
               onChange={(event) => setQuery(event.target.value.slice(0, 120))}
             />
           </label>
+
           <div className="flex flex-wrap gap-2">
-            <label className="flex h-9 items-center gap-2 rounded-lg border bg-card px-3 text-sm">
-              <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden="true" />
-              <span className="sr-only">Product Type</span>
-              <select
-                className="bg-transparent outline-none"
-                name="productType"
-                value={productTypeId}
-                onChange={(event) => replaceQuery({ type: event.target.value, page: '1' })}
-              >
-                <option value="ALL">All Product Types</option>
+            {/* ── Product Type — Select ── */}
+            <Select
+              value={productTypeId}
+              onValueChange={(val: string | null) => replaceQuery({ type: val ?? 'ALL', page: '1' })}
+            >
+              <SelectTrigger
+                aria-label="Filter by Product Type"
+                className="h-9 min-w-44 rounded-lg border bg-card"
+              />
+              <SelectContent>
+                <SelectItem value="ALL">All Product Types</SelectItem>
                 {types.map((type) => (
-                  <option key={type.id} value={type.id}>
+                  <SelectItem key={type.id} value={type.id}>
                     {type.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
-            </label>
-            <label className="flex h-9 items-center rounded-lg border bg-card px-3 text-sm">
-              <span className="sr-only">Publishing Status</span>
-              <select
-                className="bg-transparent outline-none"
-                name="status"
-                value={status}
-                onChange={(event) => replaceQuery({ status: event.target.value, page: '1' })}
-              >
-                {statuses.map((value) => (
-                  <option key={value} value={value}>
-                    {value === 'ALL' ? 'Any Catalog State' : value.replaceAll('_', ' ')}
-                  </option>
+              </SelectContent>
+            </Select>
+
+            {/* ── Catalog Status — Select ── */}
+            <Select
+              value={status}
+              onValueChange={(val: string | null) => replaceQuery({ status: val ?? 'ALL', page: '1' })}
+            >
+              <SelectTrigger
+                aria-label="Filter by Catalog State"
+                className="h-9 w-44 rounded-lg border bg-card"
+              />
+              <SelectContent>
+                {statuses.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s === 'ALL' ? 'Any Catalog State' : s.replaceAll('_', ' ')}
+                  </SelectItem>
                 ))}
-              </select>
-            </label>
-            <label className="flex h-9 items-center rounded-lg border bg-card px-3 text-sm">
-              <span className="sr-only">Publishing Readiness</span>
-              <select
-                className="bg-transparent outline-none"
-                name="readiness"
-                value={readiness}
-                onChange={(event) => replaceQuery({ readiness: event.target.value, page: '1' })}
-              >
-                {readinessStates.map((value) => (
-                  <option key={value} value={value}>
-                    {value === 'ALL' ? 'Any Readiness' : value}
-                  </option>
+              </SelectContent>
+            </Select>
+
+            {/* ── Readiness — Select ── */}
+            <Select
+              value={readiness}
+              onValueChange={(val: string | null) => replaceQuery({ readiness: val ?? 'ALL', page: '1' })}
+            >
+              <SelectTrigger
+                aria-label="Filter by Readiness"
+                className="h-9 w-36 rounded-lg border bg-card"
+              />
+              <SelectContent>
+                {readinessStates.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r === 'ALL' ? 'Any Readiness' : r}
+                  </SelectItem>
                 ))}
-              </select>
-            </label>
+              </SelectContent>
+            </Select>
+
             {hasFilters ? (
               <Button
                 variant="ghost"
