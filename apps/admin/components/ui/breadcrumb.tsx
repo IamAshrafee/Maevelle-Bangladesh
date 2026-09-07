@@ -146,7 +146,7 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<'li'>) {
   return (
     <li
       data-slot="breadcrumb-item"
-      className={cn('inline-flex items-center gap-0.5', className)}
+      className={cn('inline-flex items-center gap-0.5 shrink-0', className)}
       {...props}
     />
   );
@@ -158,7 +158,7 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<'li'>) {
 
 type BreadcrumbLinkProps = Omit<React.ComponentProps<'a'>, 'href'> & {
   href?: string;
-  as?: React.ElementType;
+  as?: React.ElementType<any>;
   disabled?: boolean;
   maxLabelWidth?: string;
 };
@@ -173,7 +173,7 @@ function BreadcrumbLink({
   ...props
 }: BreadcrumbLinkProps) {
   const { size } = useBreadcrumbContext();
-  const Component = as ?? (href ? Link : 'span');
+  const Component = as ?? (href && !disabled ? Link : 'span');
 
   const inner =
     maxLabelWidth ? (
@@ -191,9 +191,11 @@ function BreadcrumbLink({
   return (
     <Component
       data-slot="breadcrumb-link"
-      href={href ?? '#'}
+      {...(href !== undefined && !disabled ? { href } : {})}
+      tabIndex={disabled ? -1 : undefined}
       aria-disabled={disabled || undefined}
       className={cn(breadcrumbLinkVariants({ size }), className)}
+      {...(disabled ? { onClick: (e: any) => e.preventDefault() } : {})}
       {...props}
     >
       {inner}
@@ -308,7 +310,15 @@ function BreadcrumbEllipsis({
   const [open, setOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
+  const menuId = React.useId();
   const { size } = useBreadcrumbContext();
+
+  React.useEffect(() => {
+    if (open && menuRef.current) {
+      const firstItem = menuRef.current.querySelector<HTMLElement>('[role="menuitem"]');
+      firstItem?.focus();
+    }
+  }, [open]);
 
   const iconSize = size === 'lg' ? 'size-3.5' : 'size-3';
 
@@ -365,6 +375,7 @@ function BreadcrumbEllipsis({
         data-slot="breadcrumb-ellipsis"
         aria-label={open ? 'Collapse navigation' : 'Show hidden navigation items'}
         aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
         aria-haspopup="menu"
         onClick={() => setOpen((o) => !o)}
         className={cn(
@@ -379,6 +390,7 @@ function BreadcrumbEllipsis({
 
       {open && (
         <div
+          id={menuId}
           ref={menuRef}
           role="menu"
           aria-label="Hidden breadcrumb items"
@@ -446,6 +458,7 @@ function BreadcrumbEllipsis({
 
 export type BreadcrumbProps = {
   items?: BreadcrumbItemDef[];
+  /** Maximum number of breadcrumb slots to display (including the ellipsis). */
   maxItems?: number;
   separator?: React.ReactNode;
   showIcons?: boolean;
@@ -554,7 +567,7 @@ function Breadcrumb({
       }
 
       result.push(
-        <BreadcrumbItem key={item.href ?? item.label ?? idx}>
+        <BreadcrumbItem key={`${item.label}-${idx}`}>
           {idx > 0 && <BreadcrumbSeparator />}
           {renderContent(item, idx)}
         </BreadcrumbItem>,
@@ -588,7 +601,7 @@ function Breadcrumb({
 
         <BreadcrumbList
           className={cn(
-            isMobileBack && 'hidden md:flex',
+            isMobileBack && mobileBackParent && 'hidden md:flex',
             isMobileScroll && 'flex-nowrap overflow-x-auto scrollbar-none',
           )}
         >
