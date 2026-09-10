@@ -5,7 +5,7 @@ means meaningful current implementation exists; it does not mean acceptance.
 
 | Area | Current evidence status | Primary source evidence |
 | --- | --- | --- |
-| Admin Product Management Workspace | `ACTIVE_DISCOVERY` | `apps/admin/app/products`, `apps/admin/components/products`, Catalog API/database modules |
+| Admin Product Management Workspace | `ACTIVE_IMPLEMENTATION` | Current-head assessment recorded in `areas/admin-product-management-workspace`; `apps/admin/app/products`, `apps/admin/components/products`, Catalog API/database modules |
 | Catalog and classification | `CODE_SUBSTANTIAL` | `catalog.*`, `catalog-classification.*`, public catalog routes |
 | Media | `CODE_SUBSTANTIAL` | `media.*`, Admin Media, product-media forms |
 | Sizing | `CODE_SUBSTANTIAL` | `sizing.*`, Admin sizing routes, PDP size guide |

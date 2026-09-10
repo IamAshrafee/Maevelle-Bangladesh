@@ -14,26 +14,33 @@ that the historical Catalog stage remains current.
 
 ## Current Status / Substage
 
-`ACTIVE_DISCOVERY` — `CURRENT_HEAD_ASSESSMENT`
+`ACTIVE_IMPLEMENTATION` — `SAFE_PUBLISHED_VARIANT_INTEGRITY`
 
 ## Evidence Already Known
 
-Current source contains dedicated Product list/create/detail/edit routes,
-catalog API commands/read models, shared contracts, focused Catalog tests, and
-Storefront product consumption. Current-head workflow, responsive behavior, and
-owner acceptance are not yet evidenced.
+The current Product list, detail workspace, and sectioned editor form a solid
+base: URL-backed worklist filters and pagination, readiness, domain-owned
+pricing/inventory/media/sizing signals, content conflict recovery, and
+tenant/capability-scoped routes all exist. A current local desktop review and
+source assessment found one P0 correctness issue plus product-worklist,
+variant-scale, media, and Storefront-preview gaps. Focused database tests are
+present but were not runnable locally because `maevelle_test` is absent.
 
 ## Immediate Objective
 
-Establish a current, evidence-backed gap assessment for the operator path from
-product creation through organization, variants, pricing/media/sizing signals,
-publication, and Storefront visibility.
+Fix the published Product option/variant integrity boundary before expanding
+the surrounding workspace. A published Product must not retain active Variants
+that refer to archived axes or values and therefore cannot be selected on the
+Storefront; historical order/inventory records must remain intact and the
+operator must receive a clear recovery path.
 
 ## Next Exact Action
 
-Read the current Product Admin routes/components, Catalog API/database commands,
-and focused tests; map one realistic merchandiser workflow and record only
-observed gaps before implementing any behavior.
+Implement `SAFE_PUBLISHED_VARIANT_INTEGRITY`: trace option-axis/value archival,
+variant status/lifecycle, Storefront projection, and readiness together; choose
+and prove an explicit safe outcome for affected published Products, including
+operator-facing explanation and focused regression tests. Do not begin the
+worklist/editor breadth stages first.
 
 ## Important Constraints
 
