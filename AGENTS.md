@@ -15,7 +15,7 @@ different level of rigor.
   scoped-implementation labels are **not current product boundaries**.
 - Historical documents remain useful for business reasoning, but they must not
   be used to omit a capability or force a thin implementation. The user's
-  current request, this file, and current product-completion evidence supersede
+  current request, this file, and current Product Completion V2 evidence supersede
   those old limits.
 - Work may happen in any module the user selects. `current-focus.md` is a resume
   aid, not an instruction that forbids switching areas.
@@ -28,6 +28,23 @@ different level of rigor.
 - "Advanced as practical" means robust, extensible, maintainable, and complete
   for the real product. It does not mean adding speculative complexity with no
   credible product use.
+
+## Evidence and continuity
+
+- The repository, current Git state, source, tests, and runtime evidence outrank
+  historical completion reports or chat context. Preserve and inspect dirty work;
+  never reset, clean, stash, or discard useful interrupted work merely to simplify
+  a task.
+- Before selecting or resuming product work, read `docs/product-completion/`
+  (especially `state.json` and `current-focus.md`) and verify important claims
+  against current source and Git. Do not declare an area complete without current
+  evidence for the applicable completion gate.
+- Keep shared contracts, domain ownership, organization isolation, and capability
+  authorization authoritative. Authentication establishes identity; it does not
+  grant authorization. Do not bypass semantic operations for money, inventory,
+  payments, refunds, costing, or other authoritative business state.
+- Preserve deliberate transaction boundaries, idempotency, optimistic concurrency,
+  audit, and outbox behavior when modifying affected workflows.
 
 ## Priorities
 
@@ -58,8 +75,22 @@ backend and frontend task:
 - validate at system boundaries and keep domain invariants authoritative on the
   server;
 - use the established Tailwind CSS and shadcn/component-primitives direction
-  for UI work; do not add feature-specific raw vanilla CSS or grow monolithic
-  global stylesheets;
+  for UI work; always prefer existing shadcn UI components and the project's
+  own shared components before creating feature-specific UI. Compose or extend
+  those primitives when needed instead of rebuilding the same controls and
+  interaction patterns. Do not add feature-specific raw vanilla CSS or grow
+  monolithic global stylesheets;
+- before creating a component, search the repository for an existing component
+  that already serves the need. When a component or behavior has a credible use
+  in more than one place, design it as a reusable component with a clear API and
+  place it in the appropriate shared or domain-level component directory. Avoid
+  duplicating markup, behavior, validation, and styling across features;
+- keep implementation code in focused files organized by responsibility. Split
+  substantial components, hooks, schemas, utilities, data-access code, and
+  business logic into appropriately named files and directories so pages and
+  modules remain easy to read and navigate. Avoid both large mixed-purpose files
+  and excessive fragmentation into trivial files that make the code harder to
+  follow;
 - prefer React composition and explicit variants over boolean-prop-heavy
   components, keep client boundaries narrow, avoid async waterfalls, and avoid
   sending unused server data to client components;
@@ -67,6 +98,39 @@ backend and frontend task:
   explain intent, invariants, tradeoffs, or non-obvious behavior; and
 - improve touched legacy code enough that new work does not deepen its
   structural problems.
+
+## Frontend experience and responsive design
+
+- Treat responsive behavior as a core requirement for every frontend feature,
+  not as optional polish. Design and implement each screen for mobile, tablet
+  and iPad, and desktop layouts, including intermediate widths, content growth,
+  and orientation changes.
+- Treat mobile and touch use as the primary interaction context. Use comfortable
+  touch targets and spacing, avoid hover-only actions, keep important actions
+  reachable, support touch-friendly scrolling and controls, and ensure forms,
+  dialogs, drawers, tables, menus, and navigation remain practical on small
+  screens and on-screen keyboards.
+- Plan the complete user workflow before implementing a frontend surface. Keep
+  tasks clean, direct, predictable, and organized; use clear labels, sensible
+  defaults, progressive disclosure, visible feedback, validation, loading and
+  empty states, success outcomes, error recovery, and an obvious next step.
+- Preserve the platform's full power without exposing its architectural
+  complexity to users. Group advanced capabilities logically, reveal detail
+  when it becomes relevant, and optimize common tasks for the fewest clear
+  decisions and interactions without hiding necessary controls.
+- Put the primary action for creating a resource on its main listing or
+  workspace page. Use a dialog, sheet, or similarly focused overlay for short
+  and simple forms; use a dedicated page for long, multi-section, or complex
+  forms. After a successful creation, return the user to the relevant main page
+  or detail context with clear confirmation and refreshed data.
+- Reuse the same form fields, validation, layout, and interaction patterns for
+  creating and editing the same resource. Share the underlying form component
+  and vary only the mode, initial values, permissions, labels, and submit action
+  needed by the workflow so both experiences stay familiar and consistent.
+- Choose overlays and full pages based on task complexity and device usability.
+  Dialogs that work on desktop must adapt appropriately for mobile, such as a
+  full-screen dialog, sheet, or dedicated route when space, scrolling, keyboard
+  use, or recovery would otherwise be difficult.
 
 ## Dependencies and framework changes
 
@@ -101,8 +165,13 @@ backend and frontend task:
 
 ## Verification
 
+- Local browser, screenshot, and UI verification are allowed when useful and
+  tooling is available. Never use production credentials or mutate production
+  or other live external systems without explicit user authorization. Record an
+  unavailable tool or unperformed visual check honestly; owner visual and
+  operational judgment remains a distinct review gate where applicable.
 - Use the narrowest useful verification for the files and behavior changed.
-- Prefer focused typechecking, focused tests, or a targeted manual/API check.
+- Prefer focused typechecking, focused tests, or a targeted API/manual workflow.
 - Do not run the full test suite, all-package build, complete acceptance suite,
   backup drill, staging smoke suite, or release-readiness checks after every
   task or checkpoint.
