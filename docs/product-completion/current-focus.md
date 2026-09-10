@@ -14,33 +14,32 @@ that the historical Catalog stage remains current.
 
 ## Current Status / Substage
 
-`ACTIVE_IMPLEMENTATION` — `SAFE_PUBLISHED_VARIANT_INTEGRITY`
+`ACTIVE_IMPLEMENTATION` — `SCALABLE_VARIANT_AND_MEDIA_OPERATIONS`
 
 ## Evidence Already Known
 
-The current Product list, detail workspace, and sectioned editor form a solid
-base: URL-backed worklist filters and pagination, readiness, domain-owned
-pricing/inventory/media/sizing signals, content conflict recovery, and
-tenant/capability-scoped routes all exist. A current local desktop review and
-source assessment found one P0 correctness issue plus product-worklist,
-variant-scale, media, and Storefront-preview gaps. Focused database tests are
-present but were not runnable locally because `maevelle_test` is absent.
+`SAFE_PUBLISHED_VARIANT_INTEGRITY` is complete. Catalog now serializes
+publication and option/Variant mutations on the Product row, rejects unsafe
+published option archival with affected SKU details, preserves archived
+Variant links/history, detects legacy structural inconsistency in readiness,
+and suppresses incoherent Products from live public reads/search. The
+disposable `maevelle_test` database was created and 17 focused Catalog,
+Storefront, and API tests pass.
 
 ## Immediate Objective
 
-Fix the published Product option/variant integrity boundary before expanding
-the surrounding workspace. A published Product must not retain active Variants
-that refer to archived axes or values and therefore cannot be selected on the
-Storefront; historical order/inventory records must remain intact and the
-operator must receive a clear recovery path.
+Complete the high-count Variant and variant-media operating workflow. The
+editor must not silently stop at the first 100 matrix combinations, and
+operators need safe generation/reconciliation, practical editing, and
+variant-scoped media placement while Pricing and Inventory remain authoritative
+in their own domains.
 
 ## Next Exact Action
 
-Implement `SAFE_PUBLISHED_VARIANT_INTEGRITY`: trace option-axis/value archival,
-variant status/lifecycle, Storefront projection, and readiness together; choose
-and prove an explicit safe outcome for affected published Products, including
-operator-facing explanation and focused regression tests. Do not begin the
-worklist/editor breadth stages first.
+Implement `SCALABLE_VARIANT_AND_MEDIA_OPERATIONS`: design and prove complete
+matrix traversal beyond 100 combinations, safe bounded bulk operations and
+high-count editing, plus variant-scoped media assignment in the Product
+workspace. Do not begin worklist sorting/reason cues or Storefront preview.
 
 ## Important Constraints
 
@@ -50,5 +49,7 @@ transactions, optimistic versions, audit, and outbox behavior.
 
 ## Blockers / Owner Review
 
-No technical blocker recorded. Owner review is not yet requested because the
-area is being assessed, not presented for acceptance.
+No technical blocker recorded. The Admin production build has a pre-existing
+TypeScript failure at `components/ui/search-input.tsx:93`, so the new recovery
+panel was not visually verified in a freshly built Admin container. Owner
+review is not yet requested because the area remains in implementation.

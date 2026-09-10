@@ -42,8 +42,17 @@ export function sendCatalogDomainError(
   const statusCode =
     error.code === 'NOT_FOUND'
       ? 404
-      : error.code === 'STALE_VERSION' || error.code === 'CONFLICT'
+      : error.code === 'STALE_VERSION' ||
+          error.code === 'CONFLICT' ||
+          error.code === 'OPTION_STRUCTURE_IN_USE' ||
+          error.code === 'PUBLISHED_VARIANT_INTEGRITY'
         ? 409
         : 422;
-  return reply.code(statusCode).send({ error: { code: error.code, message: error.message } });
+  return reply.code(statusCode).send({
+    error: {
+      code: error.code,
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    },
+  });
 }

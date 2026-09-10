@@ -1,25 +1,33 @@
 # Observed Gaps
 
-## P0 — Published option changes can leave active Storefront SKUs unselectable
+## Resolved 2026-09-10 — Published option changes could leave active Storefront SKUs unselectable
 
-- **Problem:** Archiving a Product option axis or value is allowed against a
+- **Former problem:** Archiving a Product option axis or value was allowed against a
   published Product without changing the Product lifecycle or reconciling its
   active Variants. The Storefront returns published active Variants regardless
   of whether their option values remain active, while it omits archived option
   axes/values from the customer choice list.
-- **Evidence:** `apps/admin/components/products/product-variants-form.tsx`
+- **Former evidence:** `apps/admin/components/products/product-variants-form.tsx`
   exposes `Archive Axis` and tiny `×` archive actions for the published `Does`
   Product; `packages/database/src/catalog.ts:updateProductOptionAxis` and
   `updateProductOptionValue` update only the option rows. The public projection
   at `getStorefrontCatalogProduct` filters options/values to `ACTIVE` but its
   Variant query filters only `variant.status='ACTIVE'`.
-- **Business effect:** a merchandiser can make an active published SKU
+- **Business effect:** a merchandiser could make an active published SKU
   impossible to select while the Product remains listed and purchasable,
   producing a broken customer choice/variant mapping. Historical records must
   remain, but this published-state transition needs an explicit safe outcome.
-- **Likely layers:** Catalog domain lifecycle/readiness, Storefront projection,
-  Catalog Admin option/variant controls, focused database/API/Admin tests.
-- **Blocks area completion:** yes; this is the first implementation substage.
+- **Resolution:** Catalog applies one structural Variant invariant through
+  readiness and transaction-serialized semantic commands. Published archive
+  attempts identify affected SKUs and explain the safe recovery path; archived
+  Variant/link history is retained, and public Product/search projections omit
+  any legacy-inconsistent published Product rather than exposing contradictory
+  selectors and active SKUs.
+- **Proof:** `packages/database/src/catalog-variant-integrity.test.ts` and
+  `apps/api/src/routes/catalog-support.test.ts`, plus the existing Catalog,
+  Variant-matrix and Storefront focused suites (17 passing tests total).
+- **Blocks area completion:** no; resolved. The area remains incomplete for the
+  P1/P2 substages below.
 
 ## P1 — Variant matrix generation silently covers only the first 100 combinations
 
@@ -95,14 +103,16 @@
 - **Likely layers:** Product workspace media projection and labels.
 - **Blocks area completion:** yes.
 
-## P3 — Variant archive controls are inaccessible and overly terse
+## Resolved 2026-09-10 — Variant archive controls were inaccessible and overly terse
 
-- **Problem:** active option values are archived through icon-only `×` buttons
+- **Former problem:** active option values were archived through icon-only `×` buttons
   with no accessible name and a generic confirmation.
-- **Evidence:** `product-variants-form.tsx` renders the button with only `×`;
+- **Former evidence:** `product-variants-form.tsx` rendered the button with only `×`;
   local accessibility inspection names it simply `×`.
-- **Business effect:** keyboard/screen-reader operators cannot reliably identify
+- **Business effect:** keyboard/screen-reader operators could not reliably identify
   the value they will archive, and sighted operators face a small ambiguous
   destructive target.
-- **Likely layers:** Product variant UI primitive/copy.
-- **Blocks area completion:** no, but should be corrected with the safety work.
+- **Resolution:** archive/restore controls now have value-specific accessible
+  names, titles and touch-sized targets; confirmations explain published/draft
+  consequences, and structured conflict recovery lists affected SKUs.
+- **Blocks area completion:** no; resolved with the P0 safety work.

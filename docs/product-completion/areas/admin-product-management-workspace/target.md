@@ -8,10 +8,11 @@ edits, and not duplicate downstream domain authority.
 
 ## Completion Plan
 
-1. **Safe published variant integrity** — make option/variant lifecycle changes
-   safe for a published Product, preserve historical records, and make recovery
-   understandable.
-2. **Scalable variant and media operations** — complete paginated matrix work,
+1. **Safe published variant integrity — COMPLETE** — published Product
+   option/Variant changes are transaction-serialized, recovery is explicit,
+   history is retained, and public projections fail closed on legacy
+   inconsistency.
+2. **Scalable variant and media operations — NEXT** — complete paginated matrix work,
    bulk generation/reconciliation, variant-scoped media, and safe high-count
    editing without moving pricing or inventory authority into Catalog.
 3. **Merchandiser worklist and workspace clarity** — add the useful priority,

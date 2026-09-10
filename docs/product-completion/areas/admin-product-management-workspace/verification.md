@@ -1,6 +1,6 @@
 # Verification
 
-Status: `ACTIVE_IMPLEMENTATION`.
+Status: `ACTIVE_IMPLEMENTATION` — `SCALABLE_VARIANT_AND_MEDIA_OPERATIONS`.
 
 Current assessment evidence:
 
@@ -21,6 +21,31 @@ Current assessment evidence:
   the Admin dev server and `/products/does` returned its 404. Storefront source
   projection was inspected; owner visual review remains required.
 
-Completion cannot be claimed until the P0 integrity issue and all recorded
-blocking P1/P2 stages have current targeted proof, including a separate
-Storefront runtime check and responsive/owner review.
+## Safe published Variant integrity proof — 2026-09-10
+
+- `pnpm exec vitest run packages/database/src/catalog.test.ts
+  packages/database/src/catalog-variants.test.ts
+  packages/database/src/storefront.test.ts
+  packages/database/src/catalog-variant-integrity.test.ts
+  apps/api/src/routes/catalog-support.test.ts` passed: 5 files, 17 tests.
+- The dedicated regression suite proves used value/axis archive rejection with
+  affected SKU details, safe archive after Variant deactivation, preservation
+  of archived Variant links, rejection of the final active Variant on a
+  published Product, tenant isolation, concurrent publish/archive serialization,
+  legacy-invalid readiness, republish blocking, public list/detail/search
+  suppression, and restoration.
+- Focused ESLint passed for changed database, API, Admin Catalog, and Product
+  Variant files. Focused database and API TypeScript checks passed.
+- API and Storefront Docker production images built successfully and services
+  started. The combined local stack could not build Admin because the untouched
+  current-head `apps/admin/components/ui/search-input.tsx:93` has
+  `TS2532: Object is possibly 'undefined'`; therefore the new recovery panel
+  has code/test evidence but no fresh authenticated browser screenshot.
+- The repository test-database initializer failed in the Linux container because
+  its checked-out CRLF line ending made `set -eu` invalid. The missing disposable
+  `maevelle_test` database was created with the same Compose Postgres role and
+  all checked-in migrations were applied successfully; no live data was used.
+
+Completion cannot be claimed until the remaining P1/P2 stages have current
+targeted proof, the Admin build blocker is resolved in its proper scope, and
+responsive/owner review is complete.

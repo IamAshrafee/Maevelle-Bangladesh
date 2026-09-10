@@ -1,13 +1,27 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
+import {
+  catalogProductHasCoherentActiveVariants,
+  catalogVariantIsStructurallyValid,
+} from './catalog-variant-integrity.js';
 import { appendAuditEvent } from './platform.js';
 
 export class CatalogDomainError extends Error {
   public readonly code:
-    'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED' | 'STALE_VERSION' | 'CATEGORY_CYCLE';
+    | 'NOT_FOUND'
+    | 'CONFLICT'
+    | 'VALIDATION_FAILED'
+    | 'STALE_VERSION'
+    | 'CATEGORY_CYCLE'
+    | 'OPTION_STRUCTURE_IN_USE'
+    | 'PUBLISHED_VARIANT_INTEGRITY';
 
-  public constructor(code: CatalogDomainError['code'], message: string) {
+  public constructor(
+    code: CatalogDomainError['code'],
+    message: string,
+    public readonly details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'CatalogDomainError';
     this.code = code;
@@ -346,15 +360,36 @@ export async function createProductOptionAxis(
     code: string;
     name: string;
     position?: number;
+    actorId?: string;
   },
 ): Promise<{ id: string }> {
-  const result = await sql<{ id: string }>`
-    insert into catalog.product_option_axes (organization_id, product_id, code, name, position)
-    values (${input.organizationId}, ${input.productId}, ${input.code}, ${input.name}, ${input.position ?? 0}) returning id
-  `.execute(db);
-  const row = result.rows[0];
-  if (!row) throw new Error('Option axis creation did not return an id.');
-  return row;
+  return db.transaction().execute(async (transaction) => {
+    const product = await lockCatalogProduct(transaction, input.organizationId, input.productId);
+    if (!product || product.status === 'ARCHIVED')
+      throw new CatalogDomainError('NOT_FOUND', 'Product was not found or is archived.');
+    if (product.publicationStatus === 'PUBLISHED')
+      throw new CatalogDomainError(
+        'PUBLISHED_VARIANT_INTEGRITY',
+        'Unpublish the Product before adding a new option. Every active Variant must be updated with a value for the new option before the Product can be published again.',
+        { recoveryAction: 'UNPUBLISH_AND_RECONFIGURE' },
+      );
+    const result = await sql<{ id: string }>`
+      insert into catalog.product_option_axes (organization_id, product_id, code, name, position)
+      values (${input.organizationId}, ${input.productId}, ${input.code}, ${input.name}, ${input.position ?? 0}) returning id
+    `.execute(transaction);
+    const row = result.rows[0];
+    if (!row) throw new Error('Option axis creation did not return an id.');
+    if (input.actorId)
+      await emitCatalogEvent(transaction, {
+        organizationId: input.organizationId,
+        productId: input.productId,
+        actorId: input.actorId,
+        eventType: 'catalog.product.option_structure_updated',
+        auditAction: 'catalog.product.option_axis_created',
+        metadata: { optionAxisId: row.id },
+      });
+    return row;
+  });
 }
 
 export async function createProductOptionValue(
@@ -367,15 +402,38 @@ export async function createProductOptionValue(
     position?: number;
     colorId?: string;
     sizeDefinitionId?: string;
+    actorId?: string;
   },
 ): Promise<{ id: string }> {
-  const result = await sql<{ id: string }>`
-    insert into catalog.product_option_values (organization_id, option_axis_id, code, display_value, position, color_id, size_definition_id)
-    values (${input.organizationId}, ${input.optionAxisId}, ${input.code}, ${input.displayValue}, ${input.position ?? 0}, ${input.colorId ?? null}, ${input.sizeDefinitionId ?? null}) returning id
-  `.execute(db);
-  const row = result.rows[0];
-  if (!row) throw new Error('Option value creation did not return an id.');
-  return row;
+  return db.transaction().execute(async (transaction) => {
+    const axis = await sql<{
+      product_id: string;
+    }>`select product_id::text from catalog.product_option_axes
+      where organization_id=${input.organizationId} and id=${input.optionAxisId}::uuid`.execute(
+      transaction,
+    );
+    const productId = axis.rows[0]?.product_id;
+    if (!productId) throw new CatalogDomainError('NOT_FOUND', 'Product option was not found.');
+    const product = await lockCatalogProduct(transaction, input.organizationId, productId);
+    if (!product || product.status === 'ARCHIVED')
+      throw new CatalogDomainError('NOT_FOUND', 'Product was not found or is archived.');
+    const result = await sql<{ id: string }>`
+      insert into catalog.product_option_values (organization_id, option_axis_id, code, display_value, position, color_id, size_definition_id)
+      values (${input.organizationId}, ${input.optionAxisId}, ${input.code}, ${input.displayValue}, ${input.position ?? 0}, ${input.colorId ?? null}, ${input.sizeDefinitionId ?? null}) returning id
+    `.execute(transaction);
+    const row = result.rows[0];
+    if (!row) throw new Error('Option value creation did not return an id.');
+    if (input.actorId)
+      await emitCatalogEvent(transaction, {
+        organizationId: input.organizationId,
+        productId,
+        actorId: input.actorId,
+        eventType: 'catalog.product.option_structure_updated',
+        auditAction: 'catalog.product.option_value_created',
+        metadata: { optionAxisId: input.optionAxisId, optionValueId: row.id },
+      });
+    return row;
+  });
 }
 
 export async function updateProductOptionAxis(
@@ -389,6 +447,7 @@ export async function updateProductOptionAxis(
     code?: string;
     position?: number;
     status?: 'ACTIVE' | 'ARCHIVED';
+    actorId?: string;
   },
 ): Promise<void> {
   const name = input.name?.trim();
@@ -400,14 +459,56 @@ export async function updateProductOptionAxis(
       'VALIDATION_FAILED',
       'Option code must use lowercase words separated by hyphens.',
     );
-  const result = await sql`update catalog.product_option_axes set
-      name=coalesce(${name ?? null},name),code=coalesce(${code ?? null},code),
-      position=coalesce(${input.position ?? null},position),status=coalesce(${input.status ?? null},status),
-      version=version+1,updated_at=now()
-    where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
-      and id=${input.axisId}::uuid and version=${input.expectedVersion}`.execute(db);
-  if (Number(result.numAffectedRows) !== 1)
-    throw new CatalogDomainError('STALE_VERSION', 'Product option changed while you were editing.');
+  await db.transaction().execute(async (transaction) => {
+    const product = await lockCatalogProduct(transaction, input.organizationId, input.productId);
+    if (!product) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
+    const axis = await sql<{ name: string; status: 'ACTIVE' | 'ARCHIVED'; version: string }>`
+      select name,status,version::text from catalog.product_option_axes
+      where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+        and id=${input.axisId}::uuid
+    `.execute(transaction);
+    const current = axis.rows[0];
+    if (!current) throw new CatalogDomainError('NOT_FOUND', 'Product option was not found.');
+    if (Number(current.version) !== input.expectedVersion)
+      throw new CatalogDomainError(
+        'STALE_VERSION',
+        'Product option changed while you were editing.',
+      );
+    if (
+      input.status === 'ARCHIVED' &&
+      current.status === 'ACTIVE' &&
+      product.publicationStatus === 'PUBLISHED'
+    ) {
+      const affected = await listActiveVariantsUsingOptionStructure(transaction, {
+        organizationId: input.organizationId,
+        productId: input.productId,
+        axisId: input.axisId,
+      });
+      if (affected.total > 0) throw optionStructureInUseError('option', current.name, affected);
+    }
+    const result = await sql`update catalog.product_option_axes set
+        name=coalesce(${name ?? null},name),code=coalesce(${code ?? null},code),
+        position=coalesce(${input.position ?? null},position),status=coalesce(${input.status ?? null},status),
+        version=version+1,updated_at=now()
+      where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+        and id=${input.axisId}::uuid and version=${input.expectedVersion}`.execute(transaction);
+    if (Number(result.numAffectedRows) !== 1)
+      throw new CatalogDomainError(
+        'STALE_VERSION',
+        'Product option changed while you were editing.',
+      );
+    if (input.status === 'ACTIVE' && current.status === 'ARCHIVED')
+      await assertPublishedProductVariantIntegrity(transaction, input.organizationId, product);
+    if (input.actorId)
+      await emitCatalogEvent(transaction, {
+        organizationId: input.organizationId,
+        productId: input.productId,
+        actorId: input.actorId,
+        eventType: 'catalog.product.option_structure_updated',
+        auditAction: 'catalog.product.option_axis_updated',
+        metadata: { optionAxisId: input.axisId, status: input.status },
+      });
+  });
 }
 
 export async function updateProductOptionValue(
@@ -423,6 +524,7 @@ export async function updateProductOptionValue(
     status?: 'ACTIVE' | 'ARCHIVED';
     colorId?: string | null;
     sizeDefinitionId?: string | null;
+    actorId?: string;
   },
 ): Promise<void> {
   const displayValue = input.displayValue?.trim();
@@ -434,25 +536,71 @@ export async function updateProductOptionValue(
       'VALIDATION_FAILED',
       'Option value code must use lowercase words separated by hyphens.',
     );
-  if (input.colorId) {
-    const color = await sql<{ id: string }>`select color.id::text from catalog.colors color
-      join catalog.product_option_axes axis on axis.organization_id=color.organization_id
-      where color.organization_id=${input.organizationId} and color.id=${input.colorId}::uuid
-        and color.status='ACTIVE' and axis.id=${input.axisId}::uuid`.execute(db);
-    if (!color.rows[0]) throw new CatalogDomainError('VALIDATION_FAILED', 'Color is unavailable.');
-  }
-  const result = await sql`update catalog.product_option_values set
-      display_value=coalesce(${displayValue ?? null},display_value),
-      code=coalesce(${code ?? null},code),position=coalesce(${input.position ?? null},position),
-      status=coalesce(${input.status ?? null},status),
-      color_id=case when ${input.colorId !== undefined} then ${input.colorId ?? null}::uuid else color_id end,
-      size_definition_id=case when ${input.sizeDefinitionId !== undefined}
-        then ${input.sizeDefinitionId ?? null}::uuid else size_definition_id end,
-      version=version+1,updated_at=now()
-    where organization_id=${input.organizationId} and option_axis_id=${input.axisId}::uuid
-      and id=${input.valueId}::uuid and version=${input.expectedVersion}`.execute(db);
-  if (Number(result.numAffectedRows) !== 1)
-    throw new CatalogDomainError('STALE_VERSION', 'Option value changed while you were editing.');
+  await db.transaction().execute(async (transaction) => {
+    const value = await sql<{
+      display_value: string;
+      status: 'ACTIVE' | 'ARCHIVED';
+      version: string;
+      product_id: string;
+    }>`select value.display_value,value.status,value.version::text,axis.product_id::text
+      from catalog.product_option_values value
+      join catalog.product_option_axes axis
+        on axis.organization_id=value.organization_id and axis.id=value.option_axis_id
+      where value.organization_id=${input.organizationId} and value.option_axis_id=${input.axisId}::uuid
+        and value.id=${input.valueId}::uuid`.execute(transaction);
+    const current = value.rows[0];
+    if (!current) throw new CatalogDomainError('NOT_FOUND', 'Option value was not found.');
+    const product = await lockCatalogProduct(transaction, input.organizationId, current.product_id);
+    if (!product) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
+    if (Number(current.version) !== input.expectedVersion)
+      throw new CatalogDomainError('STALE_VERSION', 'Option value changed while you were editing.');
+    if (input.colorId) {
+      const color = await sql<{ id: string }>`select id::text from catalog.colors
+        where organization_id=${input.organizationId} and id=${input.colorId}::uuid
+          and status='ACTIVE'`.execute(transaction);
+      if (!color.rows[0])
+        throw new CatalogDomainError('VALIDATION_FAILED', 'Color is unavailable.');
+    }
+    if (
+      input.status === 'ARCHIVED' &&
+      current.status === 'ACTIVE' &&
+      product.publicationStatus === 'PUBLISHED'
+    ) {
+      const affected = await listActiveVariantsUsingOptionStructure(transaction, {
+        organizationId: input.organizationId,
+        productId: current.product_id,
+        axisId: input.axisId,
+        valueId: input.valueId,
+      });
+      if (affected.total > 0)
+        throw optionStructureInUseError('option value', current.display_value, affected);
+    }
+    const result = await sql`update catalog.product_option_values set
+        display_value=coalesce(${displayValue ?? null},display_value),
+        code=coalesce(${code ?? null},code),position=coalesce(${input.position ?? null},position),
+        status=coalesce(${input.status ?? null},status),
+        color_id=case when ${input.colorId !== undefined} then ${input.colorId ?? null}::uuid else color_id end,
+        size_definition_id=case when ${input.sizeDefinitionId !== undefined}
+          then ${input.sizeDefinitionId ?? null}::uuid else size_definition_id end,
+        version=version+1,updated_at=now()
+      where organization_id=${input.organizationId} and option_axis_id=${input.axisId}::uuid
+        and id=${input.valueId}::uuid and version=${input.expectedVersion}`.execute(transaction);
+    if (Number(result.numAffectedRows) !== 1)
+      throw new CatalogDomainError('STALE_VERSION', 'Option value changed while you were editing.');
+    if (input.actorId)
+      await emitCatalogEvent(transaction, {
+        organizationId: input.organizationId,
+        productId: current.product_id,
+        actorId: input.actorId,
+        eventType: 'catalog.product.option_structure_updated',
+        auditAction: 'catalog.product.option_value_updated',
+        metadata: {
+          optionAxisId: input.axisId,
+          optionValueId: input.valueId,
+          status: input.status,
+        },
+      });
+  });
 }
 
 function normalizeSku(value: string): string {
@@ -493,6 +641,163 @@ async function emitCatalogEvent(
   `.execute(db);
 }
 
+interface LockedCatalogProduct {
+  readonly id: string;
+  readonly status: ProductSummary['status'];
+  readonly publicationStatus: ProductSummary['publicationStatus'];
+  readonly version: number;
+}
+
+interface CatalogVariantIntegrityIssue {
+  readonly id: string;
+  readonly sku: string;
+  readonly title: string | null;
+}
+
+interface CatalogProductVariantIntegrity {
+  readonly activeVariantCount: number;
+  readonly invalidVariantCount: number;
+  readonly invalidVariants: readonly CatalogVariantIntegrityIssue[];
+}
+
+async function lockCatalogProduct(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  productId: string,
+): Promise<LockedCatalogProduct | undefined> {
+  const result = await sql<{
+    id: string;
+    status: ProductSummary['status'];
+    publication_status: ProductSummary['publicationStatus'];
+    version: string;
+  }>`select id::text,status,publication_status,version::text from catalog.products
+    where organization_id=${organizationId} and id=${productId}::uuid for update`.execute(db);
+  const product = result.rows[0];
+  return product
+    ? {
+        id: product.id,
+        status: product.status,
+        publicationStatus: product.publication_status,
+        version: Number(product.version),
+      }
+    : undefined;
+}
+
+/**
+ * Canonical structural rule for active Variants. A valid combination has exactly one link for
+ * every active option axis, no link to archived or foreign option structure, and a signature that
+ * represents those links. Archived Variants remain untouched as historical records.
+ */
+async function getCatalogProductVariantIntegrity(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  productId: string,
+): Promise<CatalogProductVariantIntegrity> {
+  const result = await sql<{
+    active_variant_count: string;
+    invalid_variant_count: string;
+    invalid_variants: CatalogVariantIntegrityIssue[];
+  }>`
+    with active_variants as (
+      select variant.id,variant.sku,variant.title,
+        ${catalogVariantIsStructurallyValid({
+          organizationId: sql.ref('variant.organization_id'),
+          productId: sql.ref('variant.product_id'),
+          variantId: sql.ref('variant.id'),
+          optionSignature: sql.ref('variant.option_signature'),
+        })} as structurally_valid
+      from catalog.product_variants variant
+      where variant.organization_id=${organizationId} and variant.product_id=${productId}::uuid
+        and variant.status='ACTIVE'
+    )
+    select count(*)::text as active_variant_count,
+      count(*) filter(where not structurally_valid)::text as invalid_variant_count,
+      coalesce(
+        jsonb_agg(jsonb_build_object('id',id,'sku',sku,'title',title) order by sku,id)
+          filter(where not structurally_valid),
+        '[]'::jsonb
+      ) as invalid_variants
+    from active_variants
+  `.execute(db);
+  const integrity = result.rows[0];
+  return {
+    activeVariantCount: Number(integrity?.active_variant_count ?? 0),
+    invalidVariantCount: Number(integrity?.invalid_variant_count ?? 0),
+    invalidVariants: integrity?.invalid_variants ?? [],
+  };
+}
+
+async function assertPublishedProductVariantIntegrity(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  product: LockedCatalogProduct,
+): Promise<void> {
+  if (product.publicationStatus !== 'PUBLISHED') return;
+  const integrity = await getCatalogProductVariantIntegrity(db, organizationId, product.id);
+  if (integrity.activeVariantCount > 0 && integrity.invalidVariantCount === 0) return;
+  throw new CatalogDomainError(
+    'PUBLISHED_VARIANT_INTEGRITY',
+    integrity.activeVariantCount === 0
+      ? 'A published Product must keep at least one active Variant. Unpublish the Product before archiving its final active Variant.'
+      : `${integrity.invalidVariantCount} active Variant${integrity.invalidVariantCount === 1 ? '' : 's'} no longer match the Product's active options. Unpublish the Product, repair or archive the affected Variants, then publish again.`,
+    {
+      recoveryAction: 'UNPUBLISH_AND_RECONFIGURE',
+      activeVariantCount: integrity.activeVariantCount,
+      affectedVariantCount: integrity.invalidVariantCount,
+      affectedVariants: integrity.invalidVariants.slice(0, 20),
+    },
+  );
+}
+
+async function listActiveVariantsUsingOptionStructure(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    productId: string;
+    axisId: string;
+    valueId?: string;
+  },
+): Promise<{ total: number; variants: readonly CatalogVariantIntegrityIssue[] }> {
+  const result = await sql<{
+    id: string;
+    sku: string;
+    title: string | null;
+    total: string;
+  }>`select variant.id::text,variant.sku,variant.title,count(*) over()::text as total
+    from catalog.product_variants variant
+    join catalog.variant_option_values link
+      on link.organization_id=variant.organization_id and link.variant_id=variant.id
+    where variant.organization_id=${input.organizationId} and variant.product_id=${input.productId}::uuid
+      and variant.status='ACTIVE' and link.option_axis_id=${input.axisId}::uuid
+      and (${input.valueId ?? null}::uuid is null or link.option_value_id=${input.valueId ?? null}::uuid)
+    order by variant.sku,variant.id limit 20`.execute(db);
+  return {
+    total: Number(result.rows[0]?.total ?? 0),
+    variants: result.rows.map(({ id, sku, title }) => ({ id, sku, title })),
+  };
+}
+
+function optionStructureInUseError(
+  kind: 'option' | 'option value',
+  label: string,
+  affected: { total: number; variants: readonly CatalogVariantIntegrityIssue[] },
+): CatalogDomainError {
+  const requiresUnpublish = kind === 'option';
+  return new CatalogDomainError(
+    'OPTION_STRUCTURE_IN_USE',
+    requiresUnpublish
+      ? `${label} cannot be archived while the Product is published because ${affected.total} active Variant${affected.total === 1 ? '' : 's'} use this option. Unpublish the Product, update its option structure and Variants, then publish again after readiness passes.`
+      : `${label} cannot be archived because ${affected.total} active Variant${affected.total === 1 ? '' : 's'} use this option value. Archive or reconfigure the affected Variants first. If every active Variant must change, unpublish the Product before rebuilding it.`,
+    {
+      recoveryAction: requiresUnpublish
+        ? 'UNPUBLISH_AND_RECONFIGURE'
+        : 'RESOLVE_ACTIVE_VARIANTS_OR_UNPUBLISH',
+      affectedVariantCount: affected.total,
+      affectedVariants: affected.variants,
+    },
+  );
+}
+
 function asProduct(row: {
   id: string;
   handle: string;
@@ -530,9 +835,7 @@ async function getCatalogProductFacts(
     publication_status: ProductSummary['publicationStatus'];
     product_type_active: boolean;
     default_currency: string;
-    active_variant_count: string;
     required_attribute_missing_count: string;
-    incomplete_variant_count: string;
     priced_variant_count: string;
     public_media_count: string;
     available_variant_count: string;
@@ -541,9 +844,6 @@ async function getCatalogProductFacts(
     select product.title,product.description,product.publication_status,
       (product_type.status='ACTIVE') as product_type_active,
       organization.default_currency,
-      (select count(*)::text from catalog.product_variants variant
-        where variant.organization_id=product.organization_id and variant.product_id=product.id
-          and variant.status='ACTIVE') as active_variant_count,
       (select count(*)::text
         from catalog.product_type_attributes required
         join catalog.attribute_definitions definition
@@ -558,23 +858,6 @@ async function getCatalogProductFacts(
           and required.product_type_id=product.product_type_id
           and required.is_required and definition.scope='PRODUCT' and value.id is null
       ) as required_attribute_missing_count,
-      (select count(*)::text
-        from catalog.product_variants variant
-        where variant.organization_id=product.organization_id
-          and variant.product_id=product.id and variant.status='ACTIVE'
-          and (select count(*)
-            from catalog.variant_option_values link
-            join catalog.product_option_axes axis
-              on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
-              and axis.product_id=product.id and axis.status='ACTIVE'
-            join catalog.product_option_values value
-              on value.id=link.option_value_id and value.organization_id=link.organization_id
-              and value.option_axis_id=axis.id and value.status='ACTIVE'
-            where link.organization_id=product.organization_id and link.variant_id=variant.id
-          ) <> (select count(*) from catalog.product_option_axes axis
-            where axis.organization_id=product.organization_id
-              and axis.product_id=product.id and axis.status='ACTIVE')
-      ) as incomplete_variant_count,
       (select count(*)::text
         from catalog.product_variants variant
         where variant.organization_id=product.organization_id
@@ -622,14 +905,15 @@ async function getCatalogProductFacts(
   `.execute(db);
   const row = result.rows[0];
   if (!row) return undefined;
+  const variantIntegrity = await getCatalogProductVariantIntegrity(db, organizationId, productId);
   return {
     title: row.product_type_active ? row.title : '',
     description: row.description,
     publicationStatus: row.publication_status,
     defaultCurrency: row.default_currency,
-    activeVariantCount: Number(row.active_variant_count),
+    activeVariantCount: variantIntegrity.activeVariantCount,
     requiredAttributeMissingCount: Number(row.required_attribute_missing_count),
-    incompleteVariantCount: Number(row.incomplete_variant_count),
+    incompleteVariantCount: variantIntegrity.invalidVariantCount,
     pricedVariantCount: Number(row.priced_variant_count),
     publicMediaCount: Number(row.public_media_count),
     availableVariantCount: Number(row.available_variant_count),
@@ -677,8 +961,8 @@ function readinessFromFacts(facts: CatalogProductFacts): {
       state: facts.incompleteVariantCount === 0 ? 'PASS' : 'BLOCKER',
       message:
         facts.incompleteVariantCount === 0
-          ? 'Active Variants use one active value from every active option.'
-          : `${facts.incompleteVariantCount} active Variant${facts.incompleteVariantCount === 1 ? ' has' : 's have'} an incomplete option combination.`,
+          ? 'Active Variants use exactly one active value from every active option.'
+          : `${facts.incompleteVariantCount} active Variant${facts.incompleteVariantCount === 1 ? ' has' : 's have'} an invalid option combination. Repair or archive affected Variants before publishing.`,
       actionHref: '#variants',
     },
     {
@@ -977,6 +1261,13 @@ export async function publishCatalogProduct(
   input: { organizationId: string; actorId: string; productId: string; expectedVersion: number },
 ): Promise<ProductSummary> {
   return db.transaction().execute(async (transaction) => {
+    const locked = await lockCatalogProduct(transaction, input.organizationId, input.productId);
+    if (!locked) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
+    if (locked.version !== input.expectedVersion)
+      throw new CatalogDomainError(
+        'STALE_VERSION',
+        'Product has changed; reload before publishing.',
+      );
     const validation = await getCatalogProductReadiness(
       transaction,
       input.organizationId,
@@ -1740,6 +2031,7 @@ export async function createCatalogVariants(
     organizationId: string;
     productId: string;
     variants: readonly CatalogVariantWrite[];
+    actorId?: string;
   },
 ): Promise<readonly { id: string; sku: string; version: number }[]> {
   if (input.variants.length === 0 || input.variants.length > 250)
@@ -1754,10 +2046,8 @@ export async function createCatalogVariants(
     throw new CatalogDomainError('VALIDATION_FAILED', 'Variant SKUs must be unique.');
 
   return db.transaction().execute(async (transaction) => {
-    const product = await sql<{ id: string }>`select id::text from catalog.products
-      where organization_id=${input.organizationId} and id=${input.productId}::uuid
-        and status<>'ARCHIVED'`.execute(transaction);
-    if (!product.rows[0])
+    const product = await lockCatalogProduct(transaction, input.organizationId, input.productId);
+    if (!product || product.status === 'ARCHIVED')
       throw new CatalogDomainError('NOT_FOUND', 'Product was not found or is archived.');
     const created: { id: string; sku: string; version: number }[] = [];
     for (const [index, variantInput] of input.variants.entries()) {
@@ -1775,7 +2065,8 @@ export async function createCatalogVariants(
       });
       const title = variantInput.title?.trim() || null;
       const barcode = variantInput.barcode?.trim() || null;
-      const signature = selected.length > 0 ? optionSignature(variantInput.optionValueIds) : 'default';
+      const signature =
+        selected.length > 0 ? optionSignature(variantInput.optionValueIds) : 'default';
       const row = await sql<{ id: string; sku: string; version: string }>`
         insert into catalog.product_variants
           (organization_id,product_id,title,sku,sku_normalized,barcode,option_signature,
@@ -1813,17 +2104,28 @@ export async function createCatalogVariants(
       );
       created.push({ id: variant.id, sku: variant.sku, version: Number(variant.version) });
     }
+    await assertPublishedProductVariantIntegrity(transaction, input.organizationId, product);
+    if (input.actorId)
+      await emitCatalogEvent(transaction, {
+        organizationId: input.organizationId,
+        productId: input.productId,
+        actorId: input.actorId,
+        eventType: 'catalog.product.variants_updated',
+        auditAction: 'catalog.product.variants_created',
+        metadata: { variantIds: created.map((variant) => variant.id) },
+      });
     return created;
   });
 }
 
 export async function createCatalogVariant(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; productId: string } & CatalogVariantWrite,
+  input: { organizationId: string; productId: string; actorId?: string } & CatalogVariantWrite,
 ): Promise<{ id: string; sku: string; version: number }> {
   const [variant] = await createCatalogVariants(db, {
     organizationId: input.organizationId,
     productId: input.productId,
+    ...(input.actorId ? { actorId: input.actorId } : {}),
     variants: [input],
   });
   if (!variant) throw new Error('Variant creation did not return a Variant.');
@@ -1845,20 +2147,24 @@ export async function updateCatalogVariant(
     primaryColorId?: string | null;
     associatedColorIds?: readonly string[];
     weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
-    dimensions?:
-      | {
-          readonly length: string;
-          readonly width: string;
-          readonly height: string;
-          readonly unit: 'MM' | 'CM' | 'IN';
-        }
-      | null;
+    dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
+    actorId?: string;
   },
 ): Promise<{ id: string; sku: string; version: number }> {
   return db.transaction().execute(async (transaction) => {
+    const product = await lockCatalogProduct(transaction, input.organizationId, input.productId);
+    if (!product || product.status === 'ARCHIVED')
+      throw new CatalogDomainError('NOT_FOUND', 'Product was not found or is archived.');
     const current = await sql<{ id: string; sku: string }>`select id::text,sku
       from catalog.product_variants where organization_id=${input.organizationId}
-        and product_id=${input.productId}::uuid and id=${input.variantId}::uuid`.execute(transaction);
+        and product_id=${input.productId}::uuid and id=${input.variantId}::uuid`.execute(
+      transaction,
+    );
     if (!current.rows[0]) throw new CatalogDomainError('NOT_FOUND', 'Variant was not found.');
     const sku = input.sku === undefined ? undefined : normalizeSku(input.sku);
     if (sku !== undefined && !sku)
@@ -1908,7 +2214,11 @@ export async function updateCatalogVariant(
     }
     const title = input.title === undefined ? undefined : input.title?.trim() || null;
     const barcode = input.barcode === undefined ? undefined : input.barcode?.trim() || null;
-    const updated = await sql<{ id: string; sku: string; version: string }>`update catalog.product_variants
+    const updated = await sql<{
+      id: string;
+      sku: string;
+      version: string;
+    }>`update catalog.product_variants
       set sku=case when ${input.sku !== undefined} then ${input.sku?.trim() ?? ''} else sku end,
         sku_normalized=case when ${input.sku !== undefined} then ${sku ?? ''} else sku_normalized end,
         title=case when ${input.title !== undefined} then ${title ?? null} else title end,
@@ -1940,6 +2250,16 @@ export async function updateCatalogVariant(
           transaction,
         );
     }
+    await assertPublishedProductVariantIntegrity(transaction, input.organizationId, product);
+    if (input.actorId)
+      await emitCatalogEvent(transaction, {
+        organizationId: input.organizationId,
+        productId: input.productId,
+        actorId: input.actorId,
+        eventType: 'catalog.product.variants_updated',
+        auditAction: 'catalog.product.variant_updated',
+        metadata: { variantId: input.variantId, status: input.status },
+      });
     return { id: variant.id, sku: variant.sku, version: Number(variant.version) };
   });
 }
@@ -2349,7 +2669,14 @@ export async function getCatalogProductWorkspace(
     faqs,
     media,
   ] = await Promise.all([
-    sql<{ id: string; code: string; name: string; status: 'ACTIVE' | 'ARCHIVED'; position: number; version: string }>`
+    sql<{
+      id: string;
+      code: string;
+      name: string;
+      status: 'ACTIVE' | 'ARCHIVED';
+      position: number;
+      version: string;
+    }>`
       select id::text,code,name,status,position,version::text from catalog.product_option_axes
       where organization_id=${organizationId} and product_id=${productId}::uuid
       order by status,position,id
@@ -2619,8 +2946,7 @@ export async function getCatalogProductWorkspace(
       status: variant.status,
       version: Number(variant.version),
       optionValueIds: variant.option_value_ids,
-      primaryColor:
-        variant.colors.find((color) => color.role === 'PRIMARY') ?? null,
+      primaryColor: variant.colors.find((color) => color.role === 'PRIMARY') ?? null,
       associatedColors: variant.colors.filter((color) => color.role === 'ASSOCIATED'),
       weight:
         variant.weight_value && variant.weight_unit
@@ -2767,10 +3093,15 @@ export async function listStorefrontCatalogProducts(
 ): Promise<readonly StorefrontProductCard[]> {
   const term = query?.trim();
   const result = await sql<StorefrontProductCard>`
-    select id::text,handle,title,description from catalog.products
-    where organization_id=${organizationId} and status='ACTIVE' and publication_status='PUBLISHED'
-      and (${term ?? null}::text is null or to_tsvector('simple',coalesce(title,'') || ' ' || coalesce(description,'')) @@ websearch_to_tsquery('simple',${term ?? null}))
-    order by published_at desc nulls last,id desc limit 48
+    select product.id::text,product.handle,product.title,product.description from catalog.products product
+    where product.organization_id=${organizationId} and product.status='ACTIVE'
+      and product.publication_status='PUBLISHED'
+      and ${catalogProductHasCoherentActiveVariants(
+        sql.ref('product.organization_id'),
+        sql.ref('product.id'),
+      )}
+      and (${term ?? null}::text is null or to_tsvector('simple',coalesce(product.title,'') || ' ' || coalesce(product.description,'')) @@ websearch_to_tsquery('simple',${term ?? null}))
+    order by product.published_at desc nulls last,product.id desc limit 48
   `.execute(db);
   return result.rows;
 }
@@ -2789,8 +3120,14 @@ export async function getStorefrontCatalogProduct(
     seo_title: string | null;
     seo_description: string | null;
   }>`
-    select id,handle,title,description,seo_title,seo_description from catalog.products
-    where organization_id = ${organizationId} and handle = ${handle} and status = 'ACTIVE' and publication_status = 'PUBLISHED'
+    select product.id,product.handle,product.title,product.description,product.seo_title,product.seo_description
+    from catalog.products product
+    where product.organization_id = ${organizationId} and product.handle = ${handle}
+      and product.status = 'ACTIVE' and product.publication_status = 'PUBLISHED'
+      and ${catalogProductHasCoherentActiveVariants(
+        sql.ref('product.organization_id'),
+        sql.ref('product.id'),
+      )}
   `.execute(db);
   const row = product.rows[0];
   if (!row) return undefined;

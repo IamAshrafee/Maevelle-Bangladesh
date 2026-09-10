@@ -1,5 +1,6 @@
 import { sql, type Kysely } from 'kysely';
 
+import { catalogProductHasCoherentActiveVariants } from './catalog-variant-integrity.js';
 import type { DatabaseSchema } from './index.js';
 
 export interface PublicCategory {
@@ -112,6 +113,10 @@ export async function rebuildStorefrontSearch(
       left join inventory.inventory_items item on item.variant_id=v.id and item.organization_id=p.organization_id
       left join inventory.inventory_levels level on level.inventory_item_id=item.id and level.organization_id=p.organization_id
       where p.organization_id=${organizationId} and p.status='ACTIVE' and p.publication_status='PUBLISHED'
+        and ${catalogProductHasCoherentActiveVariants(
+          sql.ref('p.organization_id'),
+          sql.ref('p.id'),
+        )}
       group by p.organization_id,p.id,p.handle,p.title,p.description,p.published_at
       returning product_id
     `.execute(transaction);
@@ -199,7 +204,14 @@ export async function searchStorefront(
           greatest(similarity(document.title,${query}),similarity(document.search_text,${query}))*0.35
         end rank
       from search.catalog_documents document
+      join catalog.products product
+        on product.organization_id=document.organization_id and product.id=document.product_id
       where document.organization_id=${input.organizationId}
+        and product.status='ACTIVE' and product.publication_status='PUBLISHED'
+        and ${catalogProductHasCoherentActiveVariants(
+          sql.ref('product.organization_id'),
+          sql.ref('product.id'),
+        )}
         and (${query}::text is null or document.document @@ websearch_to_tsquery('simple',${query})
           or similarity(document.title,${query})>0.2 or similarity(document.search_text,${query})>0.12)
         and (${input.categoryId ?? null}::uuid is null or ${input.categoryId ?? null}::uuid=any(document.category_ids))

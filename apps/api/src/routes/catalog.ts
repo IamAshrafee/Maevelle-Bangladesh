@@ -502,6 +502,7 @@ export function registerCatalogRoutes(
         return reply.code(201).send({
           data: await createProductOptionAxis(database.db, {
             organizationId: context.organizationId,
+            actorId: context.actorId,
             productId: (request.params as { productId: string }).productId,
             ...(request.body as { code: string; name: string; position?: number }),
           }),
@@ -532,6 +533,7 @@ export function registerCatalogRoutes(
         return reply.code(201).send({
           data: await createProductOptionValue(database.db, {
             organizationId: context.organizationId,
+            actorId: context.actorId,
             optionAxisId: (request.params as { axisId: string }).axisId,
             ...(request.body as {
               code: string;
@@ -576,6 +578,7 @@ export function registerCatalogRoutes(
         const params = request.params as { productId: string; axisId: string };
         await updateProductOptionAxis(database.db, {
           organizationId: context.organizationId,
+          actorId: context.actorId,
           productId: params.productId,
           axisId: params.axisId,
           expectedVersion: version,
@@ -619,6 +622,7 @@ export function registerCatalogRoutes(
         const { version, ...changes } = body;
         await updateProductOptionValue(database.db, {
           organizationId: context.organizationId,
+          actorId: context.actorId,
           axisId: (request.params as { axisId: string }).axisId,
           valueId: (request.params as { valueId: string }).valueId,
           expectedVersion: version,
@@ -751,6 +755,7 @@ export function registerCatalogRoutes(
         const variant = await createCatalogVariant(database.db, {
           ...body,
           organizationId: context.organizationId,
+          actorId: context.actorId,
           productId: (request.params as { productId: string }).productId,
         });
         return reply.code(201).send({ data: variant });
@@ -764,7 +769,9 @@ export function registerCatalogRoutes(
     '/admin/catalog/products/:productId/variants/bulk',
     {
       schema: {
-        body: Type.Object({ variants: Type.Array(variantWriteSchema, { minItems: 1, maxItems: 250 }) }),
+        body: Type.Object({
+          variants: Type.Array(variantWriteSchema, { minItems: 1, maxItems: 250 }),
+        }),
       },
     },
     async (request, reply) => {
@@ -775,6 +782,7 @@ export function registerCatalogRoutes(
         return reply.code(201).send({
           data: await createCatalogVariants(database.db, {
             organizationId: context.organizationId,
+            actorId: context.actorId,
             productId: (request.params as { productId: string }).productId,
             variants: body.variants,
           }),
@@ -802,16 +810,12 @@ export function registerCatalogRoutes(
             barcode: Type.Optional(
               Type.Union([Type.String({ minLength: 1, maxLength: 120 }), Type.Null()]),
             ),
-            status: Type.Optional(
-              Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')]),
-            ),
+            status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')])),
             primaryColorId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
             associatedColorIds: Type.Optional(
               Type.Array(organizationIdParameter, { maxItems: 12, uniqueItems: true }),
             ),
-            weight: Type.Optional(
-              Type.Union([variantWriteSchema.properties.weight, Type.Null()]),
-            ),
+            weight: Type.Optional(Type.Union([variantWriteSchema.properties.weight, Type.Null()])),
             dimensions: Type.Optional(
               Type.Union([variantWriteSchema.properties.dimensions, Type.Null()]),
             ),
@@ -830,6 +834,7 @@ export function registerCatalogRoutes(
         return {
           data: await updateCatalogVariant(database.db, {
             organizationId: context.organizationId,
+            actorId: context.actorId,
             productId: params.productId,
             variantId: params.variantId,
             expectedVersion: version,

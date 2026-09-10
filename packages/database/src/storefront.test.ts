@@ -54,7 +54,7 @@ async function fixture() {
   );
   const variant = await sql<{
     id: string;
-  }>`insert into catalog.product_variants(organization_id,product_id,sku,sku_normalized,option_signature) values(${organization.id},${product.rows[0]!.id},'SUMMER-01','SUMMER-01','summer') returning id`.execute(
+  }>`insert into catalog.product_variants(organization_id,product_id,sku,sku_normalized,option_signature) values(${organization.id},${product.rows[0]!.id},'SUMMER-01','SUMMER-01','default') returning id`.execute(
     database.db,
   );
   await sql`insert into catalog.product_categories(organization_id,product_id,category_id) values(${organization.id},${product.rows[0]!.id},${leaf.rows[0]!.id})`.execute(

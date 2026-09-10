@@ -661,7 +661,7 @@ export interface MeasurementDefinitionDto {
 }
 
 export interface ApiErrorDto {
-  readonly error: string | { code: string; message: string };
+  readonly error: string | { code: string; message: string; details?: unknown };
 }
 
 /** Decimal quantities remain strings across HTTP so JavaScript never becomes inventory authority. */

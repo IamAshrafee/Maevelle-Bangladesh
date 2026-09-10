@@ -35,7 +35,7 @@ export async function catalogRequest<T>(path: string, init?: RequestInit): Promi
       structured?.message ?? 'The catalog operation could not be completed. Try again.',
       structured?.code ?? (typeof payload?.error === 'string' ? payload.error : 'REQUEST_FAILED'),
       response.status,
-      undefined,
+      structured?.details,
     );
   }
   if (response.status === 204) return undefined as T;

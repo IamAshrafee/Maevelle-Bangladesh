@@ -29,3 +29,28 @@
   not start because the configured local `maevelle_test` database does not
   exist; this is an evidence limitation, not a product-test failure.
 - Next: `SAFE_PUBLISHED_VARIANT_INTEGRITY`.
+
+## 2026-09-10 — Safe published Variant integrity
+
+- Established the authoritative rule: every active Variant on a published
+  Product must have exactly one link for every active option axis, no links to
+  archived/foreign axes or values, and a signature matching the linked values;
+  at least one active Variant must remain. Archived Variants are historical and
+  are excluded from the live invariant without deleting their links.
+- Product publication and option-axis/value/Variant commands now take the same
+  Product-row lock. Unsafe published archive attempts return a structured 409
+  with affected SKUs and explicit deactivate/reconfigure-or-unpublish recovery;
+  successful semantic writes emit Catalog audit/outbox evidence.
+- Draft Products may be temporarily inconsistent while being rebuilt.
+  Readiness blocks republishing until repaired. Existing inconsistent published
+  Products become `ATTENTION`, cannot republish, and are defensively omitted
+  from Product detail/list/search projections until healed.
+- Created and migrated the disposable `maevelle_test` database. Seventeen
+  focused Catalog, Variant, Storefront and API tests pass, including concurrent
+  publish-versus-archive, tenant isolation, historical-link preservation,
+  public projection defense, restoration, and structured error transport.
+- API and Storefront Docker images build. A fresh Admin image is blocked by the
+  untouched current-head TypeScript error in `components/ui/search-input.tsx:93`,
+  so post-change browser proof remains unperformed.
+- Next: `SCALABLE_VARIANT_AND_MEDIA_OPERATIONS`; do not begin worklist or preview
+  improvements first.
