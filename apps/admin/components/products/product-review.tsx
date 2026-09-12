@@ -1,11 +1,12 @@
 'use client';
 
-import { ArrowLeft, CheckCircle2, FileCheck2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ExternalLink, FileCheck2 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import type { ProductEditorSectionProps } from '@/components/products/product-editor-types';
 import { ProductReadiness } from '@/components/products/product-readiness';
+import { storefrontProductHref } from '@/components/products/product-workspace-links';
 import { Button } from '@/components/ui/button';
 import { catalogData } from '@/lib/catalog/api';
 
@@ -72,6 +73,26 @@ export function ProductReview({ workspace, onRefresh, onDirtyChange }: ProductEd
             >
               <FileCheck2 aria-hidden="true" /> View Full Product Details
             </Button>
+            {workspace.publicationStatus === 'PUBLISHED' ? (
+              <Button
+                className="w-full"
+                variant="outline"
+                render={
+                  <a
+                    aria-label={`Open ${workspace.title} in the Storefront`}
+                    href={storefrontProductHref(workspace.handle)}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  />
+                }
+              >
+                <ExternalLink aria-hidden="true" /> Open Storefront Product
+              </Button>
+            ) : (
+              <p className="px-1 text-center text-xs text-muted-foreground">
+                The customer view becomes available after publishing.
+              </p>
+            )}
             <Button className="w-full" variant="ghost" render={<Link href="/products" />}>
               <ArrowLeft aria-hidden="true" /> Finish and Return to Products
             </Button>

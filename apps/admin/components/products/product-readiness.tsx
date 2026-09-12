@@ -3,6 +3,8 @@ import Link from 'next/link';
 
 import type { CatalogProductReadinessDto } from '@maevelle/contracts';
 
+import { productReadinessResolutionHref } from '@/components/products/product-workspace-links';
+
 export function ProductReadiness({
   readiness,
   productId,
@@ -68,19 +70,7 @@ export function ProductReadiness({
             {check.state !== 'PASS' ? (
               <Link
                 className="shrink-0 text-xs font-medium text-primary hover:underline focus-visible:ring-3 focus-visible:ring-ring/30"
-                href={`/products/${productId}/edit?section=${
-                  check.code === 'ACTIVE_VARIANT' || check.code === 'OPTION_COMBINATIONS'
-                    ? 'variants'
-                    : check.code === 'PUBLIC_MEDIA'
-                      ? 'media'
-                      : check.code === 'CURRENT_PRICE' || check.code === 'AVAILABLE_INVENTORY'
-                        ? 'variants'
-                        : check.code === 'REQUIRED_ATTRIBUTES' || check.code === 'CATEGORY'
-                          ? 'organization'
-                          : check.code === 'DESCRIPTION' || check.code === 'IDENTITY'
-                            ? 'overview'
-                            : 'review'
-                }`}
+                href={productReadinessResolutionHref(productId, check.code)}
               >
                 Resolve
               </Link>

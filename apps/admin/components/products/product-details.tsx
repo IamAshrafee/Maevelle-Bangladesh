@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Edit3,
   EyeOff,
+  ExternalLink,
   ImageIcon,
   PackageOpen,
   RotateCcw,
@@ -25,6 +26,7 @@ import type {
 } from '@maevelle/contracts';
 
 import { ProductReadiness } from '@/components/products/product-readiness';
+import { storefrontProductHref } from '@/components/products/product-workspace-links';
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
@@ -115,6 +117,22 @@ export function ProductDetails({ productId }: { productId: string }) {
   const primaryMedia = workspace?.media.find((media) => media.isPrimary) ?? workspace?.media[0];
   const productMedia =
     workspace?.media.filter((media) => !media.variantId && !media.optionValueId) ?? [];
+  const mediaScopeCounts = useMemo(() => {
+    const media = workspace?.media ?? [];
+    return {
+      product: media.filter((item) => !item.variantId && !item.optionValueId).length,
+      option: media.filter((item) => item.optionValueId !== null).length,
+      variant: media.filter((item) => item.variantId !== null).length,
+    };
+  }, [workspace?.media]);
+  const optionMediaCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const media of workspace?.media ?? []) {
+      if (media.optionValueId)
+        counts.set(media.optionValueId, (counts.get(media.optionValueId) ?? 0) + 1);
+    }
+    return counts;
+  }, [workspace?.media]);
 
   const organizationLabels = useMemo(() => {
     if (!workspace) return { categories: [], tags: [], occasions: [], collections: [] };
@@ -225,6 +243,21 @@ export function ProductDetails({ productId }: { productId: string }) {
               <Button variant="outline" render={<Link href={`/products/${workspace.id}/edit`} />}>
                 <Edit3 aria-hidden="true" /> Edit Product
               </Button>
+              {workspace.publicationStatus === 'PUBLISHED' ? (
+                <Button
+                  variant="outline"
+                  render={
+                    <a
+                      aria-label={`Open ${workspace.title} in the Storefront`}
+                      href={storefrontProductHref(workspace.handle)}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    />
+                  }
+                >
+                  <ExternalLink aria-hidden="true" /> View Storefront
+                </Button>
+              ) : null}
               {workspace.publicationStatus === 'PUBLISHED' ? (
                 <Button
                   variant="outline"
@@ -360,7 +393,13 @@ export function ProductDetails({ productId }: { productId: string }) {
           </div>
           <aside className="space-y-4">
             <section className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-              <h2 className="text-sm font-semibold">Primary Gallery</h2>
+              <h2 className="text-sm font-semibold">Product-level Gallery</h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {mediaScopeCounts.product} Product-level · {mediaScopeCounts.option} option gallery
+                · {mediaScopeCounts.variant} SKU-specific image
+                {mediaScopeCounts.variant === 1 ? '' : 's'}. Option and SKU images can appear for
+                matching customer choices.
+              </p>
               {productMedia.length > 0 ? (
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {productMedia.slice(0, 6).map((media) => (
@@ -376,7 +415,9 @@ export function ProductDetails({ productId }: { productId: string }) {
                   ))}
                 </div>
               ) : (
-                <p className="mt-2 text-sm text-muted-foreground">No Product images attached.</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  No Product-level fallback images attached.
+                </p>
               )}
               <Button
                 className="mt-3 w-full"
@@ -545,7 +586,18 @@ export function ProductDetails({ productId }: { productId: string }) {
                       </span>
                     </td>
                     <td className="px-4 py-3 tabular-nums">{variant.sellableQuantity}</td>
-                    <td className="px-4 py-3 tabular-nums">{variant.media.length}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {variant.media.length > 0
+                        ? `${variant.media.length} SKU-specific`
+                        : variant.optionValueIds.reduce(
+                              (total, valueId) => total + (optionMediaCounts.get(valueId) ?? 0),
+                              0,
+                            ) > 0
+                          ? 'Option gallery'
+                          : mediaScopeCounts.product > 0
+                            ? 'Product fallback'
+                            : 'No image'}
+                    </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={variant.status} />
                     </td>
@@ -568,7 +620,8 @@ export function ProductDetails({ productId }: { productId: string }) {
             <div>
               <h2 className="font-semibold">Product & Variant Media</h2>
               <p className="text-sm text-muted-foreground">
-                Primary, general, option-value, and Variant-specific galleries.
+                Product fallback, option galleries, and exact-SKU images are kept as separate
+                scopes.
               </p>
             </div>
             <Button render={<Link href={`/products/${workspace.id}/edit?section=media`} />}>

@@ -70,3 +70,21 @@ targeted proof and responsive/owner review is complete.
   so the changed Product screens were not visually claimed; repository
   bootstrap credentials were not printed or injected. Responsive and owner
   visual review remain open for the area gate.
+
+## Merchandiser worklist and workspace clarity proof — 2026-09-12
+
+- `pnpm exec vitest run packages/database/src/catalog.test.ts
+  packages/database/src/catalog-variant-integrity.test.ts
+  packages/database/src/storefront.test.ts apps/api/src/routes/catalog-support.test.ts
+  apps/admin/src/product-workspace-links.test.ts` passed: 5 files, 17 tests.
+  It includes canonical worklist attention/recovery, deterministic name sorting,
+  structural-Variant defense, public projection, API support, and Admin route
+  handoff coverage.
+- Catalog/API/Admin TypeScript checks and focused executable-surface ESLint
+  pass. The touched contracts file's package-level ESLint remains blocked by
+  pre-existing `no-explicit-any` errors near `index.ts:973`; its TypeScript
+  check passes. `pnpm --filter @maevelle/admin build` passed all 56 Admin routes.
+- Local Compose API, Admin, Storefront, database, and Caddy services were
+  healthy. Authenticated browser rendering was not claimed because the prior
+  container rebuild invalidated the available Admin session; no credentials were
+  exposed or injected. Responsive and owner visual review remain open.

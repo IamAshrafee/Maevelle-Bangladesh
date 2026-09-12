@@ -201,11 +201,14 @@ export interface CatalogProductWorkItem extends ProductSummary {
   readonly readinessState: CatalogReadinessState;
   readonly blockerCount: number;
   readonly warningCount: number;
+  readonly attention: CatalogReadinessCheck | null;
   readonly operationalSignals: CatalogProductOperationalSignals;
   readonly primaryMediaId: string | null;
   readonly priceRange: { minimum: string; maximum: string; currency: string } | null;
   readonly availableQuantity: string;
 }
+
+type CatalogProductWorklistSort = 'UPDATED_DESC' | 'UPDATED_ASC' | 'ATTENTION_FIRST' | 'TITLE_ASC';
 
 export interface CatalogProductWorklist {
   readonly items: readonly CatalogProductWorkItem[];
@@ -2309,6 +2312,7 @@ export async function listCatalogProductWorkItems(
     status?: 'ALL' | 'DRAFT' | 'ACTIVE' | 'ARCHIVED' | 'PUBLISHED';
     productTypeId?: string;
     readiness?: 'ALL' | CatalogReadinessState;
+    sort?: CatalogProductWorklistSort;
     page?: number;
     pageSize?: number;
   },
@@ -2320,6 +2324,7 @@ export async function listCatalogProductWorkItems(
   const searchPattern = query ? `%${escapeLikePattern(query)}%` : null;
   const status = input.status ?? 'ALL';
   const readiness = input.readiness ?? 'ALL';
+  const sort = input.sort ?? 'UPDATED_DESC';
   const productTypeId = input.productTypeId ?? null;
 
   const [workItems, summary] = await Promise.all([
@@ -2327,10 +2332,12 @@ export async function listCatalogProductWorkItems(
       id: string;
       handle: string;
       title: string;
+      description: string | null;
       status: ProductSummary['status'];
       publication_status: ProductSummary['publicationStatus'];
       version: string;
       product_type_name: string;
+      product_type_status: 'ACTIVE' | 'ARCHIVED';
       active_variant_count: number;
       sku_preview: string | null;
       updated_at: string;
@@ -2339,6 +2346,8 @@ export async function listCatalogProductWorkItems(
       public_media_count: number;
       available_variant_count: number;
       category_count: number;
+      required_attribute_missing_count: number;
+      incomplete_variant_count: number;
       blocker_count: number;
       warning_count: number;
       readiness_state: CatalogReadinessState;
@@ -2409,17 +2418,12 @@ export async function listCatalogProductWorkItems(
           (select count(*)::integer from catalog.product_variants variant
             where variant.organization_id=product.organization_id
               and variant.product_id=product.id and variant.status='ACTIVE'
-              and (select count(*) from catalog.variant_option_values link
-                join catalog.product_option_axes axis
-                  on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
-                  and axis.product_id=product.id and axis.status='ACTIVE'
-                join catalog.product_option_values value
-                  on value.id=link.option_value_id and value.organization_id=link.organization_id
-                  and value.option_axis_id=axis.id and value.status='ACTIVE'
-                where link.organization_id=product.organization_id and link.variant_id=variant.id
-              ) <> (select count(*) from catalog.product_option_axes axis
-                where axis.organization_id=product.organization_id
-                  and axis.product_id=product.id and axis.status='ACTIVE')
+              and not ${catalogVariantIsStructurallyValid({
+                organizationId: sql.ref('variant.organization_id'),
+                productId: sql.ref('variant.product_id'),
+                variantId: sql.ref('variant.id'),
+                optionSignature: sql.ref('variant.option_signature'),
+              })}
           ) as incomplete_variant_count,
           (select count(*)::integer from catalog.product_variants variant
             where variant.organization_id=product.organization_id
@@ -2496,13 +2500,28 @@ export async function listCatalogProductWorkItems(
         select * from scored
         where ${readiness}='ALL' or readiness_state=${readiness}
       )
-      select id::text,handle,title,status,publication_status,version::text,product_type_name,
+      select id::text,handle,title,description,status,publication_status,version::text,product_type_name,
+        product_type_status,
         active_variant_count,sku_preview,updated_at::text,default_currency,priced_variant_count,
-        public_media_count,available_variant_count,category_count,blocker_count,warning_count,
+        public_media_count,available_variant_count,category_count,required_attribute_missing_count,
+        incomplete_variant_count,blocker_count,warning_count,
         readiness_state,primary_media_id,minimum_price,maximum_price,available_quantity,
         count(*) over()::text as filtered_total
       from filtered
-      order by updated_at desc,id desc
+      order by
+        case when ${sort}='ATTENTION_FIRST' then
+          case readiness_state
+            when 'ATTENTION' then 0
+            when 'BLOCKED' then 1
+            when 'READY' then 2
+            else 3
+          end
+          else 0
+        end,
+        case when ${sort}='TITLE_ASC' then lower(title) end asc,
+        case when ${sort}='UPDATED_ASC' then updated_at end asc,
+        case when ${sort} in ('UPDATED_DESC','ATTENTION_FIRST') then updated_at end desc,
+        id desc
       limit ${pageSize} offset ${offset}
     `.execute(db),
     sql<{
@@ -2528,33 +2547,49 @@ export async function listCatalogProductWorkItems(
   const totalItems = Number(workItems.rows[0]?.filtered_total ?? 0);
   const summaryRow = summary.rows[0];
   return {
-    items: workItems.rows.map((row) => ({
-      ...asProduct({
-        ...row,
-        variant_count: String(row.active_variant_count),
-      }),
-      readinessState: row.readiness_state,
-      blockerCount: row.blocker_count,
-      warningCount: row.warning_count,
-      primaryMediaId: row.primary_media_id,
-      priceRange:
-        row.minimum_price && row.maximum_price
-          ? {
-              minimum: row.minimum_price,
-              maximum: row.maximum_price,
-              currency: row.default_currency,
-            }
-          : null,
-      availableQuantity: row.available_quantity,
-      operationalSignals: {
+    items: workItems.rows.map((row) => {
+      const readiness = readinessFromFacts({
+        title: row.product_type_status === 'ACTIVE' ? row.title : '',
+        description: row.description,
+        publicationStatus: row.publication_status,
         defaultCurrency: row.default_currency,
         activeVariantCount: row.active_variant_count,
+        requiredAttributeMissingCount: row.required_attribute_missing_count,
+        incompleteVariantCount: row.incomplete_variant_count,
         pricedVariantCount: row.priced_variant_count,
         publicMediaCount: row.public_media_count,
         availableVariantCount: row.available_variant_count,
         categoryCount: row.category_count,
-      },
-    })),
+      }).readiness;
+      return {
+        ...asProduct({
+          ...row,
+          variant_count: String(row.active_variant_count),
+        }),
+        readinessState: row.readiness_state,
+        blockerCount: row.blocker_count,
+        warningCount: row.warning_count,
+        attention: readiness.checks.find((check) => check.state !== 'PASS') ?? null,
+        primaryMediaId: row.primary_media_id,
+        priceRange:
+          row.minimum_price && row.maximum_price
+            ? {
+                minimum: row.minimum_price,
+                maximum: row.maximum_price,
+                currency: row.default_currency,
+              }
+            : null,
+        availableQuantity: row.available_quantity,
+        operationalSignals: {
+          defaultCurrency: row.default_currency,
+          activeVariantCount: row.active_variant_count,
+          pricedVariantCount: row.priced_variant_count,
+          publicMediaCount: row.public_media_count,
+          availableVariantCount: row.available_variant_count,
+          categoryCount: row.category_count,
+        },
+      };
+    }),
     pagination: {
       page,
       pageSize,

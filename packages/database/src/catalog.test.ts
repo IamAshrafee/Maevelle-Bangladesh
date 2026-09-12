@@ -228,7 +228,17 @@ describe('catalog invariants', () => {
       pageSize: 10,
     });
     expect(blockedList).toMatchObject({
-      items: [expect.objectContaining({ id: product.id, readinessState: 'BLOCKED' })],
+      items: [
+        expect.objectContaining({
+          id: product.id,
+          readinessState: 'BLOCKED',
+          attention: expect.objectContaining({
+            code: 'ACTIVE_VARIANT',
+            state: 'BLOCKER',
+            message: expect.stringContaining('Create at least one active'),
+          }),
+        }),
+      ],
       pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
     });
     const normalizedStalePage = await listCatalogProductWorkItems(database.db, {
@@ -268,6 +278,21 @@ describe('catalog invariants', () => {
     expect(ready?.readiness.checks).toContainEqual(
       expect.objectContaining({ code: 'CURRENT_PRICE', state: 'WARNING' }),
     );
+
+    const secondProduct = await createCatalogProduct(database.db, {
+      ...fixture,
+      title: 'A Worklist dress',
+      handle: `${handle}-a`,
+      description: 'A useful customer-facing description.',
+    });
+    const alphabetical = await listCatalogProductWorkItems(database.db, {
+      organizationId: fixture.organizationId,
+      query: handle,
+      sort: 'TITLE_ASC',
+      page: 1,
+      pageSize: 10,
+    });
+    expect(alphabetical.items.map((item) => item.id)).toEqual([secondProduct.id, product.id]);
   });
 
   it('supports arbitrary nested categories but prevents a cycle', async () => {

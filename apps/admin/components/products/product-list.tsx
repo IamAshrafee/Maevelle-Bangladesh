@@ -8,7 +8,6 @@ import {
   ImageIcon,
   PackagePlus,
   RefreshCw,
-  Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -17,10 +16,12 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import type {
   CatalogProductWorkItemDto,
   CatalogProductWorklistDto,
+  CatalogProductWorklistSort,
   CatalogProductTypeDefinitionDto,
 } from '@maevelle/contracts';
 
 import { ProductTypeManager } from '@/components/catalog-product-types/product-type-manager';
+import { productReadinessResolutionHref } from '@/components/products/product-workspace-links';
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,14 @@ import { catalogData, formatCatalogMoney } from '@/lib/catalog/api';
 
 const statuses = ['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'] as const;
 const readinessStates = ['ALL', 'READY', 'BLOCKED', 'ATTENTION'] as const;
+const worklistSorts = ['UPDATED_DESC', 'ATTENTION_FIRST', 'UPDATED_ASC', 'TITLE_ASC'] as const;
+
+const worklistSortLabels: Record<CatalogProductWorklistSort, string> = {
+  UPDATED_DESC: 'Recently updated',
+  ATTENTION_FIRST: 'Needs attention first',
+  UPDATED_ASC: 'Oldest updated',
+  TITLE_ASC: 'Product name A–Z',
+};
 
 function productDate(value?: string): string {
   return value
@@ -66,6 +75,9 @@ export function ProductList() {
     ? (searchParameters.get('readiness') as (typeof readinessStates)[number])
     : 'ALL';
   const productTypeId = searchParameters.get('type') ?? 'ALL';
+  const sort = worklistSorts.includes(searchParameters.get('sort') as CatalogProductWorklistSort)
+    ? (searchParameters.get('sort') as CatalogProductWorklistSort)
+    : 'UPDATED_DESC';
   const page = Math.max(1, Number(searchParameters.get('page') ?? 1) || 1);
 
   const productTypeItems = useMemo(() => {
@@ -113,6 +125,7 @@ export function ProductList() {
       readiness,
       page: String(page),
       pageSize: '25',
+      sort,
     });
     if (deferredQuery) parameters.set('q', deferredQuery);
     if (productTypeId !== 'ALL') parameters.set('productTypeId', productTypeId);
@@ -145,7 +158,7 @@ export function ProductList() {
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, [deferredQuery, status, readiness, productTypeId, page]);
+  }, [deferredQuery, status, readiness, productTypeId, sort, page]);
 
   const visibleIds = useMemo(() => worklist?.items.map((product) => product.id) ?? [], [worklist]);
   const allVisibleSelected =
@@ -191,7 +204,11 @@ export function ProductList() {
   }
 
   const hasFilters =
-    Boolean(deferredQuery) || status !== 'ALL' || readiness !== 'ALL' || productTypeId !== 'ALL';
+    Boolean(deferredQuery) ||
+    status !== 'ALL' ||
+    readiness !== 'ALL' ||
+    productTypeId !== 'ALL' ||
+    sort !== 'UPDATED_DESC';
   const summary = worklist?.summary;
 
   return (
@@ -267,7 +284,9 @@ export function ProductList() {
             {/* ── Product Type — Select ── */}
             <Select
               value={productTypeId}
-              onValueChange={(val: string | null) => replaceQuery({ type: val ?? 'ALL', page: '1' })}
+              onValueChange={(val: string | null) =>
+                replaceQuery({ type: val ?? 'ALL', page: '1' })
+              }
               items={productTypeItems}
             >
               <SelectTrigger
@@ -284,10 +303,32 @@ export function ProductList() {
               </SelectContent>
             </Select>
 
+            <Select
+              value={sort}
+              onValueChange={(value: string | null) =>
+                replaceQuery({ sort: value ?? 'UPDATED_DESC', page: '1' })
+              }
+              items={worklistSortLabels}
+            >
+              <SelectTrigger
+                aria-label="Sort Products"
+                className="h-9 min-w-44 rounded-lg border bg-card"
+              />
+              <SelectContent>
+                {worklistSorts.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {worklistSortLabels[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             {/* ── Catalog Status — Select ── */}
             <Select
               value={status}
-              onValueChange={(val: string | null) => replaceQuery({ status: val ?? 'ALL', page: '1' })}
+              onValueChange={(val: string | null) =>
+                replaceQuery({ status: val ?? 'ALL', page: '1' })
+              }
               items={statusItems}
             >
               <SelectTrigger
@@ -306,7 +347,9 @@ export function ProductList() {
             {/* ── Readiness — Select ── */}
             <Select
               value={readiness}
-              onValueChange={(val: string | null) => replaceQuery({ readiness: val ?? 'ALL', page: '1' })}
+              onValueChange={(val: string | null) =>
+                replaceQuery({ readiness: val ?? 'ALL', page: '1' })
+              }
               items={readinessItems}
             >
               <SelectTrigger
@@ -434,13 +477,19 @@ export function ProductList() {
                   <td className="px-3 py-2.5">
                     <div className="space-y-1">
                       <StatusBadge status={product.readinessState} />
-                      <p className="text-xs text-muted-foreground">
-                        {product.blockerCount > 0
-                          ? `${product.blockerCount} blocker${product.blockerCount === 1 ? '' : 's'}`
-                          : product.warningCount > 0
-                            ? `${product.warningCount} warning${product.warningCount === 1 ? '' : 's'}`
-                            : 'Ready'}
-                      </p>
+                      {product.attention ? (
+                        <Link
+                          className="line-clamp-3 block max-w-52 text-xs leading-relaxed text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/30"
+                          href={productReadinessResolutionHref(product.id, product.attention.code)}
+                        >
+                          <span className="font-medium text-foreground">
+                            Fix {product.attention.label}:
+                          </span>{' '}
+                          {product.attention.message}
+                        </Link>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Ready to review or publish.</p>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-2.5">

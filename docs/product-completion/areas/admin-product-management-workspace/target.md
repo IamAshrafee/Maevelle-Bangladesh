@@ -15,10 +15,10 @@ edits, and not duplicate downstream domain authority.
 2. **Scalable variant and media operations — COMPLETE** — complete paginated matrix work,
    bulk generation/reconciliation, variant-scoped media, and safe high-count
    editing without moving pricing or inventory authority into Catalog.
-3. **Merchandiser worklist and workspace clarity — NEXT** — add the useful priority,
-   sorting, remediation, media-signal, and Storefront-preview cues supported by
-   real operating decisions.
-4. **Integrated organization, sizing, content, and lifecycle review** — prove
+3. **Merchandiser worklist and workspace clarity — COMPLETE** — Product rows
+   support useful URL-backed sorting and canonical recovery cues; media scopes
+   are explicit and published Products can open their customer representation.
+4. **Integrated organization, sizing, content, and lifecycle review — NEXT** — prove
    the full sectioned workflow, stale/error recovery, deep links, and domain
    handoffs against representative data.
 5. **Verification and owner review** — run targeted database/API/Admin and

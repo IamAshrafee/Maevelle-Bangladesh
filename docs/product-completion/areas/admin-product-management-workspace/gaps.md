@@ -77,7 +77,7 @@
   focused type/lint/build validation passes.
 - **Blocks area completion:** no; resolved.
 
-## P2 — The worklist is a strong finder but lacks sorting and actionable reason detail
+## Resolved 2026-09-12 — The worklist needed sorting and actionable reason detail
 
 - **Problem:** the worklist supports search, Product Type/catalog-state/readiness
   filters, URL state and pagination, but ordering is fixed to newest-updated and
@@ -88,10 +88,20 @@
   warnings` but no reason or direct remediation at list level.
 - **Business effect:** a high-volume merchandiser cannot prioritize stale,
   incomplete, out-of-stock or no-media work without opening records one by one.
-- **Likely layers:** Catalog worklist contract/query and Admin list UI.
-- **Blocks area completion:** yes.
+- **Resolution:** the worklist contract now exposes a bounded set of
+  operator-selected sorts (`recent`, `needs attention first`, `oldest`, and
+  `name`) in URL state. Each non-ready row surfaces the first existing canonical
+  readiness check and links directly to its owning editor section. The worklist
+  now also uses the shared structural Variant predicate, so signature drift
+  cannot be flattened into a healthy readiness summary.
+- **Proof:** `catalog.test.ts` proves the canonical active-Variant recovery
+  cue and alphabetical ordering; the focused 17-test Catalog/API/Admin/
+  Storefront suite, Catalog/API/Admin TypeScript, executable-surface lint, and
+  Admin production build pass. The pre-existing contracts lint errors are
+  outside this Product change.
+- **Blocks area completion:** no; resolved.
 
-## P2 — Product overview and editor lack a safe Storefront preview handoff
+## Resolved 2026-09-12 — Product overview and editor lacked a safe Storefront handoff
 
 - **Problem:** the review copy promises Storefront eligibility and URL, but the
   Product detail/editor surfaces do not provide a Storefront preview/open link.
@@ -101,10 +111,16 @@
   customer-view action.
 - **Business effect:** merchandisers must manually reconstruct customer-facing
   representation, weakening final publication review.
-- **Likely layers:** Admin deep links and Storefront route/preview boundary.
-- **Blocks area completion:** yes.
+- **Resolution:** published Product detail and review now use an explicit
+  root-relative, new-tab `Open/View Storefront` anchor to the existing public
+  handle route. Drafts receive a clear “available after publishing” explanation
+  rather than a leaking preview route. The route helper encodes the handle and
+  intentionally bypasses Admin's `/admin` base path.
+- **Proof:** Admin link tests prove editor recovery routes and root-safe public
+  URLs; existing Storefront projection tests remain green.
+- **Blocks area completion:** no; resolved.
 
-## P2 — Product media signals are internally confusing in the current workspace
+## Resolved 2026-09-12 — Product media signals were internally confusing in the workspace
 
 - **Problem:** the published `Does` workspace reports four public images and
   shows a thumbnail, but the overview Primary Gallery says no Product images
@@ -117,8 +133,15 @@
   summary counts all public media.
 - **Business effect:** an operator cannot confidently tell whether the
   customer sees an image or where to correct it.
-- **Likely layers:** Product workspace media projection and labels.
-- **Blocks area completion:** yes.
+- **Resolution:** the detail workspace now labels the fallback gallery as
+  Product-level, shows Product/option/SKU-scope counts, explains their customer
+  relationship, and reports each Variant's effective coverage as SKU-specific,
+  option-gallery, Product fallback, or no image. It does not move Media's
+  placement authority into Catalog.
+- **Proof:** affected Admin build/type/executable-surface lint checks pass; the
+  existing media and public Storefront regression coverage remains in the
+  focused suite.
+- **Blocks area completion:** no; resolved.
 
 ## Resolved 2026-09-10 — Variant archive controls were inaccessible and overly terse
 

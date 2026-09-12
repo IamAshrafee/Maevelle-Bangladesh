@@ -257,6 +257,14 @@ export function registerCatalogRoutes(
               Type.Literal('ATTENTION'),
             ]),
           ),
+          sort: Type.Optional(
+            Type.Union([
+              Type.Literal('UPDATED_DESC'),
+              Type.Literal('UPDATED_ASC'),
+              Type.Literal('ATTENTION_FIRST'),
+              Type.Literal('TITLE_ASC'),
+            ]),
+          ),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           pageSize: Type.Optional(Type.Integer({ minimum: 10, maximum: 100 })),
         }),
@@ -270,6 +278,7 @@ export function registerCatalogRoutes(
         status?: 'ALL' | 'DRAFT' | 'ACTIVE' | 'ARCHIVED' | 'PUBLISHED';
         productTypeId?: string;
         readiness?: 'ALL' | 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
+        sort?: 'UPDATED_DESC' | 'UPDATED_ASC' | 'ATTENTION_FIRST' | 'TITLE_ASC';
         page?: number;
         pageSize?: number;
       };

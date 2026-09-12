@@ -80,3 +80,24 @@
   only because rebuilding containers invalidated the saved local session.
 - Next: `MERCHANDISER_WORKLIST_AND_WORKSPACE_CLARITY`; do not begin integrated
   organization/sizing/content/lifecycle review first.
+
+## 2026-09-12 — Merchandiser worklist and workspace clarity
+
+- Added four intentional Product worklist orders—recent, attention first,
+  oldest, and name—while retaining bounded server pagination and URL state.
+  Every attention row now shows the first canonical publishing issue and opens
+  the exact editor section that owns recovery.
+- The worklist derives that issue from the same readiness facts used by the
+  Product workspace. Its structural-Variant count now uses the shared signature
+  and active-option predicate, so the P0 repair condition is not hidden there.
+- Product detail makes media scope legible: Product fallback, option gallery,
+  and SKU-specific placements are counted and Variants explain their effective
+  coverage rather than presenting a misleading zero. Published Products expose
+  an explicit root-safe Storefront handoff; drafts remain unpreviewable.
+- Seventeen focused Catalog, Variant-integrity, Storefront, API, and Admin tests
+  pass. Catalog/API/Admin TypeScript and executable-surface lint pass; the
+  pre-existing contracts lint errors remain outside this Product change. The
+  Admin production build completes all 56 routes. Fresh authenticated browser
+  review remains unavailable because the local rebuild invalidated the saved session.
+- Next: `INTEGRATED_ORGANIZATION_SIZING_CONTENT_LIFECYCLE_REVIEW`; do not begin
+  final verification and owner review first.

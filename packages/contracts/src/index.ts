@@ -129,10 +129,15 @@ export interface CatalogProductOperationalSignalsDto {
   readonly categoryCount: number;
 }
 
+export type CatalogProductWorklistSort =
+  'UPDATED_DESC' | 'UPDATED_ASC' | 'ATTENTION_FIRST' | 'TITLE_ASC';
+
 export interface CatalogProductWorkItemDto extends CatalogProductSummaryDto {
   readonly readinessState: CatalogReadinessState;
   readonly blockerCount: number;
   readonly warningCount: number;
+  /** The first canonical readiness issue, ordered by the Product publishing workflow. */
+  readonly attention: CatalogReadinessCheckDto | null;
   readonly operationalSignals: CatalogProductOperationalSignalsDto;
   readonly primaryMediaId: string | null;
   readonly priceRange: {
