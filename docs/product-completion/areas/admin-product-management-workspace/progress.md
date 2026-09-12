@@ -54,3 +54,29 @@
   so post-change browser proof remains unperformed.
 - Next: `SCALABLE_VARIANT_AND_MEDIA_OPERATIONS`; do not begin worklist or preview
   improvements first.
+
+## 2026-09-12 — Scalable Variant and media operations
+
+- Replaced the first-page-only matrix workflow with bounded 50-combination
+  pages, full summary/range navigation, page-scoped generation, and current-page
+  editing. Generated SKUs retain readable option segments plus a stable global
+  ordinal and remain within the API limit.
+- Existing prices now load instead of appearing blank. Catalog identity/status
+  and Pricing writes continue through their owning APIs; sequential saves stop,
+  refresh, and explain partial success if a later domain rejects a row. Page
+  navigation participates in the editor's unsaved-change guard.
+- The Catalog matrix now compares stored signatures with actual option links.
+  Drift is surfaced as `SIGNATURE_MISMATCH`, excluded from a misleading matrix
+  position, and counted as missing/repair work.
+- Added a bounded searchable Variant picker and exact-SKU media galleries.
+  Product, colour-option, and Variant placements stay distinct; removing a
+  placement explicitly retains the Media-library asset.
+- Preserved and incorporated the interrupted saved-Product guard/typed empty
+  workspace edits found at the start of the run. Fixed the one-line shared
+  SearchInput null-safety error that blocked Admin production builds.
+- Twenty-three focused Catalog/Variant/Media/Storefront/API tests pass. Focused
+  lint and Admin/database/contracts TypeScript pass; fresh Docker Admin, API,
+  and Storefront builds are healthy. Authenticated browser proof was blocked
+  only because rebuilding containers invalidated the saved local session.
+- Next: `MERCHANDISER_WORKLIST_AND_WORKSPACE_CLARITY`; do not begin integrated
+  organization/sizing/content/lifecycle review first.

@@ -24,6 +24,118 @@ const database = createDatabase({
 afterAll(async () => database.close());
 
 describe('Catalog Variant matrix', () => {
+  it('keeps combinations beyond 100 reachable', async () => {
+    const organization = await createOrganization(database.db, {
+      code: `large-matrix-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Large matrix test',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const productType = await sql<{ id: string }>`insert into catalog.product_types
+      (organization_id,code,name) values (${organization.id},'coat','Coat') returning id::text`.execute(
+      database.db,
+    );
+    const product = await createCatalogProduct(database.db, {
+      organizationId: organization.id,
+      actorId: crypto.randomUUID(),
+      productTypeId: productType.rows[0]!.id,
+      title: 'Large matrix coat',
+      handle: `large-matrix-coat-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const size = await createProductOptionAxis(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      code: 'size',
+      name: 'Size',
+    });
+    const color = await createProductOptionAxis(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      code: 'color',
+      name: 'Color',
+      position: 1,
+    });
+    for (let index = 0; index < 12; index += 1)
+      await createProductOptionValue(database.db, {
+        organizationId: organization.id,
+        optionAxisId: size.id,
+        code: `size-${index}`,
+        displayValue: `Size ${index}`,
+        position: index,
+      });
+    for (let index = 0; index < 10; index += 1)
+      await createProductOptionValue(database.db, {
+        organizationId: organization.id,
+        optionAxisId: color.id,
+        code: `color-${index}`,
+        displayValue: `Color ${index}`,
+        position: index,
+      });
+
+    const matrix = await getCatalogVariantMatrix(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      page: 3,
+      pageSize: 50,
+    });
+    expect(matrix.pagination).toEqual({ page: 3, pageSize: 50, totalItems: 120, totalPages: 3 });
+    expect(matrix.rows).toHaveLength(20);
+    expect(new Set(matrix.rows.map((row) => row.combinationKey)).size).toBe(20);
+    expect(matrix.summary.missingCombinations).toBe(120);
+  });
+
+  it('reports a stored option signature that disagrees with Variant links', async () => {
+    const organization = await createOrganization(database.db, {
+      code: `signature-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Signature repair test',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const productType = await sql<{ id: string }>`insert into catalog.product_types
+      (organization_id,code,name) values (${organization.id},'bag','Bag') returning id::text`.execute(
+      database.db,
+    );
+    const product = await createCatalogProduct(database.db, {
+      organizationId: organization.id,
+      actorId: crypto.randomUUID(),
+      productTypeId: productType.rows[0]!.id,
+      title: 'Signature bag',
+      handle: `signature-bag-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const axis = await createProductOptionAxis(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      code: 'material',
+      name: 'Material',
+    });
+    const value = await createProductOptionValue(database.db, {
+      organizationId: organization.id,
+      optionAxisId: axis.id,
+      code: 'linen',
+      displayValue: 'Linen',
+    });
+    const variant = await createCatalogVariant(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+      sku: `BAG-${crypto.randomUUID().slice(0, 8)}`,
+      optionValueIds: [value.id],
+    });
+    await sql`update catalog.product_variants set option_signature=${crypto.randomUUID()}
+      where organization_id=${organization.id} and id=${variant.id}::uuid`.execute(database.db);
+
+    const matrix = await getCatalogVariantMatrix(database.db, {
+      organizationId: organization.id,
+      productId: product.id,
+    });
+    expect(matrix.summary).toMatchObject({ missingCombinations: 1, incompleteVariants: 1 });
+    expect(matrix.rows[0]).toMatchObject({ state: 'MISSING', variant: null });
+    expect(matrix.incompleteVariants).toContainEqual(
+      expect.objectContaining({ id: variant.id, reasons: ['SIGNATURE_MISMATCH'] }),
+    );
+  });
+
   it('paginates potential combinations and exposes incomplete and cross-domain setup state', async () => {
     const organization = await createOrganization(database.db, {
       code: `matrix-${crypto.randomUUID().slice(0, 12)}`,

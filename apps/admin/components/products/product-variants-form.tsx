@@ -1,6 +1,7 @@
 'use client';
 
-import { Boxes, Plus, Tags, Loader2 } from 'lucide-react';
+import { Boxes, ChevronLeft, ChevronRight, Loader2, Plus, Tags } from 'lucide-react';
+import Link from 'next/link';
 import { type FormEvent, useEffect, useState } from 'react';
 
 import type { CatalogVariantMatrixDto, CatalogVariantCreateDto } from '@maevelle/contracts';
@@ -69,9 +70,13 @@ export function ProductVariantsForm({
     slug(workspace.title).replaceAll('-', '').toUpperCase().slice(0, 12),
   );
   const [busy, setBusy] = useState(false);
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [matrixPage, setMatrixPage] = useState(1);
+  const [tableDirty, setTableDirty] = useState(false);
   const [error, setError] = useState('');
   const [recovery, setRecovery] = useState<OptionRecoveryDetails>();
 
+  const isUnsavedProduct = workspace.id.length === 0;
   const activeAxes = workspace.options.filter((axis) => axis.status === 'ACTIVE');
   const missingRows = matrix?.rows.filter((row) => row.state === 'MISSING') ?? [];
 
@@ -80,27 +85,70 @@ export function ProductVariantsForm({
     setRecovery(optionRecoveryDetails(caught));
   }
 
-  async function loadSupporting(signal?: AbortSignal) {
+  async function loadSupporting(page: number, signal?: AbortSignal) {
+    setMatrixLoading(true);
     try {
       const variantMatrix = await catalogData<CatalogVariantMatrixDto>(
-        `/admin/catalog/products/${workspace.id}/variant-matrix?page=1&pageSize=100`,
+        `/admin/catalog/products/${workspace.id}/variant-matrix?page=${page}&pageSize=50`,
         signal ? { signal } : undefined,
       );
       setMatrix(variantMatrix);
+      if (variantMatrix.pagination.page !== page) setMatrixPage(variantMatrix.pagination.page);
     } catch (caught) {
       if (!(caught instanceof DOMException && caught.name === 'AbortError'))
         showError(caught, 'Variant matrix could not be loaded.');
+    } finally {
+      if (!signal?.aborted) setMatrixLoading(false);
     }
   }
 
   useEffect(() => {
+    if (isUnsavedProduct) {
+      setMatrix(undefined);
+      return;
+    }
     const controller = new AbortController();
-    void loadSupporting(controller.signal);
+    void loadSupporting(matrixPage, controller.signal);
     return () => controller.abort();
-  }, [workspace.id, workspace.version, workspace.variants.length, workspace.options.length]);
+  }, [
+    isUnsavedProduct,
+    matrixPage,
+    workspace.id,
+    workspace.version,
+    workspace.variants.length,
+    workspace.options.length,
+  ]);
 
   useEffect(() => onDirtyChange(false), [onDirtyChange]);
   useEffect(() => setColors(references.colors), [references.colors]);
+
+  async function refreshVariants(message: string, page = matrixPage) {
+    await onRefresh(message || undefined);
+    await loadSupporting(page);
+  }
+
+  function changeMatrixPage(page: number) {
+    if (tableDirty && !window.confirm('Discard unsaved Variant changes on this page?')) return;
+    setTableDirty(false);
+    onDirtyChange(false);
+    setMatrixPage(page);
+  }
+
+  if (isUnsavedProduct)
+    return (
+      <section className="rounded-xl border bg-card p-6 shadow-sm">
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">
+          Save the product first
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Variants belong to a saved product. Complete the required Overview details, save the
+          draft, then return here to add options and generate SKUs.
+        </p>
+        <Button className="mt-4" render={<Link href="/products/new/edit?section=overview" />}>
+          Go to Overview
+        </Button>
+      </section>
+    );
 
   async function addAxis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -121,7 +169,8 @@ export function ProductVariantsForm({
         }),
       });
       form.reset();
-      await onRefresh('Product option added. Add its customer-facing values next.');
+      setMatrixPage(1);
+      await refreshVariants('Product option added. Add its customer-facing values next.', 1);
     } catch (caught) {
       showError(caught, 'Product option could not be added.');
     } finally {
@@ -150,7 +199,8 @@ export function ProductVariantsForm({
         }),
       });
       form.reset();
-      await onRefresh('Option value added.');
+      setMatrixPage(1);
+      await refreshVariants('Option value added.', 1);
     } catch (caught) {
       showError(caught, 'Option value could not be added.');
     } finally {
@@ -175,7 +225,8 @@ export function ProductVariantsForm({
         method: 'PATCH',
         body: JSON.stringify({ version, status: 'ARCHIVED' }),
       });
-      await onRefresh(`${label} archived.`);
+      setMatrixPage(1);
+      await refreshVariants(`${label} archived.`, 1);
     } catch (caught) {
       showError(caught, 'Option could not be archived.');
     } finally {
@@ -206,7 +257,8 @@ export function ProductVariantsForm({
         method: 'PATCH',
         body: JSON.stringify({ version, status }),
       });
-      await onRefresh(`Option value ${status === 'ACTIVE' ? 'restored' : 'archived'}.`);
+      setMatrixPage(1);
+      await refreshVariants(`Option value ${status === 'ACTIVE' ? 'restored' : 'archived'}.`, 1);
     } catch (caught) {
       showError(caught, 'Option value could not be updated.');
     } finally {
@@ -216,12 +268,13 @@ export function ProductVariantsForm({
 
   async function generateMissing() {
     if (!matrix || missingRows.length === 0 || busy) return;
-    if (matrix.summary.missingCombinations > 250) {
-      return setError('Generate at most 250 Variants at once.');
-    }
     if (!skuPrefix.trim()) return setError('Enter an SKU prefix before generating Variants.');
 
+    const pageOffset = (matrix.pagination.page - 1) * matrix.pagination.pageSize;
     const variants: CatalogVariantCreateDto[] = missingRows.map((row) => {
+      const rowIndex = matrix.rows.findIndex(
+        (candidate) => candidate.combinationKey === row.combinationKey,
+      );
       const primaryColorId = row.values
         .map(
           (value) =>
@@ -230,9 +283,14 @@ export function ProductVariantsForm({
               .find((candidate) => candidate.id === value.valueId)?.color?.id,
         )
         .find((colorId): colorId is string => Boolean(colorId));
+      const ordinal = String(pageOffset + rowIndex + 1).padStart(6, '0');
+      const descriptiveSku = [
+        skuPrefix.trim().toUpperCase().slice(0, 24),
+        ...row.values.map((value) => slug(value.valueLabel).toUpperCase().slice(0, 20)),
+      ].join('-');
 
       return {
-        sku: `${skuPrefix.trim().toUpperCase()}-${row.values.map((value) => slug(value.valueLabel).toUpperCase()).join('-')}`,
+        sku: `${descriptiveSku.slice(0, 119 - ordinal.length)}-${ordinal}`,
         title: row.values.map((value) => value.valueLabel).join(' / '),
         optionValueIds: row.values.map((value) => value.valueId),
         ...(primaryColorId ? { primaryColorId } : {}),
@@ -246,7 +304,9 @@ export function ProductVariantsForm({
         method: 'POST',
         body: JSON.stringify({ variants }),
       });
-      await onRefresh(`${variants.length} Variant(s) generated.`);
+      await refreshVariants(
+        `${variants.length} Variant${variants.length === 1 ? '' : 's'} generated on page ${matrix.pagination.page}.`,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Variants could not be generated.');
     } finally {
@@ -349,8 +409,10 @@ export function ProductVariantsForm({
 
               <form onSubmit={(e) => addValue(e, axis.id)} className="flex items-center gap-2">
                 <Input
+                  aria-label={`New ${axis.name} value`}
                   name="displayValue"
-                  placeholder={`New ${axis.name} value...`}
+                  autoComplete="off"
+                  placeholder={`New ${axis.name} value…`}
                   className="h-8 max-w-[200px]"
                   required
                 />
@@ -367,8 +429,10 @@ export function ProductVariantsForm({
               className="flex items-center gap-2 rounded-lg border border-dashed p-4"
             >
               <Input
+                aria-label="New option axis name"
                 name="name"
-                placeholder="E.g. Size, Color, Material"
+                autoComplete="off"
+                placeholder="E.g. Size, Color, Material…"
                 className="h-8 max-w-[200px]"
                 required
               />
@@ -380,38 +444,153 @@ export function ProductVariantsForm({
         </div>
       </section>
 
-      {/* Auto-Generation Matrix */}
-      {missingRows.length > 0 && (
-        <section className="rounded-xl border border-primary/20 bg-primary/5 p-6 text-primary">
-          <h3 className="mb-2 flex items-center gap-2 font-semibold">
-            <Boxes className="size-4" /> {missingRows.length} Missing Combinations
-          </h3>
-          <p className="mb-4 text-sm text-primary/80">
-            You've added new options. We can automatically generate {missingRows.length} variants
-            for you.
-          </p>
-          <div className="flex items-center gap-2">
-            <Input
-              value={skuPrefix}
-              onChange={(e) => setSkuPrefix(e.target.value)}
-              placeholder="SKU Prefix"
-              className="h-9 max-w-[150px] bg-background text-foreground"
-            />
-            <Button onClick={generateMissing} disabled={busy} className="h-9">
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Generate {missingRows.length} Variants
-            </Button>
+      <section className="space-y-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 font-semibold">
+              <Boxes className="size-4" aria-hidden="true" /> Variant Matrix
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Review, generate, and edit one bounded page of combinations at a time.
+            </p>
           </div>
-        </section>
-      )}
-
-      {/* Variants Data Table */}
-      <section className="rounded-xl border bg-card p-6 shadow-sm">
-        <header className="mb-4">
-          <h3 className="font-semibold">Active Variants</h3>
-          <p className="text-sm text-muted-foreground">Manage your generated variants below.</p>
+          {matrix ? (
+            <p className="text-sm tabular-nums text-muted-foreground">
+              Page {matrix.pagination.page} of {Math.max(1, matrix.pagination.totalPages)}
+            </p>
+          ) : null}
         </header>
-        <ProductVariantsTable workspace={workspace} onRefresh={onRefresh} onMessage={onMessage} />
+
+        {matrix ? (
+          <>
+            <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {[
+                ['Potential', matrix.summary.potentialCombinations],
+                ['Active', matrix.summary.activeVariants],
+                ['Archived', matrix.summary.archivedVariants],
+                ['Missing', matrix.summary.missingCombinations],
+                ['Needs Repair', matrix.summary.incompleteVariants],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border bg-muted/20 p-3">
+                  <dt className="text-xs text-muted-foreground">{label}</dt>
+                  <dd className="mt-1 text-lg font-semibold tabular-nums">{value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            {matrix.incompleteVariants.length > 0 ? (
+              <div
+                className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm"
+                role="status"
+              >
+                <p className="font-medium">
+                  {matrix.summary.incompleteVariants} Variant
+                  {matrix.summary.incompleteVariants === 1 ? '' : 's'} need option repair
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Repair the SKU option selections before publishing. Shown here:{' '}
+                  {matrix.incompleteVariants
+                    .map(
+                      (variant) =>
+                        `${variant.sku} (${variant.reasons.join(', ').toLowerCase().replaceAll('_', ' ')})`,
+                    )
+                    .join('; ')}
+                  {matrix.summary.incompleteVariants > matrix.incompleteVariants.length
+                    ? ` and ${matrix.summary.incompleteVariants - matrix.incompleteVariants.length} more`
+                    : ''}
+                  .
+                </p>
+              </div>
+            ) : null}
+
+            {missingRows.length > 0 ? (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <h4 className="font-medium text-foreground">
+                  Generate {missingRows.length} missing combination
+                  {missingRows.length === 1 ? '' : 's'} on this page
+                </h4>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {matrix.summary.missingCombinations} remain across the full matrix. Existing and
+                  archived combinations are never recreated.
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <label className="grid gap-1 text-xs font-medium text-foreground">
+                    SKU Prefix
+                    <Input
+                      name="skuPrefix"
+                      autoComplete="off"
+                      value={skuPrefix}
+                      maxLength={24}
+                      onChange={(event) => setSkuPrefix(event.target.value)}
+                      placeholder="DRESS"
+                      className="h-11 bg-background text-foreground sm:h-9 sm:w-44"
+                      spellCheck={false}
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    onClick={generateMissing}
+                    disabled={busy}
+                    className="h-11 sm:h-9"
+                  >
+                    {busy ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    {busy ? 'Generating…' : `Generate This Page (${missingRows.length})`}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            <ProductVariantsTable
+              matrix={matrix}
+              onSaved={refreshVariants}
+              onDirtyChange={(dirty) => {
+                setTableDirty(dirty);
+                onDirtyChange(dirty);
+              }}
+              onMessage={onMessage}
+            />
+
+            {matrix.pagination.totalPages > 1 ? (
+              <nav
+                className="flex items-center justify-between border-t pt-4"
+                aria-label="Variant matrix pages"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={matrixLoading || matrix.pagination.page <= 1}
+                  onClick={() => changeMatrixPage(matrix.pagination.page - 1)}
+                >
+                  <ChevronLeft aria-hidden="true" /> Previous
+                </Button>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  Combinations {(matrix.pagination.page - 1) * matrix.pagination.pageSize + 1}–
+                  {Math.min(
+                    matrix.pagination.page * matrix.pagination.pageSize,
+                    matrix.pagination.totalItems,
+                  )}{' '}
+                  of {matrix.pagination.totalItems}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={matrixLoading || matrix.pagination.page >= matrix.pagination.totalPages}
+                  onClick={() => changeMatrixPage(matrix.pagination.page + 1)}
+                >
+                  Next <ChevronRight aria-hidden="true" />
+                </Button>
+              </nav>
+            ) : null}
+          </>
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground" aria-live="polite">
+            {matrixLoading
+              ? 'Loading Variant matrix…'
+              : 'Add an active value to every option to build the Variant matrix.'}
+          </div>
+        )}
       </section>
     </div>
   );

@@ -4,6 +4,8 @@ import { sql } from 'kysely';
 import { createDatabase } from './index.js';
 import {
   createCatalogProduct,
+  createCatalogVariant,
+  getCatalogProductWorkspace,
   createProductOptionAxis,
   createProductOptionValue,
 } from './catalog.js';
@@ -24,6 +26,93 @@ const database = createDatabase({
 afterAll(async () => database.close());
 
 describe('media tenant ownership', () => {
+  it('manages one primary gallery per Variant and rejects a Variant from another Product', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `variant-media-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Variant media owner',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const productType = await sql<{ id: string }>`insert into catalog.product_types
+      (organization_id,code,name) values (${owner.id},'dress','Dress') returning id::text`.execute(
+      database.db,
+    );
+    const products = await Promise.all(
+      ['Primary dress', 'Other dress'].map((title, index) =>
+        createCatalogProduct(database.db, {
+          organizationId: owner.id,
+          actorId: crypto.randomUUID(),
+          productTypeId: productType.rows[0]!.id,
+          title,
+          handle: `variant-media-${index}-${crypto.randomUUID().slice(0, 8)}`,
+        }),
+      ),
+    );
+    const variants = await Promise.all(
+      products.map((product, index) =>
+        createCatalogVariant(database.db, {
+          organizationId: owner.id,
+          productId: product.id,
+          sku: `VARIANT-MEDIA-${index}-${crypto.randomUUID().slice(0, 6)}`,
+          optionValueIds: [],
+        }),
+      ),
+    );
+    const assets = await Promise.all(
+      ['e', 'f'].map((checksum) =>
+        registerUploadedMedia(database.db, {
+          organizationId: owner.id,
+          objectKey: `images/${crypto.randomUUID()}.webp`,
+          mimeType: 'image/webp',
+          byteSize: 100,
+          checksumSha256: checksum.repeat(64),
+          visibility: 'PUBLIC',
+        }),
+      ),
+    );
+
+    await attachMediaToProduct(database.db, {
+      organizationId: owner.id,
+      productId: products[0]!.id,
+      variantId: variants[0]!.id,
+      assetId: assets[0]!.id,
+      role: 'GALLERY',
+      isPrimary: true,
+    });
+    await attachMediaToProduct(database.db, {
+      organizationId: owner.id,
+      productId: products[0]!.id,
+      variantId: variants[0]!.id,
+      assetId: assets[1]!.id,
+      role: 'GALLERY',
+      isPrimary: true,
+      position: 1,
+    });
+    await expect(
+      attachMediaToProduct(database.db, {
+        organizationId: owner.id,
+        productId: products[0]!.id,
+        variantId: variants[1]!.id,
+        assetId: assets[0]!.id,
+        role: 'GALLERY',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    const placements = (await listMediaLibrary(database.db, owner.id))
+      .flatMap((asset) => asset.usages.map((usage) => ({ ...usage, assetId: asset.id })))
+      .filter((usage) => usage.variantId === variants[0]!.id);
+    expect(placements).toHaveLength(2);
+    expect(placements.filter((usage) => usage.isPrimary)).toEqual([
+      expect.objectContaining({ assetId: assets[1]!.id, variantId: variants[0]!.id }),
+    ]);
+    const workspace = await getCatalogProductWorkspace(database.db, owner.id, products[0]!.id);
+    expect(workspace?.variants[0]?.media).toHaveLength(2);
+    expect(workspace?.variants[0]?.media.filter((item) => item.isPrimary)).toEqual([
+      expect.objectContaining({ assetId: assets[1]!.id, variantId: variants[0]!.id }),
+    ]);
+  });
+
   it('registers ready object metadata only under the owning organization', async () => {
     const owner = await createOrganization(database.db, {
       code: `media-${crypto.randomUUID().slice(0, 10)}`,

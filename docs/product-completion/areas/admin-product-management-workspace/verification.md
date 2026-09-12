@@ -46,6 +46,27 @@ Current assessment evidence:
   `maevelle_test` database was created with the same Compose Postgres role and
   all checked-in migrations were applied successfully; no live data was used.
 
-Completion cannot be claimed until the remaining P1/P2 stages have current
-targeted proof, the Admin build blocker is resolved in its proper scope, and
-responsive/owner review is complete.
+Completion cannot be claimed until the remaining P2 stages have current
+targeted proof and responsive/owner review is complete.
+
+## Scalable Variant and media operations proof — 2026-09-12
+
+- `pnpm exec vitest run packages/database/src/catalog.test.ts
+  packages/database/src/catalog-variants.test.ts
+  packages/database/src/catalog-variant-integrity.test.ts
+  packages/database/src/media.test.ts packages/database/src/storefront.test.ts
+  apps/api/src/routes/catalog-support.test.ts` passed: 6 files, 23 tests.
+- New regression cases prove a 120-combination matrix reaches page 3 without
+  omission, stored-signature drift remains visible as repair work, Variant
+  media cannot target a Variant from another Product, and one primary image is
+  maintained per Variant scope.
+- Focused ESLint passed for touched Product Admin and database files. Admin,
+  database, and contracts TypeScript checks pass.
+- `pnpm --filter @maevelle/admin build` passed all 56 Admin routes after the
+  existing SearchInput null-safety blocker was corrected. Fresh Compose Admin,
+  API, and Storefront images built and their services became healthy.
+- Browser rendering was attempted through the local Caddy stack. The rebuild
+  invalidated the saved authenticated session (`/admin/context` returned 401),
+  so the changed Product screens were not visually claimed; repository
+  bootstrap credentials were not printed or injected. Responsive and owner
+  visual review remain open for the area gate.

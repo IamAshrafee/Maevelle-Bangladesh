@@ -37,8 +37,6 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { catalogData } from '@/lib/catalog/api';
 
-import { Ruler } from 'lucide-react';
-
 const editorSections = [
   { id: 'overview', label: 'Overview', help: 'Identity and description', icon: PackageOpen },
   { id: 'organization', label: 'Organization', help: 'Categories and attributes', icon: Layers3 },
@@ -85,51 +83,67 @@ export function ProductEditor({ productId }: { productId: string }) {
 
   const isNew = productId === 'new';
 
-  const emptyWorkspace = useMemo(() => ({
-    id: '',
-    version: 1,
-    title: '',
-    handle: '',
-    productTypeId: '',
-    description: null,
-    status: 'DRAFT',
-    readiness: 'BLOCKED',
-    blockers: [],
-    optionAxes: [],
-    variants: [],
-    categories: [],
-    attributes: [],
-    organization: {
-      categoryIds: [],
-      primaryCategoryId: null,
-      tagIds: [],
-      occasionIds: [],
-      collectionIds: [],
-      attributes: [],
-    },
-    content: {
-      informationGroups: [],
-      faqs: [],
-      seoTitle: null,
-      seoDescription: null,
-    },
-    operationalSignals: {
-      hasDraftChanges: false,
-      hasPublishedVersion: false,
-      isFullyStocked: false,
-      isMissingImages: false,
-      isMissingPrices: false,
-      isMissingWeights: false,
-    },
-    media: [],
-  } as unknown as CatalogProductWorkspaceDto), []);
+  const emptyWorkspace = useMemo<CatalogProductWorkspaceDto>(
+    () => ({
+      id: '',
+      version: 1,
+      title: '',
+      handle: '',
+      productTypeId: '',
+      description: null,
+      status: 'DRAFT',
+      publicationStatus: 'UNPUBLISHED',
+      readiness: {
+        state: 'BLOCKED',
+        canPublish: false,
+        blockerCount: 1,
+        warningCount: 0,
+        checks: [
+          {
+            code: 'IDENTITY',
+            label: 'Product identity',
+            state: 'BLOCKER',
+            message: 'Save the product overview before completing publishing checks.',
+          },
+        ],
+      },
+      options: [],
+      variants: [],
+      sizeSystemId: null,
+      sizeGuideId: null,
+      organization: {
+        categoryIds: [],
+        primaryCategoryId: null,
+        tagIds: [],
+        occasionIds: [],
+        collectionIds: [],
+        attributes: [],
+      },
+      content: {
+        informationGroups: [],
+        faqs: [],
+        seoTitle: null,
+        seoDescription: null,
+      },
+      operationalSignals: {
+        defaultCurrency: 'BDT',
+        activeVariantCount: 0,
+        pricedVariantCount: 0,
+        publicMediaCount: 0,
+        availableVariantCount: 0,
+        categoryCount: 0,
+      },
+      media: [],
+    }),
+    [],
+  );
 
   const loadWorkspace = useCallback(
     async (successMessage?: string) => {
       try {
-        const next = isNew ? emptyWorkspace : await catalogData<CatalogProductWorkspaceDto>(
-          `/admin/catalog/products/${productId}`,
-        );
+        const next = isNew
+          ? emptyWorkspace
+          : await catalogData<CatalogProductWorkspaceDto>(`/admin/catalog/products/${productId}`);
         setWorkspace(next);
         setDirty(false);
         setError('');
@@ -145,9 +159,11 @@ export function ProductEditor({ productId }: { productId: string }) {
     const controller = new AbortController();
     setLoading(true);
     void Promise.all([
-      isNew ? Promise.resolve(emptyWorkspace) : catalogData<CatalogProductWorkspaceDto>(`/admin/catalog/products/${productId}`, {
-        signal: controller.signal,
-      }),
+      isNew
+        ? Promise.resolve(emptyWorkspace)
+        : catalogData<CatalogProductWorkspaceDto>(`/admin/catalog/products/${productId}`, {
+            signal: controller.signal,
+          }),
       catalogData<readonly CatalogProductTypeDefinitionDto[]>(
         '/admin/catalog/product-type-definitions',
         { signal: controller.signal },
@@ -220,6 +236,7 @@ export function ProductEditor({ productId }: { productId: string }) {
   const currentIndex = editorSections.findIndex((item) => item.id === section);
   const next = editorSections[currentIndex + 1];
   const previous = editorSections[currentIndex - 1];
+  const requiresSavedProduct = isNew && section !== 'overview';
   const sectionProps = useMemo(
     () =>
       workspace
@@ -281,7 +298,9 @@ export function ProductEditor({ productId }: { productId: string }) {
       <header className="mb-5 flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{workspace.title || 'Create a Publish-Ready Product'}</h1>
+            <h1 className="truncate text-2xl font-semibold tracking-tight">
+              {workspace.title || 'Create a Publish-Ready Product'}
+            </h1>
             {!isNew && <StatusBadge status={workspace.status} />}
             {!isNew && <StatusBadge status={workspace.publicationStatus} />}
           </div>
@@ -373,18 +392,49 @@ export function ProductEditor({ productId }: { productId: string }) {
         </aside>
 
         <div className="min-w-0">
-          {section === 'overview' ? <ProductOverviewForm {...sectionProps} /> : null}
-          {section === 'organization' ? <ProductOrganizationForm {...sectionProps} /> : null}
-          {section === 'variants' ? <ProductVariantsForm {...sectionProps} /> : null}
-          {section === 'media' ? <ProductMediaForm {...sectionProps} /> : null}
-          {section === 'content' ? <ProductContentForm {...sectionProps} /> : null}
-          {section === 'review' ? <ProductReview {...sectionProps} /> : null}
+          {requiresSavedProduct ? (
+            <section className="rounded-xl border bg-card p-6 shadow-sm">
+              <h2 className="text-lg font-semibold tracking-tight">Save the product first</h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                Complete the required Overview details and save the draft before managing its
+                organization, variants, media, customer content, or publishing readiness.
+              </p>
+              <Button
+                className="mt-4"
+                render={
+                  <Link
+                    href={`/products/new/edit?section=overview${guidedSetup ? '&setup=1' : ''}`}
+                  />
+                }
+              >
+                Go to Overview
+              </Button>
+            </section>
+          ) : null}
+          {!requiresSavedProduct && section === 'overview' ? (
+            <ProductOverviewForm {...sectionProps} />
+          ) : null}
+          {!requiresSavedProduct && section === 'organization' ? (
+            <ProductOrganizationForm {...sectionProps} />
+          ) : null}
+          {!requiresSavedProduct && section === 'variants' ? (
+            <ProductVariantsForm {...sectionProps} />
+          ) : null}
+          {!requiresSavedProduct && section === 'media' ? (
+            <ProductMediaForm {...sectionProps} />
+          ) : null}
+          {!requiresSavedProduct && section === 'content' ? (
+            <ProductContentForm {...sectionProps} />
+          ) : null}
+          {!requiresSavedProduct && section === 'review' ? (
+            <ProductReview {...sectionProps} />
+          ) : null}
 
           {guidedSetup ? (
             <footer className="mt-5 flex flex-col-reverse gap-2 rounded-xl border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <Button
                 variant="outline"
-                disabled={!previous || (productId === 'new' && (previous?.id !== 'overview'))}
+                disabled={!previous || (productId === 'new' && previous?.id !== 'overview')}
                 onClick={() => previous && navigate(previous.id)}
               >
                 <ArrowLeft aria-hidden="true" /> Previous

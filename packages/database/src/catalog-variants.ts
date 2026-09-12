@@ -25,6 +25,7 @@ export interface CatalogVariantMatrixAxis {
 export interface CatalogVariantMatrixVariant {
   readonly id: string;
   readonly sku: string;
+  readonly title: string | null;
   readonly status: CatalogVariantLifecycleStatus;
   readonly version: number;
   readonly barcode: string | null;
@@ -84,7 +85,9 @@ export interface CatalogVariantMatrix {
     id: string;
     sku: string;
     status: CatalogVariantLifecycleStatus;
-    reasons: readonly ('MISSING_AXIS' | 'ARCHIVED_AXIS' | 'ARCHIVED_VALUE')[];
+    reasons: readonly (
+      'MISSING_AXIS' | 'ARCHIVED_AXIS' | 'ARCHIVED_VALUE' | 'SIGNATURE_MISMATCH'
+    )[];
   }[];
 }
 
@@ -220,6 +223,7 @@ export async function getCatalogVariantMatrix(
     sql<{
       id: string;
       sku: string;
+      title: string | null;
       status: CatalogVariantLifecycleStatus;
       version: string;
       barcode: string | null;
@@ -230,15 +234,21 @@ export async function getCatalogVariantMatrix(
       height_value: string | null;
       dimension_unit: string | null;
       option_signature: string;
+      linked_signature: string;
+      active_axis_count: number;
+      active_value_count: number;
+      total_link_count: number;
+      expected_axis_count: number;
       current_price_amount: string | null;
       current_compare_at_amount: string | null;
       sellable_quantity: string;
       variant_media_count: number;
       product_media_count: number;
-    }>`select variant.id::text,variant.sku,variant.status,variant.version::text,variant.barcode,
+    }>`select variant.id::text,variant.sku,variant.title,variant.status,variant.version::text,variant.barcode,
         variant.weight_value::text,variant.weight_unit,variant.length_value::text,
         variant.width_value::text,variant.height_value::text,variant.dimension_unit,
-        variant.option_signature,
+        variant.option_signature,integrity.linked_signature,integrity.active_axis_count,
+        integrity.active_value_count,integrity.total_link_count,integrity.expected_axis_count,
         price.amount::text current_price_amount,price.compare_at_amount::text current_compare_at_amount,
         coalesce(stock.sellable_quantity,0)::text sellable_quantity,
         (select count(*)::integer from catalog.product_media media
@@ -248,6 +258,21 @@ export async function getCatalogVariantMatrix(
           where media.organization_id=variant.organization_id and media.product_id=variant.product_id
             and media.variant_id is null) product_media_count
       from catalog.product_variants variant
+      join lateral (
+        select coalesce(string_agg(link.option_value_id::text,':' order by link.option_value_id),'default') linked_signature,
+          count(*) filter(where axis.status='ACTIVE')::integer active_axis_count,
+          count(*) filter(where axis.status='ACTIVE' and value.status='ACTIVE')::integer active_value_count,
+          count(link.option_value_id)::integer total_link_count,
+          (select count(*)::integer from catalog.product_option_axes expected
+            where expected.organization_id=variant.organization_id
+              and expected.product_id=variant.product_id and expected.status='ACTIVE') expected_axis_count
+        from catalog.variant_option_values link
+        join catalog.product_option_axes axis
+          on axis.organization_id=link.organization_id and axis.id=link.option_axis_id
+        join catalog.product_option_values value
+          on value.organization_id=link.organization_id and value.id=link.option_value_id
+        where link.organization_id=variant.organization_id and link.variant_id=variant.id
+      ) integrity on true
       left join lateral (
         select definition.amount,definition.compare_at_amount
         from pricing.price_definitions definition
@@ -271,10 +296,11 @@ export async function getCatalogVariantMatrix(
         and variant.option_signature=any(${signatures}::text[])
       order by variant.sku,variant.id`.execute(db),
     sql<{ active: string; archived: string; valid_combinations: string }>`with integrity as (
-        select variant.id,variant.status,
+        select variant.id,variant.status,variant.option_signature,
           count(*) filter(where axis.status='ACTIVE')::integer active_axis_count,
           count(*) filter(where axis.status='ACTIVE' and value.status='ACTIVE')::integer active_value_count,
           count(link.option_value_id)::integer total_link_count,
+          coalesce(string_agg(link.option_value_id::text,':' order by link.option_value_id),'default') linked_signature,
           (select count(*)::integer from catalog.product_option_axes expected
             where expected.organization_id=variant.organization_id
               and expected.product_id=variant.product_id and expected.status='ACTIVE') expected_axis_count
@@ -287,12 +313,13 @@ export async function getCatalogVariantMatrix(
           on value.organization_id=link.organization_id and value.id=link.option_value_id
         where variant.organization_id=${input.organizationId}
           and variant.product_id=${input.productId}::uuid
-        group by variant.id,variant.status
+        group by variant.id,variant.status,variant.option_signature
       ) select count(*) filter(where status='ACTIVE')::text active,
         count(*) filter(where status='ARCHIVED')::text archived,
         count(*) filter(where active_axis_count=expected_axis_count
           and active_value_count=expected_axis_count
-          and total_link_count=expected_axis_count)::text valid_combinations
+          and total_link_count=expected_axis_count
+          and option_signature=linked_signature)::text valid_combinations
       from integrity`.execute(db),
     sql<{
       id: string;
@@ -302,12 +329,15 @@ export async function getCatalogVariantMatrix(
       active_value_count: number;
       total_link_count: number;
       expected_axis_count: number;
+      option_signature: string;
+      linked_signature: string;
       total_count: string;
     }>`with variant_integrity as (
-        select variant.id,variant.sku,variant.status,
+        select variant.id,variant.sku,variant.status,variant.option_signature,
           count(*) filter(where axis.status='ACTIVE')::integer active_axis_count,
           count(*) filter(where axis.status='ACTIVE' and value.status='ACTIVE')::integer active_value_count,
           count(link.option_value_id)::integer total_link_count,
+          coalesce(string_agg(link.option_value_id::text,':' order by link.option_value_id),'default') linked_signature,
           (select count(*)::integer from catalog.product_option_axes expected
             where expected.organization_id=variant.organization_id
               and expected.product_id=variant.product_id and expected.status='ACTIVE') expected_axis_count
@@ -320,17 +350,26 @@ export async function getCatalogVariantMatrix(
           on value.organization_id=link.organization_id and value.id=link.option_value_id
         where variant.organization_id=${input.organizationId}
           and variant.product_id=${input.productId}::uuid
-        group by variant.id,variant.sku,variant.status
+        group by variant.id,variant.sku,variant.status,variant.option_signature
       ), incomplete as (
         select * from variant_integrity
         where active_axis_count<>expected_axis_count
           or active_value_count<>expected_axis_count
           or total_link_count<>expected_axis_count
+          or option_signature<>linked_signature
       ) select *,count(*) over()::text total_count from incomplete
         order by sku,id limit 100`.execute(db),
   ]);
   const bySignature = new Map(
-    variantsResult.rows.map((variant) => [variant.option_signature, variant]),
+    variantsResult.rows
+      .filter(
+        (variant) =>
+          variant.option_signature === variant.linked_signature &&
+          variant.active_axis_count === variant.expected_axis_count &&
+          variant.active_value_count === variant.expected_axis_count &&
+          variant.total_link_count === variant.expected_axis_count,
+      )
+      .map((variant) => [variant.option_signature, variant]),
   );
   const rows: CatalogVariantMatrixRow[] = combinations.map((combination, index) => {
     const variant = bySignature.get(signatures[index]!);
@@ -349,6 +388,7 @@ export async function getCatalogVariantMatrix(
       variant: {
         id: variant.id,
         sku: variant.sku,
+        title: variant.title,
         status: variant.status,
         version: Number(variant.version),
         barcode: variant.barcode,
@@ -423,6 +463,9 @@ export async function getCatalogVariantMatrix(
           : []),
         ...(variant.active_value_count < variant.active_axis_count
           ? (['ARCHIVED_VALUE'] as const)
+          : []),
+        ...(variant.option_signature !== variant.linked_signature
+          ? (['SIGNATURE_MISMATCH'] as const)
           : []),
       ],
     })),

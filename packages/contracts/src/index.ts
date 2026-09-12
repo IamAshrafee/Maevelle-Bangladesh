@@ -84,17 +84,13 @@ export interface CatalogVariantUpdateDto {
   readonly status?: 'ACTIVE' | 'ARCHIVED';
   readonly primaryColorId?: string | null;
   readonly associatedColorIds?: readonly string[];
-  readonly weight?:
-    | { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' }
-    | null;
-  readonly dimensions?:
-    | {
-        readonly length: string;
-        readonly width: string;
-        readonly height: string;
-        readonly unit: 'MM' | 'CM' | 'IN';
-      }
-    | null;
+  readonly weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+  readonly dimensions?: {
+    readonly length: string;
+    readonly width: string;
+    readonly height: string;
+    readonly unit: 'MM' | 'CM' | 'IN';
+  } | null;
 }
 
 export type CatalogReadinessState = 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';
@@ -419,6 +415,7 @@ export interface CatalogVariantMatrixDto {
     readonly variant: {
       readonly id: string;
       readonly sku: string;
+      readonly title: string | null;
       readonly status: 'ACTIVE' | 'ARCHIVED';
       readonly version: number;
       readonly barcode: string | null;
@@ -452,7 +449,9 @@ export interface CatalogVariantMatrixDto {
     readonly id: string;
     readonly sku: string;
     readonly status: 'ACTIVE' | 'ARCHIVED';
-    readonly reasons: readonly ('MISSING_AXIS' | 'ARCHIVED_AXIS' | 'ARCHIVED_VALUE')[];
+    readonly reasons: readonly (
+      'MISSING_AXIS' | 'ARCHIVED_AXIS' | 'ARCHIVED_VALUE' | 'SIGNATURE_MISMATCH'
+    )[];
   }[];
 }
 
@@ -746,7 +745,8 @@ export interface WarehouseTransferDto {
   readonly sourceLocationName: string;
   readonly destinationLocationId: string;
   readonly destinationLocationName: string;
-  readonly status: 'DRAFT' | 'READY' | 'IN_TRANSIT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+  readonly status:
+    'DRAFT' | 'READY' | 'IN_TRANSIT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
   readonly version: number;
   readonly totalRequested: string;
   readonly totalDispatched: string;

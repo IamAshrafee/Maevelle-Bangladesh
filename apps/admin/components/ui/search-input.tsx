@@ -90,7 +90,7 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
 
       // Parse shortcut into modifier and key
       const parts = shortcut.toLowerCase().split('+').map((part) => part.trim());
-      const isSingleChar = parts.length === 1 && parts[0].length === 1;
+      const isSingleChar = parts.length === 1 && parts[0]?.length === 1;
       const mainKey = parts[parts.length - 1]; // last part is the actual key
       const modifiers = parts.slice(0, -1); // everything before is modifier
 

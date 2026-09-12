@@ -29,9 +29,9 @@
 - **Blocks area completion:** no; resolved. The area remains incomplete for the
   P1/P2 substages below.
 
-## P1 — Variant matrix generation silently covers only the first 100 combinations
+## Resolved 2026-09-12 — Variant matrix generation silently covered only the first 100 combinations
 
-- **Problem:** the editor requests only page 1 of the paginated variant matrix
+- **Former problem:** the editor requests only page 1 of the paginated variant matrix
   and builds `missingRows` from that page. It never displays matrix pagination
   or the summary’s remaining combinations.
 - **Evidence:** `apps/admin/components/products/product-variants-form.tsx`
@@ -44,11 +44,20 @@
   SKUs undiscovered and obstructing high-volume merchandising.
 - **Likely layers:** variant matrix API contract/read model and Admin variant
   workflow.
-- **Blocks area completion:** yes.
+- **Resolution:** the editor now traverses deterministic 50-combination pages,
+  exposes full counts/range/navigation, generates only missing rows on the
+  visible page with bounded unique SKUs, and edits only the current page.
+  Unsaved navigation is guarded; Catalog and Pricing remain separate writes
+  with explicit partial-success refresh/recovery. Stored option-signature drift
+  is reported as repair work and never placed under the wrong combination.
+- **Proof:** `catalog-variants.test.ts` reaches page 3 of a 120-combination
+  matrix and proves signature-drift detection; focused TypeScript, lint, Admin
+  production build, and the broader 23-test Product suite pass.
+- **Blocks area completion:** no; resolved.
 
-## P1 — Editor cannot manage the variant-scoped media that the workspace read model supports
+## Resolved 2026-09-12 — Editor could not manage variant-scoped media
 
-- **Problem:** the detail UI describes general, option-value, and
+- **Former problem:** the detail UI describes general, option-value, and
   variant-specific galleries, and the Catalog media relationship supports a
   `variantId`; the editor only uploads/attaches product and color-option media.
 - **Evidence:** `apps/admin/components/products/product-details.tsx` renders
@@ -58,7 +67,15 @@
   variant-specific imagery (for example a non-colour material/cut variation)
   from the Product workspace, despite being told the capability is there.
 - **Likely layers:** Admin media editor/read model and focused media tests.
-- **Blocks area completion:** yes.
+- **Resolution:** the Media section now provides a bounded searchable Variant
+  finder by SKU/title/options and a precise per-Variant gallery alongside the
+  existing Product and colour-option scopes. Upload, remove, and primary-image
+  actions preserve the Media asset and use the existing tenant-scoped Catalog
+  placement boundary; touch and keyboard actions remain visible and named.
+- **Proof:** `media.test.ts` proves same-Product Variant scoping, rejection of a
+  Variant from another Product, and one primary placement per Variant scope;
+  focused type/lint/build validation passes.
+- **Blocks area completion:** no; resolved.
 
 ## P2 — The worklist is a strong finder but lacks sorting and actionable reason detail
 

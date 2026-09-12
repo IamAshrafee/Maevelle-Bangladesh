@@ -12,10 +12,10 @@ edits, and not duplicate downstream domain authority.
    option/Variant changes are transaction-serialized, recovery is explicit,
    history is retained, and public projections fail closed on legacy
    inconsistency.
-2. **Scalable variant and media operations — NEXT** — complete paginated matrix work,
+2. **Scalable variant and media operations — COMPLETE** — complete paginated matrix work,
    bulk generation/reconciliation, variant-scoped media, and safe high-count
    editing without moving pricing or inventory authority into Catalog.
-3. **Merchandiser worklist and workspace clarity** — add the useful priority,
+3. **Merchandiser worklist and workspace clarity — NEXT** — add the useful priority,
    sorting, remediation, media-signal, and Storefront-preview cues supported by
    real operating decisions.
 4. **Integrated organization, sizing, content, and lifecycle review** — prove
