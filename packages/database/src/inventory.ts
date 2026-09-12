@@ -1609,10 +1609,14 @@ export async function getStocktakeWorkspace(
   | {
       id: string;
       locationId: string;
+      locationName: string;
       status: string;
       version: number;
       lines: readonly {
         inventoryItemId: string;
+        sku: string;
+        productTitle: string;
+        optionSummary: string | null;
         expectedQuantity: string;
         countedQuantity: string | null;
       }[];
@@ -1622,29 +1626,61 @@ export async function getStocktakeWorkspace(
   const session = await sql<{
     id: string;
     location_id: string;
+    location_name: string;
     status: string;
     version: string;
-  }>`select id, location_id, status, version::text from inventory.stocktake_sessions where id = ${stocktakeId} and organization_id = ${organizationId}`.execute(
-    db,
-  );
+  }>`
+    select s.id, s.location_id, s.status, s.version::text, l.name as location_name
+    from inventory.stocktake_sessions s
+    join warehouse.locations l on l.id = s.location_id
+    where s.id = ${stocktakeId} and s.organization_id = ${organizationId}
+  `.execute(db);
   const header = session.rows[0];
   if (!header) return undefined;
+
   const lines = await sql<{
     inventory_item_id: string;
     expected_quantity_at_snapshot: string;
     counted_quantity: string | null;
-  }>`select inventory_item_id, expected_quantity_at_snapshot::text, counted_quantity::text from inventory.stocktake_lines where stocktake_session_id = ${header.id} and organization_id = ${organizationId} order by inventory_item_id`.execute(
-    db,
-  );
+    sku: string;
+    product_title: string;
+    option_summary: string | null;
+  }>`
+    select
+      sl.inventory_item_id,
+      sl.expected_quantity_at_snapshot::text,
+      sl.counted_quantity::text,
+      variant.sku,
+      product.title as product_title,
+      (
+        select string_agg(ov.display_value, ' / ' order by axis.position)
+        from catalog.product_option_axes axis
+        join catalog.product_option_values ov on ov.axis_id = axis.id
+        join catalog.variant_option_values vov on vov.option_value_id = ov.id and vov.variant_id = variant.id
+        where axis.product_id = product.id
+      ) as option_summary
+    from inventory.stocktake_lines sl
+    join inventory.inventory_items item on item.id = sl.inventory_item_id
+    join catalog.product_variants variant on variant.id = item.variant_id
+    join catalog.products product on product.id = variant.product_id
+    where sl.stocktake_session_id = ${header.id} and sl.organization_id = ${organizationId}
+    order by product.title, variant.sku
+  `.execute(db);
+
   return {
     id: header.id,
     locationId: header.location_id,
+    locationName: header.location_name,
     status: header.status,
     version: Number(header.version),
     lines: lines.rows.map((line) => ({
       inventoryItemId: line.inventory_item_id,
+      sku: line.sku,
+      productTitle: line.product_title,
+      optionSummary: line.option_summary,
       expectedQuantity: subtract(line.expected_quantity_at_snapshot, '0'),
-      countedQuantity: line.counted_quantity === null ? null : subtract(line.counted_quantity, '0'),
+      countedQuantity:
+        line.counted_quantity === null ? null : subtract(line.counted_quantity, '0'),
     })),
   };
 }

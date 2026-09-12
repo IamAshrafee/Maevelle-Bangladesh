@@ -66,7 +66,7 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
           <p className="text-muted-foreground">{item.optionSummary || 'Default variant'}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push(`/inventory/adjustments?variantId=${item.variantId}`)}>
+          <Button variant="outline" onClick={() => router.push(`/inventory/adjustments?sku=${encodeURIComponent(item.sku)}`)}>
             Adjust Stock
           </Button>
           <Button onClick={() => router.push(`/inventory/transfers/new`)}>

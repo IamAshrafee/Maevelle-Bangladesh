@@ -253,6 +253,16 @@ export function ProductDetails({ productId }: { productId: string }) {
               <Button variant="outline" render={<Link href={`/products/${workspace.id}/edit`} />}>
                 <Edit3 aria-hidden="true" /> Edit Product
               </Button>
+              <Button
+                variant="outline"
+                render={
+                  <Link
+                    href={`/inventory/stock?search=${encodeURIComponent(workspace.title)}`}
+                  />
+                }
+              >
+                <PackageOpen aria-hidden="true" /> View Inventory
+              </Button>
               {workspace.publicationStatus === 'PUBLISHED' ? (
                 <Button
                   variant="outline"

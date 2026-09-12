@@ -1,6 +1,7 @@
 'use client';
 
-import { AlertTriangle, Loader2, Save } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Loader2, Save } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 
@@ -132,6 +133,7 @@ export function ProductVariantsTable({
               <th className="px-3 py-3 font-medium">Price</th>
               <th className="px-3 py-3 font-medium">Compare At</th>
               <th className="px-3 py-3 font-medium">Status</th>
+              <th className="px-3 py-3 font-medium">Inventory</th>
               <th className="px-3 py-3 font-medium">Setup</th>
             </tr>
           </thead>
@@ -191,6 +193,16 @@ export function ProductVariantsTable({
                       <option value="ACTIVE">Active</option>
                       <option value="ARCHIVED">Archived</option>
                     </select>
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    <Link
+                      href={`/inventory/stock?search=${encodeURIComponent(source.variant.sku)}`}
+                      className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                      title={`View ${source.variant.sku} stock`}
+                    >
+                      Stock
+                      <ExternalLink className="h-3 w-3 opacity-70" />
+                    </Link>
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {source.variant.setupIssues.length > 0 ? (

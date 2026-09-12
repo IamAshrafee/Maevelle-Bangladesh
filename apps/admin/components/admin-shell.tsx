@@ -101,6 +101,7 @@ const navigation: readonly NavGroup[] = [
   {
     label: 'Inventory',
     items: [
+      { label: 'Overview', href: '/inventory', icon: LayoutDashboard, capability: 'inventory.view' },
       { label: 'Stock', href: '/inventory/stock', icon: Boxes, capability: 'inventory.view' },
       {
         label: 'Warehouses',

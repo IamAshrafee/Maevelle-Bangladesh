@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 
 const lineSchema = z.object({
-  inventoryItemId: z.string().min(1, 'Item is required'),
+  variantId: z.string().min(1, 'Item is required'),
   quantity: z.string().regex(/^\d+(?:\.\d{1,6})?$/, 'Invalid quantity'),
 });
 
@@ -55,7 +55,7 @@ export function TransferForm() {
       sourceLocationId: '',
       destinationLocationId: '',
       notes: '',
-      lines: [{ inventoryItemId: '', quantity: '1' }]
+      lines: [{ variantId: '', quantity: '1' }]
     }
   });
 
@@ -125,12 +125,11 @@ export function TransferForm() {
     // Validate quantities against available stock dynamically
     for (const [i, line] of values.lines.entries()) {
       if (!line) continue;
-      const stockItem = availableStock.find(s => s.inventoryItemId === line.inventoryItemId);
-      
+      const stockItem = availableStock.find((s) => s.variantId === line.variantId);
       if (stockItem && Number(line.quantity) > Number(stockItem.availableToSell)) {
         form.setError(`lines.${i}.quantity`, {
           type: 'manual',
-          message: `Only ${stockItem.availableToSell} available at source.`
+          message: `Only ${stockItem.availableToSell} available at source.`,
         });
         return;
       }
@@ -144,13 +143,10 @@ export function TransferForm() {
           sourceLocationId: values.sourceLocationId,
           destinationLocationId: values.destinationLocationId,
           notes: values.notes,
-          lines: values.lines.map(l => ({
-            inventoryItemId: l.inventoryItemId,
-            quantity: l.quantity
-          })),
+          lines: values.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
         }),
       });
-      
+
       router.push(`/inventory/transfers/${result.data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -192,7 +188,7 @@ export function TransferForm() {
                   onValueChange={(val) => {
                     form.setValue('sourceLocationId', val || '', { shouldValidate: true });
                     // Reset lines when source changes
-                    form.setValue('lines', [{ inventoryItemId: '', quantity: '1' }]);
+                    form.setValue('lines', [{ variantId: '', quantity: '1' }]);
                   }} 
                   disabled={isLoadingLocations}
                 >
@@ -260,7 +256,7 @@ export function TransferForm() {
               <CardTitle>Line Items</CardTitle>
               <CardDescription className="mt-1">Select items currently available at the source location.</CardDescription>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => append({ inventoryItemId: '', quantity: '1' })} disabled={!sourceLocationId || isLoadingStock}>
+            <Button type="button" variant="outline" size="sm" onClick={() => append({ variantId: '', quantity: '1' })} disabled={!sourceLocationId || isLoadingStock}>
               <Plus className="mr-2 h-4 w-4" /> Add Line
             </Button>
           </CardHeader>
@@ -272,47 +268,44 @@ export function TransferForm() {
             ) : (
               <div className="space-y-4">
                 {fields.map((field, index) => {
-                  const lineItemId = form.watch(`lines.${index}.inventoryItemId`);
-                  const selectedStockItem = availableStock.find(s => s.inventoryItemId === lineItemId);
-                  
+                  const lineVariantId = form.watch(`lines.${index}.variantId`);
+                  const selectedStockItem = availableStock.find((s) => s.variantId === lineVariantId);
+
                   return (
                     <div key={field.id} className="flex gap-4 items-start">
                       <div className="flex-1 grid gap-2">
                         {index === 0 && <Label>Item <span className="text-destructive">*</span></Label>}
-                        <Select 
-                          value={lineItemId} 
-                          onValueChange={(val) => form.setValue(`lines.${index}.inventoryItemId`, val || '', { shouldValidate: true })}
+                        <Select
+                          value={lineVariantId}
+                          onValueChange={(val) =>
+                            form.setValue(`lines.${index}.variantId`, val || '', { shouldValidate: true })
+                          }
                           disabled={isLoadingStock}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder={isLoadingStock ? "Loading stock..." : "Select item to transfer"}>
-                              {lineItemId 
-                                ? (availableStock.find(s => s.inventoryItemId === lineItemId)?.productTitle || 
-                                   availableStock.find(s => s.inventoryItemId === lineItemId)?.sku || 
-                                   'Selected Item')
+                            <SelectValue placeholder={isLoadingStock ? 'Loading stock…' : 'Select item to transfer'}>
+                              {lineVariantId
+                                ? `${selectedStockItem?.productTitle ?? 'Item'} — ${selectedStockItem?.sku ?? ''}`
                                 : undefined}
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {availableStock.length === 0 ? (
-                              <SelectItem value="empty" disabled>No stock available at source</SelectItem>
+                              <SelectItem value="empty" disabled>No transferable stock at source</SelectItem>
                             ) : (
-                              availableStock.map((stock) => {
-                                const displayName = stock.productTitle || stock.sku || stock.inventoryItemId;
-                                return (
-                                  <SelectItem key={stock.inventoryItemId} value={stock.inventoryItemId}>
-                                    {displayName} 
-                                    <span className="text-muted-foreground ml-2">
-                                      (Available: {stock.availableToSell})
-                                    </span>
-                                  </SelectItem>
-                                );
-                              })
+                              availableStock.map((stock) => (
+                                <SelectItem key={stock.variantId} value={stock.variantId}>
+                                  {stock.productTitle}
+                                  <span className="text-muted-foreground ml-2 font-mono text-xs">
+                                    {stock.sku} · {stock.availableToSell} avail.
+                                  </span>
+                                </SelectItem>
+                              ))
                             )}
                           </SelectContent>
                         </Select>
-                        {form.formState.errors.lines?.[index]?.inventoryItemId && (
-                          <p className="text-sm font-medium text-destructive">{form.formState.errors.lines[index]?.inventoryItemId?.message}</p>
+                        {form.formState.errors.lines?.[index]?.variantId && (
+                          <p className="text-sm font-medium text-destructive">{form.formState.errors.lines[index]?.variantId?.message}</p>
                         )}
                       </div>
                       <div className="w-32 grid gap-2">
@@ -321,7 +314,7 @@ export function TransferForm() {
                           type="number"
                           min="1"
                           max={selectedStockItem ? selectedStockItem.availableToSell : undefined}
-                          disabled={!lineItemId}
+                          disabled={!lineVariantId}
                           {...form.register(`lines.${index}.quantity`)}
                         />
                         {form.formState.errors.lines?.[index]?.quantity && (

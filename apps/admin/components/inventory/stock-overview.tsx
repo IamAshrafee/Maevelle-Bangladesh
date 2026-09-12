@@ -57,7 +57,7 @@ export function StockOverview() {
     if (availability !== 'all') params.set('availability', availability);
     
     inventoryRequest<{ data: PaginatedDto<InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string }> }>(
-      `/inventory/stock?${params.toString()}`
+      `/inventory/stock?${params.toString()}`,
     )
       .then((res) => {
         setBalancesData(res.data);
