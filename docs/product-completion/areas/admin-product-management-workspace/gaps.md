@@ -1,5 +1,35 @@
 # Observed Gaps
 
+## Resolved 2026-09-12 — Product sizing selection and public guide state could diverge
+
+- **Problem:** the Product organization editor loaded all active size guides,
+  including guides outside the selected size system's domain. It also allowed a
+  guide to remain selected after the system was cleared, then silently removed
+  the configuration on save. Separately, configuration writes did not serialize
+  with guide/system archival, and a legacy archived-guide reference could still
+  be selected by the public sizing query.
+- **Evidence:** `product-organization-form.tsx` called `/admin/sizing/guides`
+  without domain filtering and sent a `DELETE` when `sizeSystemId` was empty;
+  `attachSizeGuideToProduct` and archive commands previously performed their
+  reads/writes without shared row locks; the first branch of
+  `getPublicSizeGuideForProduct` did not require `guide.status = 'ACTIVE'`.
+- **Business effect:** operators encountered avoidable post-submit validation or
+  could accidentally erase a Product sizing assignment. Under a concurrent
+  archive/configuration operation or legacy data, customers could receive a
+  retired guide rather than a coherent current configuration.
+- **Resolution:** the editor requires a system before guide selection, displays
+  only same-domain active published guides, explains unavailable legacy values,
+  and surfaces configuration names and owning-guide handoff in Product Details.
+  Sizing locks the guide/system authority rows before configuration/archive work;
+  guide archival retains the system configuration and audit record, while public
+  guide lookup excludes archived guides as a defensive legacy-data boundary.
+- **Proof:** `packages/database/src/sizing.test.ts` proves archive cleanup,
+  archived-guide attachment rejection, active-system archive blocking, and
+  defensive public omission. The focused 18-test Product suite, affected
+  TypeScript/lint, and Admin production build pass.
+- **Blocks area completion:** no; resolved. Responsive/operator acceptance
+  evidence remains for the final verification stage.
+
 ## Resolved 2026-09-10 — Published option changes could leave active Storefront SKUs unselectable
 
 - **Former problem:** Archiving a Product option axis or value was allowed against a

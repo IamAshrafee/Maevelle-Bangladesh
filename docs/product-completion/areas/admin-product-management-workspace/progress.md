@@ -101,3 +101,28 @@
   review remains unavailable because the local rebuild invalidated the saved session.
 - Next: `INTEGRATED_ORGANIZATION_SIZING_CONTENT_LIFECYCLE_REVIEW`; do not begin
   final verification and owner review first.
+
+## 2026-09-12 — Integrated organization, sizing, content, and lifecycle review
+
+- Confirmed a Product operator could select an arbitrary published guide before
+  the server rejected its sizing-domain mismatch, or select a guide without a
+  system and have the form silently remove the configuration. The editor now
+  requires a system before guide selection, limits choices to active published
+  guides in that system's domain, and keeps an incompatible legacy selection
+  visible until the operator replaces it.
+- Sizing configuration writes and guide/system archival now lock their shared
+  authority rows in one transaction. Guide archival preserves the Product's
+  system configuration and audit history; system archival remains blocked while
+  an active Product configuration uses it. A legacy configuration pointing at
+  an archived guide cannot reach the public guide projection.
+- Product Details now gives merchandisers the effective product-specific sizing
+  system/guide context, a recovery message when sizing access is absent, and a
+  direct guide handoff. Existing structured-content conflict recovery,
+  lifecycle actions, and published Storefront handoff were revalidated from
+  their focused tests and current source.
+- Eighteen focused Catalog/Sizing/Storefront/Admin state and handoff tests pass;
+  affected database/API/Admin/Storefront TypeScript and executable-surface lint
+  pass, and the Admin production build completes all 56 routes. Browser proof
+  remains unperformed because the prior local rebuild invalidated the safe
+  authenticated session.
+- Next: `VERIFICATION_AND_OWNER_REVIEW`; do not begin unrelated Product work.

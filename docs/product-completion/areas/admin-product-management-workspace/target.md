@@ -18,8 +18,10 @@ edits, and not duplicate downstream domain authority.
 3. **Merchandiser worklist and workspace clarity — COMPLETE** — Product rows
    support useful URL-backed sorting and canonical recovery cues; media scopes
    are explicit and published Products can open their customer representation.
-4. **Integrated organization, sizing, content, and lifecycle review — NEXT** — prove
-   the full sectioned workflow, stale/error recovery, deep links, and domain
-   handoffs against representative data.
-5. **Verification and owner review** — run targeted database/API/Admin and
+4. **Integrated organization, sizing, content, and lifecycle review — COMPLETE** —
+   product sizing configuration now follows Sizing-domain compatibility,
+   serialization, public projection safety, and a legible Product workspace
+   handoff; existing content conflict recovery and lifecycle/deep-link flows
+   retain their focused proof.
+5. **Verification and owner review — NEXT** — run targeted database/API/Admin and
    Storefront proof, responsive review, and a focused operator acceptance pass.

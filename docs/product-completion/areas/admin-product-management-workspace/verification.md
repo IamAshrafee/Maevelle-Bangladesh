@@ -1,6 +1,6 @@
 # Verification
 
-Status: `ACTIVE_IMPLEMENTATION` — `SCALABLE_VARIANT_AND_MEDIA_OPERATIONS`.
+Status: `PLANNED` — `VERIFICATION_AND_OWNER_REVIEW`.
 
 Current assessment evidence:
 
@@ -48,6 +48,27 @@ Current assessment evidence:
 
 Completion cannot be claimed until the remaining P2 stages have current
 targeted proof and responsive/owner review is complete.
+
+## Integrated organization, sizing, content, and lifecycle proof — 2026-09-12
+
+- `pnpm exec vitest run packages/database/src/sizing.test.ts
+  packages/database/src/catalog.test.ts packages/database/src/storefront.test.ts
+  apps/admin/src/catalog-content-state.test.ts
+  apps/admin/src/product-workspace-links.test.ts` passed: 5 files, 18 tests.
+  The Sizing regression covers active/published/domain-compatible attachment,
+  safe guide archival, retained system configuration, system-archive blocking,
+  and defensive omission of a legacy archived guide from Storefront data.
+- Affected database, API, Admin, and Storefront TypeScript checks passed, as did
+  executable-surface ESLint for the changed sizing and Product workspace files.
+  `pnpm --filter @maevelle/admin build` completed all 56 routes.
+- Product Details uses the capability-scoped Sizing read model only for context;
+  all sizing writes remain in Sizing and Catalog retains identity/lifecycle
+  authority. Content stale-conflict merge, lifecycle confirmation, and
+  root-safe published Storefront handoff remain covered by their existing focused
+  source/test evidence.
+- Browser rendering was not claimed: the safe saved Admin session was invalidated
+  by prior local rebuilds and no credentials were exposed or injected. Responsive
+  browser review and owner operational judgment remain the final gate.
 
 ## Scalable Variant and media operations proof — 2026-09-12
 
