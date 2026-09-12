@@ -23,6 +23,7 @@ import type {
   CatalogProductWorkspaceDto,
   CatalogVocabularyItemDto,
   CatalogVocabularyListDto,
+  ProductSizingDto,
 } from '@maevelle/contracts';
 
 import { ProductReadiness } from '@/components/products/product-readiness';
@@ -64,6 +65,8 @@ export function ProductDetails({ productId }: { productId: string }) {
     occasions: readonly CatalogVocabularyItemDto[];
     collections: readonly CatalogVocabularyItemDto[];
   }>({ tags: [], occasions: [], collections: [] });
+  const [sizing, setSizing] = useState<ProductSizingDto>();
+  const [sizingUnavailable, setSizingUnavailable] = useState(false);
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -71,29 +74,36 @@ export function ProductDetails({ productId }: { productId: string }) {
   async function load(signal?: AbortSignal) {
     setState('loading');
     try {
-      const [product, categoryChoices, tags, occasions, collections] = await Promise.all([
-        catalogData<CatalogProductWorkspaceDto>(
-          `/admin/catalog/products/${productId}`,
-          signal ? { signal } : undefined,
-        ),
-        catalogData<readonly CatalogCategoryChoiceDto[]>(
-          '/admin/catalog/categories',
-          signal ? { signal } : undefined,
-        ),
-        catalogData<CatalogVocabularyListDto>(
-          '/admin/catalog/vocabulary/TAG?status=ALL&page=1&pageSize=100',
-          signal ? { signal } : undefined,
-        ),
-        catalogData<CatalogVocabularyListDto>(
-          '/admin/catalog/vocabulary/OCCASION?status=ALL&page=1&pageSize=100',
-          signal ? { signal } : undefined,
-        ),
-        catalogData<CatalogVocabularyListDto>(
-          '/admin/catalog/vocabulary/COLLECTION?status=ALL&page=1&pageSize=100',
-          signal ? { signal } : undefined,
-        ),
-      ]);
+      const [product, categoryChoices, tags, occasions, collections, productSizing] =
+        await Promise.all([
+          catalogData<CatalogProductWorkspaceDto>(
+            `/admin/catalog/products/${productId}`,
+            signal ? { signal } : undefined,
+          ),
+          catalogData<readonly CatalogCategoryChoiceDto[]>(
+            '/admin/catalog/categories',
+            signal ? { signal } : undefined,
+          ),
+          catalogData<CatalogVocabularyListDto>(
+            '/admin/catalog/vocabulary/TAG?status=ALL&page=1&pageSize=100',
+            signal ? { signal } : undefined,
+          ),
+          catalogData<CatalogVocabularyListDto>(
+            '/admin/catalog/vocabulary/OCCASION?status=ALL&page=1&pageSize=100',
+            signal ? { signal } : undefined,
+          ),
+          catalogData<CatalogVocabularyListDto>(
+            '/admin/catalog/vocabulary/COLLECTION?status=ALL&page=1&pageSize=100',
+            signal ? { signal } : undefined,
+          ),
+          catalogData<ProductSizingDto>(
+            `/admin/catalog/products/${productId}/size-configuration`,
+            signal ? { signal } : undefined,
+          ).catch(() => undefined),
+        ]);
       setWorkspace(product);
+      setSizing(productSizing);
+      setSizingUnavailable(productSizing === undefined && product.sizeSystemId !== null);
       setCategories(categoryChoices);
       setVocabulary({
         tags: tags.items,
@@ -674,7 +684,7 @@ export function ProductDetails({ productId }: { productId: string }) {
       ) : null}
 
       {section === 'organization' ? (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-3">
           <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
             <div className="flex justify-between gap-3">
               <h2 className="font-semibold">Catalog Organization</h2>
@@ -732,6 +742,62 @@ export function ProductDetails({ productId }: { productId: string }) {
               <p className="mt-2 text-sm text-muted-foreground">
                 This Product Type has no Product-level attributes.
               </p>
+            ) : null}
+          </section>
+          <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Sizing configuration</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Product-specific sizing is managed by the Sizing workspace.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                render={<Link href={`/products/${workspace.id}/edit?section=organization`} />}
+              >
+                Edit
+              </Button>
+            </div>
+            {sizing?.configured ? (
+              <dl className="mt-4 divide-y text-sm">
+                <div className="grid grid-cols-2 gap-3 py-2.5">
+                  <dt className="text-muted-foreground">System</dt>
+                  <dd>{sizing.sizeSystemName}</dd>
+                </div>
+                <div className="grid grid-cols-2 gap-3 py-2.5">
+                  <dt className="text-muted-foreground">Guide</dt>
+                  <dd>
+                    {sizing.sizeGuideName ?? 'No product guide — category default may apply'}
+                    {sizing.sizeGuideName && !sizing.hasPublishedGuide ? (
+                      <span className="block text-destructive">
+                        A published replacement is required.
+                      </span>
+                    ) : null}
+                  </dd>
+                </div>
+              </dl>
+            ) : sizingUnavailable ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                A sizing configuration exists, but your current access cannot inspect it. Request
+                sizing access or open the editor to update it.
+              </p>
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">
+                No product-specific sizing configuration. The Storefront can use the primary
+                category&apos;s published default guide when one is assigned.
+              </p>
+            )}
+            {sizing?.sizeGuideId ? (
+              <Button
+                className="mt-4"
+                size="sm"
+                variant="outline"
+                render={<Link href={`/sizing/guides/${sizing.sizeGuideId}`} />}
+              >
+                Open size guide
+              </Button>
             ) : null}
           </section>
         </div>

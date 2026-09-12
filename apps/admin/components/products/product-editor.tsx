@@ -39,7 +39,12 @@ import { catalogData } from '@/lib/catalog/api';
 
 const editorSections = [
   { id: 'overview', label: 'Overview', help: 'Identity and description', icon: PackageOpen },
-  { id: 'organization', label: 'Organization', help: 'Categories and attributes', icon: Layers3 },
+  {
+    id: 'organization',
+    label: 'Organization',
+    help: 'Categories, attributes, and sizing',
+    icon: Layers3,
+  },
   { id: 'variants', label: 'Variants', help: 'Options, SKUs, price, stock', icon: Settings2 },
   { id: 'media', label: 'Media', help: 'Product and color galleries', icon: ImageIcon },
   { id: 'content', label: 'Content', help: 'Information, FAQs, and SEO', icon: FileText },

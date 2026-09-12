@@ -28,6 +28,7 @@ export function ProductOrganizationForm({
   const [error, setError] = useState('');
   const [guides, setGuides] = useState<SizeGuideSummaryDto[]>([]);
   const [loadingGuides, setLoadingGuides] = useState(true);
+  const [guidesError, setGuidesError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -35,11 +36,15 @@ export function ProductOrganizationForm({
       .then((res) => {
         if (active) {
           setGuides(res ?? []);
+          setGuidesError('');
           setLoadingGuides(false);
         }
       })
       .catch(() => {
-        if (active) setLoadingGuides(false);
+        if (active) {
+          setGuidesError('Size guides could not be loaded. Reload the editor before choosing one.');
+          setLoadingGuides(false);
+        }
       });
     return () => {
       active = false;
@@ -47,45 +52,57 @@ export function ProductOrganizationForm({
   }, []);
 
   const dynamicSchema = useMemo(() => {
-    return z.object({
-      categoryIds: z.array(z.string()),
-      primaryCategoryId: z.string().optional().nullable(),
-      tagIds: z.array(z.string()),
-      occasionIds: z.array(z.string()),
-      collectionIds: z.array(z.string()),
-      sizeSystemId: z.string().optional().nullable(),
-      sizeGuideId: z.string().optional().nullable(),
-      attributeValues: z.record(z.string(), z.union([z.string(), z.boolean(), z.null()]))
-    }).superRefine((data, ctx) => {
-      workspace.organization.attributes.forEach((attr) => {
-        if (attr.required) {
-          const val = data.attributeValues[attr.id];
-          if (val === null || val === '' || val === undefined) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `${attr.name} is required.`,
-              path: ['attributeValues', attr.id],
-            });
-          }
+    return z
+      .object({
+        categoryIds: z.array(z.string()),
+        primaryCategoryId: z.string().optional().nullable(),
+        tagIds: z.array(z.string()),
+        occasionIds: z.array(z.string()),
+        collectionIds: z.array(z.string()),
+        sizeSystemId: z.string().optional().nullable(),
+        sizeGuideId: z.string().optional().nullable(),
+        attributeValues: z.record(z.string(), z.union([z.string(), z.boolean(), z.null()])),
+      })
+      .superRefine((data, ctx) => {
+        if (data.sizeGuideId && !data.sizeSystemId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Choose a size system before selecting a size guide.',
+            path: ['sizeGuideId'],
+          });
         }
+        workspace.organization.attributes.forEach((attr) => {
+          if (attr.required) {
+            const val = data.attributeValues[attr.id];
+            if (val === null || val === '' || val === undefined) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `${attr.name} is required.`,
+                path: ['attributeValues', attr.id],
+              });
+            }
+          }
+        });
       });
-    });
   }, [workspace.organization.attributes]);
 
   type FormValues = z.infer<typeof dynamicSchema>;
 
-  const baseline = useMemo(() => ({
-    categoryIds: [...workspace.organization.categoryIds],
-    primaryCategoryId: workspace.organization.primaryCategoryId ?? '',
-    tagIds: [...workspace.organization.tagIds],
-    occasionIds: [...workspace.organization.occasionIds],
-    collectionIds: [...workspace.organization.collectionIds],
-    sizeSystemId: workspace.sizeSystemId ?? '',
-    sizeGuideId: workspace.sizeGuideId ?? '',
-    attributeValues: Object.fromEntries(
-      workspace.organization.attributes.map((attribute) => [attribute.id, attribute.value]),
-    ),
-  }), [workspace.organization]);
+  const baseline = useMemo(
+    () => ({
+      categoryIds: [...workspace.organization.categoryIds],
+      primaryCategoryId: workspace.organization.primaryCategoryId ?? '',
+      tagIds: [...workspace.organization.tagIds],
+      occasionIds: [...workspace.organization.occasionIds],
+      collectionIds: [...workspace.organization.collectionIds],
+      sizeSystemId: workspace.sizeSystemId ?? '',
+      sizeGuideId: workspace.sizeGuideId ?? '',
+      attributeValues: Object.fromEntries(
+        workspace.organization.attributes.map((attribute) => [attribute.id, attribute.value]),
+      ),
+    }),
+    [workspace.organization],
+  );
 
   const form = useForm<FormValues>({
     resolver: zodResolver(dynamicSchema),
@@ -98,12 +115,27 @@ export function ProductOrganizationForm({
 
   useEffect(() => onDirtyChange(form.formState.isDirty), [form.formState.isDirty, onDirtyChange]);
 
-  function toggleArrayField(field: 'categoryIds' | 'tagIds' | 'occasionIds' | 'collectionIds', id: string) {
+  const selectedSystem = references.sizeSystems.find(
+    (system) => system.id === form.watch('sizeSystemId'),
+  );
+  const selectedGuideId = form.watch('sizeGuideId') ?? '';
+  const matchingGuides = guides.filter(
+    (guide) =>
+      guide.hasPublishedRevision &&
+      selectedSystem !== undefined &&
+      guide.sizingDomainId === selectedSystem.sizingDomainId,
+  );
+  const selectedGuideIsEligible = matchingGuides.some((guide) => guide.id === selectedGuideId);
+
+  function toggleArrayField(
+    field: 'categoryIds' | 'tagIds' | 'occasionIds' | 'collectionIds',
+    id: string,
+  ) {
     const current = form.getValues(field);
     const selected = current.includes(id)
       ? current.filter((candidate) => candidate !== id)
       : [...current, id];
-    
+
     form.setValue(field, selected, { shouldDirty: true, shouldValidate: true });
 
     if (field === 'categoryIds') {
@@ -116,15 +148,15 @@ export function ProductOrganizationForm({
 
   async function onSubmit(values: FormValues) {
     if (!form.formState.isDirty) return;
-    
+
     setError('');
     let version = workspace.version;
-    
+
     try {
       const categoriesChanged =
         !same(baseline.categoryIds, values.categoryIds) ||
         baseline.primaryCategoryId !== values.primaryCategoryId;
-      
+
       if (categoriesChanged) {
         const saved = await catalogData<CatalogProductSummaryDto>(
           `/admin/catalog/products/${workspace.id}/categories`,
@@ -139,7 +171,7 @@ export function ProductOrganizationForm({
         );
         version = saved.version;
       }
-      
+
       if (!same(baseline.attributeValues, values.attributeValues)) {
         const saved = await catalogData<CatalogProductSummaryDto>(
           `/admin/catalog/products/${workspace.id}/attributes`,
@@ -156,12 +188,12 @@ export function ProductOrganizationForm({
         );
         version = saved.version;
       }
-      
+
       const vocabularyChanged =
         !same(baseline.tagIds, values.tagIds) ||
         !same(baseline.occasionIds, values.occasionIds) ||
         !same(baseline.collectionIds, values.collectionIds);
-        
+
       if (vocabularyChanged) {
         await catalogData(`/admin/catalog/products/${workspace.id}/vocabulary`, {
           method: 'PUT',
@@ -174,7 +206,10 @@ export function ProductOrganizationForm({
         });
       }
 
-      if (baseline.sizeSystemId !== values.sizeSystemId || baseline.sizeGuideId !== values.sizeGuideId) {
+      if (
+        baseline.sizeSystemId !== values.sizeSystemId ||
+        baseline.sizeGuideId !== values.sizeGuideId
+      ) {
         if (values.sizeSystemId) {
           await catalogRequest(`/admin/catalog/products/${workspace.id}/size-configuration`, {
             method: 'PUT',
@@ -189,7 +224,7 @@ export function ProductOrganizationForm({
           });
         }
       }
-      
+
       await onRefresh('Product organization and structured attributes saved.');
     } catch (caught) {
       setError(
@@ -233,7 +268,9 @@ export function ProductOrganizationForm({
               ) : null}
             </div>
             {form.formState.errors.categoryIds && (
-              <p className="mt-1 text-sm text-destructive">{form.formState.errors.categoryIds.message}</p>
+              <p className="mt-1 text-sm text-destructive">
+                {form.formState.errors.categoryIds.message}
+              </p>
             )}
           </fieldset>
           <div className="space-y-2">
@@ -273,7 +310,7 @@ export function ProductOrganizationForm({
           {workspace.organization.attributes.map((attribute) => {
             const value = form.watch(`attributeValues.${attribute.id}`);
             const errorObj = form.formState.errors.attributeValues?.[attribute.id];
-            
+
             return (
               <div className="space-y-2" key={attribute.id}>
                 <Label htmlFor={`attribute-${attribute.id}`}>
@@ -291,9 +328,9 @@ export function ProductOrganizationForm({
                     value={value === null || value === undefined ? '' : value ? 'true' : 'false'}
                     onChange={(event) =>
                       form.setValue(
-                        `attributeValues.${attribute.id}`, 
+                        `attributeValues.${attribute.id}`,
                         event.target.value === '' ? null : event.target.value === 'true',
-                        { shouldDirty: true, shouldValidate: true }
+                        { shouldDirty: true, shouldValidate: true },
                       )
                     }
                   >
@@ -307,11 +344,10 @@ export function ProductOrganizationForm({
                     id={`attribute-${attribute.id}`}
                     value={typeof value === 'string' ? value : ''}
                     onChange={(event) =>
-                      form.setValue(
-                        `attributeValues.${attribute.id}`, 
-                        event.target.value || null,
-                        { shouldDirty: true, shouldValidate: true }
-                      )
+                      form.setValue(`attributeValues.${attribute.id}`, event.target.value || null, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
                     }
                   >
                     <option value="">Choose {attribute.name}</option>
@@ -334,11 +370,10 @@ export function ProductOrganizationForm({
                     type={attribute.valueType === 'DATE' ? 'date' : 'text'}
                     value={typeof value === 'string' ? value : ''}
                     onChange={(event) =>
-                      form.setValue(
-                        `attributeValues.${attribute.id}`, 
-                        event.target.value || null,
-                        { shouldDirty: true, shouldValidate: true }
-                      )
+                      form.setValue(`attributeValues.${attribute.id}`, event.target.value || null, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
                     }
                   />
                 )}
@@ -377,7 +412,8 @@ export function ProductOrganizationForm({
               ))}
             </select>
             <p className="text-xs text-muted-foreground">
-              Select the standardized sizing system used by this product's variants.
+              Select the standardized sizing system used by this product's variants. The guide list
+              is limited to the same sizing domain.
             </p>
           </fieldset>
 
@@ -386,19 +422,42 @@ export function ProductOrganizationForm({
             <select
               id="sizeGuideId"
               className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-              disabled={loadingGuides || form.formState.isSubmitting}
+              disabled={
+                !selectedSystem ||
+                loadingGuides ||
+                form.formState.isSubmitting ||
+                Boolean(guidesError)
+              }
               {...form.register('sizeGuideId')}
             >
-              <option value="">Use category default / No guide</option>
-              {guides.map((guide) => (
+              <option value="">
+                {selectedSystem ? 'Use category default / No guide' : 'Choose a size system first'}
+              </option>
+              {selectedGuideId && !selectedGuideIsEligible ? (
+                <option disabled value={selectedGuideId}>
+                  Current guide is unavailable for this sizing system — choose a replacement
+                </option>
+              ) : null}
+              {matchingGuides.map((guide) => (
                 <option key={guide.id} value={guide.id}>
                   {guide.name} (v{guide.version})
                 </option>
               ))}
             </select>
             <p className="text-xs text-muted-foreground">
-              Attach a specific published size guide.
+              {guidesError
+                ? guidesError
+                : selectedSystem
+                  ? matchingGuides.length > 0
+                    ? 'Attach a published guide that matches the selected sizing domain.'
+                    : 'No published guides exist for this sizing domain. Use the category default or create one in Sizing.'
+                  : 'Choose a size system first; a guide cannot be saved on its own.'}
             </p>
+            {form.formState.errors.sizeGuideId ? (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.sizeGuideId.message}
+              </p>
+            ) : null}
           </fieldset>
         </div>
       </section>
@@ -451,7 +510,7 @@ export function ProductOrganizationForm({
           {error}
         </p>
       ) : null}
-      
+
       <footer className="sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
         <span
           className="flex items-center gap-2 text-xs text-muted-foreground"
@@ -481,7 +540,8 @@ export function ProductOrganizationForm({
             <Undo2 aria-hidden="true" /> Discard
           </Button>
           <Button type="submit" disabled={!form.formState.isDirty || form.formState.isSubmitting}>
-            <Save aria-hidden="true" /> {form.formState.isSubmitting ? 'Saving…' : 'Save Organization'}
+            <Save aria-hidden="true" />{' '}
+            {form.formState.isSubmitting ? 'Saving…' : 'Save Organization'}
           </Button>
         </div>
       </footer>

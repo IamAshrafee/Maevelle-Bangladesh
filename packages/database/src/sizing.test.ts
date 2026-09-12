@@ -7,6 +7,8 @@ import { createOrganization } from './platform.js';
 import {
   addSizeGuideRow,
   attachSizeGuideToProduct,
+  archiveSizeGuide,
+  archiveSizeSystem,
   createMeasurementDefinition,
   createSizeDefinition,
   createSizeGuide,
@@ -14,10 +16,10 @@ import {
   createSizeSystem,
   createSizingDomain,
   getAdminSizingWorkspace,
+  getProductSizingConfiguration,
   publishSizeGuideRevision,
   setSizeGuideMeasurement,
   duplicateSizeGuide,
-  removeSizeGuideRow,
   setCategoryDefaultSizeGuide,
   getPublicSizeGuideForProduct,
 } from './sizing.js';
@@ -157,6 +159,45 @@ describe('revisioned sizing', () => {
     expect(workspace.productConfigurations).toEqual([
       expect.objectContaining({ productId: product.id, sizeGuideId: guide.id }),
     ]);
+
+    await archiveSizeGuide(database.db, {
+      organizationId: organization.id,
+      id: guide.id,
+      actorId,
+    });
+    await expect(
+      attachSizeGuideToProduct(database.db, {
+        organizationId: organization.id,
+        productId: product.id,
+        sizeSystemId: system.id,
+        sizeGuideId: guide.id,
+        actorId,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      archiveSizeSystem(database.db, {
+        organizationId: organization.id,
+        id: system.id,
+        actorId,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      getProductSizingConfiguration(database.db, organization.id, product.id),
+    ).resolves.toMatchObject({
+      configured: true,
+      sizeSystemId: system.id,
+      sizeGuideId: null,
+    });
+    // A defensive public projection must also be safe for a legacy row that
+    // predates the transactional archive behaviour.
+    await sql`
+      update sizing.product_size_configurations
+      set size_guide_id = ${guide.id}
+      where product_id = ${product.id} and organization_id = ${organization.id}
+    `.execute(database.db);
+    await expect(
+      getPublicSizeGuideForProduct(database.db, organization.id, product.id),
+    ).resolves.toBeNull();
   });
 
   it('rejects cross-tenant parent IDs and keeps Admin read models isolated', async () => {
@@ -324,7 +365,11 @@ describe('revisioned sizing', () => {
       sizeGuideId: guide.id,
       actorId,
     });
-    const type = await sql<{ id: string }>`insert into catalog.product_types (organization_id, code, name) values (${organization.id}, 'tee', 'Tee') returning id`.execute(database.db);
+    const type = await sql<{
+      id: string;
+    }>`insert into catalog.product_types (organization_id, code, name) values (${organization.id}, 'tee', 'Tee') returning id`.execute(
+      database.db,
+    );
     const product = await createCatalogProduct(database.db, {
       organizationId: organization.id,
       actorId,
@@ -332,8 +377,10 @@ describe('revisioned sizing', () => {
       title: 'Basic Tee',
       handle: `tee-${crypto.randomUUID().slice(0, 8)}`,
     });
-    await sql`insert into catalog.product_categories (organization_id, product_id, category_id) values (${organization.id}, ${product.id}, ${category.id})`.execute(database.db);
-    
+    await sql`insert into catalog.product_categories (organization_id, product_id, category_id) values (${organization.id}, ${product.id}, ${category.id})`.execute(
+      database.db,
+    );
+
     const publicGuide = await getPublicSizeGuideForProduct(
       database.db,
       organization.id,

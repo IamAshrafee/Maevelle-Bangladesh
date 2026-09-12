@@ -530,6 +530,16 @@ export async function archiveSizeGuide(
   input: { organizationId: string; id: string; actorId: string },
 ): Promise<void> {
   await db.transaction().execute(async (transaction) => {
+    // Serialize guide archival with product configuration changes. Without this
+    // lock, an in-flight configuration write could reattach an archived guide.
+    const guide = await sql<{ id: string }>`
+      select id::text
+      from sizing.size_guides
+      where id = ${input.id} and organization_id = ${input.organizationId} and status = 'ACTIVE'
+      for update
+    `.execute(transaction);
+    if (!guide.rows[0]) throw new SizingDomainError('NOT_FOUND', 'Size guide was not found.');
+
     // Null out the guide reference on product configs but keep the config (system stays)
     await sql`
       update sizing.product_size_configurations
@@ -542,7 +552,7 @@ export async function archiveSizeGuide(
       where id = ${input.id} and organization_id = ${input.organizationId} and status = 'ACTIVE'
     `.execute(transaction);
     if (Number(changed.numAffectedRows) !== 1)
-      throw new SizingDomainError('NOT_FOUND', 'Size guide was not found.');
+      throw new Error('Locked size guide was not archived.');
     await recordSizingAudit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -608,23 +618,35 @@ export async function archiveSizeSystem(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; id: string; actorId: string },
 ): Promise<void> {
-  const usages = await sql<{ count: string }>`
-    select count(*)::text as count
-    from sizing.product_size_configurations
-    where size_system_id = ${input.id} and status = 'ACTIVE'
-  `.execute(db);
-  if (Number(usages.rows[0]?.count ?? 0) > 0)
-    throw new SizingDomainError(
-      'VALIDATION_FAILED',
-      'This size system is used by active product configurations and cannot be archived.',
-    );
-  const changed = await sql`
-    update sizing.size_systems
-    set status = 'ARCHIVED'
-    where id = ${input.id} and organization_id = ${input.organizationId} and status = 'ACTIVE'
-  `.execute(db);
-  if (Number(changed.numAffectedRows) !== 1)
-    throw new SizingDomainError('NOT_FOUND', 'Size system was not found.');
+  await db.transaction().execute(async (transaction) => {
+    // Configuration writes lock this row too, so a system cannot be archived
+    // between validation and a new product configuration insert.
+    const system = await sql<{ id: string }>`
+      select id::text
+      from sizing.size_systems
+      where id = ${input.id} and organization_id = ${input.organizationId} and status = 'ACTIVE'
+      for update
+    `.execute(transaction);
+    if (!system.rows[0]) throw new SizingDomainError('NOT_FOUND', 'Size system was not found.');
+
+    const usages = await sql<{ count: string }>`
+      select count(*)::text as count
+      from sizing.product_size_configurations
+      where size_system_id = ${input.id} and status = 'ACTIVE'
+    `.execute(transaction);
+    if (Number(usages.rows[0]?.count ?? 0) > 0)
+      throw new SizingDomainError(
+        'VALIDATION_FAILED',
+        'This size system is used by active product configurations and cannot be archived.',
+      );
+    const changed = await sql`
+      update sizing.size_systems
+      set status = 'ARCHIVED'
+      where id = ${input.id} and organization_id = ${input.organizationId} and status = 'ACTIVE'
+    `.execute(transaction);
+    if (Number(changed.numAffectedRows) !== 1)
+      throw new Error('Locked size system was not archived.');
+  });
 }
 
 export async function archiveSizingDomain(
@@ -758,44 +780,54 @@ export async function attachSizeGuideToProduct(
     actorId: string;
   },
 ): Promise<void> {
-  const targets = await sql<{
-    product_id: string;
-    system_id: string;
-    sizing_domain_id: string;
-  }>`
-    select product.id as product_id,system.id as system_id,system.sizing_domain_id
-    from catalog.products product
-    join sizing.size_systems system on system.id=${input.sizeSystemId}
-      and system.organization_id=product.organization_id and system.status='ACTIVE'
-    where product.id=${input.productId} and product.organization_id=${input.organizationId}
-  `.execute(db);
-  if (!targets.rows[0])
-    throw new SizingDomainError('NOT_FOUND', 'Product or size system was not found.');
-  const guide = input.sizeGuideId
-    ? await sql<{
-        id: string;
-      }>`select id from sizing.size_guides where id = ${input.sizeGuideId}
-        and organization_id = ${input.organizationId}
-        and sizing_domain_id=${targets.rows[0]!.sizing_domain_id}
-        and current_published_revision_id is not null`.execute(db)
-    : undefined;
-  if (input.sizeGuideId && !guide?.rows[0])
-    throw new SizingDomainError(
-      'VALIDATION_FAILED',
-      'Size guide must be published and belong to this organization.',
-    );
-  await sql`
-    insert into sizing.product_size_configurations (organization_id, product_id, size_system_id, size_guide_id)
-    values (${input.organizationId}, ${input.productId}, ${input.sizeSystemId}, ${input.sizeGuideId ?? null})
-    on conflict (product_id) do update set size_system_id = excluded.size_system_id, size_guide_id = excluded.size_guide_id, status = 'ACTIVE'
-  `.execute(db);
-  await recordSizingAudit(db, {
-    organizationId: input.organizationId,
-    actorId: input.actorId,
-    action: 'PRODUCT_SIZING_SET',
-    targetType: 'PRODUCT',
-    targetId: input.productId,
-    metadata: { sizeSystemId: input.sizeSystemId, sizeGuideId: input.sizeGuideId ?? null },
+  await db.transaction().execute(async (transaction) => {
+    const system = await sql<{
+      id: string;
+      sizing_domain_id: string;
+    }>`
+      select id::text, sizing_domain_id::text
+      from sizing.size_systems
+      where id = ${input.sizeSystemId} and organization_id = ${input.organizationId} and status = 'ACTIVE'
+      for update
+    `.execute(transaction);
+    if (!system.rows[0])
+      throw new SizingDomainError('NOT_FOUND', 'Product or size system was not found.');
+
+    const product = await sql<{ id: string }>`
+      select id::text from catalog.products
+      where id = ${input.productId} and organization_id = ${input.organizationId}
+    `.execute(transaction);
+    if (!product.rows[0])
+      throw new SizingDomainError('NOT_FOUND', 'Product or size system was not found.');
+
+    const guide = input.sizeGuideId
+      ? await sql<{ id: string }>`
+          select id::text from sizing.size_guides where id = ${input.sizeGuideId}
+            and organization_id = ${input.organizationId}
+            and sizing_domain_id = ${system.rows[0].sizing_domain_id}
+            and status = 'ACTIVE'
+            and current_published_revision_id is not null
+          for update
+        `.execute(transaction)
+      : undefined;
+    if (input.sizeGuideId && !guide?.rows[0])
+      throw new SizingDomainError(
+        'VALIDATION_FAILED',
+        'Size guide must be active, published, and belong to the selected sizing domain.',
+      );
+    await sql`
+      insert into sizing.product_size_configurations (organization_id, product_id, size_system_id, size_guide_id)
+      values (${input.organizationId}, ${input.productId}, ${input.sizeSystemId}, ${input.sizeGuideId ?? null})
+      on conflict (product_id) do update set size_system_id = excluded.size_system_id, size_guide_id = excluded.size_guide_id, status = 'ACTIVE'
+    `.execute(transaction);
+    await recordSizingAudit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'PRODUCT_SIZING_SET',
+      targetType: 'PRODUCT',
+      targetId: input.productId,
+      metadata: { sizeSystemId: input.sizeSystemId, sizeGuideId: input.sizeGuideId ?? null },
+    });
   });
 }
 
@@ -822,6 +854,7 @@ export async function getProductSizingConfiguration(
   organizationId: string,
   productId: string,
 ): Promise<{
+  productId: string;
   configured: boolean;
   sizeSystemId: string | null;
   sizeSystemName: string | null;
@@ -855,8 +888,20 @@ export async function getProductSizingConfiguration(
       and config.status = 'ACTIVE'
   `.execute(db);
   const row = result.rows[0];
-  if (!row) return { configured: false, sizeSystemId: null, sizeSystemName: null, sizeGuideId: null, sizeGuideName: null, sizeGuideStatus: null, hasPublishedGuide: false, configStatus: null };
+  if (!row)
+    return {
+      productId,
+      configured: false,
+      sizeSystemId: null,
+      sizeSystemName: null,
+      sizeGuideId: null,
+      sizeGuideName: null,
+      sizeGuideStatus: null,
+      hasPublishedGuide: false,
+      configStatus: null,
+    };
   return {
+    productId,
     configured: true,
     sizeSystemId: row.size_system_id,
     sizeSystemName: row.system_name,
@@ -1516,6 +1561,7 @@ export async function getPublicSizeGuideForProduct(
     where configuration.organization_id = ${organizationId}
       and configuration.product_id = ${productId}
       and configuration.status = 'ACTIVE'
+      and guide.status = 'ACTIVE'
       and revision.status = 'PUBLISHED'
     union all
     -- Category default fallback: used when product has no guide
@@ -1585,7 +1631,10 @@ export async function getPublicSizeGuideForProduct(
     }
   >();
   for (const measurement of records.rows) {
-    const current = sizeRows.get(measurement.row_id) ?? { label: measurement.label, measurements: [] };
+    const current = sizeRows.get(measurement.row_id) ?? {
+      label: measurement.label,
+      measurements: [],
+    };
     current.measurements.push({
       name: measurement.name,
       instructions: measurement.instructions,

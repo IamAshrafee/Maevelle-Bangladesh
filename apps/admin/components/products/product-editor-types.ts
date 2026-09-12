@@ -15,6 +15,7 @@ export interface ProductEditorReferences {
   readonly collections: readonly CatalogVocabularyItemDto[];
   readonly sizeSystems: readonly {
     readonly id: string;
+    readonly sizingDomainId: string;
     readonly name: string;
     readonly status: 'ACTIVE' | 'ARCHIVED';
   }[];
