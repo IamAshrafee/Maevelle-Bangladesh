@@ -7,7 +7,6 @@ import {
   Package,
   AlertTriangle,
   ArrowRight,
-  Plus,
   SlidersHorizontal,
   Truck,
   ClipboardCheck,
@@ -33,19 +32,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+import { cn } from '@/lib/utils';
 
 export function InventoryDashboard() {
   const router = useRouter();
 
   const [stats, setStats] = useState<InventoryStatsDto | null>(null);
-  const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
+  const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
   const [lowStockItems, setLowStockItems] = useState<
-    (InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string })[]
+    readonly (InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string })[]
   >([]);
   const [outOfStockItems, setOutOfStockItems] = useState<
-    (InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string })[]
+    readonly (InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string })[]
   >([]);
-  const [recentMovements, setRecentMovements] = useState<InventoryHistoryDto[]>([]);
+  const [recentMovements, setRecentMovements] = useState<readonly InventoryHistoryDto[]>([]);
   const [activeReservationsCount, setActiveReservationsCount] = useState<number>(0);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -78,9 +79,9 @@ export function InventoryDashboard() {
 
         if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
         if (locRes.status === 'fulfilled') setLocations(locRes.value.data);
-        if (lowRes.status === 'fulfilled') setLowStockItems(lowRes.value.data.items as any);
-        if (outRes.status === 'fulfilled') setOutOfStockItems(outRes.value.data.items as any);
-        if (histRes.status === 'fulfilled') setRecentMovements(histRes.value.data.items as any);
+        if (lowRes.status === 'fulfilled') setLowStockItems(lowRes.value.data.items);
+        if (outRes.status === 'fulfilled') setOutOfStockItems(outRes.value.data.items);
+        if (histRes.status === 'fulfilled') setRecentMovements(histRes.value.data.items);
         if (resRes.status === 'fulfilled') {
           setActiveReservationsCount(resRes.value.data.totalCount ?? resRes.value.data.items.length);
         }
@@ -102,7 +103,8 @@ export function InventoryDashboard() {
       {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Inventory Management</h1>
+          <p className="text-sm font-medium text-primary">Inventory</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Inventory Management</h1>
           <p className="text-sm text-muted-foreground">
             Multi-location ledger, stock availability, transfers, and warehouse operations.
           </p>
@@ -128,85 +130,70 @@ export function InventoryDashboard() {
       {error && <InventoryFeedback isError message={error} />}
 
       {/* Primary KPI Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Total On Hand</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold">
-              {isLoading ? '—' : formatInventoryNumber(stats?.totalOnHand ?? '0')}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Physical ledger units</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Available to Sell</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-emerald-600">
-              {isLoading ? '—' : formatInventoryNumber(stats?.totalAvailable ?? '0')}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Unallocated sellable</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Reserved</CardTitle>
-            <Clock className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-amber-600">
-              {isLoading ? '—' : formatInventoryNumber(stats?.totalReserved ?? '0')}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{activeReservationsCount} active holds</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Damaged / Hold</CardTitle>
-            <ShieldAlert className="h-4 w-4 text-rose-500" />
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-rose-600">
-              {isLoading ? '—' : formatInventoryNumber(stats?.totalDamaged ?? '0')}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Non-sellable condition</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Low Stock SKUs</CardTitle>
-            <TrendingDown className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-amber-600">
-              {isLoading ? '—' : stats?.lowStockCount ?? 0}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">≤ 5 units available</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Out of Stock</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-rose-500" />
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-rose-600">
-              {isLoading ? '—' : stats?.outOfStockCount ?? 0}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">0 units available</p>
-          </CardContent>
-        </Card>
-      </div>
+      <Stats aria-label="Inventory summary" className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        {[
+          {
+            label: 'Total On Hand',
+            value: isLoading ? '—' : formatInventoryNumber(stats?.totalOnHand ?? '0'),
+            description: 'Physical ledger units',
+            icon: Package,
+            iconClass: 'text-muted-foreground',
+            valueClass: undefined,
+          },
+          {
+            label: 'Available to Sell',
+            value: isLoading ? '—' : formatInventoryNumber(stats?.totalAvailable ?? '0'),
+            description: 'Unallocated sellable',
+            icon: CheckCircle2,
+            iconClass: 'text-emerald-500',
+            valueClass: 'text-emerald-600 dark:text-emerald-400',
+          },
+          {
+            label: 'Reserved',
+            value: isLoading ? '—' : formatInventoryNumber(stats?.totalReserved ?? '0'),
+            description: `${activeReservationsCount} active holds`,
+            icon: Clock,
+            iconClass: 'text-amber-500',
+            valueClass: 'text-amber-600 dark:text-amber-400',
+          },
+          {
+            label: 'Damaged / Hold',
+            value: isLoading ? '—' : formatInventoryNumber(stats?.totalDamaged ?? '0'),
+            description: 'Non-sellable condition',
+            icon: ShieldAlert,
+            iconClass: 'text-rose-500',
+            valueClass: 'text-rose-600 dark:text-rose-400',
+          },
+          {
+            label: 'Low Stock SKUs',
+            value: isLoading ? '—' : stats?.lowStockCount ?? 0,
+            description: '≤ 5 units available',
+            icon: TrendingDown,
+            iconClass: 'text-amber-500',
+            valueClass: 'text-amber-600 dark:text-amber-400',
+          },
+          {
+            label: 'Out of Stock',
+            value: isLoading ? '—' : stats?.outOfStockCount ?? 0,
+            description: '0 units available',
+            icon: AlertTriangle,
+            iconClass: 'text-rose-500',
+            valueClass: 'text-rose-600 dark:text-rose-400',
+          },
+        ].map((card) => {
+          const Icon = card.icon;
+          return (
+            <StatsCard key={card.label} className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <StatsTitle>{card.label}</StatsTitle>
+                <StatsValue className={card.valueClass}>{card.value}</StatsValue>
+                <StatsDescription>{card.description}</StatsDescription>
+              </div>
+              <Icon className={cn('h-4 w-4 shrink-0 mt-0.5', card.iconClass)} />
+            </StatsCard>
+          );
+        })}
+      </Stats>
 
       {/* Main Operations Grid */}
       <div className="grid gap-6 lg:grid-cols-3">

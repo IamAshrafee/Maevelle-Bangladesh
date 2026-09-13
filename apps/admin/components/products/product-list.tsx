@@ -5,7 +5,9 @@ import {
   ArrowRight,
   CheckCircle2,
   CircleAlert,
+  FileText,
   ImageIcon,
+  Package,
   PackagePlus,
   RefreshCw,
 } from 'lucide-react';
@@ -23,10 +25,11 @@ import type {
 import { ProductTypeManager } from '@/components/catalog-product-types/product-type-manager';
 import { productReadinessResolutionHref } from '@/components/products/product-workspace-links';
 import { StatusBadge } from '@/components/status-badge';
-import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
 import { SearchInput } from '@/components/ui/search-input';
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+import { cn } from '@/lib/utils';
 import { catalogData, formatCatalogMoney } from '@/lib/catalog/api';
 
 const statuses = ['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'] as const;
@@ -215,15 +218,9 @@ export function ProductList() {
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <Breadcrumb
-            items={[
-              { label: 'Catalog', href: '/products' },
-              { label: 'Products', current: true },
-            ]}
-            className="mb-2"
-          />
-          <h1 className="text-balance text-2xl font-semibold tracking-tight">Products</h1>
-          <p className="mt-1 max-w-2xl text-pretty text-sm text-muted-foreground">
+          <p className="text-sm font-medium text-primary">Catalog</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Create, prepare, publish, and maintain every sellable item from one catalog.
           </p>
         </div>
@@ -249,19 +246,54 @@ export function ProductList() {
         </div>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-2 md:grid-cols-4" aria-label="Catalog summary">
+      <Stats aria-label="Catalog summary">
         {[
-          ['All Products', summary?.total ?? '—'],
-          ['Published', summary?.published ?? '—'],
-          ['Drafts', summary?.drafts ?? '—'],
-          ['Archived', summary?.archived ?? '—'],
-        ].map(([label, value]) => (
-          <div className="rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/10" key={label}>
-            <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
-          </div>
-        ))}
-      </section>
+          {
+            label: 'All Products',
+            value: summary?.total ?? '—',
+            description: 'Total catalog records',
+            icon: Package,
+            iconClass: 'text-muted-foreground',
+            valueClass: undefined,
+          },
+          {
+            label: 'Published',
+            value: summary?.published ?? '—',
+            description: 'Live on storefront',
+            icon: CheckCircle2,
+            iconClass: 'text-emerald-500',
+            valueClass: 'text-emerald-600 dark:text-emerald-400',
+          },
+          {
+            label: 'Drafts',
+            value: summary?.drafts ?? '—',
+            description: 'Unpublished in progress',
+            icon: FileText,
+            iconClass: 'text-amber-500',
+            valueClass: 'text-amber-600 dark:text-amber-400',
+          },
+          {
+            label: 'Archived',
+            value: summary?.archived ?? '—',
+            description: 'Historical records',
+            icon: Archive,
+            iconClass: 'text-muted-foreground',
+            valueClass: undefined,
+          },
+        ].map((card) => {
+          const Icon = card.icon;
+          return (
+            <StatsCard key={card.label} className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <StatsTitle>{card.label}</StatsTitle>
+                <StatsValue className={card.valueClass}>{card.value}</StatsValue>
+                <StatsDescription>{card.description}</StatsDescription>
+              </div>
+              <Icon className={cn('h-4 w-4 shrink-0 mt-0.5', card.iconClass)} />
+            </StatsCard>
+          );
+        })}
+      </Stats>
 
       <section className="space-y-3" aria-label="Product filters">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center">

@@ -9,7 +9,6 @@ import type { OrderSummaryDto, PaginatedEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
-import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -87,15 +86,9 @@ export function OrdersList() {
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <Breadcrumb
-            items={[
-              { label: 'Commerce', href: '/orders' },
-              { label: 'Orders', current: true },
-            ]}
-            className="mb-2"
-          />
-          <h1 className="text-balance text-2xl font-semibold tracking-tight">Orders</h1>
-          <p className="mt-1 max-w-2xl text-pretty text-sm text-muted-foreground">
+          <p className="text-sm font-medium text-primary">Commerce</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Orders</h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Manage customer orders, track payments, and initiate fulfillments.
           </p>
         </div>

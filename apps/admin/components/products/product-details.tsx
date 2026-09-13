@@ -13,7 +13,6 @@ import {
   RotateCcw,
   Tags,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -31,6 +30,8 @@ import { storefrontProductHref } from '@/components/products/product-workspace-l
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+import { cn } from '@/lib/utils';
 import { catalogData, formatCatalogMoney, productMediaUrl } from '@/lib/catalog/api';
 
 const sections = ['overview', 'variants', 'media', 'organization', 'content'] as const;
@@ -321,35 +322,62 @@ export function ProductDetails({ productId }: { productId: string }) {
         </div>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-2 md:grid-cols-5" aria-label="Product summary">
-        {(
-          [
-            ['Variants', workspace.operationalSignals.activeVariantCount, Boxes],
-            [
-              'Priced',
-              `${workspace.operationalSignals.pricedVariantCount}/${workspace.operationalSignals.activeVariantCount}`,
-              Tags,
-            ],
-            [
-              'Available Variants',
-              workspace.operationalSignals.availableVariantCount,
-              CheckCircle2,
-            ],
-            ['Public Images', workspace.operationalSignals.publicMediaCount, ImageIcon],
-            ['Categories', workspace.operationalSignals.categoryCount, PackageOpen],
-          ] satisfies ReadonlyArray<readonly [string, string | number, LucideIcon]>
-        ).map(([label, value, Icon]) => (
-          <div
-            className="rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/10"
-            key={String(label)}
-          >
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <Icon className="size-3.5" aria-hidden="true" /> {label}
-            </div>
-            <p className="mt-1 text-xl font-semibold tabular-nums">{String(value)}</p>
-          </div>
-        ))}
-      </section>
+      <Stats aria-label="Product summary" className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+        {[
+          {
+            label: 'Variants',
+            value: workspace.operationalSignals.activeVariantCount,
+            description: 'Active SKUs defined',
+            icon: Boxes,
+            iconClass: 'text-muted-foreground',
+            valueClass: undefined,
+          },
+          {
+            label: 'Priced',
+            value: `${workspace.operationalSignals.pricedVariantCount}/${workspace.operationalSignals.activeVariantCount}`,
+            description: 'Variants with price',
+            icon: Tags,
+            iconClass: 'text-muted-foreground',
+            valueClass: undefined,
+          },
+          {
+            label: 'Available Variants',
+            value: workspace.operationalSignals.availableVariantCount,
+            description: 'Sellable stock',
+            icon: CheckCircle2,
+            iconClass: 'text-emerald-500',
+            valueClass: 'text-emerald-600 dark:text-emerald-400',
+          },
+          {
+            label: 'Public Images',
+            value: workspace.operationalSignals.publicMediaCount,
+            description: 'Published assets',
+            icon: ImageIcon,
+            iconClass: 'text-muted-foreground',
+            valueClass: undefined,
+          },
+          {
+            label: 'Categories',
+            value: workspace.operationalSignals.categoryCount,
+            description: 'Taxonomy assignments',
+            icon: PackageOpen,
+            iconClass: 'text-muted-foreground',
+            valueClass: undefined,
+          },
+        ].map((card) => {
+          const Icon = card.icon;
+          return (
+            <StatsCard key={card.label} className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <StatsTitle>{card.label}</StatsTitle>
+                <StatsValue className={card.valueClass}>{card.value}</StatsValue>
+                <StatsDescription>{card.description}</StatsDescription>
+              </div>
+              <Icon className={cn('h-4 w-4 shrink-0 mt-0.5', card.iconClass)} />
+            </StatsCard>
+          );
+        })}
+      </Stats>
 
       <nav className="flex gap-1 overflow-x-auto border-b" aria-label="Product detail sections">
         {sections.map((item) => (

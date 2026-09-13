@@ -9,6 +9,7 @@ import type {
   CatalogVocabularyKindDto,
 } from '@maevelle/contracts';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,8 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -127,12 +128,12 @@ export function ClassificationDialog(props: {
         </DialogHeader>
         <form className="grid gap-5" id="classification-form" onSubmit={submit}>
           {props.error ? (
-            <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
-              {props.error}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{props.error}</AlertDescription>
+            </Alert>
           ) : null}
-          <div className="grid gap-2">
-            <Label htmlFor="classification-name">Name</Label>
+          <Field>
+            <FieldLabel htmlFor="classification-name">Name</FieldLabel>
             <Input
               autoFocus
               id="classification-name"
@@ -146,14 +147,9 @@ export function ClassificationDialog(props: {
                 if (!handleEdited) setHandle(slugify(next));
               }}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label
-              htmlFor="classification-handle"
-              title="A unique, URL-safe identifier for this item."
-            >
-              Slug
-            </Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="classification-handle">Slug</FieldLabel>
             <Input
               id="classification-handle"
               maxLength={160}
@@ -165,15 +161,11 @@ export function ClassificationDialog(props: {
                 setHandle(slugify(event.target.value));
               }}
             />
-          </div>
+            <FieldDescription>A unique, URL-safe identifier for this item.</FieldDescription>
+          </Field>
           {!props.categoryMode ? (
-            <div className="grid gap-2">
-              <Label
-                htmlFor="classification-description"
-                title="Visible to buyers when browsing collections or used by merchandisers internally."
-              >
-                Description
-              </Label>
+            <Field>
+              <FieldLabel htmlFor="classification-description">Description</FieldLabel>
               <Textarea
                 id="classification-description"
                 maxLength={1000}
@@ -182,17 +174,15 @@ export function ClassificationDialog(props: {
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />
-            </div>
+              <FieldDescription>
+                Visible to buyers when browsing collections or used by merchandisers internally.
+              </FieldDescription>
+            </Field>
           ) : null}
           {props.categoryMode ? (
             <>
-              <div className="grid gap-2">
-                <Label
-                  htmlFor="classification-parent"
-                  title="Leave empty to create a top-level category."
-                >
-                  Parent category
-                </Label>
+              <Field>
+                <FieldLabel htmlFor="classification-parent">Parent category</FieldLabel>
                 <Select
                   value={parentCategoryId}
                   onValueChange={(value) => setParentCategoryId(value ?? 'NONE')}
@@ -211,14 +201,12 @@ export function ClassificationDialog(props: {
                       ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label
-                  htmlFor="classification-size-guide"
-                  title="Products in this category inherit this size guide unless specifically overridden."
-                >
-                  Default Size Guide
-                </Label>
+                <FieldDescription>
+                  Select a parent category to nest under, or leave as top-level.
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="classification-size-guide">Default Size Guide</FieldLabel>
                 <Select
                   value={defaultSizeGuideId}
                   onValueChange={(value) => setDefaultSizeGuideId(value ?? 'NONE')}
@@ -235,12 +223,15 @@ export function ClassificationDialog(props: {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+                <FieldDescription>
+                  Products in this category inherit this size guide unless specifically overridden.
+                </FieldDescription>
+              </Field>
             </>
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="classification-status">Status</Label>
+            <Field>
+              <FieldLabel htmlFor="classification-status">Status</FieldLabel>
               <Select
                 value={status}
                 onValueChange={(value) => setStatus(value as CatalogCategoryStatusDto)}
@@ -254,12 +245,10 @@ export function ClassificationDialog(props: {
                   <SelectItem value="ARCHIVED">Archived</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
             {props.categoryMode || props.kind === 'COLLECTION' ? (
-              <div className="grid gap-2">
-                <Label htmlFor="classification-position" title="Smaller numbers appear first.">
-                  Display order
-                </Label>
+              <Field>
+                <FieldLabel htmlFor="classification-position">Display order</FieldLabel>
                 <Input
                   id="classification-position"
                   min={0}
@@ -268,7 +257,8 @@ export function ClassificationDialog(props: {
                   value={position}
                   onChange={(event) => setPosition(Math.max(0, Number(event.target.value) || 0))}
                 />
-              </div>
+                <FieldDescription>Smaller numbers appear first.</FieldDescription>
+              </Field>
             ) : null}
           </div>
         </form>

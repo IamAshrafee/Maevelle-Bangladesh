@@ -1,7 +1,7 @@
 import { AlertCircle, FileBox } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 
 export const PAGE_SIZE = 25;
 
@@ -11,21 +11,17 @@ export function InventoryStatCards({
   stats: { label: string; value: string | number; description?: string }[];
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <Stats aria-label="Inventory statistics">
       {stats.map((stat, i) => (
-        <Card key={i}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{stat.label}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stat.value}</div>
-            {stat.description ? (
-              <p className="text-xs text-muted-foreground">{stat.description}</p>
-            ) : null}
-          </CardContent>
-        </Card>
+        <StatsCard key={i}>
+          <StatsTitle>{stat.label}</StatsTitle>
+          <StatsValue>{stat.value}</StatsValue>
+          {stat.description ? (
+            <StatsDescription>{stat.description}</StatsDescription>
+          ) : null}
+        </StatsCard>
       ))}
-    </div>
+    </Stats>
   );
 }
 

@@ -7,7 +7,6 @@ import {
   FolderTree,
   Pencil,
   Plus,
-  Search,
   Tags,
 } from 'lucide-react';
 import { useDeferredValue, useEffect, useState } from 'react';
@@ -24,11 +23,19 @@ import type {
 
 import { fetchSizeGuides } from '@/lib/sizing/api';
 
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import { SearchInput } from '@/components/ui/search-input';
 import {
   Select,
   SelectContent,
@@ -36,6 +43,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
 import {
   Table,
   TableBody,
@@ -301,19 +310,22 @@ export function CatalogClassificationConsole() {
             <p className="text-sm text-muted-foreground">{currentTab.help}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="w-full pl-9 sm:w-72"
-                placeholder={`Search ${currentTab.label.toLowerCase()}…`}
-                type="search"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setPage(1);
-                }}
-              />
-            </div>
+            <SearchInput
+              className="w-full sm:w-72"
+              placeholder={`Search ${currentTab.label.toLowerCase()}…`}
+              value={query}
+              onChange={(val) => {
+                setQuery(val);
+                setPage(1);
+              }}
+              onClear={() => {
+                setQuery('');
+                setPage(1);
+              }}
+              shortcut="/"
+              isLoading={deferredQuery !== query}
+              aria-label={`Search ${currentTab.label.toLowerCase()}`}
+            />
             <Select
               value={status}
               onValueChange={(value) => {
@@ -335,9 +347,11 @@ export function CatalogClassificationConsole() {
         </CardHeader>
         <CardContent className="px-0">
           {message ? (
-            <p className="m-4 rounded-md bg-destructive/10 p-3 text-destructive" role="alert">
-              {message}
-            </p>
+            <div className="m-4">
+              <Alert variant="destructive">
+                <AlertDescription>{message}</AlertDescription>
+              </Alert>
+            </div>
           ) : null}
           <Table>
             <TableHeader>
@@ -432,18 +446,84 @@ export function CatalogClassificationConsole() {
               })}
               {!loading && rows.length === 0 ? (
                 <TableRow>
-                  <TableCell className="h-36 text-center text-muted-foreground" colSpan={7}>
-                    No {currentTab.label.toLowerCase()} match these filters. Create the first one or
-                    clear the filters.
+                  <TableCell className="py-12" colSpan={7}>
+                    <Empty className="py-4">
+                      <EmptyMedia variant="icon">
+                        <currentTab.icon />
+                      </EmptyMedia>
+                      <EmptyHeader>
+                        <EmptyTitle>No {currentTab.label.toLowerCase()} found</EmptyTitle>
+                        <EmptyDescription>
+                          {query || status !== 'ALL'
+                            ? 'No records match your active filters. Try searching with different terms or resetting filters.'
+                            : `Get started by creating your first ${currentTab.label.slice(0, -1).toLowerCase()}.`}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <EmptyContent>
+                        {query || status !== 'ALL' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setQuery('');
+                              setStatus('ALL');
+                              setPage(1);
+                            }}
+                          >
+                            Reset filters
+                          </Button>
+                        ) : (
+                          <Button size="sm" onClick={openCreate}>
+                            <Plus /> Create {currentTab.label.slice(0, -1)}
+                          </Button>
+                        )}
+                      </EmptyContent>
+                    </Empty>
                   </TableCell>
                 </TableRow>
               ) : null}
               {loading ? (
-                <TableRow>
-                  <TableCell className="h-28 text-center text-muted-foreground" colSpan={7}>
-                    Loading {currentTab.label.toLowerCase()}…
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 5 }).map((_, index) => (
+                  <TableRow key={`skeleton-${index}`}>
+                    <TableCell>
+                      <div className="space-y-1.5 min-w-56">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </TableCell>
+                    {tab === 'CATEGORY' ? (
+                      <>
+                        <TableCell>
+                          <Skeleton className="h-4 w-8" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-8" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-5 w-20" />
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell>
+                          <Skeleton className="h-4 w-40" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-8" />
+                        </TableCell>
+                      </>
+                    )}
+                    <TableCell className="text-right">
+                      <Skeleton className="size-8 ml-auto rounded-md" />
+                    </TableCell>
+                  </TableRow>
+                ))
               ) : null}
             </TableBody>
           </Table>

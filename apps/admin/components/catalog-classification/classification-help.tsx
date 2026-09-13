@@ -1,6 +1,10 @@
 'use client';
 
+import { Boxes, CalendarHeart, FolderTree, Sparkles, Tags } from 'lucide-react';
+
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -25,36 +29,59 @@ export function ClassificationHelp(props: {
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm sm:grid-cols-2">
-          <div className="rounded-lg border p-4">
-            <strong>Category</strong>
-            <p className="mt-1 text-muted-foreground">
-              Where customers browse. Example: Women / Clothing / Dresses.
-            </p>
-          </div>
-          <div className="rounded-lg border p-4">
-            <strong>Tag</strong>
-            <p className="mt-1 text-muted-foreground">
-              A flexible label. Example: bestseller or limited-stock.
-            </p>
-          </div>
-          <div className="rounded-lg border p-4">
-            <strong>Occasion or event</strong>
-            <p className="mt-1 text-muted-foreground">
-              When the item is suitable. Example: Wedding, Eid, or Office.
-            </p>
-          </div>
-          <div className="rounded-lg border p-4">
-            <strong>Collection</strong>
-            <p className="mt-1 text-muted-foreground">
-              A curated campaign group. Example: Eid 2026 or Summer Edit.
-            </p>
-          </div>
+          <Card className="p-4 gap-1.5">
+            <CardHeader className="p-0 gap-1.5">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <FolderTree className="size-4 text-primary" />
+                Category
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Where customers browse. Example: Women / Clothing / Dresses.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="p-4 gap-1.5">
+            <CardHeader className="p-0 gap-1.5">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Tags className="size-4 text-primary" />
+                Tag
+              </CardTitle>
+              <CardDescription className="text-xs">
+                A flexible label. Example: bestseller or limited-stock.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="p-4 gap-1.5">
+            <CardHeader className="p-0 gap-1.5">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <CalendarHeart className="size-4 text-primary" />
+                Occasion or event
+              </CardTitle>
+              <CardDescription className="text-xs">
+                When the item is suitable. Example: Wedding, Eid, or Office.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="p-4 gap-1.5">
+            <CardHeader className="p-0 gap-1.5">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Boxes className="size-4 text-primary" />
+                Collection
+              </CardTitle>
+              <CardDescription className="text-xs">
+                A curated campaign group. Example: Eid 2026 or Summer Edit.
+              </CardDescription>
+            </CardHeader>
+          </Card>
         </div>
-        <p className="rounded-lg bg-muted p-4 text-sm">
-          Real scenario: a silk dress can belong to <strong>Dresses</strong>, use the tag{' '}
-          <strong>hand-finished</strong>, suit the <strong>Wedding</strong> occasion, and appear in
-          the <strong>Festive Edit</strong> collection.
-        </p>
+        <Alert>
+          <Sparkles className="size-4 text-amber-500" />
+          <AlertDescription className="text-xs leading-relaxed">
+            Real scenario: a silk dress can belong to <strong>Dresses</strong>, use the tag{' '}
+            <strong>hand-finished</strong>, suit the <strong>Wedding</strong> occasion, and appear in
+            the <strong>Festive Edit</strong> collection.
+          </AlertDescription>
+        </Alert>
         <DialogFooter>
           <Button onClick={() => props.onOpenChange(false)}>Got it</Button>
         </DialogFooter>
