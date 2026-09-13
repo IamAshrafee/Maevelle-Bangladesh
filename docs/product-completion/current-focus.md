@@ -2,53 +2,54 @@
 
 ## Active Area
 
-Admin Product Management Workspace
+Admin Inventory Operations
 
 ## Why Now
 
-Products are the upstream operating record for merchandising and customer
-discovery. The workspace received concentrated recent changes after the former
-tracker was deleted, so its real workflow and remaining gaps are uncertain.
-It is bounded enough to establish the V2 assessment process without assuming
-that the historical Catalog stage remains current.
+The user explicitly selected Inventory for deep completion work. Current source
+shows a strong locked quantity ledger and several real cross-domain workflows,
+but physical quantity and cost provenance diverge during Transfers, condition
+changes, adjustments, Stocktakes, and returned-stock resale. Stocktake posting
+also has an unsafe current-balance read/lock order. Those integrity boundaries
+must be repaired before expanding the Admin experience.
 
 ## Current Status / Substage
 
-`PLANNED` — `VERIFICATION_AND_OWNER_REVIEW`
+`PLANNED` — `INVENTORY_FOUNDATION_INTEGRITY`
 
 ## Evidence Already Known
 
-All four implementation substages are complete. The organization/sizing review
-now serializes configuration writes with guide/system archival, rejects inactive
-or cross-domain guide selection before a configuration write, and defensively
-withholds archived-guide data from the Storefront. Product Details presents
-product-specific sizing context and links to the owning Sizing guide without
-moving Sizing authority into Catalog. Eighteen focused tests, affected
-Catalog/API/Admin/Storefront TypeScript, executable-surface lint, and an Admin
-production build pass.
+The current-head assessment is recorded in
+`areas/admin-inventory-operations/inventory-assessment-and-roadmap.md` at
+baseline `b1f5d08`. It traces schema, services, APIs, Admin pages, Catalog,
+Orders, Fulfillment/Delivery, Supply/Receiving, Returns, Costing, Search,
+Analytics, permissions, audit, outbox, and tests. Typecheck and architecture
+checks passed; 38 focused integration tests passed; all migrations through
+`2800_supply_operations` are applied locally. No Inventory implementation was
+changed during the assessment.
 
 ## Immediate Objective
 
-Run the final targeted Product Management verification and owner-review gate.
-This is the point to determine whether current source and local evidence earn
-`VERIFIED_COMPLETE`, not an authorization to start unrelated Product work.
+Make every existing physical Inventory movement preserve explainable quantity
+and cost truth, and make Stocktake reconciliation safe under concurrent
+movements, before broad UI work.
 
 ## Next Exact Action
 
-Execute `VERIFICATION_AND_OWNER_REVIEW`: run targeted final Product Management
-database/API/Admin/Storefront proof, attempt responsive local browser review
-only with safe local credentials/data, inspect final tracker/Git state, and
-determine whether the area earns `VERIFIED_COMPLETE` or needs an exact follow-up.
-Do not begin unrelated Product implementation.
+Add failing regression proof for Transfer/condition/adjustment/Stocktake/return
+resale cost-provenance gaps and the concurrent Stocktake posting race. Then
+implement the smallest coherent cost-safe movement and Stocktake locking
+checkpoint, expand integrity checks, and close it with focused verification.
 
 ## Important Constraints
 
-Catalog owns product identity and publication. Pricing, inventory, media, and
-sizing retain their own authoritative writes. Preserve tenant/capability checks,
-transactions, optimistic versions, audit, and outbox behavior.
+Extend the existing Inventory ledger and projections; do not create a parallel
+stock system. Preserve tenant/capability checks, historical movement evidence,
+transactions, optimistic versions, idempotency, audit, outbox, Order/Fulfillment
+locking, Receiving atomicity, and Costing provenance. Keep the first checkpoint
+focused on correctness, not the broad Admin redesign.
 
 ## Blockers / Owner Review
 
-No technical blocker is recorded. Fresh local container rebuilds invalidated the
-saved authenticated Admin session, so owner visual review and responsive browser
-proof remain open; no bootstrap credential was exposed or injected.
+No technical blocker is recorded. Authenticated visual/owner review was not part
+of the source assessment and remains a later UX verification gate.

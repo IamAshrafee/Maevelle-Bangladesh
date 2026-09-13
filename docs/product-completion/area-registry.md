@@ -5,12 +5,12 @@ means meaningful current implementation exists; it does not mean acceptance.
 
 | Area | Current evidence status | Primary source evidence |
 | --- | --- | --- |
-| Admin Product Management Workspace | `ACTIVE_IMPLEMENTATION` | Current-head assessment recorded in `areas/admin-product-management-workspace`; `apps/admin/app/products`, `apps/admin/components/products`, Catalog API/database modules |
+| Admin Product Management Workspace | `VERIFICATION_PENDING` | Four implementation substages are complete; responsive/owner verification remains pending in `areas/admin-product-management-workspace` |
 | Catalog and classification | `CODE_SUBSTANTIAL` | `catalog.*`, `catalog-classification.*`, public catalog routes |
 | Media | `CODE_SUBSTANTIAL` | `media.*`, Admin Media, product-media forms |
 | Sizing | `CODE_SUBSTANTIAL` | `sizing.*`, Admin sizing routes, PDP size guide |
 | Pricing and promotions | `CODE_SUBSTANTIAL` | `pricing.*`, `promotions.*`, Admin pages |
-| Warehouse and inventory | `CODE_SUBSTANTIAL` | `warehouse.*`, `inventory.*`, Admin inventory routes |
+| Warehouse and inventory | `ACTIVE_ASSESSMENT_COMPLETE` | Current-head report and roadmap in `areas/admin-inventory-operations`; `warehouse.*`, `inventory.*`, Admin Inventory, Orders, Supply, Fulfillment, Returns, Costing, Search and Analytics traces |
 | Customers and geography | `CODE_SUBSTANTIAL` | `customers.*`, `geography.*`, Admin customer routes |
 | Cart, checkout and orders | `CODE_SUBSTANTIAL` | `cart.*`, `orders.*`, Storefront and Admin order routes |
 | Payments and refunds | `CODE_SUBSTANTIAL` | `payments.*`, payment/admin routes |
