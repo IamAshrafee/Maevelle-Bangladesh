@@ -6,49 +6,45 @@ Admin Inventory Operations
 
 ## Why Now
 
-Inventory Workspace and Traceability is complete. Staff can now see authoritative
-stock positions and explain movement history across Locations, conditions,
-Reservations, Transfers, and inbound Supply. Reservation ownership and generic
-expiry are now safe. The remaining lifecycle gap is policy-driven manual-payment
-timeout: Maevelle needs an explicit configurable window and a race-safe terminal
-path rather than an invented global countdown.
+Inventory Workspace, traceability, and Reservation/Order lifecycle completion
+are complete. The next operational gap is internal Transfer execution: draft
+correction, reliable retry, selective receiving, and explicit closure for every
+unit dispatched but not received.
 
 ## Current Status / Substage
 
-`IN_PROGRESS` — `INVENTORY_RESERVATION_ORDER_LIFECYCLE`
+`PLANNED` — `INVENTORY_TRANSFER_OPERATIONS_COMPLETION`
 
 ## Evidence Already Known
 
-The ownership/expiry checkpoint is recorded in
+The completed Reservation lifecycle is recorded in
 `areas/admin-inventory-operations/reservation-lifecycle-checkpoint.md`. Commit
-`962cf74` prevents unsafe direct release, coordinates Order cancellation with
-open Fulfillment work, blocks cancellation after dispatch, reaps only explicitly
-expiring standalone holds, and exposes real ownership/allocation state in Admin.
+`373d7e8` adds configurable manual-payment deadlines, race-safe timeout
+cancellation, Payment review exceptions, stale-owner integrity checks, and the
+existing safe release/fulfillment coordination.
 
 ## Immediate Objective
 
-Ensure every Reservation has one explicit business owner, cannot reduce ATS
-indefinitely after its owner becomes terminal, and can be consumed, released, or
-expired exactly once without racing Order, Payment, cancellation, or Fulfillment
-work.
+Make Warehouse Transfers operationally complete from editable Draft through
+dispatch, selective receipt, and authorized discrepancy closure while preserving
+owned quantity, condition, value, and history in transit.
 
 ## Next Exact Action
 
-Define an organization-configured timeout for manual-payment Orders, then make
-payment timeout race safely with verification, Order cancellation, and
-Fulfillment. Surface payment/stale-owner exceptions and add terminal-owner and
-allocation integrity checks plus API authorization coverage.
+Revalidate Transfer contracts and current Admin workflows at `373d7e8`. First
+close idempotent create and versioned Draft-line editing, including scalable
+SKU selection and capability-valid Location choices; then proceed to selective
+receipt and shortage/damage/loss closure.
 
 ## Important Constraints
 
-Preserve Inventory's locked ATS check, atomic Order placement, existing
-idempotency/audit/outbox behavior, tenant isolation, and Fulfillment consumption
-boundary. Do not add cart-level holds. COD policy must not expire legitimate
-confirmed Orders, and recovery actions must never release stock already claimed
-by a live Fulfillment.
+Preserve the existing Warehouse Transfer authority, Inventory movement ledger,
+Costing provenance, tenant isolation, capability authorization, idempotency,
+optimistic concurrency, audit, and outbox behavior. Posted dispatch/receipt
+movements are immutable facts; corrections must be new explainable movements.
 
 ## Blockers / Owner Review
 
-No technical blocker is recorded. Authenticated visual/owner review of the Phase
-2 workspace remains a distinct review gate and does not weaken its automated
-contract/integrity evidence.
+No technical blocker is recorded. Authenticated visual/owner review remains a
+distinct review gate and does not weaken the automated transaction and contract
+evidence.

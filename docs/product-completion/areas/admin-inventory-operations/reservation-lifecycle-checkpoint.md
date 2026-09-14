@@ -1,10 +1,10 @@
 # Reservation and Order Lifecycle Checkpoint
 
-**Checkpoint:** `962cf74`
+**Checkpoint:** `373d7e8`
 
 **Substage:** `INVENTORY_RESERVATION_ORDER_LIFECYCLE`
 
-**State:** in progress
+**State:** complete
 
 ## Policy established
 
@@ -17,6 +17,9 @@
 | Standalone hold whose explicit expiry has passed | Worker releases it once and records `EXPIRED` with system audit/outbox evidence | Inventory worker |
 | Order-owned hold containing an expiry timestamp | Generic expiry deliberately ignores it | Orders |
 | Rejected manual-payment attempt | Reservation remains owned by the active Order because rejection is an attempt outcome and the READY intent still permits resubmission | Payments / Orders |
+| Manual-payment Order before its configured deadline | Reservation remains owned by the pending Order | Payments / Orders |
+| Manual-payment reference awaiting review after the deadline | Automatic timeout pauses; staff see an overdue-review exception and must verify or reject the claim | Payments |
+| Unclaimed or rejected manual-payment Order after the deadline | Worker cancels the pending Order and its READY intent, cancels open Fulfillment work, and releases stock exactly once | Orders coordinating Payments, Fulfillment, and Inventory |
 | COD Order | No automatic expiry is invented; cancellation or dispatch is required | Orders |
 
 ## Completed in this checkpoint
@@ -38,32 +41,50 @@
   than the Order Line source reference, order-owned rows no longer offer the
   unsafe Release command, and retrying a standalone release reuses its command
   identity.
+- Each active manual wallet method now requires an organization-configured
+  payment window from 15 minutes through seven days. COD deliberately has no
+  automatic expiry.
+- Order placement snapshots the policy into a Payment Intent deadline. The
+  worker finds expired unpaid intents, while Order cancellation re-locks and
+  revalidates the exact intent inside the cancellation transaction. Payment
+  verification locks that same intent, so only verification or timeout can win.
+- Submitted payment references pause automatic timeout until staff verify or
+  reject them. Rejected claims retain their evidence while the still-expired
+  obligation becomes eligible for cancellation.
+- Reservation reads now expose Payment state and deadline and classify terminal
+  owner, held Order, rejected Payment, overdue review, and expired standalone
+  hold exceptions. Admin displays those conditions directly rather than asking
+  staff to infer them from source labels.
+- Integrity verification now detects active Reservations owned by terminal
+  Orders and allocation/header identity or quantity mismatches.
+- Protected Reservation list/release and Payment policy routes have explicit API
+  authentication regression coverage. Existing capability checks remain
+  authoritative on the handlers.
 
 ## Verification
 
-- Database, Admin, and Worker focused TypeScript checks passed.
-- 36 focused tests passed across Inventory, Orders, Fulfillment/Delivery, and
-  Worker lifecycle.
-- Focused lint passed for all touched implementation/test files. The shared
-  contracts file still reports five pre-existing `no-explicit-any` findings in
-  unrelated analytics contracts.
-- A fresh temporary PostgreSQL database successfully applied the complete
-  migration baseline including the revised Reservation indexes, then was
-  removed.
-- The repository-wide typecheck remains blocked by the unrelated in-progress
-  `apps/api/src/routes/sizing.ts` worktree changes; no Inventory failure was
-  reported by the focused checks.
+- 45 focused PostgreSQL tests passed across Inventory, Orders,
+  Fulfillment/Delivery, and Payments, including final-unit concurrency,
+  timeout/review/rejection behavior, cancellation, tenant isolation,
+  idempotency, rollback, and integrity exceptions.
+- Six API foundation tests passed, including unauthenticated denial for the
+  Reservation list/release and Payment policy routes.
+- Database build and focused Admin, API, and Worker TypeScript checks passed.
+- Focused lint and `git diff --check` passed.
+- A freshly recreated disposable `maevelle_test` database successfully applied
+  the complete migration baseline, including the Payment policy constraint and
+  expiry index.
+- Authenticated visual/owner review remains a separate product review gate; no
+  browser verification was required for the transaction-policy closeout.
 
-## Remaining Phase 3 work
+## Phase 3 closeout
 
-- Add an explicit organization-configured timeout policy for manual-payment
-  Orders before setting `payment_intents.expires_at`; repository UX architecture
-  explicitly forbids inventing a countdown.
-- Implement timeout-versus-payment-verification serialization and automatic
-  Order cancellation only after that policy exists.
-- Surface payment waiting/review/rejected state and stale active Order holds as
-  operational exceptions in Reservations.
-- Extend Inventory integrity checks for active Reservations whose Order owner is
-  terminal or whose allocation totals disagree with the Reservation header.
-- Add API authorization/contract coverage for the enriched Reservation response
-  and protected release command.
+Phase 3 is complete at `373d7e8`. Every supported active Reservation now has an
+explicit owner or expiry path; order-owned release is controlled by the Order
+lifecycle; manual-payment timeout is configured rather than invented; timeout
+and verification serialize on the authoritative Payment Intent; and stale
+ownership is visible both operationally and through integrity checks.
+
+The next roadmap phase is `INVENTORY_TRANSFER_OPERATIONS_COMPLETION`. It must
+extend the existing Warehouse Transfer authority rather than introduce another
+stock movement system.
