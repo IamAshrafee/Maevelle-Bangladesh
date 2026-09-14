@@ -471,6 +471,7 @@ async function beginIdempotent(
   input: {
     organizationId: string;
     actorId: string;
+    principalType?: 'USER' | 'SYSTEM';
     operation: string;
     idempotencyKey: string;
     request: unknown;
@@ -479,7 +480,7 @@ async function beginIdempotent(
   try {
     const record = await claimIdempotencyRecord(transaction, {
       organizationId: input.organizationId,
-      principalType: 'USER',
+      principalType: input.principalType ?? 'USER',
       principalId: input.actorId,
       operationType: input.operation,
       idempotencyKey: input.idempotencyKey,
@@ -511,7 +512,8 @@ async function emit(
   transaction: Transaction<DatabaseSchema>,
   input: {
     organizationId: string;
-    actorId: string;
+    actorId?: string;
+    actorType?: 'USER' | 'SYSTEM';
     action: string;
     eventType: string;
     targetType: string;
@@ -521,8 +523,8 @@ async function emit(
 ): Promise<void> {
   await appendAuditEvent(transaction, {
     organizationId: input.organizationId,
-    actorType: 'USER',
-    actorId: input.actorId,
+    actorType: input.actorType ?? 'USER',
+    ...(input.actorId ? { actorId: input.actorId } : {}),
     action: input.action,
     targetType: input.targetType,
     targetId: input.targetId,
@@ -833,16 +835,30 @@ export async function createInventoryReservationInTransaction(
 
 export async function releaseInventoryReservation(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; reservationId: string; idempotencyKey: string },
+  input: ReservationReleaseInput,
 ): Promise<{ reservationId: string; released: boolean }> {
   return db
     .transaction()
     .execute((transaction) => releaseInventoryReservationInTransaction(transaction, input));
 }
 
+export interface ReservationReleaseInput {
+  organizationId: string;
+  actorId: string;
+  reservationId: string;
+  idempotencyKey: string;
+  /**
+   * Order stock is owned by the Order lifecycle. Only the Order cancellation
+   * transaction may release it; generic Inventory commands must not strand a
+   * fulfillment that still relies on the allocation.
+   */
+  authority?: { type: 'ORDER_CANCELLATION'; orderId: string } | { type: 'EXPIRY' };
+  actorType?: 'USER' | 'SYSTEM';
+}
+
 export async function releaseInventoryReservationInTransaction(
   transaction: Transaction<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; reservationId: string; idempotencyKey: string },
+  input: ReservationReleaseInput,
 ): Promise<{ reservationId: string; released: boolean }> {
   const started = await beginIdempotent(transaction, {
     organizationId: input.organizationId,
@@ -850,6 +866,7 @@ export async function releaseInventoryReservationInTransaction(
     operation: 'inventory.release-reservation',
     idempotencyKey: input.idempotencyKey,
     request: input,
+    ...(input.actorType === 'SYSTEM' ? { principalType: 'SYSTEM' as const } : {}),
   });
   if (started.replay) return started.replay as { reservationId: string; released: boolean };
   const reservation = await sql<{
@@ -863,6 +880,22 @@ export async function releaseInventoryReservationInTransaction(
   );
   const row = reservation.rows[0];
   if (!row) throw new InventoryDomainError('NOT_FOUND', 'Reservation was not found.');
+  const orderOwner = await sql<{ order_id: string }>`
+    select bridge.order_id
+    from orders.order_inventory_reservations bridge
+    where bridge.organization_id = ${input.organizationId}
+      and bridge.reservation_id = ${row.id}
+    for update
+  `.execute(transaction);
+  if (
+    orderOwner.rows[0] &&
+    (input.authority?.type !== 'ORDER_CANCELLATION' ||
+      input.authority.orderId !== orderOwner.rows[0].order_id)
+  )
+    throw new InventoryDomainError(
+      'CONFLICT',
+      'This reservation belongs to an Order. Cancel the Order to release its stock safely.',
+    );
   let released = false;
   if (['ACTIVE', 'PARTIALLY_CONSUMED'].includes(row.status)) {
     const allocations = await sql<{
@@ -907,25 +940,31 @@ export async function releaseInventoryReservationInTransaction(
       await sql`update inventory.inventory_reservation_allocations set released_quantity = reserved_quantity - consumed_quantity, updated_at = now(), version = version + 1 where reservation_id = ${row.id} and organization_id = ${input.organizationId}`.execute(
         transaction,
       );
-    const status = allocations.rows.some((allocation) => allocation.consumed_quantity !== '0')
-      ? 'CONSUMED'
-      : 'RELEASED';
-    await sql`update inventory.inventory_reservations set status = ${status}, released_at = now(), updated_at = now(), version = version + 1 where id = ${row.id}`.execute(
+    const terminalStatus = input.authority?.type === 'EXPIRY' ? 'EXPIRED' : 'RELEASED';
+    await sql`update inventory.inventory_reservations set status = ${terminalStatus}, released_at = now(), updated_at = now(), version = version + 1 where id = ${row.id}`.execute(
       transaction,
     );
     released = true;
     await emit(transaction, {
       organizationId: input.organizationId,
-      actorId: input.actorId,
-      action: 'inventory.reservation.released',
-      eventType: 'inventory.reservation.released',
+      ...(input.actorType === 'SYSTEM' ? {} : { actorId: input.actorId }),
+      action:
+        input.authority?.type === 'EXPIRY'
+          ? 'inventory.reservation.expired'
+          : 'inventory.reservation.released',
+      eventType:
+        input.authority?.type === 'EXPIRY'
+          ? 'inventory.reservation.expired'
+          : 'inventory.reservation.released',
       targetType: 'inventory.reservation',
       targetId: row.id,
       metadata: {
         inventoryItemId: row.inventory_item_id,
         locationId: row.location_id,
         quantity: remaining,
+        disposition: input.authority?.type === 'EXPIRY' ? 'EXPIRED' : 'RELEASED',
       },
+      ...(input.actorType ? { actorType: input.actorType } : {}),
     });
   }
   const response = { reservationId: row.id, released };
@@ -937,6 +976,50 @@ export async function releaseInventoryReservationInTransaction(
     response,
   );
   return response;
+}
+
+/**
+ * Releases only explicitly expiring, standalone holds. Order-owned stock has
+ * its own cancellation/fulfillment lifecycle and is deliberately excluded,
+ * even if malformed historical data happens to contain an expiry timestamp.
+ */
+export async function expireInventoryReservations(
+  db: Kysely<DatabaseSchema>,
+  limit = 100,
+): Promise<number> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
+    throw new InventoryDomainError('VALIDATION_FAILED', 'Expiry batch limit is invalid.');
+  return db.transaction().execute(async (transaction) => {
+    const candidates = await sql<{ id: string; organization_id: string }>`
+      select reservation.id, reservation.organization_id
+      from inventory.inventory_reservations reservation
+      where reservation.status in ('ACTIVE', 'PARTIALLY_CONSUMED')
+        and reservation.expires_at is not null
+        and reservation.expires_at <= now()
+        and not exists (
+          select 1
+          from orders.order_inventory_reservations bridge
+          where bridge.organization_id = reservation.organization_id
+            and bridge.reservation_id = reservation.id
+        )
+      order by reservation.expires_at, reservation.id
+      limit ${limit}
+      for update of reservation skip locked
+    `.execute(transaction);
+    let expired = 0;
+    for (const candidate of candidates.rows) {
+      const result = await releaseInventoryReservationInTransaction(transaction, {
+        organizationId: candidate.organization_id,
+        actorId: candidate.organization_id,
+        actorType: 'SYSTEM',
+        reservationId: candidate.id,
+        idempotencyKey: `inventory-expiry:${candidate.id}`,
+        authority: { type: 'EXPIRY' },
+      });
+      if (result.released) expired += 1;
+    }
+    return expired;
+  });
 }
 
 /**
@@ -2400,6 +2483,7 @@ export async function listInventoryReservations(
     inventoryItemId?: string;
     locationId?: string;
     status?: 'ACTIVE' | 'ALL';
+    search?: string;
     page?: number;
     limit?: number;
   } = {},
@@ -2413,9 +2497,21 @@ export async function listInventoryReservations(
     locationId: string;
     locationName: string;
     quantity: string;
+    consumedQuantity: string;
+    releasedQuantity: string;
+    remainingQuantity: string;
     status: 'ACTIVE' | 'PARTIALLY_CONSUMED' | 'CONSUMED' | 'RELEASED' | 'EXPIRED';
     sourceType: string;
     sourceReference: string;
+    owner?: {
+      type: 'ORDER';
+      orderId: string;
+      orderNumber: string;
+      orderStatus: string;
+      fulfillmentStatus?: string;
+    };
+    releaseAllowed: boolean;
+    releaseBlockedReason?: string;
     expiresAt?: string;
     createdAt: string;
   }[];
@@ -2430,14 +2526,28 @@ export async function listInventoryReservations(
   const itemFilter = input.inventoryItemId
     ? sql`res.inventory_item_id = ${input.inventoryItemId}::uuid`
     : sql`1=1`;
+  const searchFilter = input.search?.trim()
+    ? sql`(
+        variant.sku ilike ${`%${input.search.trim()}%`}
+        or product.title ilike ${`%${input.search.trim()}%`}
+        or res.source_reference ilike ${`%${input.search.trim()}%`}
+        or order_row.order_number ilike ${`%${input.search.trim()}%`}
+      )`
+    : sql`1=1`;
 
   const countResult = await sql<{ count: string }>`
     select count(*)::text as count
     from inventory.inventory_reservations res
+    join inventory.inventory_items item on item.id = res.inventory_item_id and item.organization_id = res.organization_id
+    join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
+    join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
+    left join orders.order_inventory_reservations bridge on bridge.organization_id = res.organization_id and bridge.reservation_id = res.id
+    left join orders.orders order_row on order_row.organization_id = bridge.organization_id and order_row.id = bridge.order_id
     where res.organization_id = ${organizationId}
       and ${statusFilter}
       and ${locationFilter}
       and ${itemFilter}
+      and ${searchFilter}
   `.execute(db);
 
   const result = await sql<{
@@ -2445,6 +2555,9 @@ export async function listInventoryReservations(
     inventory_item_id: string;
     location_id: string;
     quantity: string;
+    consumed_quantity: string;
+    released_quantity: string;
+    remaining_quantity: string;
     status: 'ACTIVE' | 'PARTIALLY_CONSUMED' | 'CONSUMED' | 'RELEASED' | 'EXPIRED';
     source_type: string;
     source_reference: string;
@@ -2454,9 +2567,18 @@ export async function listInventoryReservations(
     sku: string;
     product_title: string;
     location_name: string;
+    order_id: string | null;
+    order_number: string | null;
+    order_status: string | null;
+    fulfillment_status: string | null;
   }>`
     select res.id, res.inventory_item_id, res.location_id, res.quantity::text, res.status, res.source_type, res.source_reference, res.expires_at, res.created_at,
-      variant.id as variant_id, variant.sku, product.title as product_title, location.name as location_name
+      coalesce(allocation.consumed_quantity, 0)::text as consumed_quantity,
+      coalesce(allocation.released_quantity, 0)::text as released_quantity,
+      (res.quantity - coalesce(allocation.consumed_quantity, 0) - coalesce(allocation.released_quantity, 0))::text as remaining_quantity,
+      variant.id as variant_id, variant.sku, product.title as product_title, location.name as location_name,
+      order_row.id as order_id, order_row.order_number, order_row.order_status,
+      fulfillment_state.status as fulfillment_status
     from inventory.inventory_reservations res
     join inventory.inventory_items item on item.id = res.inventory_item_id
       and item.organization_id = res.organization_id
@@ -2466,10 +2588,30 @@ export async function listInventoryReservations(
       and product.organization_id = variant.organization_id
     join warehouse.locations location on location.id = res.location_id
       and location.organization_id = res.organization_id
+    left join inventory.inventory_reservation_allocations allocation
+      on allocation.organization_id = res.organization_id and allocation.reservation_id = res.id
+    left join orders.order_inventory_reservations bridge
+      on bridge.organization_id = res.organization_id and bridge.reservation_id = res.id
+    left join orders.orders order_row
+      on order_row.organization_id = bridge.organization_id and order_row.id = bridge.order_id
+    left join lateral (
+      select string_agg(distinct fulfillment.status, ', ' order by fulfillment.status) as status
+      from inventory.fulfillment_inventory_allocations fulfillment_allocation
+      join fulfillment.fulfillment_lines fulfillment_line
+        on fulfillment_line.organization_id = fulfillment_allocation.organization_id
+        and fulfillment_line.id = fulfillment_allocation.fulfillment_line_id
+      join fulfillment.fulfillments fulfillment
+        on fulfillment.organization_id = fulfillment_line.organization_id
+        and fulfillment.id = fulfillment_line.fulfillment_id
+      where fulfillment_allocation.organization_id = res.organization_id
+        and fulfillment_allocation.reservation_allocation_id = allocation.id
+        and fulfillment.status <> 'CANCELLED'
+    ) fulfillment_state on true
     where res.organization_id = ${organizationId}
       and ${statusFilter}
       and ${locationFilter}
       and ${itemFilter}
+      and ${searchFilter}
     order by res.created_at desc
     limit ${input.limit || 25} offset ${offset}
   `.execute(db);
@@ -2484,9 +2626,28 @@ export async function listInventoryReservations(
       locationId: row.location_id,
       locationName: row.location_name,
       quantity: subtract(row.quantity, '0'),
+      consumedQuantity: subtract(row.consumed_quantity, '0'),
+      releasedQuantity: subtract(row.released_quantity, '0'),
+      remainingQuantity: subtract(row.remaining_quantity, '0'),
       status: row.status,
       sourceType: row.source_type,
       sourceReference: row.source_reference,
+      ...(row.order_id && row.order_number && row.order_status
+        ? {
+            owner: {
+              type: 'ORDER' as const,
+              orderId: row.order_id,
+              orderNumber: row.order_number,
+              orderStatus: row.order_status,
+              ...(row.fulfillment_status ? { fulfillmentStatus: row.fulfillment_status } : {}),
+            },
+          }
+        : {}),
+      releaseAllowed:
+        row.order_id === null && ['ACTIVE', 'PARTIALLY_CONSUMED'].includes(row.status),
+      ...(row.order_id
+        ? { releaseBlockedReason: 'Cancel the owning Order to release this stock safely.' }
+        : {}),
       ...(row.expires_at === null ? {} : { expiresAt: row.expires_at }),
       createdAt: row.created_at,
     })),

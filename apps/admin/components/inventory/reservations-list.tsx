@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Search, RotateCcw, Unlock, Clock, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Search, RotateCcw, Unlock, AlertTriangle, ExternalLink } from 'lucide-react';
 
-import type { PaginatedDto, InventoryReservationDto, WarehouseLocationDto } from '@maevelle/contracts';
+import type {
+  PaginatedDto,
+  InventoryReservationDto,
+  WarehouseLocationDto,
+} from '@maevelle/contracts';
 
 import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
 import { InventoryFeedback, InventoryEmptyState, InventoryPager } from './inventory-page-ui';
@@ -43,6 +47,7 @@ export function ReservationsList() {
   const [status, setStatus] = useState<string>('ACTIVE');
   const [search, setSearch] = useState<string>('');
   const [hasNext, setHasNext] = useState(false);
+  const releaseKeys = useRef(new Map<string, string>());
 
   // Fetch locations once
   useEffect(() => {
@@ -58,13 +63,14 @@ export function ReservationsList() {
     params.set('limit', '50');
     if (locationId !== 'all') params.set('locationId', locationId);
     if (status !== 'all') params.set('status', status);
+    if (search.trim()) params.set('search', search.trim());
 
     inventoryRequest<{ data: PaginatedDto<InventoryReservationDto> }>(
       `/inventory/reservations?${params.toString()}`,
     )
       .then((res) => {
         setReservations(res.data.items);
-        setHasNext(res.data.items.length === 50);
+        setHasNext(page * 50 < (res.data.totalCount ?? 0));
         setError(null);
       })
       .catch((err) => setError(err instanceof Error ? err : new Error(String(err))))
@@ -73,7 +79,7 @@ export function ReservationsList() {
 
   useEffect(() => {
     loadReservations();
-  }, [page, locationId, status]);
+  }, [page, locationId, status, search]);
 
   const handleRelease = async (reservation: InventoryReservationDto) => {
     setReleasingId(reservation.id);
@@ -84,13 +90,20 @@ export function ReservationsList() {
       await inventoryRequest(`/inventory/reservations/${reservation.id}/release`, {
         method: 'POST',
         headers: {
-          'idempotency-key': `rel-${reservation.id}-${Date.now()}`,
+          'idempotency-key':
+            releaseKeys.current.get(reservation.id) ??
+            (() => {
+              const key = crypto.randomUUID();
+              releaseKeys.current.set(reservation.id, key);
+              return key;
+            })(),
         },
       });
 
       setActionSuccess(
-        `Successfully released reservation for ${reservation.productTitle || reservation.sku} (${formatInventoryNumber(reservation.quantity)} units).`,
+        `Successfully released reservation for ${reservation.productTitle || reservation.sku} (${formatInventoryNumber(reservation.remainingQuantity)} units).`,
       );
+      releaseKeys.current.delete(reservation.id);
       loadReservations();
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -125,7 +138,7 @@ export function ReservationsList() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Stock Reservations</h1>
           <p className="text-sm text-muted-foreground">
-            View and manage inventory held for pending customer orders and active warehouse transfers.
+            Trace held stock to its owner and safely release standalone operational holds.
           </p>
         </div>
       </div>
@@ -219,10 +232,18 @@ export function ReservationsList() {
             <table className="w-full caption-bottom text-sm">
               <thead className="bg-muted/40 text-xs uppercase tracking-wider font-semibold border-b">
                 <tr>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Product / SKU</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Location</th>
-                  <th className="h-10 px-4 text-right font-medium text-muted-foreground">Reserved Qty</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Originating Source</th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Product / SKU
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Location
+                  </th>
+                  <th className="h-10 px-4 text-right font-medium text-muted-foreground">
+                    Remaining held
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Originating Source
+                  </th>
                   <th className="h-10 px-4 text-left font-medium text-muted-foreground">Status</th>
                   <th className="h-10 px-4 text-left font-medium text-muted-foreground">Expires</th>
                   <th className="h-10 px-4 text-right font-medium text-muted-foreground">Action</th>
@@ -231,13 +252,12 @@ export function ReservationsList() {
               <tbody className="divide-y text-xs">
                 {filteredReservations.map((res) => {
                   const isExpired =
-                    res.expiresAt && new Date(res.expiresAt).getTime() < Date.now() && res.status === 'ACTIVE';
+                    res.expiresAt &&
+                    new Date(res.expiresAt).getTime() < Date.now() &&
+                    res.status === 'ACTIVE';
 
                   return (
-                    <tr
-                      key={res.id}
-                      className="hover:bg-muted/40 transition-colors"
-                    >
+                    <tr key={res.id} className="hover:bg-muted/40 transition-colors">
                       <td className="p-4 align-middle">
                         <div className="font-medium text-foreground">
                           {res.inventoryItemId ? (
@@ -251,7 +271,9 @@ export function ReservationsList() {
                             res.productTitle || res.sku
                           )}
                         </div>
-                        <div className="text-[11px] text-muted-foreground font-mono mt-0.5">{res.sku}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          {res.sku}
+                        </div>
                       </td>
                       <td className="p-4 align-middle">
                         <Link
@@ -261,23 +283,38 @@ export function ReservationsList() {
                           {res.locationName || res.locationId}
                         </Link>
                       </td>
-                      <td className="p-4 text-right align-middle tabular-nums font-semibold text-sm text-amber-600">
-                        {formatInventoryNumber(res.quantity)}
+                      <td className="p-4 text-right align-middle tabular-nums">
+                        <div className="font-semibold text-sm text-amber-600">
+                          {formatInventoryNumber(res.remainingQuantity)}
+                        </div>
+                        {(res.consumedQuantity !== '0' || res.releasedQuantity !== '0') && (
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            {formatInventoryNumber(res.quantity)} original
+                          </div>
+                        )}
                       </td>
                       <td className="p-4 align-middle text-muted-foreground">
-                        <div className="flex items-center gap-1.5 font-mono text-xs">
-                          {res.sourceType === 'ORDER' ? (
+                        <div className="flex flex-col items-start gap-1 font-mono text-xs">
+                          {res.owner ? (
                             <Link
-                              href={`/orders/${res.sourceReference}`}
+                              href={`/orders/${res.owner.orderId}`}
                               className="hover:underline text-foreground inline-flex items-center gap-1"
                             >
-                              Order #{res.sourceReference}
+                              Order {res.owner.orderNumber}
                               <ExternalLink className="h-3 w-3 text-muted-foreground" />
                             </Link>
                           ) : (
                             <span>
                               {res.sourceType} #{res.sourceReference}
                             </span>
+                          )}
+                          {res.owner && (
+                            <div className="mt-1 font-sans text-[11px] text-muted-foreground">
+                              {res.owner.orderStatus}
+                              {res.owner.fulfillmentStatus
+                                ? ` · Fulfillment ${res.owner.fulfillmentStatus}`
+                                : ''}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -288,9 +325,7 @@ export function ReservationsList() {
                             Expired
                           </Badge>
                         ) : (
-                          <Badge
-                            variant={res.status === 'ACTIVE' ? 'default' : 'secondary'}
-                          >
+                          <Badge variant={res.status === 'ACTIVE' ? 'default' : 'secondary'}>
                             {res.status}
                           </Badge>
                         )}
@@ -308,7 +343,7 @@ export function ReservationsList() {
                         )}
                       </td>
                       <td className="p-4 text-right align-middle">
-                        {res.status === 'ACTIVE' ? (
+                        {res.releaseAllowed ? (
                           <AlertDialog>
                             <AlertDialogTrigger
                               render={
@@ -326,10 +361,12 @@ export function ReservationsList() {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Release this stock reservation?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This will release <strong>{formatInventoryNumber(res.quantity)}</strong> units of{' '}
-                                  <strong>{res.productTitle || res.sku}</strong> at{' '}
-                                  <strong>{res.locationName}</strong> back to general available-to-sell inventory.
-                                  Any pending fulfillment relying on this allocation will be impacted.
+                                  This will release{' '}
+                                  <strong>{formatInventoryNumber(res.remainingQuantity)}</strong>{' '}
+                                  units of <strong>{res.productTitle || res.sku}</strong> at{' '}
+                                  <strong>{res.locationName}</strong> back to general
+                                  available-to-sell inventory. This action is recorded in the
+                                  reservation audit history.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -344,7 +381,12 @@ export function ReservationsList() {
                             </AlertDialogContent>
                           </AlertDialog>
                         ) : (
-                          <span className="text-muted-foreground/40 text-xs">—</span>
+                          <span
+                            className="text-muted-foreground text-xs"
+                            title={res.releaseBlockedReason}
+                          >
+                            {res.owner ? 'Manage in Order' : '—'}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -357,11 +399,7 @@ export function ReservationsList() {
       )}
 
       {(hasNext || page > 1) && (
-        <InventoryPager
-          page={page}
-          hasNext={hasNext}
-          onPageChange={setPage}
-        />
+        <InventoryPager page={page} hasNext={hasNext} onPageChange={setPage} />
       )}
     </div>
   );

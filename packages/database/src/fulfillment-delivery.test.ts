@@ -3,7 +3,12 @@ import { sql } from 'kysely';
 
 import { addGuestCartLine, createGuestCart } from './cart.js';
 import { createDatabase } from './index.js';
-import { adjustInventory } from './inventory.js';
+import {
+  adjustInventory,
+  expireInventoryReservations,
+  listInventoryReservations,
+  releaseInventoryReservation,
+} from './inventory.js';
 import {
   cancelFulfillment,
   createFulfillment,
@@ -20,6 +25,7 @@ import {
   recordManualCourierBooking,
 } from './delivery.js';
 import {
+  cancelOrder,
   createCheckout,
   placeOrder,
   updateCheckoutAddress,
@@ -184,6 +190,103 @@ async function preparedFulfillment(
 }
 
 describe('outbound fulfillment, physical consumption, and delivery operations', () => {
+  it('keeps order-owned reservations under the Order lifecycle authority', async () => {
+    const input = await fixture('2');
+    const order = await orderFor(input, '1');
+    const reservation = await sql<{ id: string }>`
+      select reservation.id
+      from inventory.inventory_reservations reservation
+      join orders.order_inventory_reservations bridge on bridge.reservation_id = reservation.id
+      where bridge.organization_id = ${input.organizationId} and bridge.order_id = ${order.order.id}
+    `.execute(database.db);
+
+    const workspace = await listInventoryReservations(database.db, input.organizationId, {
+      search: order.order.orderNumber,
+    });
+    expect(workspace.items).toEqual([
+      expect.objectContaining({
+        id: reservation.rows[0]!.id,
+        remainingQuantity: '1',
+        releaseAllowed: false,
+        owner: expect.objectContaining({
+          type: 'ORDER',
+          orderId: order.order.id,
+          orderNumber: order.order.orderNumber,
+        }),
+      }),
+    ]);
+
+    await sql`update inventory.inventory_reservations set expires_at = now() - interval '1 minute' where id = ${reservation.rows[0]!.id}`.execute(
+      database.db,
+    );
+    expect(await expireInventoryReservations(database.db)).toBe(0);
+
+    await expect(
+      releaseInventoryReservation(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        reservationId: reservation.rows[0]!.id,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(await balances(input)).toEqual({ sellable: '2.000000', reserved: '1.000000' });
+  });
+
+  it('cancels open fulfillment work before releasing an order reservation', async () => {
+    const input = await fixture('2');
+    const order = await orderFor(input, '1');
+    const packed = await preparedFulfillment(input, order, '1');
+
+    const cancelled = await cancelOrder(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      orderId: order.order.id,
+      expectedVersion: order.order.version,
+      reasonCode: 'CUSTOMER_REQUEST',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(cancelled).toMatchObject({
+      order: { status: 'CANCELLED' },
+      releasedReservations: 1,
+      cancelledFulfillments: 1,
+    });
+    expect(
+      (
+        await getFulfillment(database.db, {
+          organizationId: input.organizationId,
+          fulfillmentId: packed.id,
+        })
+      ).status,
+    ).toBe('CANCELLED');
+    expect(await balances(input)).toEqual({ sellable: '2.000000', reserved: '0.000000' });
+  });
+
+  it('refuses order cancellation after physical inventory has been dispatched', async () => {
+    const input = await fixture('2');
+    const order = await orderFor(input, '1');
+    const packed = await preparedFulfillment(input, order, '1');
+    await dispatchFulfillment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      fulfillmentId: packed.id,
+      expectedVersion: packed.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    await expect(
+      cancelOrder(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        orderId: order.order.id,
+        expectedVersion: order.order.version,
+        reasonCode: 'CUSTOMER_REQUEST',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+    expect(await balances(input)).toEqual({ sellable: '1.000000', reserved: '0.000000' });
+  });
+
   it('consumes a reservation into exactly one immutable physical movement and supports an independent delivery outcome', async () => {
     const input = await fixture('10');
     const order = await orderFor(input, '2');

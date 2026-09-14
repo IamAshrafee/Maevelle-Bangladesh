@@ -1,4 +1,4 @@
-import { sql, type Kysely } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
 import { consumeReservationAllocationInTransaction, InventoryDomainError } from './inventory.js';
@@ -603,4 +603,45 @@ export async function cancelFulfillment(
       fulfillmentId: input.fulfillmentId,
     });
   });
+}
+
+/**
+ * Published Order→Fulfillment boundary for commercial cancellation.
+ * Open warehouse work is cancelled in the caller's transaction. Once any
+ * stock has been dispatched, Order cancellation must use the return/delivery
+ * recovery workflow instead of pretending the physical movement never happened.
+ */
+export async function cancelOpenFulfillmentsForOrderInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; orderId: string },
+): Promise<number> {
+  const fulfillments = await sql<{ id: string; status: FulfillmentStatus }>`
+    select id, status
+    from fulfillment.fulfillments
+    where organization_id = ${input.organizationId} and order_id = ${input.orderId}
+    order by id
+    for update
+  `.execute(transaction);
+  if (fulfillments.rows.some((fulfillment) => fulfillment.status === 'DISPATCHED'))
+    throw new FulfillmentDomainError(
+      'INVALID_TRANSITION',
+      'Dispatched inventory cannot be cancelled through the Order. Use the delivery or return recovery workflow.',
+    );
+  const open = fulfillments.rows.filter((fulfillment) => fulfillment.status !== 'CANCELLED');
+  for (const fulfillment of open) {
+    await sql`
+      update fulfillment.fulfillments
+      set status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${fulfillment.id}
+    `.execute(transaction);
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'fulfillment.fulfillment.cancelled',
+      eventType: 'fulfillment.cancelled',
+      fulfillmentId: fulfillment.id,
+      metadata: { orderId: input.orderId, reason: 'ORDER_CANCELLED' },
+    });
+  }
+  return open.length;
 }

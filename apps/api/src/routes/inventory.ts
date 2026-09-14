@@ -498,6 +498,7 @@ export function registerInventoryRoutes(
         querystring: Type.Object({
           locationId: Type.Optional(Type.String({ format: 'uuid' })),
           status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ALL')])),
+          search: Type.Optional(Type.String({ maxLength: 120 })),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
@@ -513,6 +514,7 @@ export function registerInventoryRoutes(
           request.query as {
             locationId?: string;
             status?: 'ACTIVE' | 'ALL';
+            search?: string;
             page?: number;
             limit?: number;
           },

@@ -881,9 +881,21 @@ export interface InventoryReservationDto {
   readonly locationId: string;
   readonly locationName: string;
   readonly quantity: string;
+  readonly consumedQuantity: string;
+  readonly releasedQuantity: string;
+  readonly remainingQuantity: string;
   readonly status: 'ACTIVE' | 'PARTIALLY_CONSUMED' | 'CONSUMED' | 'RELEASED' | 'EXPIRED';
   readonly sourceType: string;
   readonly sourceReference: string;
+  readonly owner?: {
+    readonly type: 'ORDER';
+    readonly orderId: string;
+    readonly orderNumber: string;
+    readonly orderStatus: string;
+    readonly fulfillmentStatus?: string;
+  };
+  readonly releaseAllowed: boolean;
+  readonly releaseBlockedReason?: string;
   readonly expiresAt?: string;
   readonly createdAt: string;
 }

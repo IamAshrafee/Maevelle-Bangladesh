@@ -11,6 +11,7 @@ import {
   createInventoryReservation,
   createWarehouseTransfer,
   dispatchWarehouseTransfer,
+  expireInventoryReservations,
   getInventoryStats,
   getInventoryItemDetail,
   listInventoryBalances,
@@ -489,6 +490,49 @@ describe('ledger-backed inventory', () => {
       (row) => row.condition === 'SELLABLE',
     )!;
     expect(balance).toMatchObject({ onHand: '4', reserved: '0', availableToSell: '4' });
+  });
+
+  it('expires standalone timed holds once with system audit and outbox evidence', async () => {
+    const f = await fixture();
+    await opening(f, '3');
+    const reservation = await createInventoryReservation(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.main.id,
+      quantity: '2',
+      sourceType: 'OPERATIONS_HOLD',
+      sourceReference: crypto.randomUUID(),
+      expiresAt: new Date(Date.now() - 60_000),
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(await expireInventoryReservations(database.db)).toBe(1);
+    expect(await expireInventoryReservations(database.db)).toBe(0);
+    const evidence = await sql<{
+      status: string;
+      reserved: string;
+      audit: string;
+      outbox: string;
+    }>`
+      select
+        reservation.status,
+        level.reserved_quantity::text as reserved,
+        (select count(*)::text from audit.audit_events where target_id = reservation.id and action = 'inventory.reservation.expired' and actor_type = 'SYSTEM') as audit,
+        (select count(*)::text from platform.outbox_events where aggregate_id = reservation.id and event_type = 'inventory.reservation.expired') as outbox
+      from inventory.inventory_reservations reservation
+      join inventory.inventory_levels level
+        on level.organization_id = reservation.organization_id
+        and level.inventory_item_id = reservation.inventory_item_id
+        and level.location_id = reservation.location_id
+      where reservation.id = ${reservation.reservationId}
+    `.execute(database.db);
+    expect(evidence.rows[0]).toEqual({
+      status: 'EXPIRED',
+      reserved: '0.000000',
+      audit: '1',
+      outbox: '1',
+    });
   });
 
   it('serializes competing transfer dispatches and keeps ledger/balance reconciliation intact', async () => {

@@ -20,6 +20,10 @@ import {
   type PaymentMethodCode,
   type PaymentSummary,
 } from './payments.js';
+import {
+  cancelOpenFulfillmentsForOrderInTransaction,
+  FulfillmentDomainError,
+} from './fulfillment.js';
 
 const checkoutLifetimeMs = 60 * 60 * 1000;
 
@@ -1047,27 +1051,54 @@ export async function getOrderForAdmin(
       where order_id = ${input.orderId}
       order by created_at desc limit 20
     `.execute(db),
-    sql<{ id: string; event_type: string; aggregate_type: string; aggregate_id: string; occurred_at: Date; payload: Record<string, unknown> }>`
+    sql<{
+      id: string;
+      event_type: string;
+      aggregate_type: string;
+      aggregate_id: string;
+      occurred_at: Date;
+      payload: Record<string, unknown>;
+    }>`
       select id, event_type, aggregate_type, aggregate_id, occurred_at, payload
       from platform.outbox_events
       where aggregate_type in ('orders.order', 'fulfillment.fulfillment', 'delivery.delivery', 'returns.return_case')
         and payload->>'orderId' = ${input.orderId}
       order by occurred_at desc limit 30
     `.execute(db),
-    sql<{ id: string; fulfillment_number: string; status: string; location_id: string; dispatched_at: Date | null }>`
+    sql<{
+      id: string;
+      fulfillment_number: string;
+      status: string;
+      location_id: string;
+      dispatched_at: Date | null;
+    }>`
       select id, fulfillment_number, status, location_id, dispatched_at
       from fulfillment.fulfillments
       where order_id = ${input.orderId}
       order by created_at desc
     `.execute(db),
-    sql<{ id: string; delivery_number: string; operational_status: string; outcome_status: string | null; tracking_reference: string | null; dispatched_at: Date | null; delivered_at: Date | null }>`
+    sql<{
+      id: string;
+      delivery_number: string;
+      operational_status: string;
+      outcome_status: string | null;
+      tracking_reference: string | null;
+      dispatched_at: Date | null;
+      delivered_at: Date | null;
+    }>`
       select d.id, d.delivery_number, d.operational_status, d.outcome_status, d.tracking_reference, f.dispatched_at, null as delivered_at
       from delivery.deliveries d
       join fulfillment.fulfillments f on f.id = d.fulfillment_id
       where d.order_id = ${input.orderId}
       order by d.created_at desc
     `.execute(db),
-    sql<{ id: string; return_number: string; case_status: string; case_type: string; created_at: Date }>`
+    sql<{
+      id: string;
+      return_number: string;
+      case_status: string;
+      case_type: string;
+      created_at: Date;
+    }>`
       select id, return_number, case_status, case_type, created_at
       from returns.return_cases
       where order_id = ${input.orderId}
@@ -1082,7 +1113,13 @@ export async function getOrderForAdmin(
       where pi.order_id = ${input.orderId}
       order by r.created_at desc
     `.execute(db),
-    sql<{ promotion_name: string; coupon_code: string | null; benefit_type: string; benefit_value: string; discount_amount: string }>`
+    sql<{
+      promotion_name: string;
+      coupon_code: string | null;
+      benefit_type: string;
+      benefit_value: string;
+      discount_amount: string;
+    }>`
       select promotion_name_snapshot as promotion_name, coupon_code_snapshot as coupon_code,
              benefit_type_snapshot as benefit_type, benefit_value_snapshot::text as benefit_value,
              discount_amount::text as discount_amount
@@ -1131,7 +1168,7 @@ export async function getOrderForAdmin(
       dispatchedAt: row.dispatched_at?.toISOString() ?? null,
       deliveredAt: row.delivered_at?.toISOString() ?? null,
     })),
-    returnCases: returnsQuery.rows.map(row => ({
+    returnCases: returnsQuery.rows.map((row) => ({
       id: row.id,
       caseNumber: row.return_number,
       status: row.case_status,
@@ -1379,10 +1416,51 @@ export async function cancelOrder(
     reasonText?: string;
     idempotencyKey: string;
   },
-): Promise<{ order: OrderView; releasedReservations: number }> {
+): Promise<{ order: OrderView; releasedReservations: number; cancelledFulfillments: number }> {
   if (!input.reasonCode.trim())
     throw new OrderDomainError('VALIDATION_FAILED', 'A cancellation reason is required.');
   return db.transaction().execute(async (transaction) => {
+    let idempotencyRecordId: string;
+    try {
+      const record = await claimIdempotencyRecord(transaction, {
+        organizationId: input.organizationId,
+        principalType: 'USER',
+        principalId: input.actorId,
+        operationType: 'orders.cancel',
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint: JSON.stringify({
+          orderId: input.orderId,
+          expectedVersion: input.expectedVersion,
+          reasonCode: input.reasonCode.trim(),
+          reasonText: input.reasonText?.trim() ?? null,
+        }),
+      });
+      if (!record.created) {
+        if (record.status !== 'SUCCEEDED')
+          throw new OrderDomainError(
+            'IDEMPOTENCY_CONFLICT',
+            'This Order cancellation is already in progress.',
+          );
+        const replay = await sql<{
+          safe_response: { releasedReservations?: number; cancelledFulfillments?: number } | null;
+        }>`select safe_response from platform.idempotency_records where id = ${record.id}`.execute(
+          transaction,
+        );
+        return {
+          order: await orderView(transaction, input.orderId),
+          releasedReservations: replay.rows[0]?.safe_response?.releasedReservations ?? 0,
+          cancelledFulfillments: replay.rows[0]?.safe_response?.cancelledFulfillments ?? 0,
+        };
+      }
+      idempotencyRecordId = record.id;
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError)
+        throw new OrderDomainError(
+          'IDEMPOTENCY_CONFLICT',
+          'The idempotency key was reused for different cancellation details.',
+        );
+      throw error;
+    }
     const order = await sql<{
       order_status: string;
       version: string;
@@ -1391,12 +1469,29 @@ export async function cancelOrder(
     );
     const row = order.rows[0];
     if (!row) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
-    if (row.order_status === 'CANCELLED')
-      return { order: await orderView(transaction, input.orderId), releasedReservations: 0 };
+    if (row.order_status === 'CANCELLED') {
+      const response = { releasedReservations: 0, cancelledFulfillments: 0 };
+      await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'orders.order', result_entity_id = ${input.orderId}::uuid, safe_response = ${JSON.stringify(response)}::jsonb, completed_at = now() where id = ${idempotencyRecordId}`.execute(
+        transaction,
+      );
+      return { order: await orderView(transaction, input.orderId), ...response };
+    }
     if (!['PENDING', 'CONFIRMED', 'ON_HOLD'].includes(row.order_status))
       throw new OrderDomainError('INVALID_TRANSITION', 'This Order cannot be cancelled.');
     if (Number(row.version) !== input.expectedVersion)
       throw new OrderDomainError('STALE_VERSION', 'Order has changed; reload before cancelling.');
+    let cancelledFulfillments: number;
+    try {
+      cancelledFulfillments = await cancelOpenFulfillmentsForOrderInTransaction(transaction, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        orderId: input.orderId,
+      });
+    } catch (error) {
+      if (error instanceof FulfillmentDomainError)
+        throw new OrderDomainError('INVALID_TRANSITION', error.message);
+      throw error;
+    }
     const reservations = await sql<{
       reservation_id: string;
     }>`select reservation_id from orders.order_inventory_reservations where order_id = ${input.orderId} order by reservation_id`.execute(
@@ -1409,6 +1504,7 @@ export async function cancelOrder(
         actorId: input.actorId,
         reservationId: reservation.reservation_id,
         idempotencyKey: `order-cancel:${input.orderId}:${reservation.reservation_id}`,
+        authority: { type: 'ORDER_CANCELLATION', orderId: input.orderId },
       });
       if (release.released) releasedReservations += 1;
     }
@@ -1430,12 +1526,16 @@ export async function cancelOrder(
       targetType: 'orders.order',
       targetId: input.orderId,
       ...(input.reasonText ? { reason: input.reasonText } : {}),
-      metadata: { reasonCode: input.reasonCode, releasedReservations },
+      metadata: { reasonCode: input.reasonCode, releasedReservations, cancelledFulfillments },
     });
-    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'orders.order.cancelled', 1, 'orders.order', ${input.orderId}, 1, ${JSON.stringify({ orderId: input.orderId, releasedReservations })}::jsonb, now())`.execute(
+    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'orders.order.cancelled', 1, 'orders.order', ${input.orderId}, 1, ${JSON.stringify({ orderId: input.orderId, releasedReservations, cancelledFulfillments })}::jsonb, now())`.execute(
       transaction,
     );
-    return { order: await orderView(transaction, input.orderId), releasedReservations };
+    const response = { releasedReservations, cancelledFulfillments };
+    await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'orders.order', result_entity_id = ${input.orderId}::uuid, safe_response = ${JSON.stringify(response)}::jsonb, completed_at = now() where id = ${idempotencyRecordId}`.execute(
+      transaction,
+    );
+    return { order: await orderView(transaction, input.orderId), ...response };
   });
 }
 
@@ -1727,7 +1827,10 @@ export async function createManualOrder(
 
   const deliveryAmountRaw = input.deliveryAmount.trim();
   if (!decimalPattern.test(deliveryAmountRaw))
-    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery amount must be a non-negative decimal.');
+    throw new OrderDomainError(
+      'VALIDATION_FAILED',
+      'Delivery amount must be a non-negative decimal.',
+    );
 
   ensureAddress(input.deliveryAddress);
 
@@ -1737,7 +1840,10 @@ export async function createManualOrder(
     if (!positiveDecimalPattern.test(qty))
       throw new OrderDomainError('VALIDATION_FAILED', 'Line quantity must be a positive decimal.');
     if (!decimalPattern.test(price))
-      throw new OrderDomainError('VALIDATION_FAILED', 'Line unit price must be a non-negative decimal.');
+      throw new OrderDomainError(
+        'VALIDATION_FAILED',
+        'Line unit price must be a non-negative decimal.',
+      );
   }
 
   const currency = input.currency ?? 'BDT';
@@ -1764,17 +1870,27 @@ export async function createManualOrder(
       });
       if (!record.created) {
         if (record.status === 'SUCCEEDED') {
-          const idRecord = await sql<{ result_entity_id: string | null }>`select result_entity_id::text from platform.idempotency_records where id = ${record.id}`.execute(transaction);
+          const idRecord = await sql<{
+            result_entity_id: string | null;
+          }>`select result_entity_id::text from platform.idempotency_records where id = ${record.id}`.execute(
+            transaction,
+          );
           if (idRecord.rows[0]?.result_entity_id) {
             return orderView(transaction, idRecord.rows[0].result_entity_id);
           }
         }
-        throw new OrderDomainError('IDEMPOTENCY_CONFLICT', 'This manual order request is already in progress.');
+        throw new OrderDomainError(
+          'IDEMPOTENCY_CONFLICT',
+          'This manual order request is already in progress.',
+        );
       }
       recordId = record.id;
     } catch (error) {
       if (error instanceof IdempotencyKeyReuseError)
-        throw new OrderDomainError('IDEMPOTENCY_CONFLICT', 'The idempotency key was reused for different order details.');
+        throw new OrderDomainError(
+          'IDEMPOTENCY_CONFLICT',
+          'The idempotency key was reused for different order details.',
+        );
       throw error;
     }
 
@@ -1786,8 +1902,7 @@ export async function createManualOrder(
       for share
     `.execute(transaction);
     const customer = customerRow.rows[0];
-    if (!customer)
-      throw new OrderDomainError('NOT_FOUND', 'Customer was not found.');
+    if (!customer) throw new OrderDomainError('NOT_FOUND', 'Customer was not found.');
     if (!['ACTIVE'].includes(customer.status))
       throw new OrderDomainError(
         'VALIDATION_FAILED',
@@ -1806,7 +1921,10 @@ export async function createManualOrder(
         and loc.status = 'ACTIVE'
     `.execute(transaction);
     if (!locationRow.rows[0])
-      throw new OrderDomainError('VALIDATION_FAILED', 'Location was not found or is not a STOCK_HOLDING location.');
+      throw new OrderDomainError(
+        'VALIDATION_FAILED',
+        'Location was not found or is not a STOCK_HOLDING location.',
+      );
 
     // ---- Variant resolution ------------------------------------------------
     // Resolve each variant to its inventory item. Sort by variantId to ensure
@@ -1876,9 +1994,7 @@ export async function createManualOrder(
     }
 
     // ---- Compute totals ---------------------------------------------------
-    const subtotalAmount = resolvedLines
-      .reduce((sum, l) => sum + Number(l.gross), 0)
-      .toFixed(4);
+    const subtotalAmount = resolvedLines.reduce((sum, l) => sum + Number(l.gross), 0).toFixed(4);
     const totalAmount = (Number(subtotalAmount) + Number(deliveryAmountRaw)).toFixed(4);
 
     // ---- Insert order header -----------------------------------------------

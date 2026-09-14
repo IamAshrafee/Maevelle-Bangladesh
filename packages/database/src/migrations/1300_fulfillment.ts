@@ -26,6 +26,13 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       add constraint inventory_inventory_reservations_status_check check (
         status in ('ACTIVE', 'PARTIALLY_CONSUMED', 'CONSUMED', 'RELEASED', 'EXPIRED')
       );
+    drop index if exists inventory.inventory_reservations_active;
+    create index inventory_reservations_active
+      on inventory.inventory_reservations (organization_id, location_id, inventory_item_id, created_at)
+      where status in ('ACTIVE', 'PARTIALLY_CONSUMED');
+    create index inventory_reservations_expiry
+      on inventory.inventory_reservations (expires_at, id)
+      where status in ('ACTIVE', 'PARTIALLY_CONSUMED') and expires_at is not null;
 
     create table inventory.inventory_reservation_allocations (
       id uuid primary key default uuidv7(),
