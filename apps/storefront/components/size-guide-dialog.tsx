@@ -65,9 +65,10 @@ export function SizeGuideDialog({
         const m = row.measurements.find((meas) => meas.name === colName);
         if (!m) continue;
 
-        const exact = m.exact ? Number(convertMeasurement(m.exact, m.unit as any, displayUnit)) : null;
-        const min = m.min ? Number(convertMeasurement(m.min, m.unit as any, displayUnit)) : null;
-        const max = m.max ? Number(convertMeasurement(m.max, m.unit as any, displayUnit)) : null;
+        const unit = m.unit === 'inch' ? 'inch' : 'cm';
+        const exact = m.exact ? Number(convertMeasurement(m.exact, unit, displayUnit)) : null;
+        const min = m.min ? Number(convertMeasurement(m.min, unit, displayUnit)) : null;
+        const max = m.max ? Number(convertMeasurement(m.max, unit, displayUnit)) : null;
 
         if (min !== null && max !== null) {
           if (userVal >= min && userVal <= max) {
@@ -349,9 +350,10 @@ export function SizeGuideDialog({
                                 —
                               </td>
                             );
-                          const exact = convertMeasurement(m.exact, m.unit as any, displayUnit);
-                          const min = convertMeasurement(m.min, m.unit as any, displayUnit);
-                          const max = convertMeasurement(m.max, m.unit as any, displayUnit);
+                          const unit = m.unit === 'inch' ? 'inch' : 'cm';
+                          const exact = convertMeasurement(m.exact, unit, displayUnit);
+                          const min = convertMeasurement(m.min, unit, displayUnit);
+                          const max = convertMeasurement(m.max, unit, displayUnit);
                           let text = exact ?? (min && max ? `${min} - ${max}` : min || max || '—');
                           if (m.approximate && text !== '—') text = `~${text}`;
                           return (

@@ -169,7 +169,7 @@ export function CatalogClassificationConsole() {
 
   useEffect(() => {
     void refreshCategoryOptions().catch(() => undefined);
-    void fetchSizeGuides().then(setSizeGuides).catch(() => undefined);
+    void fetchSizeGuides().then((result) => setSizeGuides(result.items)).catch(() => undefined);
   }, []);
 
   function switchTab(next: TabKey) {

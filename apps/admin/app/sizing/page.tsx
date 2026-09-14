@@ -1,62 +1,76 @@
 'use client';
 
 import {
-  ShieldCheck,
   AlertCircle,
-  FileWarning,
-  Layers,
   ArrowRight,
   Check,
+  CircleAlert,
+  FileWarning,
+  GitCompareArrows,
   Loader2,
   RefreshCw,
+  ShieldCheck,
   Sparkles,
+  TriangleAlert,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import {
-  fetchSizingQualityChecks,
-  fetchSizeOptionValues,
-  fetchSizingWorkspace,
-  linkOptionValueToSizeDefinition,
-} from '@/lib/sizing/api';
 import type {
-  SizingQualityChecksDto,
-  SizeOptionValueMappingDto,
   SizeDefinitionDto,
+  SizeOptionValueMappingDto,
+  SizingQualityChecksDto,
 } from '@maevelle/contracts';
 
 import {
-  OperationalPageHeader,
+  fetchSizeOptionValues,
+  fetchSizingQualityChecks,
+  fetchSizingWorkspace,
+  linkOptionValueToSizeDefinition,
+} from '@/lib/sizing/api';
+
+import {
   OperationalEmptyState,
   OperationalFeedback,
+  OperationalPageHeader,
 } from '../../components/operational-worklist';
+
+type Feedback = { message: string; tone: 'success' | 'warning' | 'danger' } | null;
+
+type Metric = {
+  title: string;
+  value: number;
+  description: string;
+  severity: 'warning' | 'danger';
+  href?: string;
+  action?: string;
+};
 
 export default function SizingDashboardPage() {
   const [checks, setChecks] = useState<SizingQualityChecksDto | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  // Unlinked Option Values Mapping Tool
   const [optionValues, setOptionValues] = useState<readonly SizeOptionValueMappingDto[]>([]);
   const [sizeDefinitions, setSizeDefinitions] = useState<readonly SizeDefinitionDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [mappingBusyId, setMappingBusyId] = useState<string | null>(null);
-  const [mappingMessage, setMappingMessage] = useState('');
+  const [feedback, setFeedback] = useState<Feedback>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError('');
+
     try {
-      const [checksData, optionsData, workspaceData] = await Promise.all([
+      const [checksData, optionData, workspaceData] = await Promise.all([
         fetchSizingQualityChecks(),
-        fetchSizeOptionValues(),
+        fetchSizeOptionValues({ page: 1, pageSize: 10, mappingStatus: 'UNMAPPED' }),
         fetchSizingWorkspace(),
       ]);
 
       setChecks(checksData);
-      setOptionValues(optionsData);
-      setSizeDefinitions(workspaceData.sizeDefinitions ?? []);
+      setOptionValues(optionData.items);
+      setSizeDefinitions(workspaceData.sizeDefinitions.filter((definition) => definition.status === 'ACTIVE'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load checks');
+      setError(err instanceof Error ? err.message : 'Failed to load sizing overview.');
     } finally {
       setLoading(false);
     }
@@ -66,202 +80,281 @@ export default function SizingDashboardPage() {
     void load();
   }, [load]);
 
-  const handleMapOptionValue = async (optionValueId: string, sizeDefinitionId: string) => {
-    setMappingBusyId(optionValueId);
-    setMappingMessage('');
+  const metrics = useMemo<Metric[]>(() => {
+    if (!checks) return [];
+
+    return [
+      {
+        title: 'Missing size configurations',
+        value: checks.productsWithSizeAxisButNoSizingConfig,
+        description: 'Products expose a size option axis but have no sizing configuration.',
+        severity: 'warning',
+        href: '/products',
+        action: 'Review products',
+      },
+      {
+        title: 'Missing published guides',
+        value: checks.productsWithConfigButNoPublishedGuide,
+        description: 'Configured products have no usable published guide.',
+        severity: 'warning',
+        href: '/sizing/guides',
+        action: 'Review guides',
+      },
+      {
+        title: 'Archived guides in use',
+        value: checks.productsUsingArchivedGuide,
+        description: 'Active product configuration still references an archived guide.',
+        severity: 'danger',
+        href: '/sizing/guides?status=ARCHIVED',
+        action: 'Resolve references',
+      },
+      {
+        title: 'System / guide mismatches',
+        value: checks.productConfigurationsWithSystemGuideMismatch,
+        description: 'Product sizing system and guide system/domain do not agree.',
+        severity: 'danger',
+        href: '/products',
+        action: 'Fix products',
+      },
+      {
+        title: 'Empty published revisions',
+        value: checks.publishedRevisionsWithEmptyRows,
+        description: 'Published revisions contain no usable measurement matrix.',
+        severity: 'danger',
+        href: '/sizing/guides',
+        action: 'Review guides',
+      },
+      {
+        title: 'Published rows without measurements',
+        value: checks.publishedRowsWithoutMeasurements,
+        description: 'Published size rows exist without any measurement values.',
+        severity: 'danger',
+        href: '/sizing/guides',
+        action: 'Repair rows',
+      },
+      {
+        title: 'Unlinked size options',
+        value: checks.optionValuesInSizeAxisWithoutSizeDefinitionLink,
+        description: 'Catalog size values are not mapped to canonical size definitions.',
+        severity: 'warning',
+        href: '/sizing/mappings?mappingStatus=UNMAPPED',
+        action: 'Map options',
+      },
+      {
+        title: 'Option mappings outside system',
+        value: checks.optionValuesMappedOutsideConfiguredSystem,
+        description: 'Mapped option values point to definitions outside the product system.',
+        severity: 'danger',
+        href: '/sizing/mappings',
+        action: 'Repair mappings',
+      },
+      {
+        title: 'Guide row system mismatches',
+        value: checks.guideRowsWithSystemMismatch,
+        description: 'Guide rows use size definitions outside the guide’s bound system.',
+        severity: 'danger',
+        href: '/sizing/guides',
+        action: 'Repair guides',
+      },
+      {
+        title: 'Unavailable category defaults',
+        value: checks.categoryDefaultsUsingUnavailableGuide,
+        description: 'A category default points to an unavailable or unpublished guide.',
+        severity: 'danger',
+        href: '/sizing/categories',
+        action: 'Fix defaults',
+      },
+      {
+        title: 'Definitions under archived systems',
+        value: checks.activeDefinitionsUnderArchivedSystem,
+        description: 'Active size definitions remain under an archived size system.',
+        severity: 'warning',
+        href: '/sizing/sizes',
+        action: 'Review definitions',
+      },
+      {
+        title: 'Measurements under archived domains',
+        value: checks.activeMeasurementsUnderArchivedDomain,
+        description: 'Active measurements remain under an archived sizing domain.',
+        severity: 'warning',
+        href: '/sizing/measurements',
+        action: 'Review measurements',
+      },
+    ];
+  }, [checks]);
+
+  const totalIssues = metrics.reduce((sum, metric) => sum + metric.value, 0);
+  const criticalIssues = metrics
+    .filter((metric) => metric.severity === 'danger')
+    .reduce((sum, metric) => sum + metric.value, 0);
+
+  async function handleMapOptionValue(option: SizeOptionValueMappingDto, sizeDefinitionId: string) {
+    setMappingBusyId(option.optionValueId);
+    setFeedback(null);
+
     try {
-      await linkOptionValueToSizeDefinition(optionValueId, sizeDefinitionId || null);
-      setMappingMessage('Size option linked successfully.');
+      await linkOptionValueToSizeDefinition(option.optionValueId, sizeDefinitionId || null);
+      setFeedback({ message: 'Size option mapping updated.', tone: 'success' });
       await load();
     } catch (err) {
-      setMappingMessage(err instanceof Error ? err.message : 'Failed to map option.');
+      setFeedback({
+        message: err instanceof Error ? err.message : 'Failed to update size option mapping.',
+        tone: 'danger',
+      });
     } finally {
       setMappingBusyId(null);
     }
-  };
-
-  const unlinkedOptions = optionValues.filter((ov) => !ov.sizeDefinitionId);
+  }
 
   return (
     <div className="flex h-full flex-col">
       <OperationalPageHeader
-        eyebrow="Dashboard"
+        eyebrow="Sizing"
         title="Sizing Overview"
-        description="Monitor data quality, catalog coverage, and standardized size mappings."
+        description="Monitor sizing integrity, guide readiness, catalog mappings, and data quality across the business."
       />
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+
+      <div className="flex-1 space-y-7 overflow-y-auto p-6">
         {loading ? (
           <div className="animate-pulse space-y-4">
             <div className="h-28 rounded-xl bg-slate-100" />
-            <div className="h-28 rounded-xl bg-slate-100" />
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="h-32 rounded-xl bg-slate-100" />
+              <div className="h-32 rounded-xl bg-slate-100" />
+              <div className="h-32 rounded-xl bg-slate-100" />
+            </div>
           </div>
         ) : error ? (
-          <OperationalEmptyState title="Could not load dashboard" description={error} />
+          <OperationalEmptyState title="Could not load sizing dashboard" description={error} />
         ) : checks ? (
           <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600">
-                Data Quality Signals
-              </h2>
-              <button
-                onClick={() => void load()}
-                className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800"
-              >
-                <RefreshCw className="h-3 w-3" /> Refresh
-              </button>
-            </div>
+            {feedback ? <OperationalFeedback tone={feedback.tone}>{feedback.message}</OperationalFeedback> : null}
 
-            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-              <MetricCard
-                title="Missing Size Configurations"
-                value={checks.productsWithSizeAxisButNoSizingConfig}
-                description="Products with a 'Size' option axis but no sizing system or guide attached."
-                icon={<Layers className="h-5 w-5 text-amber-500" />}
-                status={checks.productsWithSizeAxisButNoSizingConfig > 0 ? 'warning' : 'ok'}
-                actionHref="/products"
-                actionLabel="Review Products"
+            <section className="grid gap-4 md:grid-cols-3">
+              <SummaryCard
+                title="Overall health"
+                value={totalIssues === 0 ? 'Healthy' : `${totalIssues} issue${totalIssues === 1 ? '' : 's'}`}
+                description={totalIssues === 0 ? 'No sizing integrity issues were detected.' : 'Items requiring review across sizing and catalog integration.'}
+                icon={totalIssues === 0 ? <ShieldCheck className="h-5 w-5" /> : <CircleAlert className="h-5 w-5" />}
+                tone={totalIssues === 0 ? 'ok' : 'warning'}
               />
-              <MetricCard
-                title="Missing Published Guides"
-                value={checks.productsWithConfigButNoPublishedGuide}
-                description="Products referencing a guide that has not yet been published."
-                icon={<FileWarning className="h-5 w-5 text-amber-500" />}
-                status={checks.productsWithConfigButNoPublishedGuide > 0 ? 'warning' : 'ok'}
-                actionHref="/sizing/guides"
-                actionLabel="Publish Guides"
+              <SummaryCard
+                title="Critical integrity"
+                value={String(criticalIssues)}
+                description="High-impact mismatches or unavailable production sizing data."
+                icon={<TriangleAlert className="h-5 w-5" />}
+                tone={criticalIssues > 0 ? 'danger' : 'ok'}
               />
-              <MetricCard
-                title="Archived Guides in Use"
-                value={checks.productsUsingArchivedGuide}
-                description="Products that are currently referencing an archived size guide."
-                icon={<AlertCircle className="h-5 w-5 text-red-500" />}
-                status={checks.productsUsingArchivedGuide > 0 ? 'danger' : 'ok'}
-                actionHref="/sizing/guides"
-                actionLabel="Update Configurations"
+              <SummaryCard
+                title="Unlinked options"
+                value={String(checks.optionValuesInSizeAxisWithoutSizeDefinitionLink)}
+                description="Catalog size option values still waiting for canonical mapping."
+                icon={<GitCompareArrows className="h-5 w-5" />}
+                tone={checks.optionValuesInSizeAxisWithoutSizeDefinitionLink > 0 ? 'warning' : 'ok'}
               />
-              <MetricCard
-                title="Empty Published Revisions"
-                value={checks.publishedRevisionsWithEmptyRows}
-                description="Published guides that have 0 measurement rows."
-                icon={<ShieldCheck className="h-5 w-5 text-amber-500" />}
-                status={checks.publishedRevisionsWithEmptyRows > 0 ? 'warning' : 'ok'}
-                actionHref="/sizing/guides"
-                actionLabel="Fix Guides"
-              />
-              <MetricCard
-                title="Unlinked Size Options"
-                value={checks.optionValuesInSizeAxisWithoutSizeDefinitionLink}
-                description="Variant size choices not mapped to standardized size definitions."
-                icon={<AlertCircle className="h-5 w-5 text-amber-500" />}
-                status={
-                  checks.optionValuesInSizeAxisWithoutSizeDefinitionLink > 0 ? 'warning' : 'ok'
-                }
-              />
-            </div>
+            </section>
 
-            {/* Interactive Standardization Section */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <section>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">Data quality checks</h2>
+                  <p className="text-xs text-slate-500">Production-facing sizing rules checked across catalog and sizing data.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void load()}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                </button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {metrics.map((metric) => (
+                  <MetricCard key={metric.title} {...metric} />
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
                 <div>
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-blue-600" />
-                    <h3 className="text-sm font-semibold text-slate-900">
-                      Standardize Product Size Options
-                    </h3>
+                    <h2 className="text-sm font-semibold text-slate-900">Unlinked option quick-fix</h2>
                   </div>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    Map individual product variant sizes (e.g. &ldquo;M&rdquo; on Linen Dress) to
-                    canonical size definitions to enable accurate filtering, returns, and analytics.
+                  <p className="mt-1 text-xs text-slate-500">
+                    Map the first unlinked product size values. Use Option Mapping for the full paginated workspace.
                   </p>
                 </div>
-                <div className="text-xs font-medium text-slate-500">
-                  {unlinkedOptions.length} unlinked option{unlinkedOptions.length === 1 ? '' : 's'}
-                </div>
+                <Link
+                  href="/sizing/mappings?mappingStatus=UNMAPPED"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
+                >
+                  Open mapping workspace <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </div>
 
-              {mappingMessage && (
-                <OperationalFeedback tone="success">{mappingMessage}</OperationalFeedback>
-              )}
-
               {optionValues.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400">
-                  No active products with size option axes found in the catalog.
+                <div className="p-8 text-center text-xs text-slate-500">
+                  <Check className="mx-auto mb-2 h-5 w-5 text-emerald-600" />
+                  No unlinked size options were found in the first quality pass.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-600 font-semibold">
+                    <thead className="bg-slate-50 font-semibold text-slate-600">
                       <tr>
-                        <th className="px-3 py-2.5">Product</th>
-                        <th className="px-3 py-2.5">Option Axis</th>
-                        <th className="px-3 py-2.5">Variant Size</th>
-                        <th className="px-3 py-2.5">Canonical Size Definition</th>
-                        <th className="px-3 py-2.5 text-right">Status</th>
+                        <th className="px-4 py-3">Product</th>
+                        <th className="px-4 py-3">Axis</th>
+                        <th className="px-4 py-3">Value</th>
+                        <th className="px-4 py-3">Canonical definition</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {optionValues.slice(0, 15).map((ov) => {
-                        const isBusy = mappingBusyId === ov.optionValueId;
+                      {optionValues.map((option) => {
+                        const candidates = sizeDefinitions.filter((definition) =>
+                          option.configuredSizeSystemId
+                            ? definition.sizeSystemId === option.configuredSizeSystemId
+                            : true,
+                        );
+                        const isBusy = mappingBusyId === option.optionValueId;
+
                         return (
-                          <tr key={ov.optionValueId} className="hover:bg-slate-50/60">
-                            <td className="px-3 py-2 font-medium text-slate-900">
-                              <Link
-                                href={`/products/${ov.productId}`}
-                                className="hover:underline"
-                              >
-                                {ov.productTitle}
+                          <tr key={option.optionValueId} className="hover:bg-slate-50/70">
+                            <td className="px-4 py-3">
+                              <Link href={`/products/${option.productId}`} className="font-medium text-slate-900 hover:underline">
+                                {option.productTitle}
                               </Link>
                             </td>
-                            <td className="px-3 py-2 text-slate-500">{ov.optionAxisName}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-800">
-                              {ov.optionValueLabel}
-                            </td>
-                            <td className="px-3 py-2">
+                            <td className="px-4 py-3 text-slate-500">{option.optionAxisName}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-800">{option.optionValueLabel}</td>
+                            <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <select
                                   disabled={isBusy}
-                                  value={ov.sizeDefinitionId ?? ''}
-                                  onChange={(e) =>
-                                    void handleMapOptionValue(ov.optionValueId, e.target.value)
-                                  }
-                                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-slate-600"
+                                  defaultValue=""
+                                  onChange={(event) => void handleMapOptionValue(option, event.target.value)}
+                                  className="min-w-56 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-slate-600"
                                 >
-                                  <option value="">Unlinked</option>
-                                  {sizeDefinitions.map((sd) => (
-                                    <option key={sd.id} value={sd.id}>
-                                      {sd.label} ({sd.code})
+                                  <option value="">Choose definition…</option>
+                                  {candidates.map((definition) => (
+                                    <option key={definition.id} value={definition.id}>
+                                      {definition.label} ({definition.code})
                                     </option>
                                   ))}
                                 </select>
-                                {isBusy && (
-                                  <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
-                                )}
+                                {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" /> : null}
                               </div>
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              {ov.sizeDefinitionId ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                                  <Check className="h-3 w-3" /> Mapped
-                                </span>
-                              ) : (
-                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                                  Unlinked
-                                </span>
-                              )}
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
-                  {optionValues.length > 15 && (
-                    <p className="mt-2 text-center text-[11px] text-slate-400">
-                      Showing first 15 of {optionValues.length} size options.
-                    </p>
-                  )}
                 </div>
               )}
-            </div>
+            </section>
           </>
         ) : null}
       </div>
@@ -269,58 +362,71 @@ export default function SizingDashboardPage() {
   );
 }
 
-function MetricCard({
+function SummaryCard({
   title,
   value,
   description,
   icon,
-  status,
-  actionHref,
-  actionLabel,
+  tone,
 }: {
   title: string;
-  value: number;
+  value: string;
   description: string;
   icon: React.ReactNode;
-  status: 'ok' | 'warning' | 'danger';
-  actionHref?: string;
-  actionLabel?: string;
+  tone: 'ok' | 'warning' | 'danger';
 }) {
-  const bgClass =
-    status === 'ok'
-      ? 'bg-emerald-50/50 border-emerald-200'
-      : status === 'warning'
-        ? 'bg-amber-50/50 border-amber-200'
-        : 'bg-red-50/50 border-red-200';
-
-  const textClass =
-    status === 'ok'
-      ? 'text-emerald-700'
-      : status === 'warning'
-        ? 'text-amber-700'
-        : 'text-red-700';
+  const classes =
+    tone === 'ok'
+      ? 'border-emerald-200 bg-emerald-50/50 text-emerald-800'
+      : tone === 'warning'
+        ? 'border-amber-200 bg-amber-50/60 text-amber-800'
+        : 'border-red-200 bg-red-50/60 text-red-800';
 
   return (
-    <div className={`flex flex-col justify-between rounded-xl border p-5 shadow-2xs ${bgClass}`}>
+    <div className={`rounded-xl border p-5 ${classes}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wider">{title}</p>
+        {icon}
+      </div>
+      <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>
+      <p className="mt-1 text-xs leading-relaxed opacity-80">{description}</p>
+    </div>
+  );
+}
+
+function MetricCard({ title, value, description, severity, href, action }: Metric) {
+  const healthy = value === 0;
+  const icon = healthy ? (
+    <Check className="h-4 w-4 text-emerald-600" />
+  ) : severity === 'danger' ? (
+    <AlertCircle className="h-4 w-4 text-red-600" />
+  ) : (
+    <FileWarning className="h-4 w-4 text-amber-600" />
+  );
+
+  const classes = healthy
+    ? 'border-slate-200 bg-white'
+    : severity === 'danger'
+      ? 'border-red-200 bg-red-50/40'
+      : 'border-amber-200 bg-amber-50/40';
+
+  return (
+    <div className={`flex min-h-36 flex-col justify-between rounded-xl border p-4 shadow-sm ${classes}`}>
       <div>
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-800">{title}</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xs font-semibold text-slate-800">{title}</h3>
           {icon}
         </div>
-        <div className={`mt-2 text-3xl font-extrabold tracking-tight ${textClass}`}>{value}</div>
-        <p className="mt-1 text-xs text-slate-600 leading-relaxed">{description}</p>
+        <p className={`mt-2 text-2xl font-bold ${healthy ? 'text-emerald-700' : severity === 'danger' ? 'text-red-700' : 'text-amber-700'}`}>
+          {value}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">{description}</p>
       </div>
-
-      {actionHref && value > 0 && (
-        <div className="mt-4 pt-3 border-t border-slate-200/60">
-          <Link
-            href={actionHref}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-900 hover:underline"
-          >
-            {actionLabel ?? 'Resolve'} <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
-      )}
+      {href && value > 0 ? (
+        <Link href={href} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-800 hover:underline">
+          {action ?? 'Review'} <ArrowRight className="h-3 w-3" />
+        </Link>
+      ) : null}
     </div>
   );
 }

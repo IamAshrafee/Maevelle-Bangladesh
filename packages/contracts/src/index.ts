@@ -500,22 +500,67 @@ export interface StorefrontContextDto {
   readonly announcement?: string;
 }
 
+export type SizingLifecycleStatusDto = 'ACTIVE' | 'ARCHIVED';
+export type SizingRevisionStatusDto = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type SizingSubjectTypeDto = 'BODY' | 'GARMENT' | 'PRODUCT';
+export type SizingMeasurementUnitDto = 'cm' | 'inch';
+export type SizingMappingStatusDto = 'MAPPED' | 'UNMAPPED' | 'ALL';
+
 export interface PublicSizeGuideDto {
   readonly name: string;
   readonly instructions: string | null;
   readonly fitNotes: string | null;
   readonly rows: readonly {
-    label: string;
-    measurements: readonly {
-      name: string;
-      instructions: string | null;
-      exact?: string;
-      min?: string;
-      max?: string;
-      unit: string;
-      approximate: boolean;
+    readonly label: string;
+    readonly measurements: readonly {
+      readonly name: string;
+      readonly instructions: string | null;
+      readonly exact?: string;
+      readonly min?: string;
+      readonly max?: string;
+      readonly unit: string;
+      readonly approximate: boolean;
     }[];
   }[];
+}
+
+export interface SizingDomainDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly subjectType: SizingSubjectTypeDto;
+  readonly status: SizingLifecycleStatusDto;
+}
+
+export interface SizeSystemDto {
+  readonly id: string;
+  readonly sizingDomainId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly regionCode: string | null;
+  readonly status: SizingLifecycleStatusDto;
+}
+
+export interface SizeDefinitionDto {
+  readonly id: string;
+  readonly sizeSystemId: string;
+  readonly code: string;
+  readonly label: string;
+  readonly sortOrder: number;
+  readonly status: SizingLifecycleStatusDto;
+}
+
+export interface MeasurementDefinitionDto {
+  readonly id: string;
+  readonly sizingDomainId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly instructions: string | null;
+  readonly subjectType: SizingSubjectTypeDto;
+  readonly defaultUnit: SizingMeasurementUnitDto;
+  readonly sortOrder: number;
+  readonly status: SizingLifecycleStatusDto;
 }
 
 export interface SizeGuideSummaryDto {
@@ -524,26 +569,28 @@ export interface SizeGuideSummaryDto {
   readonly description: string | null;
   readonly sizingDomainId: string;
   readonly sizingDomainName: string;
-  readonly status: 'ACTIVE' | 'ARCHIVED';
+  readonly sizeSystemId: string | null;
+  readonly sizeSystemName: string | null;
+  readonly status: SizingLifecycleStatusDto;
   readonly hasPublishedRevision: boolean;
   readonly version: number;
   readonly productCount: number;
+  readonly categoryCount: number;
   readonly updatedAt: string;
 }
 
 export interface SizeGuideListDto {
   readonly items: readonly SizeGuideSummaryDto[];
-  readonly pagination: {
-    readonly totalItems: number;
-  };
+  readonly pagination: PaginationDto;
 }
 
 export interface SizeGuideMeasurementDto {
   readonly measurementDefinitionId: string;
+  readonly measurementDefinitionName?: string;
   readonly exact: string | null;
   readonly min: string | null;
   readonly max: string | null;
-  readonly unit: 'cm' | 'inch';
+  readonly unit: SizingMeasurementUnitDto;
   readonly approximate: boolean;
 }
 
@@ -552,13 +599,15 @@ export interface SizeGuideRowDto {
   readonly displayLabel: string;
   readonly position: number;
   readonly sizeDefinitionId: string | null;
+  readonly sizeDefinitionLabel?: string | null;
   readonly measurements: readonly SizeGuideMeasurementDto[];
 }
 
 export interface SizeGuideRevisionDetailDto {
   readonly id: string;
   readonly revisionNumber: number;
-  readonly status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  readonly status: SizingRevisionStatusDto;
+  readonly version: number;
   readonly instructions: string | null;
   readonly fitNotes: string | null;
   readonly createdAt: string;
@@ -572,49 +621,71 @@ export interface SizeGuideDetailDto {
   readonly description: string | null;
   readonly sizingDomainId: string;
   readonly sizingDomainName: string;
-  readonly status: 'ACTIVE' | 'ARCHIVED';
+  readonly sizeSystemId: string | null;
+  readonly sizeSystemName: string | null;
+  readonly status: SizingLifecycleStatusDto;
   readonly currentPublishedRevisionId: string | null;
   readonly version: number;
   readonly revisions: readonly SizeGuideRevisionDetailDto[];
-  readonly products: readonly { id: string; title: string; handle: string }[];
+  readonly products: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly handle: string;
+  }[];
+  readonly categories: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly handle: string;
+  }[];
 }
 
 export interface ProductSizingDto {
   readonly productId: string;
+  readonly productVersion: number | null;
   readonly configured: boolean;
   readonly sizeSystemId: string | null;
   readonly sizeSystemName: string | null;
   readonly sizeGuideId: string | null;
   readonly sizeGuideName: string | null;
-  readonly sizeGuideStatus: 'ACTIVE' | 'ARCHIVED' | null;
+  readonly sizeGuideStatus: SizingLifecycleStatusDto | null;
+  readonly sizeGuideSystemId: string | null;
   readonly hasPublishedGuide: boolean;
-  readonly configStatus: 'ACTIVE' | 'ARCHIVED' | null;
+  readonly configStatus: SizingLifecycleStatusDto | null;
 }
 
-export interface SizingDomainDto {
+export interface AdminSizingGuideDto {
   readonly id: string;
-  readonly code: string;
   readonly name: string;
   readonly description: string | null;
-  readonly subjectType: 'BODY' | 'GARMENT' | 'PRODUCT';
-  readonly status: 'ACTIVE' | 'ARCHIVED';
-}
-
-export interface SizeSystemDto {
-  readonly id: string;
   readonly sizingDomainId: string;
-  readonly code: string;
-  readonly name: string;
-  readonly regionCode: string | null;
-  readonly status: 'ACTIVE' | 'ARCHIVED';
-}
-
-export interface SizeDefinitionDto {
-  readonly id: string;
-  readonly sizeSystemId: string;
-  readonly code: string;
-  readonly label: string;
-  readonly sortOrder: number;
+  readonly sizeSystemId: string | null;
+  readonly status: SizingLifecycleStatusDto;
+  readonly currentPublishedRevisionId: string | null;
+  readonly version: number;
+  readonly revisions: readonly {
+    readonly id: string;
+    readonly revisionNumber: number;
+    readonly status: SizingRevisionStatusDto;
+    readonly version: number;
+    readonly instructions: string | null;
+    readonly fitNotes: string | null;
+    readonly createdAt: string;
+    readonly publishedAt: string | null;
+    readonly rows: readonly {
+      readonly id: string;
+      readonly displayLabel: string;
+      readonly position: number;
+      readonly sizeDefinitionId: string | null;
+      readonly measurements: readonly {
+        readonly measurementDefinitionId: string;
+        readonly exact: string | null;
+        readonly min: string | null;
+        readonly max: string | null;
+        readonly unit: SizingMeasurementUnitDto;
+        readonly approximate: boolean;
+      }[];
+    }[];
+  }[];
 }
 
 export interface AdminSizingWorkspaceDto {
@@ -622,15 +693,30 @@ export interface AdminSizingWorkspaceDto {
   readonly systems: readonly SizeSystemDto[];
   readonly sizeDefinitions: readonly SizeDefinitionDto[];
   readonly measurementDefinitions: readonly MeasurementDefinitionDto[];
-  readonly guides: readonly SizeGuideSummaryDto[];
+  readonly guides: readonly AdminSizingGuideDto[];
+  readonly productConfigurations: readonly {
+    readonly productId: string;
+    readonly productTitle: string;
+    readonly productVersion: number;
+    readonly sizeSystemId: string;
+    readonly sizeGuideId: string | null;
+    readonly status: SizingLifecycleStatusDto;
+  }[];
 }
 
 export interface SizingQualityChecksDto {
   readonly productsWithSizeAxisButNoSizingConfig: number;
   readonly productsWithConfigButNoPublishedGuide: number;
   readonly productsUsingArchivedGuide: number;
+  readonly productConfigurationsWithSystemGuideMismatch: number;
   readonly publishedRevisionsWithEmptyRows: number;
+  readonly publishedRowsWithoutMeasurements: number;
   readonly optionValuesInSizeAxisWithoutSizeDefinitionLink: number;
+  readonly optionValuesMappedOutsideConfiguredSystem: number;
+  readonly guideRowsWithSystemMismatch: number;
+  readonly categoryDefaultsUsingUnavailableGuide: number;
+  readonly activeDefinitionsUnderArchivedSystem: number;
+  readonly activeMeasurementsUnderArchivedDomain: number;
 }
 
 export interface CategorySizeGuideDefaultDto {
@@ -639,29 +725,180 @@ export interface CategorySizeGuideDefaultDto {
   readonly categoryPath: string;
   readonly sizeGuideId: string | null;
   readonly sizeGuideName: string | null;
+  readonly sizeGuideStatus: SizingLifecycleStatusDto | null;
+  readonly hasPublishedGuide: boolean;
+}
+
+export interface CategorySizeGuideDefaultListDto {
+  readonly items: readonly CategorySizeGuideDefaultDto[];
+  readonly pagination: PaginationDto;
 }
 
 export interface SizeOptionValueMappingDto {
   readonly optionValueId: string;
   readonly optionValueLabel: string;
+  readonly optionAxisId: string;
   readonly optionAxisName: string;
   readonly productTitle: string;
   readonly productId: string;
+  readonly configuredSizeSystemId: string | null;
   readonly sizeDefinitionId: string | null;
   readonly sizeDefinitionLabel: string | null;
+  readonly sizeDefinitionSystemId: string | null;
 }
 
-export interface MeasurementDefinitionDto {
-  readonly id: string;
+export interface SizeOptionValueMappingListDto {
+  readonly items: readonly SizeOptionValueMappingDto[];
+  readonly pagination: PaginationDto;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                        Sizing mutation transport DTOs                       */
+/* -------------------------------------------------------------------------- */
+
+export interface CreateSizingDomainDto {
+  readonly code: string;
+  readonly name: string;
+  readonly subjectType: SizingSubjectTypeDto;
+}
+
+export interface UpdateSizingDomainDto {
+  readonly name: string;
+}
+
+export interface CreateSizeSystemDto {
   readonly sizingDomainId: string;
   readonly code: string;
   readonly name: string;
-  readonly description: string | null;
-  readonly instructions: string | null;
-  readonly subjectType: 'BODY' | 'GARMENT' | 'PRODUCT';
-  readonly defaultUnit: 'cm' | 'inch';
-  readonly sortOrder: number;
-  readonly status: 'ACTIVE' | 'ARCHIVED';
+  readonly regionCode?: string;
+}
+
+export interface UpdateSizeSystemDto {
+  readonly name?: string;
+  readonly regionCode?: string | null;
+}
+
+export interface CreateSizeDefinitionDto {
+  readonly sizeSystemId: string;
+  readonly code: string;
+  readonly label: string;
+  readonly sortOrder?: number;
+}
+
+export interface UpdateSizeDefinitionDto {
+  readonly label?: string;
+  readonly sortOrder?: number;
+}
+
+export interface CreateMeasurementDefinitionDto {
+  readonly sizingDomainId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly instructions?: string;
+  readonly sortOrder?: number;
+  readonly subjectType: SizingSubjectTypeDto;
+  readonly defaultUnit: SizingMeasurementUnitDto;
+}
+
+export interface UpdateMeasurementDefinitionDto {
+  readonly name?: string;
+  readonly description?: string | null;
+  readonly instructions?: string | null;
+  readonly sortOrder?: number;
+  readonly defaultUnit?: SizingMeasurementUnitDto;
+}
+
+export interface CreateSizeGuideDto {
+  readonly name: string;
+  readonly description?: string;
+  readonly sizingDomainId: string;
+  readonly sizeSystemId?: string;
+}
+
+export interface UpdateSizeGuideDto {
+  readonly expectedVersion: number;
+  readonly name?: string;
+  readonly description?: string | null;
+  readonly sizeSystemId?: string | null;
+}
+
+export interface CreateSizeGuideRevisionDto {
+  readonly sourceRevisionId?: string;
+  readonly instructions?: string;
+  readonly fitNotes?: string;
+}
+
+export interface UpdateSizeGuideRevisionMetaDto {
+  readonly expectedVersion: number;
+  readonly instructions?: string | null;
+  readonly fitNotes?: string | null;
+}
+
+export interface CreateSizeGuideRowDto {
+  readonly expectedVersion: number;
+  readonly displayLabel: string;
+  readonly position: number;
+  readonly sizeDefinitionId?: string;
+}
+
+export interface UpdateSizeGuideRowDto {
+  readonly expectedVersion: number;
+  readonly displayLabel?: string;
+  readonly position?: number;
+  readonly sizeDefinitionId?: string | null;
+}
+
+export interface ReorderSizeGuideRowsDto {
+  readonly expectedVersion: number;
+  readonly rows: readonly {
+    readonly rowId: string;
+    readonly position: number;
+  }[];
+}
+
+export type SetSizeGuideMeasurementDto =
+  | {
+      readonly expectedVersion: number;
+      readonly unitCode: SizingMeasurementUnitDto;
+      readonly exact: string;
+      readonly isApproximate?: boolean;
+    }
+  | {
+      readonly expectedVersion: number;
+      readonly unitCode: SizingMeasurementUnitDto;
+      readonly min: string;
+      readonly max: string;
+      readonly isApproximate?: boolean;
+    };
+
+export type SizeGuideMatrixChangeDto =
+  | {
+      readonly operation: 'SET';
+      readonly rowId: string;
+      readonly measurementDefinitionId: string;
+      readonly unitCode: SizingMeasurementUnitDto;
+      readonly exact: string;
+      readonly isApproximate?: boolean;
+    }
+  | {
+      readonly operation: 'SET';
+      readonly rowId: string;
+      readonly measurementDefinitionId: string;
+      readonly unitCode: SizingMeasurementUnitDto;
+      readonly min: string;
+      readonly max: string;
+      readonly isApproximate?: boolean;
+    }
+  | {
+      readonly operation: 'CLEAR';
+      readonly rowId: string;
+      readonly measurementDefinitionId: string;
+    };
+
+export interface SetSizeGuideMeasurementsBulkDto {
+  readonly expectedVersion: number;
+  readonly changes: readonly SizeGuideMatrixChangeDto[];
 }
 
 export interface ApiErrorDto {

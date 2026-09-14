@@ -235,6 +235,7 @@ async function main() {
         name: 'Standard Tops & Dresses Size Guide',
         description: 'Canonical size and measurement guide for women’s tops, kurtis, and tunics.',
         sizingDomainId: domain.id,
+        sizeSystemId: system.id,
       });
 
       const rowData: readonly {
@@ -252,57 +253,78 @@ async function main() {
         { label: 'XL', sizeDefId: sizeXL.id, bust: ['96', '100'], waist: ['78', '82'], hips: ['104', '108'], len: '96' },
       ];
 
+      let currentRevisionVersion = 0;
+
       for (let i = 0; i < rowData.length; i++) {
         const item = rowData[i]!;
         const row = await addSizeGuideRow(database.db, {
           organizationId: active.organization_id,
           revisionId: guide.revisionId,
+          expectedVersion: currentRevisionVersion,
           displayLabel: item.label,
           position: i,
           sizeDefinitionId: item.sizeDefId,
+          actorId: active.actor_id,
         });
+        currentRevisionVersion = row.version;
 
         await setSizeGuideMeasurement(database.db, {
           organizationId: active.organization_id,
           revisionId: guide.revisionId,
           rowId: row.id,
           measurementDefinitionId: mBust.id,
+          expectedVersion: currentRevisionVersion,
           unitCode: 'cm',
           min: item.bust[0],
           max: item.bust[1],
+          actorId: active.actor_id,
         });
+        currentRevisionVersion += 1;
+
         await setSizeGuideMeasurement(database.db, {
           organizationId: active.organization_id,
           revisionId: guide.revisionId,
           rowId: row.id,
           measurementDefinitionId: mWaist.id,
+          expectedVersion: currentRevisionVersion,
           unitCode: 'cm',
           min: item.waist[0],
           max: item.waist[1],
+          actorId: active.actor_id,
         });
+        currentRevisionVersion += 1;
+
         await setSizeGuideMeasurement(database.db, {
           organizationId: active.organization_id,
           revisionId: guide.revisionId,
           rowId: row.id,
           measurementDefinitionId: mHips.id,
+          expectedVersion: currentRevisionVersion,
           unitCode: 'cm',
           min: item.hips[0],
           max: item.hips[1],
+          actorId: active.actor_id,
         });
+        currentRevisionVersion += 1;
+
         await setSizeGuideMeasurement(database.db, {
           organizationId: active.organization_id,
           revisionId: guide.revisionId,
           rowId: row.id,
           measurementDefinitionId: mLength.id,
+          expectedVersion: currentRevisionVersion,
           unitCode: 'cm',
           exact: item.len,
+          actorId: active.actor_id,
         });
+        currentRevisionVersion += 1;
       }
 
       await publishSizeGuideRevision(database.db, {
         organizationId: active.organization_id,
         sizeGuideId: guide.id,
         revisionId: guide.revisionId,
+        expectedVersion: currentRevisionVersion,
         actorId: active.actor_id,
       });
     }
@@ -433,7 +455,7 @@ async function main() {
           });
         }
 
-        await sql`update catalog.products set status = 'ACTIVE', publication_status = 'PUBLISHED' where id = ${kurti.id}::uuid`.execute(database.db);
+        await sql`update catalog.products set status = 'ACTIVE', publication_status = 'PUBLISHED', published_at = now() where id = ${kurti.id}::uuid`.execute(database.db);
       }
     }
     console.log(

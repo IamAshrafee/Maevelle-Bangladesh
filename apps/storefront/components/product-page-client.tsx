@@ -23,19 +23,6 @@ function money(amount: string, currency = 'BDT') {
   }).format(Number(amount));
 }
 
-function formatMeasurementNumber(val: string | null | undefined): string {
-  if (!val) return '';
-  const n = Number(val);
-  return Number.isFinite(n) ? (Number.isInteger(n) ? n.toString() : n.toFixed(1).replace(/\.0$/, '')) : val;
-}
-
-function measurement(value: PublicSizeGuideDto['rows'][number]['measurements'][number]) {
-  const exact = formatMeasurementNumber(value.exact);
-  const min = formatMeasurementNumber(value.min);
-  const max = formatMeasurementNumber(value.max);
-  return `${exact || `${min}–${max}`} ${value.unit}${value.approximate ? ' approx.' : ''}`;
-}
-
 export function ProductPageClient() {
   const parameters = useParams<{ handle: string }>();
   const { context, loading: contextLoading } = useStorefrontContext();
