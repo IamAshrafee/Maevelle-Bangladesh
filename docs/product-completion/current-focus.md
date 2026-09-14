@@ -8,24 +8,22 @@ Admin Inventory Operations
 
 Inventory Workspace and Traceability is complete. Staff can now see authoritative
 stock positions and explain movement history across Locations, conditions,
-Reservations, Transfers, and inbound Supply. The highest remaining integrity risk
-is Reservation ownership: holds can currently outlive failed or timed-out Payment
-paths, and manual release does not sufficiently account for downstream
-Fulfillment claims.
+Reservations, Transfers, and inbound Supply. Reservation ownership and generic
+expiry are now safe. The remaining lifecycle gap is policy-driven manual-payment
+timeout: Maevelle needs an explicit configurable window and a race-safe terminal
+path rather than an invented global countdown.
 
 ## Current Status / Substage
 
-`PLANNED` — `INVENTORY_RESERVATION_ORDER_LIFECYCLE`
+`IN_PROGRESS` — `INVENTORY_RESERVATION_ORDER_LIFECYCLE`
 
 ## Evidence Already Known
 
-The assessment and roadmap are recorded in
-`areas/admin-inventory-operations/inventory-assessment-and-roadmap.md`; Phase 2
-closeout is in
-`areas/admin-inventory-operations/workspace-traceability-closeout.md`. Commit
-`11c2336` passed typecheck, focused lint, Admin/API production builds,
-architecture checks, and 50 focused Inventory/Catalog/Procurement/Costing/
-Returns/Storefront/Admin tests.
+The ownership/expiry checkpoint is recorded in
+`areas/admin-inventory-operations/reservation-lifecycle-checkpoint.md`. Commit
+`962cf74` prevents unsafe direct release, coordinates Order cancellation with
+open Fulfillment work, blocks cancellation after dispatch, reaps only explicitly
+expiring standalone holds, and exposes real ownership/allocation state in Admin.
 
 ## Immediate Objective
 
@@ -36,11 +34,10 @@ work.
 
 ## Next Exact Action
 
-Trace the current Order, Payment, Reservation, Fulfillment, cancellation, failed
-payment, and timeout transitions into a single state/ownership matrix. Then add
-failing tests for expiry-versus-fulfillment, payment failure, cancellation replay,
-partial consumption, and unauthorized or unsafe manual release before changing
-domain behavior.
+Define an organization-configured timeout for manual-payment Orders, then make
+payment timeout race safely with verification, Order cancellation, and
+Fulfillment. Surface payment/stale-owner exceptions and add terminal-owner and
+allocation integrity checks plus API authorization coverage.
 
 ## Important Constraints
 
