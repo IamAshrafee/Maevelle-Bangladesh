@@ -6,52 +6,52 @@ Admin Inventory Operations
 
 ## Why Now
 
-Inventory Foundation Integrity is now complete. The authoritative ledger,
-current balances, cost positions, Storefront availability, Catalog archive
-state, and integrity checks are aligned across the existing movement paths.
-The next operational bottleneck is staff visibility: the Admin surfaces remain
-fragmented and do not yet make quantity, location, condition, reason, actor,
-source document, and running balance easy to understand together.
+Inventory Workspace and Traceability is complete. Staff can now see authoritative
+stock positions and explain movement history across Locations, conditions,
+Reservations, Transfers, and inbound Supply. The highest remaining integrity risk
+is Reservation ownership: holds can currently outlive failed or timed-out Payment
+paths, and manual release does not sufficiently account for downstream
+Fulfillment claims.
 
 ## Current Status / Substage
 
-`PLANNED` — `INVENTORY_WORKSPACE_TRACEABILITY`
+`PLANNED` — `INVENTORY_RESERVATION_ORDER_LIFECYCLE`
 
 ## Evidence Already Known
 
 The assessment and roadmap are recorded in
-`areas/admin-inventory-operations/inventory-assessment-and-roadmap.md`; the
-Foundation closeout is in
-`areas/admin-inventory-operations/foundation-integrity-closeout.md`. Commit
-`c905dfd` passed a fresh main/test database construction, production container
-builds, typecheck, architecture checks, and 48 focused Inventory/Catalog/
-Costing/Procurement/Returns/Storefront tests.
+`areas/admin-inventory-operations/inventory-assessment-and-roadmap.md`; Phase 2
+closeout is in
+`areas/admin-inventory-operations/workspace-traceability-closeout.md`. Commit
+`11c2336` passed typecheck, focused lint, Admin/API production builds,
+architecture checks, and 50 focused Inventory/Catalog/Procurement/Costing/
+Returns/Storefront/Admin tests.
 
 ## Immediate Objective
 
-Give Maevelle staff one authoritative, responsive Inventory workspace that can
-answer how many units exist, where they are, what can sell, what is reserved or
-unavailable, and exactly what changed, why, by whom, and from which business
-document.
+Ensure every Reservation has one explicit business owner, cannot reduce ATS
+indefinitely after its owner becomes terminal, and can be consumed, released, or
+expired exactly once without racing Order, Payment, cancellation, or Fulfillment
+work.
 
 ## Next Exact Action
 
-Define the paged stock/history/detail API contracts and Admin information
-architecture. Implement running balances, actor/reason/reference fields,
-server-backed URL search/filter/sort, and reliable Product, Location, and source
-document links before broader dashboard polish.
+Trace the current Order, Payment, Reservation, Fulfillment, cancellation, failed
+payment, and timeout transitions into a single state/ownership matrix. Then add
+failing tests for expiry-versus-fulfillment, payment failure, cancellation replay,
+partial consumption, and unauthorized or unsafe manual release before changing
+domain behavior.
 
 ## Important Constraints
 
-Keep the ledger and current balance projections authoritative; the workspace is
-a read/command surface, not a new stock source. Reuse shared contracts and UI
-primitives, keep queries server-paged, preserve tenant/capability boundaries,
-and design touch-first for mobile, tablet, and desktop. Do not absorb Reservation,
-Transfer discrepancy, Receiving, or Stocktake workflow redesign into this phase.
+Preserve Inventory's locked ATS check, atomic Order placement, existing
+idempotency/audit/outbox behavior, tenant isolation, and Fulfillment consumption
+boundary. Do not add cart-level holds. COD policy must not expire legitimate
+confirmed Orders, and recovery actions must never release stock already claimed
+by a live Fulfillment.
 
 ## Blockers / Owner Review
 
-No technical blocker is recorded. Repository-wide lint and hardening still
-report known unrelated baseline findings; these are recorded in the Foundation
-closeout. Authenticated visual/owner review remains a distinct gate for the new
-workspace.
+No technical blocker is recorded. Authenticated visual/owner review of the Phase
+2 workspace remains a distinct review gate and does not weaken its automated
+contract/integrity evidence.
