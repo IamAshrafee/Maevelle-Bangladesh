@@ -48,6 +48,34 @@ export interface InventoryBalance {
   readonly availableToSell: string;
 }
 
+export interface InventoryPosition {
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly productId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly optionSummary: string | null;
+  readonly inventoryStatus: 'ACTIVE' | 'ARCHIVED';
+  readonly variantStatus: 'ACTIVE' | 'ARCHIVED';
+  readonly unitCode: string;
+  readonly locationId: string;
+  readonly locationCode: string;
+  readonly locationName: string;
+  readonly onHand: string;
+  readonly sellable: string;
+  readonly reserved: string;
+  readonly availableToSell: string;
+  readonly unavailable: string;
+  readonly damaged: string;
+  readonly quarantine: string;
+  readonly inspection: string;
+  readonly incomingTransfer: string;
+  readonly outgoingTransfer: string;
+  readonly incomingSupply: string;
+  readonly activeReservationCount: number;
+  readonly lastMovementAt: Date | null;
+}
+
 function fingerprint(input: unknown): string {
   return JSON.stringify(input);
 }
@@ -117,6 +145,12 @@ function fixedQuantity(value: string): bigint {
   return BigInt(integer) * 1_000_000n + BigInt((fraction + '000000').slice(0, 6));
 }
 
+function sumPositiveQuantities(values: readonly string[]): string {
+  const total = values.reduce((sum, value) => sum + fixedQuantity(value), 0n);
+  const fraction = (total % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
+  return `${total / 1_000_000n}${fraction ? `.${fraction}` : ''}`;
+}
+
 async function ensureItem(
   transaction: Transaction<DatabaseSchema>,
   organizationId: string,
@@ -165,6 +199,14 @@ export async function ensureInventoryItemForVariant(
   return db
     .transaction()
     .execute((transaction) => ensureItem(transaction, organizationId, variantId));
+}
+
+export async function ensureInventoryItemForVariantInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  organizationId: string,
+  variantId: string,
+): Promise<string> {
+  return ensureItem(transaction, organizationId, variantId);
 }
 
 async function lockLevel(
@@ -993,6 +1035,249 @@ export async function consumeReservationAllocationInTransaction(
   return { inventoryTransactionId, consumed: input.quantity };
 }
 
+export async function listInventoryPositions(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  input: {
+    locationId?: string;
+    inventoryItemId?: string;
+    search?: string;
+    condition?: InventoryCondition;
+    availability?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+    catalogStatus?: 'ACTIVE' | 'ARCHIVED';
+    sortBy?: 'PRODUCT' | 'SKU' | 'ON_HAND' | 'AVAILABLE' | 'LAST_MOVEMENT';
+    sortOrder?: 'ASC' | 'DESC';
+    page?: number;
+    limit?: number;
+  } = {},
+): Promise<{ items: readonly InventoryPosition[]; totalCount: number }> {
+  const page = input.page ?? 1;
+  const limit = input.limit ?? 25;
+  const offset = (page - 1) * limit;
+  const locationFilter = input.locationId
+    ? sql`level.location_id = ${input.locationId}::uuid`
+    : sql`true`;
+  const itemFilter = input.inventoryItemId
+    ? sql`level.inventory_item_id = ${input.inventoryItemId}::uuid`
+    : sql`true`;
+  const searchFilter = input.search?.trim()
+    ? sql`(variant.sku ilike '%' || ${input.search.trim()} || '%' or product.title ilike '%' || ${input.search.trim()} || '%' or coalesce(variant.title, '') ilike '%' || ${input.search.trim()} || '%' or location.name ilike '%' || ${input.search.trim()} || '%' or location.code ilike '%' || ${input.search.trim()} || '%')`
+    : sql`true`;
+  const catalogStatusFilter =
+    input.catalogStatus === 'ARCHIVED'
+      ? sql`(item.status = 'ARCHIVED' or variant.status = 'ARCHIVED' or product.status = 'ARCHIVED')`
+      : input.catalogStatus === 'ACTIVE'
+        ? sql`(item.status = 'ACTIVE' and variant.status = 'ACTIVE' and product.status <> 'ARCHIVED')`
+        : sql`true`;
+  const conditionFilter = input.condition
+    ? sql`coalesce(conditions.${sql.raw(
+        input.condition === 'SELLABLE'
+          ? 'sellable'
+          : input.condition === 'DAMAGED'
+            ? 'damaged'
+            : input.condition === 'QUARANTINE'
+              ? 'quarantine'
+              : 'inspection',
+      )}, 0) > 0`
+    : sql`true`;
+  const availabilityFilter =
+    input.availability === 'IN_STOCK'
+      ? sql`level.sellable_quantity - level.reserved_quantity > 0`
+      : input.availability === 'LOW_STOCK'
+        ? sql`level.sellable_quantity - level.reserved_quantity between 1 and 5`
+        : input.availability === 'OUT_OF_STOCK'
+          ? sql`level.sellable_quantity - level.reserved_quantity <= 0`
+          : sql`true`;
+  const sortExpression =
+    input.sortBy === 'SKU'
+      ? sql`variant.sku`
+      : input.sortBy === 'ON_HAND'
+        ? sql`level.sellable_quantity + level.unavailable_quantity`
+        : input.sortBy === 'AVAILABLE'
+          ? sql`level.sellable_quantity - level.reserved_quantity`
+          : input.sortBy === 'LAST_MOVEMENT'
+            ? sql`last_movement.occurred_at`
+            : sql`product.title`;
+  const sortOrder = sql.raw(input.sortOrder === 'DESC' ? 'desc' : 'asc');
+
+  const fromAndFilters = sql`
+    from (
+      select position_key.organization_id, position_key.inventory_item_id, position_key.location_id,
+        coalesce(current_level.sellable_quantity, 0) as sellable_quantity,
+        coalesce(current_level.unavailable_quantity, 0) as unavailable_quantity,
+        coalesce(current_level.reserved_quantity, 0) as reserved_quantity
+      from (
+        select organization_id, inventory_item_id, location_id from inventory.inventory_levels
+        union
+        select line.organization_id, line.inventory_item_id, transfer.destination_location_id
+        from warehouse.transfer_lines line
+        join warehouse.transfers transfer on transfer.id=line.transfer_id and transfer.organization_id=line.organization_id
+        where transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED')
+        union
+        select allocation.organization_id, item.id, shipment.receiving_location_id
+        from inbound_shipment.purchase_line_allocations allocation
+        join inbound_shipment.shipments shipment on shipment.id=allocation.shipment_id
+          and shipment.organization_id=allocation.organization_id
+        join inventory.inventory_items item on item.variant_id=allocation.variant_id
+          and item.organization_id=allocation.organization_id
+        where shipment.status in ('IN_TRANSIT', 'ARRIVED') and shipment.receiving_status<>'RECEIVED'
+      ) position_key
+      left join inventory.inventory_levels current_level
+        on current_level.organization_id=position_key.organization_id
+        and current_level.inventory_item_id=position_key.inventory_item_id
+        and current_level.location_id=position_key.location_id
+    ) level
+    join inventory.inventory_items item on item.id = level.inventory_item_id and item.organization_id = level.organization_id
+    join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
+    join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
+    join warehouse.locations location on location.id = level.location_id and location.organization_id = level.organization_id
+    left join lateral (
+      select
+        coalesce(sum(condition.quantity) filter (where condition.condition_code = 'SELLABLE'), 0) as sellable,
+        coalesce(sum(condition.quantity) filter (where condition.condition_code = 'DAMAGED'), 0) as damaged,
+        coalesce(sum(condition.quantity) filter (where condition.condition_code = 'QUARANTINE'), 0) as quarantine,
+        coalesce(sum(condition.quantity) filter (where condition.condition_code = 'INSPECTION'), 0) as inspection
+      from inventory.inventory_level_conditions condition
+      where condition.organization_id = level.organization_id
+        and condition.inventory_item_id = level.inventory_item_id
+        and condition.location_id = level.location_id
+    ) conditions on true
+    left join lateral (
+      select max(transaction.occurred_at) as occurred_at
+      from inventory.inventory_movement_lines movement
+      join inventory.inventory_transactions transaction on transaction.id = movement.inventory_transaction_id
+        and transaction.organization_id = movement.organization_id
+      where movement.organization_id = level.organization_id
+        and movement.inventory_item_id = level.inventory_item_id
+        and movement.location_id = level.location_id
+    ) last_movement on true
+    left join lateral (
+      select coalesce(sum(line.dispatched_quantity - line.received_quantity), 0) as quantity
+      from warehouse.transfer_lines line
+      join warehouse.transfers transfer on transfer.id = line.transfer_id and transfer.organization_id = line.organization_id
+      where line.organization_id = level.organization_id and line.inventory_item_id = level.inventory_item_id
+        and transfer.destination_location_id = level.location_id
+        and transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED')
+    ) incoming_transfer on true
+    left join lateral (
+      select coalesce(sum(line.dispatched_quantity - line.received_quantity), 0) as quantity
+      from warehouse.transfer_lines line
+      join warehouse.transfers transfer on transfer.id = line.transfer_id and transfer.organization_id = line.organization_id
+      where line.organization_id = level.organization_id and line.inventory_item_id = level.inventory_item_id
+        and transfer.source_location_id = level.location_id
+        and transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED')
+    ) outgoing_transfer on true
+    left join lateral (
+      select coalesce(sum(greatest(allocation.allocated_quantity - coalesce(received.quantity, 0), 0)), 0) as quantity
+      from inbound_shipment.purchase_line_allocations allocation
+      join inbound_shipment.shipments shipment on shipment.id = allocation.shipment_id
+        and shipment.organization_id = allocation.organization_id
+      left join lateral (
+        select sum(receipt_line.quantity) as quantity
+        from receiving.inbound_receipt_lines receipt_line
+        where receipt_line.organization_id = allocation.organization_id
+          and receipt_line.shipment_allocation_id = allocation.id
+      ) received on true
+      where allocation.organization_id = level.organization_id and allocation.variant_id = variant.id
+        and shipment.receiving_location_id = level.location_id and shipment.status in ('IN_TRANSIT', 'ARRIVED')
+        and shipment.receiving_status <> 'RECEIVED'
+    ) incoming_supply on true
+    left join lateral (
+      select count(*) as quantity from inventory.inventory_reservations reservation
+      where reservation.organization_id = level.organization_id
+        and reservation.inventory_item_id = level.inventory_item_id
+        and reservation.location_id = level.location_id
+        and reservation.status in ('ACTIVE', 'PARTIALLY_CONSUMED')
+    ) active_reservations on true
+    where level.organization_id = ${organizationId}
+      and ${locationFilter} and ${itemFilter} and ${searchFilter}
+      and ${catalogStatusFilter} and ${conditionFilter} and ${availabilityFilter}
+  `;
+  const countResult = await sql<{
+    count: string;
+  }>`select count(*)::text as count ${fromAndFilters}`.execute(db);
+  const result = await sql<{
+    inventory_item_id: string;
+    variant_id: string;
+    product_id: string;
+    sku: string;
+    product_title: string;
+    option_summary: string | null;
+    inventory_status: 'ACTIVE' | 'ARCHIVED';
+    variant_status: 'ACTIVE' | 'ARCHIVED';
+    unit_code: string;
+    location_id: string;
+    location_code: string;
+    location_name: string;
+    on_hand: string;
+    sellable: string;
+    reserved: string;
+    available_to_sell: string;
+    unavailable: string;
+    damaged: string;
+    quarantine: string;
+    inspection: string;
+    incoming_transfer: string;
+    outgoing_transfer: string;
+    incoming_supply: string;
+    active_reservation_count: string;
+    last_movement_at: Date | null;
+  }>`
+    select level.inventory_item_id, item.variant_id, variant.product_id, variant.sku,
+      product.title as product_title, coalesce(nullif(variant.title, ''), (
+        select string_agg(axis.name || ': ' || value.display_value, ', ' order by axis.position, value.position)
+        from catalog.variant_option_values link
+        join catalog.product_option_values value on value.id=link.option_value_id and value.organization_id=link.organization_id
+        join catalog.product_option_axes axis on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
+        where link.organization_id=item.organization_id and link.variant_id=variant.id
+      )) as option_summary, item.status as inventory_status,
+      variant.status as variant_status, item.unit_code, level.location_id, location.code as location_code,
+      location.name as location_name, (level.sellable_quantity + level.unavailable_quantity)::text as on_hand,
+      level.sellable_quantity::text as sellable, level.reserved_quantity::text as reserved,
+      (level.sellable_quantity - level.reserved_quantity)::text as available_to_sell,
+      level.unavailable_quantity::text as unavailable, conditions.damaged::text, conditions.quarantine::text,
+      conditions.inspection::text,
+      coalesce(incoming_transfer.quantity, 0)::text as incoming_transfer,
+      coalesce(outgoing_transfer.quantity, 0)::text as outgoing_transfer,
+      coalesce(incoming_supply.quantity, 0)::text as incoming_supply,
+      coalesce(active_reservations.quantity, 0)::text as active_reservation_count,
+      last_movement.occurred_at as last_movement_at
+    ${fromAndFilters}
+    order by ${sortExpression} ${sortOrder} nulls last, variant.sku, location.name, level.inventory_item_id
+    limit ${limit} offset ${offset}
+  `.execute(db);
+  return {
+    items: result.rows.map((row) => ({
+      inventoryItemId: row.inventory_item_id,
+      variantId: row.variant_id,
+      productId: row.product_id,
+      sku: row.sku,
+      productTitle: row.product_title,
+      optionSummary: row.option_summary,
+      inventoryStatus: row.inventory_status,
+      variantStatus: row.variant_status,
+      unitCode: row.unit_code,
+      locationId: row.location_id,
+      locationCode: row.location_code,
+      locationName: row.location_name,
+      onHand: subtract(row.on_hand, '0'),
+      sellable: subtract(row.sellable, '0'),
+      reserved: subtract(row.reserved, '0'),
+      availableToSell: subtract(row.available_to_sell, '0'),
+      unavailable: subtract(row.unavailable, '0'),
+      damaged: subtract(row.damaged, '0'),
+      quarantine: subtract(row.quarantine, '0'),
+      inspection: subtract(row.inspection, '0'),
+      incomingTransfer: subtract(row.incoming_transfer, '0'),
+      outgoingTransfer: subtract(row.outgoing_transfer, '0'),
+      incomingSupply: subtract(row.incoming_supply, '0'),
+      activeReservationCount: Number(row.active_reservation_count),
+      lastMovementAt: row.last_movement_at,
+    })),
+    totalCount: Number(countResult.rows[0]?.count ?? '0'),
+  };
+}
+
 export async function listInventoryBalances(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
@@ -1095,8 +1380,11 @@ export async function listInventoryHistory(
     inventoryItemId?: string;
     locationId?: string;
     transactionType?: string;
-    dateFrom?: Date;
-    dateTo?: Date;
+    condition?: InventoryCondition;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    sortOrder?: 'ASC' | 'DESC';
     page?: number;
     limit?: number;
   } = {},
@@ -1106,11 +1394,14 @@ export async function listInventoryHistory(
     transactionId: string;
     inventoryItemId: string;
     variantId: string;
+    productId: string;
     occurredAt: Date;
     transactionType: string;
     transactionNumber: string | null;
     sku: string;
     productTitle: string;
+    optionSummary: string | null;
+    locationId: string;
     locationName: string;
     condition: InventoryCondition;
     quantityDelta: string;
@@ -1118,7 +1409,10 @@ export async function listInventoryHistory(
     reasonText: string | null;
     referenceType: string | null;
     referenceId: string | null;
+    referenceNumber: string | null;
     actorId: string | null;
+    actorDisplayName: string | null;
+    runningBalance: string;
   }[];
   totalCount: number;
 }> {
@@ -1133,19 +1427,35 @@ export async function listInventoryHistory(
   const typeFilter = input.transactionType
     ? sql`transaction.transaction_type = ${input.transactionType}`
     : sql`1=1`;
-  const dateFromFilter = input.dateFrom
-    ? sql`transaction.occurred_at >= ${input.dateFrom}`
+  const conditionFilter = input.condition
+    ? sql`line.condition_code = ${input.condition}`
     : sql`1=1`;
-  const dateToFilter = input.dateTo ? sql`transaction.occurred_at <= ${input.dateTo}` : sql`1=1`;
+  const searchFilter = input.search?.trim()
+    ? sql`(variant.sku ilike '%' || ${input.search.trim()} || '%' or product.title ilike '%' || ${input.search.trim()} || '%' or location.name ilike '%' || ${input.search.trim()} || '%' or coalesce(transaction.reason_code, '') ilike '%' || ${input.search.trim()} || '%' or coalesce(transaction.reason_text, '') ilike '%' || ${input.search.trim()} || '%' or coalesce(transaction.transaction_number, '') ilike '%' || ${input.search.trim()} || '%' or coalesce(transaction.reference_id::text, '') ilike '%' || ${input.search.trim()} || '%' or exists (select 1 from warehouse.transfers reference where transaction.reference_type = 'warehouse.transfer' and reference.organization_id=line.organization_id and reference.id=transaction.reference_id and reference.transfer_number ilike '%' || ${input.search.trim()} || '%') or exists (select 1 from inventory.stocktake_sessions reference where transaction.reference_type = 'inventory.stocktake' and reference.organization_id=line.organization_id and reference.id=transaction.reference_id and reference.stocktake_number ilike '%' || ${input.search.trim()} || '%') or exists (select 1 from receiving.inbound_receipts reference where transaction.reference_type = 'receiving.inbound_receipt' and reference.organization_id=line.organization_id and reference.id=transaction.reference_id and reference.receipt_number ilike '%' || ${input.search.trim()} || '%') or exists (select 1 from fulfillment.fulfillments reference where transaction.reference_type = 'fulfillment.fulfillment' and reference.organization_id=line.organization_id and reference.id=transaction.reference_id and reference.fulfillment_number ilike '%' || ${input.search.trim()} || '%') or exists (select 1 from returns.return_receipts reference where transaction.reference_type = 'returns.return_receipt' and reference.organization_id=line.organization_id and reference.id=transaction.reference_id and reference.receipt_number ilike '%' || ${input.search.trim()} || '%'))`
+    : sql`1=1`;
+  const dateFromFilter = input.dateFrom
+    ? sql`transaction.occurred_at >= ${input.dateFrom}::date`
+    : sql`1=1`;
+  const dateToFilter = input.dateTo
+    ? sql`transaction.occurred_at < (${input.dateTo}::date + interval '1 day')`
+    : sql`1=1`;
+  const sortOrder = sql.raw(input.sortOrder === 'ASC' ? 'asc' : 'desc');
 
   const countResult = await sql<{ count: string }>`
     select count(*)::text as count
     from inventory.inventory_movement_lines line
     join inventory.inventory_transactions transaction on transaction.id = line.inventory_transaction_id
+      and transaction.organization_id = line.organization_id
+    join inventory.inventory_items item on item.id = line.inventory_item_id and item.organization_id = line.organization_id
+    join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
+    join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
+    join warehouse.locations location on location.id = line.location_id and location.organization_id = line.organization_id
     where line.organization_id = ${organizationId}
       and ${itemFilter}
       and ${locationFilter}
       and ${typeFilter}
+      and ${conditionFilter}
+      and ${searchFilter}
       and ${dateFromFilter}
       and ${dateToFilter}
   `.execute(db);
@@ -1155,11 +1465,14 @@ export async function listInventoryHistory(
     inventory_transaction_id: string;
     inventory_item_id: string;
     variant_id: string;
+    product_id: string;
     occurred_at: Date;
     transaction_type: string;
     transaction_number: string | null;
     sku: string;
     product_title: string;
+    option_summary: string | null;
+    location_id: string;
     location_name: string;
     condition_code: InventoryCondition;
     quantity_delta: string;
@@ -1167,25 +1480,56 @@ export async function listInventoryHistory(
     reason_text: string | null;
     reference_type: string | null;
     reference_id: string | null;
+    reference_number: string | null;
     created_by_actor_id: string | null;
+    actor_display_name: string | null;
+    running_balance: string;
   }>`
-    select line.id::text, line.inventory_transaction_id, line.inventory_item_id, item.variant_id, transaction.occurred_at,
+    select line.id::text, line.inventory_transaction_id, line.inventory_item_id, item.variant_id, variant.product_id, transaction.occurred_at,
       transaction.transaction_type, transaction.transaction_number, variant.sku, product.title as product_title,
-      location.name as location_name, line.condition_code, line.quantity_delta::text, transaction.reason_code,
-      transaction.reason_text, transaction.reference_type, transaction.reference_id::text, transaction.created_by_actor_id
+      coalesce(nullif(variant.title, ''), (
+        select string_agg(axis.name || ': ' || value.display_value, ', ' order by axis.position, value.position)
+        from catalog.variant_option_values link
+        join catalog.product_option_values value on value.id=link.option_value_id and value.organization_id=link.organization_id
+        join catalog.product_option_axes axis on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
+        where link.organization_id=item.organization_id and link.variant_id=variant.id
+      )) as option_summary, line.location_id, location.name as location_name, line.condition_code,
+      line.quantity_delta::text, transaction.reason_code, transaction.reason_text, transaction.reference_type,
+      transaction.reference_id::text, transaction.created_by_actor_id,
+      coalesce(membership.display_name, actor.email) as actor_display_name,
+      (select coalesce(sum(prior.quantity_delta), 0)::text
+        from inventory.inventory_movement_lines prior
+        join inventory.inventory_transactions prior_transaction on prior_transaction.id = prior.inventory_transaction_id
+          and prior_transaction.organization_id = prior.organization_id
+        where prior.organization_id = line.organization_id and prior.inventory_item_id = line.inventory_item_id
+          and prior.location_id = line.location_id and prior.condition_code = line.condition_code
+          and (prior_transaction.occurred_at, prior.id) <= (transaction.occurred_at, line.id)) as running_balance,
+      case transaction.reference_type
+        when 'warehouse.transfer' then (select transfer_number from warehouse.transfers where organization_id=line.organization_id and id=transaction.reference_id)
+        when 'inventory.stocktake' then (select stocktake_number from inventory.stocktake_sessions where organization_id=line.organization_id and id=transaction.reference_id)
+        when 'receiving.inbound_receipt' then (select receipt_number from receiving.inbound_receipts where organization_id=line.organization_id and id=transaction.reference_id)
+        when 'fulfillment.fulfillment' then (select fulfillment_number from fulfillment.fulfillments where organization_id=line.organization_id and id=transaction.reference_id)
+        when 'returns.return_receipt' then (select receipt_number from returns.return_receipts where organization_id=line.organization_id and id=transaction.reference_id)
+        else null
+      end as reference_number
     from inventory.inventory_movement_lines line
-    join inventory.inventory_transactions transaction on transaction.id = line.inventory_transaction_id
-    join inventory.inventory_items item on item.id = line.inventory_item_id
-    join catalog.product_variants variant on variant.id = item.variant_id
-    join catalog.products product on product.id = variant.product_id
-    join warehouse.locations location on location.id = line.location_id
+    join inventory.inventory_transactions transaction on transaction.id = line.inventory_transaction_id and transaction.organization_id = line.organization_id
+    join inventory.inventory_items item on item.id = line.inventory_item_id and item.organization_id = line.organization_id
+    join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
+    join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
+    join warehouse.locations location on location.id = line.location_id and location.organization_id = line.organization_id
+    left join iam.users actor on actor.id = transaction.created_by_actor_id
+    left join iam.organization_memberships membership on membership.organization_id = line.organization_id
+      and membership.user_id = transaction.created_by_actor_id
     where line.organization_id = ${organizationId}
       and ${itemFilter}
       and ${locationFilter}
       and ${typeFilter}
+      and ${conditionFilter}
+      and ${searchFilter}
       and ${dateFromFilter}
       and ${dateToFilter}
-    order by transaction.occurred_at desc, line.id desc
+    order by transaction.occurred_at ${sortOrder}, line.id ${sortOrder}
     limit ${input.limit || 25} offset ${offset}
   `.execute(db);
 
@@ -1195,11 +1539,14 @@ export async function listInventoryHistory(
       transactionId: row.inventory_transaction_id,
       inventoryItemId: row.inventory_item_id,
       variantId: row.variant_id,
+      productId: row.product_id,
       occurredAt: row.occurred_at,
       transactionType: row.transaction_type,
       transactionNumber: row.transaction_number,
       sku: row.sku,
       productTitle: row.product_title,
+      optionSummary: row.option_summary,
+      locationId: row.location_id,
       locationName: row.location_name,
       condition: row.condition_code,
       quantityDelta: row.quantity_delta,
@@ -1207,7 +1554,10 @@ export async function listInventoryHistory(
       reasonText: row.reason_text,
       referenceType: row.reference_type,
       referenceId: row.reference_id,
+      referenceNumber: row.reference_number,
       actorId: row.created_by_actor_id,
+      actorDisplayName: row.actor_display_name,
+      runningBalance: subtract(row.running_balance, '0'),
     })),
     totalCount: Number(countResult.rows[0]?.count ?? '0'),
   };
@@ -2006,6 +2356,7 @@ export async function getInventoryStats(
   totalOnHand: string;
   totalAvailable: string;
   totalReserved: string;
+  totalUnavailable: string;
   totalDamaged: string;
   lowStockCount: number;
   outOfStockCount: number;
@@ -2014,6 +2365,7 @@ export async function getInventoryStats(
     total_on_hand: string;
     total_available: string;
     total_reserved: string;
+    total_unavailable: string;
     total_damaged: string;
     low_stock_count: string;
     out_of_stock_count: string;
@@ -2022,6 +2374,7 @@ export async function getInventoryStats(
       coalesce(sum(level.sellable_quantity + level.unavailable_quantity), 0)::text as total_on_hand,
       coalesce(sum(level.sellable_quantity - level.reserved_quantity), 0)::text as total_available,
       coalesce(sum(level.reserved_quantity), 0)::text as total_reserved,
+      coalesce(sum(level.unavailable_quantity), 0)::text as total_unavailable,
       coalesce((select sum(quantity) from inventory.inventory_level_conditions where organization_id = ${organizationId} and condition_code = 'DAMAGED'), 0)::text as total_damaged,
       count(case when level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= 5 then 1 end)::text as low_stock_count,
       count(case when level.sellable_quantity - level.reserved_quantity <= 0 then 1 end)::text as out_of_stock_count
@@ -2033,6 +2386,7 @@ export async function getInventoryStats(
     totalOnHand: subtract(row?.total_on_hand ?? '0', '0'),
     totalAvailable: subtract(row?.total_available ?? '0', '0'),
     totalReserved: subtract(row?.total_reserved ?? '0', '0'),
+    totalUnavailable: subtract(row?.total_unavailable ?? '0', '0'),
     totalDamaged: subtract(row?.total_damaged ?? '0', '0'),
     lowStockCount: Number(row?.low_stock_count ?? '0'),
     outOfStockCount: Number(row?.out_of_stock_count ?? '0'),
@@ -2042,7 +2396,13 @@ export async function getInventoryStats(
 export async function listInventoryReservations(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-  input: { locationId?: string; status?: 'ACTIVE' | 'ALL'; page?: number; limit?: number } = {},
+  input: {
+    inventoryItemId?: string;
+    locationId?: string;
+    status?: 'ACTIVE' | 'ALL';
+    page?: number;
+    limit?: number;
+  } = {},
 ): Promise<{
   items: readonly {
     id: string;
@@ -2067,6 +2427,9 @@ export async function listInventoryReservations(
   const locationFilter = input.locationId
     ? sql`res.location_id = ${input.locationId}::uuid`
     : sql`1=1`;
+  const itemFilter = input.inventoryItemId
+    ? sql`res.inventory_item_id = ${input.inventoryItemId}::uuid`
+    : sql`1=1`;
 
   const countResult = await sql<{ count: string }>`
     select count(*)::text as count
@@ -2074,6 +2437,7 @@ export async function listInventoryReservations(
     where res.organization_id = ${organizationId}
       and ${statusFilter}
       and ${locationFilter}
+      and ${itemFilter}
   `.execute(db);
 
   const result = await sql<{
@@ -2095,12 +2459,17 @@ export async function listInventoryReservations(
       variant.id as variant_id, variant.sku, product.title as product_title, location.name as location_name
     from inventory.inventory_reservations res
     join inventory.inventory_items item on item.id = res.inventory_item_id
+      and item.organization_id = res.organization_id
     join catalog.product_variants variant on variant.id = item.variant_id
+      and variant.organization_id = item.organization_id
     join catalog.products product on product.id = variant.product_id
+      and product.organization_id = variant.organization_id
     join warehouse.locations location on location.id = res.location_id
+      and location.organization_id = res.organization_id
     where res.organization_id = ${organizationId}
       and ${statusFilter}
       and ${locationFilter}
+      and ${itemFilter}
     order by res.created_at desc
     limit ${input.limit || 25} offset ${offset}
   `.execute(db);
@@ -2130,7 +2499,18 @@ export async function listStocktakeSessions(
   organizationId: string,
   input: { locationId?: string; status?: string; page?: number; limit?: number } = {},
 ): Promise<{
-  items: readonly any[];
+  items: readonly {
+    id: string;
+    stocktakeNumber: string;
+    locationId: string;
+    locationName: string;
+    status: 'DRAFT' | 'COUNTING' | 'REVIEW' | 'POSTED' | 'CANCELLED';
+    snapshotAt: Date;
+    postedAt: Date | null;
+    version: number;
+    totalLines: number;
+    countedLines: number;
+  }[];
   totalCount: number;
 }> {
   const offset = ((input.page || 1) - 1) * (input.limit || 25);
@@ -2147,7 +2527,18 @@ export async function listStocktakeSessions(
       and ${statusFilter}
   `.execute(db);
 
-  const result = await sql<any>`
+  const result = await sql<{
+    id: string;
+    stocktake_number: string;
+    location_id: string;
+    location_name: string;
+    status: 'DRAFT' | 'COUNTING' | 'REVIEW' | 'POSTED' | 'CANCELLED';
+    snapshot_at: Date;
+    posted_at: Date | null;
+    version: string;
+    total_lines: string;
+    counted_lines: string;
+  }>`
     select session.id, session.stocktake_number, session.location_id, session.status, session.snapshot_at, session.posted_at, session.version::text, location.name as location_name,
       (select count(*) from inventory.stocktake_lines where stocktake_session_id = session.id) as total_lines,
       (select count(*) from inventory.stocktake_lines where stocktake_session_id = session.id and counted_quantity is not null) as counted_lines
@@ -2185,70 +2576,120 @@ export async function getInventoryItemDetail(
   | {
       id: string;
       variantId: string;
+      productId: string;
       sku: string;
       productTitle: string;
+      optionSummary?: string;
+      inventoryStatus: 'ACTIVE' | 'ARCHIVED';
+      variantStatus: 'ACTIVE' | 'ARCHIVED';
       trackingMode: 'STANDARD' | 'LOT' | 'SERIAL';
       unitCode: string;
-      balances: readonly any[];
-      recentHistory: readonly any[];
-      activeReservations: readonly any[];
+      summary: {
+        onHand: string;
+        sellable: string;
+        reserved: string;
+        availableToSell: string;
+        unavailable: string;
+        incomingTransfer: string;
+        outgoingTransfer: string;
+        incomingSupply: string;
+      };
+      balances: readonly (InventoryBalance & {
+        variantId: string;
+        sku: string;
+        productTitle: string;
+        locationName: string;
+      })[];
+      recentHistory: Awaited<ReturnType<typeof listInventoryHistory>>['items'];
+      activeReservations: Awaited<ReturnType<typeof listInventoryReservations>>['items'];
     }
   | undefined
 > {
   const itemResult = await sql<{
     id: string;
     variant_id: string;
+    product_id: string;
     sku: string;
     product_title: string;
+    option_summary: string | null;
+    inventory_status: 'ACTIVE' | 'ARCHIVED';
+    variant_status: 'ACTIVE' | 'ARCHIVED';
     tracking_mode: 'STANDARD' | 'LOT' | 'SERIAL';
     unit_code: string;
   }>`
-    select item.id, item.variant_id, item.tracking_mode, item.unit_code,
-      variant.sku, product.title as product_title
+    select item.id, item.variant_id, variant.product_id, item.tracking_mode, item.unit_code,
+      item.status as inventory_status, variant.status as variant_status, variant.sku,
+      coalesce(nullif(variant.title, ''), (
+        select string_agg(axis.name || ': ' || value.display_value, ', ' order by axis.position, value.position)
+        from catalog.variant_option_values link
+        join catalog.product_option_values value on value.id=link.option_value_id and value.organization_id=link.organization_id
+        join catalog.product_option_axes axis on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
+        where link.organization_id=item.organization_id and link.variant_id=variant.id
+      )) as option_summary, product.title as product_title
     from inventory.inventory_items item
-    join catalog.product_variants variant on variant.id = item.variant_id
-    join catalog.products product on product.id = variant.product_id
+    join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
+    join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
     where item.id = ${inventoryItemId} and item.organization_id = ${organizationId}
   `.execute(db);
   const item = itemResult.rows[0];
   if (!item) return undefined;
 
-  const balancesResult = await sql<any>`
-    select condition.location_id, condition.condition_code, condition.quantity::text, level.reserved_quantity::text,
-      location.name as location_name
-    from inventory.inventory_level_conditions condition
-    join inventory.inventory_levels level on level.organization_id = condition.organization_id and level.inventory_item_id = condition.inventory_item_id and level.location_id = condition.location_id
-    join warehouse.locations location on location.id = condition.location_id
-    where condition.inventory_item_id = ${inventoryItemId} and condition.organization_id = ${organizationId}
-    order by location.name, condition.condition_code
-  `.execute(db);
-
-  const historyResult = await sql<any>`
-    select line.id::text, transaction.occurred_at, transaction.transaction_type, location.name as location_name, line.condition_code, line.quantity_delta::text, transaction.reason_code
-    from inventory.inventory_movement_lines line
-    join inventory.inventory_transactions transaction on transaction.id = line.inventory_transaction_id
-    join warehouse.locations location on location.id = line.location_id
-    where line.inventory_item_id = ${inventoryItemId} and line.organization_id = ${organizationId}
-    order by transaction.occurred_at desc, line.id desc
-    limit 25
-  `.execute(db);
-
-  const reservationsResult = await sql<any>`
-    select res.id, res.location_id, res.quantity::text, res.status, res.source_type, res.source_reference, res.expires_at, res.created_at,
-      location.name as location_name
-    from inventory.inventory_reservations res
-    join warehouse.locations location on location.id = res.location_id
-    where res.inventory_item_id = ${inventoryItemId} and res.organization_id = ${organizationId} and res.status = 'ACTIVE'
-    order by res.created_at desc
-  `.execute(db);
+  const [positions, recentHistory, activeReservations, balancesResult] = await Promise.all([
+    listInventoryPositions(db, organizationId, { inventoryItemId, limit: 100 }),
+    listInventoryHistory(db, organizationId, { inventoryItemId, limit: 25 }),
+    listInventoryReservations(db, organizationId, {
+      inventoryItemId,
+      status: 'ACTIVE',
+      limit: 100,
+    }),
+    sql<{
+      location_id: string;
+      condition_code: InventoryCondition;
+      quantity: string;
+      reserved_quantity: string;
+      location_name: string;
+    }>`
+      select condition.location_id, condition.condition_code, condition.quantity::text,
+        level.reserved_quantity::text, location.name as location_name
+      from inventory.inventory_level_conditions condition
+      join inventory.inventory_levels level on level.organization_id = condition.organization_id
+        and level.inventory_item_id = condition.inventory_item_id and level.location_id = condition.location_id
+      join warehouse.locations location on location.id = condition.location_id
+        and location.organization_id = condition.organization_id
+      where condition.inventory_item_id = ${inventoryItemId} and condition.organization_id = ${organizationId}
+      order by location.name, condition.condition_code
+    `.execute(db),
+  ]);
 
   return {
     id: item.id,
     variantId: item.variant_id,
+    productId: item.product_id,
     sku: item.sku,
     productTitle: item.product_title,
+    ...(item.option_summary === null ? {} : { optionSummary: item.option_summary }),
+    inventoryStatus: item.inventory_status,
+    variantStatus: item.variant_status,
     trackingMode: item.tracking_mode,
     unitCode: item.unit_code,
+    summary: {
+      onHand: sumPositiveQuantities(positions.items.map((position) => position.onHand)),
+      sellable: sumPositiveQuantities(positions.items.map((position) => position.sellable)),
+      reserved: sumPositiveQuantities(positions.items.map((position) => position.reserved)),
+      availableToSell: sumPositiveQuantities(
+        positions.items.map((position) => position.availableToSell),
+      ),
+      unavailable: sumPositiveQuantities(positions.items.map((position) => position.unavailable)),
+      incomingTransfer: sumPositiveQuantities(
+        positions.items.map((position) => position.incomingTransfer),
+      ),
+      outgoingTransfer: sumPositiveQuantities(
+        positions.items.map((position) => position.outgoingTransfer),
+      ),
+      incomingSupply: sumPositiveQuantities(
+        positions.items.map((position) => position.incomingSupply),
+      ),
+    },
     balances: balancesResult.rows.map((row) => ({
       inventoryItemId: item.id,
       variantId: item.variant_id,
@@ -2264,30 +2705,7 @@ export async function getInventoryItemDetail(
           ? subtract(subtract(row.quantity, '0'), subtract(row.reserved_quantity, '0'))
           : '0',
     })),
-    recentHistory: historyResult.rows.map((row) => ({
-      id: row.id,
-      occurredAt: row.occurred_at,
-      transactionType: row.transaction_type,
-      sku: item.sku,
-      locationName: row.location_name,
-      condition: row.condition_code,
-      quantityDelta: row.quantity_delta,
-      reasonCode: row.reason_code,
-    })),
-    activeReservations: reservationsResult.rows.map((row) => ({
-      id: row.id,
-      inventoryItemId: item.id,
-      variantId: item.variant_id,
-      sku: item.sku,
-      productTitle: item.product_title,
-      locationId: row.location_id,
-      locationName: row.location_name,
-      quantity: subtract(row.quantity, '0'),
-      status: row.status,
-      sourceType: row.source_type,
-      sourceReference: row.source_reference,
-      expiresAt: row.expires_at,
-      createdAt: row.created_at,
-    })),
+    recentHistory: recentHistory.items,
+    activeReservations: activeReservations.items,
   };
 }

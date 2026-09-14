@@ -682,16 +682,47 @@ export interface InventoryBalanceDto {
   readonly availableToSell: string;
 }
 
+export interface InventoryPositionDto {
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly productId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly optionSummary: string | null;
+  readonly inventoryStatus: 'ACTIVE' | 'ARCHIVED';
+  readonly variantStatus: 'ACTIVE' | 'ARCHIVED';
+  readonly unitCode: string;
+  readonly locationId: string;
+  readonly locationCode: string;
+  readonly locationName: string;
+  readonly onHand: string;
+  readonly sellable: string;
+  readonly reserved: string;
+  readonly availableToSell: string;
+  readonly unavailable: string;
+  readonly damaged: string;
+  readonly quarantine: string;
+  readonly inspection: string;
+  readonly incomingTransfer: string;
+  readonly outgoingTransfer: string;
+  readonly incomingSupply: string;
+  readonly activeReservationCount: number;
+  readonly lastMovementAt: string | null;
+}
+
 export interface InventoryHistoryDto {
   readonly id: string;
   readonly transactionId: string;
   readonly inventoryItemId: string;
   readonly variantId: string;
+  readonly productId: string;
   readonly occurredAt: string;
   readonly transactionType: string;
   readonly transactionNumber: string | null;
   readonly sku: string;
   readonly productTitle: string;
+  readonly optionSummary: string | null;
+  readonly locationId: string;
   readonly locationName: string;
   readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
   readonly quantityDelta: string;
@@ -699,7 +730,10 @@ export interface InventoryHistoryDto {
   readonly reasonText: string | null;
   readonly referenceType: string | null;
   readonly referenceId: string | null;
+  readonly referenceNumber: string | null;
   readonly actorId: string | null;
+  readonly actorDisplayName: string | null;
+  readonly runningBalance: string;
 }
 
 export interface WarehouseLocationDto {
@@ -722,6 +756,7 @@ export interface InventoryStatsDto {
   readonly totalOnHand: string;
   readonly totalAvailable: string;
   readonly totalReserved: string;
+  readonly totalUnavailable: string;
   readonly totalDamaged: string;
   readonly lowStockCount: number;
   readonly outOfStockCount: number;
@@ -730,11 +765,24 @@ export interface InventoryStatsDto {
 export interface InventoryItemDetailDto {
   readonly id: string;
   readonly variantId: string;
+  readonly productId: string;
   readonly sku: string;
   readonly productTitle: string;
   readonly optionSummary?: string;
+  readonly inventoryStatus: 'ACTIVE' | 'ARCHIVED';
+  readonly variantStatus: 'ACTIVE' | 'ARCHIVED';
   readonly trackingMode: 'STANDARD' | 'LOT' | 'SERIAL';
   readonly unitCode: string;
+  readonly summary: {
+    readonly onHand: string;
+    readonly sellable: string;
+    readonly reserved: string;
+    readonly availableToSell: string;
+    readonly unavailable: string;
+    readonly incomingTransfer: string;
+    readonly outgoingTransfer: string;
+    readonly incomingSupply: string;
+  };
   readonly balances: readonly InventoryBalanceDto[];
   readonly recentHistory: readonly InventoryHistoryDto[];
   readonly activeReservations: readonly InventoryReservationDto[];

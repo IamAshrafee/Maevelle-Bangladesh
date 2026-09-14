@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search, RotateCcw } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { RefreshCw, RotateCcw, Search } from 'lucide-react';
+import { useDeferredValue, useEffect, useState } from 'react';
 
-import type { PaginatedDto, InventoryHistoryDto, WarehouseLocationDto } from '@maevelle/contracts';
+import type { InventoryHistoryDto, PaginatedDto, WarehouseLocationDto } from '@maevelle/contracts';
 
-import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
-import { InventoryFeedback, InventoryEmptyState, InventoryPager } from './inventory-page-ui';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -18,314 +18,448 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { formatInventoryDate, formatInventoryNumber, inventoryRequest } from '@/lib/inventory/api';
+
+import {
+  InventoryEmptyState,
+  InventoryFeedback,
+  InventoryPager,
+  PAGE_SIZE,
+} from './inventory-page-ui';
+import { InventorySourceLink } from './inventory-source-link';
 
 const TRANSACTION_TYPES = [
-  { value: 'all', label: 'All Transaction Types' },
-  { value: 'OPENING_BALANCE', label: 'Opening Balance' },
-  { value: 'INBOUND_RECEIPT', label: 'Inbound Receipt' },
-  { value: 'RETURN_RECEIPT', label: 'Return Receipt' },
-  { value: 'FULFILLMENT_DISPATCH', label: 'Fulfillment Dispatch' },
-  { value: 'TRANSFER_DISPATCH', label: 'Transfer Dispatch' },
-  { value: 'TRANSFER_RECEIPT', label: 'Transfer Receipt' },
-  { value: 'ADJUSTMENT', label: 'Manual Adjustment' },
-  { value: 'STOCKTAKE_ADJUSTMENT', label: 'Stocktake Adjustment' },
-  { value: 'CONDITION_CHANGE', label: 'Condition Move' },
-];
+  ['ALL', 'All Movement Types'],
+  ['OPENING_BALANCE', 'Opening Balance'],
+  ['INBOUND_RECEIPT', 'Inbound Receipt'],
+  ['RETURN_RECEIPT', 'Return Receipt'],
+  ['FULFILLMENT_DISPATCH', 'Fulfillment Dispatch'],
+  ['TRANSFER_DISPATCH', 'Transfer Dispatch'],
+  ['TRANSFER_RECEIPT', 'Transfer Receipt'],
+  ['ADJUSTMENT', 'Manual Adjustment'],
+  ['STOCKTAKE_ADJUSTMENT', 'Stocktake Reconciliation'],
+  ['CONDITION_CHANGE', 'Condition Change'],
+] as const;
 
-function TransactionBadge({ type }: { type: string }) {
-  switch (type) {
-    case 'INBOUND_RECEIPT':
-    case 'RETURN_RECEIPT':
-    case 'TRANSFER_RECEIPT':
-      return (
-        <Badge className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 border-emerald-300 dark:border-emerald-800">
-          Receive
-        </Badge>
-      );
-    case 'FULFILLMENT_DISPATCH':
-    case 'TRANSFER_DISPATCH':
-      return (
-        <Badge className="bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 border-sky-300 dark:border-sky-800">
-          Dispatch
-        </Badge>
-      );
-    case 'ADJUSTMENT':
-      return (
-        <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 border-amber-300 dark:border-amber-800">
-          Adjustment
-        </Badge>
-      );
-    case 'STOCKTAKE_ADJUSTMENT':
-      return (
-        <Badge className="bg-purple-500/15 text-purple-700 hover:bg-purple-500/25 border-purple-300 dark:border-purple-800">
-          Reconciliation
-        </Badge>
-      );
-    case 'CONDITION_CHANGE':
-      return (
-        <Badge className="bg-orange-500/15 text-orange-700 hover:bg-orange-500/25 border-orange-300 dark:border-orange-800">
-          Condition Move
-        </Badge>
-      );
-    default:
-      return <Badge variant="outline">{type.replace(/_/g, ' ')}</Badge>;
-  }
+function movementLabel(type: string) {
+  return TRANSACTION_TYPES.find(([value]) => value === type)?.[1] ?? type.replaceAll('_', ' ');
+}
+
+function MovementBadge({ type }: { type: string }) {
+  const variant = type.includes('RECEIPT')
+    ? 'default'
+    : type.includes('DISPATCH')
+      ? 'secondary'
+      : type === 'STOCKTAKE_ADJUSTMENT'
+        ? 'outline'
+        : 'secondary';
+  return <Badge variant={variant}>{movementLabel(type)}</Badge>;
+}
+
+function Delta({ record }: { record: InventoryHistoryDto }) {
+  const positive = Number(record.quantityDelta) > 0;
+  return (
+    <span
+      className={
+        positive
+          ? 'font-semibold text-emerald-600 tabular-nums'
+          : 'font-semibold text-rose-600 tabular-nums'
+      }
+    >
+      {positive ? '+' : ''}
+      {formatInventoryNumber(record.quantityDelta)}
+    </span>
+  );
 }
 
 export function MovementHistory() {
-  const [history, setHistory] = useState<
-    readonly (InventoryHistoryDto & { inventoryItemId?: string })[]
-  >([]);
-  const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const router = useRouter();
+  const searchParameters = useSearchParams();
+  const [query, setQuery] = useState(searchParameters.get('q') ?? '');
+  const deferredQuery = useDeferredValue(query.trim());
+  const [history, setHistory] = useState<PaginatedDto<InventoryHistoryDto>>();
+  const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [message, setMessage] = useState('');
 
-  const [page, setPage] = useState(1);
-  const [locationId, setLocationId] = useState<string>('all');
-  const [transactionType, setTransactionType] = useState<string>('all');
-  const [search, setSearch] = useState<string>('');
-  const [hasNext, setHasNext] = useState(false);
+  const page = Math.max(1, Number(searchParameters.get('page') ?? 1) || 1);
+  const locationId = searchParameters.get('location') ?? 'ALL';
+  const transactionType = searchParameters.get('type') ?? 'ALL';
+  const condition = searchParameters.get('condition') ?? 'ALL';
+  const dateFrom = searchParameters.get('from') ?? '';
+  const dateTo = searchParameters.get('to') ?? '';
+  const order = searchParameters.get('order') ?? 'DESC';
 
-  // Fetch locations once
+  function replaceQuery(changes: Record<string, string | undefined>) {
+    const next = new URLSearchParams(searchParameters.toString());
+    for (const [key, value] of Object.entries(changes)) {
+      if (!value || value === 'ALL' || (key === 'page' && value === '1')) next.delete(key);
+      else next.set(key, value);
+    }
+    router.replace(next.size ? `/inventory/history?${next.toString()}` : '/inventory/history', {
+      scroll: false,
+    });
+  }
+
   useEffect(() => {
-    inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations')
-      .then((res) => setLocations(res.data || []))
-      .catch(console.error);
+    const current = searchParameters.get('q') ?? '';
+    if (current !== deferredQuery) replaceQuery({ q: deferredQuery || undefined, page: '1' });
+  }, [deferredQuery]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations', {
+      signal: controller.signal,
+    })
+      .then((result) => setLocations(result.data))
+      .catch((error) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError'))
+          setMessage(error instanceof Error ? error.message : 'Locations could not be loaded.');
+      });
+    return () => controller.abort();
   }, []);
 
-  // Fetch movements whenever filters change
+  async function load(signal?: AbortSignal) {
+    setState('loading');
+    const parameters = new URLSearchParams({
+      page: String(page),
+      limit: String(PAGE_SIZE),
+      sortOrder: order,
+    });
+    if (deferredQuery) parameters.set('search', deferredQuery);
+    if (locationId !== 'ALL') parameters.set('locationId', locationId);
+    if (transactionType !== 'ALL') parameters.set('transactionType', transactionType);
+    if (condition !== 'ALL') parameters.set('condition', condition);
+    if (dateFrom) parameters.set('dateFrom', dateFrom);
+    if (dateTo) parameters.set('dateTo', dateTo);
+    try {
+      const result = await inventoryRequest<{ data: PaginatedDto<InventoryHistoryDto> }>(
+        `/inventory/history?${parameters.toString()}`,
+        signal ? { signal } : undefined,
+      );
+      setHistory(result.data);
+      setMessage('');
+      setState('ready');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMessage(error instanceof Error ? error.message : 'Movement history could not be loaded.');
+      setState('error');
+    }
+  }
+
   useEffect(() => {
-    setIsLoading(true);
-    const params = new URLSearchParams();
-    params.set('page', page.toString());
-    params.set('limit', '50');
-    if (locationId !== 'all') params.set('locationId', locationId);
-    if (transactionType !== 'all') params.set('transactionType', transactionType);
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [deferredQuery, page, locationId, transactionType, condition, dateFrom, dateTo, order]);
 
-    inventoryRequest<{ data: PaginatedDto<InventoryHistoryDto & { inventoryItemId?: string }> }>(
-      `/inventory/history?${params.toString()}`,
-    )
-      .then((res) => {
-        setHistory(res.data.items);
-        setHasNext(res.data.items.length === 50);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof Error ? err : new Error(String(err))))
-      .finally(() => setIsLoading(false));
-  }, [page, locationId, transactionType]);
-
-  // Client-side SKU search filtering if needed
-  const filteredHistory = history.filter((item) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      item.sku.toLowerCase().includes(q) ||
-      item.locationName.toLowerCase().includes(q) ||
-      (item.reasonCode && item.reasonCode.toLowerCase().includes(q))
-    );
-  });
-
-  const handleResetFilters = () => {
-    setLocationId('all');
-    setTransactionType('all');
-    setSearch('');
-    setPage(1);
-  };
-
-  const hasActiveFilters =
-    locationId !== 'all' || transactionType !== 'all' || search.trim() !== '';
+  const items = history?.items ?? [];
+  const totalCount = history?.totalCount ?? 0;
+  const hasFilters = Boolean(
+    deferredQuery ||
+    locationId !== 'ALL' ||
+    transactionType !== 'ALL' ||
+    condition !== 'ALL' ||
+    dateFrom ||
+    dateTo,
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Movement History</h1>
-          <p className="text-sm text-muted-foreground">
-            Complete double-entry audit ledger of all inventory transactions and condition changes.
+    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-primary">Inventory</p>
+          <h1 className="text-pretty text-2xl font-semibold tracking-tight">Movement History</h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Trace every quantity change to its location, condition, reason, actor, source document,
+            and resulting balance.
           </p>
         </div>
-      </div>
+        <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
+          <RefreshCw aria-hidden="true" /> Refresh
+        </Button>
+      </header>
 
-      {/* Filter Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-card p-3.5 rounded-lg border">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1">
-          <div className="relative min-w-[200px] flex-1 max-w-xs">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <InventoryFeedback isError={state === 'error'} message={message} />
+
+      <section
+        aria-label="Movement filters"
+        className="space-y-3 rounded-lg border bg-card p-3 sm:p-4"
+      >
+        <div className="grid gap-2 lg:grid-cols-[minmax(16rem,1fr)_repeat(3,minmax(9rem,auto))]">
+          <div className="relative min-w-0">
+            <Search
+              className="absolute left-3 top-2.5 size-4 text-muted-foreground"
+              aria-hidden="true"
+            />
             <Input
+              aria-label="Search inventory history"
+              autoComplete="off"
+              className="pl-9"
+              name="history-search"
+              placeholder="Search SKU, product, location, reason, or number…"
               type="search"
-              placeholder="Search by SKU, warehouse, note…"
-              className="pl-8 text-xs h-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-
-          {/* Location Select */}
           <Select
             value={locationId}
-            onValueChange={(v) => {
-              setLocationId(v || 'all');
-              setPage(1);
-            }}
+            onValueChange={(value) => replaceQuery({ location: value ?? 'ALL', page: '1' })}
           >
-            <SelectTrigger className="w-[180px] text-xs h-9">
-              <SelectValue placeholder="All Locations" />
+            <SelectTrigger aria-label="Filter history by location">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
-              {locations.map((loc) => (
-                <SelectItem key={loc.id} value={loc.id}>
-                  {loc.name} ({loc.code})
+              <SelectItem value="ALL">All Locations</SelectItem>
+              {locations.map((location) => (
+                <SelectItem key={location.id} value={location.id}>
+                  {location.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-
-          {/* Transaction Type Select */}
           <Select
             value={transactionType}
-            onValueChange={(v) => {
-              setTransactionType(v || 'all');
-              setPage(1);
-            }}
+            onValueChange={(value) => replaceQuery({ type: value ?? 'ALL', page: '1' })}
           >
-            <SelectTrigger className="w-[200px] text-xs h-9">
-              <SelectValue placeholder="All Transaction Types" />
+            <SelectTrigger aria-label="Filter by movement type">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {TRANSACTION_TYPES.map((t) => (
-                <SelectItem key={t.value} value={t.value}>
-                  {t.label}
+              {TRANSACTION_TYPES.map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={handleResetFilters} className="text-xs h-9">
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-              Reset
-            </Button>
-          )}
+          <Select
+            value={condition}
+            onValueChange={(value) => replaceQuery({ condition: value ?? 'ALL', page: '1' })}
+          >
+            <SelectTrigger aria-label="Filter history by condition">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Conditions</SelectItem>
+              <SelectItem value="SELLABLE">Sellable</SelectItem>
+              <SelectItem value="DAMAGED">Damaged</SelectItem>
+              <SelectItem value="QUARANTINE">Quarantine</SelectItem>
+              <SelectItem value="INSPECTION">Inspection</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-
-        <div className="text-xs text-muted-foreground self-end md:self-center">
-          Showing {filteredHistory.length} records
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              From
+              <Input
+                className="w-40"
+                name="history-from"
+                type="date"
+                value={dateFrom}
+                onChange={(event) =>
+                  replaceQuery({ from: event.target.value || undefined, page: '1' })
+                }
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              To
+              <Input
+                className="w-40"
+                name="history-to"
+                type="date"
+                value={dateTo}
+                onChange={(event) =>
+                  replaceQuery({ to: event.target.value || undefined, page: '1' })
+                }
+              />
+            </label>
+            <Select
+              value={order}
+              onValueChange={(value) => replaceQuery({ order: value ?? 'DESC', page: '1' })}
+            >
+              <SelectTrigger className="w-40" aria-label="Sort movement history">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DESC">Newest First</SelectItem>
+                <SelectItem value="ASC">Oldest First</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasFilters ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setQuery('');
+                  router.replace('/inventory/history', { scroll: false });
+                }}
+              >
+                <RotateCcw aria-hidden="true" /> Clear Filters
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {totalCount} {totalCount === 1 ? 'movement' : 'movements'}
+          </p>
         </div>
-      </div>
+      </section>
 
-      <InventoryFeedback isError message={error instanceof Error ? error.message : ''} />
-
-      {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-            <div key={i} className="h-12 w-full animate-pulse bg-muted rounded-md" />
+      {state === 'loading' ? (
+        <div className="space-y-3" aria-label="Loading movement history">
+          {[1, 2, 3, 4, 5].map((row) => (
+            <div key={row} className="h-20 animate-pulse rounded-lg bg-muted" />
           ))}
         </div>
-      ) : filteredHistory.length === 0 ? (
+      ) : items.length === 0 ? (
         <InventoryEmptyState
-          title="No history records found"
+          title="No Movements Found"
           description={
-            hasActiveFilters
-              ? 'No movements match your current filters. Try resetting the filters.'
-              : 'No inventory movements have been recorded yet in the ledger.'
+            hasFilters
+              ? 'No ledger movements match these filters. Clear filters to broaden the search.'
+              : 'Inventory movements will appear here as stock is received, reconditioned, transferred, adjusted, dispatched, or returned.'
           }
         />
       ) : (
-        <div className="rounded-lg border bg-card overflow-hidden">
-          <div className="relative w-full overflow-auto">
-            <table className="w-full caption-bottom text-sm">
-              <thead className="bg-muted/40 text-xs uppercase tracking-wider font-semibold border-b">
-                <tr>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
-                    Timestamp
-                  </th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
-                    Item / SKU
-                  </th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
-                    Location
-                  </th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
-                    Transaction
-                  </th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
-                    Condition
-                  </th>
-                  <th className="h-10 px-4 text-right font-medium text-muted-foreground">Delta</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
-                    Reason / Note
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y text-xs">
-                {filteredHistory.map((record) => {
-                  const deltaNum = Number(record.quantityDelta);
-                  const isPositive = deltaNum > 0;
-                  const isNegative = deltaNum < 0;
-
-                  return (
-                    <tr key={record.id} className="hover:bg-muted/40 transition-colors">
-                      <td className="p-4 align-middle text-muted-foreground whitespace-nowrap">
-                        {formatInventoryDate(record.occurredAt)}
-                      </td>
-                      <td className="p-4 align-middle">
-                        {record.inventoryItemId ? (
-                          <Link
-                            href={`/inventory/stock/${record.inventoryItemId}`}
-                            className="font-mono font-medium hover:underline text-foreground"
-                          >
-                            {record.sku}
-                          </Link>
-                        ) : (
-                          <span className="font-mono font-medium">{record.sku}</span>
-                        )}
-                      </td>
-                      <td className="p-4 align-middle">
-                        <span className="font-medium text-foreground">{record.locationName}</span>
-                      </td>
-                      <td className="p-4 align-middle">
-                        <TransactionBadge type={record.transactionType} />
-                      </td>
-                      <td className="p-4 align-middle">
-                        <span className="text-muted-foreground font-mono text-[11px]">
-                          {record.condition}
-                        </span>
-                      </td>
-                      <td
-                        className={`p-4 text-right align-middle tabular-nums font-semibold text-sm ${
-                          isPositive
-                            ? 'text-emerald-600'
-                            : isNegative
-                              ? 'text-rose-600'
-                              : 'text-muted-foreground'
-                        }`}
+        <>
+          <div className="grid gap-3 lg:hidden">
+            {items.map((record) => (
+              <Card key={record.id}>
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link
+                        className="font-semibold hover:underline"
+                        href={`/inventory/stock/${record.inventoryItemId}`}
                       >
-                        {isPositive ? '+' : ''}
-                        {formatInventoryNumber(record.quantityDelta)}
-                      </td>
-                      <td
-                        className="p-4 align-middle text-muted-foreground max-w-[220px] truncate"
-                        title={record.reasonCode || ''}
-                      >
-                        {record.reasonCode ? (
-                          <span className="font-mono text-foreground/80">{record.reasonCode}</span>
-                        ) : (
-                          <span className="text-muted-foreground/50">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {record.productTitle}
+                      </Link>
+                      {record.optionSummary ? (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {record.optionSummary}
+                        </p>
+                      ) : null}
+                      <p className="truncate font-mono text-xs text-muted-foreground">
+                        {record.sku}
+                      </p>
+                    </div>
+                    <Delta record={record} />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <MovementBadge type={record.transactionType} />
+                    <Badge variant="outline">{record.condition}</Badge>
+                  </div>
+                  <p className="text-sm">
+                    {record.reasonText ?? record.reasonCode ?? 'No reason recorded'}
+                  </p>
+                  <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+                    <span>{formatInventoryDate(record.occurredAt)}</span>
+                    <span>Balance {formatInventoryNumber(record.runningBalance)}</span>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2 text-sm">
+                    <InventorySourceLink record={record} />
+                    <span>{record.actorDisplayName ?? 'System'}</span>
+                  </div>
+                  <Link
+                    className="text-sm font-medium hover:underline"
+                    href={`/inventory/warehouses/${record.locationId}`}
+                  >
+                    {record.locationName}
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
+          <div className="hidden rounded-lg border lg:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Product & SKU</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Movement</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Source & Actor</TableHead>
+                  <TableHead className="text-right">Change</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell className="text-muted-foreground">
+                      {formatInventoryDate(record.occurredAt)}
+                    </TableCell>
+                    <TableCell className="max-w-56 whitespace-normal">
+                      <Link
+                        className="font-semibold hover:underline"
+                        href={`/inventory/stock/${record.inventoryItemId}`}
+                      >
+                        {record.productTitle}
+                      </Link>
+                      {record.optionSummary ? (
+                        <p className="text-xs text-muted-foreground">{record.optionSummary}</p>
+                      ) : null}
+                      <p className="font-mono text-xs text-muted-foreground">{record.sku}</p>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        className="hover:underline"
+                        href={`/inventory/warehouses/${record.locationId}`}
+                      >
+                        {record.locationName}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col items-start gap-1">
+                        <MovementBadge type={record.transactionType} />
+                        <span className="text-xs text-muted-foreground">{record.condition}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-64 whitespace-normal">
+                      <p>{record.reasonText ?? record.reasonCode ?? 'No reason recorded'}</p>
+                      {record.reasonText && record.reasonCode ? (
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">
+                          {record.reasonCode}
+                        </p>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="max-w-48 whitespace-normal">
+                      <InventorySourceLink record={record} />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {record.actorDisplayName ?? 'System'}
+                      </p>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Delta record={record} />
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {formatInventoryNumber(record.runningBalance)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
-      {(hasNext || page > 1) && (
-        <InventoryPager page={page} hasNext={hasNext} onPageChange={setPage} />
-      )}
-    </div>
+      {totalCount > PAGE_SIZE ? (
+        <InventoryPager
+          page={page}
+          hasNext={page * PAGE_SIZE < totalCount}
+          onPageChange={(nextPage) => replaceQuery({ page: String(nextPage) })}
+        />
+      ) : null}
+    </main>
   );
 }

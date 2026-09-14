@@ -16,9 +16,7 @@ export function InventoryStatCards({
         <StatsCard key={i}>
           <StatsTitle>{stat.label}</StatsTitle>
           <StatsValue>{stat.value}</StatsValue>
-          {stat.description ? (
-            <StatsDescription>{stat.description}</StatsDescription>
-          ) : null}
+          {stat.description ? <StatsDescription>{stat.description}</StatsDescription> : null}
         </StatsCard>
       ))}
     </Stats>
@@ -47,7 +45,7 @@ export function InventoryEmptyState({
   return (
     <div className="flex min-h-[300px] flex-col items-center justify-center rounded-md border border-dashed p-8 text-center animate-in fade-in-50">
       <div className="mx-auto flex max-w-[420px] flex-col items-center justify-center text-center">
-        <FileBox className="h-10 w-10 text-muted-foreground/50" />
+        <FileBox className="h-10 w-10 text-muted-foreground/50" aria-hidden="true" />
         <h3 className="mt-4 text-lg font-semibold">{title}</h3>
         <p className="mt-2 text-sm text-muted-foreground">{description}</p>
       </div>
@@ -60,11 +58,12 @@ export function InventoryFeedback({ message, isError }: { message: string; isErr
   return (
     <div
       role="status"
+      aria-live="polite"
       className={`flex items-center gap-2 rounded-md px-4 py-3 text-sm ${
         isError ? 'bg-destructive/15 text-destructive' : 'bg-secondary text-secondary-foreground'
       }`}
     >
-      {isError ? <AlertCircle className="h-4 w-4" /> : null}
+      {isError ? <AlertCircle className="h-4 w-4" aria-hidden="true" /> : null}
       <p>{message}</p>
     </div>
   );

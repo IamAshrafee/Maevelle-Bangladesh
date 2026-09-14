@@ -22,7 +22,7 @@ import type {
   InventoryStatsDto,
   WarehouseLocationDto,
   InventoryHistoryDto,
-  InventoryBalanceDto,
+  InventoryPositionDto,
   PaginatedDto,
 } from '@maevelle/contracts';
 
@@ -34,18 +34,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { cn } from '@/lib/utils';
+import { useAdminCapability } from '@/components/admin-capabilities';
 
 export function InventoryDashboard() {
   const router = useRouter();
+  const canAdjust = useAdminCapability('inventory.adjust');
+  const canTransfer = useAdminCapability('inventory.transfer');
+  const canStocktake = useAdminCapability('inventory.stocktake');
 
   const [stats, setStats] = useState<InventoryStatsDto | null>(null);
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
-  const [lowStockItems, setLowStockItems] = useState<
-    readonly (InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string })[]
-  >([]);
-  const [outOfStockItems, setOutOfStockItems] = useState<
-    readonly (InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string })[]
-  >([]);
+  const [lowStockItems, setLowStockItems] = useState<readonly InventoryPositionDto[]>([]);
+  const [outOfStockItems, setOutOfStockItems] = useState<readonly InventoryPositionDto[]>([]);
+  const [lowStockTotal, setLowStockTotal] = useState(0);
+  const [outOfStockTotal, setOutOfStockTotal] = useState(0);
   const [recentMovements, setRecentMovements] = useState<readonly InventoryHistoryDto[]>([]);
   const [activeReservationsCount, setActiveReservationsCount] = useState<number>(0);
 
@@ -53,48 +55,75 @@ export function InventoryDashboard() {
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
     setIsLoading(true);
+    setError('');
 
     Promise.allSettled([
       // 1. Stats
-      inventoryRequest<{ data: InventoryStatsDto }>('/inventory/stats'),
+      inventoryRequest<{ data: InventoryStatsDto }>('/inventory/stats', {
+        signal: controller.signal,
+      }),
       // 2. Locations
-      inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations'),
+      inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations', {
+        signal: controller.signal,
+      }),
       // 3. Low stock items
-      inventoryRequest<{
-        data: PaginatedDto<InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string }>;
-      }>('/inventory/stock?availability=LOW_STOCK&limit=6'),
+      inventoryRequest<{ data: PaginatedDto<InventoryPositionDto> }>(
+        '/inventory/positions?availability=LOW_STOCK&limit=6&sortBy=AVAILABLE&sortOrder=ASC',
+        { signal: controller.signal },
+      ),
       // 4. Out of stock items
-      inventoryRequest<{
-        data: PaginatedDto<InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string }>;
-      }>('/inventory/stock?availability=OUT_OF_STOCK&limit=6'),
+      inventoryRequest<{ data: PaginatedDto<InventoryPositionDto> }>(
+        '/inventory/positions?availability=OUT_OF_STOCK&limit=6&sortBy=LAST_MOVEMENT&sortOrder=DESC',
+        { signal: controller.signal },
+      ),
       // 5. Recent history
-      inventoryRequest<{ data: PaginatedDto<InventoryHistoryDto> }>('/inventory/history?limit=8'),
+      inventoryRequest<{ data: PaginatedDto<InventoryHistoryDto> }>(
+        '/inventory/history?limit=8&sortOrder=DESC',
+        { signal: controller.signal },
+      ),
       // 6. Active reservations
-      inventoryRequest<{ data: { totalCount?: number; items: unknown[] } }>('/inventory/reservations?status=ACTIVE&limit=1'),
+      inventoryRequest<{ data: { totalCount?: number; items: unknown[] } }>(
+        '/inventory/reservations?status=ACTIVE&limit=1',
+        { signal: controller.signal },
+      ),
     ])
-      .then(([statsRes, locRes, lowRes, outRes, histRes, resRes]) => {
-        if (!isMounted) return;
+      .then((results) => {
+        if (controller.signal.aborted) return;
+        const [statsRes, locRes, lowRes, outRes, histRes, resRes] = results;
 
         if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
         if (locRes.status === 'fulfilled') setLocations(locRes.value.data);
-        if (lowRes.status === 'fulfilled') setLowStockItems(lowRes.value.data.items);
-        if (outRes.status === 'fulfilled') setOutOfStockItems(outRes.value.data.items);
+        if (lowRes.status === 'fulfilled') {
+          setLowStockItems(lowRes.value.data.items);
+          setLowStockTotal(lowRes.value.data.totalCount ?? lowRes.value.data.items.length);
+        }
+        if (outRes.status === 'fulfilled') {
+          setOutOfStockItems(outRes.value.data.items);
+          setOutOfStockTotal(outRes.value.data.totalCount ?? outRes.value.data.items.length);
+        }
         if (histRes.status === 'fulfilled') setRecentMovements(histRes.value.data.items);
         if (resRes.status === 'fulfilled') {
-          setActiveReservationsCount(resRes.value.data.totalCount ?? resRes.value.data.items.length);
+          setActiveReservationsCount(
+            resRes.value.data.totalCount ?? resRes.value.data.items.length,
+          );
+        }
+        const failedCount = results.filter((result) => result.status === 'rejected').length;
+        if (failedCount > 0) {
+          setError(
+            failedCount === results.length
+              ? 'Inventory overview could not be loaded. Try refreshing the page.'
+              : `${failedCount} inventory overview ${failedCount === 1 ? 'section is' : 'sections are'} temporarily unavailable.`,
+          );
         }
       })
-      .catch((err) => {
-        if (isMounted) setError(err instanceof Error ? err.message : String(err));
-      })
       .finally(() => {
-        if (isMounted) setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       });
 
     return () => {
-      isMounted = false;
+      controller.abort();
     };
   }, []);
 
@@ -112,18 +141,32 @@ export function InventoryDashboard() {
 
         {/* Fast Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => router.push('/inventory/adjustments')}>
-            <SlidersHorizontal className="mr-1.5 h-4 w-4" />
-            Adjust Stock
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => router.push('/inventory/transfers/new')}>
-            <Truck className="mr-1.5 h-4 w-4" />
-            New Transfer
-          </Button>
-          <Button size="sm" onClick={() => router.push('/inventory/stocktakes/new')}>
-            <ClipboardCheck className="mr-1.5 h-4 w-4" />
-            Start Stocktake
-          </Button>
+          {canAdjust ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/inventory/adjustments')}
+            >
+              <SlidersHorizontal className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Adjust Stock
+            </Button>
+          ) : null}
+          {canTransfer ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/inventory/transfers/new')}
+            >
+              <Truck className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              New Transfer
+            </Button>
+          ) : null}
+          {canStocktake ? (
+            <Button size="sm" onClick={() => router.push('/inventory/stocktakes/new')}>
+              <ClipboardCheck className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Start Stocktake
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -157,16 +200,16 @@ export function InventoryDashboard() {
             valueClass: 'text-amber-600 dark:text-amber-400',
           },
           {
-            label: 'Damaged / Hold',
-            value: isLoading ? '—' : formatInventoryNumber(stats?.totalDamaged ?? '0'),
-            description: 'Non-sellable condition',
+            label: 'Unavailable',
+            value: isLoading ? '—' : formatInventoryNumber(stats?.totalUnavailable ?? '0'),
+            description: 'Damaged, quarantine, inspection',
             icon: ShieldAlert,
             iconClass: 'text-rose-500',
             valueClass: 'text-rose-600 dark:text-rose-400',
           },
           {
             label: 'Low Stock SKUs',
-            value: isLoading ? '—' : stats?.lowStockCount ?? 0,
+            value: isLoading ? '—' : lowStockTotal,
             description: '≤ 5 units available',
             icon: TrendingDown,
             iconClass: 'text-amber-500',
@@ -174,7 +217,7 @@ export function InventoryDashboard() {
           },
           {
             label: 'Out of Stock',
-            value: isLoading ? '—' : stats?.outOfStockCount ?? 0,
+            value: isLoading ? '—' : outOfStockTotal,
             description: '0 units available',
             icon: AlertTriangle,
             iconClass: 'text-rose-500',
@@ -189,7 +232,7 @@ export function InventoryDashboard() {
                 <StatsValue className={card.valueClass}>{card.value}</StatsValue>
                 <StatsDescription>{card.description}</StatsDescription>
               </div>
-              <Icon className={cn('h-4 w-4 shrink-0 mt-0.5', card.iconClass)} />
+              <Icon className={cn('h-4 w-4 shrink-0 mt-0.5', card.iconClass)} aria-hidden="true" />
             </StatsCard>
           );
         })}
@@ -205,13 +248,21 @@ export function InventoryDashboard() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    <AlertTriangle className="h-4 w-4 text-amber-500" aria-hidden="true" />
                     Stock Attention Required
                   </CardTitle>
-                  <CardDescription>Items that are depleted or approaching threshold.</CardDescription>
+                  <CardDescription>
+                    Items that are depleted or approaching threshold.
+                  </CardDescription>
                 </div>
-                <Button variant="ghost" size="sm" render={<Link href="/inventory/stock?availability=LOW_STOCK" />} className="text-xs">
-                  View full stock table <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={<Link href="/inventory/stock?availability=LOW_STOCK" />}
+                  className="text-xs"
+                >
+                  View full stock table{' '}
+                  <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
                 </Button>
               </div>
             </CardHeader>
@@ -219,10 +270,10 @@ export function InventoryDashboard() {
               <Tabs defaultValue="low">
                 <TabsList className="grid w-full grid-cols-2 mb-3">
                   <TabsTrigger value="low" className="text-xs">
-                    Low Stock ({stats?.lowStockCount ?? lowStockItems.length})
+                    Low Stock ({lowStockTotal})
                   </TabsTrigger>
                   <TabsTrigger value="out" className="text-xs">
-                    Out of Stock ({stats?.outOfStockCount ?? outOfStockItems.length})
+                    Out of Stock ({outOfStockTotal})
                   </TabsTrigger>
                 </TabsList>
 
@@ -261,17 +312,19 @@ export function InventoryDashboard() {
                                 {formatInventoryNumber(item.onHand)} on hand
                               </div>
                             </div>
-                            <Button
-                              size="xs"
-                              variant="outline"
-                              render={
-                                <Link
-                                  href={`/inventory/adjustments?sku=${encodeURIComponent(item.sku)}&locationId=${item.locationId}`}
-                                />
-                              }
-                            >
-                              Adjust
-                            </Button>
+                            {canAdjust ? (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                render={
+                                  <Link
+                                    href={`/inventory/adjustments?sku=${encodeURIComponent(item.sku)}&locationId=${item.locationId}`}
+                                  />
+                                }
+                              >
+                                Adjust
+                              </Button>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -309,17 +362,19 @@ export function InventoryDashboard() {
                             <Badge variant="destructive" className="text-xs">
                               0 Available
                             </Badge>
-                            <Button
-                              size="xs"
-                              variant="outline"
-                              render={
-                                <Link
-                                  href={`/inventory/adjustments?sku=${encodeURIComponent(item.sku)}&locationId=${item.locationId}`}
-                                />
-                              }
-                            >
-                              Restock
-                            </Button>
+                            {canAdjust ? (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                render={
+                                  <Link
+                                    href={`/inventory/adjustments?sku=${encodeURIComponent(item.sku)}&locationId=${item.locationId}`}
+                                  />
+                                }
+                              >
+                                Restock
+                              </Button>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -336,13 +391,20 @@ export function InventoryDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <History className="h-4 w-4 text-muted-foreground" />
+                    <History className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     Recent Inventory Transactions
                   </CardTitle>
-                  <CardDescription>Latest movements recorded across all warehouses.</CardDescription>
+                  <CardDescription>
+                    Latest movements recorded across all warehouses.
+                  </CardDescription>
                 </div>
-                <Button variant="ghost" size="sm" render={<Link href="/inventory/history" />} className="text-xs">
-                  View ledger <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={<Link href="/inventory/history" />}
+                  className="text-xs"
+                >
+                  View ledger <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
                 </Button>
               </div>
             </CardHeader>
@@ -364,7 +426,10 @@ export function InventoryDashboard() {
                       >
                         <div className="min-w-0 pr-3">
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-[10px] font-medium uppercase tracking-wider">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-medium uppercase tracking-wider"
+                            >
                               {move.transactionType}
                             </Badge>
                             <span className="text-xs text-muted-foreground font-mono">
@@ -411,11 +476,16 @@ export function InventoryDashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <Warehouse className="h-4 w-4 text-muted-foreground" />
+                  <Warehouse className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   Locations & Facilities
                 </CardTitle>
-                <Button variant="ghost" size="sm" render={<Link href="/inventory/warehouses" />} className="text-xs">
-                  Manage <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={<Link href="/inventory/warehouses" />}
+                  className="text-xs"
+                >
+                  Manage <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
                 </Button>
               </div>
               <CardDescription>{locations.length} registered locations in network</CardDescription>
@@ -474,61 +544,75 @@ export function InventoryDashboard() {
               <CardDescription>Direct shortcuts to lifecycle modules</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <Link
-                href="/inventory/transfers"
-                className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 border transition-colors"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Truck className="h-4 w-4 text-primary" />
-                  <div>
-                    <div className="font-medium text-xs">Transfers & Shipments</div>
-                    <div className="text-[11px] text-muted-foreground">Inter-warehouse movements</div>
+              {canTransfer ? (
+                <Link
+                  href="/inventory/transfers"
+                  className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 border transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Truck className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <div>
+                      <div className="font-medium text-xs">Transfers & Shipments</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Inter-warehouse movements
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-              </Link>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                </Link>
+              ) : null}
 
-              <Link
-                href="/inventory/stocktakes"
-                className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 border transition-colors"
-              >
-                <div className="flex items-center gap-2.5">
-                  <ClipboardCheck className="h-4 w-4 text-primary" />
-                  <div>
-                    <div className="font-medium text-xs">Stocktakes & Audits</div>
-                    <div className="text-[11px] text-muted-foreground">Snapshot counts and reconciliations</div>
+              {canStocktake ? (
+                <Link
+                  href="/inventory/stocktakes"
+                  className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 border transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <ClipboardCheck className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <div>
+                      <div className="font-medium text-xs">Stocktakes & Audits</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Snapshot counts and reconciliations
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-              </Link>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                </Link>
+              ) : null}
 
               <Link
                 href="/inventory/reservations"
                 className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 border transition-colors"
               >
                 <div className="flex items-center gap-2.5">
-                  <Clock className="h-4 w-4 text-primary" />
+                  <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
                   <div>
                     <div className="font-medium text-xs">Active Reservations</div>
-                    <div className="text-[11px] text-muted-foreground">Allocations for orders & transfers</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Allocations for orders & transfers
+                    </div>
                   </div>
                 </div>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
               </Link>
 
-              <Link
-                href="/inventory/adjustments"
-                className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 border transition-colors"
-              >
-                <div className="flex items-center gap-2.5">
-                  <SlidersHorizontal className="h-4 w-4 text-primary" />
-                  <div>
-                    <div className="font-medium text-xs">Manual Adjustments</div>
-                    <div className="text-[11px] text-muted-foreground">Direct write-offs and corrections</div>
+              {canAdjust ? (
+                <Link
+                  href="/inventory/adjustments"
+                  className="flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 border transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <SlidersHorizontal className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <div>
+                      <div className="font-medium text-xs">Manual Adjustments</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Direct write-offs and corrections
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-              </Link>
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                </Link>
+              ) : null}
             </CardContent>
           </Card>
         </div>

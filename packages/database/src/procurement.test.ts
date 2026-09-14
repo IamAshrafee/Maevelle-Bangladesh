@@ -9,6 +9,7 @@ import {
   createWarehouseTransfer,
   dispatchWarehouseTransfer,
   listInventoryBalances,
+  listInventoryPositions,
   moveInventoryCondition,
   postStocktake,
   recordStocktakeCount,
@@ -232,6 +233,17 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       idempotencyKey: crypto.randomUUID(),
     });
     expect(arrived.status).toBe('ARRIVED');
+    const incoming = await listInventoryPositions(database.db, input.organizationId, {
+      locationId: input.locationId,
+    });
+    expect(incoming.items).toHaveLength(1);
+    expect(incoming.items[0]).toMatchObject({
+      variantId: input.variantId,
+      locationId: input.locationId,
+      onHand: '0',
+      availableToSell: '0',
+      incomingSupply: '5',
+    });
     expect(
       await listInventoryBalances(database.db, input.organizationId, {
         locationId: input.locationId,
@@ -579,6 +591,10 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     await expect(
       getShipment(database.db, { organizationId: other.organizationId, shipmentId: shipment.id }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(await listInventoryPositions(database.db, other.organizationId)).toEqual({
+      items: [],
+      totalCount: 0,
+    });
     const plainLocation = await createLocation(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,

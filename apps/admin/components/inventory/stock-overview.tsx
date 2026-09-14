@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { RefreshCw, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
+import { useDeferredValue, useEffect, useState } from 'react';
 
+import type {
+  InventoryPositionDto,
+  InventoryStatsDto,
+  PaginatedDto,
+  WarehouseLocationDto,
+} from '@maevelle/contracts';
 
-import type { InventoryBalanceDto, InventoryStatsDto, PaginatedDto, WarehouseLocationDto } from '@maevelle/contracts';
-
-import { inventoryRequest } from '@/lib/inventory/api';
-import { InventoryEmptyState, InventoryFeedback, InventoryPager, InventoryStatCards } from './inventory-page-ui';
-import { StockTable } from './stock-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -19,163 +21,294 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { inventoryRequest, formatInventoryNumber } from '@/lib/inventory/api';
+import { useAdminCapability } from '@/components/admin-capabilities';
 
+import {
+  InventoryFeedback,
+  InventoryPager,
+  InventoryStatCards,
+  PAGE_SIZE,
+} from './inventory-page-ui';
+import { InventoryPositionTable } from './inventory-position-table';
 
 export function StockOverview() {
   const router = useRouter();
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [locationId, setLocationId] = useState<string>('all');
-  const [condition, setCondition] = useState<string>('all');
-  const [availability, setAvailability] = useState<string>('all');
+  const searchParameters = useSearchParams();
+  const canAdjust = useAdminCapability('inventory.adjust');
+  const [query, setQuery] = useState(searchParameters.get('q') ?? '');
+  const deferredQuery = useDeferredValue(query.trim());
+  const [stats, setStats] = useState<InventoryStatsDto>();
+  const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
+  const [positions, setPositions] = useState<PaginatedDto<InventoryPositionDto>>();
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [message, setMessage] = useState('');
 
-  const [stats, setStats] = useState<InventoryStatsDto | null>(null);
-  const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
-  
-  const [balancesData, setBalancesData] = useState<PaginatedDto<InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string }> | null>(null);
-  const [balancesLoading, setBalancesLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const page = Math.max(1, Number(searchParameters.get('page') ?? 1) || 1);
+  const locationId = searchParameters.get('location') ?? 'ALL';
+  const condition = searchParameters.get('condition') ?? 'ALL';
+  const availability = searchParameters.get('availability') ?? 'ALL';
+  const catalogStatus = searchParameters.get('catalog') ?? 'ALL';
+  const sort = searchParameters.get('sort') ?? 'PRODUCT';
+  const order = searchParameters.get('order') ?? 'ASC';
+
+  function replaceQuery(changes: Record<string, string | undefined>) {
+    const next = new URLSearchParams(searchParameters.toString());
+    for (const [key, value] of Object.entries(changes)) {
+      if (!value || value === 'ALL' || (key === 'page' && value === '1')) next.delete(key);
+      else next.set(key, value);
+    }
+    router.replace(next.size ? `/inventory/stock?${next.toString()}` : '/inventory/stock', {
+      scroll: false,
+    });
+  }
 
   useEffect(() => {
-    inventoryRequest<{ data: InventoryStatsDto }>('/inventory/stats')
-      .then((res) => setStats(res.data))
-      .catch(console.error);
+    const current = searchParameters.get('q') ?? '';
+    if (current !== deferredQuery) replaceQuery({ q: deferredQuery || undefined, page: '1' });
+  }, [deferredQuery]);
 
-    inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations')
-      .then((res) => setLocations(res.data))
-      .catch(console.error);
+  useEffect(() => {
+    const controller = new AbortController();
+    void Promise.all([
+      inventoryRequest<{ data: InventoryStatsDto }>('/inventory/stats', {
+        signal: controller.signal,
+      }),
+      inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations', {
+        signal: controller.signal,
+      }),
+    ])
+      .then(([statsResult, locationsResult]) => {
+        setStats(statsResult.data);
+        setLocations(locationsResult.data);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setMessage(
+          error instanceof Error ? error.message : 'Inventory summary could not be loaded.',
+        );
+      });
+    return () => controller.abort();
   }, []);
 
+  async function load(signal?: AbortSignal) {
+    setState('loading');
+    const parameters = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
+    if (deferredQuery) parameters.set('search', deferredQuery);
+    if (locationId !== 'ALL') parameters.set('locationId', locationId);
+    if (condition !== 'ALL') parameters.set('condition', condition);
+    if (availability !== 'ALL') parameters.set('availability', availability);
+    if (catalogStatus !== 'ALL') parameters.set('catalogStatus', catalogStatus);
+    parameters.set('sortBy', sort);
+    parameters.set('sortOrder', order);
+    try {
+      const result = await inventoryRequest<{ data: PaginatedDto<InventoryPositionDto> }>(
+        `/inventory/positions?${parameters.toString()}`,
+        signal ? { signal } : undefined,
+      );
+      setPositions(result.data);
+      setMessage('');
+      setState('ready');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setMessage(error instanceof Error ? error.message : 'Stock positions could not be loaded.');
+      setState('error');
+    }
+  }
+
   useEffect(() => {
-    setBalancesLoading(true);
-    const params = new URLSearchParams();
-    params.set('page', page.toString());
-    params.set('limit', '25');
-    if (search) params.set('search', search);
-    if (locationId !== 'all') params.set('locationId', locationId);
-    if (condition !== 'all') params.set('condition', condition);
-    if (availability !== 'all') params.set('availability', availability);
-    
-    inventoryRequest<{ data: PaginatedDto<InventoryBalanceDto & { variantId: string; sku: string; productTitle: string; locationName: string }> }>(
-      `/inventory/stock?${params.toString()}`,
-    )
-      .then((res) => {
-        setBalancesData(res.data);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof Error ? err : new Error(String(err))))
-      .finally(() => setBalancesLoading(false));
-  }, [page, search, locationId, condition, availability]);
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [deferredQuery, page, locationId, condition, availability, catalogStatus, sort, order]);
+
+  const hasFilters = Boolean(
+    deferredQuery ||
+    locationId !== 'ALL' ||
+    condition !== 'ALL' ||
+    availability !== 'ALL' ||
+    catalogStatus !== 'ALL',
+  );
+  const totalCount = positions?.totalCount ?? 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Stock Overview</h2>
-          <p className="text-muted-foreground">Manage and track your inventory across all locations.</p>
+    <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-primary">Inventory</p>
+          <h1 className="text-pretty text-2xl font-semibold tracking-tight">Stock Positions</h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            See physical, reserved, available, unavailable, incoming, and moving units by SKU and
+            location.
+          </p>
         </div>
-        <Button onClick={() => router.push('/inventory/adjustments')}>Adjust Stock</Button>
-      </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
+            <RefreshCw aria-hidden="true" /> Refresh
+          </Button>
+          {canAdjust ? (
+            <Button render={<Link href="/inventory/adjustments" />} nativeButton={false}>
+              <SlidersHorizontal aria-hidden="true" /> Adjust Stock
+            </Button>
+          ) : null}
+        </div>
+      </header>
 
       <InventoryStatCards
         stats={[
           {
-            label: 'Total On Hand',
-            value: stats?.totalOnHand ?? '-',
-            description: 'Physical items in warehouses',
+            label: 'On Hand',
+            value: stats ? formatInventoryNumber(stats.totalOnHand) : '—',
+            description: 'All physical conditions',
           },
           {
-            label: 'Total Available',
-            value: stats?.totalAvailable ?? '-',
-            description: 'Available to sell',
+            label: 'Available to Sell',
+            value: stats ? formatInventoryNumber(stats.totalAvailable) : '—',
+            description: 'Sellable minus reserved',
           },
           {
-            label: 'Total Reserved',
-            value: stats?.totalReserved ?? '-',
-            description: 'Reserved for orders/transfers',
+            label: 'Reserved',
+            value: stats ? formatInventoryNumber(stats.totalReserved) : '—',
+            description: 'Held for active orders',
           },
           {
-            label: 'Low Stock Items',
-            value: stats?.lowStockCount ?? '-',
-            description: 'SKUs with ≤ 5 available',
+            label: 'Unavailable',
+            value: stats ? formatInventoryNumber(stats.totalUnavailable) : '—',
+            description: 'Damaged, quarantine, inspection',
           },
         ]}
       />
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 items-center gap-2 max-w-sm">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <InventoryFeedback isError={state === 'error'} message={message} />
+
+      <section
+        aria-label="Stock filters"
+        className="space-y-3 rounded-lg border bg-card p-3 sm:p-4"
+      >
+        <div className="grid gap-2 lg:grid-cols-[minmax(16rem,1fr)_repeat(3,minmax(9rem,auto))]">
+          <div className="relative min-w-0">
+            <Search
+              className="absolute left-3 top-2.5 size-4 text-muted-foreground"
+              aria-hidden="true"
+            />
             <Input
+              aria-label="Search stock positions"
+              autoComplete="off"
+              className="pl-9"
+              name="inventory-search"
+              placeholder="Search product, SKU, variant, or location…"
               type="search"
-              placeholder="Search SKU or product..."
-              className="pl-8"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={locationId} onValueChange={(v) => { setLocationId(v || 'all'); setPage(1); }}>
-            <SelectTrigger className="w-[180px]">
+          <Select
+            value={locationId}
+            onValueChange={(value) => replaceQuery({ location: value ?? 'ALL', page: '1' })}
+          >
+            <SelectTrigger aria-label="Filter by location">
               <SelectValue placeholder="All Locations" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
-              {locations?.map((loc) => (
-                <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+              <SelectItem value="ALL">All Locations</SelectItem>
+              {locations.map((location) => (
+                <SelectItem key={location.id} value={location.id}>
+                  {location.name} ({location.code})
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
-
-          <Select value={condition} onValueChange={(v) => { setCondition(v || 'all'); setPage(1); }}>
-            <SelectTrigger className="w-[140px]">
+          <Select
+            value={condition}
+            onValueChange={(value) => replaceQuery({ condition: value ?? 'ALL', page: '1' })}
+          >
+            <SelectTrigger aria-label="Filter by condition">
               <SelectValue placeholder="All Conditions" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Conditions</SelectItem>
+              <SelectItem value="ALL">All Conditions</SelectItem>
               <SelectItem value="SELLABLE">Sellable</SelectItem>
               <SelectItem value="DAMAGED">Damaged</SelectItem>
               <SelectItem value="QUARANTINE">Quarantine</SelectItem>
               <SelectItem value="INSPECTION">Inspection</SelectItem>
             </SelectContent>
           </Select>
-
-          <Select value={availability} onValueChange={(v) => { setAvailability(v || 'all'); setPage(1); }}>
-            <SelectTrigger className="w-[160px]">
+          <Select
+            value={availability}
+            onValueChange={(value) => replaceQuery({ availability: value ?? 'ALL', page: '1' })}
+          >
+            <SelectTrigger aria-label="Filter by availability">
               <SelectValue placeholder="All Availability" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Availability</SelectItem>
-              <SelectItem value="IN_STOCK">In Stock</SelectItem>
+              <SelectItem value="ALL">All Availability</SelectItem>
+              <SelectItem value="IN_STOCK">Available</SelectItem>
               <SelectItem value="LOW_STOCK">Low Stock</SelectItem>
               <SelectItem value="OUT_OF_STOCK">Out of Stock</SelectItem>
             </SelectContent>
           </Select>
         </div>
-      </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <Select
+              value={catalogStatus}
+              onValueChange={(value) => replaceQuery({ catalog: value ?? 'ALL', page: '1' })}
+            >
+              <SelectTrigger className="w-40" aria-label="Filter by Catalog status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Catalog Items</SelectItem>
+                <SelectItem value="ACTIVE">Active Catalog</SelectItem>
+                <SelectItem value="ARCHIVED">Archived Catalog</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={`${sort}:${order}`}
+              onValueChange={(value) => {
+                const [nextSort, nextOrder] = (value ?? 'PRODUCT:ASC').split(':');
+                replaceQuery({ sort: nextSort, order: nextOrder, page: '1' });
+              }}
+            >
+              <SelectTrigger className="w-48" aria-label="Sort stock positions">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PRODUCT:ASC">Product A–Z</SelectItem>
+                <SelectItem value="SKU:ASC">SKU A–Z</SelectItem>
+                <SelectItem value="AVAILABLE:ASC">Lowest Availability</SelectItem>
+                <SelectItem value="AVAILABLE:DESC">Highest Availability</SelectItem>
+                <SelectItem value="ON_HAND:DESC">Highest On Hand</SelectItem>
+                <SelectItem value="LAST_MOVEMENT:DESC">Recently Changed</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasFilters ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setQuery('');
+                  router.replace('/inventory/stock', { scroll: false });
+                }}
+              >
+                <RotateCcw aria-hidden="true" /> Clear Filters
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {totalCount} stock {totalCount === 1 ? 'position' : 'positions'}
+          </p>
+        </div>
+      </section>
 
-      <InventoryFeedback
-        isError
-        message={error instanceof Error ? error.message : ''}
-      />
+      <InventoryPositionTable positions={positions?.items ?? []} isLoading={state === 'loading'} />
 
-      <StockTable
-        balances={balancesData?.items ?? []}
-        isLoading={balancesLoading}
-      />
-
-      {balancesData && (balancesData.items.length === 25 || page > 1) && (
+      {totalCount > PAGE_SIZE ? (
         <InventoryPager
           page={page}
-          hasNext={balancesData.items.length === 25}
-          onPageChange={setPage}
+          hasNext={page * PAGE_SIZE < totalCount}
+          onPageChange={(nextPage) => replaceQuery({ page: String(nextPage) })}
         />
-      )}
-    </div>
+      ) : null}
+    </main>
   );
 }

@@ -1,7 +1,11 @@
 import { sql, type Kysely, type Transaction } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
-import { receiveInboundInventoryInTransaction, type InventoryCondition } from './inventory.js';
+import {
+  ensureInventoryItemForVariantInTransaction,
+  receiveInboundInventoryInTransaction,
+  type InventoryCondition,
+} from './inventory.js';
 import { createProvisionalCostLayersForInboundReceiptInTransaction } from './costing.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 
@@ -1021,6 +1025,11 @@ export async function createShipment(
           'CONFLICT',
           'Shipment allocation exceeds the unresolved Purchase Line quantity.',
         );
+      await ensureInventoryItemForVariantInTransaction(
+        transaction,
+        input.organizationId,
+        purchaseLine.variant_id,
+      );
       await sql`insert into inbound_shipment.purchase_line_allocations (organization_id, shipment_id, purchase_line_id, variant_id, sku_snapshot, product_title_snapshot, allocated_quantity) values (${input.organizationId}, ${shipmentId}, ${purchaseLine.id}, ${purchaseLine.variant_id}, ${purchaseLine.sku_snapshot}, ${purchaseLine.product_title_snapshot}, ${allocation.quantity}::numeric)`.execute(
         transaction,
       );

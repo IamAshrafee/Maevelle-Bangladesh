@@ -12,7 +12,10 @@ import {
   createWarehouseTransfer,
   dispatchWarehouseTransfer,
   getInventoryStats,
+  getInventoryItemDetail,
   listInventoryBalances,
+  listInventoryHistory,
+  listInventoryPositions,
   listInventoryReservations,
   moveInventoryCondition,
   postStocktake,
@@ -38,6 +41,14 @@ async function fixture() {
     defaultLocale: 'en',
     defaultCurrency: 'USD',
   });
+  const actorId = crypto.randomUUID();
+  const actorEmail = `inventory-${actorId}@example.test`;
+  await sql`insert into iam.users (id, name, email, email_normalized) values (${actorId}, 'Inventory Operator', ${actorEmail}, ${actorEmail})`.execute(
+    database.db,
+  );
+  await sql`insert into iam.organization_memberships (organization_id, user_id, membership_type, status, display_name) values (${organization.id}, ${actorId}, 'STANDARD', 'ACTIVE', 'Inventory Operator')`.execute(
+    database.db,
+  );
   const productType = await sql<{
     id: string;
   }>`insert into catalog.product_types (organization_id, code, name) values (${organization.id}, 'hat', 'Hat') returning id`.execute(
@@ -64,7 +75,6 @@ async function fixture() {
   }>`insert into catalog.product_variants (organization_id, product_id, sku, sku_normalized, option_signature) values (${organization.id}, ${product.rows[0]!.id}, ${skuString}, ${skuString}, ${value.rows[0]!.id}) returning id`.execute(
     database.db,
   );
-  const actorId = crypto.randomUUID();
   const main = await createLocation(database.db, {
     organizationId: organization.id,
     actorId,
@@ -125,6 +135,11 @@ describe('ledger-backed inventory', () => {
         expect.objectContaining({ condition: 'DAMAGED', onHand: '2', availableToSell: '0' }),
       ]),
     );
+    expect(await getInventoryStats(database.db, f.organizationId)).toMatchObject({
+      totalOnHand: '10',
+      totalUnavailable: '2',
+      totalDamaged: '2',
+    });
     const unvalued = await sql<{
       quantity: string;
       reason_code: string;
@@ -177,6 +192,95 @@ describe('ledger-backed inventory', () => {
         lines: [{ variantId: f.variantId, quantity: '0.5' }],
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('serves authoritative position and searchable running-balance history read models', async () => {
+    const f = await fixture();
+    await opening(f, '5');
+    await moveInventoryCondition(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.main.id,
+      fromCondition: 'SELLABLE',
+      toCondition: 'DAMAGED',
+      quantity: '2',
+      reason: 'Packaging torn during inspection',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await createInventoryReservation(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.main.id,
+      quantity: '1',
+      sourceType: 'TEST',
+      sourceReference: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const positions = await listInventoryPositions(database.db, f.organizationId, {
+      search: 'Test Hat',
+      condition: 'DAMAGED',
+    });
+    expect(positions).toMatchObject({
+      totalCount: 1,
+      items: [
+        {
+          inventoryItemId: expect.any(String),
+          productId: f.productId,
+          variantId: f.variantId,
+          locationId: f.main.id,
+          onHand: '5',
+          sellable: '3',
+          reserved: '1',
+          availableToSell: '2',
+          unavailable: '2',
+          damaged: '2',
+          activeReservationCount: 1,
+        },
+      ],
+    });
+
+    const history = await listInventoryHistory(database.db, f.organizationId, {
+      search: 'packaging torn',
+      condition: 'DAMAGED',
+    });
+    expect(history).toMatchObject({
+      totalCount: 1,
+      items: [
+        {
+          productId: f.productId,
+          variantId: f.variantId,
+          locationId: f.main.id,
+          transactionType: 'CONDITION_CHANGE',
+          quantityDelta: '2.000000',
+          reasonText: 'Packaging torn during inspection',
+          actorId: f.actorId,
+          actorDisplayName: 'Inventory Operator',
+          runningBalance: '2',
+        },
+      ],
+    });
+    const detail = await getInventoryItemDetail(
+      database.db,
+      f.organizationId,
+      positions.items[0]!.inventoryItemId,
+    );
+    expect(detail).toMatchObject({
+      productId: f.productId,
+      summary: {
+        onHand: '5',
+        sellable: '3',
+        reserved: '1',
+        availableToSell: '2',
+        unavailable: '2',
+      },
+      recentHistory: expect.arrayContaining([
+        expect.objectContaining({ runningBalance: expect.any(String) }),
+      ]),
+      activeReservations: expect.arrayContaining([expect.objectContaining({ status: 'ACTIVE' })]),
+    });
   });
 
   it('preserves archived Catalog stock while blocking new stock and reservations until restoration', async () => {
@@ -433,6 +537,58 @@ describe('ledger-backed inventory', () => {
         }),
       ]),
     );
+    const dispatchedTransfer = transferList.items.find(
+      (transfer) => transfer.status === 'IN_TRANSIT',
+    )!;
+    expect(
+      await listInventoryHistory(database.db, f.organizationId, {
+        transactionType: 'TRANSFER_DISPATCH',
+        search: dispatchedTransfer.transferNumber,
+      }),
+    ).toMatchObject({
+      totalCount: 1,
+      items: [
+        {
+          referenceType: 'warehouse.transfer',
+          referenceId: dispatchedTransfer.id,
+          referenceNumber: dispatchedTransfer.transferNumber,
+          actorDisplayName: 'Inventory Operator',
+        },
+      ],
+    });
+    const positions = await listInventoryPositions(database.db, f.organizationId, {
+      inventoryItemId: openingTransaction.inventoryItemId,
+    });
+    expect(positions.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          locationId: f.main.id,
+          onHand: '1',
+          outgoingTransfer: '2',
+        }),
+        expect.objectContaining({
+          locationId: f.secondary.id,
+          onHand: '0',
+          incomingTransfer: '2',
+        }),
+      ]),
+    );
+    const firstPage = await listInventoryPositions(database.db, f.organizationId, {
+      inventoryItemId: openingTransaction.inventoryItemId,
+      sortBy: 'AVAILABLE',
+      sortOrder: 'DESC',
+      page: 1,
+      limit: 1,
+    });
+    const secondPage = await listInventoryPositions(database.db, f.organizationId, {
+      inventoryItemId: openingTransaction.inventoryItemId,
+      sortBy: 'AVAILABLE',
+      sortOrder: 'DESC',
+      page: 2,
+      limit: 1,
+    });
+    expect(firstPage).toMatchObject({ totalCount: 2, items: [{ locationId: f.main.id }] });
+    expect(secondPage).toMatchObject({ totalCount: 2, items: [{ locationId: f.secondary.id }] });
     const reconciliation = await reconcileInventoryItem(
       database.db,
       f.organizationId,

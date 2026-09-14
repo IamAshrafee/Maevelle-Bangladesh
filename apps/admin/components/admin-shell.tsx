@@ -47,6 +47,8 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
 
+import { AdminCapabilitiesProvider } from './admin-capabilities';
+
 type AdminContext = {
   actorId: string;
   organizationId: string;
@@ -101,7 +103,12 @@ const navigation: readonly NavGroup[] = [
   {
     label: 'Inventory',
     items: [
-      { label: 'Overview', href: '/inventory', icon: LayoutDashboard, capability: 'inventory.view' },
+      {
+        label: 'Overview',
+        href: '/inventory',
+        icon: LayoutDashboard,
+        capability: 'inventory.view',
+      },
       { label: 'Stock', href: '/inventory/stock', icon: Boxes, capability: 'inventory.view' },
       {
         label: 'Warehouses',
@@ -563,7 +570,11 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
-        <div className="admin-content">{children}</div>
+        <div className="admin-content">
+          <AdminCapabilitiesProvider capabilities={context?.capabilities ?? []}>
+            {children}
+          </AdminCapabilitiesProvider>
+        </div>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} context={context} />
     </div>

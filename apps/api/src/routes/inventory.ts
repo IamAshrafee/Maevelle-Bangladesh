@@ -6,6 +6,7 @@ import {
   adjustInventory,
   createInventoryReservation,
   listInventoryBalances,
+  listInventoryPositions,
   listInventoryHistory,
   moveInventoryCondition,
   postStocktake,
@@ -32,6 +33,17 @@ const condition = Type.Union([
   Type.Literal('INSPECTION'),
 ]);
 const quantity = Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' });
+const inventoryTransactionType = Type.Union([
+  Type.Literal('OPENING_BALANCE'),
+  Type.Literal('ADJUSTMENT'),
+  Type.Literal('CONDITION_CHANGE'),
+  Type.Literal('TRANSFER_DISPATCH'),
+  Type.Literal('TRANSFER_RECEIPT'),
+  Type.Literal('STOCKTAKE_ADJUSTMENT'),
+  Type.Literal('FULFILLMENT_DISPATCH'),
+  Type.Literal('INBOUND_RECEIPT'),
+  Type.Literal('RETURN_RECEIPT'),
+]);
 
 function headers(input: Record<string, string | string[] | undefined>): Headers {
   return new Headers(
@@ -105,6 +117,61 @@ export function registerInventoryRoutes(
   auth: Auth,
 ): void {
   app.get(
+    '/admin/inventory/positions',
+    {
+      schema: {
+        querystring: Type.Object({
+          locationId: Type.Optional(Type.String({ format: 'uuid' })),
+          search: Type.Optional(Type.String({ maxLength: 120 })),
+          condition: Type.Optional(condition),
+          availability: Type.Optional(
+            Type.Union([
+              Type.Literal('IN_STOCK'),
+              Type.Literal('LOW_STOCK'),
+              Type.Literal('OUT_OF_STOCK'),
+            ]),
+          ),
+          catalogStatus: Type.Optional(
+            Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')]),
+          ),
+          sortBy: Type.Optional(
+            Type.Union([
+              Type.Literal('PRODUCT'),
+              Type.Literal('SKU'),
+              Type.Literal('ON_HAND'),
+              Type.Literal('AVAILABLE'),
+              Type.Literal('LAST_MOVEMENT'),
+            ]),
+          ),
+          sortOrder: Type.Optional(Type.Union([Type.Literal('ASC'), Type.Literal('DESC')])),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      return {
+        data: await listInventoryPositions(
+          database.db,
+          active.organizationId,
+          request.query as {
+            locationId?: string;
+            search?: string;
+            condition?: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+            availability?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+            catalogStatus?: 'ACTIVE' | 'ARCHIVED';
+            sortBy?: 'PRODUCT' | 'SKU' | 'ON_HAND' | 'AVAILABLE' | 'LAST_MOVEMENT';
+            sortOrder?: 'ASC' | 'DESC';
+            page?: number;
+            limit?: number;
+          },
+        ),
+      };
+    },
+  );
+  app.get(
     '/admin/inventory/stock',
     {
       schema: {
@@ -112,11 +179,13 @@ export function registerInventoryRoutes(
           locationId: Type.Optional(Type.String()),
           search: Type.Optional(Type.String()),
           condition: Type.Optional(condition),
-          availability: Type.Optional(Type.Union([
-            Type.Literal('IN_STOCK'),
-            Type.Literal('LOW_STOCK'),
-            Type.Literal('OUT_OF_STOCK'),
-          ])),
+          availability: Type.Optional(
+            Type.Union([
+              Type.Literal('IN_STOCK'),
+              Type.Literal('LOW_STOCK'),
+              Type.Literal('OUT_OF_STOCK'),
+            ]),
+          ),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
@@ -132,8 +201,8 @@ export function registerInventoryRoutes(
           request.query as {
             locationId?: string;
             search?: string;
-            condition?: any;
-            availability?: any;
+            condition?: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+            availability?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
             page?: number;
             limit?: number;
           },
@@ -146,9 +215,14 @@ export function registerInventoryRoutes(
     {
       schema: {
         querystring: Type.Object({
-          inventoryItemId: Type.Optional(Type.String()),
-          locationId: Type.Optional(Type.String()),
-          transactionType: Type.Optional(Type.String()),
+          inventoryItemId: Type.Optional(Type.String({ format: 'uuid' })),
+          locationId: Type.Optional(Type.String({ format: 'uuid' })),
+          transactionType: Type.Optional(inventoryTransactionType),
+          condition: Type.Optional(condition),
+          search: Type.Optional(Type.String({ maxLength: 120 })),
+          dateFrom: Type.Optional(Type.String({ format: 'date' })),
+          dateTo: Type.Optional(Type.String({ format: 'date' })),
+          sortOrder: Type.Optional(Type.Union([Type.Literal('ASC'), Type.Literal('DESC')])),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
@@ -165,12 +239,17 @@ export function registerInventoryRoutes(
             inventoryItemId?: string;
             locationId?: string;
             transactionType?: string;
+            condition?: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+            search?: string;
+            dateFrom?: string;
+            dateTo?: string;
+            sortOrder?: 'ASC' | 'DESC';
             page?: number;
             limit?: number;
           },
         ),
       };
-    }
+    },
   );
   app.post(
     '/admin/inventory/adjustments',
@@ -393,23 +472,31 @@ export function registerInventoryRoutes(
     return { data: await getInventoryStats(database.db, active.organizationId) };
   });
 
-  app.get('/admin/inventory/stock/:inventoryItemId', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'inventory.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    const detail = await getInventoryItemDetail(
-      database.db,
-      active.organizationId,
-      (request.params as { inventoryItemId: string }).inventoryItemId,
-    );
-    return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
-  });
+  app.get(
+    '/admin/inventory/stock/:inventoryItemId',
+    {
+      schema: {
+        params: Type.Object({ inventoryItemId: Type.String({ format: 'uuid' }) }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const detail = await getInventoryItemDetail(
+        database.db,
+        active.organizationId,
+        (request.params as { inventoryItemId: string }).inventoryItemId,
+      );
+      return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
+    },
+  );
 
   app.get(
     '/admin/inventory/reservations',
     {
       schema: {
         querystring: Type.Object({
-          locationId: Type.Optional(Type.String()),
+          locationId: Type.Optional(Type.String({ format: 'uuid' })),
           status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ALL')])),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
@@ -423,10 +510,15 @@ export function registerInventoryRoutes(
         data: await listInventoryReservations(
           database.db,
           active.organizationId,
-          request.query as any,
+          request.query as {
+            locationId?: string;
+            status?: 'ACTIVE' | 'ALL';
+            page?: number;
+            limit?: number;
+          },
         ),
       };
-    }
+    },
   );
 
   app.get(
@@ -448,9 +540,9 @@ export function registerInventoryRoutes(
         data: await listStocktakeSessions(
           database.db,
           active.organizationId,
-          request.query as any,
+          request.query as { locationId?: string; status?: string; page?: number; limit?: number },
         ),
       };
-    }
+    },
   );
 }
