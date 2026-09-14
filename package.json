@@ -29,6 +29,7 @@
     "db:status": "docker compose ps postgres",
     "db:migrate": "pnpm --filter @maevelle/database migrate",
     "db:migrate:status": "pnpm --filter @maevelle/database migrate:status",
+    "db:seed": "pnpm --filter @maevelle/database seed",
     "bootstrap:owner": "pnpm --filter @maevelle/api bootstrap:owner",
     "dev:admin": "pnpm --filter @maevelle/admin dev",
     "dev:storefront": "pnpm --filter @maevelle/storefront dev",

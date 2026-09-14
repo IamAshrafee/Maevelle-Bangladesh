@@ -206,6 +206,16 @@ export async function listCatalogCategories(
   };
 }
 
+function withClassificationTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  callback: (trx: Kysely<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  if ('isTransaction' in db && (db as { isTransaction?: boolean }).isTransaction) {
+    return callback(db);
+  }
+  return db.transaction().execute(callback);
+}
+
 export async function createManagedCategory(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -220,7 +230,7 @@ export async function createManagedCategory(
   },
 ): Promise<{ id: string }> {
   const identity = validateIdentity(input.name, input.handle);
-  return db.transaction().execute(async (transaction) => {
+  return withClassificationTransaction(db, async (transaction) => {
     if (input.parentCategoryId) {
       const parent = await sql<{ id: string }>`select id from catalog.categories
         where organization_id=${input.organizationId} and id=${input.parentCategoryId}`.execute(
@@ -232,14 +242,20 @@ export async function createManagedCategory(
     const created = await sql<{ id: string }>`insert into catalog.categories
       (organization_id,name,handle,parent_category_id,status,position,default_size_guide_id)
       values (${input.organizationId},${identity.name},${identity.handle},${input.parentCategoryId || null}::uuid,
-        ${input.status ?? 'ACTIVE'},${input.position ?? 0},${input.defaultSizeGuideId || null}::uuid) returning id`.execute(transaction);
+        ${input.status ?? 'ACTIVE'},${input.position ?? 0},${input.defaultSizeGuideId || null}::uuid) returning id`.execute(
+      transaction,
+    );
     const id = created.rows[0]!.id;
     await emitClassificationEvent(transaction, {
       ...input,
       action: 'catalog.category.created',
       targetType: 'catalog.category',
       targetId: id,
-      metadata: { handle: identity.handle, parentCategoryId: input.parentCategoryId, defaultSizeGuideId: input.defaultSizeGuideId },
+      metadata: {
+        handle: identity.handle,
+        parentCategoryId: input.parentCategoryId,
+        defaultSizeGuideId: input.defaultSizeGuideId,
+      },
     });
     return { id };
   });
@@ -260,7 +276,7 @@ export async function updateManagedCategory(
     defaultSizeGuideId?: string | null;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withClassificationTransaction(db, async (transaction) => {
     const existing = await sql<{ name: string; handle: string; version: string }>`
       select name,handle,version::text from catalog.categories
       where organization_id=${input.organizationId} and id=${input.categoryId} for update
@@ -310,7 +326,11 @@ export async function updateManagedCategory(
       action: 'catalog.category.updated',
       targetType: 'catalog.category',
       targetId: input.categoryId,
-      metadata: { status: input.status, parentCategoryId: input.parentCategoryId, defaultSizeGuideId: input.defaultSizeGuideId },
+      metadata: {
+        status: input.status,
+        parentCategoryId: input.parentCategoryId,
+        defaultSizeGuideId: input.defaultSizeGuideId,
+      },
     });
   });
 }
@@ -408,7 +428,7 @@ export async function createCatalogVocabularyItem(
   },
 ): Promise<{ id: string }> {
   const identity = validateIdentity(input.name, input.handle);
-  return db.transaction().execute(async (transaction) => {
+  return withClassificationTransaction(db, async (transaction) => {
     let created: { rows: readonly { id: string }[] };
     if (input.kind === 'TAG')
       created = await sql<{
@@ -459,7 +479,7 @@ export async function updateCatalogVocabularyItem(
   },
 ): Promise<void> {
   const identity = validateIdentity(input.name, input.handle);
-  await db.transaction().execute(async (transaction) => {
+  await withClassificationTransaction(db, async (transaction) => {
     let updated: { numAffectedRows?: bigint };
     if (input.kind === 'TAG')
       updated = await sql`update catalog.tags set name=${identity.name},handle=${identity.handle},
@@ -505,7 +525,7 @@ export async function setCatalogProductVocabulary(
     collectionIds: readonly string[];
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withClassificationTransaction(db, async (transaction) => {
     for (const [table, ids] of [
       ['tags', [...new Set(input.tagIds)]],
       ['occasions', [...new Set(input.occasionIds)]],

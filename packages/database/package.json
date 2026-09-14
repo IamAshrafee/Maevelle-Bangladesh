@@ -119,12 +119,17 @@
     "./storefront": {
       "types": "./src/storefront.ts",
       "default": "./dist/src/storefront.js"
+    },
+    "./seed": {
+      "types": "./src/seed/index.ts",
+      "default": "./dist/src/seed/index.js"
     }
   },
   "scripts": {
     "build": "tsc --build tsconfig.build.json --pretty false",
     "migrate": "pnpm run build && node dist/src/migrate-cli.js",
     "migrate:status": "pnpm run build && node dist/src/migrate-cli.js --status",
+    "seed": "pnpm run build && node dist/src/seed/cli.js",
     "seed:staging": "pnpm run build && node dist/src/staging-seed.js"
   },
   "dependencies": {
