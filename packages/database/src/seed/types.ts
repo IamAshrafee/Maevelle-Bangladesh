@@ -48,3 +48,12 @@ export interface CategorySeedItem {
   readonly defaultSizeGuideId?: string | null;
   readonly children?: readonly CategorySeedItem[];
 }
+
+export interface VocabularySeedItem {
+  readonly name: string;
+  readonly handle?: string;
+  readonly previousHandles?: readonly string[];
+  readonly description?: string | null;
+  readonly status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  readonly position?: number;
+}

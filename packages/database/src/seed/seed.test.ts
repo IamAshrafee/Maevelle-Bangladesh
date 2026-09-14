@@ -3,12 +3,15 @@ import { sql } from 'kysely';
 
 import { createDatabase } from '../index.js';
 import { createOrganization } from '../platform.js';
-import { createManagedCategory } from '../catalog-classification.js';
+import { createManagedCategory, createCatalogVocabularyItem } from '../catalog-classification.js';
 import { categorySeedData } from './data/categories.js';
 import { slugify } from './helpers/slug.js';
 import { categoriesSeedModule, createCategoriesSeedModule } from './modules/categories.seed.js';
-import { runSeeds, sortSeedModules } from './runner.js';
-import type { CategorySeedItem, SeedModule } from './types.js';
+import { tagsSeedModule, createTagsSeedModule } from './modules/tags.seed.js';
+import { occasionsSeedModule, createOccasionsSeedModule } from './modules/occasions.seed.js';
+import { collectionsSeedModule, createCollectionsSeedModule } from './modules/collections.seed.js';
+import { runSeeds, sortSeedModules, DEFAULT_SEED_MODULES } from './runner.js';
+import type { CategorySeedItem, SeedModule, VocabularySeedItem } from './types.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -312,6 +315,225 @@ describe('database seed system', () => {
       ).rows;
 
       expect(Number(rows[0]?.count)).toBe(0);
+    });
+  });
+
+  describe('tags seed module', () => {
+    it('seeds canonical 29 tags and handles idempotency cleanly', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Run 1: initial seed
+      const outcome1 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['tags'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome1.results).toHaveLength(1);
+      expect(outcome1.results[0]?.moduleId).toBe('tags');
+      expect(outcome1.results[0]?.totalCount).toBe(29);
+      expect(outcome1.results[0]?.createdCount).toBe(29);
+      expect(outcome1.results[0]?.unchangedCount).toBe(0);
+
+      // Verify records in database
+      const rows = (
+        await sql<{ handle: string; name: string }>`
+          select handle, name from catalog.tags where organization_id = ${organizationId} order by handle
+        `.execute(database.db)
+      ).rows;
+
+      expect(rows).toHaveLength(29);
+      expect(rows.map((r) => r.handle)).toContain('boho');
+      expect(rows.map((r) => r.handle)).toContain('3d-detail');
+      expect(rows.map((r) => r.handle)).toContain('beach-style');
+      expect(rows.map((r) => r.handle)).toContain('straw');
+
+      // Run 2: immediately re-run (idempotency check)
+      const outcome2 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['tags'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome2.results[0]?.createdCount).toBe(0);
+      expect(outcome2.results[0]?.updatedCount).toBe(0);
+      expect(outcome2.results[0]?.unchangedCount).toBe(29);
+    });
+
+    it('updates tag descriptions in-place and preserves manual tags', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Pre-create an unrelated manual tag
+      await createCatalogVocabularyItem(database.db, {
+        organizationId,
+        actorId: '00000000-0000-0000-0000-000000000000',
+        kind: 'TAG',
+        name: 'Manual Clearance',
+        handle: 'manual-clearance',
+      });
+
+      const initial: readonly VocabularySeedItem[] = [
+        { name: 'Boho', handle: 'boho', description: 'Old description' },
+      ];
+      const seeder1 = createTagsSeedModule(initial);
+      await runSeeds(database.db, { organizationCode, verbose: false }, [seeder1]);
+
+      const updated: readonly VocabularySeedItem[] = [
+        { name: 'Boho Chic', handle: 'boho', description: 'Updated bohemian aesthetic' },
+      ];
+      const seeder2 = createTagsSeedModule(updated);
+      const outcome = await runSeeds(database.db, { organizationCode, verbose: false }, [seeder2]);
+
+      expect(outcome.results[0]?.createdCount).toBe(0);
+      expect(outcome.results[0]?.updatedCount).toBe(1);
+
+      const rows = (
+        await sql<{ handle: string; name: string; description: string }>`
+          select handle, name, description from catalog.tags where organization_id = ${organizationId} order by handle
+        `.execute(database.db)
+      ).rows;
+
+      expect(rows).toHaveLength(2);
+      expect(rows.find((r) => r.handle === 'boho')).toEqual({
+        handle: 'boho',
+        name: 'Boho Chic',
+        description: 'Updated bohemian aesthetic',
+      });
+      expect(rows.map((r) => r.handle)).toContain('manual-clearance');
+    });
+  });
+
+  describe('occasions seed module', () => {
+    it('seeds canonical 9 occasions and verifies idempotency', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome1 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['occasions'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome1.results).toHaveLength(1);
+      expect(outcome1.results[0]?.moduleId).toBe('occasions');
+      expect(outcome1.results[0]?.totalCount).toBe(9);
+      expect(outcome1.results[0]?.createdCount).toBe(9);
+
+      const rows = (
+        await sql<{ handle: string; name: string }>`
+          select handle, name from catalog.occasions where organization_id = ${organizationId} order by handle
+        `.execute(database.db)
+      ).rows;
+
+      expect(rows).toHaveLength(9);
+      expect(rows.map((r) => r.handle)).toContain('beach-and-vacation');
+      expect(rows.map((r) => r.handle)).toContain('photoshoot');
+      expect(rows.map((r) => r.handle)).toContain('date-and-dinner');
+
+      // Re-run
+      const outcome2 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['occasions'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+      expect(outcome2.results[0]?.createdCount).toBe(0);
+      expect(outcome2.results[0]?.unchangedCount).toBe(9);
+    });
+  });
+
+  describe('collections seed module', () => {
+    it('seeds canonical 14 collections with positions preserved', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome1 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['collections'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome1.results).toHaveLength(1);
+      expect(outcome1.results[0]?.moduleId).toBe('collections');
+      expect(outcome1.results[0]?.totalCount).toBe(14);
+      expect(outcome1.results[0]?.createdCount).toBe(14);
+
+      const rows = (
+        await sql<{ handle: string; name: string; position: number }>`
+          select handle, name, position from catalog.collections
+          where organization_id = ${organizationId}
+          order by position asc
+        `.execute(database.db)
+      ).rows;
+
+      expect(rows).toHaveLength(14);
+      expect(rows[0]?.handle).toBe('new-arrivals');
+      expect(rows[0]?.position).toBe(10);
+      expect(rows[1]?.handle).toBe('best-sellers');
+      expect(rows[1]?.position).toBe(20);
+      expect(rows[13]?.handle).toBe('nail-art-collection');
+      expect(rows[13]?.position).toBe(140);
+
+      // Re-run (idempotency)
+      const outcome2 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['collections'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+      expect(outcome2.results[0]?.createdCount).toBe(0);
+      expect(outcome2.results[0]?.unchangedCount).toBe(14);
+    });
+  });
+
+  describe('multi-module comprehensive seed run', () => {
+    it('seeds categories, tags, occasions, and collections together in one transaction', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome.results).toHaveLength(4);
+      expect(outcome.results.map((r) => r.moduleId)).toEqual([
+        'categories',
+        'tags',
+        'occasions',
+        'collections',
+      ]);
+
+      const [catRes, tagRes, occRes, colRes] = outcome.results;
+      expect(catRes?.createdCount).toBe(44);
+      expect(tagRes?.createdCount).toBe(29);
+      expect(occRes?.createdCount).toBe(9);
+      expect(colRes?.createdCount).toBe(14);
+
+      // Verify all counts in database
+      const [cats, tags, occs, cols] = await Promise.all([
+        sql<{
+          count: string;
+        }>`select count(*)::text from catalog.categories where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from catalog.tags where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from catalog.occasions where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from catalog.collections where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
+      ]);
+
+      expect(Number(cats.rows[0]?.count)).toBe(44);
+      expect(Number(tags.rows[0]?.count)).toBe(29);
+      expect(Number(occs.rows[0]?.count)).toBe(9);
+      expect(Number(cols.rows[0]?.count)).toBe(14);
     });
   });
 });

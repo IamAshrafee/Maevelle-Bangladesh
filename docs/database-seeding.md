@@ -22,8 +22,11 @@ Executes the seed inside a PostgreSQL transaction and rolls back at the end, dis
 
 ### Target Specific Scope or Module
 ```bash
-# Target only categories module
+# Target specific modules
 pnpm db:seed --module=categories
+pnpm db:seed --module=tags
+pnpm db:seed --module=occasions
+pnpm db:seed --module=collections
 
 # Target a specific organization
 pnpm db:seed --org=maevelle
@@ -41,17 +44,24 @@ All seed files reside in `packages/database/src/seed/`:
 ```text
 packages/database/src/seed/
 ├── data/                      # Human-readable business data definitions
-│   └── categories.ts          # Category taxonomy hierarchy
+│   ├── categories.ts          # Category taxonomy hierarchy (44 categories)
+│   ├── tags.ts                # Product descriptive tags (29 tags)
+│   ├── occasions.ts           # Product usage occasions (9 occasions)
+│   └── collections.ts         # Merchandising collections (14 collections)
 │
 ├── modules/                   # Domain synchronization seeders
-│   └── categories.seed.ts     # Category change detection & tree synchronization
+│   ├── categories.seed.ts     # Category change detection & tree synchronization
+│   ├── vocabulary.seed.ts     # Flat vocabulary seeder factory (Tags, Occasions, Collections)
+│   ├── tags.seed.ts           # Tags module
+│   ├── occasions.seed.ts      # Occasions module
+│   └── collections.seed.ts    # Collections module
 │
 ├── helpers/                   # Reusable seed utilities
 │   ├── slug.ts                # Handle/slug normalization & validation
 │   ├── tenant.ts              # Organization & actor resolution
 │   └── format.ts              # Terminal output formatter
 │
-├── types.ts                   # Core interfaces (SeedModule, SeedContext, CategorySeedItem)
+├── types.ts                   # Core interfaces (SeedModule, SeedContext, CategorySeedItem, VocabularySeedItem)
 ├── runner.ts                  # Dependency coordinator & transaction manager
 ├── cli.ts                     # CLI argument parsing & database lifecycle
 └── index.ts                   # Programmatic exports
