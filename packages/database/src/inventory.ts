@@ -1673,33 +1673,58 @@ export async function verifyInventoryIntegrity(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
 ): Promise<readonly InventoryIntegrityIssue[]> {
-  const [rollups, ledger, reservations, transfers, stocktakes] = await Promise.all([
-    sql<{
-      id: string;
-    }>`select level.id from inventory.inventory_levels level left join lateral (select coalesce(sum(condition.quantity) filter (where condition.condition_code = 'SELLABLE'), 0) as sellable, coalesce(sum(condition.quantity) filter (where condition.condition_code <> 'SELLABLE'), 0) as unavailable from inventory.inventory_level_conditions condition where condition.organization_id = level.organization_id and condition.inventory_item_id = level.inventory_item_id and condition.location_id = level.location_id) actual on true where level.organization_id = ${organizationId} and (level.sellable_quantity <> actual.sellable or level.unavailable_quantity <> actual.unavailable)`.execute(
-      db,
-    ),
-    sql<{
-      id: string;
-    }>`with movement as (select inventory_item_id, location_id, condition_code, sum(quantity_delta) as quantity from inventory.inventory_movement_lines where organization_id = ${organizationId} group by inventory_item_id, location_id, condition_code) select condition.id from inventory.inventory_level_conditions condition full join movement on movement.inventory_item_id = condition.inventory_item_id and movement.location_id = condition.location_id and movement.condition_code = condition.condition_code where condition.organization_id = ${organizationId} and coalesce(condition.quantity, 0) <> coalesce(movement.quantity, 0)`.execute(
-      db,
-    ),
-    sql<{
-      id: string;
-    }>`select level.id from inventory.inventory_levels level left join lateral (select coalesce(sum(case when exists (select 1 from inventory.inventory_reservation_allocations allocation where allocation.reservation_id = reservation.id) then (select sum(allocation.reserved_quantity - allocation.consumed_quantity - allocation.released_quantity) from inventory.inventory_reservation_allocations allocation where allocation.reservation_id = reservation.id) else reservation.quantity end), 0) as quantity from inventory.inventory_reservations reservation where reservation.organization_id = level.organization_id and reservation.inventory_item_id = level.inventory_item_id and reservation.location_id = level.location_id and reservation.status in ('ACTIVE', 'PARTIALLY_CONSUMED')) active on true where level.organization_id = ${organizationId} and level.reserved_quantity <> active.quantity`.execute(
-      db,
-    ),
-    sql<{
-      id: string;
-    }>`select line.id from warehouse.transfer_lines line where line.organization_id = ${organizationId} and (line.received_quantity > line.dispatched_quantity or line.dispatched_quantity + line.cancelled_quantity > line.requested_quantity or (line.dispatched_quantity > line.received_quantity and not exists (select 1 from warehouse.transfers transfer where transfer.id = line.transfer_id and transfer.organization_id = line.organization_id and transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED'))))`.execute(
-      db,
-    ),
-    sql<{
-      id: string;
-    }>`select session.id from inventory.stocktake_sessions session where session.organization_id = ${organizationId} and ((session.status = 'POSTED' and session.posted_inventory_transaction_id is null) or (session.status <> 'POSTED' and session.posted_inventory_transaction_id is not null))`.execute(
-      db,
-    ),
-  ]);
+  const [rollups, ledger, reservations, terminalOwners, allocationHeaders, transfers, stocktakes] =
+    await Promise.all([
+      sql<{
+        id: string;
+      }>`select level.id from inventory.inventory_levels level left join lateral (select coalesce(sum(condition.quantity) filter (where condition.condition_code = 'SELLABLE'), 0) as sellable, coalesce(sum(condition.quantity) filter (where condition.condition_code <> 'SELLABLE'), 0) as unavailable from inventory.inventory_level_conditions condition where condition.organization_id = level.organization_id and condition.inventory_item_id = level.inventory_item_id and condition.location_id = level.location_id) actual on true where level.organization_id = ${organizationId} and (level.sellable_quantity <> actual.sellable or level.unavailable_quantity <> actual.unavailable)`.execute(
+        db,
+      ),
+      sql<{
+        id: string;
+      }>`with movement as (select inventory_item_id, location_id, condition_code, sum(quantity_delta) as quantity from inventory.inventory_movement_lines where organization_id = ${organizationId} group by inventory_item_id, location_id, condition_code) select condition.id from inventory.inventory_level_conditions condition full join movement on movement.inventory_item_id = condition.inventory_item_id and movement.location_id = condition.location_id and movement.condition_code = condition.condition_code where condition.organization_id = ${organizationId} and coalesce(condition.quantity, 0) <> coalesce(movement.quantity, 0)`.execute(
+        db,
+      ),
+      sql<{
+        id: string;
+      }>`select level.id from inventory.inventory_levels level left join lateral (select coalesce(sum(case when exists (select 1 from inventory.inventory_reservation_allocations allocation where allocation.reservation_id = reservation.id) then (select sum(allocation.reserved_quantity - allocation.consumed_quantity - allocation.released_quantity) from inventory.inventory_reservation_allocations allocation where allocation.reservation_id = reservation.id) else reservation.quantity end), 0) as quantity from inventory.inventory_reservations reservation where reservation.organization_id = level.organization_id and reservation.inventory_item_id = level.inventory_item_id and reservation.location_id = level.location_id and reservation.status in ('ACTIVE', 'PARTIALLY_CONSUMED')) active on true where level.organization_id = ${organizationId} and level.reserved_quantity <> active.quantity`.execute(
+        db,
+      ),
+      sql<{ id: string }>`
+      select reservation.id
+      from inventory.inventory_reservations reservation
+      join orders.order_inventory_reservations bridge
+        on bridge.organization_id = reservation.organization_id and bridge.reservation_id = reservation.id
+      join orders.orders order_row
+        on order_row.organization_id = bridge.organization_id and order_row.id = bridge.order_id
+      where reservation.organization_id = ${organizationId}
+        and reservation.status in ('ACTIVE', 'PARTIALLY_CONSUMED')
+        and order_row.order_status in ('COMPLETED', 'CANCELLED')
+    `.execute(db),
+      sql<{ id: string }>`
+      select reservation.id
+      from inventory.inventory_reservations reservation
+      join inventory.inventory_reservation_allocations allocation
+        on allocation.organization_id = reservation.organization_id
+        and allocation.reservation_id = reservation.id
+      where reservation.organization_id = ${organizationId}
+        and (
+          allocation.inventory_item_id <> reservation.inventory_item_id
+          or allocation.location_id <> reservation.location_id
+          or allocation.reserved_quantity <> reservation.quantity
+        )
+    `.execute(db),
+      sql<{
+        id: string;
+      }>`select line.id from warehouse.transfer_lines line where line.organization_id = ${organizationId} and (line.received_quantity > line.dispatched_quantity or line.dispatched_quantity + line.cancelled_quantity > line.requested_quantity or (line.dispatched_quantity > line.received_quantity and not exists (select 1 from warehouse.transfers transfer where transfer.id = line.transfer_id and transfer.organization_id = line.organization_id and transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED'))))`.execute(
+        db,
+      ),
+      sql<{
+        id: string;
+      }>`select session.id from inventory.stocktake_sessions session where session.organization_id = ${organizationId} and ((session.status = 'POSTED' and session.posted_inventory_transaction_id is null) or (session.status <> 'POSTED' and session.posted_inventory_transaction_id is not null))`.execute(
+        db,
+      ),
+    ]);
   return [
     ...rollups.rows.map((row) => ({
       code: 'LEVEL_CONDITION_ROLLUP_MISMATCH',
@@ -1714,6 +1739,16 @@ export async function verifyInventoryIntegrity(
     ...reservations.rows.map((row) => ({
       code: 'RESERVATION_ROLLUP_MISMATCH',
       summary: 'Reserved quantity differs from active Reservation ownership.',
+      entityId: row.id,
+    })),
+    ...terminalOwners.rows.map((row) => ({
+      code: 'RESERVATION_TERMINAL_ORDER_OWNER',
+      summary: 'An active Reservation belongs to a terminal Order.',
+      entityId: row.id,
+    })),
+    ...allocationHeaders.rows.map((row) => ({
+      code: 'RESERVATION_ALLOCATION_HEADER_MISMATCH',
+      summary: 'Reservation allocation identity or quantity differs from its header.',
       entityId: row.id,
     })),
     ...transfers.rows.map((row) => ({
@@ -2509,7 +2544,15 @@ export async function listInventoryReservations(
       orderNumber: string;
       orderStatus: string;
       fulfillmentStatus?: string;
+      paymentStatus: string;
+      paymentExpiresAt?: string;
     };
+    attentionCode?:
+      | 'TERMINAL_ORDER_OWNER'
+      | 'ORDER_ON_HOLD'
+      | 'PAYMENT_REJECTED'
+      | 'PAYMENT_REVIEW_OVERDUE'
+      | 'EXPIRED_STANDALONE_HOLD';
     releaseAllowed: boolean;
     releaseBlockedReason?: string;
     expiresAt?: string;
@@ -2571,6 +2614,8 @@ export async function listInventoryReservations(
     order_number: string | null;
     order_status: string | null;
     fulfillment_status: string | null;
+    payment_status: string | null;
+    payment_expires_at: string | null;
   }>`
     select res.id, res.inventory_item_id, res.location_id, res.quantity::text, res.status, res.source_type, res.source_reference, res.expires_at, res.created_at,
       coalesce(allocation.consumed_quantity, 0)::text as consumed_quantity,
@@ -2578,7 +2623,8 @@ export async function listInventoryReservations(
       (res.quantity - coalesce(allocation.consumed_quantity, 0) - coalesce(allocation.released_quantity, 0))::text as remaining_quantity,
       variant.id as variant_id, variant.sku, product.title as product_title, location.name as location_name,
       order_row.id as order_id, order_row.order_number, order_row.order_status,
-      fulfillment_state.status as fulfillment_status
+      fulfillment_state.status as fulfillment_status,
+      payment_state.status as payment_status, payment_state.expires_at as payment_expires_at
     from inventory.inventory_reservations res
     join inventory.inventory_items item on item.id = res.inventory_item_id
       and item.organization_id = res.organization_id
@@ -2607,6 +2653,34 @@ export async function listInventoryReservations(
         and fulfillment_allocation.reservation_allocation_id = allocation.id
         and fulfillment.status <> 'CANCELLED'
     ) fulfillment_state on true
+    left join lateral (
+      select
+        case
+          when method.method_type = 'COD' then 'COD'
+          when intent.status = 'SATISFIED' then 'PAID'
+          when exists (
+            select 1 from payments.payment_attempts attempt
+            where attempt.organization_id = intent.organization_id
+              and attempt.payment_intent_id = intent.id
+              and attempt.status = 'PENDING_VERIFICATION'
+          ) then 'PAYMENT_REVIEW'
+          when exists (
+            select 1 from payments.payment_attempts attempt
+            where attempt.organization_id = intent.organization_id
+              and attempt.payment_intent_id = intent.id
+              and attempt.status = 'REJECTED'
+          ) then 'PAYMENT_REJECTED'
+          when intent.status = 'READY' then 'AWAITING_PAYMENT'
+          else intent.status
+        end as status,
+        intent.expires_at
+      from payments.payment_intents intent
+      join payments.payment_methods method
+        on method.organization_id = intent.organization_id and method.id = intent.payment_method_id
+      where intent.organization_id = res.organization_id and intent.order_id = order_row.id
+      order by intent.created_at desc
+      limit 1
+    ) payment_state on true
     where res.organization_id = ${organizationId}
       and ${statusFilter}
       and ${locationFilter}
@@ -2617,40 +2691,60 @@ export async function listInventoryReservations(
   `.execute(db);
 
   return {
-    items: result.rows.map((row) => ({
-      id: row.id,
-      inventoryItemId: row.inventory_item_id,
-      variantId: row.variant_id,
-      sku: row.sku,
-      productTitle: row.product_title,
-      locationId: row.location_id,
-      locationName: row.location_name,
-      quantity: subtract(row.quantity, '0'),
-      consumedQuantity: subtract(row.consumed_quantity, '0'),
-      releasedQuantity: subtract(row.released_quantity, '0'),
-      remainingQuantity: subtract(row.remaining_quantity, '0'),
-      status: row.status,
-      sourceType: row.source_type,
-      sourceReference: row.source_reference,
-      ...(row.order_id && row.order_number && row.order_status
-        ? {
-            owner: {
-              type: 'ORDER' as const,
-              orderId: row.order_id,
-              orderNumber: row.order_number,
-              orderStatus: row.order_status,
-              ...(row.fulfillment_status ? { fulfillmentStatus: row.fulfillment_status } : {}),
-            },
-          }
-        : {}),
-      releaseAllowed:
-        row.order_id === null && ['ACTIVE', 'PARTIALLY_CONSUMED'].includes(row.status),
-      ...(row.order_id
-        ? { releaseBlockedReason: 'Cancel the owning Order to release this stock safely.' }
-        : {}),
-      ...(row.expires_at === null ? {} : { expiresAt: row.expires_at }),
-      createdAt: row.created_at,
-    })),
+    items: result.rows.map((row) => {
+      const paymentExpiryPassed =
+        row.payment_expires_at !== null && new Date(row.payment_expires_at).getTime() <= Date.now();
+      const attentionCode = row.order_id
+        ? ['COMPLETED', 'CANCELLED'].includes(row.order_status ?? '')
+          ? ('TERMINAL_ORDER_OWNER' as const)
+          : row.order_status === 'ON_HOLD'
+            ? ('ORDER_ON_HOLD' as const)
+            : row.payment_status === 'PAYMENT_REJECTED'
+              ? ('PAYMENT_REJECTED' as const)
+              : row.payment_status === 'PAYMENT_REVIEW' && paymentExpiryPassed
+                ? ('PAYMENT_REVIEW_OVERDUE' as const)
+                : undefined
+        : row.expires_at !== null && new Date(row.expires_at).getTime() <= Date.now()
+          ? ('EXPIRED_STANDALONE_HOLD' as const)
+          : undefined;
+      return {
+        id: row.id,
+        inventoryItemId: row.inventory_item_id,
+        variantId: row.variant_id,
+        sku: row.sku,
+        productTitle: row.product_title,
+        locationId: row.location_id,
+        locationName: row.location_name,
+        quantity: subtract(row.quantity, '0'),
+        consumedQuantity: subtract(row.consumed_quantity, '0'),
+        releasedQuantity: subtract(row.released_quantity, '0'),
+        remainingQuantity: subtract(row.remaining_quantity, '0'),
+        status: row.status,
+        sourceType: row.source_type,
+        sourceReference: row.source_reference,
+        ...(row.order_id && row.order_number && row.order_status
+          ? {
+              owner: {
+                type: 'ORDER' as const,
+                orderId: row.order_id,
+                orderNumber: row.order_number,
+                orderStatus: row.order_status,
+                ...(row.fulfillment_status ? { fulfillmentStatus: row.fulfillment_status } : {}),
+                paymentStatus: row.payment_status ?? 'UNKNOWN',
+                ...(row.payment_expires_at ? { paymentExpiresAt: row.payment_expires_at } : {}),
+              },
+            }
+          : {}),
+        releaseAllowed:
+          row.order_id === null && ['ACTIVE', 'PARTIALLY_CONSUMED'].includes(row.status),
+        ...(row.order_id
+          ? { releaseBlockedReason: 'Cancel the owning Order to release this stock safely.' }
+          : {}),
+        ...(attentionCode ? { attentionCode } : {}),
+        ...(row.expires_at === null ? {} : { expiresAt: row.expires_at }),
+        createdAt: row.created_at,
+      };
+    }),
     totalCount: Number(countResult.rows[0]?.count ?? '0'),
   };
 }

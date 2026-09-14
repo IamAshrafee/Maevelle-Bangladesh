@@ -124,7 +124,8 @@ async function emit(
   db: Kysely<DatabaseSchema>,
   input: {
     organizationId: string;
-    actorId: string;
+    actorId?: string;
+    actorType?: 'USER' | 'SYSTEM';
     action: string;
     eventType: string;
     fulfillmentId: string;
@@ -133,8 +134,8 @@ async function emit(
 ): Promise<void> {
   await appendAuditEvent(db, {
     organizationId: input.organizationId,
-    actorType: 'USER',
-    actorId: input.actorId,
+    actorType: input.actorType ?? 'USER',
+    ...(input.actorId ? { actorId: input.actorId } : {}),
     action: input.action,
     targetType: 'fulfillment.fulfillment',
     targetId: input.fulfillmentId,
@@ -613,7 +614,12 @@ export async function cancelFulfillment(
  */
 export async function cancelOpenFulfillmentsForOrderInTransaction(
   transaction: Transaction<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; orderId: string },
+  input: {
+    organizationId: string;
+    actorId?: string;
+    actorType?: 'USER' | 'SYSTEM';
+    orderId: string;
+  },
 ): Promise<number> {
   const fulfillments = await sql<{ id: string; status: FulfillmentStatus }>`
     select id, status
@@ -636,7 +642,8 @@ export async function cancelOpenFulfillmentsForOrderInTransaction(
     `.execute(transaction);
     await emit(transaction, {
       organizationId: input.organizationId,
-      actorId: input.actorId,
+      ...(input.actorId ? { actorId: input.actorId } : {}),
+      ...(input.actorType ? { actorType: input.actorType } : {}),
       action: 'fulfillment.fulfillment.cancelled',
       eventType: 'fulfillment.cancelled',
       fulfillmentId: fulfillment.id,

@@ -31,6 +31,7 @@ export interface PaymentMethodView {
   readonly methodType: 'COD' | 'MOBILE_WALLET';
   readonly status: 'ACTIVE' | 'DISABLED';
   readonly instructions: { readonly accountNumber?: string; readonly text?: string };
+  readonly paymentWindowMinutes: number | null;
   readonly displayOrder: number;
   readonly version: number;
 }
@@ -126,6 +127,7 @@ function paymentMethodView(row: {
   method_type: 'COD' | 'MOBILE_WALLET';
   status: 'ACTIVE' | 'DISABLED';
   public_instructions: unknown;
+  payment_window_minutes: number | null;
   display_order: number;
   version: string;
 }): PaymentMethodView {
@@ -136,6 +138,7 @@ function paymentMethodView(row: {
     methodType: row.method_type,
     status: row.status,
     instructions: asInstructions(row.public_instructions),
+    paymentWindowMinutes: row.payment_window_minutes,
     displayOrder: row.display_order,
     version: Number(row.version),
   };
@@ -154,10 +157,11 @@ export async function listPaymentMethods(
     method_type: 'COD' | 'MOBILE_WALLET';
     status: 'ACTIVE' | 'DISABLED';
     public_instructions: unknown;
+    payment_window_minutes: number | null;
     display_order: number;
     version: string;
   }>`
-    select id, code, name, method_type, status, public_instructions, display_order, version::text
+    select id, code, name, method_type, status, public_instructions, payment_window_minutes, display_order, version::text
     from payments.payment_methods
     where organization_id = ${organizationId} and (${activeOnly} = false or status = 'ACTIVE')
     order by display_order, code
@@ -203,6 +207,7 @@ export async function configurePaymentMethod(
     name: string;
     status: 'ACTIVE' | 'DISABLED';
     instructions?: PaymentMethodView['instructions'];
+    paymentWindowMinutes?: number | null;
     displayOrder: number;
   },
 ): Promise<PaymentMethodView> {
@@ -212,6 +217,23 @@ export async function configurePaymentMethod(
       'Payment method name and display order are required.',
     );
   const methodType = input.code === 'COD' ? 'COD' : 'MOBILE_WALLET';
+  const paymentWindowMinutes = input.code === 'COD' ? null : input.paymentWindowMinutes;
+  if (input.code !== 'COD') {
+    const hasValidWindow =
+      Number.isInteger(paymentWindowMinutes) &&
+      paymentWindowMinutes !== null &&
+      paymentWindowMinutes !== undefined &&
+      paymentWindowMinutes >= 15 &&
+      paymentWindowMinutes <= 10_080;
+    if (
+      (!hasValidWindow && input.status === 'ACTIVE') ||
+      (paymentWindowMinutes != null && !hasValidWindow)
+    )
+      throw new PaymentDomainError(
+        'VALIDATION_FAILED',
+        'Manual payment methods require a payment window between 15 minutes and 7 days when configured.',
+      );
+  }
   return db.transaction().execute(async (transaction) => {
     const result = await sql<{
       id: string;
@@ -220,15 +242,16 @@ export async function configurePaymentMethod(
       method_type: 'COD' | 'MOBILE_WALLET';
       status: 'ACTIVE' | 'DISABLED';
       public_instructions: unknown;
+      payment_window_minutes: number | null;
       display_order: number;
       version: string;
     }>`
-      insert into payments.payment_methods (organization_id, code, name, method_type, status, public_instructions, display_order)
-      values (${input.organizationId}, ${input.code}, ${input.name.trim()}, ${methodType}, ${input.status}, ${JSON.stringify(input.instructions ?? {})}::jsonb, ${input.displayOrder})
+      insert into payments.payment_methods (organization_id, code, name, method_type, status, public_instructions, payment_window_minutes, display_order)
+      values (${input.organizationId}, ${input.code}, ${input.name.trim()}, ${methodType}, ${input.status}, ${JSON.stringify(input.instructions ?? {})}::jsonb, ${paymentWindowMinutes ?? null}, ${input.displayOrder})
       on conflict (organization_id, code) do update set name = excluded.name, status = excluded.status,
-        public_instructions = excluded.public_instructions, display_order = excluded.display_order,
+        public_instructions = excluded.public_instructions, payment_window_minutes = excluded.payment_window_minutes, display_order = excluded.display_order,
         version = payments.payment_methods.version + 1, updated_at = now()
-      returning id, code, name, method_type, status, public_instructions, display_order, version::text
+      returning id, code, name, method_type, status, public_instructions, payment_window_minutes, display_order, version::text
     `.execute(transaction);
     const row = result.rows[0];
     if (!row) throw new Error('Payment method configuration did not return a record.');
@@ -239,7 +262,7 @@ export async function configurePaymentMethod(
       action: 'payments.payment_method.configured',
       targetType: 'payments.payment_method',
       targetId: row.id,
-      metadata: { code: input.code, status: input.status },
+      metadata: { code: input.code, status: input.status, paymentWindowMinutes },
     });
     return paymentMethodView(row);
   });
@@ -262,8 +285,9 @@ export async function createPaymentIntentForOrder(
     code: input.paymentMethod,
   });
   const result = await sql<{ id: string }>`
-    insert into payments.payment_intents (organization_id, order_id, order_number_snapshot, payment_method_id, currency_code, expected_amount, status, instructions_snapshot)
-    values (${input.organizationId}, ${input.orderId}, ${input.orderNumber}, ${method.id}, ${input.currency}, ${input.expectedAmount}::numeric, 'READY', ${JSON.stringify(method.instructions)}::jsonb)
+    insert into payments.payment_intents (organization_id, order_id, order_number_snapshot, payment_method_id, currency_code, expected_amount, status, instructions_snapshot, expires_at)
+    values (${input.organizationId}, ${input.orderId}, ${input.orderNumber}, ${method.id}, ${input.currency}, ${input.expectedAmount}::numeric, 'READY', ${JSON.stringify(method.instructions)}::jsonb,
+      case when ${method.paymentWindowMinutes}::integer is null then null else now() + (${method.paymentWindowMinutes}::integer * interval '1 minute') end)
     returning id
   `.execute(db);
   const id = result.rows[0]?.id;
@@ -623,10 +647,16 @@ export async function verifyManualPayment(
       );
     const intent = await sql<{
       id: string;
-    }>`select id from payments.payment_intents where id = ${row.intent_id} for update`.execute(
+      status: string;
+    }>`select id, status from payments.payment_intents where organization_id = ${input.organizationId} and id = ${row.intent_id} for update`.execute(
       transaction,
     );
     if (!intent.rows[0]) throw new PaymentDomainError('NOT_FOUND', 'Payment intent was not found.');
+    if (intent.rows[0].status !== 'READY')
+      throw new PaymentDomainError(
+        'PAYMENT_METHOD_UNAVAILABLE',
+        'This payment obligation is no longer open for verification.',
+      );
     const duplicate = await sql<{
       id: string;
     }>`select id from payments.payments where organization_id = ${input.organizationId} and payment_method_id = ${row.method_id} and normalized_external_reference = ${row.normalized_reference} and status = 'CONFIRMED' for update`.execute(

@@ -3,11 +3,16 @@ import { sql } from 'kysely';
 
 import { addGuestCartLine, createGuestCart } from './cart.js';
 import { createDatabase } from './index.js';
-import { adjustInventory } from './inventory.js';
+import {
+  adjustInventory,
+  listInventoryReservations,
+  verifyInventoryIntegrity,
+} from './inventory.js';
 import {
   cancelOrder,
   createCheckout,
   placeOrder,
+  processExpiredPaymentOrders,
   updateCheckoutAddress,
   updateCheckoutContact,
   updateCheckoutPaymentMethod,
@@ -89,6 +94,7 @@ async function fixture(quantity = '4') {
     code: 'BKASH_MANUAL',
     name: 'bKash Manual',
     status: 'ACTIVE',
+    paymentWindowMinutes: 60,
     displayOrder: 20,
     instructions: { accountNumber: '01700000000', text: 'Send money to the Maevelle test wallet.' },
   });
@@ -98,6 +104,7 @@ async function fixture(quantity = '4') {
     code: 'NAGAD_MANUAL',
     name: 'Nagad Manual',
     status: 'ACTIVE',
+    paymentWindowMinutes: 60,
     displayOrder: 30,
     instructions: { accountNumber: '01800000000', text: 'Send money to the Maevelle test wallet.' },
   });
@@ -163,6 +170,121 @@ async function orderFor(
 }
 
 describe('payment facts, manual wallet verification, and refunds', () => {
+  it('requires a bounded timeout policy before a manual payment method can be active', async () => {
+    await expect(
+      configurePaymentMethod(database.db, {
+        organizationId: crypto.randomUUID(),
+        actorId: crypto.randomUUID(),
+        code: 'BKASH_MANUAL',
+        name: 'bKash Manual',
+        status: 'ACTIVE',
+        displayOrder: 20,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      configurePaymentMethod(database.db, {
+        organizationId: crypto.randomUUID(),
+        actorId: crypto.randomUUID(),
+        code: 'NAGAD_MANUAL',
+        name: 'Nagad Manual',
+        status: 'DISABLED',
+        paymentWindowMinutes: 10,
+        displayOrder: 30,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('applies the configured manual-payment window and expires only unclaimed unpaid Orders', async () => {
+    const input = await fixture();
+    const expiring = await orderFor(input, 'BKASH_MANUAL');
+    const intent = await sql<{ id: string; expires_at: Date | null }>`
+      select id, expires_at
+      from payments.payment_intents
+      where organization_id = ${input.organizationId} and order_id = ${expiring.order.id}
+    `.execute(database.db);
+    expect(intent.rows[0]!.expires_at).not.toBeNull();
+    await sql`update payments.payment_intents set expires_at = now() - interval '1 minute' where id = ${intent.rows[0]!.id}`.execute(
+      database.db,
+    );
+
+    expect(await processExpiredPaymentOrders(database.db)).toBe(1);
+    expect(await processExpiredPaymentOrders(database.db)).toBe(0);
+    const expired = await sql<{
+      order_status: string;
+      intent_status: string;
+      reserved: string;
+      audit: string;
+    }>`
+      select order_row.order_status, payment_intent.status as intent_status,
+        (select sum(level.reserved_quantity)::text
+          from inventory.inventory_levels level
+          join inventory.inventory_items item on item.id = level.inventory_item_id
+          where item.organization_id = ${input.organizationId} and item.variant_id = ${input.variantId}) as reserved,
+        (select count(*)::text from audit.audit_events
+          where organization_id = ${input.organizationId}
+            and target_id = order_row.id
+            and action = 'orders.order.cancelled'
+            and actor_type = 'SYSTEM') as audit
+      from orders.orders order_row
+      join payments.payment_intents payment_intent
+        on payment_intent.organization_id = order_row.organization_id
+        and payment_intent.order_id = order_row.id
+      where order_row.id = ${expiring.order.id}
+    `.execute(database.db);
+    expect(expired.rows[0]).toEqual({
+      order_status: 'CANCELLED',
+      intent_status: 'CANCELLED',
+      reserved: '0.000000',
+      audit: '1',
+    });
+  });
+
+  it('defers timeout while a payment claim awaits review, then expires after rejection', async () => {
+    const input = await fixture();
+    const flow = await orderFor(input, 'NAGAD_MANUAL');
+    const attempt = await submitManualPayment(database.db, {
+      organizationId: input.organizationId,
+      orderId: flow.order.id,
+      customerReference: 'TIMEOUT-REVIEW-001',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await sql`update payments.payment_intents set expires_at = now() - interval '1 minute' where order_id = ${flow.order.id}`.execute(
+      database.db,
+    );
+
+    expect(await processExpiredPaymentOrders(database.db)).toBe(0);
+    const awaitingReview = await listInventoryReservations(database.db, input.organizationId);
+    expect(awaitingReview.items[0]).toMatchObject({
+      attentionCode: 'PAYMENT_REVIEW_OVERDUE',
+      owner: { orderId: flow.order.id, paymentStatus: 'PAYMENT_REVIEW' },
+    });
+    await rejectManualPayment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      attemptId: attempt.id,
+      reasonCode: 'REFERENCE_NOT_FOUND',
+    });
+    const rejected = await listInventoryReservations(database.db, input.organizationId);
+    expect(rejected.items[0]).toMatchObject({
+      attentionCode: 'PAYMENT_REJECTED',
+      owner: { orderId: flow.order.id, paymentStatus: 'PAYMENT_REJECTED' },
+    });
+    expect(await processExpiredPaymentOrders(database.db)).toBe(1);
+  });
+
+  it('reports an active reservation owned by a terminal Order as an integrity failure', async () => {
+    const input = await fixture();
+    const flow = await orderFor(input, 'COD');
+    await sql`update orders.orders set order_status = 'CANCELLED' where organization_id = ${input.organizationId} and id = ${flow.order.id}`.execute(
+      database.db,
+    );
+
+    await expect(verifyInventoryIntegrity(database.db, input.organizationId)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'RESERVATION_TERMINAL_ORDER_OWNER' }),
+      ]),
+    );
+  });
   it('keeps COD as a due payment obligation without inventing a confirmed Payment', async () => {
     const input = await fixture();
     const flow = await orderFor(input, 'COD');

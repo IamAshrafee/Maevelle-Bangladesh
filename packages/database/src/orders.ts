@@ -1415,6 +1415,9 @@ export async function cancelOrder(
     reasonCode: string;
     reasonText?: string;
     idempotencyKey: string;
+    actorType?: 'USER' | 'SYSTEM';
+    /** Worker-only proof that this cancellation is driven by an eligible timed-out intent. */
+    paymentTimeoutIntentId?: string;
   },
 ): Promise<{ order: OrderView; releasedReservations: number; cancelledFulfillments: number }> {
   if (!input.reasonCode.trim())
@@ -1424,7 +1427,7 @@ export async function cancelOrder(
     try {
       const record = await claimIdempotencyRecord(transaction, {
         organizationId: input.organizationId,
-        principalType: 'USER',
+        principalType: input.actorType ?? 'USER',
         principalId: input.actorId,
         operationType: 'orders.cancel',
         idempotencyKey: input.idempotencyKey,
@@ -1433,6 +1436,7 @@ export async function cancelOrder(
           expectedVersion: input.expectedVersion,
           reasonCode: input.reasonCode.trim(),
           reasonText: input.reasonText?.trim() ?? null,
+          paymentTimeoutIntentId: input.paymentTimeoutIntentId ?? null,
         }),
       });
       if (!record.created) {
@@ -1480,11 +1484,55 @@ export async function cancelOrder(
       throw new OrderDomainError('INVALID_TRANSITION', 'This Order cannot be cancelled.');
     if (Number(row.version) !== input.expectedVersion)
       throw new OrderDomainError('STALE_VERSION', 'Order has changed; reload before cancelling.');
+    if (input.paymentTimeoutIntentId) {
+      if (row.order_status !== 'PENDING')
+        throw new OrderDomainError(
+          'INVALID_TRANSITION',
+          'Only a pending unpaid Order can expire automatically.',
+        );
+      const eligibleIntent = await sql<{ id: string }>`
+        select intent.id
+        from payments.payment_intents intent
+        join payments.payment_methods method
+          on method.organization_id = intent.organization_id
+          and method.id = intent.payment_method_id
+        where intent.organization_id = ${input.organizationId}
+          and intent.order_id = ${input.orderId}
+          and intent.id = ${input.paymentTimeoutIntentId}
+          and intent.status = 'READY'
+          and intent.expires_at is not null
+          and intent.expires_at <= now()
+          and method.method_type = 'MOBILE_WALLET'
+          and not exists (
+            select 1 from payments.payment_attempts attempt
+            where attempt.organization_id = intent.organization_id
+              and attempt.payment_intent_id = intent.id
+              and attempt.status = 'PENDING_VERIFICATION'
+          )
+          and not exists (
+            select 1
+            from payments.payment_allocations allocation
+            join payments.payments payment
+              on payment.organization_id = allocation.organization_id
+              and payment.id = allocation.payment_id
+            where allocation.organization_id = intent.organization_id
+              and allocation.order_id = intent.order_id
+              and payment.status = 'CONFIRMED'
+          )
+        for update of intent
+      `.execute(transaction);
+      if (!eligibleIntent.rows[0])
+        throw new OrderDomainError(
+          'INVALID_TRANSITION',
+          'The payment obligation is no longer eligible for automatic expiry.',
+        );
+    }
     let cancelledFulfillments: number;
     try {
       cancelledFulfillments = await cancelOpenFulfillmentsForOrderInTransaction(transaction, {
         organizationId: input.organizationId,
-        actorId: input.actorId,
+        ...(input.actorType === 'SYSTEM' ? {} : { actorId: input.actorId }),
+        ...(input.actorType ? { actorType: input.actorType } : {}),
         orderId: input.orderId,
       });
     } catch (error) {
@@ -1505,6 +1553,7 @@ export async function cancelOrder(
         reservationId: reservation.reservation_id,
         idempotencyKey: `order-cancel:${input.orderId}:${reservation.reservation_id}`,
         authority: { type: 'ORDER_CANCELLATION', orderId: input.orderId },
+        ...(input.actorType ? { actorType: input.actorType } : {}),
       });
       if (release.released) releasedReservations += 1;
     }
@@ -1515,13 +1564,13 @@ export async function cancelOrder(
     await sql`update orders.orders set order_status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now() where id = ${input.orderId}`.execute(
       transaction,
     );
-    await sql`insert into orders.order_cancellations (organization_id, order_id, reason_code, reason_text, created_by_actor_id) values (${input.organizationId}, ${input.orderId}, ${input.reasonCode.trim()}, ${input.reasonText?.trim() ?? null}, ${input.actorId})`.execute(
+    await sql`insert into orders.order_cancellations (organization_id, order_id, reason_code, reason_text, created_by_actor_id) values (${input.organizationId}, ${input.orderId}, ${input.reasonCode.trim()}, ${input.reasonText?.trim() ?? null}, ${input.actorType === 'SYSTEM' ? null : input.actorId})`.execute(
       transaction,
     );
     await appendAuditEvent(transaction, {
       organizationId: input.organizationId,
-      actorType: 'USER',
-      actorId: input.actorId,
+      actorType: input.actorType ?? 'USER',
+      ...(input.actorType === 'SYSTEM' ? {} : { actorId: input.actorId }),
       action: 'orders.order.cancelled',
       targetType: 'orders.order',
       targetId: input.orderId,
@@ -1537,6 +1586,80 @@ export async function cancelOrder(
     );
     return { order: await orderView(transaction, input.orderId), ...response };
   });
+}
+
+/**
+ * Cancels only expired, unpaid manual-payment Orders. Candidate discovery is
+ * intentionally optimistic; cancelOrder re-locks and revalidates the Order and
+ * Payment Intent so verification, fulfillment, or operator activity wins safely.
+ */
+export async function processExpiredPaymentOrders(
+  db: Kysely<DatabaseSchema>,
+  limit = 100,
+): Promise<number> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
+    throw new OrderDomainError('VALIDATION_FAILED', 'Payment expiry batch limit is invalid.');
+  const candidates = await sql<{
+    organization_id: string;
+    order_id: string;
+    intent_id: string;
+    version: string;
+  }>`
+    select intent.organization_id, intent.order_id, intent.id as intent_id, order_row.version::text
+    from payments.payment_intents intent
+    join payments.payment_methods method
+      on method.organization_id = intent.organization_id and method.id = intent.payment_method_id
+    join orders.orders order_row
+      on order_row.organization_id = intent.organization_id and order_row.id = intent.order_id
+    where intent.status = 'READY'
+      and intent.expires_at is not null
+      and intent.expires_at <= now()
+      and method.method_type = 'MOBILE_WALLET'
+      and order_row.order_status = 'PENDING'
+      and not exists (
+        select 1 from payments.payment_attempts attempt
+        where attempt.organization_id = intent.organization_id
+          and attempt.payment_intent_id = intent.id
+          and attempt.status = 'PENDING_VERIFICATION'
+      )
+      and not exists (
+        select 1
+        from payments.payment_allocations allocation
+        join payments.payments payment
+          on payment.organization_id = allocation.organization_id
+          and payment.id = allocation.payment_id
+        where allocation.organization_id = intent.organization_id
+          and allocation.order_id = intent.order_id
+          and payment.status = 'CONFIRMED'
+      )
+    order by intent.expires_at, intent.id
+    limit ${limit}
+  `.execute(db);
+  let expired = 0;
+  for (const candidate of candidates.rows) {
+    try {
+      await cancelOrder(db, {
+        organizationId: candidate.organization_id,
+        actorId: candidate.organization_id,
+        actorType: 'SYSTEM',
+        orderId: candidate.order_id,
+        expectedVersion: Number(candidate.version),
+        reasonCode: 'PAYMENT_TIMEOUT',
+        reasonText: 'Manual payment window expired without a verified payment.',
+        idempotencyKey: `payment-timeout:${candidate.intent_id}`,
+        paymentTimeoutIntentId: candidate.intent_id,
+      });
+      expired += 1;
+    } catch (error) {
+      if (
+        error instanceof OrderDomainError &&
+        ['STALE_VERSION', 'INVALID_TRANSITION'].includes(error.code)
+      )
+        continue;
+      throw error;
+    }
+  }
+  return expired;
 }
 
 /**

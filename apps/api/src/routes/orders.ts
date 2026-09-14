@@ -472,10 +472,15 @@ export function registerOrderRoutes(
     async (request, reply) => {
       const active = await admin(database, auth, request.headers, 'orders.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      const query = request.query as { page?: number; pageSize?: number; q?: string; status?: string };
+      const query = request.query as {
+        page?: number;
+        pageSize?: number;
+        q?: string;
+        status?: string;
+      };
       const result = await listOrders(database.db, active.organizationId, query);
       return { data: { items: result.data, totalCount: result.pagination.totalItems } };
-    }
+    },
   );
   app.get('/admin/orders/:orderId', async (request, reply) => {
     const active = await admin(database, auth, request.headers, 'orders.view');
@@ -580,6 +585,9 @@ export function registerOrderRoutes(
             }),
           ),
           displayOrder: Type.Integer(),
+          paymentWindowMinutes: Type.Optional(
+            Type.Union([Type.Integer({ minimum: 15, maximum: 10080 }), Type.Null()]),
+          ),
         }),
       },
     },
@@ -592,6 +600,7 @@ export function registerOrderRoutes(
           status: 'ACTIVE' | 'DISABLED';
           instructions?: { accountNumber?: string; text?: string };
           displayOrder: number;
+          paymentWindowMinutes?: number | null;
         };
         const code = (request.params as { code: PaymentMethodCode }).code;
         if (!['COD', 'BKASH_MANUAL', 'NAGAD_MANUAL'].includes(code))

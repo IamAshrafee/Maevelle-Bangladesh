@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight, CheckCircle2, FileText, MapPin } from 'lucide-react';
 import Link from 'next/link';
-import type { WarehouseTransferDetailDto } from '@maevelle/contracts';
+import type { WarehouseTransferDetailDto, WarehouseTransferLineDto } from '@maevelle/contracts';
 
 import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
 import { InventoryEmptyState } from './inventory-page-ui';
@@ -148,7 +148,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
     );
   }
 
-  const lines = (transfer as any).lines ?? [];
+  const lines = transfer.lines;
 
   return (
     <div className="space-y-6">
@@ -343,7 +343,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
                   </tr>
                 </thead>
                 <tbody className="[&_tr:last-child]:border-0">
-                  {lines.map((line: any) => (
+                  {lines.map((line: WarehouseTransferLineDto) => (
                     <tr
                       key={line.id}
                       className="border-b transition-colors hover:bg-muted/30"

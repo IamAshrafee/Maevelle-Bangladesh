@@ -263,7 +263,7 @@ export function registerWarehouseRoutes(
   );
 
   app.get('/admin/warehouse/transfers/:transferId', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'inventory.transfer');
+    const active = await context(database, auth, request.headers, 'warehouse.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     const detail = await getTransferDetail(
       database.db,

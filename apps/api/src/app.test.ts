@@ -163,6 +163,31 @@ describe('API hardening foundation', () => {
     });
     expect(protectedDefinitions.statusCode).toBe(403);
 
+    const protectedReservations = await app.inject({
+      method: 'GET',
+      url: '/admin/inventory/reservations',
+    });
+    expect(protectedReservations.statusCode).toBe(403);
+
+    const protectedReservationRelease = await app.inject({
+      method: 'POST',
+      url: `/admin/inventory/reservations/${productId}/release`,
+      headers: { 'idempotency-key': crypto.randomUUID() },
+    });
+    expect(protectedReservationRelease.statusCode).toBe(403);
+
+    const protectedPaymentPolicy = await app.inject({
+      method: 'PUT',
+      url: '/admin/payments/methods/BKASH_MANUAL',
+      payload: {
+        name: 'bKash',
+        status: 'ACTIVE',
+        displayOrder: 1,
+        paymentWindowMinutes: 60,
+      },
+    });
+    expect(protectedPaymentPolicy.statusCode).toBe(403);
+
     const invalidMatrix = await app.inject({
       method: 'GET',
       url: '/admin/catalog/products/not-a-product/variant-matrix',

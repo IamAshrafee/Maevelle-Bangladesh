@@ -19,12 +19,23 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       method_type text not null check (method_type in ('COD', 'MOBILE_WALLET')),
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'DISABLED')),
       public_instructions jsonb not null default '{}'::jsonb check (jsonb_typeof(public_instructions) = 'object'),
+      payment_window_minutes integer,
       display_order integer not null default 0,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       version bigint not null default 1,
       unique (organization_id, code),
-      unique (organization_id, id)
+      unique (organization_id, id),
+      check (
+        (method_type = 'COD' and payment_window_minutes is null)
+        or (
+          method_type = 'MOBILE_WALLET'
+          and (
+            payment_window_minutes between 15 and 10080
+            or (status = 'DISABLED' and payment_window_minutes is null)
+          )
+        )
+      )
     );
     create index payment_methods_checkout on payments.payment_methods (organization_id, display_order, id)
       where status = 'ACTIVE';
@@ -57,6 +68,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       foreign key (organization_id, payment_method_id) references payments.payment_methods(organization_id, id)
     );
     create index payment_intents_order on payments.payment_intents (organization_id, order_id, created_at desc);
+    create index payment_intents_expiry on payments.payment_intents (expires_at, id)
+      where status = 'READY' and expires_at is not null;
     create unique index payment_intents_one_active_method_per_order on payments.payment_intents (order_id, payment_method_id)
       where status = 'READY';
 

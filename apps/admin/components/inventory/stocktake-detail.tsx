@@ -381,6 +381,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                           type="number"
                           min="0"
                           step="any"
+                          data-stocktake-count="true"
                           value={rawCounted ?? ''}
                           disabled={stocktake.status !== 'COUNTING' || isSaving}
                           placeholder="0"
@@ -388,6 +389,19 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                           onChange={(e) =>
                             setCounts((p) => ({ ...p, [line.inventoryItemId]: e.target.value }))
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const v = counts[line.inventoryItemId];
+                              if (v !== undefined) void saveCount(line.inventoryItemId, v);
+                              // Move focus to the next count input
+                              const inputs = document.querySelectorAll<HTMLInputElement>(
+                                'input[data-stocktake-count]',
+                              );
+                              const idx = Array.from(inputs).indexOf(e.currentTarget);
+                              inputs[idx + 1]?.focus();
+                            }
+                          }}
                           onBlur={() => {
                             const v = counts[line.inventoryItemId];
                             if (v !== undefined) void saveCount(line.inventoryItemId, v);

@@ -1130,7 +1130,15 @@ export interface InventoryReservationDto {
     readonly orderNumber: string;
     readonly orderStatus: string;
     readonly fulfillmentStatus?: string;
+    readonly paymentStatus: string;
+    readonly paymentExpiresAt?: string;
   };
+  readonly attentionCode?:
+    | 'TERMINAL_ORDER_OWNER'
+    | 'ORDER_ON_HOLD'
+    | 'PAYMENT_REJECTED'
+    | 'PAYMENT_REVIEW_OVERDUE'
+    | 'EXPIRED_STANDALONE_HOLD';
   readonly releaseAllowed: boolean;
   readonly releaseBlockedReason?: string;
   readonly expiresAt?: string;

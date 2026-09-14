@@ -32,7 +32,7 @@ export interface ReceivableTransferLine {
 
 interface Props {
   transferId: string;
-  lines: ReceivableTransferLine[];
+  lines: readonly ReceivableTransferLine[];
   open: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;

@@ -11,7 +11,7 @@ import type { EncryptionKey } from '@maevelle/security';
 import { processAnalyticsOutbox } from '@maevelle/database/analytics';
 import { processCatalogImports } from '@maevelle/database/admin-operations';
 import { processStorefrontSearchOutbox } from '@maevelle/database/storefront';
-import { processOrderOutbox } from '@maevelle/database/orders';
+import { processExpiredPaymentOrders, processOrderOutbox } from '@maevelle/database/orders';
 import { expireInventoryReservations } from '@maevelle/database/inventory';
 
 export interface WorkerLogger {
@@ -61,6 +61,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           processStorefrontSearchOutbox(options.database.db),
           processOrderOutbox(options.database.db),
           expireInventoryReservations(options.database.db),
+          processExpiredPaymentOrders(options.database.db),
           ...(options.encryptionKey
             ? [deliverPendingWebhooks(options.database.db, options.encryptionKey)]
             : []),
@@ -76,6 +77,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
               search,
               orders,
               expiredReservations,
+              expiredPaymentOrders,
               webhookDeliveries,
             ]) =>
               logger?.debug(
@@ -89,6 +91,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
                   search,
                   orders,
                   expiredReservations,
+                  expiredPaymentOrders,
                   webhookDeliveries,
                 },
                 'Worker recovery tick.',

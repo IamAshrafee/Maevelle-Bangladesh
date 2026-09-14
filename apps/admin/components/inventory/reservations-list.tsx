@@ -34,6 +34,14 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
+const attentionLabels: Record<NonNullable<InventoryReservationDto['attentionCode']>, string> = {
+  TERMINAL_ORDER_OWNER: 'Terminal order still holds stock',
+  ORDER_ON_HOLD: 'Order needs review',
+  PAYMENT_REJECTED: 'Payment was rejected',
+  PAYMENT_REVIEW_OVERDUE: 'Payment review is overdue',
+  EXPIRED_STANDALONE_HOLD: 'Standalone hold expired',
+};
+
 export function ReservationsList() {
   const [reservations, setReservations] = useState<readonly InventoryReservationDto[]>([]);
   const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
@@ -251,10 +259,12 @@ export function ReservationsList() {
               </thead>
               <tbody className="divide-y text-xs">
                 {filteredReservations.map((res) => {
-                  const isExpired =
+                  const isStandaloneExpired =
                     res.expiresAt &&
                     new Date(res.expiresAt).getTime() < Date.now() &&
                     res.status === 'ACTIVE';
+                  const effectiveExpiry = res.owner?.paymentExpiresAt ?? res.expiresAt;
+                  const isPaymentReviewOverdue = res.attentionCode === 'PAYMENT_REVIEW_OVERDUE';
 
                   return (
                     <tr key={res.id} className="hover:bg-muted/40 transition-colors">
@@ -311,6 +321,7 @@ export function ReservationsList() {
                           {res.owner && (
                             <div className="mt-1 font-sans text-[11px] text-muted-foreground">
                               {res.owner.orderStatus}
+                              {` · ${res.owner.paymentStatus.replaceAll('_', ' ')}`}
                               {res.owner.fulfillmentStatus
                                 ? ` · Fulfillment ${res.owner.fulfillmentStatus}`
                                 : ''}
@@ -319,10 +330,10 @@ export function ReservationsList() {
                         </div>
                       </td>
                       <td className="p-4 align-middle">
-                        {isExpired ? (
+                        {res.attentionCode ? (
                           <Badge variant="destructive" className="flex items-center gap-1 w-fit">
                             <AlertTriangle className="h-3 w-3" />
-                            Expired
+                            {attentionLabels[res.attentionCode]}
                           </Badge>
                         ) : (
                           <Badge variant={res.status === 'ACTIVE' ? 'default' : 'secondary'}>
@@ -331,12 +342,16 @@ export function ReservationsList() {
                         )}
                       </td>
                       <td className="p-4 align-middle text-muted-foreground whitespace-nowrap">
-                        {res.expiresAt ? (
+                        {effectiveExpiry ? (
                           <span
-                            className={isExpired ? 'text-destructive font-medium' : ''}
-                            title={res.expiresAt}
+                            className={
+                              isStandaloneExpired || isPaymentReviewOverdue
+                                ? 'text-destructive font-medium'
+                                : ''
+                            }
+                            title={effectiveExpiry}
                           >
-                            {formatInventoryDate(res.expiresAt)}
+                            {formatInventoryDate(effectiveExpiry)}
                           </span>
                         ) : (
                           <span className="text-muted-foreground/50">No expiry</span>

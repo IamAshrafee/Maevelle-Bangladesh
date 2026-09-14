@@ -23,6 +23,7 @@ interface PaymentMethod {
   status: 'ACTIVE' | 'DISABLED';
   instructions: { accountNumber?: string; text?: string };
   displayOrder: number;
+  paymentWindowMinutes: number | null;
 }
 interface Attempt {
   id: string;
@@ -162,6 +163,8 @@ export function PaymentsConsole() {
         name: values.get('name'),
         status: values.get('status'),
         displayOrder: Number(values.get('displayOrder')),
+        paymentWindowMinutes:
+          method.code === 'COD' ? null : Number(values.get('paymentWindowMinutes')),
         instructions: {
           accountNumber: values.get('accountNumber') || undefined,
           text: values.get('instructions') || undefined,
@@ -543,6 +546,21 @@ export function PaymentsConsole() {
                 </div>
                 {method.code !== 'COD' ? (
                   <>
+                    <label>
+                      Payment window in minutes
+                      <input
+                        defaultValue={method.paymentWindowMinutes ?? 1440}
+                        min={15}
+                        max={10080}
+                        name="paymentWindowMinutes"
+                        type="number"
+                        required
+                      />
+                      <span className="cell-secondary">
+                        Unpaid orders expire after this window. Submitted references awaiting review
+                        do not expire.
+                      </span>
+                    </label>
                     <label>
                       Customer-visible wallet number
                       <input
