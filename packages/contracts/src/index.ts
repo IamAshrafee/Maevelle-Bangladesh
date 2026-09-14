@@ -503,7 +503,7 @@ export interface StorefrontContextDto {
 export type SizingLifecycleStatusDto = 'ACTIVE' | 'ARCHIVED';
 export type SizingRevisionStatusDto = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type SizingSubjectTypeDto = 'BODY' | 'GARMENT' | 'PRODUCT';
-export type SizingMeasurementUnitDto = 'cm' | 'inch';
+export type SizingMeasurementUnitDto = 'cm' | 'inch' | 'kg';
 export type SizingMappingStatusDto = 'MAPPED' | 'UNMAPPED' | 'ALL';
 
 export interface PublicSizeGuideDto {

@@ -4,12 +4,15 @@ import { sql } from 'kysely';
 import { createDatabase } from '../index.js';
 import { createOrganization } from '../platform.js';
 import { createManagedCategory, createCatalogVocabularyItem } from '../catalog-classification.js';
+import { createSizingDomain } from '../sizing.js';
 import { categorySeedData } from './data/categories.js';
+import { sizingSeedData } from './data/sizing.js';
 import { slugify } from './helpers/slug.js';
 import { categoriesSeedModule, createCategoriesSeedModule } from './modules/categories.seed.js';
 import { tagsSeedModule, createTagsSeedModule } from './modules/tags.seed.js';
 import { occasionsSeedModule, createOccasionsSeedModule } from './modules/occasions.seed.js';
 import { collectionsSeedModule, createCollectionsSeedModule } from './modules/collections.seed.js';
+import { sizingSeedModule, createSizingSeedModule } from './modules/sizing.seed.js';
 import { runSeeds, sortSeedModules, DEFAULT_SEED_MODULES } from './runner.js';
 import type { CategorySeedItem, SeedModule, VocabularySeedItem } from './types.js';
 
@@ -482,8 +485,181 @@ describe('database seed system', () => {
     });
   });
 
+  describe('sizing seed module', () => {
+    it('seeds sizing domains, systems, definitions, measurements, and guides', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome1 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['sizing'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome1.results).toHaveLength(1);
+      expect(outcome1.results[0]?.moduleId).toBe('sizing');
+      expect(outcome1.results[0]?.totalCount).toBe(61);
+      expect(outcome1.results[0]?.createdCount).toBe(61);
+      expect(outcome1.results[0]?.updatedCount).toBe(0);
+      expect(outcome1.results[0]?.unchangedCount).toBe(0);
+
+      // Verify database counts
+      const [domains, systems, defs, measurements, guides] = await Promise.all([
+        sql<{ count: string }>`select count(*)::text from sizing.sizing_domains where organization_id=${organizationId}`.execute(database.db),
+        sql<{ count: string }>`select count(*)::text from sizing.size_systems where organization_id=${organizationId}`.execute(database.db),
+        sql<{ count: string }>`select count(*)::text from sizing.size_definitions where organization_id=${organizationId}`.execute(database.db),
+        sql<{ count: string }>`select count(*)::text from sizing.measurement_definitions where organization_id=${organizationId}`.execute(database.db),
+        sql<{ count: string }>`select count(*)::text from sizing.size_guides where organization_id=${organizationId}`.execute(database.db),
+      ]);
+
+      expect(Number(domains.rows[0]?.count)).toBe(3);
+      expect(Number(systems.rows[0]?.count)).toBe(4);
+      expect(Number(defs.rows[0]?.count)).toBe(28);
+      expect(Number(measurements.rows[0]?.count)).toBe(20);
+      expect(Number(guides.rows[0]?.count)).toBe(6);
+
+      // Verify published guides
+      const publishedGuides = (
+        await sql<{ name: string; current_published_revision_id: string | null }>`
+          select name, current_published_revision_id::text
+          from sizing.size_guides
+          where organization_id = ${organizationId}
+          order by name
+        `.execute(database.db)
+      ).rows;
+
+      const hatGuide = publishedGuides.find((g) => g.name === "Women's Hats");
+      expect(hatGuide?.current_published_revision_id).not.toBeNull();
+
+      const waistGuide = publishedGuides.find((g) => g.name === 'Waist Chains & Body Jewelry');
+      expect(waistGuide?.current_published_revision_id).not.toBeNull();
+
+      const topsGuide = publishedGuides.find((g) => g.name === "Women's Tops");
+      expect(topsGuide?.current_published_revision_id).toBeNull();
+
+      // Re-run (idempotency)
+      const outcome2 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['sizing'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome2.results[0]?.createdCount).toBe(0);
+      expect(outcome2.results[0]?.updatedCount).toBe(0);
+      expect(outcome2.results[0]?.unchangedCount).toBe(61);
+    });
+
+    it('detects changes in sizing definitions and updates non-destructively', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Initial seed
+      await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['sizing'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      // Mutate custom seed data: modify label of one size definition
+      const customData = {
+        ...sizingSeedData,
+        systems: sizingSeedData.systems.map((s) =>
+          s.code === 'womens-apparel-alpha'
+            ? {
+                ...s,
+                sizes: s.sizes.map((sz) =>
+                  sz.code === 'one-size' ? { ...sz, label: 'One Size (Free Size)' } : sz,
+                ),
+              }
+            : s,
+        ),
+      };
+
+      const customModule = createSizingSeedModule(customData);
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['sizing'], verbose: false },
+        [customModule],
+      );
+
+      expect(outcome.results[0]?.createdCount).toBe(0);
+      expect(outcome.results[0]?.updatedCount).toBe(1);
+      expect(outcome.results[0]?.unchangedCount).toBe(60);
+
+      const updatedRow = (
+        await sql<{ label: string }>`
+          select def.label
+          from sizing.size_definitions def
+          join sizing.size_systems sys on sys.id = def.size_system_id
+          where def.organization_id = ${organizationId}
+            and sys.code = 'womens-apparel-alpha'
+            and def.code = 'one-size'
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(updatedRow?.label).toBe('One Size (Free Size)');
+    });
+
+    it('preserves manually created sizing data', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Create manual domain
+      await createSizingDomain(database.db, {
+        organizationId,
+        code: 'custom-craft',
+        name: 'Custom Craft Domain',
+        subjectType: 'PRODUCT',
+      });
+
+      // Run sizing seeder
+      await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['sizing'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      const manualRow = (
+        await sql<{ code: string; name: string }>`
+          select code, name from sizing.sizing_domains
+          where organization_id = ${organizationId} and code = 'custom-craft'
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(manualRow?.name).toBe('Custom Craft Domain');
+
+      const allDomains = (
+        await sql<{ count: string }>`
+          select count(*)::text from sizing.sizing_domains
+          where organization_id = ${organizationId}
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(Number(allDomains?.count)).toBe(4); // 1 manual + 3 seeded
+    });
+
+    it('rolls back completely on dry-run', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['sizing'], dryRun: true, verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome.results[0]?.createdCount).toBe(61);
+
+      const count = (
+        await sql<{ count: string }>`
+          select count(*)::text from sizing.sizing_domains
+          where organization_id = ${organizationId}
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(Number(count?.count)).toBe(0);
+    });
+  });
+
   describe('multi-module comprehensive seed run', () => {
-    it('seeds categories, tags, occasions, and collections together in one transaction', async () => {
+    it('seeds categories, tags, occasions, collections, and sizing together in one transaction', async () => {
       const { organizationCode, organizationId } = await createTestOrg();
 
       const outcome = await runSeeds(
@@ -492,22 +668,24 @@ describe('database seed system', () => {
         DEFAULT_SEED_MODULES,
       );
 
-      expect(outcome.results).toHaveLength(4);
+      expect(outcome.results).toHaveLength(5);
       expect(outcome.results.map((r) => r.moduleId)).toEqual([
         'categories',
         'tags',
         'occasions',
         'collections',
+        'sizing',
       ]);
 
-      const [catRes, tagRes, occRes, colRes] = outcome.results;
+      const [catRes, tagRes, occRes, colRes, sizRes] = outcome.results;
       expect(catRes?.createdCount).toBe(44);
       expect(tagRes?.createdCount).toBe(29);
       expect(occRes?.createdCount).toBe(9);
       expect(colRes?.createdCount).toBe(14);
+      expect(sizRes?.createdCount).toBe(61);
 
       // Verify all counts in database
-      const [cats, tags, occs, cols] = await Promise.all([
+      const [cats, tags, occs, cols, sizDomains] = await Promise.all([
         sql<{
           count: string;
         }>`select count(*)::text from catalog.categories where organization_id=${organizationId}`.execute(
@@ -528,12 +706,18 @@ describe('database seed system', () => {
         }>`select count(*)::text from catalog.collections where organization_id=${organizationId}`.execute(
           database.db,
         ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from sizing.sizing_domains where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
       ]);
 
       expect(Number(cats.rows[0]?.count)).toBe(44);
       expect(Number(tags.rows[0]?.count)).toBe(29);
       expect(Number(occs.rows[0]?.count)).toBe(9);
       expect(Number(cols.rows[0]?.count)).toBe(14);
+      expect(Number(sizDomains.rows[0]?.count)).toBe(3);
     });
   });
 });

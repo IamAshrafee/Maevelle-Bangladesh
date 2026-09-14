@@ -97,7 +97,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       instructions text,
       sort_order integer not null default 0 check (sort_order >= 0),
       subject_type text not null check (subject_type in ('BODY', 'GARMENT', 'PRODUCT')),
-      default_unit text not null check (default_unit in ('cm', 'inch')),
+      default_unit text not null check (default_unit in ('cm', 'inch', 'kg')),
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
 
       unique (sizing_domain_id, code),
@@ -239,7 +239,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       value_exact numeric(20,3),
       value_min numeric(20,3),
       value_max numeric(20,3),
-      unit_code text not null check (unit_code in ('cm', 'inch')),
+      unit_code text not null check (unit_code in ('cm', 'inch', 'kg')),
       is_approximate boolean not null default false,
 
       unique (row_id, measurement_definition_id),

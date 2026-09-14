@@ -4,6 +4,7 @@ import { resolveActorId, resolveOrganization, type ResolvedTenant } from './help
 import { categoriesSeedModule } from './modules/categories.seed.js';
 import { collectionsSeedModule } from './modules/collections.seed.js';
 import { occasionsSeedModule } from './modules/occasions.seed.js';
+import { sizingSeedModule } from './modules/sizing.seed.js';
 import { tagsSeedModule } from './modules/tags.seed.js';
 import type { SeedContext, SeedModule, SeedModuleResult, SeedRunnerOptions } from './types.js';
 
@@ -12,6 +13,7 @@ export const DEFAULT_SEED_MODULES: readonly SeedModule[] = [
   tagsSeedModule,
   occasionsSeedModule,
   collectionsSeedModule,
+  sizingSeedModule,
 ];
 
 class DryRunRollbackSignal extends Error {

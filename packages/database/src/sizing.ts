@@ -27,7 +27,17 @@ export class SizingDomainError extends Error {
 }
 
 type SubjectType = 'BODY' | 'GARMENT' | 'PRODUCT';
-type MeasurementUnit = 'cm' | 'inch';
+export type MeasurementUnit = 'cm' | 'inch' | 'kg';
+
+function withSizingTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  callback: (trx: Kysely<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  if ('isTransaction' in db && (db as { isTransaction?: boolean }).isTransaction) {
+    return callback(db);
+  }
+  return db.transaction().execute(callback);
+}
 type LifecycleStatus = 'ACTIVE' | 'ARCHIVED';
 type RevisionStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
@@ -38,6 +48,19 @@ type RevisionMutationContext = {
   guideDomainId: string;
   guideSizeSystemId: string | null;
 };
+
+async function resolveIamActorId(
+  db: Kysely<DatabaseSchema>,
+  actorId?: string | null,
+): Promise<string | null> {
+  if (!actorId || actorId === '00000000-0000-0000-0000-000000000000') {
+    return null;
+  }
+  const result = await sql<{ id: string }>`
+    select id::text from iam.users where id = ${actorId} limit 1
+  `.execute(db);
+  return result.rows[0]?.id ?? null;
+}
 
 // ─── Audit helper ─────────────────────────────────────────────────────────────
 
@@ -779,7 +802,7 @@ export async function createSizeGuide(
     actorId: string;
   },
 ): Promise<{ id: string; revisionId: string }> {
-  return db.transaction().execute(async (transaction) => {
+  return withSizingTransaction(db, async (transaction) => {
     const domain = await sql<{ id: string }>`
       select id::text
       from sizing.sizing_domains
@@ -824,6 +847,8 @@ export async function createSizeGuide(
       throw new Error('Size guide creation did not return an id.');
     }
 
+    const createdBy = await resolveIamActorId(transaction, input.actorId);
+
     const revision = await sql<{ id: string }>`
       insert into sizing.size_guide_revisions (
         organization_id,
@@ -837,7 +862,7 @@ export async function createSizeGuide(
         ${id},
         1,
         0,
-        ${input.actorId}
+        ${createdBy}
       )
       returning id::text
     `.execute(transaction);
@@ -876,7 +901,7 @@ export async function createSizeGuideRevision(
     fitNotes?: string;
   },
 ): Promise<{ id: string; revisionNumber: number; version: number }> {
-  return db.transaction().execute(async (transaction) => {
+  return withSizingTransaction(db, async (transaction) => {
     const guide = await lockActiveGuide(transaction, input.organizationId, input.sizeGuideId);
 
     const existingDraft = await sql<{ id: string }>`
@@ -938,6 +963,8 @@ export async function createSizeGuideRevision(
 
     const revisionNumber = nextRevisionNumberResult.rows[0]?.next_revision_number ?? 1;
 
+    const createdBy = await resolveIamActorId(transaction, input.actorId);
+
     const created = await sql<{ id: string }>`
       insert into sizing.size_guide_revisions (
         organization_id,
@@ -957,7 +984,7 @@ export async function createSizeGuideRevision(
         0,
         ${input.instructions !== undefined ? input.instructions : (source?.instructions ?? null)},
         ${input.fitNotes !== undefined ? input.fitNotes : (source?.fit_notes ?? null)},
-        ${input.actorId}
+        ${createdBy}
       )
       returning id::text
     `.execute(transaction);
@@ -1073,7 +1100,7 @@ export async function addSizeGuideRow(
     actorId: string;
   },
 ): Promise<{ id: string; version: number }> {
-  return db.transaction().execute(async (transaction) => {
+  return withSizingTransaction(db, async (transaction) => {
     const revision = await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -1185,7 +1212,7 @@ export async function updateSizeGuideRow(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const revision = await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -1304,7 +1331,7 @@ export async function reorderSizeGuideRows(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -1391,7 +1418,7 @@ export async function removeSizeGuideRow(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -1449,7 +1476,7 @@ export async function setSizeGuideMeasurement(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const revision = await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -1504,7 +1531,7 @@ export async function removeSizeGuideMeasurement(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -1575,7 +1602,7 @@ export async function setSizeGuideMeasurementsBulk(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const revision = await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -1651,7 +1678,7 @@ export async function publishSizeGuideRevision(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const revision = await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -1867,7 +1894,7 @@ export async function updateSizeGuide(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const guide = await lockActiveGuide(transaction, input.organizationId, input.id);
     assertExpectedVersion(guide.version, input.expectedVersion, 'Size guide');
 
@@ -1953,7 +1980,7 @@ export async function updateSizeGuideRevisionMeta(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     await lockDraftRevision(
       transaction,
       input.organizationId,
@@ -2141,7 +2168,7 @@ export async function archiveSizeGuide(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; id: string; actorId: string },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     await lockActiveGuide(transaction, input.organizationId, input.id);
 
     const productUsage = await sql<{ count: string }>`
@@ -2199,7 +2226,7 @@ export async function archiveSizeDefinition(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; id: string; actorId: string },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const definition = await sql<{ id: string }>`
       select id::text
       from sizing.size_definitions
@@ -2262,7 +2289,7 @@ export async function archiveMeasurementDefinition(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; id: string; actorId: string },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const definition = await sql<{ id: string }>`
       select id::text
       from sizing.measurement_definitions
@@ -2321,7 +2348,7 @@ export async function archiveSizeSystem(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; id: string; actorId: string },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const system = await sql<{ id: string }>`
       select id::text
       from sizing.size_systems
@@ -2392,7 +2419,7 @@ export async function archiveSizingDomain(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; id: string; actorId: string },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const domain = await sql<{ id: string }>`
       select id::text
       from sizing.sizing_domains
@@ -2586,7 +2613,7 @@ export async function restoreSizeGuide(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; id: string; actorId: string },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const guide = await sql<{
       sizing_domain_id: string;
       size_system_id: string | null;
@@ -2659,7 +2686,7 @@ export async function duplicateSizeGuide(
     actorId: string;
   },
 ): Promise<{ id: string; revisionId: string }> {
-  return db.transaction().execute(async (transaction) => {
+  return withSizingTransaction(db, async (transaction) => {
     const source = await sql<{
       guide_id: string;
       name: string;
@@ -2738,6 +2765,8 @@ export async function duplicateSizeGuide(
       throw new Error('Duplicate guide creation did not return an id.');
     }
 
+    const createdBy = await resolveIamActorId(transaction, input.actorId);
+
     const newRevision = await sql<{ id: string }>`
       insert into sizing.size_guide_revisions (
         organization_id,
@@ -2757,7 +2786,7 @@ export async function duplicateSizeGuide(
         0,
         ${guide.instructions},
         ${guide.fit_notes},
-        ${input.actorId}
+        ${createdBy}
       )
       returning id::text
     `.execute(transaction);
@@ -2868,7 +2897,7 @@ export async function attachSizeGuideToProduct(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     await lockProductForSizingMutation(transaction, {
       organizationId: input.organizationId,
       productId: input.productId,
@@ -2980,7 +3009,7 @@ export async function removeProductSizingConfiguration(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     await lockProductForSizingMutation(transaction, {
       organizationId: input.organizationId,
       productId: input.productId,
@@ -3116,7 +3145,7 @@ export async function setCategoryDefaultSizeGuide(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const category = await sql<{ id: string }>`
       select id::text
       from catalog.categories
@@ -3272,7 +3301,7 @@ export async function linkOptionValueToSizeDefinition(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     await linkOptionValueToSizeDefinitionInternal(transaction, input);
 
     await recordSizingAudit(transaction, {
@@ -3299,7 +3328,7 @@ export async function linkOptionValuesToSizeDefinitionsBulk(
     actorId: string;
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withSizingTransaction(db, async (transaction) => {
     const ids = input.mappings.map((mapping) => mapping.optionValueId);
     if (new Set(ids).size !== ids.length) {
       throw new SizingDomainError(
