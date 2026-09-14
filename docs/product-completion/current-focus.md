@@ -6,50 +6,52 @@ Admin Inventory Operations
 
 ## Why Now
 
-The user explicitly selected Inventory for deep completion work. Current source
-shows a strong locked quantity ledger and several real cross-domain workflows,
-but physical quantity and cost provenance diverge during Transfers, condition
-changes, adjustments, Stocktakes, and returned-stock resale. Stocktake posting
-also has an unsafe current-balance read/lock order. Those integrity boundaries
-must be repaired before expanding the Admin experience.
+Inventory Foundation Integrity is now complete. The authoritative ledger,
+current balances, cost positions, Storefront availability, Catalog archive
+state, and integrity checks are aligned across the existing movement paths.
+The next operational bottleneck is staff visibility: the Admin surfaces remain
+fragmented and do not yet make quantity, location, condition, reason, actor,
+source document, and running balance easy to understand together.
 
 ## Current Status / Substage
 
-`PLANNED` — `INVENTORY_FOUNDATION_INTEGRITY`
+`PLANNED` — `INVENTORY_WORKSPACE_TRACEABILITY`
 
 ## Evidence Already Known
 
-The current-head assessment is recorded in
-`areas/admin-inventory-operations/inventory-assessment-and-roadmap.md` at
-baseline `b1f5d08`. It traces schema, services, APIs, Admin pages, Catalog,
-Orders, Fulfillment/Delivery, Supply/Receiving, Returns, Costing, Search,
-Analytics, permissions, audit, outbox, and tests. Typecheck and architecture
-checks passed; 38 focused integration tests passed; all migrations through
-`2800_supply_operations` are applied locally. No Inventory implementation was
-changed during the assessment.
+The assessment and roadmap are recorded in
+`areas/admin-inventory-operations/inventory-assessment-and-roadmap.md`; the
+Foundation closeout is in
+`areas/admin-inventory-operations/foundation-integrity-closeout.md`. Commit
+`c905dfd` passed a fresh main/test database construction, production container
+builds, typecheck, architecture checks, and 48 focused Inventory/Catalog/
+Costing/Procurement/Returns/Storefront tests.
 
 ## Immediate Objective
 
-Make every existing physical Inventory movement preserve explainable quantity
-and cost truth, and make Stocktake reconciliation safe under concurrent
-movements, before broad UI work.
+Give Maevelle staff one authoritative, responsive Inventory workspace that can
+answer how many units exist, where they are, what can sell, what is reserved or
+unavailable, and exactly what changed, why, by whom, and from which business
+document.
 
 ## Next Exact Action
 
-Add failing regression proof for Transfer/condition/adjustment/Stocktake/return
-resale cost-provenance gaps and the concurrent Stocktake posting race. Then
-implement the smallest coherent cost-safe movement and Stocktake locking
-checkpoint, expand integrity checks, and close it with focused verification.
+Define the paged stock/history/detail API contracts and Admin information
+architecture. Implement running balances, actor/reason/reference fields,
+server-backed URL search/filter/sort, and reliable Product, Location, and source
+document links before broader dashboard polish.
 
 ## Important Constraints
 
-Extend the existing Inventory ledger and projections; do not create a parallel
-stock system. Preserve tenant/capability checks, historical movement evidence,
-transactions, optimistic versions, idempotency, audit, outbox, Order/Fulfillment
-locking, Receiving atomicity, and Costing provenance. Keep the first checkpoint
-focused on correctness, not the broad Admin redesign.
+Keep the ledger and current balance projections authoritative; the workspace is
+a read/command surface, not a new stock source. Reuse shared contracts and UI
+primitives, keep queries server-paged, preserve tenant/capability boundaries,
+and design touch-first for mobile, tablet, and desktop. Do not absorb Reservation,
+Transfer discrepancy, Receiving, or Stocktake workflow redesign into this phase.
 
 ## Blockers / Owner Review
 
-No technical blocker is recorded. Authenticated visual/owner review was not part
-of the source assessment and remains a later UX verification gate.
+No technical blocker is recorded. Repository-wide lint and hardening still
+report known unrelated baseline findings; these are recorded in the Foundation
+closeout. Authenticated visual/owner review remains a distinct gate for the new
+workspace.
