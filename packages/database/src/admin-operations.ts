@@ -4,6 +4,7 @@ import type { DatabaseSchema } from './index.js';
 import { rebuildAnalyticsProjections, verifyAnalyticsIntegrity } from './analytics.js';
 import { createCatalogProduct } from './catalog.js';
 import { verifyCostingIntegrity } from './costing.js';
+import { verifyInventoryIntegrity } from './inventory.js';
 import { verifyFinanceIntegrity } from './finance.js';
 import { verifyNotificationIntegrationIntegrity } from './notifications.js';
 import { verifyPaymentIntegrity } from './payments.js';
@@ -347,19 +348,29 @@ export async function updateTeamMember(
 }
 
 export async function getIntegrityCenter(db: Kysely<DatabaseSchema>, organizationId: string) {
-  const [costing, returns, finance, payments, reviews, notifications, analytics, persisted] =
-    await Promise.all([
-      verifyCostingIntegrity(db, organizationId),
-      verifyReturnIntegrity(db, organizationId),
-      verifyFinanceIntegrity(db, organizationId),
-      verifyPaymentIntegrity(db, organizationId),
-      verifyReviewIntegrity(db, organizationId),
-      verifyNotificationIntegrationIntegrity(db, organizationId),
-      verifyAnalyticsIntegrity(db, organizationId),
-      sql`select id::text,domain,issue_type code,severity,entity_type,entity_id::text,status,summary description,detected_at::text,repair_reference from platform.integrity_issues where organization_id=${organizationId} and status in ('OPEN','INVESTIGATING') order by detected_at desc`.execute(
-        db,
-      ),
-    ]);
+  const [
+    inventory,
+    costing,
+    returns,
+    finance,
+    payments,
+    reviews,
+    notifications,
+    analytics,
+    persisted,
+  ] = await Promise.all([
+    verifyInventoryIntegrity(db, organizationId),
+    verifyCostingIntegrity(db, organizationId),
+    verifyReturnIntegrity(db, organizationId),
+    verifyFinanceIntegrity(db, organizationId),
+    verifyPaymentIntegrity(db, organizationId),
+    verifyReviewIntegrity(db, organizationId),
+    verifyNotificationIntegrationIntegrity(db, organizationId),
+    verifyAnalyticsIntegrity(db, organizationId),
+    sql`select id::text,domain,issue_type code,severity,entity_type,entity_id::text,status,summary description,detected_at::text,repair_reference from platform.integrity_issues where organization_id=${organizationId} and status in ('OPEN','INVESTIGATING') order by detected_at desc`.execute(
+      db,
+    ),
+  ]);
   const normalize = (domain: string, items: readonly unknown[]) =>
     items.map((item) => ({
       domain,
@@ -386,6 +397,7 @@ export async function getIntegrityCenter(db: Kysely<DatabaseSchema>, organizatio
           : 'DIAGNOSIS_ONLY',
     }));
   return [
+    ...normalize('Inventory', inventory),
     ...normalize('Costing', costing),
     ...normalize('Returns', returns),
     ...normalize('Finance', finance),

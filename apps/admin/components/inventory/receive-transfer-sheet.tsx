@@ -40,7 +40,7 @@ interface Props {
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
-const qtyPattern = /^\d+(?:\.\d{1,6})?$/;
+const qtyPattern = /^\d+$/;
 
 const lineSchema = z.object({
   transferLineId: z.string(),
@@ -48,9 +48,9 @@ const lineSchema = z.object({
   productTitle: z.string(),
   remainingQty: z.number(),
   sellableQuantity: z.string().regex(qtyPattern, 'Invalid quantity'),
-  damagedQuantity: z.string().regex(/^(\d+(?:\.\d{1,6})?)?$/, 'Invalid quantity'),
-  quarantineQuantity: z.string().regex(/^(\d+(?:\.\d{1,6})?)?$/, 'Invalid quantity'),
-  inspectionQuantity: z.string().regex(/^(\d+(?:\.\d{1,6})?)?$/, 'Invalid quantity'),
+  damagedQuantity: z.string().regex(/^(\d+)?$/, 'Enter a whole number of units'),
+  quarantineQuantity: z.string().regex(/^(\d+)?$/, 'Enter a whole number of units'),
+  inspectionQuantity: z.string().regex(/^(\d+)?$/, 'Enter a whole number of units'),
 });
 
 const formSchema = z.object({ lines: z.array(lineSchema) });
@@ -141,7 +141,9 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
             <SheetDescription>There are no lines remaining to receive.</SheetDescription>
           </SheetHeader>
           <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
@@ -181,8 +183,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                   <p className="font-medium text-sm">{lineWatch.productTitle}</p>
                   <p className="text-xs text-muted-foreground font-mono">{lineWatch.sku}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    In transit:{' '}
-                    <span className="font-medium">{lineWatch.remainingQty}</span> units
+                    In transit: <span className="font-medium">{lineWatch.remainingQty}</span> units
                   </p>
                   {overReceived && (
                     <p className="text-xs text-destructive mt-1">

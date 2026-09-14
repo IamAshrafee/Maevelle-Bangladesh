@@ -42,22 +42,24 @@ const adjustSchema = z.object({
   variantId: z.string().min(1, 'Select a product variant'),
   locationId: z.string().min(1, 'Select a location'),
   condition: z.enum(['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION']),
-  quantityDelta: z.string().regex(/^-?\d+(?:\.\d{1,6})?$/, 'Enter a valid quantity (e.g. 5 or -2)'),
+  quantityDelta: z.string().regex(/^-?\d+$/, 'Enter a whole number of units (e.g. 5 or -2)'),
   reasonCode: z.enum(['OPENING_BALANCE', 'CORRECTION', 'DAMAGE', 'FOUND_STOCK', 'OTHER']),
   note: z.string().optional(),
 });
 
-const conditionSchema = z.object({
-  variantId: z.string().min(1, 'Select a product variant'),
-  locationId: z.string().min(1, 'Select a location'),
-  fromCondition: z.enum(['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION']),
-  toCondition: z.enum(['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION']),
-  quantity: z.string().regex(/^\d+(?:\.\d{1,6})?$/, 'Enter a positive quantity'),
-  reason: z.string().optional(),
-}).refine((d) => d.fromCondition !== d.toCondition, {
-  message: 'From and To conditions must differ',
-  path: ['toCondition'],
-});
+const conditionSchema = z
+  .object({
+    variantId: z.string().min(1, 'Select a product variant'),
+    locationId: z.string().min(1, 'Select a location'),
+    fromCondition: z.enum(['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION']),
+    toCondition: z.enum(['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION']),
+    quantity: z.string().regex(/^\d+$/, 'Enter a whole number of units'),
+    reason: z.string().optional(),
+  })
+  .refine((d) => d.fromCondition !== d.toCondition, {
+    message: 'From and To conditions must differ',
+    path: ['toCondition'],
+  });
 
 type AdjustForm = z.infer<typeof adjustSchema>;
 type ConditionForm = z.infer<typeof conditionSchema>;
@@ -87,9 +89,9 @@ function VariantSearch({ onSelect, selectedLabel, onClear, error }: VariantSearc
     }
     setSearching(true);
     try {
-      const res = await inventoryRequest<{ data: { items: StockSearchResult[]; totalCount: number } }>(
-        `/inventory/stock?search=${encodeURIComponent(term)}&limit=20`,
-      );
+      const res = await inventoryRequest<{
+        data: { items: StockSearchResult[]; totalCount: number };
+      }>(`/inventory/stock?search=${encodeURIComponent(term)}&limit=20`);
       // Deduplicate by variantId — stock shows one row per condition×location
       const seen = new Set<string>();
       const unique = (res.data.items ?? []).filter((r) => {
@@ -127,7 +129,11 @@ function VariantSearch({ onSelect, selectedLabel, onClear, error }: VariantSearc
     return (
       <div className="flex items-center gap-2 h-9 rounded-lg border border-input bg-background px-3 text-sm">
         <span className="flex-1 truncate">{selectedLabel}</span>
-        <button type="button" onClick={onClear} className="text-muted-foreground hover:text-foreground">
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-muted-foreground hover:text-foreground"
+        >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -149,29 +155,28 @@ function VariantSearch({ onSelect, selectedLabel, onClear, error }: VariantSearc
       {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
       {open && (
         <div className="absolute z-50 mt-1 w-full rounded-lg border bg-popover shadow-md max-h-60 overflow-auto">
-          {searching && (
-            <p className="px-3 py-2 text-sm text-muted-foreground">Searching…</p>
-          )}
+          {searching && <p className="px-3 py-2 text-sm text-muted-foreground">Searching…</p>}
           {!searching && results.length === 0 && (
             <p className="px-3 py-2 text-sm text-muted-foreground">No matching variants found.</p>
           )}
-          {!searching && results.map((r) => (
-            <button
-              key={r.variantId}
-              type="button"
-              className="w-full flex items-start gap-3 px-3 py-2.5 text-left text-sm hover:bg-muted"
-              onClick={() => {
-                onSelect(r.variantId, r.sku, r.productTitle);
-                setQuery('');
-                setOpen(false);
-              }}
-            >
-              <span className="flex-1 min-w-0">
-                <span className="block font-medium truncate">{r.productTitle}</span>
-                <span className="block text-xs text-muted-foreground font-mono">{r.sku}</span>
-              </span>
-            </button>
-          ))}
+          {!searching &&
+            results.map((r) => (
+              <button
+                key={r.variantId}
+                type="button"
+                className="w-full flex items-start gap-3 px-3 py-2.5 text-left text-sm hover:bg-muted"
+                onClick={() => {
+                  onSelect(r.variantId, r.sku, r.productTitle);
+                  setQuery('');
+                  setOpen(false);
+                }}
+              >
+                <span className="flex-1 min-w-0">
+                  <span className="block font-medium truncate">{r.productTitle}</span>
+                  <span className="block text-xs text-muted-foreground font-mono">{r.sku}</span>
+                </span>
+              </button>
+            ))}
         </div>
       )}
     </div>
@@ -242,10 +247,16 @@ export function AdjustmentsSection() {
   useEffect(() => {
     let active = true;
     inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations')
-      .then((res) => { if (active) setLocations(res.data ?? []); })
+      .then((res) => {
+        if (active) setLocations(res.data ?? []);
+      })
       .catch(console.error)
-      .finally(() => { if (active) setLoadingLocations(false); });
-    return () => { active = false; };
+      .finally(() => {
+        if (active) setLoadingLocations(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // ── Adjustment form ──────────────────────────────────────────────────────
@@ -418,10 +429,14 @@ export function AdjustmentsSection() {
                       name="condition"
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger id="adj-condition"><SelectValue /></SelectTrigger>
+                          <SelectTrigger id="adj-condition">
+                            <SelectValue />
+                          </SelectTrigger>
                           <SelectContent>
                             {CONDITIONS.map((c) => (
-                              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                              <SelectItem key={c.value} value={c.value}>
+                                {c.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -452,10 +467,14 @@ export function AdjustmentsSection() {
                       name="reasonCode"
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger id="adj-reason"><SelectValue /></SelectTrigger>
+                          <SelectTrigger id="adj-reason">
+                            <SelectValue />
+                          </SelectTrigger>
                           <SelectContent>
                             {REASON_CODES.map((r) => (
-                              <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                              <SelectItem key={r.value} value={r.value}>
+                                {r.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -491,7 +510,8 @@ export function AdjustmentsSection() {
               <CardHeader>
                 <CardTitle>Move Item Condition</CardTitle>
                 <CardDescription>
-                  Reclassify stock without changing total on-hand quantity (e.g. Sellable → Damaged).
+                  Reclassify stock without changing total on-hand quantity (e.g. Sellable →
+                  Damaged).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -547,10 +567,14 @@ export function AdjustmentsSection() {
                       name="fromCondition"
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger id="cond-from"><SelectValue /></SelectTrigger>
+                          <SelectTrigger id="cond-from">
+                            <SelectValue />
+                          </SelectTrigger>
                           <SelectContent>
                             {CONDITIONS.map((c) => (
-                              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                              <SelectItem key={c.value} value={c.value}>
+                                {c.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -566,10 +590,14 @@ export function AdjustmentsSection() {
                       render={({ field, fieldState }) => (
                         <>
                           <Select value={field.value} onValueChange={field.onChange}>
-                            <SelectTrigger id="cond-to"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="cond-to">
+                              <SelectValue />
+                            </SelectTrigger>
                             <SelectContent>
                               {CONDITIONS.map((c) => (
-                                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                                <SelectItem key={c.value} value={c.value}>
+                                  {c.label}
+                                </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>

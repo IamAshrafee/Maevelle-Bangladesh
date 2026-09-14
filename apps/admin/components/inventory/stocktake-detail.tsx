@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle, CheckCircle2, Clock, MapPin, Package, Search } from 'lucide-react';
 import type { StocktakeDetailDto } from '@maevelle/contracts';
 
-import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
-import { InventoryEmptyState, InventoryConditionBadge } from './inventory-page-ui';
+import { inventoryRequest, formatInventoryNumber } from '@/lib/inventory/api';
+import { InventoryEmptyState } from './inventory-page-ui';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -25,23 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface StocktakeLine {
-  inventoryItemId: string;
-  sku: string;
-  productTitle: string;
-  optionSummary: string | null;
-  expectedQuantity: string;
-  countedQuantity: string | null;
-}
-
-interface EnrichedStocktake {
-  id: string;
-  locationId: string;
-  locationName: string;
-  status: string;
-  version: number;
-  lines: StocktakeLine[];
-}
+type EnrichedStocktake = StocktakeDetailDto;
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -75,7 +59,9 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
   const [search, setSearch] = useState('');
 
   const reload = async () => {
-    const res = await inventoryRequest<{ data: EnrichedStocktake }>(`/inventory/stocktakes/${stocktakeId}`);
+    const res = await inventoryRequest<{ data: EnrichedStocktake }>(
+      `/inventory/stocktakes/${stocktakeId}`,
+    );
     setStocktake(res.data);
     // Merge server-persisted counts into local state
     const persisted: Record<string, string> = {};
@@ -103,12 +89,14 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
       .finally(() => {
         if (active) setIsLoading(false);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [stocktakeId]);
 
   const saveCount = async (inventoryItemId: string, value: string) => {
     if (!stocktake || stocktake.status !== 'COUNTING') return;
-    if (!value.trim() || !/^\d+(?:\.\d{1,6})?$/.test(value)) return;
+    if (!value.trim() || !/^\d+$/.test(value)) return;
     setSaving((p) => ({ ...p, [inventoryItemId]: true }));
     setSaveErrors((p) => ({ ...p, [inventoryItemId]: '' }));
     try {
@@ -120,9 +108,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
         },
       );
       // Bump our local version to match backend expectation for next count save
-      setStocktake((prev) =>
-        prev ? { ...prev, version: prev.version + 1 } : prev,
-      );
+      setStocktake((prev) => (prev ? { ...prev, version: prev.version + 1 } : prev));
     } catch (err) {
       setSaveErrors((p) => ({
         ...p,
@@ -213,9 +199,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
 
         {stocktake.status === 'COUNTING' && (
           <AlertDialog>
-            <AlertDialogTrigger
-              render={<Button disabled={!allCounted || isPosting} />}
-            >
+            <AlertDialogTrigger render={<Button disabled={!allCounted || isPosting} />}>
               {isPosting ? 'Posting…' : 'Review & Post'}
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -269,9 +253,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              <span className={allCounted ? 'text-emerald-600' : undefined}>
-                {countedCount}
-              </span>
+              <span className={allCounted ? 'text-emerald-600' : undefined}>{countedCount}</span>
               <span className="text-muted-foreground text-base font-normal"> / {totalCount}</span>
             </div>
             {/* Progress bar */}
@@ -334,12 +316,24 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
             <table className="w-full caption-bottom text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Product</th>
-                  <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">SKU</th>
-                  <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Expected</th>
-                  <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground w-36">Counted Qty</th>
-                  <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Variance</th>
-                  <th className="h-10 px-4 text-center align-middle font-medium text-muted-foreground w-20">Status</th>
+                  <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Product
+                  </th>
+                  <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">
+                    SKU
+                  </th>
+                  <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
+                    Expected
+                  </th>
+                  <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground w-36">
+                    Counted Qty
+                  </th>
+                  <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
+                    Variance
+                  </th>
+                  <th className="h-10 px-4 text-center align-middle font-medium text-muted-foreground w-20">
+                    Status
+                  </th>
                 </tr>
               </thead>
               <tbody className="[&_tr:last-child]:border-0">
@@ -352,8 +346,9 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                 )}
                 {filteredLines.map((line) => {
                   const rawCounted = counts[line.inventoryItemId];
-                  const counted = rawCounted !== undefined && rawCounted !== '' ? Number(rawCounted) : null;
-                  const expected = Number(line.expectedQuantity);
+                  const counted =
+                    rawCounted !== undefined && rawCounted !== '' ? Number(rawCounted) : null;
+                  const expected = Number(line.expectedQuantityAtSnapshot);
                   const variance = counted !== null ? counted - expected : null;
                   const isSaving = saving[line.inventoryItemId];
                   const saveError = saveErrors[line.inventoryItemId];
@@ -379,7 +374,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right align-middle tabular-nums text-muted-foreground">
-                        {formatInventoryNumber(line.expectedQuantity)}
+                        {formatInventoryNumber(line.expectedQuantityAtSnapshot)}
                       </td>
                       <td className="px-4 py-3 align-middle">
                         <Input

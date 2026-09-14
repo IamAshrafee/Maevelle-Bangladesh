@@ -423,9 +423,289 @@ export async function createProvisionalCostLayersForInboundReceiptInTransaction(
     }>`insert into costing.cost_layers (organization_id, inbound_receipt_line_id, shipment_allocation_id, inventory_item_id, location_id, condition_code, original_quantity, base_purchase_cost, currency_code, received_at) values (${input.organizationId}, ${line.receipt_line_id}, ${line.allocation_id}, ${line.inventory_item_id}, ${input.locationId}, ${line.condition_code}, ${line.quantity}::numeric, (${line.quantity}::numeric * ${line.unit_price}::numeric)::numeric(24,8), ${line.currency_code}, ${line.posted_at}::timestamptz) returning id`.execute(
       tx,
     );
-    await sql`insert into costing.cost_layer_positions (organization_id, cost_layer_id, remaining_quantity) values (${input.organizationId}, ${inserted.rows[0]!.id}, ${line.quantity}::numeric)`.execute(
+    await sql`insert into costing.cost_layer_positions (organization_id, cost_layer_id, location_id, condition_code, remaining_quantity) values (${input.organizationId}, ${inserted.rows[0]!.id}, ${input.locationId}, ${line.condition_code}, ${line.quantity}::numeric)`.execute(
       tx,
     );
+  }
+}
+
+type CurrentCostPosition = {
+  source_kind: 'ACQUISITION' | 'RETURN';
+  position_id: string;
+  source_layer_id: string;
+  remaining: string;
+  source_date: string;
+};
+
+async function lockCurrentCostPositions(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    inventoryItemId: string;
+    locationId: string;
+    condition: string;
+  },
+): Promise<CurrentCostPosition[]> {
+  const acquired = await sql<CurrentCostPosition>`
+    select 'ACQUISITION'::text as source_kind, position.id as position_id,
+      layer.id as source_layer_id, position.remaining_quantity::text as remaining,
+      layer.received_at::text as source_date
+    from costing.cost_layer_positions position
+    join costing.cost_layers layer on layer.id = position.cost_layer_id
+    where position.organization_id = ${input.organizationId}
+      and layer.inventory_item_id = ${input.inventoryItemId}::uuid
+      and position.location_id = ${input.locationId}::uuid
+      and position.condition_code = ${input.condition}
+      and position.remaining_quantity > 0
+    order by layer.received_at, layer.id
+    for update of position
+  `.execute(tx);
+  const returned = await sql<CurrentCostPosition>`
+    select 'RETURN'::text as source_kind, position.id as position_id,
+      layer.id as source_layer_id, position.remaining_quantity::text as remaining,
+      layer.created_at::text as source_date
+    from costing.return_cost_layer_positions position
+    join costing.return_cost_layers layer on layer.id = position.return_cost_layer_id
+    where position.organization_id = ${input.organizationId}
+      and layer.inventory_item_id = ${input.inventoryItemId}::uuid
+      and position.location_id = ${input.locationId}::uuid
+      and position.condition_code = ${input.condition}
+      and position.remaining_quantity > 0
+    order by layer.created_at, layer.id
+    for update of position
+  `.execute(tx);
+  return [...acquired.rows, ...returned.rows].sort(
+    (left, right) =>
+      left.source_date.localeCompare(right.source_date) ||
+      left.source_layer_id.localeCompare(right.source_layer_id),
+  );
+}
+
+async function debitCostPosition(
+  tx: Transaction<DatabaseSchema>,
+  position: CurrentCostPosition,
+  quantity: string,
+): Promise<void> {
+  if (position.source_kind === 'ACQUISITION') {
+    await sql`update costing.cost_layer_positions set remaining_quantity = remaining_quantity - ${quantity}::numeric, version = version + 1, updated_at = now() where id = ${position.position_id}`.execute(
+      tx,
+    );
+  } else {
+    await sql`update costing.return_cost_layer_positions set remaining_quantity = remaining_quantity - ${quantity}::numeric, version = version + 1, updated_at = now() where id = ${position.position_id}`.execute(
+      tx,
+    );
+  }
+}
+
+async function creditCostPosition(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    sourceKind: CurrentCostPosition['source_kind'];
+    sourceLayerId: string;
+    locationId: string;
+    condition: string;
+    quantity: string;
+  },
+): Promise<void> {
+  if (input.sourceKind === 'ACQUISITION') {
+    await sql`insert into costing.cost_layer_positions (organization_id, cost_layer_id, location_id, condition_code, remaining_quantity) values (${input.organizationId}, ${input.sourceLayerId}, ${input.locationId}, ${input.condition}, ${input.quantity}::numeric) on conflict (organization_id, cost_layer_id, location_id, condition_code) do update set remaining_quantity = costing.cost_layer_positions.remaining_quantity + excluded.remaining_quantity, version = costing.cost_layer_positions.version + 1, updated_at = now()`.execute(
+      tx,
+    );
+  } else {
+    await sql`insert into costing.return_cost_layer_positions (organization_id, return_cost_layer_id, location_id, condition_code, remaining_quantity) values (${input.organizationId}, ${input.sourceLayerId}, ${input.locationId}, ${input.condition}, ${input.quantity}::numeric) on conflict (organization_id, return_cost_layer_id, location_id, condition_code) do update set remaining_quantity = costing.return_cost_layer_positions.remaining_quantity + excluded.remaining_quantity, version = costing.return_cost_layer_positions.version + 1, updated_at = now()`.execute(
+      tx,
+    );
+  }
+}
+
+async function takeCostPositions(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    inventoryItemId: string;
+    locationId: string;
+    condition: string;
+    quantity: string;
+  },
+): Promise<
+  readonly {
+    sourceKind: CurrentCostPosition['source_kind'];
+    sourceLayerId: string;
+    quantity: string;
+  }[]
+> {
+  let remaining = fixed(input.quantity, quantityScale);
+  const taken: {
+    sourceKind: CurrentCostPosition['source_kind'];
+    sourceLayerId: string;
+    quantity: string;
+  }[] = [];
+  for (const position of await lockCurrentCostPositions(tx, input)) {
+    if (remaining <= 0n) break;
+    const available = fixed(position.remaining, quantityScale);
+    const amount = available < remaining ? available : remaining;
+    if (amount <= 0n) continue;
+    const quantity = decimal(amount, quantityScale);
+    await debitCostPosition(tx, position, quantity);
+    taken.push({
+      sourceKind: position.source_kind,
+      sourceLayerId: position.source_layer_id,
+      quantity,
+    });
+    remaining -= amount;
+  }
+  return taken;
+}
+
+/** Move the known-value portion of physical stock while preserving its originating cost slices. */
+export async function moveCostPositionsInTransaction(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    inventoryItemId: string;
+    locationId: string;
+    fromCondition: string;
+    toCondition: string;
+    quantity: string;
+    inventoryTransactionId: string;
+  },
+): Promise<void> {
+  const slices = await takeCostPositions(tx, {
+    ...input,
+    condition: input.fromCondition,
+  });
+  for (const slice of slices) {
+    await creditCostPosition(tx, {
+      organizationId: input.organizationId,
+      sourceKind: slice.sourceKind,
+      sourceLayerId: slice.sourceLayerId,
+      locationId: input.locationId,
+      condition: input.toCondition,
+      quantity: slice.quantity,
+    });
+    await sql`insert into costing.inventory_cost_position_movements (organization_id, inventory_transaction_id, movement_kind, cost_layer_id, return_cost_layer_id, from_location_id, from_condition_code, to_location_id, to_condition_code, quantity) values (${input.organizationId}, ${input.inventoryTransactionId}, 'CONDITION_MOVE', ${slice.sourceKind === 'ACQUISITION' ? slice.sourceLayerId : null}::uuid, ${slice.sourceKind === 'RETURN' ? slice.sourceLayerId : null}::uuid, ${input.locationId}, ${input.fromCondition}, ${input.locationId}, ${input.toCondition}, ${slice.quantity}::numeric)`.execute(
+      tx,
+    );
+  }
+}
+
+/** Remove only known-value slices; unvalued opening/found stock remains explicitly detectable. */
+export async function consumeCostPositionsForInventoryLossInTransaction(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    inventoryItemId: string;
+    locationId: string;
+    condition: string;
+    quantity: string;
+    inventoryTransactionId: string;
+  },
+): Promise<void> {
+  const slices = await takeCostPositions(tx, input);
+  for (const slice of slices)
+    await sql`insert into costing.inventory_cost_position_movements (organization_id, inventory_transaction_id, movement_kind, cost_layer_id, return_cost_layer_id, from_location_id, from_condition_code, quantity) values (${input.organizationId}, ${input.inventoryTransactionId}, 'WRITE_OFF', ${slice.sourceKind === 'ACQUISITION' ? slice.sourceLayerId : null}::uuid, ${slice.sourceKind === 'RETURN' ? slice.sourceLayerId : null}::uuid, ${input.locationId}, ${input.condition}, ${slice.quantity}::numeric)`.execute(
+      tx,
+    );
+}
+
+export async function recordUnvaluedInventoryAdditionInTransaction(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    inventoryTransactionId: string;
+    inventoryItemId: string;
+    locationId: string;
+    condition: string;
+    quantity: string;
+    reasonCode: string;
+  },
+): Promise<void> {
+  await sql`insert into costing.unvalued_inventory_additions (organization_id, inventory_transaction_id, inventory_item_id, location_id, condition_code, quantity, reason_code) values (${input.organizationId}, ${input.inventoryTransactionId}, ${input.inventoryItemId}, ${input.locationId}, ${input.condition}, ${input.quantity}::numeric, ${input.reasonCode})`.execute(
+    tx,
+  );
+}
+
+export async function dispatchTransferCostPositionsInTransaction(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    sourceLocationId: string;
+    inventoryTransactionId: string;
+    lines: readonly { transferLineId: string; inventoryItemId: string; quantity: string }[];
+  },
+): Promise<void> {
+  for (const line of input.lines) {
+    const slices = await takeCostPositions(tx, {
+      organizationId: input.organizationId,
+      inventoryItemId: line.inventoryItemId,
+      locationId: input.sourceLocationId,
+      condition: 'SELLABLE',
+      quantity: line.quantity,
+    });
+    for (const slice of slices)
+      await sql`insert into costing.transfer_cost_allocations (organization_id, transfer_line_id, dispatch_inventory_transaction_id, cost_layer_id, return_cost_layer_id, dispatched_quantity) values (${input.organizationId}, ${line.transferLineId}, ${input.inventoryTransactionId}, ${slice.sourceKind === 'ACQUISITION' ? slice.sourceLayerId : null}::uuid, ${slice.sourceKind === 'RETURN' ? slice.sourceLayerId : null}::uuid, ${slice.quantity}::numeric)`.execute(
+        tx,
+      );
+  }
+}
+
+export async function receiveTransferCostPositionsInTransaction(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    destinationLocationId: string;
+    inventoryTransactionId: string;
+    lines: readonly {
+      transferLineId: string;
+      quantities: readonly { condition: string; quantity: string }[];
+    }[];
+  },
+): Promise<void> {
+  for (const line of input.lines) {
+    const allocations = await sql<{
+      id: string;
+      cost_layer_id: string | null;
+      return_cost_layer_id: string | null;
+      remaining: string;
+    }>`select id, cost_layer_id, return_cost_layer_id, (dispatched_quantity - received_quantity)::text as remaining from costing.transfer_cost_allocations where organization_id = ${input.organizationId} and transfer_line_id = ${line.transferLineId} and dispatched_quantity > received_quantity order by created_at, id for update`.execute(
+      tx,
+    );
+    let allocationIndex = 0;
+    let allocationRemaining = allocations.rows[0]
+      ? fixed(allocations.rows[0].remaining, quantityScale)
+      : 0n;
+    for (const destination of line.quantities) {
+      let required = fixed(destination.quantity, quantityScale);
+      while (required > 0n && allocationIndex < allocations.rows.length) {
+        const allocation = allocations.rows[allocationIndex]!;
+        const amount = allocationRemaining < required ? allocationRemaining : required;
+        if (amount <= 0n) {
+          allocationIndex += 1;
+          allocationRemaining = allocations.rows[allocationIndex]
+            ? fixed(allocations.rows[allocationIndex]!.remaining, quantityScale)
+            : 0n;
+          continue;
+        }
+        const quantity = decimal(amount, quantityScale);
+        await creditCostPosition(tx, {
+          organizationId: input.organizationId,
+          sourceKind: allocation.cost_layer_id ? 'ACQUISITION' : 'RETURN',
+          sourceLayerId: allocation.cost_layer_id ?? allocation.return_cost_layer_id!,
+          locationId: input.destinationLocationId,
+          condition: destination.condition,
+          quantity,
+        });
+        await sql`update costing.transfer_cost_allocations set received_quantity = received_quantity + ${quantity}::numeric, updated_at = now() where id = ${allocation.id}`.execute(
+          tx,
+        );
+        await sql`insert into costing.transfer_cost_receipts (organization_id, transfer_cost_allocation_id, receipt_inventory_transaction_id, destination_location_id, destination_condition_code, quantity) values (${input.organizationId}, ${allocation.id}, ${input.inventoryTransactionId}, ${input.destinationLocationId}, ${destination.condition}, ${quantity}::numeric)`.execute(
+          tx,
+        );
+        allocationRemaining -= amount;
+        required -= amount;
+      }
+    }
   }
 }
 
@@ -679,51 +959,56 @@ export async function assignOutboundCostsForFulfillmentInTransaction(
   let assignedAnyLayer = false;
   for (const line of lines.rows) {
     let required = fixed(line.quantity, quantityScale);
-    const positions = await sql<{
-      position_id: string;
-      layer_id: string;
-      remaining: string;
-      original_quantity: string;
-      base_purchase_cost: string;
-      currency_code: string;
-      adjustments: string;
-    }>`
-      select position.id as position_id, layer.id as layer_id, position.remaining_quantity::text as remaining, layer.original_quantity::text, layer.base_purchase_cost::text, layer.currency_code, coalesce((select sum(adjustment.delta_total_cost) from costing.cost_layer_adjustments adjustment where adjustment.cost_layer_id = layer.id), 0)::text as adjustments
-      from costing.cost_layer_positions position join costing.cost_layers layer on layer.id = position.cost_layer_id
-      where position.organization_id = ${input.organizationId} and layer.inventory_item_id = ${line.inventory_item_id}::uuid and layer.location_id = ${line.location_id}::uuid and layer.condition_code = 'SELLABLE' and position.remaining_quantity > 0
-      order by layer.received_at asc, layer.id asc for update of position, layer
-    `.execute(tx);
-    if (!positions.rows.length) {
+    const positions = await lockCurrentCostPositions(tx, {
+      organizationId: input.organizationId,
+      inventoryItemId: line.inventory_item_id,
+      locationId: line.location_id,
+      condition: 'SELLABLE',
+    });
+    if (!positions.length) {
       const provenance = await sql<{ exists: boolean }>`
         select exists(
-          select 1 from costing.cost_layers layer
-          where layer.organization_id = ${input.organizationId}
-            and layer.inventory_item_id = ${line.inventory_item_id}::uuid
-            and layer.location_id = ${line.location_id}::uuid
-            and layer.condition_code = 'SELLABLE'
+          select 1 from costing.cost_layer_positions position join costing.cost_layers layer on layer.id = position.cost_layer_id
+          where position.organization_id = ${input.organizationId} and layer.inventory_item_id = ${line.inventory_item_id}::uuid
+            and position.location_id = ${line.location_id}::uuid and position.condition_code = 'SELLABLE'
+          union all
+          select 1 from costing.return_cost_layer_positions position join costing.return_cost_layers layer on layer.id = position.return_cost_layer_id
+          where position.organization_id = ${input.organizationId} and layer.inventory_item_id = ${line.inventory_item_id}::uuid
+            and position.location_id = ${line.location_id}::uuid and position.condition_code = 'SELLABLE'
         ) as exists
       `.execute(tx);
       // Historical pre-costing stock can be physically dispatched, but stock
       // with known Cost Layers must never silently lose its cost provenance.
       if (!provenance.rows[0]?.exists && !assignedAnyLayer) continue;
     }
-    for (const position of positions.rows) {
+    for (const position of positions) {
       if (!required) break;
       const available = fixed(position.remaining, quantityScale);
       const take = available < required ? available : required;
-      const effective =
-        fixed(position.base_purchase_cost, 100_000_000n) +
-        fixed(position.adjustments, 100_000_000n);
-      const lineCost = (effective * take) / fixed(position.original_quantity, quantityScale);
-      const unit = effective / fixed(position.original_quantity, quantityScale);
-      await sql`update costing.cost_layer_positions set remaining_quantity = remaining_quantity - ${decimal(take, quantityScale)}::numeric, version = version + 1, updated_at = now() where id = ${position.position_id}`.execute(
-        tx,
-      );
-      await sql`insert into costing.outbound_cost_assignment_lines (organization_id, outbound_cost_assignment_id, fulfillment_line_id, cost_layer_id, quantity, unit_cost, total_cost) values (${input.organizationId}, ${assignment.rows[0]!.id}, ${line.fulfillment_line_id}, ${position.layer_id}, ${decimal(take, quantityScale)}::numeric, ${decimal(unit, 100_000_000n)}::numeric, ${decimal(lineCost, 100_000_000n)}::numeric)`.execute(
+      const source =
+        position.source_kind === 'ACQUISITION'
+          ? await sql<{
+              unit_cost: string;
+              currency_code: string;
+            }>`select ((layer.base_purchase_cost + coalesce((select sum(adjustment.delta_total_cost) from costing.cost_layer_adjustments adjustment where adjustment.cost_layer_id = layer.id), 0)) / layer.original_quantity)::text as unit_cost, layer.currency_code from costing.cost_layers layer where layer.organization_id = ${input.organizationId} and layer.id = ${position.source_layer_id}`.execute(
+              tx,
+            )
+          : await sql<{
+              unit_cost: string;
+              currency_code: string;
+            }>`select unit_cost::text, currency_code from costing.return_cost_layers where organization_id = ${input.organizationId} and id = ${position.source_layer_id}`.execute(
+              tx,
+            );
+      const sourceRow = source.rows[0];
+      if (!sourceRow) throw new CostingDomainError('CONFLICT', 'Cost position source is missing.');
+      const unit = fixed(sourceRow.unit_cost, 100_000_000n);
+      const lineCost = (unit * take) / quantityScale;
+      await debitCostPosition(tx, position, decimal(take, quantityScale));
+      await sql`insert into costing.outbound_cost_assignment_lines (organization_id, outbound_cost_assignment_id, fulfillment_line_id, cost_layer_id, return_cost_layer_id, quantity, unit_cost, total_cost) values (${input.organizationId}, ${assignment.rows[0]!.id}, ${line.fulfillment_line_id}, ${position.source_kind === 'ACQUISITION' ? position.source_layer_id : null}::uuid, ${position.source_kind === 'RETURN' ? position.source_layer_id : null}::uuid, ${decimal(take, quantityScale)}::numeric, ${decimal(unit, 100_000_000n)}::numeric, ${decimal(lineCost, 100_000_000n)}::numeric)`.execute(
         tx,
       );
       total += lineCost;
-      currency = position.currency_code;
+      currency = sourceRow.currency_code;
       assignedAnyLayer = true;
       required -= take;
     }
@@ -801,14 +1086,14 @@ export async function listCostLayers(db: Kysely<DatabaseSchema>, organizationId:
   }>`
     select layer.id, layer.inbound_receipt_line_id as receipt_line_id, position.remaining_quantity::text, layer.original_quantity::text,
       (layer.base_purchase_cost + coalesce(sum(adjustment.delta_total_cost), 0))::text as effective_cost,
-      layer.currency_code, layer.location_id, location.name as location_name, layer.condition_code, allocation.product_title_snapshot as product_title,
+      layer.currency_code, position.location_id, location.name as location_name, position.condition_code, allocation.product_title_snapshot as product_title,
       allocation.sku_snapshot as sku, receipt.receipt_number, layer.received_at::text, layer.cost_state
     from costing.cost_layers layer
     join costing.cost_layer_positions position on position.cost_layer_id = layer.id
     join receiving.inbound_receipt_lines receipt_line on receipt_line.id = layer.inbound_receipt_line_id
     join receiving.inbound_receipts receipt on receipt.id = receipt_line.inbound_receipt_id
     join inbound_shipment.purchase_line_allocations allocation on allocation.id = layer.shipment_allocation_id
-    join warehouse.locations location on location.id = layer.location_id
+    join warehouse.locations location on location.id = position.location_id
     left join costing.cost_layer_adjustments adjustment on adjustment.cost_layer_id = layer.id
     where layer.organization_id = ${organizationId}
     group by layer.id, position.id, allocation.product_title_snapshot, allocation.sku_snapshot, receipt.receipt_number, location.name
@@ -833,7 +1118,7 @@ export async function getInventoryValuation(
     quantity: string;
     value: string;
   }>`
-    select layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code,
+    select layer.inventory_item_id, position.location_id, position.condition_code, layer.currency_code,
       product.title as product_title, variant.sku, location.name as location_name,
       sum(position.remaining_quantity)::text as quantity,
       sum((layer.base_purchase_cost + coalesce((select sum(adjustment.delta_total_cost) from costing.cost_layer_adjustments adjustment where adjustment.cost_layer_id = layer.id), 0)) * position.remaining_quantity / layer.original_quantity)::text as value
@@ -842,24 +1127,25 @@ export async function getInventoryValuation(
     join inventory.inventory_items item on item.id = layer.inventory_item_id
     join catalog.product_variants variant on variant.id = item.variant_id
     join catalog.products product on product.id = variant.product_id
-    join warehouse.locations location on location.id = layer.location_id
+    join warehouse.locations location on location.id = position.location_id
     where layer.organization_id = ${input.organizationId}
       and (${input.inventoryItemId ?? null}::uuid is null or layer.inventory_item_id = ${input.inventoryItemId ?? null}::uuid)
-      and (${input.locationId ?? null}::uuid is null or layer.location_id = ${input.locationId ?? null}::uuid)
-    group by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code, product.title, variant.sku, location.name
+      and (${input.locationId ?? null}::uuid is null or position.location_id = ${input.locationId ?? null}::uuid)
+    group by layer.inventory_item_id, position.location_id, position.condition_code, layer.currency_code, product.title, variant.sku, location.name
     union all
-    select layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code,
+    select layer.inventory_item_id, position.location_id, position.condition_code, layer.currency_code,
       product.title as product_title, variant.sku, location.name as location_name,
-      sum(layer.quantity)::text as quantity, sum(layer.quantity * layer.unit_cost)::text as value
+      sum(position.remaining_quantity)::text as quantity, sum(position.remaining_quantity * layer.unit_cost)::text as value
     from costing.return_cost_layers layer
+    join costing.return_cost_layer_positions position on position.return_cost_layer_id = layer.id
     join inventory.inventory_items item on item.id = layer.inventory_item_id
     join catalog.product_variants variant on variant.id = item.variant_id
     join catalog.products product on product.id = variant.product_id
-    join warehouse.locations location on location.id = layer.location_id
+    join warehouse.locations location on location.id = position.location_id
     where layer.organization_id = ${input.organizationId}
       and (${input.inventoryItemId ?? null}::uuid is null or layer.inventory_item_id = ${input.inventoryItemId ?? null}::uuid)
-      and (${input.locationId ?? null}::uuid is null or layer.location_id = ${input.locationId ?? null}::uuid)
-    group by layer.inventory_item_id, layer.location_id, layer.condition_code, layer.currency_code, product.title, variant.sku, location.name
+      and (${input.locationId ?? null}::uuid is null or position.location_id = ${input.locationId ?? null}::uuid)
+    group by layer.inventory_item_id, position.location_id, position.condition_code, layer.currency_code, product.title, variant.sku, location.name
     order by inventory_item_id, location_id, condition_code, currency_code
   `.execute(db);
   return rows.rows;
@@ -1054,7 +1340,7 @@ export async function verifyCostingIntegrity(
     ),
     sql<{
       id: string;
-    }>`select level.id from inventory.inventory_level_conditions level where level.organization_id = ${organizationId} and level.quantity > 0 and not exists (select 1 from costing.cost_layers layer where layer.organization_id = level.organization_id and layer.inventory_item_id = level.inventory_item_id and layer.location_id = level.location_id and layer.condition_code = level.condition_code) and not exists (select 1 from costing.return_cost_layers layer where layer.organization_id = level.organization_id and layer.inventory_item_id = level.inventory_item_id and layer.location_id = level.location_id and layer.condition_code = level.condition_code)`.execute(
+    }>`select level.id from inventory.inventory_level_conditions level where level.organization_id = ${organizationId} and level.quantity > 0 and not exists (select 1 from costing.cost_layer_positions position join costing.cost_layers layer on layer.id = position.cost_layer_id where position.organization_id = level.organization_id and layer.inventory_item_id = level.inventory_item_id and position.location_id = level.location_id and position.condition_code = level.condition_code and position.remaining_quantity > 0) and not exists (select 1 from costing.return_cost_layer_positions position join costing.return_cost_layers layer on layer.id = position.return_cost_layer_id where position.organization_id = level.organization_id and layer.inventory_item_id = level.inventory_item_id and position.location_id = level.location_id and position.condition_code = level.condition_code and position.remaining_quantity > 0)`.execute(
       db,
     ),
     sql<{
@@ -1064,7 +1350,7 @@ export async function verifyCostingIntegrity(
     ),
     sql<{
       id: string;
-    }>`select position.id from costing.cost_layer_positions position where position.organization_id = ${organizationId} and position.remaining_quantity < 0`.execute(
+    }>`select position.id from costing.cost_layer_positions position where position.organization_id = ${organizationId} and position.remaining_quantity < 0 union all select position.id from costing.return_cost_layer_positions position where position.organization_id = ${organizationId} and position.remaining_quantity < 0`.execute(
       db,
     ),
     sql<{
@@ -1100,11 +1386,13 @@ export async function verifyCostingIntegrity(
         and fulfillment.status = 'DISPATCHED'
         and allocation.quantity_consumed > 0
         and exists (
-          select 1 from costing.cost_layers layer
-          where layer.organization_id = fulfillment.organization_id
-            and layer.inventory_item_id = item.id
-            and layer.location_id = fulfillment.location_id
-            and layer.condition_code = 'SELLABLE'
+          select 1 from costing.cost_layer_positions position join costing.cost_layers layer on layer.id = position.cost_layer_id
+          where position.organization_id = fulfillment.organization_id and layer.inventory_item_id = item.id
+            and position.location_id = fulfillment.location_id and position.condition_code = 'SELLABLE'
+          union all
+          select 1 from costing.return_cost_layer_positions position join costing.return_cost_layers layer on layer.id = position.return_cost_layer_id
+          where position.organization_id = fulfillment.organization_id and layer.inventory_item_id = item.id
+            and position.location_id = fulfillment.location_id and position.condition_code = 'SELLABLE'
         )
         and not exists (
           select 1 from costing.outbound_cost_assignments assignment
@@ -1140,8 +1428,8 @@ export async function verifyCostingIntegrity(
       left join inventory.inventory_level_conditions level
         on level.organization_id = layer.organization_id
         and level.inventory_item_id = layer.inventory_item_id
-        and level.location_id = layer.location_id
-        and level.condition_code = layer.condition_code
+        and level.location_id = position.location_id
+        and level.condition_code = position.condition_code
       where position.organization_id = ${organizationId}
       group by position.id, position.remaining_quantity
       having position.remaining_quantity > coalesce(max(level.quantity), 0)
@@ -1164,20 +1452,21 @@ export async function verifyCostingIntegrity(
       select level.id
       from inventory.inventory_level_conditions level
       left join (
-        select layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code, sum(position.remaining_quantity) as quantity
+        select layer.organization_id, layer.inventory_item_id, position.location_id, position.condition_code, sum(position.remaining_quantity) as quantity
         from costing.cost_layers layer
         join costing.cost_layer_positions position on position.cost_layer_id = layer.id
         where layer.organization_id = ${organizationId}
-        group by layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code
+        group by layer.organization_id, layer.inventory_item_id, position.location_id, position.condition_code
       ) position on position.organization_id = level.organization_id
         and position.inventory_item_id = level.inventory_item_id
         and position.location_id = level.location_id
         and position.condition_code = level.condition_code
       left join (
-        select layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code, sum(layer.quantity) as quantity
+        select layer.organization_id, layer.inventory_item_id, position.location_id, position.condition_code, sum(position.remaining_quantity) as quantity
         from costing.return_cost_layers layer
+        join costing.return_cost_layer_positions position on position.return_cost_layer_id = layer.id
         where layer.organization_id = ${organizationId}
-        group by layer.organization_id, layer.inventory_item_id, layer.location_id, layer.condition_code
+        group by layer.organization_id, layer.inventory_item_id, position.location_id, position.condition_code
       ) returned on returned.organization_id = level.organization_id
         and returned.inventory_item_id = level.inventory_item_id
         and returned.location_id = level.location_id
@@ -1185,6 +1474,25 @@ export async function verifyCostingIntegrity(
       where level.organization_id = ${organizationId}
         and (position.quantity is not null or returned.quantity is not null)
         and coalesce(position.quantity, 0) + coalesce(returned.quantity, 0) <> level.quantity
+    `.execute(db),
+    sql<{ id: string }>`
+      select layer.id
+      from costing.cost_layers layer
+      where layer.organization_id = ${organizationId}
+        and layer.original_quantity <>
+          coalesce((select sum(position.remaining_quantity) from costing.cost_layer_positions position where position.cost_layer_id = layer.id), 0)
+          + coalesce((select sum(line.quantity) from costing.outbound_cost_assignment_lines line where line.cost_layer_id = layer.id), 0)
+          + coalesce((select sum(allocation.dispatched_quantity - allocation.received_quantity) from costing.transfer_cost_allocations allocation where allocation.cost_layer_id = layer.id), 0)
+          + coalesce((select sum(movement.quantity) from costing.inventory_cost_position_movements movement where movement.cost_layer_id = layer.id and movement.movement_kind = 'WRITE_OFF'), 0)
+      union all
+      select layer.id
+      from costing.return_cost_layers layer
+      where layer.organization_id = ${organizationId}
+        and layer.quantity <>
+          coalesce((select sum(position.remaining_quantity) from costing.return_cost_layer_positions position where position.return_cost_layer_id = layer.id), 0)
+          + coalesce((select sum(line.quantity) from costing.outbound_cost_assignment_lines line where line.return_cost_layer_id = layer.id), 0)
+          + coalesce((select sum(allocation.dispatched_quantity - allocation.received_quantity) from costing.transfer_cost_allocations allocation where allocation.return_cost_layer_id = layer.id), 0)
+          + coalesce((select sum(movement.quantity) from costing.inventory_cost_position_movements movement where movement.return_cost_layer_id = layer.id and movement.movement_kind = 'WRITE_OFF'), 0)
     `.execute(db),
   ]);
   return [
@@ -1252,6 +1560,12 @@ export async function verifyCostingIntegrity(
     ...checks[12].rows.map((row) => ({
       code: 'VALUATION_QUANTITY_MISMATCH',
       summary: 'FIFO Position quantity differs from matching physical inventory.',
+      entityId: row.id,
+    })),
+    ...checks[13].rows.map((row) => ({
+      code: 'COST_LAYER_QUANTITY_CONSERVATION_MISMATCH',
+      summary:
+        'Cost Layer quantity is not conserved across on-hand, transit, outbound, and loss facts.',
       entityId: row.id,
     })),
   ];

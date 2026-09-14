@@ -2,7 +2,19 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
 
 import { createDatabase } from './index.js';
-import { listInventoryBalances } from './inventory.js';
+import { getInventoryValuation, verifyCostingIntegrity } from './costing.js';
+import {
+  adjustInventory,
+  approveWarehouseTransfer,
+  createWarehouseTransfer,
+  dispatchWarehouseTransfer,
+  listInventoryBalances,
+  moveInventoryCondition,
+  postStocktake,
+  recordStocktakeCount,
+  receiveWarehouseTransfer,
+  startStocktake,
+} from './inventory.js';
 import {
   addPurchaseLine,
   cancelPurchase,
@@ -59,7 +71,7 @@ async function fixture() {
     code: `RCV-${crypto.randomUUID().slice(0, 5)}`,
     name: 'Receiving warehouse',
     locationType: 'WAREHOUSE',
-    capabilities: ['STOCK_HOLDING', 'PURCHASE_RECEIVING'],
+    capabilities: ['STOCK_HOLDING', 'PURCHASE_RECEIVING', 'TRANSFER_SEND'],
   });
   const supplier = await createSupplier(database.db, {
     organizationId: organization.id,
@@ -278,6 +290,177 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     ).rejects.toMatchObject({ code: 'OVER_RECEIPT' });
   });
 
+  it('keeps acquired cost provenance aligned through condition moves and shrinkage', async () => {
+    const input = await fixture();
+    const shipment = await shipmentFor(input);
+    const arrived = await markShipmentArrived(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: shipment.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await postInboundReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      lines: [
+        {
+          shipmentAllocationId: arrived.allocations[0]!.id,
+          condition: 'SELLABLE',
+          quantity: '5',
+        },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    await moveInventoryCondition(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      variantId: input.variantId,
+      locationId: input.locationId,
+      fromCondition: 'SELLABLE',
+      toCondition: 'DAMAGED',
+      quantity: '1',
+      reason: 'Damaged during inspection',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await adjustInventory(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      variantId: input.variantId,
+      locationId: input.locationId,
+      condition: 'SELLABLE',
+      quantityDelta: '-1',
+      reasonCode: 'CORRECTION',
+      note: 'Counted one unit short',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const item = await sql<{
+      id: string;
+    }>`select id from inventory.inventory_items where organization_id = ${input.organizationId} and variant_id = ${input.variantId}`.execute(
+      database.db,
+    );
+    const stocktake = await startStocktake(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      locationId: input.locationId,
+    });
+    await recordStocktakeCount(database.db, {
+      organizationId: input.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: item.rows[0]!.id,
+      countedQuantity: '3',
+      expectedVersion: stocktake.version,
+    });
+    await postStocktake(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const valuation = await getInventoryValuation(database.db, {
+      organizationId: input.organizationId,
+      locationId: input.locationId,
+    });
+    expect(valuation.map((row) => [row.condition_code, row.quantity])).toEqual([
+      ['DAMAGED', '1.000000'],
+      ['SELLABLE', '2.000000'],
+    ]);
+    const costMovements = await sql<{
+      kind: string;
+      quantity: string;
+    }>`select movement_kind as kind, sum(quantity)::text as quantity from costing.inventory_cost_position_movements where organization_id = ${input.organizationId} group by movement_kind order by movement_kind`.execute(
+      database.db,
+    );
+    expect(costMovements.rows).toEqual([
+      { kind: 'CONDITION_MOVE', quantity: '1.000000' },
+      { kind: 'WRITE_OFF', quantity: '2.000000' },
+    ]);
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
+  });
+
+  it('moves acquired cost provenance with a warehouse transfer', async () => {
+    const input = await fixture();
+    const destination = await createLocation(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      code: `DST-${crypto.randomUUID().slice(0, 5)}`,
+      name: 'Destination warehouse',
+      locationType: 'WAREHOUSE',
+      capabilities: ['STOCK_HOLDING', 'TRANSFER_RECEIVE'],
+    });
+    const shipment = await shipmentFor(input);
+    const arrived = await markShipmentArrived(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: shipment.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await postInboundReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      lines: [
+        {
+          shipmentAllocationId: arrived.allocations[0]!.id,
+          condition: 'SELLABLE',
+          quantity: '5',
+        },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const transfer = await createWarehouseTransfer(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      sourceLocationId: input.locationId,
+      destinationLocationId: destination.id,
+      lines: [{ variantId: input.variantId, quantity: '2' }],
+    });
+    await approveWarehouseTransfer(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      transferId: transfer.transferId,
+      expectedVersion: transfer.version,
+    });
+    await dispatchWarehouseTransfer(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      transferId: transfer.transferId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const transferLine = await sql<{
+      id: string;
+    }>`select id from warehouse.transfer_lines where transfer_id = ${transfer.transferId}`.execute(
+      database.db,
+    );
+    await receiveWarehouseTransfer(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      transferId: transfer.transferId,
+      lines: [{ transferLineId: transferLine.rows[0]!.id, sellableQuantity: '2' }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const valuation = await getInventoryValuation(database.db, {
+      organizationId: input.organizationId,
+    });
+    expect(valuation.map((row) => [row.location_id, row.condition_code, row.quantity])).toEqual([
+      [input.locationId, 'SELLABLE', '3.000000'],
+      [destination.id, 'SELLABLE', '2.000000'],
+    ]);
+    const transferEvidence = await sql<{
+      dispatched: string;
+      received: string;
+    }>`select sum(dispatched_quantity)::text as dispatched, sum(received_quantity)::text as received from costing.transfer_cost_allocations where organization_id = ${input.organizationId}`.execute(
+      database.db,
+    );
+    expect(transferEvidence.rows[0]).toEqual({ dispatched: '2.000000', received: '2.000000' });
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
+  });
+
   it('allows one shipment to consolidate allocated lines from separate suppliers', async () => {
     const input = await fixture();
     const secondSupplier = await createSupplier(database.db, {
@@ -385,7 +568,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     expect(
       await listInventoryBalances(database.db, second.organizationId, {
         locationId: second.locationId,
-      }).then(res => res.items),
+      }).then((res) => res.items),
     ).toEqual([]);
   });
 

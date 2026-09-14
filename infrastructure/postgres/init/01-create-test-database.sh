@@ -1,4 +1,5 @@
 #!/bin/sh
+# Keep this script LF-only because it executes inside the Linux PostgreSQL image.
 set -eu
 
 if [ "$POSTGRES_DB" = "$POSTGRES_TEST_DB" ]; then

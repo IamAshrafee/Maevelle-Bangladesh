@@ -1365,6 +1365,11 @@ export async function archiveCatalogProduct(
     const product = updated.rows[0];
     if (!product)
       throw new CatalogDomainError('STALE_VERSION', 'Product was not found or has changed.');
+    await sql`update inventory.inventory_items item set status='ARCHIVED',version=item.version+1,updated_at=now()
+      from catalog.product_variants variant
+      where item.organization_id=${input.organizationId} and item.variant_id=variant.id
+        and variant.organization_id=item.organization_id and variant.product_id=${input.productId}::uuid
+        and item.status<>'ARCHIVED'`.execute(transaction);
     await emitCatalogEvent(transaction, {
       organizationId: input.organizationId,
       productId: input.productId,
@@ -1396,6 +1401,11 @@ export async function restoreCatalogProduct(
     const product = updated.rows[0];
     if (!product)
       throw new CatalogDomainError('STALE_VERSION', 'Archived Product was not found or changed.');
+    await sql`update inventory.inventory_items item set status='ACTIVE',version=item.version+1,updated_at=now()
+      from catalog.product_variants variant
+      where item.organization_id=${input.organizationId} and item.variant_id=variant.id
+        and variant.organization_id=item.organization_id and variant.product_id=${input.productId}::uuid
+        and variant.status='ACTIVE' and item.status<>'ACTIVE'`.execute(transaction);
     await emitCatalogEvent(transaction, {
       organizationId: input.organizationId,
       productId: input.productId,
@@ -2243,6 +2253,10 @@ export async function updateCatalogVariant(
     const variant = updated.rows[0];
     if (!variant)
       throw new CatalogDomainError('STALE_VERSION', 'Variant changed while you were editing it.');
+    if (input.status !== undefined)
+      await sql`update inventory.inventory_items set status=${input.status},version=version+1,updated_at=now()
+        where organization_id=${input.organizationId} and variant_id=${input.variantId}::uuid
+          and status<>${input.status}`.execute(transaction);
     if (selected) {
       await sql`delete from catalog.variant_option_values where organization_id=${input.organizationId}
         and variant_id=${input.variantId}::uuid`.execute(transaction);

@@ -246,7 +246,7 @@ export async function getLocationDetail(
     select location.id, location.code, location.name, location.location_type, location.status, location.version::text,
       location.address_json,
       array_remove(array_agg(capability.capability_code order by capability.capability_code), null) as capabilities,
-      coalesce((select sum(sellable_quantity + unavailable_quantity + reserved_quantity) from inventory.inventory_levels where organization_id = location.organization_id and location_id = location.id), 0)::text as total_on_hand,
+      coalesce((select sum(sellable_quantity + unavailable_quantity) from inventory.inventory_levels where organization_id = location.organization_id and location_id = location.id), 0)::text as total_on_hand,
       coalesce((select sum(sellable_quantity - reserved_quantity) from inventory.inventory_levels where organization_id = location.organization_id and location_id = location.id), 0)::text as total_available,
       coalesce((select sum(reserved_quantity) from inventory.inventory_levels where organization_id = location.organization_id and location_id = location.id), 0)::text as total_reserved,
       coalesce((select sum(quantity) from inventory.inventory_level_conditions where organization_id = location.organization_id and location_id = location.id and condition_code = 'DAMAGED'), 0)::text as total_damaged,
@@ -256,10 +256,10 @@ export async function getLocationDetail(
     where location.id = ${locationId} and location.organization_id = ${organizationId}
     group by location.id
   `.execute(db);
-  
+
   const row = result.rows[0];
   if (!row) return undefined;
-  
+
   return {
     ...mapLocation(row),
     address: row.address_json,
@@ -274,6 +274,24 @@ export async function getLocationDetail(
   };
 }
 
+type WarehouseTransferListRow = {
+  id: string;
+  transfer_number: string;
+  source_location_id: string;
+  destination_location_id: string;
+  status: string;
+  version: string;
+  created_at: Date;
+  dispatched_at: Date | null;
+  completed_at: Date | null;
+  source_location_name: string;
+  destination_location_name: string;
+  total_requested: string;
+  total_dispatched: string;
+  total_received: string;
+  line_count: string;
+};
+
 export async function listWarehouseTransfers(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
@@ -286,16 +304,38 @@ export async function listWarehouseTransfers(
     limit?: number;
   } = {},
 ): Promise<{
-  items: readonly any[];
+  items: readonly {
+    id: string;
+    transferNumber: string;
+    sourceLocationId: string;
+    sourceLocationName: string;
+    destinationLocationId: string;
+    destinationLocationName: string;
+    status: string;
+    version: number;
+    totalRequested: string;
+    totalDispatched: string;
+    totalReceived: string;
+    lineCount: number;
+    createdAt: Date;
+    dispatchedAt: Date | null;
+    completedAt: Date | null;
+  }[];
   totalCount: number;
 }> {
   const offset = ((input.page || 1) - 1) * (input.limit || 25);
-  
+
   const statusFilter = input.status ? sql`t.status = ${input.status}` : sql`1=1`;
-  const searchFilter = input.search ? sql`t.transfer_number ilike '%' || ${input.search} || '%'` : sql`1=1`;
-  const sourceFilter = input.sourceLocationId ? sql`t.source_location_id = ${input.sourceLocationId}::uuid` : sql`1=1`;
-  const destFilter = input.destinationLocationId ? sql`t.destination_location_id = ${input.destinationLocationId}::uuid` : sql`1=1`;
-  
+  const searchFilter = input.search
+    ? sql`t.transfer_number ilike '%' || ${input.search} || '%'`
+    : sql`1=1`;
+  const sourceFilter = input.sourceLocationId
+    ? sql`t.source_location_id = ${input.sourceLocationId}::uuid`
+    : sql`1=1`;
+  const destFilter = input.destinationLocationId
+    ? sql`t.destination_location_id = ${input.destinationLocationId}::uuid`
+    : sql`1=1`;
+
   const countResult = await sql<{ count: string }>`
     select count(*)::text as count
     from warehouse.transfers t
@@ -306,17 +346,23 @@ export async function listWarehouseTransfers(
       and ${destFilter}
   `.execute(db);
 
-  const transfers = await sql<any>`
+  const transfers = await sql<WarehouseTransferListRow>`
     select t.id, t.transfer_number, t.source_location_id, t.destination_location_id, t.status, t.version::text, t.created_at,
-      sl.name as source_location_name, dl.name as destination_location_name
+      t.dispatched_at, t.completed_at, sl.name as source_location_name, dl.name as destination_location_name,
+      coalesce(sum(line.requested_quantity), 0)::text as total_requested,
+      coalesce(sum(line.dispatched_quantity), 0)::text as total_dispatched,
+      coalesce(sum(line.received_quantity), 0)::text as total_received,
+      count(line.id)::text as line_count
     from warehouse.transfers t
     join warehouse.locations sl on sl.id = t.source_location_id
     join warehouse.locations dl on dl.id = t.destination_location_id
+    left join warehouse.transfer_lines line on line.organization_id = t.organization_id and line.transfer_id = t.id
     where t.organization_id = ${organizationId}
       and ${statusFilter}
       and ${searchFilter}
       and ${sourceFilter}
       and ${destFilter}
+    group by t.id, sl.name, dl.name
     order by t.created_at desc
     limit ${input.limit || 25} offset ${offset}
   `.execute(db);
@@ -331,7 +377,13 @@ export async function listWarehouseTransfers(
       destinationLocationName: t.destination_location_name,
       status: t.status,
       version: Number(t.version),
+      totalRequested: t.total_requested,
+      totalDispatched: t.total_dispatched,
+      totalReceived: t.total_received,
+      lineCount: Number(t.line_count),
       createdAt: t.created_at,
+      dispatchedAt: t.dispatched_at,
+      completedAt: t.completed_at,
     })),
     totalCount: Number(countResult.rows[0]?.count ?? '0'),
   };
@@ -341,8 +393,23 @@ export async function getTransferDetail(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   transferId: string,
-): Promise<any | undefined> {
-  const result = await sql<any>`
+): Promise<Record<string, unknown> | undefined> {
+  const result = await sql<{
+    id: string;
+    transfer_number: string;
+    source_location_id: string;
+    destination_location_id: string;
+    status: string;
+    notes: string | null;
+    created_by_actor_id: string | null;
+    approved_at: Date | null;
+    dispatched_at: Date | null;
+    completed_at: Date | null;
+    created_at: Date;
+    version: string;
+    source_location_name: string;
+    destination_location_name: string;
+  }>`
     select t.id, t.transfer_number, t.source_location_id, t.destination_location_id, t.status, t.notes, 
       t.created_by_actor_id, t.approved_at, t.dispatched_at, t.completed_at, t.created_at, t.version::text,
       sl.name as source_location_name, dl.name as destination_location_name
@@ -351,11 +418,21 @@ export async function getTransferDetail(
     join warehouse.locations dl on dl.id = t.destination_location_id
     where t.id = ${transferId} and t.organization_id = ${organizationId}
   `.execute(db);
-  
+
   const transfer = result.rows[0];
   if (!transfer) return undefined;
 
-  const linesResult = await sql<any>`
+  const linesResult = await sql<{
+    id: string;
+    inventory_item_id: string;
+    requested_quantity: string;
+    dispatched_quantity: string;
+    received_quantity: string;
+    cancelled_quantity: string;
+    variant_id: string;
+    sku: string;
+    product_title: string;
+  }>`
     select tl.id, tl.inventory_item_id, tl.requested_quantity::text, tl.dispatched_quantity::text, tl.received_quantity::text, tl.cancelled_quantity::text,
       item.variant_id, variant.sku, product.title as product_title
     from warehouse.transfer_lines tl
@@ -366,26 +443,25 @@ export async function getTransferDetail(
     order by product.title, variant.sku
   `.execute(db);
 
-  let totalRequested = 0;
-  let totalDispatched = 0;
-  let totalReceived = 0;
-  
-  const lines = linesResult.rows.map((line) => {
-    totalRequested += Number(line.requested_quantity);
-    totalDispatched += Number(line.dispatched_quantity);
-    totalReceived += Number(line.received_quantity);
-    return {
-      id: line.id,
-      inventoryItemId: line.inventory_item_id,
-      variantId: line.variant_id,
-      sku: line.sku,
-      productTitle: line.product_title,
-      requestedQuantity: String(line.requested_quantity),
-      dispatchedQuantity: String(line.dispatched_quantity),
-      receivedQuantity: String(line.received_quantity),
-      cancelledQuantity: String(line.cancelled_quantity),
-    };
-  });
+  const totals = await sql<{
+    requested: string;
+    dispatched: string;
+    received: string;
+  }>`select coalesce(sum(requested_quantity), 0)::text as requested, coalesce(sum(dispatched_quantity), 0)::text as dispatched, coalesce(sum(received_quantity), 0)::text as received from warehouse.transfer_lines where organization_id = ${organizationId} and transfer_id = ${transferId}`.execute(
+    db,
+  );
+
+  const lines = linesResult.rows.map((line) => ({
+    id: line.id,
+    inventoryItemId: line.inventory_item_id,
+    variantId: line.variant_id,
+    sku: line.sku,
+    productTitle: line.product_title,
+    requestedQuantity: String(line.requested_quantity),
+    dispatchedQuantity: String(line.dispatched_quantity),
+    receivedQuantity: String(line.received_quantity),
+    cancelledQuantity: String(line.cancelled_quantity),
+  }));
 
   return {
     id: transfer.id,
@@ -402,9 +478,9 @@ export async function getTransferDetail(
     dispatchedAt: transfer.dispatched_at,
     completedAt: transfer.completed_at,
     version: Number(transfer.version),
-    totalRequested: String(totalRequested),
-    totalDispatched: String(totalDispatched),
-    totalReceived: String(totalReceived),
+    totalRequested: totals.rows[0]?.requested ?? '0',
+    totalDispatched: totals.rows[0]?.dispatched ?? '0',
+    totalReceived: totals.rows[0]?.received ?? '0',
     lineCount: lines.length,
     lines,
   };

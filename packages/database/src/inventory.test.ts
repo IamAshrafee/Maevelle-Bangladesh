@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 
 import { createDatabase } from './index.js';
 import { createOrganization } from './platform.js';
+import { archiveCatalogProduct, restoreCatalogProduct } from './catalog.js';
 import {
   adjustInventory,
   approveWarehouseTransfer,
@@ -10,15 +11,18 @@ import {
   createInventoryReservation,
   createWarehouseTransfer,
   dispatchWarehouseTransfer,
+  getInventoryStats,
   listInventoryBalances,
+  listInventoryReservations,
   moveInventoryCondition,
   postStocktake,
   recordStocktakeCount,
   reconcileInventoryItem,
   releaseInventoryReservation,
   startStocktake,
+  verifyInventoryIntegrity,
 } from './inventory.js';
-import { createLocation } from './warehouse.js';
+import { createLocation, getLocationDetail, listWarehouseTransfers } from './warehouse.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -80,6 +84,7 @@ async function fixture() {
   return {
     organizationId: organization.id,
     actorId,
+    productId: product.rows[0]!.id,
     variantId: variant.rows[0]!.id,
     main,
     secondary,
@@ -120,6 +125,13 @@ describe('ledger-backed inventory', () => {
         expect.objectContaining({ condition: 'DAMAGED', onHand: '2', availableToSell: '0' }),
       ]),
     );
+    const unvalued = await sql<{
+      quantity: string;
+      reason_code: string;
+    }>`select quantity::text, reason_code from costing.unvalued_inventory_additions where inventory_transaction_id = ${adjustment.transactionId}`.execute(
+      database.db,
+    );
+    expect(unvalued.rows[0]).toEqual({ quantity: '10.000000', reason_code: 'OPENING_BALANCE' });
     const evidence = await sql<{
       audit: string;
       outbox: string;
@@ -127,6 +139,91 @@ describe('ledger-backed inventory', () => {
       database.db,
     );
     expect(evidence.rows[0]).toEqual({ audit: '1', outbox: '1' });
+    await expect(
+      sql`update inventory.inventory_transactions set reason_code = 'TAMPERED' where id = ${adjustment.transactionId}`.execute(
+        database.db,
+      ),
+    ).rejects.toMatchObject({ code: '55000' });
+    await expect(
+      sql`delete from inventory.inventory_movement_lines where inventory_transaction_id = ${adjustment.transactionId}`.execute(
+        database.db,
+      ),
+    ).rejects.toMatchObject({ code: '55000' });
+    expect(await verifyInventoryIntegrity(database.db, f.organizationId)).toEqual([]);
+  });
+
+  it('rejects fractional movements and reservations for unit-tracked variants', async () => {
+    const f = await fixture();
+    await expect(opening(f, '1.5')).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await opening(f, '2');
+    await expect(
+      createInventoryReservation(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        variantId: f.variantId,
+        locationId: f.main.id,
+        quantity: '0.5',
+        sourceType: 'TEST',
+        sourceReference: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      createWarehouseTransfer(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        sourceLocationId: f.main.id,
+        destinationLocationId: f.secondary.id,
+        lines: [{ variantId: f.variantId, quantity: '0.5' }],
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('preserves archived Catalog stock while blocking new stock and reservations until restoration', async () => {
+    const f = await fixture();
+    await opening(f, '2');
+    const archived = await archiveCatalogProduct(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      productId: f.productId,
+      expectedVersion: 1,
+    });
+    const item = await sql<{
+      status: string;
+    }>`select status from inventory.inventory_items where organization_id=${f.organizationId} and variant_id=${f.variantId}`.execute(
+      database.db,
+    );
+    expect(item.rows[0]?.status).toBe('ARCHIVED');
+    await expect(opening(f, '1')).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      createInventoryReservation(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        variantId: f.variantId,
+        locationId: f.main.id,
+        quantity: '1',
+        sourceType: 'TEST',
+        sourceReference: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.main.id,
+      condition: 'SELLABLE',
+      quantityDelta: '-1',
+      reasonCode: 'CORRECTION',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await restoreCatalogProduct(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      productId: f.productId,
+      expectedVersion: archived.version,
+    });
+    await expect(opening(f, '1')).resolves.toMatchObject({ inventoryItemId: expect.any(String) });
   });
 
   it('allows only one concurrent final-unit reservation and prevents cross-organization inventory access', async () => {
@@ -155,6 +252,13 @@ describe('ledger-backed inventory', () => {
       }),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const stats = await getInventoryStats(database.db, f.organizationId);
+    expect(stats).toMatchObject({ totalOnHand: '1', totalReserved: '1', totalAvailable: '0' });
+    const location = await getLocationDetail(database.db, f.organizationId, f.main.id);
+    expect(location?.inventorySummary).toMatchObject({
+      totalOnHand: '1.000000',
+      totalReserved: '1.000000',
+    });
     const balance = (await listInventoryBalances(database.db, f.organizationId)).items.find(
       (row) => row.condition === 'SELLABLE',
     )!;
@@ -253,6 +357,15 @@ describe('ledger-backed inventory', () => {
       sourceReference: crypto.randomUUID(),
       idempotencyKey: crypto.randomUUID(),
     });
+    await sql`update inventory.inventory_reservations set status = 'PARTIALLY_CONSUMED' where id = ${reservation.reservationId}`.execute(
+      database.db,
+    );
+    expect(await listInventoryReservations(database.db, f.organizationId)).toMatchObject({
+      totalCount: 1,
+      items: [
+        expect.objectContaining({ id: reservation.reservationId, status: 'PARTIALLY_CONSUMED' }),
+      ],
+    });
     const released = await Promise.all([
       releaseInventoryReservation(database.db, {
         organizationId: f.organizationId,
@@ -309,6 +422,17 @@ describe('ledger-backed inventory', () => {
       }),
     ]);
     expect(dispatched.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const transferList = await listWarehouseTransfers(database.db, f.organizationId);
+    expect(transferList.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          totalRequested: '2.000000',
+          totalDispatched: '2.000000',
+          totalReceived: '0.000000',
+          lineCount: 1,
+        }),
+      ]),
+    );
     const reconciliation = await reconcileInventoryItem(
       database.db,
       f.organizationId,
@@ -378,5 +502,68 @@ describe('ledger-backed inventory', () => {
       (row) => row.condition === 'SELLABLE',
     )!;
     expect(balance.onHand).toBe('4');
+  });
+
+  it('serializes stocktake posting against concurrent balance adjustments', async () => {
+    const f = await fixture();
+    const opened = await opening(f, '5');
+    const stocktake = await startStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+    });
+    await recordStocktakeCount(database.db, {
+      organizationId: f.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: opened.inventoryItemId,
+      countedQuantity: '4',
+      expectedVersion: stocktake.version,
+    });
+    let reportBalancesLocked!: () => void;
+    let releaseStocktake!: () => void;
+    const balancesLocked = new Promise<void>((resolve) => {
+      reportBalancesLocked = resolve;
+    });
+    const continueStocktake = new Promise<void>((resolve) => {
+      releaseStocktake = resolve;
+    });
+    const posting = postStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      idempotencyKey: crypto.randomUUID(),
+      afterBalancesLocked: async () => {
+        reportBalancesLocked();
+        await continueStocktake;
+      },
+    });
+    await balancesLocked;
+    const adjustment = adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.main.id,
+      condition: 'SELLABLE',
+      quantityDelta: '1',
+      reasonCode: 'FOUND_STOCK',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    releaseStocktake();
+    await Promise.all([posting, adjustment]);
+
+    const order = await sql<{
+      transaction_type: string;
+    }>`select transaction.transaction_type from inventory.inventory_movement_lines line join inventory.inventory_transactions transaction on transaction.id = line.inventory_transaction_id where line.organization_id = ${f.organizationId} and transaction.transaction_type in ('STOCKTAKE_ADJUSTMENT', 'ADJUSTMENT') order by line.id`.execute(
+      database.db,
+    );
+    expect(order.rows.map((row) => row.transaction_type)).toEqual([
+      'STOCKTAKE_ADJUSTMENT',
+      'ADJUSTMENT',
+    ]);
+    const balance = (await listInventoryBalances(database.db, f.organizationId)).items.find(
+      (row) => row.condition === 'SELLABLE',
+    )!;
+    expect(balance.onHand).toBe('5');
   });
 });

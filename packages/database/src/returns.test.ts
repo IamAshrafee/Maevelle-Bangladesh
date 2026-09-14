@@ -49,7 +49,7 @@ const database = createDatabase({
 });
 afterAll(async () => database.close());
 
-async function returnFixture() {
+async function returnFixture(quantity = '10') {
   const organization = await createOrganization(database.db, {
     code: `return-${crypto.randomUUID().slice(0, 10)}`,
     displayName: 'Returns test',
@@ -106,7 +106,7 @@ async function returnFixture() {
     actorId,
     purchaseId: purchase.id,
     variantId: variant.rows[0]!.id,
-    quantity: '10',
+    quantity,
     unitPrice: '40.0000',
   });
   const placed = await placePurchase(database.db, {
@@ -120,7 +120,7 @@ async function returnFixture() {
     actorId,
     receivingLocationId: location.id,
     transportMode: 'SEA',
-    allocations: [{ purchaseLineId: placed.lines[0]!.id, quantity: '10' }],
+    allocations: [{ purchaseLineId: placed.lines[0]!.id, quantity }],
   });
   const arrived = await markShipmentArrived(database.db, {
     organizationId: organization.id,
@@ -133,9 +133,7 @@ async function returnFixture() {
     organizationId: organization.id,
     actorId,
     shipmentId: shipment.id,
-    lines: [
-      { shipmentAllocationId: arrived.allocations[0]!.id, condition: 'SELLABLE', quantity: '10' },
-    ],
+    lines: [{ shipmentAllocationId: arrived.allocations[0]!.id, condition: 'SELLABLE', quantity }],
     idempotencyKey: crypto.randomUUID(),
   });
   const worksheet = await createLandedCostWorksheet(database.db, {
@@ -354,6 +352,52 @@ describe('reverse logistics', () => {
       status: 'RESOLVED',
     });
     expect(await verifyReturnIntegrity(database.db, input.organizationId)).toEqual([]);
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
+  });
+
+  it('can sell returned sellable stock again without losing its cost provenance', async () => {
+    const input = await returnFixture('1');
+    const original = await deliveredOrder(input);
+    const created = await createReturnCase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      orderId: original.orderId,
+      reasonCode: 'WRONG_SIZE',
+      lines: [
+        {
+          orderLineId: original.orderLineId,
+          deliveryLineId: original.deliveryLineId,
+          quantity: '1',
+        },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await authorizeReturnCase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      returnCaseId: created.id,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const line = await sql<{
+      id: string;
+    }>`select id from returns.return_lines where return_case_id=${created.id}`.execute(database.db);
+    await postReturnReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      returnCaseId: created.id,
+      locationId: input.locationId,
+      lines: [{ returnLineId: line.rows[0]!.id, condition: 'SELLABLE', quantity: '1' }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    await expect(deliveredOrder(input)).resolves.toBeDefined();
+    const facts = await sql<{ assignments: string; returned_remaining: string }>`select
+      (select count(*)::text from costing.outbound_cost_assignments where organization_id=${input.organizationId}) as assignments,
+      (select sum(remaining_quantity)::text from costing.return_cost_layer_positions where organization_id=${input.organizationId}) as returned_remaining`.execute(
+      database.db,
+    );
+    expect(facts.rows[0]).toEqual({ assignments: '2', returned_remaining: '0.000000' });
     expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
   });
 

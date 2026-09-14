@@ -24,18 +24,20 @@ import {
 
 const lineSchema = z.object({
   variantId: z.string().min(1, 'Item is required'),
-  quantity: z.string().regex(/^\d+(?:\.\d{1,6})?$/, 'Invalid quantity'),
+  quantity: z.string().regex(/^\d+$/, 'Enter a whole number of units'),
 });
 
-const formSchema = z.object({
-  sourceLocationId: z.string().min(1, 'Source location is required'),
-  destinationLocationId: z.string().min(1, 'Destination location is required'),
-  notes: z.string().optional(),
-  lines: z.array(lineSchema).min(1, 'At least one line item is required')
-}).refine(data => data.sourceLocationId !== data.destinationLocationId, {
-  message: "Source and destination locations cannot be the same",
-  path: ["destinationLocationId"]
-});
+const formSchema = z
+  .object({
+    sourceLocationId: z.string().min(1, 'Source location is required'),
+    destinationLocationId: z.string().min(1, 'Destination location is required'),
+    notes: z.string().optional(),
+    lines: z.array(lineSchema).min(1, 'At least one line item is required'),
+  })
+  .refine((data) => data.sourceLocationId !== data.destinationLocationId, {
+    message: 'Source and destination locations cannot be the same',
+    path: ['destinationLocationId'],
+  });
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -55,13 +57,13 @@ export function TransferForm() {
       sourceLocationId: '',
       destinationLocationId: '',
       notes: '',
-      lines: [{ variantId: '', quantity: '1' }]
-    }
+      lines: [{ variantId: '', quantity: '1' }],
+    },
   });
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
-    name: "lines"
+    name: 'lines',
   });
 
   const sourceLocationId = form.watch('sourceLocationId');
@@ -72,7 +74,9 @@ export function TransferForm() {
     let mounted = true;
     const fetchLocations = async () => {
       try {
-        const response = await inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations');
+        const response = await inventoryRequest<{ data: WarehouseLocationDto[] }>(
+          '/warehouse/locations',
+        );
         if (mounted) {
           setLocations(response.data || []);
           setIsLoadingLocations(false);
@@ -85,7 +89,9 @@ export function TransferForm() {
       }
     };
     fetchLocations();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Fetch available stock when source location changes
@@ -100,11 +106,13 @@ export function TransferForm() {
       setIsLoadingStock(true);
       try {
         const response = await inventoryRequest<{ data: PaginatedDto<InventoryBalanceDto> }>(
-          `/inventory/stock?locationId=${sourceLocationId}&limit=100`
+          `/inventory/stock?locationId=${sourceLocationId}&limit=100`,
         );
         if (mounted) {
           // Only show items that actually have physical stock available to transfer
-          const transferableStock = (response.data?.items || []).filter(item => Number(item.availableToSell) > 0);
+          const transferableStock = (response.data?.items || []).filter(
+            (item) => Number(item.availableToSell) > 0,
+          );
           setAvailableStock(transferableStock);
           setIsLoadingStock(false);
         }
@@ -116,7 +124,9 @@ export function TransferForm() {
       }
     };
     fetchStock();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [sourceLocationId]);
 
   const onSubmit = async (values: FormValues) => {
@@ -137,17 +147,20 @@ export function TransferForm() {
 
     try {
       // Create new transfer
-      const result = await inventoryRequest<{ data: { id: string } }>('/warehouse/transfers', {
-        method: 'POST',
-        body: JSON.stringify({
-          sourceLocationId: values.sourceLocationId,
-          destinationLocationId: values.destinationLocationId,
-          notes: values.notes,
-          lines: values.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
-        }),
-      });
+      const result = await inventoryRequest<{ data: { transferId: string } }>(
+        '/warehouse/transfers',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceLocationId: values.sourceLocationId,
+            destinationLocationId: values.destinationLocationId,
+            notes: values.notes,
+            lines: values.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
+          }),
+        },
+      );
 
-      router.push(`/inventory/transfers/${result.data.id}`);
+      router.push(`/inventory/transfers/${result.data.transferId}`);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     }
@@ -156,7 +169,12 @@ export function TransferForm() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" type="button" onClick={() => router.push('/inventory/transfers')}>
+        <Button
+          variant="outline"
+          size="icon"
+          type="button"
+          onClick={() => router.push('/inventory/transfers')}
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
@@ -182,19 +200,25 @@ export function TransferForm() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="source">Source Location <span className="text-destructive">*</span></Label>
-                <Select 
-                  value={sourceLocationId} 
+                <Label htmlFor="source">
+                  Source Location <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={sourceLocationId}
                   onValueChange={(val) => {
                     form.setValue('sourceLocationId', val || '', { shouldValidate: true });
                     // Reset lines when source changes
                     form.setValue('lines', [{ variantId: '', quantity: '1' }]);
-                  }} 
+                  }}
                   disabled={isLoadingLocations}
                 >
                   <SelectTrigger id="source">
-                    <SelectValue placeholder={isLoadingLocations ? "Loading..." : "Select source location"}>
-                      {sourceLocationId ? locations.find(l => l.id === sourceLocationId)?.name : undefined}
+                    <SelectValue
+                      placeholder={isLoadingLocations ? 'Loading...' : 'Select source location'}
+                    >
+                      {sourceLocationId
+                        ? locations.find((l) => l.id === sourceLocationId)?.name
+                        : undefined}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -206,45 +230,63 @@ export function TransferForm() {
                   </SelectContent>
                 </Select>
                 {form.formState.errors.sourceLocationId && (
-                  <p className="text-sm font-medium text-destructive">{form.formState.errors.sourceLocationId.message}</p>
+                  <p className="text-sm font-medium text-destructive">
+                    {form.formState.errors.sourceLocationId.message}
+                  </p>
                 )}
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="destination">Destination Location <span className="text-destructive">*</span></Label>
-                <Select 
-                  value={destinationLocationId} 
-                  onValueChange={(val) => form.setValue('destinationLocationId', val || '', { shouldValidate: true })} 
+                <Label htmlFor="destination">
+                  Destination Location <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={destinationLocationId}
+                  onValueChange={(val) =>
+                    form.setValue('destinationLocationId', val || '', { shouldValidate: true })
+                  }
                   disabled={isLoadingLocations}
                 >
                   <SelectTrigger id="destination">
-                    <SelectValue placeholder={isLoadingLocations ? "Loading..." : "Select destination location"}>
-                      {destinationLocationId ? locations.find(l => l.id === destinationLocationId)?.name : undefined}
+                    <SelectValue
+                      placeholder={
+                        isLoadingLocations ? 'Loading...' : 'Select destination location'
+                      }
+                    >
+                      {destinationLocationId
+                        ? locations.find((l) => l.id === destinationLocationId)?.name
+                        : undefined}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.filter(l => l.id !== sourceLocationId).map((loc) => (
-                      <SelectItem key={loc.id} value={loc.id}>
-                        {loc.name} ({loc.code})
-                      </SelectItem>
-                    ))}
+                    {locations
+                      .filter((l) => l.id !== sourceLocationId)
+                      .map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>
+                          {loc.name} ({loc.code})
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 {form.formState.errors.destinationLocationId && (
-                  <p className="text-sm font-medium text-destructive">{form.formState.errors.destinationLocationId.message}</p>
+                  <p className="text-sm font-medium text-destructive">
+                    {form.formState.errors.destinationLocationId.message}
+                  </p>
                 )}
               </div>
             </div>
-            
+
             <div className="grid gap-2 pt-2">
               <Label htmlFor="notes">Notes</Label>
-              <Textarea 
-                id="notes" 
-                placeholder="Optional notes for this transfer" 
+              <Textarea
+                id="notes"
+                placeholder="Optional notes for this transfer"
                 rows={3}
                 {...form.register('notes')}
               />
               {form.formState.errors.notes && (
-                <p className="text-sm font-medium text-destructive">{form.formState.errors.notes.message}</p>
+                <p className="text-sm font-medium text-destructive">
+                  {form.formState.errors.notes.message}
+                </p>
               )}
             </div>
           </CardContent>
@@ -254,9 +296,17 @@ export function TransferForm() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle>Line Items</CardTitle>
-              <CardDescription className="mt-1">Select items currently available at the source location.</CardDescription>
+              <CardDescription className="mt-1">
+                Select items currently available at the source location.
+              </CardDescription>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => append({ variantId: '', quantity: '1' })} disabled={!sourceLocationId || isLoadingStock}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => append({ variantId: '', quantity: '1' })}
+              disabled={!sourceLocationId || isLoadingStock}
+            >
               <Plus className="mr-2 h-4 w-4" /> Add Line
             </Button>
           </CardHeader>
@@ -269,21 +319,33 @@ export function TransferForm() {
               <div className="space-y-4">
                 {fields.map((field, index) => {
                   const lineVariantId = form.watch(`lines.${index}.variantId`);
-                  const selectedStockItem = availableStock.find((s) => s.variantId === lineVariantId);
+                  const selectedStockItem = availableStock.find(
+                    (s) => s.variantId === lineVariantId,
+                  );
 
                   return (
                     <div key={field.id} className="flex gap-4 items-start">
                       <div className="flex-1 grid gap-2">
-                        {index === 0 && <Label>Item <span className="text-destructive">*</span></Label>}
+                        {index === 0 && (
+                          <Label>
+                            Item <span className="text-destructive">*</span>
+                          </Label>
+                        )}
                         <Select
                           value={lineVariantId}
                           onValueChange={(val) =>
-                            form.setValue(`lines.${index}.variantId`, val || '', { shouldValidate: true })
+                            form.setValue(`lines.${index}.variantId`, val || '', {
+                              shouldValidate: true,
+                            })
                           }
                           disabled={isLoadingStock}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder={isLoadingStock ? 'Loading stock…' : 'Select item to transfer'}>
+                            <SelectValue
+                              placeholder={
+                                isLoadingStock ? 'Loading stock…' : 'Select item to transfer'
+                              }
+                            >
                               {lineVariantId
                                 ? `${selectedStockItem?.productTitle ?? 'Item'} — ${selectedStockItem?.sku ?? ''}`
                                 : undefined}
@@ -291,7 +353,9 @@ export function TransferForm() {
                           </SelectTrigger>
                           <SelectContent>
                             {availableStock.length === 0 ? (
-                              <SelectItem value="empty" disabled>No transferable stock at source</SelectItem>
+                              <SelectItem value="empty" disabled>
+                                No transferable stock at source
+                              </SelectItem>
                             ) : (
                               availableStock.map((stock) => (
                                 <SelectItem key={stock.variantId} value={stock.variantId}>
@@ -305,12 +369,18 @@ export function TransferForm() {
                           </SelectContent>
                         </Select>
                         {form.formState.errors.lines?.[index]?.variantId && (
-                          <p className="text-sm font-medium text-destructive">{form.formState.errors.lines[index]?.variantId?.message}</p>
+                          <p className="text-sm font-medium text-destructive">
+                            {form.formState.errors.lines[index]?.variantId?.message}
+                          </p>
                         )}
                       </div>
                       <div className="w-32 grid gap-2">
-                        {index === 0 && <Label>Quantity <span className="text-destructive">*</span></Label>}
-                        <Input 
+                        {index === 0 && (
+                          <Label>
+                            Quantity <span className="text-destructive">*</span>
+                          </Label>
+                        )}
+                        <Input
                           type="number"
                           min="1"
                           max={selectedStockItem ? selectedStockItem.availableToSell : undefined}
@@ -318,14 +388,16 @@ export function TransferForm() {
                           {...form.register(`lines.${index}.quantity`)}
                         />
                         {form.formState.errors.lines?.[index]?.quantity && (
-                          <p className="text-sm font-medium text-destructive">{form.formState.errors.lines[index]?.quantity?.message}</p>
+                          <p className="text-sm font-medium text-destructive">
+                            {form.formState.errors.lines[index]?.quantity?.message}
+                          </p>
                         )}
                       </div>
                       <div className={`pt-${index === 0 ? '7' : '0'}`}>
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
                           onClick={() => remove(index)}
                           disabled={fields.length === 1}
                           className="text-muted-foreground hover:text-destructive"
@@ -338,9 +410,17 @@ export function TransferForm() {
                 })}
               </div>
             )}
-            
+
             <div className="pt-8 flex justify-end">
-              <Button type="submit" disabled={form.formState.isSubmitting || !sourceLocationId || !destinationLocationId || fields.length === 0}>
+              <Button
+                type="submit"
+                disabled={
+                  form.formState.isSubmitting ||
+                  !sourceLocationId ||
+                  !destinationLocationId ||
+                  fields.length === 0
+                }
+              >
                 <Save className="mr-2 h-4 w-4" />
                 {form.formState.isSubmitting ? 'Creating...' : 'Create Transfer'}
               </Button>

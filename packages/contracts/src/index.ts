@@ -684,13 +684,22 @@ export interface InventoryBalanceDto {
 
 export interface InventoryHistoryDto {
   readonly id: string;
+  readonly transactionId: string;
+  readonly inventoryItemId: string;
+  readonly variantId: string;
   readonly occurredAt: string;
   readonly transactionType: string;
+  readonly transactionNumber: string | null;
   readonly sku: string;
+  readonly productTitle: string;
   readonly locationName: string;
   readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
   readonly quantityDelta: string;
   readonly reasonCode: string | null;
+  readonly reasonText: string | null;
+  readonly referenceType: string | null;
+  readonly referenceId: string | null;
+  readonly actorId: string | null;
 }
 
 export interface WarehouseLocationDto {
@@ -788,15 +797,15 @@ export interface StocktakeSessionDto {
   readonly locationName: string;
   readonly status: 'DRAFT' | 'COUNTING' | 'REVIEW' | 'POSTED' | 'CANCELLED';
   readonly snapshotAt: string;
-  readonly postedAt?: string;
+  readonly postedAt: string | null;
   readonly version: number;
   readonly totalLines: number;
   readonly countedLines: number;
 }
 
 export interface StocktakeDetailDto extends StocktakeSessionDto {
-  readonly createdByActorId?: string;
-  readonly postedInventoryTransactionId?: string;
+  readonly createdByActorId: string | null;
+  readonly postedInventoryTransactionId: string | null;
   readonly lines: readonly StocktakeLineDto[];
 }
 
@@ -806,11 +815,12 @@ export interface StocktakeLineDto {
   readonly variantId: string;
   readonly sku: string;
   readonly productTitle: string;
+  readonly optionSummary: string | null;
   readonly expectedQuantityAtSnapshot: string;
-  readonly countedQuantity?: string | null;
+  readonly countedQuantity: string | null;
   readonly movementsAfterSnapshot: string;
-  readonly finalExpectedQuantity?: string | null;
-  readonly varianceQuantity?: string | null;
+  readonly finalExpectedQuantity: string | null;
+  readonly varianceQuantity: string | null;
   readonly status: 'PENDING' | 'COUNTED' | 'POSTED';
 }
 
@@ -823,7 +833,7 @@ export interface InventoryReservationDto {
   readonly locationId: string;
   readonly locationName: string;
   readonly quantity: string;
-  readonly status: 'ACTIVE' | 'CONSUMED' | 'RELEASED' | 'EXPIRED';
+  readonly status: 'ACTIVE' | 'PARTIALLY_CONSUMED' | 'CONSUMED' | 'RELEASED' | 'EXPIRED';
   readonly sourceType: string;
   readonly sourceReference: string;
   readonly expiresAt?: string;

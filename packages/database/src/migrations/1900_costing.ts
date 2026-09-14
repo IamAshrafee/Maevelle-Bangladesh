@@ -27,10 +27,15 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index costing_layers_fifo on costing.cost_layers (organization_id, location_id, condition_code, received_at, id);
     create table costing.cost_layer_positions (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
-      cost_layer_id uuid not null unique references costing.cost_layers(id), remaining_quantity numeric(20,6) not null check (remaining_quantity >= 0),
+      cost_layer_id uuid not null references costing.cost_layers(id),
+      location_id uuid not null references warehouse.locations(id), condition_code text not null,
+      remaining_quantity numeric(20,6) not null check (remaining_quantity >= 0),
       updated_at timestamptz not null default now(), version integer not null default 1 check (version > 0),
-      unique (organization_id, id), foreign key (organization_id, cost_layer_id) references costing.cost_layers(organization_id, id)
+      unique (organization_id, id), unique (organization_id, cost_layer_id, location_id, condition_code),
+      foreign key (organization_id, cost_layer_id) references costing.cost_layers(organization_id, id),
+      foreign key (organization_id, location_id) references warehouse.locations(organization_id, id)
     );
+    create index costing_layer_positions_fifo on costing.cost_layer_positions (organization_id, location_id, condition_code, cost_layer_id) where remaining_quantity > 0;
     create table costing.cost_layer_adjustments (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), cost_layer_id uuid not null references costing.cost_layers(id),
       worksheet_revision_id uuid not null references landed_cost.worksheet_revisions(id), delta_total_cost numeric(24,8) not null,
@@ -47,7 +52,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create table costing.outbound_cost_assignment_lines (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), outbound_cost_assignment_id uuid not null references costing.outbound_cost_assignments(id),
-      fulfillment_line_id uuid not null references fulfillment.fulfillment_lines(id), cost_layer_id uuid not null references costing.cost_layers(id), quantity numeric(20,6) not null check (quantity > 0),
+      fulfillment_line_id uuid not null references fulfillment.fulfillment_lines(id), cost_layer_id uuid references costing.cost_layers(id), quantity numeric(20,6) not null check (quantity > 0),
       unit_cost numeric(24,8) not null, total_cost numeric(24,8) not null, created_at timestamptz not null default now(),
       unique (outbound_cost_assignment_id, fulfillment_line_id, cost_layer_id), unique (organization_id, id),
       foreign key (organization_id, outbound_cost_assignment_id) references costing.outbound_cost_assignments(organization_id, id),

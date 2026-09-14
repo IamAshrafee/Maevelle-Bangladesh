@@ -245,8 +245,21 @@ export function registerWarehouseRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'warehouse.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      return { data: await listWarehouseTransfers(database.db, active.organizationId, request.query as any) };
-    }
+      return {
+        data: await listWarehouseTransfers(
+          database.db,
+          active.organizationId,
+          request.query as {
+            search?: string;
+            status?: string;
+            sourceLocationId?: string;
+            destinationLocationId?: string;
+            page?: number;
+            limit?: number;
+          },
+        ),
+      };
+    },
   );
 
   app.get('/admin/warehouse/transfers/:transferId', async (request, reply) => {

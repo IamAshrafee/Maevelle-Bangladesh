@@ -61,7 +61,7 @@ export function LocationForm() {
           },
         }),
       });
-      
+
       router.push(`/inventory/warehouses/${result.data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -71,7 +71,12 @@ export function LocationForm() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" type="button" onClick={() => router.push('/inventory/warehouses')}>
+        <Button
+          variant="outline"
+          size="icon"
+          type="button"
+          onClick={() => router.push('/inventory/warehouses')}
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
@@ -96,34 +101,36 @@ export function LocationForm() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="name">Name <span className="text-destructive">*</span></Label>
-              <Input 
-                id="name" 
-                placeholder="e.g. Main Warehouse Dhaka" 
-                {...form.register('name')} 
-              />
+              <Label htmlFor="name">
+                Name <span className="text-destructive">*</span>
+              </Label>
+              <Input id="name" placeholder="e.g. Main Warehouse Dhaka" {...form.register('name')} />
               {form.formState.errors.name && (
-                <p className="text-sm font-medium text-destructive">{form.formState.errors.name.message}</p>
+                <p className="text-sm font-medium text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
               )}
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="code">Location Code <span className="text-destructive">*</span></Label>
-                <Input 
-                  id="code" 
-                  placeholder="e.g. WH-DHAKA-01" 
-                  {...form.register('code')} 
-                />
+                <Label htmlFor="code">
+                  Location Code <span className="text-destructive">*</span>
+                </Label>
+                <Input id="code" placeholder="e.g. WH-DHAKA-01" {...form.register('code')} />
                 {form.formState.errors.code && (
-                  <p className="text-sm font-medium text-destructive">{form.formState.errors.code.message}</p>
+                  <p className="text-sm font-medium text-destructive">
+                    {form.formState.errors.code.message}
+                  </p>
                 )}
               </div>
-              
+
               <div className="grid gap-2">
                 <Label htmlFor="type">Location Type</Label>
-                <Select 
-                  onValueChange={(val) => form.setValue('locationType', val || '', { shouldValidate: true })}
+                <Select
+                  onValueChange={(val) =>
+                    form.setValue('locationType', val || '', { shouldValidate: true })
+                  }
                   value={form.watch('locationType')}
                 >
                   <SelectTrigger id="type">
@@ -132,12 +139,14 @@ export function LocationForm() {
                   <SelectContent>
                     <SelectItem value="WAREHOUSE">Warehouse</SelectItem>
                     <SelectItem value="FULFILLMENT_CENTER">Fulfillment Center</SelectItem>
-                    <SelectItem value="STORE">Retail Store</SelectItem>
-                    <SelectItem value="DROPSHIPPER">Dropshipper</SelectItem>
+                    <SelectItem value="RETAIL_STORE">Retail Store</SelectItem>
+                    <SelectItem value="THIRD_PARTY">Third-party warehouse</SelectItem>
                   </SelectContent>
                 </Select>
                 {form.formState.errors.locationType && (
-                  <p className="text-sm font-medium text-destructive">{form.formState.errors.locationType.message}</p>
+                  <p className="text-sm font-medium text-destructive">
+                    {form.formState.errors.locationType.message}
+                  </p>
                 )}
               </div>
             </div>
@@ -152,13 +161,15 @@ export function LocationForm() {
           <CardContent className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="fullAddress">Full Address</Label>
-              <Input 
-                id="fullAddress" 
-                placeholder="e.g. 123 Logistics Way, Dhaka 1200, Bangladesh" 
-                {...form.register('fullAddress')} 
+              <Input
+                id="fullAddress"
+                placeholder="e.g. 123 Logistics Way, Dhaka 1200, Bangladesh"
+                {...form.register('fullAddress')}
               />
               {form.formState.errors.fullAddress && (
-                <p className="text-sm font-medium text-destructive">{form.formState.errors.fullAddress.message}</p>
+                <p className="text-sm font-medium text-destructive">
+                  {form.formState.errors.fullAddress.message}
+                </p>
               )}
             </div>
 

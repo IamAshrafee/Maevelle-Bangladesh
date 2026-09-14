@@ -25,7 +25,7 @@ export function TransferOverview() {
   const [transfers, setTransfers] = useState<readonly WarehouseTransferDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string>('all');
@@ -39,7 +39,9 @@ export function TransferOverview() {
     if (search) params.set('search', search);
     if (status !== 'all') params.set('status', status);
 
-    inventoryRequest<{ data: PaginatedDto<WarehouseTransferDto> }>(`/warehouse/transfers?${params.toString()}`)
+    inventoryRequest<{ data: PaginatedDto<WarehouseTransferDto> }>(
+      `/warehouse/transfers?${params.toString()}`,
+    )
       .then((res) => {
         setTransfers(res.data.items);
         setHasNext(res.data.items.length === 25);
@@ -78,9 +80,15 @@ export function TransferOverview() {
             />
           </div>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={status} onValueChange={(v) => { setStatus(v || 'all'); setPage(1); }}>
+          <Select
+            value={status}
+            onValueChange={(v) => {
+              setStatus(v || 'all');
+              setPage(1);
+            }}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
@@ -88,7 +96,7 @@ export function TransferOverview() {
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="DRAFT">Draft</SelectItem>
               <SelectItem value="READY">Ready</SelectItem>
-              <SelectItem value="DISPATCHED">Dispatched</SelectItem>
+              <SelectItem value="PARTIALLY_RECEIVED">Partially received</SelectItem>
               <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
               <SelectItem value="RECEIVED">Received</SelectItem>
               <SelectItem value="CANCELLED">Cancelled</SelectItem>
@@ -108,7 +116,11 @@ export function TransferOverview() {
       ) : transfers.length === 0 ? (
         <InventoryEmptyState
           title="No transfers found"
-          description={search || status !== 'all' ? "Try adjusting your filters." : "You haven't created any transfers yet."}
+          description={
+            search || status !== 'all'
+              ? 'Try adjusting your filters.'
+              : "You haven't created any transfers yet."
+          }
         />
       ) : (
         <div className="rounded-md border">
@@ -116,19 +128,35 @@ export function TransferOverview() {
             <table className="w-full caption-bottom text-sm">
               <thead className="[&_tr]:border-b">
                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Transfer #</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Status</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Source</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Transfer #
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Status
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Source
+                  </th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground"></th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Destination</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Created</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Destination
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Created
+                  </th>
                 </tr>
               </thead>
               <tbody className="[&_tr:last-child]:border-0">
                 {transfers.map((transfer) => (
-                  <tr key={transfer.id} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                  <tr
+                    key={transfer.id}
+                    className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                  >
                     <td className="p-4 align-middle font-medium">
-                      <Link href={`/inventory/transfers/${transfer.id}`} className="hover:underline">
+                      <Link
+                        href={`/inventory/transfers/${transfer.id}`}
+                        className="hover:underline"
+                      >
                         {transfer.transferNumber}
                       </Link>
                     </td>
@@ -156,11 +184,7 @@ export function TransferOverview() {
       )}
 
       {(hasNext || page > 1) && (
-        <InventoryPager
-          page={page}
-          hasNext={hasNext}
-          onPageChange={setPage}
-        />
+        <InventoryPager page={page} hasNext={hasNext} onPageChange={setPage} />
       )}
     </div>
   );

@@ -85,16 +85,14 @@ export interface StorefrontSearchResult {
   };
 }
 
-/** Rebuild is deterministic and safe to repeat; source domains are never modified. */
-export async function rebuildStorefrontSearch(
+async function rebuildStorefrontSearchInTransaction(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
 ): Promise<number> {
-  return db.transaction().execute(async (transaction) => {
-    await sql`delete from search.catalog_documents where organization_id=${organizationId}`.execute(
-      transaction,
-    );
-    const inserted = await sql<{ product_id: string }>`
+  await sql`delete from search.catalog_documents where organization_id=${organizationId}`.execute(
+    db,
+  );
+  const inserted = await sql<{ product_id: string }>`
       insert into search.catalog_documents(
         organization_id,product_id,handle,title,description,search_text,category_ids,
         minimum_price,currency_code,available,published_at,projection_version
@@ -119,9 +117,18 @@ export async function rebuildStorefrontSearch(
         )}
       group by p.organization_id,p.id,p.handle,p.title,p.description,p.published_at
       returning product_id
-    `.execute(transaction);
-    return inserted.rows.length;
-  });
+    `.execute(db);
+  return inserted.rows.length;
+}
+
+/** Rebuild is deterministic and safe to repeat; source domains are never modified. */
+export async function rebuildStorefrontSearch(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<number> {
+  return db
+    .transaction()
+    .execute((transaction) => rebuildStorefrontSearchInTransaction(transaction, organizationId));
 }
 
 export async function listPublicCategories(
@@ -300,17 +307,45 @@ export async function processStorefrontSearchOutbox(
     select event.id::text,event.organization_id::text
     from platform.outbox_events event
     left join search.projection_receipts receipt on receipt.source_event_id=event.id
-    where receipt.source_event_id is null and event.event_type like 'catalog.product.%'
+    where receipt.source_event_id is null and (
+      event.event_type like 'catalog.product.%'
+      or event.event_type in (
+        'inventory.adjusted', 'inventory.condition_moved', 'inventory.reservation.created',
+        'inventory.reservation.released', 'inventory.stocktake.posted',
+        'warehouse.transfer.dispatched', 'warehouse.transfer.partially_received',
+        'warehouse.transfer.received', 'receiving.inbound_receipt.posted',
+        'fulfillment.dispatched', 'returns.received'
+      )
+    )
     order by event.occurred_at,event.id limit ${limit}
   `.execute(db);
   let processed = 0;
-  for (const event of pending.rows) {
-    await rebuildStorefrontSearch(db, event.organization_id);
-    const receipt = await sql`
-      insert into search.projection_receipts(source_event_id,organization_id)
-      values(${event.id}::bigint,${event.organization_id}::uuid) on conflict do nothing
-    `.execute(db);
-    if (Number(receipt.numAffectedRows ?? 0) > 0) processed += 1;
+  const byOrganization = new Map<string, string[]>();
+  for (const event of pending.rows)
+    byOrganization.set(event.organization_id, [
+      ...(byOrganization.get(event.organization_id) ?? []),
+      event.id,
+    ]);
+  for (const [organizationId, eventIds] of byOrganization) {
+    processed += await db.transaction().execute(async (tx) => {
+      await sql`select pg_advisory_xact_lock(hashtextextended(${organizationId}, 811))`.execute(tx);
+      const stillPending = await sql<{
+        id: string;
+      }>`select event.id::text from platform.outbox_events event left join search.projection_receipts receipt on receipt.source_event_id = event.id where event.organization_id = ${organizationId} and event.id in (${sql.join(eventIds.map((id) => sql`${id}::bigint`))}) and receipt.source_event_id is null order by event.id`.execute(
+        tx,
+      );
+      if (!stillPending.rows.length) return 0;
+      await rebuildStorefrontSearchInTransaction(tx, organizationId);
+      let claimed = 0;
+      for (const event of stillPending.rows) {
+        const receipt =
+          await sql`insert into search.projection_receipts(source_event_id,organization_id) values(${event.id}::bigint,${organizationId}::uuid) on conflict do nothing`.execute(
+            tx,
+          );
+        claimed += Number(receipt.numAffectedRows ?? 0);
+      }
+      return claimed;
+    });
   }
   return processed;
 }

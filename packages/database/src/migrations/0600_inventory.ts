@@ -72,7 +72,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       idempotency_record_id uuid unique references platform.idempotency_records(id),
       created_by_actor_type text not null default 'USER',
       created_by_actor_id uuid,
-      created_at timestamptz not null default now()
+      created_at timestamptz not null default now(),
+      unique (organization_id, id)
     );
     create index inventory_transactions_organization_time on inventory.inventory_transactions (organization_id, occurred_at desc, id desc);
 
@@ -89,6 +90,14 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       foreign key (organization_id, location_id) references warehouse.locations(organization_id, id)
     );
     create index inventory_movement_lines_history on inventory.inventory_movement_lines (organization_id, inventory_item_id, location_id, created_at desc, id desc);
+    create function inventory.reject_immutable_ledger_mutation() returns trigger language plpgsql as $$
+    begin
+      raise exception 'Inventory ledger evidence is append-only.' using errcode = '55000';
+    end;
+    $$;
+    create trigger inventory_transactions_append_only before update or delete on inventory.inventory_transactions for each row execute function inventory.reject_immutable_ledger_mutation();
+    create trigger inventory_movement_lines_append_only before update or delete on inventory.inventory_movement_lines for each row execute function inventory.reject_immutable_ledger_mutation();
+    revoke update, delete on inventory.inventory_transactions, inventory.inventory_movement_lines from public;
 
     create table inventory.inventory_reservations (
       id uuid primary key default uuidv7(),

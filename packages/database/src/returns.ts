@@ -562,10 +562,16 @@ export async function postReturnReceipt(
       }>`insert into returns.return_receipt_lines (organization_id,return_receipt_id,return_line_id,inventory_item_id,condition_code,quantity) values (${input.organizationId},${receiptId},${line.returnLineId},${line.inventoryItemId},${line.condition},${line.quantity}::numeric) returning id`.execute(
         tx,
       );
-      for (const slice of line.costSlices)
-        await sql`insert into costing.return_cost_layers (organization_id,return_receipt_line_id,inventory_item_id,location_id,condition_code,original_outbound_assignment_line_id,quantity,unit_cost,currency_code) values (${input.organizationId},${inserted.rows[0]!.id},${line.inventoryItemId},${input.locationId},${line.condition},${slice.assignmentLineId},${slice.quantity}::numeric,${slice.unitCost}::numeric,${slice.currency})`.execute(
+      for (const slice of line.costSlices) {
+        const costLayer = await sql<{
+          id: string;
+        }>`insert into costing.return_cost_layers (organization_id,return_receipt_line_id,inventory_item_id,location_id,condition_code,original_outbound_assignment_line_id,quantity,unit_cost,currency_code) values (${input.organizationId},${inserted.rows[0]!.id},${line.inventoryItemId},${input.locationId},${line.condition},${slice.assignmentLineId},${slice.quantity}::numeric,${slice.unitCost}::numeric,${slice.currency}) returning id`.execute(
           tx,
         );
+        await sql`insert into costing.return_cost_layer_positions (organization_id, return_cost_layer_id, location_id, condition_code, remaining_quantity) values (${input.organizationId}, ${costLayer.rows[0]!.id}, ${input.locationId}, ${line.condition}, ${slice.quantity}::numeric)`.execute(
+          tx,
+        );
+      }
       const recognized = line.costSlices.filter((slice) => slice.recognized);
       if (recognized.length) {
         const assignmentIds = new Set(recognized.map((slice) => slice.assignmentId));

@@ -67,6 +67,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       cancelled_quantity numeric(20,6) not null default 0 check (cancelled_quantity >= 0),
       created_at timestamptz not null default now(),
       unique (transfer_id, inventory_item_id),
+      unique (organization_id, id),
       foreign key (organization_id, transfer_id) references warehouse.transfers(organization_id, id),
       check (dispatched_quantity <= requested_quantity - cancelled_quantity),
       check (received_quantity <= dispatched_quantity)

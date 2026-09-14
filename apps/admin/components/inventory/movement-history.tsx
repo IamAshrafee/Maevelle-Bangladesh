@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search, ArrowUpDown, Filter, RotateCcw } from 'lucide-react';
+import { Search, RotateCcw } from 'lucide-react';
 
 import type { PaginatedDto, InventoryHistoryDto, WarehouseLocationDto } from '@maevelle/contracts';
 
@@ -21,34 +21,61 @@ import {
 
 const TRANSACTION_TYPES = [
   { value: 'all', label: 'All Transaction Types' },
-  { value: 'RECEIVE', label: 'Receive (Inbound)' },
-  { value: 'DISPATCH', label: 'Dispatch (Outbound)' },
+  { value: 'OPENING_BALANCE', label: 'Opening Balance' },
+  { value: 'INBOUND_RECEIPT', label: 'Inbound Receipt' },
+  { value: 'RETURN_RECEIPT', label: 'Return Receipt' },
+  { value: 'FULFILLMENT_DISPATCH', label: 'Fulfillment Dispatch' },
+  { value: 'TRANSFER_DISPATCH', label: 'Transfer Dispatch' },
+  { value: 'TRANSFER_RECEIPT', label: 'Transfer Receipt' },
   { value: 'ADJUSTMENT', label: 'Manual Adjustment' },
-  { value: 'RECONCILIATION', label: 'Stocktake Reconciliation' },
-  { value: 'CONDITION_TRANSFER', label: 'Condition Move' },
-  { value: 'RESERVATION_HOLD', label: 'Reservation Hold' },
-  { value: 'RESERVATION_RELEASE', label: 'Reservation Release' },
+  { value: 'STOCKTAKE_ADJUSTMENT', label: 'Stocktake Adjustment' },
+  { value: 'CONDITION_CHANGE', label: 'Condition Move' },
 ];
 
 function TransactionBadge({ type }: { type: string }) {
   switch (type) {
-    case 'RECEIVE':
-      return <Badge className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 border-emerald-300 dark:border-emerald-800">Receive</Badge>;
-    case 'DISPATCH':
-      return <Badge className="bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 border-sky-300 dark:border-sky-800">Dispatch</Badge>;
+    case 'INBOUND_RECEIPT':
+    case 'RETURN_RECEIPT':
+    case 'TRANSFER_RECEIPT':
+      return (
+        <Badge className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 border-emerald-300 dark:border-emerald-800">
+          Receive
+        </Badge>
+      );
+    case 'FULFILLMENT_DISPATCH':
+    case 'TRANSFER_DISPATCH':
+      return (
+        <Badge className="bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 border-sky-300 dark:border-sky-800">
+          Dispatch
+        </Badge>
+      );
     case 'ADJUSTMENT':
-      return <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 border-amber-300 dark:border-amber-800">Adjustment</Badge>;
-    case 'RECONCILIATION':
-      return <Badge className="bg-purple-500/15 text-purple-700 hover:bg-purple-500/25 border-purple-300 dark:border-purple-800">Reconciliation</Badge>;
-    case 'CONDITION_TRANSFER':
-      return <Badge className="bg-orange-500/15 text-orange-700 hover:bg-orange-500/25 border-orange-300 dark:border-orange-800">Condition Move</Badge>;
+      return (
+        <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 border-amber-300 dark:border-amber-800">
+          Adjustment
+        </Badge>
+      );
+    case 'STOCKTAKE_ADJUSTMENT':
+      return (
+        <Badge className="bg-purple-500/15 text-purple-700 hover:bg-purple-500/25 border-purple-300 dark:border-purple-800">
+          Reconciliation
+        </Badge>
+      );
+    case 'CONDITION_CHANGE':
+      return (
+        <Badge className="bg-orange-500/15 text-orange-700 hover:bg-orange-500/25 border-orange-300 dark:border-orange-800">
+          Condition Move
+        </Badge>
+      );
     default:
       return <Badge variant="outline">{type.replace(/_/g, ' ')}</Badge>;
   }
 }
 
 export function MovementHistory() {
-  const [history, setHistory] = useState<readonly (InventoryHistoryDto & { inventoryItemId?: string })[]>([]);
+  const [history, setHistory] = useState<
+    readonly (InventoryHistoryDto & { inventoryItemId?: string })[]
+  >([]);
   const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -105,7 +132,8 @@ export function MovementHistory() {
     setPage(1);
   };
 
-  const hasActiveFilters = locationId !== 'all' || transactionType !== 'all' || search.trim() !== '';
+  const hasActiveFilters =
+    locationId !== 'all' || transactionType !== 'all' || search.trim() !== '';
 
   return (
     <div className="space-y-6">
@@ -209,13 +237,25 @@ export function MovementHistory() {
             <table className="w-full caption-bottom text-sm">
               <thead className="bg-muted/40 text-xs uppercase tracking-wider font-semibold border-b">
                 <tr>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Timestamp</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Item / SKU</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Location</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Transaction</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Condition</th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Timestamp
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Item / SKU
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Location
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Transaction
+                  </th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Condition
+                  </th>
                   <th className="h-10 px-4 text-right font-medium text-muted-foreground">Delta</th>
-                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Reason / Note</th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">
+                    Reason / Note
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y text-xs">
@@ -225,10 +265,7 @@ export function MovementHistory() {
                   const isNegative = deltaNum < 0;
 
                   return (
-                    <tr
-                      key={record.id}
-                      className="hover:bg-muted/40 transition-colors"
-                    >
+                    <tr key={record.id} className="hover:bg-muted/40 transition-colors">
                       <td className="p-4 align-middle text-muted-foreground whitespace-nowrap">
                         {formatInventoryDate(record.occurredAt)}
                       </td>
@@ -267,7 +304,10 @@ export function MovementHistory() {
                         {isPositive ? '+' : ''}
                         {formatInventoryNumber(record.quantityDelta)}
                       </td>
-                      <td className="p-4 align-middle text-muted-foreground max-w-[220px] truncate" title={record.reasonCode || ''}>
+                      <td
+                        className="p-4 align-middle text-muted-foreground max-w-[220px] truncate"
+                        title={record.reasonCode || ''}
+                      >
                         {record.reasonCode ? (
                           <span className="font-mono text-foreground/80">{record.reasonCode}</span>
                         ) : (
@@ -284,11 +324,7 @@ export function MovementHistory() {
       )}
 
       {(hasNext || page > 1) && (
-        <InventoryPager
-          page={page}
-          hasNext={hasNext}
-          onPageChange={setPage}
-        />
+        <InventoryPager page={page} hasNext={hasNext} onPageChange={setPage} />
       )}
     </div>
   );

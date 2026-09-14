@@ -169,4 +169,40 @@ describe('public Storefront projection', () => {
     expect(await processStorefrontSearchOutbox(database.db, 10_000)).toBeGreaterThan(0);
     expect(await processStorefrontSearchOutbox(database.db, 10_000)).toBe(0);
   });
+
+  it('refreshes projected availability once for committed inventory lifecycle events', async () => {
+    const value = await fixture();
+    await rebuildStorefrontSearch(database.db, value.organizationId);
+    await sql`update inventory.inventory_levels set sellable_quantity = 0 where organization_id = ${value.organizationId}`.execute(
+      database.db,
+    );
+    const events = [
+      'inventory.adjusted',
+      'inventory.condition_moved',
+      'inventory.reservation.created',
+      'inventory.reservation.released',
+      'inventory.stocktake.posted',
+      'warehouse.transfer.dispatched',
+      'warehouse.transfer.partially_received',
+      'warehouse.transfer.received',
+      'receiving.inbound_receipt.posted',
+      'fulfillment.dispatched',
+      'returns.received',
+    ];
+    for (const eventType of events)
+      await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values(${value.organizationId},${eventType},1,'inventory.inventory_item',${value.productId},1,'{}',now())`.execute(
+        database.db,
+      );
+
+    expect(await processStorefrontSearchOutbox(database.db, 10_000)).toBe(events.length);
+    expect(
+      (
+        await searchStorefront(database.db, {
+          organizationId: value.organizationId,
+          query: 'Sunset',
+        })
+      ).items[0],
+    ).toMatchObject({ available: false });
+    expect(await processStorefrontSearchOutbox(database.db, 10_000)).toBe(0);
+  });
 });
