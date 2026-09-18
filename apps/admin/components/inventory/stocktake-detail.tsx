@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle, CheckCircle2, Clock, MapPin, Package, Search } from 'lucide-react';
-import type { StocktakeDetailDto } from '@maevelle/contracts';
+import type { CatalogVariantChoiceDto, StocktakeDetailDto } from '@maevelle/contracts';
 
 import { inventoryRequest, formatInventoryNumber } from '@/lib/inventory/api';
 import { InventoryEmptyState } from './inventory-page-ui';
@@ -11,6 +11,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +66,10 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
   const [successMessage, setSuccessMessage] = useState('');
   const [isPosting, setIsPosting] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [foundOpen, setFoundOpen] = useState(false);
+  const [variants, setVariants] = useState<readonly CatalogVariantChoiceDto[]>([]);
+  const [foundVariantId, setFoundVariantId] = useState('');
+  const [isAddingFound, setIsAddingFound] = useState(false);
 
   // Local state for input values — keyed by inventoryItemId
   const [counts, setCounts] = useState<Record<string, string>>({});
@@ -122,7 +141,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     quantitiesByCondition?: Partial<Record<Condition, string>>,
   ) => {
     if (!stocktake || stocktake.status !== 'COUNTING') return;
-    if (!value.trim() || !/^\d+$/.test(value)) return;
+    if (!value.trim() || !/^\d+(?:\.\d{1,6})?$/.test(value)) return;
     setSaving((p) => ({ ...p, [inventoryItemId]: true }));
     setSaveErrors((p) => ({ ...p, [inventoryItemId]: '' }));
     try {
@@ -191,6 +210,43 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     }
   };
 
+  const openFoundSku = async () => {
+    setError(null);
+    try {
+      if (!variants.length) {
+        const response = await inventoryRequest<{ data: readonly CatalogVariantChoiceDto[] }>(
+          '/catalog/variants',
+        );
+        setVariants(response.data);
+      }
+      setFoundOpen(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Catalog variants could not be loaded.');
+    }
+  };
+
+  const addFoundSku = async () => {
+    if (!stocktake || !foundVariantId) return;
+    setIsAddingFound(true);
+    setError(null);
+    try {
+      await inventoryRequest(`/inventory/stocktakes/${stocktakeId}/found-lines`, {
+        method: 'POST',
+        body: JSON.stringify({ variantId: foundVariantId, version: stocktake.version }),
+      });
+      setFoundOpen(false);
+      setFoundVariantId('');
+      setSuccessMessage(
+        'Found SKU added with an expected quantity of zero. Record its physical count.',
+      );
+      await reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Found SKU could not be added.');
+    } finally {
+      setIsAddingFound(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -253,6 +309,13 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
 
         {stocktake.status === 'COUNTING' && (
           <div className="flex shrink-0 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void openFoundSku()}
+              disabled={isTransitioning}
+            >
+              Add found SKU
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger render={<Button variant="outline" disabled={isTransitioning} />}>
                 Cancel stocktake
@@ -316,6 +379,38 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           {successMessage}
         </div>
       )}
+
+      <Dialog open={foundOpen} onOpenChange={setFoundOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a found SKU</DialogTitle>
+            <DialogDescription>
+              Add stock that is physically present but missing from this location’s system balance.
+              It starts with an expected quantity of zero and remains review-gated.
+            </DialogDescription>
+          </DialogHeader>
+          <Select value={foundVariantId} onValueChange={(value) => setFoundVariantId(value ?? '')}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select SKU" />
+            </SelectTrigger>
+            <SelectContent>
+              {variants.map((variant) => (
+                <SelectItem key={variant.id} value={variant.id}>
+                  {variant.productTitle} — {variant.sku}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFoundOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void addFoundSku()} disabled={!foundVariantId || isAddingFound}>
+              {isAddingFound ? 'Adding…' : 'Add to count'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">

@@ -25,7 +25,7 @@ export function StocktakeOverview() {
   const [stocktakes, setStocktakes] = useState<readonly StocktakeSessionDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string>('all');
@@ -38,7 +38,9 @@ export function StocktakeOverview() {
     params.set('limit', '25');
     if (status !== 'all') params.set('status', status);
 
-    inventoryRequest<{ data: PaginatedDto<StocktakeSessionDto> }>(`/inventory/stocktakes?${params.toString()}`)
+    inventoryRequest<{ data: PaginatedDto<StocktakeSessionDto> }>(
+      `/inventory/stocktakes?${params.toString()}`,
+    )
       .then((res) => {
         setStocktakes(res.data.items);
         setHasNext(res.data.items.length === 25);
@@ -53,7 +55,9 @@ export function StocktakeOverview() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Stocktakes</h2>
-          <p className="text-muted-foreground">Conduct physical inventory counts and reconcile variances.</p>
+          <p className="text-muted-foreground">
+            Conduct physical counts, review variances, and reconcile stock.
+          </p>
         </div>
         <Button onClick={() => router.push('/inventory/stocktakes/new')}>
           <Plus className="mr-2 h-4 w-4" />
@@ -77,9 +81,15 @@ export function StocktakeOverview() {
             />
           </div>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={status} onValueChange={(v) => { setStatus(v || 'all'); setPage(1); }}>
+          <Select
+            value={status}
+            onValueChange={(v) => {
+              setStatus(v || 'all');
+              setPage(1);
+            }}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
@@ -105,7 +115,11 @@ export function StocktakeOverview() {
       ) : stocktakes.length === 0 ? (
         <InventoryEmptyState
           title="No stocktakes found"
-          description={status !== 'all' ? "Try adjusting your filters." : "You haven't conducted any stocktakes yet."}
+          description={
+            status !== 'all'
+              ? 'Try adjusting your filters.'
+              : "You haven't conducted any stocktakes yet."
+          }
         />
       ) : (
         <div className="rounded-md border">
@@ -113,28 +127,44 @@ export function StocktakeOverview() {
             <table className="w-full caption-bottom text-sm">
               <thead className="[&_tr]:border-b">
                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">ID</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Status</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Location</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Started At</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Completed At</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    ID
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Status
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Location
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Started At
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Completed At
+                  </th>
                 </tr>
               </thead>
               <tbody className="[&_tr:last-child]:border-0">
                 {stocktakes.map((stocktake) => (
-                  <tr key={stocktake.id} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                  <tr
+                    key={stocktake.id}
+                    className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                  >
                     <td className="p-4 align-middle font-medium">
-                      <Link href={`/inventory/stocktakes/${stocktake.id}`} className="hover:underline flex items-center gap-2">
+                      <Link
+                        href={`/inventory/stocktakes/${stocktake.id}`}
+                        className="hover:underline flex items-center gap-2"
+                      >
                         <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                        {stocktake.id.slice(0, 8)}
+                        {stocktake.stocktakeNumber}
                       </Link>
                     </td>
                     <td className="p-4 align-middle">
-                      <Badge variant={stocktake.status === 'COUNTING' ? 'default' : 'outline'}>{stocktake.status}</Badge>
+                      <Badge variant={stocktake.status === 'COUNTING' ? 'default' : 'outline'}>
+                        {stocktake.status}
+                      </Badge>
                     </td>
-                    <td className="p-4 align-middle">
-                      {stocktake.locationId}
-                    </td>
+                    <td className="p-4 align-middle">{stocktake.locationName}</td>
                     <td className="p-4 align-middle text-muted-foreground">
                       {formatInventoryDate(stocktake.snapshotAt)}
                     </td>
@@ -150,11 +180,7 @@ export function StocktakeOverview() {
       )}
 
       {(hasNext || page > 1) && (
-        <InventoryPager
-          page={page}
-          hasNext={hasNext}
-          onPageChange={setPage}
-        />
+        <InventoryPager page={page} hasNext={hasNext} onPageChange={setPage} />
       )}
     </div>
   );

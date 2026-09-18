@@ -3,12 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
 
 import { inventoryRequest } from '@/lib/inventory/api';
 import type { WarehouseLocationDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -32,9 +30,16 @@ export function StocktakeForm() {
     let mounted = true;
     const fetchLocations = async () => {
       try {
-        const response = await inventoryRequest<{ data: WarehouseLocationDto[] }>('/warehouse/locations');
+        const response = await inventoryRequest<{ data: WarehouseLocationDto[] }>(
+          '/warehouse/locations',
+        );
         if (mounted) {
-          setLocations(response.data || []);
+          setLocations(
+            (response.data || []).filter(
+              (location) =>
+                location.status === 'ACTIVE' && location.capabilities.includes('STOCK_HOLDING'),
+            ),
+          );
           setIsLoadingLocations(false);
         }
       } catch (err) {
@@ -45,7 +50,9 @@ export function StocktakeForm() {
       }
     };
     fetchLocations();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,13 +61,16 @@ export function StocktakeForm() {
     setError(null);
 
     try {
-      const result = await inventoryRequest<{ data: { stocktakeId: string } }>('/inventory/stocktakes', {
-        method: 'POST',
-        body: JSON.stringify({
-          locationId,
-        }),
-      });
-      
+      const result = await inventoryRequest<{ data: { stocktakeId: string } }>(
+        '/inventory/stocktakes',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            locationId,
+          }),
+        },
+      );
+
       router.push(`/inventory/stocktakes/${result.data.stocktakeId}`);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -71,7 +81,12 @@ export function StocktakeForm() {
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" type="button" onClick={() => router.push('/inventory/stocktakes')}>
+        <Button
+          variant="outline"
+          size="icon"
+          type="button"
+          onClick={() => router.push('/inventory/stocktakes')}
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
@@ -96,11 +111,19 @@ export function StocktakeForm() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="location">Location <span className="text-destructive">*</span></Label>
-              <Select value={locationId} onValueChange={(val) => setLocationId(val || '')} disabled={isLoadingLocations}>
+              <Label htmlFor="location">
+                Location <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={locationId}
+                onValueChange={(val) => setLocationId(val || '')}
+                disabled={isLoadingLocations}
+              >
                 <SelectTrigger id="location">
-                  <SelectValue placeholder={isLoadingLocations ? "Loading locations..." : "Select a location"}>
-                    {locationId ? locations.find(l => l.id === locationId)?.name : undefined}
+                  <SelectValue
+                    placeholder={isLoadingLocations ? 'Loading locations...' : 'Select a location'}
+                  >
+                    {locationId ? locations.find((l) => l.id === locationId)?.name : undefined}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -111,9 +134,11 @@ export function StocktakeForm() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">This will capture a snapshot of all current system balances for this location.</p>
+              <p className="text-xs text-muted-foreground">
+                This will capture a snapshot of all current system balances for this location.
+              </p>
             </div>
-            
+
             <div className="pt-4 flex justify-end">
               <Button type="submit" disabled={isSubmitting || isLoadingLocations || !locationId}>
                 <Save className="mr-2 h-4 w-4" />
