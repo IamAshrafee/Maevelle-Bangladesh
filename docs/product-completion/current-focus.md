@@ -12,7 +12,7 @@ reviewable reconciliation process rather than a thin quantity-editing flow.
 
 ## Current Status / Substage
 
-`READY` — `INVENTORY_STOCKTAKE_RECONCILIATION_HARDENING`
+`IN_PROGRESS` — `INVENTORY_STOCKTAKE_RECONCILIATION_HARDENING`
 
 ## Evidence Already Known
 
@@ -24,17 +24,17 @@ existing safe release/fulfillment coordination.
 
 ## Immediate Objective
 
-Make physical stocktake a safe reconciliation authority: serialize snapshot and
-posting against stock movement, support count review/approval and cancellation,
-record condition-aware found/short counts, and expose a practical operator flow.
+Complete the last financial-integrity boundary in physical stocktake: ensure a
+condition-aware count moves existing cost provenance between conditions instead
+of incorrectly treating a reclassification as a write-off plus unvalued gain.
 
 ## Last Completed Action
 
-Transfer Operations completed at `ce3d571`: selective receipt does not infer
-disposition for omitted lines, and Missing/Lost closure is authenticated,
-tenant-scoped, idempotent, audited, outboxed, visible in Admin, and reconciled
-through cost allocations. Fresh baseline migration and 23 focused integration
-tests passed.
+Stocktake hardening reached `e335f28`: review/cancel lifecycle, concurrency
+locking, condition-aware counts, found-SKU lines, and the responsive Admin
+workflow are implemented and focused checks passed. Cost-position treatment of
+condition reclassification remains the final validation/correction before
+closing this stage.
 
 ## Important Constraints
 
