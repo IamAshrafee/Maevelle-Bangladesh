@@ -9,6 +9,7 @@ import type { WarehouseTransferDetailDto, WarehouseTransferLineDto } from '@maev
 import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
 import { InventoryEmptyState } from './inventory-page-ui';
 import { ReceiveTransferSheet } from './receive-transfer-sheet';
+import { CloseTransferDiscrepancySheet } from './close-transfer-discrepancy-sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -35,7 +36,7 @@ function StatusBadge({ status }: { status: string }) {
         : status === 'CANCELLED'
           ? ('destructive' as const)
           : ('outline' as const);
-  return <Badge variant={variant}>{status.replace('_', ' ')}</Badge>;
+  return <Badge variant={variant}>{status.replaceAll('_', ' ')}</Badge>;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -48,6 +49,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [discrepancyOpen, setDiscrepancyOpen] = useState(false);
 
   const load = async () => {
     try {
@@ -239,9 +241,14 @@ export function TransferDetail({ transferId }: { transferId: string }) {
           )}
 
           {(transfer.status === 'IN_TRANSIT' || transfer.status === 'PARTIALLY_RECEIVED') && (
-            <Button onClick={() => setReceiveOpen(true)} disabled={busy}>
-              Receive Transfer
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setDiscrepancyOpen(true)} disabled={busy}>
+                Resolve missing stock
+              </Button>
+              <Button onClick={() => setReceiveOpen(true)} disabled={busy}>
+                Receive Transfer
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -363,6 +370,9 @@ export function TransferDetail({ transferId }: { transferId: string }) {
                     <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
                       Received
                     </th>
+                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
+                      Discrepancy
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="[&_tr:last-child]:border-0">
@@ -390,6 +400,16 @@ export function TransferDetail({ transferId }: { transferId: string }) {
                       <td className="px-4 py-3 text-right align-middle tabular-nums font-medium text-emerald-600">
                         {formatInventoryNumber(line.receivedQuantity)}
                       </td>
+                      <td className="px-4 py-3 text-right align-middle tabular-nums">
+                        {line.discrepancy ? (
+                          <span className="text-amber-700" title={line.discrepancy.reasonCode}>
+                            {formatInventoryNumber(line.discrepancy.quantity)}{' '}
+                            {line.discrepancy.dispositionCode.toLowerCase()}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -407,6 +427,16 @@ export function TransferDetail({ transferId }: { transferId: string }) {
         onClose={() => setReceiveOpen(false)}
         onSuccess={(msg) => {
           setSuccessMessage(msg);
+          void load();
+        }}
+      />
+      <CloseTransferDiscrepancySheet
+        transferId={transferId}
+        lines={lines}
+        open={discrepancyOpen}
+        onClose={() => setDiscrepancyOpen(false)}
+        onSuccess={(message) => {
+          setSuccessMessage(message);
           void load();
         }}
       />

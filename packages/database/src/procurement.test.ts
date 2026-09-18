@@ -6,6 +6,7 @@ import { getInventoryValuation, verifyCostingIntegrity } from './costing.js';
 import {
   adjustInventory,
   approveWarehouseTransfer,
+  closeWarehouseTransferDiscrepancy,
   createWarehouseTransfer,
   dispatchWarehouseTransfer,
   listInventoryBalances,
@@ -15,6 +16,7 @@ import {
   recordStocktakeCount,
   receiveWarehouseTransfer,
   startStocktake,
+  verifyInventoryIntegrity,
 } from './inventory.js';
 import {
   addPurchaseLine,
@@ -33,7 +35,7 @@ import {
   updateSupplier,
 } from './procurement.js';
 import { createOrganization } from './platform.js';
-import { createLocation } from './warehouse.js';
+import { createLocation, getTransferDetail } from './warehouse.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -471,6 +473,121 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       database.db,
     );
     expect(transferEvidence.rows[0]).toEqual({ dispatched: '2.000000', received: '2.000000' });
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
+  });
+
+  it('closes a confirmed transfer shortage without leaving stock or cost in transit', async () => {
+    const input = await fixture();
+    const destination = await createLocation(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      code: `DST-${crypto.randomUUID().slice(0, 5)}`,
+      name: 'Shortage destination',
+      locationType: 'WAREHOUSE',
+      capabilities: ['STOCK_HOLDING', 'TRANSFER_RECEIVE'],
+    });
+    const shipment = await shipmentFor(input);
+    const arrived = await markShipmentArrived(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: shipment.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await postInboundReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      lines: [
+        {
+          shipmentAllocationId: arrived.allocations[0]!.id,
+          condition: 'SELLABLE',
+          quantity: '5',
+        },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const transfer = await createWarehouseTransfer(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      sourceLocationId: input.locationId,
+      destinationLocationId: destination.id,
+      lines: [{ variantId: input.variantId, quantity: '3' }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await approveWarehouseTransfer(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      transferId: transfer.transferId,
+      expectedVersion: transfer.version,
+    });
+    await dispatchWarehouseTransfer(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      transferId: transfer.transferId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const transferLine = await sql<{
+      id: string;
+    }>`select id from warehouse.transfer_lines where transfer_id = ${transfer.transferId}`.execute(
+      database.db,
+    );
+    const discrepancyInput = {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      transferId: transfer.transferId,
+      lines: [
+        {
+          transferLineId: transferLine.rows[0]!.id,
+          dispositionCode: 'MISSING' as const,
+          quantity: '3',
+          reasonCode: 'CARRIER_SHORTAGE',
+          notes: 'Confirmed at destination handover.',
+        },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const closed = await closeWarehouseTransferDiscrepancy(database.db, discrepancyInput);
+    await expect(closeWarehouseTransferDiscrepancy(database.db, discrepancyInput)).resolves.toEqual(
+      closed,
+    );
+    expect(closed.status).toBe('CLOSED_WITH_DISCREPANCY');
+    await expect(
+      receiveWarehouseTransfer(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        transferId: transfer.transferId,
+        lines: [{ transferLineId: transferLine.rows[0]!.id, sellableQuantity: '1' }],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(
+      await getTransferDetail(database.db, input.organizationId, transfer.transferId),
+    ).toMatchObject({
+      status: 'CLOSED_WITH_DISCREPANCY',
+      lines: [
+        expect.objectContaining({
+          discrepancy: expect.objectContaining({
+            dispositionCode: 'MISSING',
+            quantity: '3.000000',
+            reasonCode: 'CARRIER_SHORTAGE',
+          }),
+        }),
+      ],
+    });
+    const transferEvidence = await sql<{
+      dispatched: string;
+      received: string;
+      written_off: string;
+    }>`select sum(dispatched_quantity)::text as dispatched, sum(received_quantity)::text as received, sum(written_off_quantity)::text as written_off from costing.transfer_cost_allocations where organization_id = ${input.organizationId}`.execute(
+      database.db,
+    );
+    expect(transferEvidence.rows[0]).toEqual({
+      dispatched: '3.000000',
+      received: '0.000000',
+      written_off: '3.000000',
+    });
+    expect(await verifyInventoryIntegrity(database.db, input.organizationId)).toEqual([]);
     expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
   });
 

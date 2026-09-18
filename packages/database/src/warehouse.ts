@@ -241,8 +241,35 @@ export async function getLocationDetail(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   locationId: string,
-): Promise<any | undefined> {
-  const result = await sql<any>`
+): Promise<
+  | (LocationSummary & {
+      readonly address: unknown;
+      readonly inventorySummary: {
+        readonly totalOnHand: string;
+        readonly totalAvailable: string;
+        readonly totalReserved: string;
+        readonly totalDamaged: string;
+        readonly totalIncoming: string;
+        readonly lowStockSkus: number;
+      };
+    })
+  | undefined
+> {
+  const result = await sql<{
+    id: string;
+    code: string;
+    name: string;
+    location_type: string;
+    status: LocationSummary['status'];
+    version: string;
+    capabilities: string[] | null;
+    address_json: unknown;
+    total_on_hand: string;
+    total_available: string;
+    total_reserved: string;
+    total_damaged: string;
+    low_stock_skus: string;
+  }>`
     select location.id, location.code, location.name, location.location_type, location.status, location.version::text,
       location.address_json,
       array_remove(array_agg(capability.capability_code order by capability.capability_code), null) as capabilities,
@@ -429,13 +456,21 @@ export async function getTransferDetail(
     dispatched_quantity: string;
     received_quantity: string;
     cancelled_quantity: string;
+    discrepancy_disposition_code: 'MISSING' | 'LOST' | null;
+    discrepancy_quantity: string | null;
+    discrepancy_reason_code: string | null;
+    discrepancy_notes: string | null;
+    discrepancy_recorded_at: Date | null;
     variant_id: string;
     sku: string;
     product_title: string;
   }>`
     select tl.id, tl.inventory_item_id, tl.requested_quantity::text, tl.dispatched_quantity::text, tl.received_quantity::text, tl.cancelled_quantity::text,
+      discrepancy.disposition_code as discrepancy_disposition_code, discrepancy.quantity::text as discrepancy_quantity,
+      discrepancy.reason_code as discrepancy_reason_code, discrepancy.notes as discrepancy_notes, discrepancy.recorded_at as discrepancy_recorded_at,
       item.variant_id, variant.sku, product.title as product_title
     from warehouse.transfer_lines tl
+    left join warehouse.transfer_line_discrepancies discrepancy on discrepancy.organization_id = tl.organization_id and discrepancy.transfer_line_id = tl.id
     join inventory.inventory_items item on item.id = tl.inventory_item_id
     join catalog.product_variants variant on variant.id = item.variant_id
     join catalog.products product on product.id = variant.product_id
@@ -461,6 +496,15 @@ export async function getTransferDetail(
     dispatchedQuantity: String(line.dispatched_quantity),
     receivedQuantity: String(line.received_quantity),
     cancelledQuantity: String(line.cancelled_quantity),
+    discrepancy: line.discrepancy_quantity
+      ? {
+          dispositionCode: line.discrepancy_disposition_code!,
+          quantity: line.discrepancy_quantity,
+          reasonCode: line.discrepancy_reason_code!,
+          notes: line.discrepancy_notes ?? undefined,
+          recordedAt: line.discrepancy_recorded_at!.toISOString(),
+        }
+      : undefined,
   }));
 
   return {

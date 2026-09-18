@@ -451,7 +451,17 @@ export function registerWarehouseRoutes(
             organizationId: active.organizationId,
             actorId: active.actorId,
             transferId: (request.params as { transferId: string }).transferId,
-            lines: (request.body as never as { lines: never[] }).lines,
+            lines: (
+              request.body as {
+                lines: {
+                  transferLineId: string;
+                  dispositionCode: 'MISSING' | 'LOST';
+                  quantity: string;
+                  reasonCode: string;
+                  notes?: string;
+                }[];
+              }
+            ).lines,
             idempotencyKey: key,
           }),
         };

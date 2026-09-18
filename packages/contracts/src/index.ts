@@ -1079,6 +1079,16 @@ export interface WarehouseTransferLineDto {
   readonly dispatchedQuantity: string;
   readonly receivedQuantity: string;
   readonly cancelledQuantity: string;
+  /** Quantity permanently resolved as missing/lost while this transfer was in transit. */
+  readonly discrepancy?: WarehouseTransferDiscrepancyDto;
+}
+
+export interface WarehouseTransferDiscrepancyDto {
+  readonly dispositionCode: 'MISSING' | 'LOST';
+  readonly quantity: string;
+  readonly reasonCode: string;
+  readonly notes?: string;
+  readonly recordedAt: string;
 }
 
 export interface StocktakeSessionDto {

@@ -1197,7 +1197,9 @@ export async function listInventoryPositions(
         select line.organization_id, line.inventory_item_id, transfer.destination_location_id
         from warehouse.transfer_lines line
         join warehouse.transfers transfer on transfer.id=line.transfer_id and transfer.organization_id=line.organization_id
+        left join warehouse.transfer_line_discrepancies discrepancy on discrepancy.organization_id=line.organization_id and discrepancy.transfer_line_id=line.id
         where transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED')
+          and line.dispatched_quantity > line.received_quantity + coalesce(discrepancy.quantity, 0)
         union
         select allocation.organization_id, item.id, shipment.receiving_location_id
         from inbound_shipment.purchase_line_allocations allocation
@@ -1237,17 +1239,19 @@ export async function listInventoryPositions(
         and movement.location_id = level.location_id
     ) last_movement on true
     left join lateral (
-      select coalesce(sum(line.dispatched_quantity - line.received_quantity), 0) as quantity
+      select coalesce(sum(line.dispatched_quantity - line.received_quantity - coalesce(discrepancy.quantity, 0)), 0) as quantity
       from warehouse.transfer_lines line
       join warehouse.transfers transfer on transfer.id = line.transfer_id and transfer.organization_id = line.organization_id
+      left join warehouse.transfer_line_discrepancies discrepancy on discrepancy.organization_id = line.organization_id and discrepancy.transfer_line_id = line.id
       where line.organization_id = level.organization_id and line.inventory_item_id = level.inventory_item_id
         and transfer.destination_location_id = level.location_id
         and transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED')
     ) incoming_transfer on true
     left join lateral (
-      select coalesce(sum(line.dispatched_quantity - line.received_quantity), 0) as quantity
+      select coalesce(sum(line.dispatched_quantity - line.received_quantity - coalesce(discrepancy.quantity, 0)), 0) as quantity
       from warehouse.transfer_lines line
       join warehouse.transfers transfer on transfer.id = line.transfer_id and transfer.organization_id = line.organization_id
+      left join warehouse.transfer_line_discrepancies discrepancy on discrepancy.organization_id = line.organization_id and discrepancy.transfer_line_id = line.id
       where line.organization_id = level.organization_id and line.inventory_item_id = level.inventory_item_id
         and transfer.source_location_id = level.location_id
         and transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED')
@@ -1718,7 +1722,7 @@ export async function verifyInventoryIntegrity(
     `.execute(db),
       sql<{
         id: string;
-      }>`select line.id from warehouse.transfer_lines line where line.organization_id = ${organizationId} and (line.received_quantity > line.dispatched_quantity or line.dispatched_quantity + line.cancelled_quantity > line.requested_quantity or (line.dispatched_quantity > line.received_quantity and not exists (select 1 from warehouse.transfers transfer where transfer.id = line.transfer_id and transfer.organization_id = line.organization_id and transfer.status in ('IN_TRANSIT', 'PARTIALLY_RECEIVED'))))`.execute(
+      }>`select line.id from warehouse.transfer_lines line left join warehouse.transfer_line_discrepancies discrepancy on discrepancy.organization_id = line.organization_id and discrepancy.transfer_line_id = line.id join warehouse.transfers transfer on transfer.id = line.transfer_id and transfer.organization_id = line.organization_id where line.organization_id = ${organizationId} and (line.received_quantity + coalesce(discrepancy.quantity, 0) > line.dispatched_quantity or line.dispatched_quantity + line.cancelled_quantity > line.requested_quantity or ((line.dispatched_quantity > line.received_quantity + coalesce(discrepancy.quantity, 0)) and transfer.status not in ('IN_TRANSIT', 'PARTIALLY_RECEIVED')) or ((line.dispatched_quantity = line.received_quantity + coalesce(discrepancy.quantity, 0)) and transfer.status not in ('RECEIVED', 'CLOSED_WITH_DISCREPANCY')) or (transfer.status = 'RECEIVED' and coalesce(discrepancy.quantity, 0) > 0))`.execute(
         db,
       ),
       sql<{
@@ -1771,6 +1775,7 @@ export async function createWarehouseTransfer(
   input: {
     organizationId: string;
     actorId: string;
+    sourceLocationId: string;
     destinationLocationId: string;
     lines: readonly { variantId: string; quantity: string }[];
     notes?: string | null;
@@ -2190,7 +2195,7 @@ export async function receiveWarehouseTransfer(
         id: string;
         inventory_item_id: string;
         remaining: string;
-      }>`select id, inventory_item_id, (dispatched_quantity - received_quantity)::text as remaining from warehouse.transfer_lines where id = ${receipt.transferLineId} and transfer_id = ${header.id} and organization_id = ${input.organizationId} for update`.execute(
+      }>`select line.id, line.inventory_item_id, (line.dispatched_quantity - line.received_quantity - coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id = line.id), 0))::text as remaining from warehouse.transfer_lines line where line.id = ${receipt.transferLineId} and line.transfer_id = ${header.id} and line.organization_id = ${input.organizationId} for update`.execute(
         transaction,
       );
       const source = line.rows[0];
@@ -2250,7 +2255,7 @@ export async function receiveWarehouseTransfer(
     });
     const remaining = await sql<{
       count: string;
-    }>`select count(*)::text as count from warehouse.transfer_lines where transfer_id = ${header.id} and dispatched_quantity > received_quantity`.execute(
+    }>`select count(*)::text as count from warehouse.transfer_lines line where line.transfer_id = ${header.id} and line.dispatched_quantity > line.received_quantity + coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id = line.id), 0)`.execute(
       transaction,
     );
     const status = Number(remaining.rows[0]?.count ?? 0) === 0 ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
@@ -2337,10 +2342,10 @@ export async function closeWarehouseTransferDiscrepancy(
       }>`select line.id, (line.dispatched_quantity - line.received_quantity - coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id=line.id), 0))::text as remaining from warehouse.transfer_lines line where line.id=${entry.transferLineId} and line.transfer_id=${header.id} and line.organization_id=${input.organizationId} for update`.execute(
         transaction,
       );
-      if (!line.rows[0] || subtract(line.rows[0].remaining, entry.quantity).startsWith('-'))
+      if (!line.rows[0] || subtract(line.rows[0].remaining, entry.quantity) !== '0')
         throw new InventoryDomainError(
           'VALIDATION_FAILED',
-          'Discrepancy exceeds the quantity still in transit.',
+          'A discrepancy must resolve all remaining quantity for its transfer line.',
         );
       await sql`insert into warehouse.transfer_line_discrepancies (organization_id, transfer_line_id, disposition_code, quantity, reason_code, notes, recorded_by_actor_id) values (${input.organizationId}, ${entry.transferLineId}, ${entry.dispositionCode}, ${entry.quantity}::numeric, ${entry.reasonCode.trim()}, ${entry.notes?.trim() || null}, ${input.actorId})`.execute(
         transaction,

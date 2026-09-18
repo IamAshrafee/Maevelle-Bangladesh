@@ -668,7 +668,7 @@ export async function receiveTransferCostPositionsInTransaction(
       cost_layer_id: string | null;
       return_cost_layer_id: string | null;
       remaining: string;
-    }>`select id, cost_layer_id, return_cost_layer_id, (dispatched_quantity - received_quantity)::text as remaining from costing.transfer_cost_allocations where organization_id = ${input.organizationId} and transfer_line_id = ${line.transferLineId} and dispatched_quantity > received_quantity order by created_at, id for update`.execute(
+    }>`select id, cost_layer_id, return_cost_layer_id, (dispatched_quantity - received_quantity - written_off_quantity)::text as remaining from costing.transfer_cost_allocations where organization_id = ${input.organizationId} and transfer_line_id = ${line.transferLineId} and dispatched_quantity > received_quantity + written_off_quantity order by created_at, id for update`.execute(
       tx,
     );
     let allocationIndex = 0;
@@ -1525,7 +1525,7 @@ export async function verifyCostingIntegrity(
         and layer.original_quantity <>
           coalesce((select sum(position.remaining_quantity) from costing.cost_layer_positions position where position.cost_layer_id = layer.id), 0)
           + coalesce((select sum(line.quantity) from costing.outbound_cost_assignment_lines line where line.cost_layer_id = layer.id), 0)
-          + coalesce((select sum(allocation.dispatched_quantity - allocation.received_quantity) from costing.transfer_cost_allocations allocation where allocation.cost_layer_id = layer.id), 0)
+          + coalesce((select sum(allocation.dispatched_quantity - allocation.received_quantity - allocation.written_off_quantity) from costing.transfer_cost_allocations allocation where allocation.cost_layer_id = layer.id), 0)
           + coalesce((select sum(movement.quantity) from costing.inventory_cost_position_movements movement where movement.cost_layer_id = layer.id and movement.movement_kind = 'WRITE_OFF'), 0)
       union all
       select layer.id
@@ -1534,7 +1534,7 @@ export async function verifyCostingIntegrity(
         and layer.quantity <>
           coalesce((select sum(position.remaining_quantity) from costing.return_cost_layer_positions position where position.return_cost_layer_id = layer.id), 0)
           + coalesce((select sum(line.quantity) from costing.outbound_cost_assignment_lines line where line.return_cost_layer_id = layer.id), 0)
-          + coalesce((select sum(allocation.dispatched_quantity - allocation.received_quantity) from costing.transfer_cost_allocations allocation where allocation.return_cost_layer_id = layer.id), 0)
+          + coalesce((select sum(allocation.dispatched_quantity - allocation.received_quantity - allocation.written_off_quantity) from costing.transfer_cost_allocations allocation where allocation.return_cost_layer_id = layer.id), 0)
           + coalesce((select sum(movement.quantity) from costing.inventory_cost_position_movements movement where movement.return_cost_layer_id = layer.id and movement.movement_kind = 'WRITE_OFF'), 0)
     `.execute(db),
   ]);

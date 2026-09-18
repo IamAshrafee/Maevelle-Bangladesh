@@ -7,7 +7,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
   await sql`
     create schema if not exists returns;
     alter table inventory.inventory_transactions drop constraint inventory_transactions_transaction_type_check;
-    alter table inventory.inventory_transactions add constraint inventory_transactions_transaction_type_check check (transaction_type in ('OPENING_BALANCE', 'ADJUSTMENT', 'CONDITION_CHANGE', 'TRANSFER_DISPATCH', 'TRANSFER_RECEIPT', 'STOCKTAKE_ADJUSTMENT', 'FULFILLMENT_DISPATCH', 'INBOUND_RECEIPT', 'RETURN_RECEIPT'));
+    alter table inventory.inventory_transactions add constraint inventory_transactions_transaction_type_check check (transaction_type in ('OPENING_BALANCE', 'ADJUSTMENT', 'CONDITION_CHANGE', 'TRANSFER_DISPATCH', 'TRANSFER_RECEIPT', 'TRANSFER_WRITE_OFF', 'STOCKTAKE_ADJUSTMENT', 'FULFILLMENT_DISPATCH', 'INBOUND_RECEIPT', 'RETURN_RECEIPT'));
 
     create table returns.return_cases (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),

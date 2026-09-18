@@ -29,6 +29,7 @@ export interface ReceivableTransferLine {
   requestedQuantity: string;
   dispatchedQuantity: string;
   receivedQuantity: string;
+  discrepancy?: { quantity: string };
 }
 
 interface Props {
@@ -65,7 +66,10 @@ type FormValues = z.infer<typeof formSchema>;
 // ─── Line with required defaults ─────────────────────────────────────────────
 
 function defaultLine(l: ReceivableTransferLine): FormValues['lines'][number] {
-  const remaining = Number(l.dispatchedQuantity) - Number(l.receivedQuantity);
+  const remaining =
+    Number(l.dispatchedQuantity) -
+    Number(l.receivedQuantity) -
+    Number(l.discrepancy?.quantity ?? 0);
   return {
     transferLineId: l.id,
     sku: l.sku,
@@ -83,7 +87,9 @@ function defaultLine(l: ReceivableTransferLine): FormValues['lines'][number] {
 
 export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSuccess }: Props) {
   const receivableLines = lines.filter(
-    (l) => Number(l.dispatchedQuantity) > Number(l.receivedQuantity),
+    (l) =>
+      Number(l.dispatchedQuantity) >
+      Number(l.receivedQuantity) + Number(l.discrepancy?.quantity ?? 0),
   );
 
   const [submitError, setSubmitError] = useState('');

@@ -99,6 +99,7 @@ export function TransferOverview() {
               <SelectItem value="PARTIALLY_RECEIVED">Partially received</SelectItem>
               <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
               <SelectItem value="RECEIVED">Received</SelectItem>
+              <SelectItem value="CLOSED_WITH_DISCREPANCY">Closed with discrepancy</SelectItem>
               <SelectItem value="CANCELLED">Cancelled</SelectItem>
             </SelectContent>
           </Select>
