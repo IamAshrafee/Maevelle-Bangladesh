@@ -13,7 +13,7 @@ unit dispatched but not received.
 
 ## Current Status / Substage
 
-`PLANNED` — `INVENTORY_TRANSFER_OPERATIONS_COMPLETION`
+`IN_PROGRESS` — `INVENTORY_TRANSFER_OPERATIONS_COMPLETION`
 
 ## Evidence Already Known
 
@@ -31,10 +31,11 @@ owned quantity, condition, value, and history in transit.
 
 ## Next Exact Action
 
-Revalidate Transfer contracts and current Admin workflows at `373d7e8`. First
-close idempotent create and versioned Draft-line editing, including scalable
-SKU selection and capability-valid Location choices; then proceed to selective
-receipt and shortage/damage/loss closure.
+The first Transfer slice is complete at `decf74d`: create requests now replay
+safely, current Drafts can be replaced with optimistic concurrency, and Admin
+exposes a real Edit Draft route with capability-valid Locations. Next, make
+partial receipt selective and close dispatched-but-unreceived quantity only
+through an explicit shortage, damage, or loss disposition.
 
 ## Important Constraints
 
