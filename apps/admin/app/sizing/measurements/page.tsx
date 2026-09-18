@@ -3,7 +3,7 @@
 import { Archive, Pencil, Plus, RotateCcw, Search } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { MeasurementDefinitionDto, SizingDomainDto } from '@maevelle/contracts';
+import type { MeasurementDefinitionDto, SizingDomainDto, SizingMeasurementUnitDto } from '@maevelle/contracts';
 
 import {
   archiveMeasurementDefinition,
@@ -33,7 +33,7 @@ type EditingState = {
   description: string;
   instructions: string;
   sortOrder: string;
-  defaultUnit: 'cm' | 'inch';
+  defaultUnit: SizingMeasurementUnitDto;
 } | null;
 
 function slug(value: FormDataEntryValue | null) {
@@ -99,7 +99,7 @@ export default function MeasurementsPage() {
         code: slug(form.get('code')),
         name: String(form.get('name') ?? '').trim(),
         subjectType: (form.get('subjectType') as 'BODY' | 'GARMENT' | 'PRODUCT') || 'GARMENT',
-        defaultUnit: (form.get('defaultUnit') as 'cm' | 'inch') || 'cm',
+        defaultUnit: (form.get('defaultUnit') as SizingMeasurementUnitDto) || 'cm',
         sortOrder: Number(form.get('sortOrder') ?? 0),
         ...(description ? { description } : {}),
         ...(instructions ? { instructions } : {}),
@@ -191,7 +191,7 @@ export default function MeasurementsPage() {
                 </label>
                 <label className="text-xs font-medium text-slate-700">Default unit
                   <select name="defaultUnit" defaultValue="cm" className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                    <option value="cm">cm</option><option value="inch">inch</option>
+                    <option value="cm">cm</option><option value="inch">inch</option><option value="kg">kg</option>
                   </select>
                 </label>
               </div>
@@ -232,7 +232,7 @@ export default function MeasurementsPage() {
                       {isEditing ? (
                         <div className="grid gap-3 md:grid-cols-2">
                           <label className="text-xs font-medium text-slate-700">Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5" /></label>
-                          <label className="text-xs font-medium text-slate-700">Default unit<select value={editing.defaultUnit} onChange={(event) => setEditing({ ...editing, defaultUnit: event.target.value as 'cm' | 'inch' })} className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5"><option value="cm">cm</option><option value="inch">inch</option></select></label>
+                          <label className="text-xs font-medium text-slate-700">Default unit<select value={editing.defaultUnit} onChange={(event) => setEditing({ ...editing, defaultUnit: event.target.value as SizingMeasurementUnitDto })} className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5"><option value="cm">cm</option><option value="inch">inch</option><option value="kg">kg</option></select></label>
                           <label className="text-xs font-medium text-slate-700 md:col-span-2">Description<input value={editing.description} onChange={(event) => setEditing({ ...editing, description: event.target.value })} className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5" /></label>
                           <label className="text-xs font-medium text-slate-700 md:col-span-2">Instructions<textarea rows={2} value={editing.instructions} onChange={(event) => setEditing({ ...editing, instructions: event.target.value })} className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5" /></label>
                           <label className="text-xs font-medium text-slate-700">Sort order<input type="number" min="0" value={editing.sortOrder} onChange={(event) => setEditing({ ...editing, sortOrder: event.target.value })} className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5" /></label>
