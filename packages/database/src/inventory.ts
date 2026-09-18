@@ -2725,6 +2725,19 @@ export async function postStocktake(
       condition: InventoryCondition;
       quantityDelta: string;
     }[] = [];
+    const conditionMoves: {
+      inventoryItemId: string;
+      fromCondition: InventoryCondition;
+      toCondition: InventoryCondition;
+      quantity: string;
+    }[] = [];
+    const losses: { inventoryItemId: string; condition: InventoryCondition; quantity: string }[] =
+      [];
+    const additions: {
+      inventoryItemId: string;
+      condition: InventoryCondition;
+      quantity: string;
+    }[] = [];
     for (const line of lines.rows) {
       const variance = subtract(line.counted_quantity!, line.actual_quantity);
       const countedConditions = readConditionQuantities(line.counted_condition_quantities);
@@ -2742,6 +2755,56 @@ export async function postStocktake(
             quantityDelta: conditionVariance,
           });
       }
+      const lineLosses = inventoryConditions
+        .map((condition) => ({
+          condition,
+          quantity: subtract(
+            actualConditions[condition] ?? '0',
+            countedConditions[condition] ?? '0',
+          ),
+        }))
+        .filter((entry) => entry.quantity !== '0' && !entry.quantity.startsWith('-'));
+      const lineAdditions = inventoryConditions
+        .map((condition) => ({
+          condition,
+          quantity: subtract(
+            countedConditions[condition] ?? '0',
+            actualConditions[condition] ?? '0',
+          ),
+        }))
+        .filter((entry) => entry.quantity !== '0' && !entry.quantity.startsWith('-'));
+      for (const loss of lineLosses) {
+        let remaining = loss.quantity;
+        for (const addition of lineAdditions) {
+          if (remaining === '0') break;
+          if (addition.quantity === '0') continue;
+          const quantity =
+            fixedQuantity(remaining) < fixedQuantity(addition.quantity)
+              ? remaining
+              : addition.quantity;
+          conditionMoves.push({
+            inventoryItemId: line.inventory_item_id,
+            fromCondition: loss.condition,
+            toCondition: addition.condition,
+            quantity,
+          });
+          remaining = subtract(remaining, quantity);
+          addition.quantity = subtract(addition.quantity, quantity);
+        }
+        if (remaining !== '0')
+          losses.push({
+            inventoryItemId: line.inventory_item_id,
+            condition: loss.condition,
+            quantity: remaining,
+          });
+      }
+      for (const addition of lineAdditions)
+        if (addition.quantity !== '0')
+          additions.push({
+            inventoryItemId: line.inventory_item_id,
+            condition: addition.condition,
+            quantity: addition.quantity,
+          });
       await sql`update inventory.stocktake_lines set movements_after_snapshot = ${subtract(line.actual_quantity, line.expected_quantity_at_snapshot)}::numeric, final_expected_quantity = ${line.actual_quantity}::numeric, variance_quantity = ${variance}::numeric, status = 'POSTED', version = version + 1 where stocktake_session_id = ${header.id} and inventory_item_id = ${line.inventory_item_id}`.execute(
         transaction,
       );
@@ -2756,26 +2819,35 @@ export async function postStocktake(
       idempotencyRecordId: started.recordId,
       lines: movements,
     });
-    for (const movement of movements)
-      if (movement.quantityDelta.startsWith('-'))
-        await consumeCostPositionsForInventoryLossInTransaction(transaction, {
-          organizationId: input.organizationId,
-          inventoryItemId: movement.inventoryItemId,
-          locationId: movement.locationId,
-          condition: movement.condition,
-          quantity: movement.quantityDelta.slice(1),
-          inventoryTransactionId,
-        });
-      else
-        await recordUnvaluedInventoryAdditionInTransaction(transaction, {
-          organizationId: input.organizationId,
-          inventoryTransactionId,
-          inventoryItemId: movement.inventoryItemId,
-          locationId: movement.locationId,
-          condition: movement.condition,
-          quantity: movement.quantityDelta,
-          reasonCode: 'STOCKTAKE_CORRECTION',
-        });
+    for (const move of conditionMoves)
+      await moveCostPositionsInTransaction(transaction, {
+        organizationId: input.organizationId,
+        inventoryItemId: move.inventoryItemId,
+        locationId: header.location_id,
+        fromCondition: move.fromCondition,
+        toCondition: move.toCondition,
+        quantity: move.quantity,
+        inventoryTransactionId,
+      });
+    for (const loss of losses)
+      await consumeCostPositionsForInventoryLossInTransaction(transaction, {
+        organizationId: input.organizationId,
+        inventoryItemId: loss.inventoryItemId,
+        locationId: header.location_id,
+        condition: loss.condition,
+        quantity: loss.quantity,
+        inventoryTransactionId,
+      });
+    for (const addition of additions)
+      await recordUnvaluedInventoryAdditionInTransaction(transaction, {
+        organizationId: input.organizationId,
+        inventoryTransactionId,
+        inventoryItemId: addition.inventoryItemId,
+        locationId: header.location_id,
+        condition: addition.condition,
+        quantity: addition.quantity,
+        reasonCode: 'STOCKTAKE_CORRECTION',
+      });
     await sql`update inventory.stocktake_sessions set status = 'POSTED', posted_inventory_transaction_id = ${inventoryTransactionId}, posted_at = now(), version = version + 1 where id = ${header.id}`.execute(
       transaction,
     );

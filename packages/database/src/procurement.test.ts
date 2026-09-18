@@ -403,6 +403,79 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
   });
 
+  it('reclassifies stocktake condition variance without writing off acquired cost', async () => {
+    const input = await fixture();
+    const shipment = await shipmentFor(input);
+    const arrived = await markShipmentArrived(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: shipment.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await postInboundReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      lines: [
+        {
+          shipmentAllocationId: arrived.allocations[0]!.id,
+          condition: 'SELLABLE',
+          quantity: '5',
+        },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const item = await sql<{
+      id: string;
+    }>`select id from inventory.inventory_items where organization_id = ${input.organizationId} and variant_id = ${input.variantId}`.execute(
+      database.db,
+    );
+    const stocktake = await startStocktake(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      locationId: input.locationId,
+    });
+    await recordStocktakeCount(database.db, {
+      organizationId: input.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: item.rows[0]!.id,
+      countedQuantity: '5',
+      countedQuantitiesByCondition: { SELLABLE: '4', DAMAGED: '1' },
+      expectedVersion: stocktake.version,
+    });
+    await submitStocktakeForReview(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
+    });
+    await postStocktake(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const valuation = await getInventoryValuation(database.db, {
+      organizationId: input.organizationId,
+      locationId: input.locationId,
+    });
+    expect(valuation.map((row) => [row.condition_code, row.quantity])).toEqual([
+      ['DAMAGED', '1.000000'],
+      ['SELLABLE', '4.000000'],
+    ]);
+    const costMovements = await sql<{
+      kind: string;
+      quantity: string;
+    }>`select movement_kind as kind, sum(quantity)::text as quantity from costing.inventory_cost_position_movements where organization_id = ${input.organizationId} group by movement_kind order by movement_kind`.execute(
+      database.db,
+    );
+    expect(costMovements.rows).toEqual([{ kind: 'CONDITION_MOVE', quantity: '1.000000' }]);
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
+  });
+
   it('moves acquired cost provenance with a warehouse transfer', async () => {
     const input = await fixture();
     const destination = await createLocation(database.db, {
