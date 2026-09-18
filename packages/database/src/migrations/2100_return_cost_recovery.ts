@@ -31,7 +31,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       transfer_line_id uuid not null references warehouse.transfer_lines(id), dispatch_inventory_transaction_id uuid not null references inventory.inventory_transactions(id),
       cost_layer_id uuid references costing.cost_layers(id),
       return_cost_layer_id uuid references costing.return_cost_layers(id), dispatched_quantity numeric(20,6) not null check (dispatched_quantity > 0),
-      received_quantity numeric(20,6) not null default 0 check (received_quantity >= 0 and received_quantity <= dispatched_quantity),
+      received_quantity numeric(20,6) not null default 0 check (received_quantity >= 0 and received_quantity <= dispatched_quantity), written_off_quantity numeric(20,6) not null default 0 check (written_off_quantity >= 0 and received_quantity + written_off_quantity <= dispatched_quantity),
       created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
       unique (organization_id, id),
       check (num_nonnulls(cost_layer_id, return_cost_layer_id) = 1),

@@ -39,7 +39,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       transfer_number text not null,
       source_location_id uuid not null,
       destination_location_id uuid not null,
-      status text not null default 'DRAFT' check (status in ('DRAFT', 'READY', 'IN_TRANSIT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED')),
+      status text not null default 'DRAFT' check (status in ('DRAFT', 'READY', 'IN_TRANSIT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CLOSED_WITH_DISCREPANCY', 'CANCELLED')),
       notes text,
       created_by_actor_id uuid,
       approved_at timestamptz,
@@ -73,6 +73,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       check (received_quantity <= dispatched_quantity)
     );
     create index transfer_lines_organization_transfer on warehouse.transfer_lines (organization_id, transfer_id);
+    create table warehouse.transfer_line_discrepancies (id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), transfer_line_id uuid not null references warehouse.transfer_lines(id), disposition_code text not null check (disposition_code in ('MISSING', 'LOST')), quantity numeric(20,6) not null check (quantity > 0), reason_code text not null check (length(trim(reason_code)) > 0), notes text, recorded_by_actor_id uuid, recorded_at timestamptz not null default now(), unique (transfer_line_id), unique (organization_id, id), foreign key (organization_id, transfer_line_id) references warehouse.transfer_lines(organization_id, id));
 
     alter table catalog.product_variants add constraint product_variants_organization_id_id_unique unique (organization_id, id);
 

@@ -62,7 +62,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table inventory.inventory_transactions (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
-      transaction_type text not null check (transaction_type in ('OPENING_BALANCE', 'ADJUSTMENT', 'CONDITION_CHANGE', 'TRANSFER_DISPATCH', 'TRANSFER_RECEIPT', 'STOCKTAKE_ADJUSTMENT')),
+      transaction_type text not null check (transaction_type in ('OPENING_BALANCE', 'ADJUSTMENT', 'CONDITION_CHANGE', 'TRANSFER_DISPATCH', 'TRANSFER_RECEIPT', 'TRANSFER_WRITE_OFF', 'STOCKTAKE_ADJUSTMENT')),
       transaction_number text,
       occurred_at timestamptz not null default now(),
       reason_code text,

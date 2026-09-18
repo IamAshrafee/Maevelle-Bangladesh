@@ -709,6 +709,49 @@ export async function receiveTransferCostPositionsInTransaction(
   }
 }
 
+/** Resolves value that was dispatched but will never arrive at the destination. */
+export async function writeOffTransferCostPositionsInTransaction(
+  tx: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    sourceLocationId: string;
+    inventoryTransactionId: string;
+    lines: readonly { transferLineId: string; quantity: string }[];
+  },
+): Promise<void> {
+  for (const line of input.lines) {
+    let required = fixed(line.quantity, quantityScale);
+    const allocations = await sql<{
+      id: string;
+      cost_layer_id: string | null;
+      return_cost_layer_id: string | null;
+      available: string;
+    }>`select id, cost_layer_id, return_cost_layer_id, (dispatched_quantity - received_quantity - written_off_quantity)::text as available from costing.transfer_cost_allocations where organization_id=${input.organizationId} and transfer_line_id=${line.transferLineId} and dispatched_quantity > received_quantity + written_off_quantity order by created_at, id for update`.execute(
+      tx,
+    );
+    for (const allocation of allocations.rows) {
+      if (required <= 0n) break;
+      const quantityFixed =
+        fixed(allocation.available, quantityScale) < required
+          ? fixed(allocation.available, quantityScale)
+          : required;
+      const quantity = decimal(quantityFixed, quantityScale);
+      await sql`update costing.transfer_cost_allocations set written_off_quantity = written_off_quantity + ${quantity}::numeric, updated_at = now() where id=${allocation.id}`.execute(
+        tx,
+      );
+      await sql`insert into costing.inventory_cost_position_movements (organization_id, inventory_transaction_id, movement_kind, cost_layer_id, return_cost_layer_id, from_location_id, from_condition_code, quantity) values (${input.organizationId}, ${input.inventoryTransactionId}, 'WRITE_OFF', ${allocation.cost_layer_id}::uuid, ${allocation.return_cost_layer_id}::uuid, ${input.sourceLocationId}, 'SELLABLE', ${quantity}::numeric)`.execute(
+        tx,
+      );
+      required -= quantityFixed;
+    }
+    if (required > 0n)
+      throw new CostingDomainError(
+        'CONFLICT',
+        'Transfer cost allocation no longer covers the discrepancy.',
+      );
+  }
+}
+
 async function distributeLayerAdjustmentToOutboundFacts(
   tx: Transaction<DatabaseSchema>,
   input: {

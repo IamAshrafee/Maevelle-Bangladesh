@@ -7,6 +7,7 @@ import {
   moveCostPositionsInTransaction,
   recordUnvaluedInventoryAdditionInTransaction,
   receiveTransferCostPositionsInTransaction,
+  writeOffTransferCostPositionsInTransaction,
 } from './costing.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { requireActiveLocationCapability } from './warehouse.js';
@@ -18,6 +19,7 @@ export type InventoryTransactionType =
   | 'CONDITION_CHANGE'
   | 'TRANSFER_DISPATCH'
   | 'TRANSFER_RECEIPT'
+  | 'TRANSFER_WRITE_OFF'
   | 'STOCKTAKE_ADJUSTMENT'
   | 'FULFILLMENT_DISPATCH'
   | 'INBOUND_RECEIPT'
@@ -2277,6 +2279,118 @@ export async function receiveWarehouseTransfer(
           : 'warehouse.transfer.partially_received',
       targetType: 'warehouse.transfer',
       targetId: header.id,
+    });
+    return response;
+  });
+}
+
+export async function closeWarehouseTransferDiscrepancy(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    transferId: string;
+    sourceLocationId: string;
+    lines: readonly {
+      transferLineId: string;
+      dispositionCode: 'MISSING' | 'LOST';
+      quantity: string;
+      reasonCode: string;
+      notes?: string;
+    }[];
+    idempotencyKey: string;
+  },
+): Promise<{ transferId: string; inventoryTransactionId: string; status: string }> {
+  if (!input.lines.length)
+    throw new InventoryDomainError('VALIDATION_FAILED', 'Select at least one remaining line.');
+  return db.transaction().execute(async (transaction) => {
+    const started = await beginIdempotent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      operation: 'warehouse.transfer.close_discrepancy',
+      idempotencyKey: input.idempotencyKey,
+      request: input,
+    });
+    if (started.replay)
+      return started.replay as {
+        transferId: string;
+        inventoryTransactionId: string;
+        status: string;
+      };
+    const transfer = await sql<{
+      id: string;
+      source_location_id: string;
+      status: string;
+    }>`select id, source_location_id, status from warehouse.transfers where id=${input.transferId} and organization_id=${input.organizationId} for update`.execute(
+      transaction,
+    );
+    const header = transfer.rows[0];
+    if (!header) throw new InventoryDomainError('NOT_FOUND', 'Transfer was not found.');
+    if (!['IN_TRANSIT', 'PARTIALLY_RECEIVED'].includes(header.status))
+      throw new InventoryDomainError('CONFLICT', 'Transfer is not awaiting reconciliation.');
+    const resolved: { transferLineId: string; quantity: string }[] = [];
+    for (const entry of input.lines) {
+      assertQuantity(entry.quantity, 'Discrepancy quantity');
+      if (!entry.reasonCode.trim())
+        throw new InventoryDomainError('VALIDATION_FAILED', 'A discrepancy reason is required.');
+      const line = await sql<{
+        id: string;
+        remaining: string;
+      }>`select line.id, (line.dispatched_quantity - line.received_quantity - coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id=line.id), 0))::text as remaining from warehouse.transfer_lines line where line.id=${entry.transferLineId} and line.transfer_id=${header.id} and line.organization_id=${input.organizationId} for update`.execute(
+        transaction,
+      );
+      if (!line.rows[0] || subtract(line.rows[0].remaining, entry.quantity).startsWith('-'))
+        throw new InventoryDomainError(
+          'VALIDATION_FAILED',
+          'Discrepancy exceeds the quantity still in transit.',
+        );
+      await sql`insert into warehouse.transfer_line_discrepancies (organization_id, transfer_line_id, disposition_code, quantity, reason_code, notes, recorded_by_actor_id) values (${input.organizationId}, ${entry.transferLineId}, ${entry.dispositionCode}, ${entry.quantity}::numeric, ${entry.reasonCode.trim()}, ${entry.notes?.trim() || null}, ${input.actorId})`.execute(
+        transaction,
+      );
+      resolved.push({ transferLineId: entry.transferLineId, quantity: entry.quantity });
+    }
+    const inventoryTransactionId = await postTransaction(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      transactionType: 'TRANSFER_WRITE_OFF',
+      reasonCode: 'TRANSFER_DISCREPANCY',
+      referenceType: 'warehouse.transfer',
+      referenceId: header.id,
+      idempotencyRecordId: started.recordId,
+      lines: [],
+    });
+    await writeOffTransferCostPositionsInTransaction(transaction, {
+      organizationId: input.organizationId,
+      sourceLocationId: header.source_location_id,
+      inventoryTransactionId,
+      lines: resolved,
+    });
+    const open = await sql<{
+      count: string;
+    }>`select count(*)::text as count from warehouse.transfer_lines line where line.transfer_id=${header.id} and line.dispatched_quantity > line.received_quantity + coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id=line.id), 0)`.execute(
+      transaction,
+    );
+    const status =
+      Number(open.rows[0]?.count ?? 0) === 0 ? 'CLOSED_WITH_DISCREPANCY' : 'PARTIALLY_RECEIVED';
+    await sql`update warehouse.transfers set status=${status}, completed_at=case when ${status}='CLOSED_WITH_DISCREPANCY' then now() else completed_at end, version=version+1, updated_at=now() where id=${header.id}`.execute(
+      transaction,
+    );
+    const response = { transferId: header.id, inventoryTransactionId, status };
+    await completeIdempotency(
+      transaction,
+      started.recordId!,
+      'warehouse.transfer',
+      header.id,
+      response,
+    );
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'warehouse.transfer.discrepancy_closed',
+      eventType: 'warehouse.transfer.discrepancy_closed',
+      targetType: 'warehouse.transfer',
+      targetId: header.id,
+      metadata: { lineCount: resolved.length },
     });
     return response;
   });
