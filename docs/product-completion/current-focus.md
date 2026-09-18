@@ -7,13 +7,12 @@ Admin Inventory Operations
 ## Why Now
 
 Inventory Workspace, traceability, and Reservation/Order lifecycle completion
-are complete. The next operational gap is internal Transfer execution: draft
-correction, reliable retry, selective receiving, and explicit closure for every
-unit dispatched but not received.
+are complete. The next operational gap is making physical counting a safe,
+reviewable reconciliation process rather than a thin quantity-editing flow.
 
 ## Current Status / Substage
 
-`IN_PROGRESS` — `INVENTORY_TRANSFER_OPERATIONS_COMPLETION`
+`READY` — `INVENTORY_STOCKTAKE_RECONCILIATION_HARDENING`
 
 ## Evidence Already Known
 
@@ -25,17 +24,17 @@ existing safe release/fulfillment coordination.
 
 ## Immediate Objective
 
-Make Warehouse Transfers operationally complete from editable Draft through
-dispatch, selective receipt, and authorized discrepancy closure while preserving
-owned quantity, condition, value, and history in transit.
+Make physical stocktake a safe reconciliation authority: serialize snapshot and
+posting against stock movement, support count review/approval and cancellation,
+record condition-aware found/short counts, and expose a practical operator flow.
 
-## Next Exact Action
+## Last Completed Action
 
-The first Transfer slice is complete at `decf74d`: create requests now replay
-safely, current Drafts can be replaced with optimistic concurrency, and Admin
-exposes a real Edit Draft route with capability-valid Locations. Next, make
-partial receipt selective and close dispatched-but-unreceived quantity only
-through an explicit shortage, damage, or loss disposition.
+Transfer Operations completed at `ce3d571`: selective receipt does not infer
+disposition for omitted lines, and Missing/Lost closure is authenticated,
+tenant-scoped, idempotent, audited, outboxed, visible in Admin, and reconciled
+through cost allocations. Fresh baseline migration and 23 focused integration
+tests passed.
 
 ## Important Constraints
 
