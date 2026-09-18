@@ -6,13 +6,12 @@ Admin Inventory Operations
 
 ## Why Now
 
-Inventory Workspace, traceability, and Reservation/Order lifecycle completion
-are complete. The next operational gap is making physical counting a safe,
-reviewable reconciliation process rather than a thin quantity-editing flow.
+The active Inventory hardening work is complete. Inventory operations is left
+idle until a new repository-evidenced capability is selected.
 
 ## Current Status / Substage
 
-`IN_PROGRESS` — `INVENTORY_STOCKTAKE_RECONCILIATION_HARDENING`
+`IDLE`
 
 ## Evidence Already Known
 
@@ -24,17 +23,15 @@ existing safe release/fulfillment coordination.
 
 ## Immediate Objective
 
-Complete the last financial-integrity boundary in physical stocktake: ensure a
-condition-aware count moves existing cost provenance between conditions instead
-of incorrectly treating a reclassification as a write-off plus unvalued gain.
+None. Reassess the current repository before starting the next Inventory
+capability.
 
 ## Last Completed Action
 
-Stocktake hardening reached `e335f28`: review/cancel lifecycle, concurrency
-locking, condition-aware counts, found-SKU lines, and the responsive Admin
-workflow are implemented and focused checks passed. Cost-position treatment of
-condition reclassification remains the final validation/correction before
-closing this stage.
+Stocktake hardening closed at `e799499`: review/cancel lifecycle, concurrency
+locking, condition-aware counts, found-SKU lines, responsive Admin workflow,
+and cost-safe condition reclassification are implemented. See
+`areas/admin-inventory-operations/stocktake-reconciliation-closeout.md`.
 
 ## Important Constraints
 
@@ -46,5 +43,5 @@ movements are immutable facts; corrections must be new explainable movements.
 ## Blockers / Owner Review
 
 No technical blocker is recorded. Authenticated visual/owner review remains a
-distinct review gate and does not weaken the automated transaction and contract
-evidence.
+distinct review gate for the Admin UI and was not performed in this
+checkpoint.
