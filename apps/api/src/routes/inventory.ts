@@ -428,14 +428,31 @@ export function registerInventoryRoutes(
     '/admin/inventory/stocktakes/:stocktakeId/lines/:inventoryItemId/count',
     {
       schema: {
-        body: Type.Object({ countedQuantity: quantity, version: Type.Integer({ minimum: 1 }) }),
+        body: Type.Object({
+          countedQuantity: quantity,
+          countedQuantitiesByCondition: Type.Optional(
+            Type.Object({
+              SELLABLE: Type.Optional(quantity),
+              DAMAGED: Type.Optional(quantity),
+              QUARANTINE: Type.Optional(quantity),
+              INSPECTION: Type.Optional(quantity),
+            }),
+          ),
+          version: Type.Integer({ minimum: 1 }),
+        }),
       },
     },
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.stocktake');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
-        const body = request.body as { countedQuantity: string; version: number };
+        const body = request.body as {
+          countedQuantity: string;
+          countedQuantitiesByCondition?: Partial<
+            Record<'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION', string>
+          >;
+          version: number;
+        };
         await recordStocktakeCount(database.db, {
           organizationId: active.organizationId,
           stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,

@@ -1118,7 +1118,13 @@ export interface StocktakeLineDto {
   readonly productTitle: string;
   readonly optionSummary: string | null;
   readonly expectedQuantityAtSnapshot: string;
+  readonly expectedQuantitiesByCondition: Partial<
+    Record<'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION', string>
+  >;
   readonly countedQuantity: string | null;
+  readonly countedQuantitiesByCondition: Partial<
+    Record<'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION', string>
+  > | null;
   readonly movementsAfterSnapshot: string;
   readonly finalExpectedQuantity: string | null;
   readonly varianceQuantity: string | null;

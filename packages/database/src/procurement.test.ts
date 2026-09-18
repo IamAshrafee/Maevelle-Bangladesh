@@ -366,6 +366,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       stocktakeId: stocktake.stocktakeId,
       inventoryItemId: item.rows[0]!.id,
       countedQuantity: '3',
+      countedQuantitiesByCondition: { SELLABLE: '2', DAMAGED: '1' },
       expectedVersion: stocktake.version,
     });
     await submitStocktakeForReview(database.db, {

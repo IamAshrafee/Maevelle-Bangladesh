@@ -820,6 +820,53 @@ describe('ledger-backed inventory', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
+  it('reconciles a stocktake by physical condition rather than forcing variance into sellable stock', async () => {
+    const f = await fixture();
+    const opened = await opening(f, '5');
+    await moveInventoryCondition(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.main.id,
+      fromCondition: 'SELLABLE',
+      toCondition: 'DAMAGED',
+      quantity: '2',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const stocktake = await startStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+    });
+    await recordStocktakeCount(database.db, {
+      organizationId: f.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: opened.inventoryItemId,
+      countedQuantity: '5',
+      countedQuantitiesByCondition: { SELLABLE: '2', DAMAGED: '3' },
+      expectedVersion: stocktake.version,
+    });
+    const reviewed = await submitStocktakeForReview(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
+    });
+    await postStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(reviewed.version).toBe(stocktake.version + 2);
+    expect((await listInventoryBalances(database.db, f.organizationId)).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ condition: 'SELLABLE', onHand: '2' }),
+        expect.objectContaining({ condition: 'DAMAGED', onHand: '3' }),
+      ]),
+    );
+  });
+
   it('serializes stocktake posting against concurrent balance adjustments', async () => {
     const f = await fixture();
     const opened = await opening(f, '5');

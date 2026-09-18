@@ -13,6 +13,12 @@ import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } fr
 import { requireActiveLocationCapability } from './warehouse.js';
 
 export type InventoryCondition = 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+const inventoryConditions: readonly InventoryCondition[] = [
+  'SELLABLE',
+  'DAMAGED',
+  'QUARANTINE',
+  'INSPECTION',
+];
 export type InventoryTransactionType =
   | 'OPENING_BALANCE'
   | 'ADJUSTMENT'
@@ -151,6 +157,34 @@ function sumPositiveQuantities(values: readonly string[]): string {
   const total = values.reduce((sum, value) => sum + fixedQuantity(value), 0n);
   const fraction = (total % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
   return `${total / 1_000_000n}${fraction ? `.${fraction}` : ''}`;
+}
+
+type ConditionQuantities = Partial<Record<InventoryCondition, string>>;
+
+function normalizeConditionQuantities(input: ConditionQuantities): ConditionQuantities {
+  const normalized: ConditionQuantities = {};
+  for (const condition of inventoryConditions) {
+    const quantity = input[condition];
+    if (quantity === undefined) continue;
+    if (!/^\d+(?:\.\d{1,6})?$/.test(quantity))
+      throw new InventoryDomainError(
+        'VALIDATION_FAILED',
+        'Condition counts must be non-negative decimals with at most six places.',
+      );
+    normalized[condition] = subtract(quantity, '0');
+  }
+  return normalized;
+}
+
+function readConditionQuantities(value: unknown): ConditionQuantities {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const source = value as Record<string, unknown>;
+  const result: ConditionQuantities = {};
+  for (const condition of inventoryConditions)
+    if (typeof source[condition] === 'string') result[condition] = subtract(source[condition], '0');
+    else if (typeof source[condition] === 'number')
+      result[condition] = subtract(String(source[condition]), '0');
+  return result;
 }
 
 async function ensureItem(
@@ -2417,9 +2451,11 @@ export async function startStocktake(
     );
     const stocktakeId = created.rows[0]?.id;
     if (!stocktakeId) throw new Error('Stocktake creation did not return an id.');
-    await sql`insert into inventory.stocktake_lines (organization_id, stocktake_session_id, inventory_item_id, expected_quantity_at_snapshot)
-      select ${input.organizationId}, ${stocktakeId}, level.inventory_item_id, (level.sellable_quantity + level.unavailable_quantity)
-      from inventory.inventory_levels level where level.organization_id = ${input.organizationId} and level.location_id = ${input.locationId}`.execute(
+    await sql`insert into inventory.stocktake_lines (organization_id, stocktake_session_id, inventory_item_id, expected_quantity_at_snapshot, expected_condition_quantities)
+      select ${input.organizationId}, ${stocktakeId}, level.inventory_item_id, (level.sellable_quantity + level.unavailable_quantity), coalesce(conditions.quantities, '{}'::jsonb)
+      from inventory.inventory_levels level
+      left join lateral (select jsonb_object_agg(condition.condition_code, condition.quantity) as quantities from inventory.inventory_level_conditions condition where condition.organization_id = level.organization_id and condition.inventory_item_id = level.inventory_item_id and condition.location_id = level.location_id) conditions on true
+      where level.organization_id = ${input.organizationId} and level.location_id = ${input.locationId}`.execute(
       transaction,
     );
     await emit(transaction, {
@@ -2442,6 +2478,7 @@ export async function recordStocktakeCount(
     stocktakeId: string;
     inventoryItemId: string;
     countedQuantity: string;
+    countedQuantitiesByCondition?: ConditionQuantities;
     expectedVersion: number;
   },
 ): Promise<void> {
@@ -2449,6 +2486,16 @@ export async function recordStocktakeCount(
     throw new InventoryDomainError(
       'VALIDATION_FAILED',
       'Counted quantity must be a non-negative decimal with at most six places.',
+    );
+  const countedConditions = input.countedQuantitiesByCondition
+    ? normalizeConditionQuantities(input.countedQuantitiesByCondition)
+    : { SELLABLE: subtract(input.countedQuantity, '0') };
+  if (
+    sumPositiveQuantities(Object.values(countedConditions)) !== subtract(input.countedQuantity, '0')
+  )
+    throw new InventoryDomainError(
+      'VALIDATION_FAILED',
+      'Condition counts must add up to the total counted quantity.',
     );
   await db.transaction().execute(async (transaction) => {
     const session = await sql<{
@@ -2467,7 +2514,7 @@ export async function recordStocktakeCount(
       );
     const updated = await sql<{
       id: string;
-    }>`update inventory.stocktake_lines set counted_quantity = ${input.countedQuantity}::numeric, status = 'COUNTED', version = version + 1 where stocktake_session_id = ${input.stocktakeId} and organization_id = ${input.organizationId} and inventory_item_id = ${input.inventoryItemId} returning id`.execute(
+    }>`update inventory.stocktake_lines set counted_quantity = ${input.countedQuantity}::numeric, counted_condition_quantities = ${JSON.stringify(countedConditions)}::jsonb, status = 'COUNTED', version = version + 1 where stocktake_session_id = ${input.stocktakeId} and organization_id = ${input.organizationId} and inventory_item_id = ${input.inventoryItemId} returning id`.execute(
       transaction,
     );
     if (!updated.rows[0])
@@ -2607,8 +2654,10 @@ export async function postStocktake(
       inventory_item_id: string;
       expected_quantity_at_snapshot: string;
       counted_quantity: string | null;
+      counted_condition_quantities: unknown;
       actual_quantity: string;
-    }>`select line.inventory_item_id, line.expected_quantity_at_snapshot::text, line.counted_quantity::text, (level.sellable_quantity + level.unavailable_quantity)::text as actual_quantity from inventory.stocktake_lines line join inventory.inventory_levels level on level.organization_id = line.organization_id and level.inventory_item_id = line.inventory_item_id and level.location_id = ${header.location_id} where line.stocktake_session_id = ${header.id} and line.organization_id = ${input.organizationId} order by line.inventory_item_id for update of line, level`.execute(
+      actual_condition_quantities: unknown;
+    }>`select line.inventory_item_id, line.expected_quantity_at_snapshot::text, line.counted_quantity::text, line.counted_condition_quantities, (level.sellable_quantity + level.unavailable_quantity)::text as actual_quantity, coalesce(conditions.quantities, '{}'::jsonb) as actual_condition_quantities from inventory.stocktake_lines line join inventory.inventory_levels level on level.organization_id = line.organization_id and level.inventory_item_id = line.inventory_item_id and level.location_id = ${header.location_id} left join lateral (select jsonb_object_agg(condition.condition_code, condition.quantity) as quantities from inventory.inventory_level_conditions condition where condition.organization_id = line.organization_id and condition.inventory_item_id = line.inventory_item_id and condition.location_id = ${header.location_id}) conditions on true where line.stocktake_session_id = ${header.id} and line.organization_id = ${input.organizationId} order by line.inventory_item_id for update of line, level`.execute(
       transaction,
     );
     if (lines.rows.some((line) => line.counted_quantity === null))
@@ -2625,13 +2674,21 @@ export async function postStocktake(
     }[] = [];
     for (const line of lines.rows) {
       const variance = subtract(line.counted_quantity!, line.actual_quantity);
-      if (variance !== '0')
-        movements.push({
-          inventoryItemId: line.inventory_item_id,
-          locationId: header.location_id,
-          condition: 'SELLABLE',
-          quantityDelta: variance,
-        });
+      const countedConditions = readConditionQuantities(line.counted_condition_quantities);
+      const actualConditions = readConditionQuantities(line.actual_condition_quantities);
+      for (const condition of inventoryConditions) {
+        const conditionVariance = subtract(
+          countedConditions[condition] ?? '0',
+          actualConditions[condition] ?? '0',
+        );
+        if (conditionVariance !== '0')
+          movements.push({
+            inventoryItemId: line.inventory_item_id,
+            locationId: header.location_id,
+            condition,
+            quantityDelta: conditionVariance,
+          });
+      }
       await sql`update inventory.stocktake_lines set movements_after_snapshot = ${subtract(line.actual_quantity, line.expected_quantity_at_snapshot)}::numeric, final_expected_quantity = ${line.actual_quantity}::numeric, variance_quantity = ${variance}::numeric, status = 'POSTED', version = version + 1 where stocktake_session_id = ${header.id} and inventory_item_id = ${line.inventory_item_id}`.execute(
         transaction,
       );
@@ -2716,7 +2773,9 @@ export async function getStocktakeWorkspace(
         productTitle: string;
         optionSummary: string | null;
         expectedQuantityAtSnapshot: string;
+        expectedQuantitiesByCondition: ConditionQuantities;
         countedQuantity: string | null;
+        countedQuantitiesByCondition: ConditionQuantities | null;
         movementsAfterSnapshot: string;
         finalExpectedQuantity: string | null;
         varianceQuantity: string | null;
@@ -2751,7 +2810,9 @@ export async function getStocktakeWorkspace(
     inventory_item_id: string;
     variant_id: string;
     expected_quantity_at_snapshot: string;
+    expected_condition_quantities: unknown;
     counted_quantity: string | null;
+    counted_condition_quantities: unknown;
     movements_after_snapshot: string;
     final_expected_quantity: string | null;
     variance_quantity: string | null;
@@ -2763,7 +2824,9 @@ export async function getStocktakeWorkspace(
     select
       sl.id, sl.inventory_item_id, item.variant_id,
       sl.expected_quantity_at_snapshot::text,
+      sl.expected_condition_quantities,
       sl.counted_quantity::text,
+      sl.counted_condition_quantities,
       sl.movements_after_snapshot::text,
       sl.final_expected_quantity::text,
       sl.variance_quantity::text,
@@ -2806,7 +2869,12 @@ export async function getStocktakeWorkspace(
       productTitle: line.product_title,
       optionSummary: line.option_summary,
       expectedQuantityAtSnapshot: subtract(line.expected_quantity_at_snapshot, '0'),
+      expectedQuantitiesByCondition: readConditionQuantities(line.expected_condition_quantities),
       countedQuantity: line.counted_quantity === null ? null : subtract(line.counted_quantity, '0'),
+      countedQuantitiesByCondition:
+        line.counted_quantity === null
+          ? null
+          : readConditionQuantities(line.counted_condition_quantities),
       movementsAfterSnapshot: subtract(line.movements_after_snapshot, '0'),
       finalExpectedQuantity:
         line.final_expected_quantity === null ? null : subtract(line.final_expected_quantity, '0'),
