@@ -2525,6 +2525,47 @@ export async function recordStocktakeCount(
   });
 }
 
+/** Adds a zero-expected line for a SKU physically found during an active count. */
+export async function addFoundStocktakeLine(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    stocktakeId: string;
+    variantId: string;
+    expectedVersion: number;
+  },
+): Promise<{ inventoryItemId: string; version: number }> {
+  return db.transaction().execute(async (transaction) => {
+    const session = await sql<{
+      status: string;
+      version: string;
+    }>`select status, version::text from inventory.stocktake_sessions where id = ${input.stocktakeId} and organization_id = ${input.organizationId} for update`.execute(
+      transaction,
+    );
+    const header = session.rows[0];
+    if (!header) throw new InventoryDomainError('NOT_FOUND', 'Stocktake was not found.');
+    if (header.status !== 'COUNTING' || Number(header.version) !== input.expectedVersion)
+      throw new InventoryDomainError(
+        'STALE_VERSION',
+        'Stocktake is no longer current for adding items.',
+      );
+    const inventoryItemId = await ensureItem(transaction, input.organizationId, input.variantId);
+    const inserted = await sql<{
+      id: string;
+    }>`insert into inventory.stocktake_lines (organization_id, stocktake_session_id, inventory_item_id, expected_quantity_at_snapshot, expected_condition_quantities) values (${input.organizationId}, ${input.stocktakeId}, ${inventoryItemId}, 0, '{}'::jsonb) on conflict (stocktake_session_id, inventory_item_id) do nothing returning id`.execute(
+      transaction,
+    );
+    if (!inserted.rows[0])
+      throw new InventoryDomainError('CONFLICT', 'This SKU is already part of the stocktake.');
+    const updated = await sql<{
+      version: string;
+    }>`update inventory.stocktake_sessions set version = version + 1, updated_at = now() where id = ${input.stocktakeId} returning version::text`.execute(
+      transaction,
+    );
+    return { inventoryItemId, version: Number(updated.rows[0]?.version) };
+  });
+}
+
 export async function submitStocktakeForReview(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; actorId: string; stocktakeId: string; expectedVersion: number },
@@ -2649,6 +2690,18 @@ export async function postStocktake(
       throw new InventoryDomainError(
         'CONFLICT',
         'Stocktake must be submitted for review before posting.',
+      );
+    const lineIdentities = await sql<{
+      inventory_item_id: string;
+    }>`select inventory_item_id from inventory.stocktake_lines where stocktake_session_id = ${header.id} and organization_id = ${input.organizationId} order by inventory_item_id`.execute(
+      transaction,
+    );
+    for (const line of lineIdentities.rows)
+      await lockLevel(
+        transaction,
+        input.organizationId,
+        line.inventory_item_id,
+        header.location_id,
       );
     const lines = await sql<{
       inventory_item_id: string;

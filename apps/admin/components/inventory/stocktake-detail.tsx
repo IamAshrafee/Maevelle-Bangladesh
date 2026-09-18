@@ -26,6 +26,8 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type EnrichedStocktake = StocktakeDetailDto;
+type Condition = 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+const conditions: readonly Condition[] = ['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION'];
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -52,6 +54,9 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
 
   // Local state for input values — keyed by inventoryItemId
   const [counts, setCounts] = useState<Record<string, string>>({});
+  const [conditionCounts, setConditionCounts] = useState<
+    Record<string, Partial<Record<Condition, string>>>
+  >({});
   // Saving state per line
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
@@ -70,6 +75,14 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
       if (line.countedQuantity !== null) persisted[line.inventoryItemId] = line.countedQuantity;
     }
     setCounts((prev) => ({ ...persisted, ...prev }));
+    setConditionCounts(
+      Object.fromEntries(
+        res.data.lines.map((line) => [
+          line.inventoryItemId,
+          line.countedQuantitiesByCondition ?? {},
+        ]),
+      ),
+    );
   };
 
   useEffect(() => {
@@ -83,6 +96,14 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           if (line.countedQuantity !== null) persisted[line.inventoryItemId] = line.countedQuantity;
         }
         setCounts(persisted);
+        setConditionCounts(
+          Object.fromEntries(
+            res.data.lines.map((line) => [
+              line.inventoryItemId,
+              line.countedQuantitiesByCondition ?? {},
+            ]),
+          ),
+        );
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : String(err));
@@ -95,7 +116,11 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     };
   }, [stocktakeId]);
 
-  const saveCount = async (inventoryItemId: string, value: string) => {
+  const saveCount = async (
+    inventoryItemId: string,
+    value: string,
+    quantitiesByCondition?: Partial<Record<Condition, string>>,
+  ) => {
     if (!stocktake || stocktake.status !== 'COUNTING') return;
     if (!value.trim() || !/^\d+$/.test(value)) return;
     setSaving((p) => ({ ...p, [inventoryItemId]: true }));
@@ -105,7 +130,13 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
         `/inventory/stocktakes/${stocktakeId}/lines/${inventoryItemId}/count`,
         {
           method: 'POST',
-          body: JSON.stringify({ countedQuantity: value, version: stocktake.version }),
+          body: JSON.stringify({
+            countedQuantity: value,
+            ...(quantitiesByCondition
+              ? { countedQuantitiesByCondition: quantitiesByCondition }
+              : {}),
+            version: stocktake.version,
+          }),
         },
       );
       // Bump our local version to match backend expectation for next count save
@@ -413,6 +444,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                   const isSaving = saving[line.inventoryItemId];
                   const saveError = saveErrors[line.inventoryItemId];
                   const isCounted = counted !== null;
+                  const lineConditionCounts = conditionCounts[line.inventoryItemId] ?? {};
 
                   return (
                     <tr
@@ -467,6 +499,43 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                             if (v !== undefined) void saveCount(line.inventoryItemId, v);
                           }}
                         />
+                        <div className="mt-2 grid w-44 grid-cols-2 gap-1.5">
+                          {conditions.map((condition) => (
+                            <label key={condition} className="text-[10px] text-muted-foreground">
+                              {condition.slice(0, 1) + condition.slice(1).toLowerCase()}
+                              <Input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={lineConditionCounts[condition] ?? ''}
+                                disabled={stocktake.status !== 'COUNTING' || isSaving}
+                                className="mt-0.5 h-7 px-1.5 text-right text-xs tabular-nums"
+                                onChange={(event) =>
+                                  setConditionCounts((current) => ({
+                                    ...current,
+                                    [line.inventoryItemId]: {
+                                      ...current[line.inventoryItemId],
+                                      [condition]: event.target.value,
+                                    },
+                                  }))
+                                }
+                                onBlur={() => {
+                                  const values = conditionCounts[line.inventoryItemId] ?? {};
+                                  const total = conditions.reduce(
+                                    (sum, current) => sum + Number(values[current] || 0),
+                                    0,
+                                  );
+                                  const normalized = String(total);
+                                  setCounts((current) => ({
+                                    ...current,
+                                    [line.inventoryItemId]: normalized,
+                                  }));
+                                  void saveCount(line.inventoryItemId, normalized, values);
+                                }}
+                              />
+                            </label>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right align-middle tabular-nums font-medium">
                         {variance === null ? (

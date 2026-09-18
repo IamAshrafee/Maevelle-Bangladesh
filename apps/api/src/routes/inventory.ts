@@ -4,6 +4,7 @@ import { Type } from 'typebox';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   adjustInventory,
+  addFoundStocktakeLine,
   createInventoryReservation,
   listInventoryBalances,
   listInventoryPositions,
@@ -461,6 +462,31 @@ export function registerInventoryRoutes(
           expectedVersion: body.version,
         });
         return reply.code(204).send();
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/inventory/stocktakes/:stocktakeId/found-lines',
+    {
+      schema: {
+        body: Type.Object({ variantId: Type.String(), version: Type.Integer({ minimum: 1 }) }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.stocktake');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as { variantId: string; version: number };
+        return reply.code(201).send({
+          data: await addFoundStocktakeLine(database.db, {
+            organizationId: active.organizationId,
+            stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,
+            variantId: body.variantId,
+            expectedVersion: body.version,
+          }),
+        });
       } catch (error) {
         return sendError(reply, error);
       }

@@ -6,6 +6,7 @@ import { createOrganization } from './platform.js';
 import { archiveCatalogProduct, restoreCatalogProduct } from './catalog.js';
 import {
   adjustInventory,
+  addFoundStocktakeLine,
   approveWarehouseTransfer,
   cancelStocktake,
   cancelWarehouseTransfer,
@@ -863,6 +864,49 @@ describe('ledger-backed inventory', () => {
       expect.arrayContaining([
         expect.objectContaining({ condition: 'SELLABLE', onHand: '2' }),
         expect.objectContaining({ condition: 'DAMAGED', onHand: '3' }),
+      ]),
+    );
+  });
+
+  it('adds a SKU found during a stocktake as a zero-expected reconciliation line', async () => {
+    const f = await fixture();
+    const stocktake = await startStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+    });
+    const found = await addFoundStocktakeLine(database.db, {
+      organizationId: f.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      variantId: f.variantId,
+      expectedVersion: stocktake.version,
+    });
+    await recordStocktakeCount(database.db, {
+      organizationId: f.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: found.inventoryItemId,
+      countedQuantity: '2',
+      expectedVersion: found.version,
+    });
+    await submitStocktakeForReview(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: found.version + 1,
+    });
+    await postStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect((await listInventoryBalances(database.db, f.organizationId)).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          inventoryItemId: found.inventoryItemId,
+          condition: 'SELLABLE',
+          onHand: '2',
+        }),
       ]),
     );
   });
