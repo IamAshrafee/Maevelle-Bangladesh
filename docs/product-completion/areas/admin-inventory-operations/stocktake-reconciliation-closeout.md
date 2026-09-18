@@ -25,8 +25,8 @@ recorded as an unvalued addition.
 - `packages/database/src/inventory.test.ts`: 16 tests passed.
 - `packages/database/src/procurement.test.ts`: 11 tests passed, including the
   acquired-cost condition-reclassification regression.
-- Database package build, API TypeScript check, targeted ESLint, and `git diff
-  --check` passed.
+- Database package build, API TypeScript check, Admin TypeScript check,
+  targeted ESLint, and `git diff --check` passed.
 - Browser/owner visual review was not performed in this checkpoint; the
   repository's automated transaction and contract evidence remains the gate
   recorded here.
