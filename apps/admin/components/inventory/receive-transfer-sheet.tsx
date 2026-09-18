@@ -9,6 +9,7 @@ import { inventoryRequest } from '@/lib/inventory/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Sheet,
   SheetContent,
@@ -47,13 +48,18 @@ const lineSchema = z.object({
   sku: z.string(),
   productTitle: z.string(),
   remainingQty: z.number(),
+  selected: z.boolean(),
   sellableQuantity: z.string().regex(qtyPattern, 'Invalid quantity'),
   damagedQuantity: z.string().regex(/^(\d+)?$/, 'Enter a whole number of units'),
   quarantineQuantity: z.string().regex(/^(\d+)?$/, 'Enter a whole number of units'),
   inspectionQuantity: z.string().regex(/^(\d+)?$/, 'Enter a whole number of units'),
 });
 
-const formSchema = z.object({ lines: z.array(lineSchema) });
+const formSchema = z.object({
+  lines: z.array(lineSchema).refine((lines) => lines.some((line) => line.selected), {
+    message: 'Select at least one line to receive.',
+  }),
+});
 type FormValues = z.infer<typeof formSchema>;
 
 // ─── Line with required defaults ─────────────────────────────────────────────
@@ -65,6 +71,7 @@ function defaultLine(l: ReceivableTransferLine): FormValues['lines'][number] {
     sku: l.sku,
     productTitle: l.productTitle,
     remainingQty: remaining,
+    selected: true,
     sellableQuantity: String(remaining),
     damagedQuantity: '0',
     quarantineQuantity: '0',
@@ -101,22 +108,24 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
             'idempotency-key': `recv-${transferId}-${Date.now()}`,
           },
           body: JSON.stringify({
-            lines: values.lines.map((l: FormValues['lines'][number]) => {
-              const entry: Record<string, string> = {
-                transferLineId: l.transferLineId,
-                sellableQuantity: l.sellableQuantity,
-              };
-              if (l.damagedQuantity && l.damagedQuantity !== '0') {
-                entry.damagedQuantity = l.damagedQuantity;
-              }
-              if (l.quarantineQuantity && l.quarantineQuantity !== '0') {
-                entry.quarantineQuantity = l.quarantineQuantity;
-              }
-              if (l.inspectionQuantity && l.inspectionQuantity !== '0') {
-                entry.inspectionQuantity = l.inspectionQuantity;
-              }
-              return entry;
-            }),
+            lines: values.lines
+              .filter((line) => line.selected)
+              .map((l) => {
+                const entry: Record<string, string> = {
+                  transferLineId: l.transferLineId,
+                  sellableQuantity: l.sellableQuantity,
+                };
+                if (l.damagedQuantity && l.damagedQuantity !== '0') {
+                  entry.damagedQuantity = l.damagedQuantity;
+                }
+                if (l.quarantineQuantity && l.quarantineQuantity !== '0') {
+                  entry.quarantineQuantity = l.quarantineQuantity;
+                }
+                if (l.inspectionQuantity && l.inspectionQuantity !== '0') {
+                  entry.inspectionQuantity = l.inspectionQuantity;
+                }
+                return entry;
+              }),
           }),
         },
       );
@@ -180,7 +189,18 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
             return (
               <div key={field.id} className="rounded-lg border p-4 space-y-3">
                 <div>
-                  <p className="font-medium text-sm">{lineWatch.productTitle}</p>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={lineWatch.selected}
+                      onCheckedChange={(checked) =>
+                        form.setValue(`lines.${index}.selected`, checked === true, {
+                          shouldValidate: true,
+                        })
+                      }
+                      aria-label={`Receive ${lineWatch.productTitle}`}
+                    />
+                    <p className="font-medium text-sm">{lineWatch.productTitle}</p>
+                  </div>
                   <p className="text-xs text-muted-foreground font-mono">{lineWatch.sku}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     In transit: <span className="font-medium">{lineWatch.remainingQty}</span> units
@@ -202,6 +222,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                       step="any"
                       className="h-8 text-sm"
                       {...form.register(`lines.${index}.sellableQuantity`)}
+                      disabled={!lineWatch.selected}
                     />
                   </div>
                   <div className="space-y-1">
@@ -212,6 +233,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                       step="any"
                       className="h-8 text-sm"
                       {...form.register(`lines.${index}.damagedQuantity`)}
+                      disabled={!lineWatch.selected}
                     />
                   </div>
                   <div className="space-y-1">
@@ -222,6 +244,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                       step="any"
                       className="h-8 text-sm"
                       {...form.register(`lines.${index}.quarantineQuantity`)}
+                      disabled={!lineWatch.selected}
                     />
                   </div>
                   <div className="space-y-1">
@@ -232,6 +255,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                       step="any"
                       className="h-8 text-sm"
                       {...form.register(`lines.${index}.inspectionQuantity`)}
+                      disabled={!lineWatch.selected}
                     />
                   </div>
                 </div>
