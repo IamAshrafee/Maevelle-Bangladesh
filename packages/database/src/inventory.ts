@@ -1772,18 +1772,20 @@ export async function createWarehouseTransfer(
     sourceLocationId: string;
     destinationLocationId: string;
     lines: readonly { variantId: string; quantity: string }[];
-    notes?: string;
+    notes?: string | null;
+    idempotencyKey: string;
   },
 ): Promise<{ transferId: string; version: number }> {
-  if (input.sourceLocationId === input.destinationLocationId)
-    throw new InventoryDomainError(
-      'VALIDATION_FAILED',
-      'Transfer source and destination must differ.',
-    );
-  if (input.lines.length === 0)
-    throw new InventoryDomainError('VALIDATION_FAILED', 'Transfer needs at least one line.');
-  for (const line of input.lines) assertQuantity(line.quantity);
+  validateWarehouseTransferDraft(input);
   return db.transaction().execute(async (transaction) => {
+    const started = await beginIdempotent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      operation: 'warehouse.transfer.create',
+      idempotencyKey: input.idempotencyKey,
+      request: input,
+    });
+    if (started.replay) return started.replay as { transferId: string; version: number };
     await requireActiveLocationCapability(
       transaction,
       input.organizationId,
@@ -1798,23 +1800,24 @@ export async function createWarehouseTransfer(
     );
     const created = await sql<{
       id: string;
-    }>`insert into warehouse.transfers (organization_id, transfer_number, source_location_id, destination_location_id, notes, created_by_actor_id) values (${input.organizationId}, concat('TR-', replace(uuidv7()::text, '-', '')), ${input.sourceLocationId}, ${input.destinationLocationId}, ${input.notes ?? null}, ${input.actorId}) returning id`.execute(
+    }>`insert into warehouse.transfers (organization_id, transfer_number, source_location_id, destination_location_id, notes, created_by_actor_id) values (${input.organizationId}, concat('TR-', replace(uuidv7()::text, '-', '')), ${input.sourceLocationId}, ${input.destinationLocationId}, ${input.notes?.trim() || null}, ${input.actorId}) returning id`.execute(
       transaction,
     );
     const transferId = created.rows[0]?.id;
     if (!transferId) throw new Error('Transfer creation did not return an id.');
-    for (const line of input.lines) {
-      const itemId = await ensureItem(transaction, input.organizationId, line.variantId);
-      await assertInventoryItemQuantityPolicy(
-        transaction,
-        input.organizationId,
-        itemId,
-        line.quantity,
-      );
-      await sql`insert into warehouse.transfer_lines (organization_id, transfer_id, inventory_item_id, requested_quantity) values (${input.organizationId}, ${transferId}, ${itemId}, ${line.quantity}::numeric)`.execute(
-        transaction,
-      );
-    }
+    await replaceWarehouseTransferDraftLines(transaction, {
+      organizationId: input.organizationId,
+      transferId,
+      lines: input.lines,
+    });
+    const response = { transferId, version: 1 };
+    await completeIdempotency(
+      transaction,
+      started.recordId!,
+      'warehouse.transfer',
+      transferId,
+      response,
+    );
     await emit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -1825,9 +1828,151 @@ export async function createWarehouseTransfer(
       metadata: {
         sourceLocationId: input.sourceLocationId,
         destinationLocationId: input.destinationLocationId,
+        lineCount: input.lines.length,
       },
     });
-    return { transferId, version: 1 };
+    return response;
+  });
+}
+
+function validateWarehouseTransferDraft(input: {
+  sourceLocationId: string;
+  destinationLocationId: string;
+  lines: readonly { variantId: string; quantity: string }[];
+}): void {
+  if (input.sourceLocationId === input.destinationLocationId)
+    throw new InventoryDomainError(
+      'VALIDATION_FAILED',
+      'Transfer source and destination must differ.',
+    );
+  if (input.lines.length === 0)
+    throw new InventoryDomainError('VALIDATION_FAILED', 'Transfer needs at least one line.');
+  const variants = new Set<string>();
+  for (const line of input.lines) {
+    if (!line.variantId)
+      throw new InventoryDomainError('VALIDATION_FAILED', 'Transfer line needs a Variant.');
+    if (variants.has(line.variantId))
+      throw new InventoryDomainError(
+        'VALIDATION_FAILED',
+        'A Variant can appear only once in a Transfer draft.',
+      );
+    variants.add(line.variantId);
+    assertQuantity(line.quantity);
+  }
+}
+
+async function replaceWarehouseTransferDraftLines(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    transferId: string;
+    lines: readonly { variantId: string; quantity: string }[];
+  },
+): Promise<void> {
+  await sql`delete from warehouse.transfer_lines where organization_id = ${input.organizationId} and transfer_id = ${input.transferId}`.execute(
+    transaction,
+  );
+  for (const line of input.lines) {
+    const itemId = await ensureItem(transaction, input.organizationId, line.variantId);
+    await assertInventoryItemQuantityPolicy(
+      transaction,
+      input.organizationId,
+      itemId,
+      line.quantity,
+    );
+    await sql`insert into warehouse.transfer_lines (organization_id, transfer_id, inventory_item_id, requested_quantity) values (${input.organizationId}, ${input.transferId}, ${itemId}, ${line.quantity}::numeric)`.execute(
+      transaction,
+    );
+  }
+}
+
+/** A Draft is an editable commercial instruction. Once dispatched, correction requires new facts. */
+export async function updateWarehouseTransferDraft(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    transferId: string;
+    expectedVersion: number;
+    sourceLocationId: string;
+    destinationLocationId: string;
+    lines: readonly { variantId: string; quantity: string }[];
+    notes?: string | null;
+    idempotencyKey: string;
+  },
+): Promise<{ transferId: string; version: number }> {
+  validateWarehouseTransferDraft(input);
+  return db.transaction().execute(async (transaction) => {
+    const started = await beginIdempotent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      operation: 'warehouse.transfer.update_draft',
+      idempotencyKey: input.idempotencyKey,
+      request: input,
+    });
+    if (started.replay) return started.replay as { transferId: string; version: number };
+    const current = await sql<{ id: string; status: string; version: string }>`
+      select id, status, version::text
+      from warehouse.transfers
+      where id = ${input.transferId} and organization_id = ${input.organizationId}
+      for update
+    `.execute(transaction);
+    const transfer = current.rows[0];
+    if (!transfer) throw new InventoryDomainError('NOT_FOUND', 'Transfer was not found.');
+    if (transfer.status !== 'DRAFT' || Number(transfer.version) !== input.expectedVersion)
+      throw new InventoryDomainError(
+        'STALE_VERSION',
+        'Transfer is no longer a current Draft; reload before saving.',
+      );
+    await requireActiveLocationCapability(
+      transaction,
+      input.organizationId,
+      input.sourceLocationId,
+      'TRANSFER_SEND',
+    );
+    await requireActiveLocationCapability(
+      transaction,
+      input.organizationId,
+      input.destinationLocationId,
+      'TRANSFER_RECEIVE',
+    );
+    await replaceWarehouseTransferDraftLines(transaction, {
+      organizationId: input.organizationId,
+      transferId: transfer.id,
+      lines: input.lines,
+    });
+    const updated = await sql<{ version: string }>`
+      update warehouse.transfers
+      set source_location_id = ${input.sourceLocationId},
+        destination_location_id = ${input.destinationLocationId},
+        notes = ${input.notes?.trim() || null},
+        version = version + 1,
+        updated_at = now()
+      where id = ${transfer.id} and organization_id = ${input.organizationId}
+      returning version::text
+    `.execute(transaction);
+    const response = { transferId: transfer.id, version: Number(updated.rows[0]!.version) };
+    await completeIdempotency(
+      transaction,
+      started.recordId!,
+      'warehouse.transfer',
+      transfer.id,
+      response,
+    );
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'warehouse.transfer.draft_updated',
+      eventType: 'warehouse.transfer.draft_updated',
+      targetType: 'warehouse.transfer',
+      targetId: transfer.id,
+      metadata: {
+        sourceLocationId: input.sourceLocationId,
+        destinationLocationId: input.destinationLocationId,
+        lineCount: input.lines.length,
+      },
+    });
+    return response;
   });
 }
 

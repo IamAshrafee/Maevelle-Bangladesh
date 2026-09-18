@@ -24,9 +24,15 @@ import {
   reconcileInventoryItem,
   releaseInventoryReservation,
   startStocktake,
+  updateWarehouseTransferDraft,
   verifyInventoryIntegrity,
 } from './inventory.js';
-import { createLocation, getLocationDetail, listWarehouseTransfers } from './warehouse.js';
+import {
+  createLocation,
+  getLocationDetail,
+  getTransferDetail,
+  listWarehouseTransfers,
+} from './warehouse.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -191,6 +197,7 @@ describe('ledger-backed inventory', () => {
         sourceLocationId: f.main.id,
         destinationLocationId: f.secondary.id,
         lines: [{ variantId: f.variantId, quantity: '0.5' }],
+        idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
@@ -417,6 +424,7 @@ describe('ledger-backed inventory', () => {
         sourceLocationId: f.main.id,
         destinationLocationId: f.secondary.id,
         lines: [{ variantId: f.variantId, quantity: '1' }],
+        idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     await expect(
@@ -545,6 +553,7 @@ describe('ledger-backed inventory', () => {
         sourceLocationId: f.main.id,
         destinationLocationId: f.secondary.id,
         lines: [{ variantId: f.variantId, quantity: '2' }],
+        idempotencyKey: crypto.randomUUID(),
       });
       await approveWarehouseTransfer(database.db, {
         organizationId: f.organizationId,
@@ -650,6 +659,7 @@ describe('ledger-backed inventory', () => {
       sourceLocationId: f.main.id,
       destinationLocationId: f.secondary.id,
       lines: [{ variantId: f.variantId, quantity: '1' }],
+      idempotencyKey: crypto.randomUUID(),
     });
     await expect(
       cancelWarehouseTransfer(database.db, {
@@ -668,6 +678,57 @@ describe('ledger-backed inventory', () => {
       }),
     ).rejects.toMatchObject({ code: 'STALE_VERSION' });
   });
+
+  it('replays transfer creation and replaces only a current Draft with a versioned command', async () => {
+    const f = await fixture();
+    const createKey = crypto.randomUUID();
+    const createInput = {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      sourceLocationId: f.main.id,
+      destinationLocationId: f.secondary.id,
+      lines: [{ variantId: f.variantId, quantity: '1' }],
+      notes: 'Initial draft',
+      idempotencyKey: createKey,
+    };
+    const created = await createWarehouseTransfer(database.db, createInput);
+    await expect(createWarehouseTransfer(database.db, createInput)).resolves.toEqual(created);
+    await expect(
+      createWarehouseTransfer(database.db, { ...createInput, notes: 'Different draft' }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+
+    const updated = await updateWarehouseTransferDraft(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      transferId: created.transferId,
+      expectedVersion: created.version,
+      sourceLocationId: f.main.id,
+      destinationLocationId: f.secondary.id,
+      lines: [{ variantId: f.variantId, quantity: '2' }],
+      notes: 'Corrected quantity',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(updated).toMatchObject({ transferId: created.transferId, version: 2 });
+    const detail = await getTransferDetail(database.db, f.organizationId, created.transferId);
+    expect(detail).toMatchObject({
+      notes: 'Corrected quantity',
+      version: 2,
+      lines: [expect.objectContaining({ requestedQuantity: '2.000000' })],
+    });
+    await expect(
+      updateWarehouseTransferDraft(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        transferId: created.transferId,
+        expectedVersion: created.version,
+        sourceLocationId: f.main.id,
+        destinationLocationId: f.secondary.id,
+        lines: [{ variantId: f.variantId, quantity: '3' }],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_VERSION' });
+  });
+
   it('posts a stocktake discrepancy at most once', async () => {
     const f = await fixture();
     const opened = await opening(f, '5');

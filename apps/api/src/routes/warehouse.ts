@@ -13,6 +13,7 @@ import {
 } from '@maevelle/database/warehouse';
 import {
   createWarehouseTransfer,
+  updateWarehouseTransferDraft,
   dispatchWarehouseTransfer,
   receiveWarehouseTransfer,
   approveWarehouseTransfer,
@@ -204,13 +205,15 @@ export function registerWarehouseRoutes(
           sourceLocationId: Type.String(),
           destinationLocationId: Type.String(),
           lines: Type.Array(Type.Object({ variantId: Type.String(), quantity }), { minItems: 1 }),
-          notes: Type.Optional(Type.String()),
+          notes: Type.Optional(Type.Union([Type.String(), Type.Null()])),
         }),
       },
     },
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'warehouse.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         return reply.code(201).send({
           data: await createWarehouseTransfer(database.db, {
@@ -220,8 +223,54 @@ export function registerWarehouseRoutes(
               Parameters<typeof createWarehouseTransfer>[1],
               'organizationId' | 'actorId'
             >),
+            idempotencyKey: key,
           }),
         });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.put(
+    '/admin/warehouse/transfers/:transferId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          sourceLocationId: Type.String(),
+          destinationLocationId: Type.String(),
+          lines: Type.Array(Type.Object({ variantId: Type.String(), quantity }), { minItems: 1 }),
+          notes: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'warehouse.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
+      try {
+        const body = request.body as {
+          version: number;
+          sourceLocationId: string;
+          destinationLocationId: string;
+          lines: readonly { variantId: string; quantity: string }[];
+          notes?: string | null;
+        };
+        return {
+          data: await updateWarehouseTransferDraft(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            transferId: (request.params as { transferId: string }).transferId,
+            expectedVersion: body.version,
+            sourceLocationId: body.sourceLocationId,
+            destinationLocationId: body.destinationLocationId,
+            lines: body.lines,
+            ...(body.notes === undefined ? {} : { notes: body.notes }),
+            idempotencyKey: key,
+          }),
+        };
       } catch (error) {
         return sendError(reply, error);
       }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, CheckCircle2, FileText, MapPin } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, FileText, MapPin, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import type { WarehouseTransferDetailDto, WarehouseTransferLineDto } from '@maevelle/contracts';
 
@@ -63,10 +63,18 @@ export function TransferDetail({ transferId }: { transferId: string }) {
   useEffect(() => {
     let active = true;
     inventoryRequest<{ data: WarehouseTransferDetailDto }>(`/warehouse/transfers/${transferId}`)
-      .then((res) => { if (active) setTransfer(res.data); })
-      .catch((err) => { if (active) setError(err instanceof Error ? err.message : 'Could not load transfer.'); })
-      .finally(() => { if (active) setIsLoading(false); });
-    return () => { active = false; };
+      .then((res) => {
+        if (active) setTransfer(res.data);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : 'Could not load transfer.');
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [transferId]);
 
   const handleApprove = async () => {
@@ -173,6 +181,13 @@ export function TransferDetail({ transferId }: { transferId: string }) {
         <div className="flex gap-2 shrink-0">
           {transfer.status === 'DRAFT' && (
             <>
+              <Button
+                variant="outline"
+                render={<Link href={`/inventory/transfers/${transfer.id}/edit`} />}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit Draft
+              </Button>
               <AlertDialog>
                 <AlertDialogTrigger render={<Button variant="destructive" disabled={busy} />}>
                   Cancel Transfer
@@ -217,9 +232,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Back</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDispatch}>
-                    Confirm Dispatch
-                  </AlertDialogAction>
+                  <AlertDialogAction onClick={handleDispatch}>Confirm Dispatch</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -335,19 +348,26 @@ export function TransferDetail({ transferId }: { transferId: string }) {
               <table className="w-full caption-bottom text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
-                    <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Product</th>
-                    <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">SKU</th>
-                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Requested</th>
-                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Dispatched</th>
-                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Received</th>
+                    <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">
+                      Product
+                    </th>
+                    <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">
+                      SKU
+                    </th>
+                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
+                      Requested
+                    </th>
+                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
+                      Dispatched
+                    </th>
+                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
+                      Received
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="[&_tr:last-child]:border-0">
                   {lines.map((line: WarehouseTransferLineDto) => (
-                    <tr
-                      key={line.id}
-                      className="border-b transition-colors hover:bg-muted/30"
-                    >
+                    <tr key={line.id} className="border-b transition-colors hover:bg-muted/30">
                       <td className="px-4 py-3 align-middle">
                         <Link
                           href={`/inventory/stock/${line.inventoryItemId}`}

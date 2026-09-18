@@ -430,6 +430,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       sourceLocationId: input.locationId,
       destinationLocationId: destination.id,
       lines: [{ variantId: input.variantId, quantity: '2' }],
+      idempotencyKey: crypto.randomUUID(),
     });
     await approveWarehouseTransfer(database.db, {
       organizationId: input.organizationId,

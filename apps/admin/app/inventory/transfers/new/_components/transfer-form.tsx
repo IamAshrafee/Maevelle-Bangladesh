@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { z } from 'zod';
@@ -8,7 +8,12 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 import { inventoryRequest } from '@/lib/inventory/api';
-import type { WarehouseLocationDto, InventoryBalanceDto, PaginatedDto } from '@maevelle/contracts';
+import type {
+  WarehouseLocationDto,
+  InventoryBalanceDto,
+  PaginatedDto,
+  WarehouseTransferDetailDto,
+} from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,9 +46,12 @@ const formSchema = z
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function TransferForm() {
+export function TransferForm({ transferId }: { transferId?: string }) {
   const router = useRouter();
+  const isEditing = Boolean(transferId);
+  const commandKey = useRef(crypto.randomUUID());
   const [error, setError] = useState<Error | null>(null);
+  const [draftVersion, setDraftVersion] = useState<number | null>(null);
 
   // Data fetching state
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
@@ -68,6 +76,43 @@ export function TransferForm() {
 
   const sourceLocationId = form.watch('sourceLocationId');
   const destinationLocationId = form.watch('destinationLocationId');
+  const sourceLocations = locations.filter(
+    (location) => location.status === 'ACTIVE' && location.capabilities.includes('TRANSFER_SEND'),
+  );
+  const destinationLocations = locations.filter(
+    (location) =>
+      location.status === 'ACTIVE' &&
+      location.capabilities.includes('TRANSFER_RECEIVE') &&
+      location.id !== sourceLocationId,
+  );
+
+  useEffect(() => {
+    if (!transferId) return;
+    let active = true;
+    inventoryRequest<{ data: WarehouseTransferDetailDto }>(`/warehouse/transfers/${transferId}`)
+      .then((response) => {
+        if (!active) return;
+        const transfer = response.data;
+        if (transfer.status !== 'DRAFT') {
+          setError(new Error('Only a current draft can be edited.'));
+          return;
+        }
+        setDraftVersion(transfer.version);
+        form.reset({
+          sourceLocationId: transfer.sourceLocationId,
+          destinationLocationId: transfer.destinationLocationId,
+          notes: transfer.notes ?? '',
+          lines: transfer.lines.map((line) => ({
+            variantId: line.variantId,
+            quantity: line.requestedQuantity,
+          })),
+        });
+      })
+      .catch((err) => active && setError(err instanceof Error ? err : new Error(String(err))));
+    return () => {
+      active = false;
+    };
+  }, [form, transferId]);
 
   // Fetch locations on mount
   useEffect(() => {
@@ -147,14 +192,16 @@ export function TransferForm() {
 
     try {
       // Create new transfer
-      const result = await inventoryRequest<{ data: { transferId: string } }>(
-        '/warehouse/transfers',
+      const result = await inventoryRequest<{ data: { transferId: string; version: number } }>(
+        isEditing ? `/warehouse/transfers/${transferId}` : '/warehouse/transfers',
         {
-          method: 'POST',
+          method: isEditing ? 'PUT' : 'POST',
+          headers: { 'idempotency-key': commandKey.current },
           body: JSON.stringify({
+            ...(isEditing ? { version: draftVersion } : {}),
             sourceLocationId: values.sourceLocationId,
             destinationLocationId: values.destinationLocationId,
-            notes: values.notes,
+            notes: values.notes?.trim() || null,
             lines: values.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
           }),
         },
@@ -178,7 +225,9 @@ export function TransferForm() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold tracking-tight">Create Transfer</h2>
+          <h2 className="text-2xl font-bold tracking-tight">
+            {isEditing ? 'Edit Transfer Draft' : 'Create Transfer'}
+          </h2>
           <p className="text-muted-foreground mt-1 text-sm">
             Move stock between warehouse locations.
           </p>
@@ -222,7 +271,7 @@ export function TransferForm() {
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.map((loc) => (
+                    {sourceLocations.map((loc) => (
                       <SelectItem key={loc.id} value={loc.id}>
                         {loc.name} ({loc.code})
                       </SelectItem>
@@ -258,13 +307,11 @@ export function TransferForm() {
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {locations
-                      .filter((l) => l.id !== sourceLocationId)
-                      .map((loc) => (
-                        <SelectItem key={loc.id} value={loc.id}>
-                          {loc.name} ({loc.code})
-                        </SelectItem>
-                      ))}
+                    {destinationLocations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name} ({loc.code})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {form.formState.errors.destinationLocationId && (
@@ -416,13 +463,20 @@ export function TransferForm() {
                 type="submit"
                 disabled={
                   form.formState.isSubmitting ||
+                  (isEditing && draftVersion === null) ||
                   !sourceLocationId ||
                   !destinationLocationId ||
                   fields.length === 0
                 }
               >
                 <Save className="mr-2 h-4 w-4" />
-                {form.formState.isSubmitting ? 'Creating...' : 'Create Transfer'}
+                {form.formState.isSubmitting
+                  ? isEditing
+                    ? 'Saving…'
+                    : 'Creating…'
+                  : isEditing
+                    ? 'Save Draft'
+                    : 'Create Transfer'}
               </Button>
             </div>
           </CardContent>
