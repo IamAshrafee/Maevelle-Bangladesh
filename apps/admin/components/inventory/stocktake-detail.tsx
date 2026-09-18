@@ -48,6 +48,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [isPosting, setIsPosting] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Local state for input values — keyed by inventoryItemId
   const [counts, setCounts] = useState<Record<string, string>>({});
@@ -137,6 +138,28 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     }
   };
 
+  const transition = async (action: 'submit-review' | 'cancel') => {
+    if (!stocktake) return;
+    setIsTransitioning(true);
+    setError(null);
+    try {
+      await inventoryRequest(`/inventory/stocktakes/${stocktakeId}/${action}`, {
+        method: 'POST',
+        body: JSON.stringify({ version: stocktake.version }),
+      });
+      setSuccessMessage(
+        action === 'submit-review'
+          ? 'Stocktake submitted for review. Counts are now locked.'
+          : 'Stocktake cancelled. No inventory balances were changed.',
+      );
+      await reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Stocktake status could not be updated.');
+    } finally {
+      setIsTransitioning(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -198,22 +221,51 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
         </div>
 
         {stocktake.status === 'COUNTING' && (
+          <div className="flex shrink-0 gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger render={<Button variant="outline" disabled={isTransitioning} />}>
+                Cancel stocktake
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Cancel this stocktake?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Recorded counts remain as history, but no inventory balance will be adjusted.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep counting</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => transition('cancel')}>
+                    Cancel stocktake
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <Button
+              onClick={() => transition('submit-review')}
+              disabled={!allCounted || isTransitioning}
+            >
+              {isTransitioning ? 'Submitting…' : 'Submit for review'}
+            </Button>
+          </div>
+        )}
+        {stocktake.status === 'REVIEW' && (
           <AlertDialog>
-            <AlertDialogTrigger render={<Button disabled={!allCounted || isPosting} />}>
-              {isPosting ? 'Posting…' : 'Review & Post'}
+            <AlertDialogTrigger render={<Button disabled={isPosting} />}>
+              {isPosting ? 'Posting…' : 'Post stocktake'}
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Post this stocktake?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will finalize the count and apply all variances to your inventory balances.
-                  This action cannot be undone.
+                  This will finalize the reviewed count and apply all variances. This cannot be
+                  undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={handlePost} disabled={isPosting}>
-                  Post Stocktake
+                  Post stocktake
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -275,16 +327,24 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
             <div className="text-2xl font-bold">
               {stocktake.status === 'POSTED'
                 ? 'Complete'
-                : allCounted
-                  ? 'Ready to post'
-                  : 'In progress'}
+                : stocktake.status === 'REVIEW'
+                  ? 'Awaiting post'
+                  : stocktake.status === 'CANCELLED'
+                    ? 'Cancelled'
+                    : allCounted
+                      ? 'Ready for review'
+                      : 'In progress'}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {stocktake.status === 'COUNTING' && !allCounted
                 ? `${totalCount - countedCount} items remaining`
                 : stocktake.status === 'POSTED'
                   ? 'Balances have been updated'
-                  : 'All items counted'}
+                  : stocktake.status === 'REVIEW'
+                    ? 'Review count variances before posting'
+                    : stocktake.status === 'CANCELLED'
+                      ? 'No balances were changed'
+                      : 'All items counted'}
             </p>
           </CardContent>
         </Card>
@@ -298,7 +358,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
             <CardDescription>
               {stocktake.status === 'COUNTING'
                 ? 'Enter the physical count for each item. Counts auto-save as you leave each field.'
-                : 'Stocktake has been posted. Counts are read-only.'}
+                : 'Counts are locked once submitted for review or cancelled.'}
             </CardDescription>
           </div>
           <div className="relative w-full sm:w-64">

@@ -2478,6 +2478,94 @@ export async function recordStocktakeCount(
   });
 }
 
+export async function submitStocktakeForReview(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; stocktakeId: string; expectedVersion: number },
+): Promise<{ stocktakeId: string; version: number }> {
+  return db.transaction().execute(async (transaction) => {
+    const session = await sql<{
+      id: string;
+      location_id: string;
+      status: string;
+      version: string;
+    }>`select id, location_id, status, version::text from inventory.stocktake_sessions where id = ${input.stocktakeId} and organization_id = ${input.organizationId} for update`.execute(
+      transaction,
+    );
+    const header = session.rows[0];
+    if (!header) throw new InventoryDomainError('NOT_FOUND', 'Stocktake was not found.');
+    if (header.status !== 'COUNTING' || Number(header.version) !== input.expectedVersion)
+      throw new InventoryDomainError('STALE_VERSION', 'Stocktake is no longer current for review.');
+    const incomplete = await sql<{
+      count: string;
+    }>`select count(*)::text as count from inventory.stocktake_lines where organization_id = ${input.organizationId} and stocktake_session_id = ${header.id} and counted_quantity is null`.execute(
+      transaction,
+    );
+    if (Number(incomplete.rows[0]?.count ?? '0') > 0)
+      throw new InventoryDomainError(
+        'VALIDATION_FAILED',
+        'Every stocktake line must be counted before review.',
+      );
+    const updated = await sql<{
+      version: string;
+    }>`update inventory.stocktake_sessions set status = 'REVIEW', version = version + 1, updated_at = now() where id = ${header.id} returning version::text`.execute(
+      transaction,
+    );
+    const version = Number(updated.rows[0]?.version);
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'inventory.stocktake.submitted_for_review',
+      eventType: 'inventory.stocktake.submitted_for_review',
+      targetType: 'inventory.stocktake',
+      targetId: header.id,
+      metadata: { locationId: header.location_id },
+    });
+    return { stocktakeId: header.id, version };
+  });
+}
+
+export async function cancelStocktake(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; stocktakeId: string; expectedVersion: number },
+): Promise<{ stocktakeId: string; version: number }> {
+  return db.transaction().execute(async (transaction) => {
+    const session = await sql<{
+      id: string;
+      location_id: string;
+      status: string;
+      version: string;
+    }>`select id, location_id, status, version::text from inventory.stocktake_sessions where id = ${input.stocktakeId} and organization_id = ${input.organizationId} for update`.execute(
+      transaction,
+    );
+    const header = session.rows[0];
+    if (!header) throw new InventoryDomainError('NOT_FOUND', 'Stocktake was not found.');
+    if (
+      !['COUNTING', 'REVIEW'].includes(header.status) ||
+      Number(header.version) !== input.expectedVersion
+    )
+      throw new InventoryDomainError(
+        'STALE_VERSION',
+        'Stocktake is no longer current for cancellation.',
+      );
+    const updated = await sql<{
+      version: string;
+    }>`update inventory.stocktake_sessions set status = 'CANCELLED', version = version + 1, updated_at = now() where id = ${header.id} returning version::text`.execute(
+      transaction,
+    );
+    const version = Number(updated.rows[0]?.version);
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'inventory.stocktake.cancelled',
+      eventType: 'inventory.stocktake.cancelled',
+      targetType: 'inventory.stocktake',
+      targetId: header.id,
+      metadata: { locationId: header.location_id },
+    });
+    return { stocktakeId: header.id, version };
+  });
+}
+
 export async function postStocktake(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -2510,10 +2598,10 @@ export async function postStocktake(
     if (!header) throw new InventoryDomainError('NOT_FOUND', 'Stocktake was not found.');
     if (header.status === 'POSTED')
       throw new InventoryDomainError('CONFLICT', 'Stocktake was already posted.');
-    if (!['COUNTING', 'REVIEW'].includes(header.status))
+    if (header.status !== 'REVIEW')
       throw new InventoryDomainError(
         'CONFLICT',
-        'Stocktake cannot be posted from its current state.',
+        'Stocktake must be submitted for review before posting.',
       );
     const lines = await sql<{
       inventory_item_id: string;

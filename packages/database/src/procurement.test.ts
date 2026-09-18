@@ -16,6 +16,7 @@ import {
   recordStocktakeCount,
   receiveWarehouseTransfer,
   startStocktake,
+  submitStocktakeForReview,
   verifyInventoryIntegrity,
 } from './inventory.js';
 import {
@@ -366,6 +367,12 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       inventoryItemId: item.rows[0]!.id,
       countedQuantity: '3',
       expectedVersion: stocktake.version,
+    });
+    await submitStocktakeForReview(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
     });
     await postStocktake(database.db, {
       organizationId: input.organizationId,

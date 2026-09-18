@@ -7,6 +7,7 @@ import { archiveCatalogProduct, restoreCatalogProduct } from './catalog.js';
 import {
   adjustInventory,
   approveWarehouseTransfer,
+  cancelStocktake,
   cancelWarehouseTransfer,
   createInventoryReservation,
   createWarehouseTransfer,
@@ -24,6 +25,7 @@ import {
   reconcileInventoryItem,
   releaseInventoryReservation,
   startStocktake,
+  submitStocktakeForReview,
   updateWarehouseTransferDraft,
   verifyInventoryIntegrity,
 } from './inventory.js';
@@ -744,6 +746,12 @@ describe('ledger-backed inventory', () => {
       countedQuantity: '4',
       expectedVersion: stocktake.version,
     });
+    await submitStocktakeForReview(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
+    });
     const results = await Promise.allSettled([
       postStocktake(database.db, {
         organizationId: f.organizationId,
@@ -765,6 +773,53 @@ describe('ledger-backed inventory', () => {
     expect(balance.onHand).toBe('4');
   });
 
+  it('requires a complete count for review and permits cancellation before posting', async () => {
+    const f = await fixture();
+    const opened = await opening(f, '2');
+    const stocktake = await startStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+    });
+    await expect(
+      submitStocktakeForReview(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        stocktakeId: stocktake.stocktakeId,
+        expectedVersion: stocktake.version,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await recordStocktakeCount(database.db, {
+      organizationId: f.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: opened.inventoryItemId,
+      countedQuantity: '2',
+      expectedVersion: stocktake.version,
+    });
+    const reviewed = await submitStocktakeForReview(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
+    });
+    await expect(
+      cancelStocktake(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        stocktakeId: stocktake.stocktakeId,
+        expectedVersion: reviewed.version,
+      }),
+    ).resolves.toMatchObject({ stocktakeId: stocktake.stocktakeId, version: reviewed.version + 1 });
+    await expect(
+      postStocktake(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        stocktakeId: stocktake.stocktakeId,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
   it('serializes stocktake posting against concurrent balance adjustments', async () => {
     const f = await fixture();
     const opened = await opening(f, '5');
@@ -779,6 +834,12 @@ describe('ledger-backed inventory', () => {
       inventoryItemId: opened.inventoryItemId,
       countedQuantity: '4',
       expectedVersion: stocktake.version,
+    });
+    await submitStocktakeForReview(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
     });
     let reportBalancesLocked!: () => void;
     let releaseStocktake!: () => void;

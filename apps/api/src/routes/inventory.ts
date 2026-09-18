@@ -10,6 +10,8 @@ import {
   listInventoryHistory,
   moveInventoryCondition,
   postStocktake,
+  submitStocktakeForReview,
+  cancelStocktake,
   recordStocktakeCount,
   releaseInventoryReservation,
   startStocktake,
@@ -442,6 +444,48 @@ export function registerInventoryRoutes(
           expectedVersion: body.version,
         });
         return reply.code(204).send();
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/inventory/stocktakes/:stocktakeId/submit-review',
+    { schema: { body: Type.Object({ version: Type.Integer({ minimum: 1 }) }) } },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.stocktake');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as { version: number };
+        return {
+          data: await submitStocktakeForReview(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,
+            expectedVersion: body.version,
+          }),
+        };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/inventory/stocktakes/:stocktakeId/cancel',
+    { schema: { body: Type.Object({ version: Type.Integer({ minimum: 1 }) }) } },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.stocktake');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as { version: number };
+        return {
+          data: await cancelStocktake(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,
+            expectedVersion: body.version,
+          }),
+        };
       } catch (error) {
         return sendError(reply, error);
       }
