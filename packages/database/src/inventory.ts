@@ -1771,7 +1771,6 @@ export async function createWarehouseTransfer(
   input: {
     organizationId: string;
     actorId: string;
-    sourceLocationId: string;
     destinationLocationId: string;
     lines: readonly { variantId: string; quantity: string }[];
     notes?: string | null;
@@ -2290,7 +2289,6 @@ export async function closeWarehouseTransferDiscrepancy(
     organizationId: string;
     actorId: string;
     transferId: string;
-    sourceLocationId: string;
     lines: readonly {
       transferLineId: string;
       dispositionCode: 'MISSING' | 'LOST';

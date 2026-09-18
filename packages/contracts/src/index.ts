@@ -1045,7 +1045,13 @@ export interface WarehouseTransferDto {
   readonly destinationLocationId: string;
   readonly destinationLocationName: string;
   readonly status:
-    'DRAFT' | 'READY' | 'IN_TRANSIT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+    | 'DRAFT'
+    | 'READY'
+    | 'IN_TRANSIT'
+    | 'PARTIALLY_RECEIVED'
+    | 'RECEIVED'
+    | 'CLOSED_WITH_DISCREPANCY'
+    | 'CANCELLED';
   readonly version: number;
   readonly totalRequested: string;
   readonly totalDispatched: string;

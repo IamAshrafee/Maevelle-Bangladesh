@@ -18,6 +18,7 @@ import {
   receiveWarehouseTransfer,
   approveWarehouseTransfer,
   cancelWarehouseTransfer,
+  closeWarehouseTransferDiscrepancy,
   InventoryDomainError,
 } from '@maevelle/database/inventory';
 import { findActiveAdminContext } from '@maevelle/database/platform';
@@ -413,6 +414,44 @@ export function registerWarehouseRoutes(
             actorId: active.actorId,
             transferId: (request.params as { transferId: string }).transferId,
             lines: (request.body as { lines: never[] }).lines,
+            idempotencyKey: key,
+          }),
+        };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/warehouse/transfers/:transferId/close-discrepancy',
+    {
+      schema: {
+        body: Type.Object({
+          lines: Type.Array(
+            Type.Object({
+              transferLineId: Type.String(),
+              dispositionCode: Type.Union([Type.Literal('MISSING'), Type.Literal('LOST')]),
+              quantity,
+              reasonCode: Type.String({ minLength: 1 }),
+              notes: Type.Optional(Type.String()),
+            }),
+            { minItems: 1 },
+          ),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.transfer');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
+      try {
+        return {
+          data: await closeWarehouseTransferDiscrepancy(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            transferId: (request.params as { transferId: string }).transferId,
+            lines: (request.body as never as { lines: never[] }).lines,
             idempotencyKey: key,
           }),
         };
