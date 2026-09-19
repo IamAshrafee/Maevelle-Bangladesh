@@ -57,3 +57,11 @@ export interface VocabularySeedItem {
   readonly status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   readonly position?: number;
 }
+
+export interface ProductTypeSeedItem {
+  readonly name: string;
+  readonly code: string;
+  /** Category handle used as this structural type's default catalog placement. */
+  readonly primaryCategoryHandle: string;
+  readonly status?: 'ACTIVE' | 'ARCHIVED';
+}

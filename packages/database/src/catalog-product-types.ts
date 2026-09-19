@@ -38,6 +38,7 @@ export interface CatalogProductTypeDefinitionView {
   readonly id: string;
   readonly code: string;
   readonly name: string;
+  readonly primaryCategoryId: string | null;
   readonly status: CatalogDefinitionStatus;
   readonly version: number;
   readonly productCount: number;
@@ -56,6 +57,17 @@ function identity(name: string, code: string): { name: string; code: string } {
       'Code must contain lowercase letters, numbers, and single hyphens only.',
     );
   return { name: normalizedName, code: normalizedCode };
+}
+
+/** Domain commands may be called from the all-or-nothing seed runner. */
+function withCatalogDefinitionTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  callback: (transaction: Kysely<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  if ('isTransaction' in db && (db as { isTransaction?: boolean }).isTransaction) {
+    return callback(db);
+  }
+  return db.transaction().execute(callback);
 }
 
 async function emitDefinitionEvent(
@@ -97,17 +109,18 @@ export async function listManagedCatalogProductTypes(
       id: string;
       code: string;
       name: string;
+      primary_category_id: string | null;
       status: CatalogDefinitionStatus;
       version: string;
       product_count: string;
     }>`
-      select type.id::text,type.code,type.name,type.status,type.version::text,
+      select type.id::text,type.code,type.name,type.primary_category_id::text,type.status,type.version::text,
         count(product.id)::text product_count
       from catalog.product_types type
       left join catalog.products product
         on product.organization_id=type.organization_id and product.product_type_id=type.id
       where type.organization_id=${organizationId}
-      group by type.id,type.code,type.name,type.status,type.version
+      group by type.id,type.code,type.name,type.primary_category_id,type.status,type.version
       order by type.status,type.name,type.id
     `.execute(db),
     sql<{
@@ -166,6 +179,7 @@ export async function listManagedCatalogProductTypes(
     id: type.id,
     code: type.code,
     name: type.name,
+    primaryCategoryId: type.primary_category_id,
     status: type.status,
     version: Number(type.version),
     productCount: Number(type.product_count),
@@ -200,13 +214,26 @@ export async function listManagedCatalogProductTypes(
 
 export async function createManagedCatalogProductType(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; code: string; name: string },
+  input: {
+    organizationId: string;
+    actorId: string;
+    code: string;
+    name: string;
+    primaryCategoryId?: string | null;
+  },
 ): Promise<{ id: string }> {
   const normalized = identity(input.name, input.code);
-  return db.transaction().execute(async (transaction) => {
+  return withCatalogDefinitionTransaction(db, async (transaction) => {
+    if (input.primaryCategoryId) {
+      const category = await sql<{ found: boolean }>`select exists(select 1 from catalog.categories
+        where organization_id=${input.organizationId} and id=${input.primaryCategoryId}::uuid
+          and status='ACTIVE') found`.execute(transaction);
+      if (!category.rows[0]?.found)
+        throw new CatalogDomainError('VALIDATION_FAILED', 'Primary Category is not available.');
+    }
     const created = await sql<{ id: string }>`
-      insert into catalog.product_types (organization_id,code,name)
-      values (${input.organizationId},${normalized.code},${normalized.name}) returning id::text
+      insert into catalog.product_types (organization_id,code,name,primary_category_id)
+      values (${input.organizationId},${normalized.code},${normalized.name},${input.primaryCategoryId ?? null}::uuid) returning id::text
     `.execute(transaction);
     const id = created.rows[0]!.id;
     await emitDefinitionEvent(transaction, {
@@ -215,7 +242,7 @@ export async function createManagedCatalogProductType(
       targetType: 'catalog.product_type',
       targetId: id,
       aggregateVersion: 1,
-      metadata: { code: normalized.code },
+      metadata: { code: normalized.code, primaryCategoryId: input.primaryCategoryId ?? null },
     });
     return { id };
   });
@@ -230,11 +257,19 @@ export async function updateManagedCatalogProductType(
     expectedVersion: number;
     name: string;
     status: CatalogDefinitionStatus;
+    primaryCategoryId?: string | null;
   },
 ): Promise<void> {
   const name = input.name.trim();
   if (!name) throw new CatalogDomainError('VALIDATION_FAILED', 'Name is required.');
-  await db.transaction().execute(async (transaction) => {
+  await withCatalogDefinitionTransaction(db, async (transaction) => {
+    if (input.primaryCategoryId) {
+      const category = await sql<{ found: boolean }>`select exists(select 1 from catalog.categories
+        where organization_id=${input.organizationId} and id=${input.primaryCategoryId}::uuid
+          and status='ACTIVE') found`.execute(transaction);
+      if (!category.rows[0]?.found)
+        throw new CatalogDomainError('VALIDATION_FAILED', 'Primary Category is not available.');
+    }
     if (input.status === 'ARCHIVED') {
       const used = await sql<{ found: boolean }>`
         select exists(select 1 from catalog.products
@@ -249,6 +284,8 @@ export async function updateManagedCatalogProductType(
     }
     const updated = await sql<{ version: string }>`
       update catalog.product_types set name=${name},status=${input.status},
+        primary_category_id=case when ${input.primaryCategoryId !== undefined}
+          then ${input.primaryCategoryId ?? null}::uuid else primary_category_id end,
         version=version+1,updated_at=now()
       where organization_id=${input.organizationId} and id=${input.productTypeId}::uuid
         and version=${input.expectedVersion}
@@ -273,7 +310,12 @@ export async function updateManagedCatalogProductType(
       targetType: 'catalog.product_type',
       targetId: input.productTypeId,
       aggregateVersion: Number(row.version),
-      metadata: { status: input.status },
+      metadata: {
+        status: input.status,
+        ...(input.primaryCategoryId !== undefined
+          ? { primaryCategoryId: input.primaryCategoryId }
+          : {}),
+      },
     });
   });
 }
@@ -313,7 +355,7 @@ export async function createManagedCatalogAttribute(
   if (new Set(normalizedOptions.map((option) => option.code)).size !== normalizedOptions.length)
     throw new CatalogDomainError('VALIDATION_FAILED', 'Reference option codes must be unique.');
 
-  return db.transaction().execute(async (transaction) => {
+  return withCatalogDefinitionTransaction(db, async (transaction) => {
     const type = await sql<{ found: boolean }>`select exists(select 1 from catalog.product_types
       where organization_id=${input.organizationId} and id=${input.productTypeId}::uuid
         and status='ACTIVE') found`.execute(transaction);
@@ -367,7 +409,7 @@ export async function updateManagedCatalogAttribute(
 ): Promise<void> {
   const name = input.name.trim();
   if (!name) throw new CatalogDomainError('VALIDATION_FAILED', 'Name is required.');
-  await db.transaction().execute(async (transaction) => {
+  await withCatalogDefinitionTransaction(db, async (transaction) => {
     const updated = await sql<{ version: string }>`
       update catalog.attribute_definitions definition
       set name=${name},status=${input.status},is_filterable=${input.filterable},
@@ -437,7 +479,7 @@ export async function createManagedCatalogReferenceOption(
   },
 ): Promise<{ id: string }> {
   const normalized = identity(input.label, input.code);
-  return db.transaction().execute(async (transaction) => {
+  return withCatalogDefinitionTransaction(db, async (transaction) => {
     await ensureReferenceAttribute(transaction, input.organizationId, input.attributeId);
     const created = await sql<{ id: string }>`insert into catalog.attribute_reference_options
       (organization_id,attribute_definition_id,code,label,position)
@@ -471,7 +513,7 @@ export async function updateManagedCatalogReferenceOption(
 ): Promise<void> {
   const label = input.label.trim();
   if (!label) throw new CatalogDomainError('VALIDATION_FAILED', 'Option label is required.');
-  await db.transaction().execute(async (transaction) => {
+  await withCatalogDefinitionTransaction(db, async (transaction) => {
     const updated = await sql<{ version: string }>`update catalog.attribute_reference_options
       set label=${label},status=${input.status},position=${input.position},
         version=version+1,updated_at=now()

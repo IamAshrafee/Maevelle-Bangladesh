@@ -12,6 +12,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       organization_id uuid not null references platform.organizations(id),
       code text not null,
       name text not null,
+      primary_category_id uuid,
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
@@ -40,6 +41,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create index categories_organization_parent_position on catalog.categories (organization_id, parent_category_id, position, id);
     create index categories_organization_status_updated on catalog.categories (organization_id, status, updated_at desc, id);
+    alter table catalog.product_types
+      add foreign key (organization_id, primary_category_id)
+      references catalog.categories(organization_id, id);
+    create index product_types_organization_primary_category
+      on catalog.product_types (organization_id, primary_category_id)
+      where primary_category_id is not null;
 
     create table catalog.tags (
       id uuid primary key default uuidv7(),

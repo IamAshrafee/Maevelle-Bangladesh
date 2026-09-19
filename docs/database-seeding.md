@@ -14,6 +14,10 @@ pnpm db:seed
 ```
 Synchronizes all canonical bootstrap data (including the complete category taxonomy) for the active organization.
 
+`Prepare.command` and `Reset.command` run this same seed automatically after
+the local environment is ready. It is idempotent, so repeated preparation
+updates canonical records without duplicating them.
+
 ### Dry-Run Preview
 ```bash
 pnpm db:seed --dry-run
@@ -27,6 +31,7 @@ pnpm db:seed --module=categories
 pnpm db:seed --module=tags
 pnpm db:seed --module=occasions
 pnpm db:seed --module=collections
+pnpm db:seed --module=product-types
 
 # Target a specific organization
 pnpm db:seed --org=maevelle
@@ -47,14 +52,16 @@ packages/database/src/seed/
 │   ├── categories.ts          # Category taxonomy hierarchy (44 categories)
 │   ├── tags.ts                # Product descriptive tags (29 tags)
 │   ├── occasions.ts           # Product usage occasions (9 occasions)
-│   └── collections.ts         # Merchandising collections (14 collections)
+│   ├── collections.ts         # Merchandising collections (14 collections)
+│   └── product-types.ts       # Structural product definitions (23 types)
 │
 ├── modules/                   # Domain synchronization seeders
 │   ├── categories.seed.ts     # Category change detection & tree synchronization
 │   ├── vocabulary.seed.ts     # Flat vocabulary seeder factory (Tags, Occasions, Collections)
 │   ├── tags.seed.ts           # Tags module
 │   ├── occasions.seed.ts      # Occasions module
-│   └── collections.seed.ts    # Collections module
+│   ├── collections.seed.ts    # Collections module
+│   └── product-types.seed.ts  # Product Types and default-category module
 │
 ├── helpers/                   # Reusable seed utilities
 │   ├── slug.ts                # Handle/slug normalization & validation

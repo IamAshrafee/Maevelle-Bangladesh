@@ -4,12 +4,16 @@ import { resolveActorId, resolveOrganization, type ResolvedTenant } from './help
 import { categoriesSeedModule } from './modules/categories.seed.js';
 import { collectionsSeedModule } from './modules/collections.seed.js';
 import { occasionsSeedModule } from './modules/occasions.seed.js';
+import { productTypesSeedModule } from './modules/product-types.seed.js';
+import { productTypeAttributesSeedModule } from './modules/product-type-attributes.seed.js';
 import { sizingSeedModule } from './modules/sizing.seed.js';
 import { tagsSeedModule } from './modules/tags.seed.js';
 import type { SeedContext, SeedModule, SeedModuleResult, SeedRunnerOptions } from './types.js';
 
 export const DEFAULT_SEED_MODULES: readonly SeedModule[] = [
   categoriesSeedModule,
+  productTypesSeedModule,
+  productTypeAttributesSeedModule,
   tagsSeedModule,
   occasionsSeedModule,
   collectionsSeedModule,
@@ -103,8 +107,17 @@ export async function runSeeds(
   }
 
   if (options.targetModules && options.targetModules.length > 0) {
-    const targetSet = new Set(options.targetModules);
-    modulesToRun = modulesToRun.filter((m) => targetSet.has(m.id));
+    const moduleById = new Map(availableModules.map((module) => [module.id, module]));
+    const selectedIds = new Set<string>();
+    const includeWithDependencies = (moduleId: string): void => {
+      if (selectedIds.has(moduleId)) return;
+      const module = moduleById.get(moduleId);
+      if (!module) throw new Error(`Requested seed module "${moduleId}" is not registered.`);
+      selectedIds.add(moduleId);
+      for (const dependencyId of module.dependencies ?? []) includeWithDependencies(dependencyId);
+    };
+    for (const moduleId of options.targetModules) includeWithDependencies(moduleId);
+    modulesToRun = availableModules.filter((module) => selectedIds.has(module.id));
   }
 
   // Environment Safety Guard: Production cannot run 'development' scope

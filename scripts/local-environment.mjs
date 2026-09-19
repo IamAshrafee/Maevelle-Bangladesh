@@ -18,6 +18,14 @@ function runDocker(...args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+function runPnpm(...args) {
+  const result = spawnSync('pnpm', args, { stdio: 'inherit' });
+  if (result.error) {
+    throw new Error('pnpm is required to seed the local database. Install it, then try again.');
+  }
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
 function assertDockerAvailable() {
   const result = spawnSync('docker', ['compose', 'version'], { stdio: 'ignore' });
   if (result.error || result.status !== 0) {
@@ -41,6 +49,8 @@ async function prepare() {
     try {
       const response = await fetch('http://localhost:8080/admin/login');
       if (response.ok) {
+        console.log('Seeding canonical catalog data...');
+        runPnpm('db:seed');
         console.log('\nMaevelle is ready.');
         console.log('Storefront:   http://localhost:8080/');
         console.log('Admin login: http://localhost:8080/admin/login');

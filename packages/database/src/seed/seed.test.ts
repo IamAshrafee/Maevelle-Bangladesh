@@ -13,6 +13,10 @@ import { tagsSeedModule, createTagsSeedModule } from './modules/tags.seed.js';
 import { occasionsSeedModule, createOccasionsSeedModule } from './modules/occasions.seed.js';
 import { collectionsSeedModule, createCollectionsSeedModule } from './modules/collections.seed.js';
 import { sizingSeedModule, createSizingSeedModule } from './modules/sizing.seed.js';
+import {
+  productTypesSeedModule,
+  createProductTypesSeedModule,
+} from './modules/product-types.seed.js';
 import { runSeeds, sortSeedModules, DEFAULT_SEED_MODULES } from './runner.js';
 import type { CategorySeedItem, SeedModule, VocabularySeedItem } from './types.js';
 
@@ -659,7 +663,26 @@ describe('database seed system', () => {
   });
 
   describe('multi-module comprehensive seed run', () => {
-    it('seeds categories, tags, occasions, collections, and sizing together in one transaction', async () => {
+    it('includes category dependencies for a targeted Product Types run', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['product-types'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome.results.map((result) => result.moduleId)).toEqual([
+        'categories',
+        'product-types',
+      ]);
+      expect(outcome.results[1]?.createdCount).toBe(23);
+      const types = await sql<{ count: string }>`select count(*)::text from catalog.product_types
+        where organization_id=${organizationId}`.execute(database.db);
+      expect(Number(types.rows[0]?.count)).toBe(23);
+    });
+
+    it('seeds categories, product types, tags, occasions, collections, and sizing together in one transaction', async () => {
       const { organizationCode, organizationId } = await createTestOrg();
 
       const outcome = await runSeeds(
@@ -668,29 +691,42 @@ describe('database seed system', () => {
         DEFAULT_SEED_MODULES,
       );
 
-      expect(outcome.results).toHaveLength(5);
+      expect(outcome.results).toHaveLength(7);
       expect(outcome.results.map((r) => r.moduleId)).toEqual([
         'categories',
+        'product-types',
+        'product-type-attributes',
         'tags',
         'occasions',
         'collections',
         'sizing',
       ]);
 
-      const [catRes, tagRes, occRes, colRes, sizRes] = outcome.results;
+      const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes] = outcome.results;
       expect(catRes?.createdCount).toBe(44);
+      expect(typeRes?.createdCount).toBe(23);
+      expect(attributeRes?.totalCount).toBe(148);
       expect(tagRes?.createdCount).toBe(29);
       expect(occRes?.createdCount).toBe(9);
       expect(colRes?.createdCount).toBe(14);
       expect(sizRes?.createdCount).toBe(61);
 
       // Verify all counts in database
-      const [cats, tags, occs, cols, sizDomains] = await Promise.all([
+      const [cats, types, fields, tags, occs, cols, sizDomains] = await Promise.all([
         sql<{
           count: string;
         }>`select count(*)::text from catalog.categories where organization_id=${organizationId}`.execute(
           database.db,
         ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from catalog.product_types where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from catalog.product_type_attributes
+          where organization_id=${organizationId}`.execute(database.db),
         sql<{
           count: string;
         }>`select count(*)::text from catalog.tags where organization_id=${organizationId}`.execute(
@@ -714,6 +750,8 @@ describe('database seed system', () => {
       ]);
 
       expect(Number(cats.rows[0]?.count)).toBe(44);
+      expect(Number(types.rows[0]?.count)).toBe(23);
+      expect(Number(fields.rows[0]?.count)).toBe(148);
       expect(Number(tags.rows[0]?.count)).toBe(29);
       expect(Number(occs.rows[0]?.count)).toBe(9);
       expect(Number(cols.rows[0]?.count)).toBe(14);

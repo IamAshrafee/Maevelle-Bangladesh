@@ -277,6 +277,7 @@ export interface CatalogProductTypeDefinitionDto {
   readonly id: string;
   readonly code: string;
   readonly name: string;
+  readonly primaryCategoryId: string | null;
   readonly status: CatalogDefinitionStatusDto;
   readonly version: number;
   readonly productCount: number;
