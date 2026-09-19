@@ -277,9 +277,9 @@ export function PurchasesTable({
                   ) : purchase.status === 'PLACED' ? (
                     <>
                       <Link
-                        href="/inbound-shipments?create=shipment"
-                        className="inline-flex h-7 items-center rounded-lg border px-2.5 text-[0.8rem] font-medium no-underline"
-                        title="Plan a shipment"
+                        href={`/inbound-shipments?create=shipment&purchase=${purchase.id}`}
+                        className="inline-flex h-7 items-center rounded-lg border px-2.5 text-[0.8rem] font-medium no-underline hover:bg-muted"
+                        title="Plan a shipment for this purchase"
                       >
                         Plan shipment
                       </Link>

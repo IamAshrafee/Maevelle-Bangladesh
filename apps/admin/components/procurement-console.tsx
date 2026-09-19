@@ -501,14 +501,24 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
       </div>
 
       <HowToDialog screen={screen} open={helpOpen} onOpenChange={setHelpOpen} />
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) {
+            setShipmentLines([]);
+          }
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{actionLabel}</DialogTitle>
             <DialogDescription>
               {screen === 'receiving'
                 ? 'Record the physical count. Expected quantity is only a guide.'
-                : 'Only useful details are shown here.'}
+                : screen === 'shipments'
+                  ? 'Consolidate placed purchase lines into an inbound freight shipment.'
+                  : 'Only useful details are shown here.'}
             </DialogDescription>
           </DialogHeader>
           {screen === 'suppliers' ? (

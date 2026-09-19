@@ -1,6 +1,17 @@
 'use client';
 
-import { Check, Loader2, PackageCheck, Plus, Ship, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  Check,
+  Loader2,
+  PackageCheck,
+  PackageOpen,
+  Plus,
+  Ship,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
+import Link from 'next/link';
 import { type FormEvent, useEffect, useState } from 'react';
 
 import type {
@@ -17,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { DialogClose, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { remainingSupplyQuantity } from '@/lib/supply/api';
+import { formatSupplyNumber, remainingSupplyQuantity } from '@/lib/supply/api';
 import { isPurchaseDestination, isShipmentReceivingLocation } from '@/lib/supply/location-options';
 import type { ReceiptDraftLine, ShipmentDraftLine } from '@/lib/supply/types';
 
@@ -261,124 +272,434 @@ export function ShipmentForm({
 }) {
   const [lineId, setLineId] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [purchaseFilter, setPurchaseFilter] = useState<string>('');
+  const [receivingLocationId, setReceivingLocationId] = useState<string>('');
+
+  const receivingLocations = locations.filter(isShipmentReceivingLocation);
+
+  // Group unique purchases that have shippable lines
+  const purchasesWithShippable = Array.from(
+    new Map(shippableLines.map((line) => [line.purchase.id, line.purchase])).values(),
+  );
+
+  // Read URL search params (e.g. ?purchase=...) on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlPurchaseId = params.get('purchase');
+      if (urlPurchaseId && purchasesWithShippable.some((p) => p.id === urlPurchaseId)) {
+        setPurchaseFilter(urlPurchaseId);
+      }
+    }
+  }, [purchasesWithShippable]);
+
+  // Set intelligent receiving warehouse default
+  useEffect(() => {
+    if (receivingLocationId) return;
+    const targetPurchase = purchasesWithShippable.find((p) => p.id === purchaseFilter);
+    if (
+      targetPurchase?.destinationLocationId &&
+      receivingLocations.some((loc) => loc.id === targetPurchase.destinationLocationId)
+    ) {
+      setReceivingLocationId(targetPurchase.destinationLocationId);
+    } else if (receivingLocations.length === 1 && receivingLocations[0]) {
+      setReceivingLocationId(receivingLocations[0].id);
+    }
+  }, [purchaseFilter, purchasesWithShippable, receivingLocations, receivingLocationId]);
+
+  // If no shippable lines at all exist across the system
+  if (shippableLines.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center">
+        <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+          <PackageOpen className="size-6 text-muted-foreground" />
+        </div>
+        <h3 className="mt-3 text-base font-semibold">No open purchase lines to ship</h3>
+        <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
+          Inbound shipments group placed purchase orders. Purchases must be in PLACED status and
+          have unallocated quantities before they can be added to a shipment.
+        </p>
+        <div className="mt-5 flex gap-3">
+          <Link
+            href="/purchases"
+            className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            View Purchases
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Lines not yet added to current shipment draft
+  const availableLines = shippableLines.filter(
+    (line) => !lines.some((selected) => selected.purchaseLineId === line.id),
+  );
+
+  // Available lines filtered by purchase filter if chosen
+  const displayedAvailableLines = purchaseFilter
+    ? availableLines.filter((l) => l.purchase.id === purchaseFilter)
+    : availableLines;
+
+  // Selected line object for the add row
+  const activeLine = shippableLines.find((line) => line.id === lineId);
+  const activeLineMax = activeLine
+    ? Number(remainingSupplyQuantity(activeLine.quantity, activeLine.allocatedQuantity))
+    : 0;
+
+  const handleLineChange = (newLineId: string) => {
+    setLineId(newLineId);
+    const line = shippableLines.find((l) => l.id === newLineId);
+    if (line) {
+      const max = remainingSupplyQuantity(line.quantity, line.allocatedQuantity);
+      setQuantity(max);
+    } else {
+      setQuantity('1');
+    }
+  };
+
+  const parsedQty = Number(quantity);
+  const isQuantityTooHigh = activeLine ? parsedQty > activeLineMax : false;
+  const isQuantityInvalid = !activeLine || parsedQty <= 0 || isNaN(parsedQty) || isQuantityTooHigh;
+
+  const handleAddLine = () => {
+    if (isQuantityInvalid || !lineId) return;
+    setLines([...lines, { purchaseLineId: lineId, quantity: String(parsedQty) }]);
+    setLineId('');
+    setQuantity('1');
+  };
+
+  // Quick-add all lines from selected purchase filter
+  const activeFilterPurchase = purchasesWithShippable.find((p) => p.id === purchaseFilter);
+  const unaddedLinesForFilter = activeFilterPurchase
+    ? availableLines.filter((l) => l.purchase.id === activeFilterPurchase.id)
+    : [];
+
+  const handleAddAllFromFilter = () => {
+    if (!unaddedLinesForFilter.length) return;
+    const newDrafts = unaddedLinesForFilter.map((l) => ({
+      purchaseLineId: l.id,
+      quantity: remainingSupplyQuantity(l.quantity, l.allocatedQuantity),
+    }));
+    setLines([...lines, ...newDrafts]);
+  };
+
+  // Inline quantity update for lines already in the draft
+  const handleUpdateLineQty = (purchaseLineId: string, newQty: string) => {
+    setLines(
+      lines.map((l) => (l.purchaseLineId === purchaseLineId ? { ...l, quantity: newQty } : l)),
+    );
+  };
+
+  // Total units and error checking
+  const totalUnitsPlanned = lines.reduce((acc, l) => acc + (Number(l.quantity) || 0), 0);
+
+  const hasLineErrors = lines.some((line) => {
+    const orig = shippableLines.find((l) => l.id === line.purchaseLineId);
+    if (!orig) return true;
+    const max = Number(remainingSupplyQuantity(orig.quantity, orig.allocatedQuantity));
+    const qty = Number(line.quantity);
+    return isNaN(qty) || qty <= 0 || qty > max;
+  });
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Group displayed available lines by purchase for optgroups
+  const purchasesToGroup = Array.from(
+    new Map(displayedAvailableLines.map((l) => [l.purchase.id, l.purchase])).values(),
+  );
+
   return (
     <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <SupplyField label="Receiving warehouse">
+        <SupplyField
+          label="Receiving warehouse"
+          hint="The warehouse destination where goods will be counted and stocked into inventory."
+        >
           <select
             className={supplySelectClassName}
             name="receivingLocationId"
             required
-            defaultValue=""
+            value={receivingLocationId}
+            onChange={(e) => setReceivingLocationId(e.target.value)}
           >
             <option value="" disabled>
               Choose a receiving warehouse
             </option>
-            {locations.filter(isShipmentReceivingLocation).map((item) => (
+            {receivingLocations.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.code}
               </option>
             ))}
           </select>
+          {receivingLocations.length === 0 ? (
+            <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
+              <AlertCircle className="size-3.5 shrink-0" />
+              No active location with "Purchase Receiving" capability.
+            </p>
+          ) : null}
         </SupplyField>
-        <SupplyField label="Transport">
+
+        <SupplyField label="Transport mode" hint="The freight method used to convey this shipment.">
           <select className={supplySelectClassName} name="transportMode" defaultValue="SEA">
-            <option value="AIR">Air</option>
-            <option value="SEA">Sea</option>
-            <option value="ROAD">Road</option>
-            <option value="RAIL">Rail</option>
-            <option value="OTHER">Other</option>
+            <option value="SEA">Sea Freight (SEA)</option>
+            <option value="AIR">Air Freight (AIR)</option>
+            <option value="ROAD">Road Freight (ROAD)</option>
+            <option value="RAIL">Rail Freight (RAIL)</option>
+            <option value="OTHER">Other Freight Mode</option>
           </select>
         </SupplyField>
-        <SupplyField label="Origin">
-          <Input name="originText" placeholder="Guangzhou consolidation hub" />
+
+        <SupplyField
+          label="Origin / Dispatch port"
+          hint="Port of departure, forwarder facility, or dispatch city."
+        >
+          <Input name="originText" placeholder="e.g. Guangzhou Consolidation Hub, Ningbo Port" />
         </SupplyField>
-        <SupplyField label="Tracking reference">
-          <Input name="trackingReference" />
+
+        <SupplyField
+          label="Tracking / Bill of Lading"
+          hint="Master tracking number, container reference, or courier AWB."
+        >
+          <Input name="trackingReference" placeholder="e.g. B/L #, Container #, or AWB" />
         </SupplyField>
-        <SupplyField label="Expected arrival">
-          <Input name="expectedArrivalDate" type="date" />
+
+        <SupplyField
+          label="Expected arrival"
+          hint="Scheduled arrival date at the receiving warehouse."
+        >
+          <Input name="expectedArrivalDate" type="date" min={todayStr} />
         </SupplyField>
       </div>
-      <div className="rounded-xl border p-4">
-        <h3 className="font-medium">Shipment contents</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Combine open lines from several purchases or suppliers.
-        </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_7rem_auto]">
+
+      <div className="space-y-3 rounded-xl border p-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-medium">Shipment contents</h3>
+            <p className="text-xs text-muted-foreground">
+              Select placed purchase lines to allocate to this freight shipment.
+            </p>
+          </div>
+          {purchasesWithShippable.length > 1 ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Filter PO:</span>
+              <select
+                className="h-7 w-auto min-w-36 rounded-md border border-input bg-background px-2 text-xs"
+                value={purchaseFilter}
+                onChange={(e) => {
+                  setPurchaseFilter(e.target.value);
+                  setLineId('');
+                }}
+              >
+                <option value="">All Purchases ({availableLines.length} open)</option>
+                {purchasesWithShippable.map((p) => {
+                  const openCount = availableLines.filter((l) => l.purchase.id === p.id).length;
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {p.purchaseNumber} ({openCount} open)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          ) : null}
+        </div>
+
+        {activeFilterPurchase && unaddedLinesForFilter.length > 0 ? (
+          <div className="flex items-center justify-between rounded-lg bg-muted/70 px-3 py-2 text-xs">
+            <span>
+              <strong>{activeFilterPurchase.purchaseNumber}</strong> has{' '}
+              {unaddedLinesForFilter.length} unallocated{' '}
+              {unaddedLinesForFilter.length === 1 ? 'line' : 'lines'}.
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 gap-1 px-2 text-xs font-normal"
+              onClick={handleAddAllFromFilter}
+            >
+              <Sparkles className="size-3 text-amber-500" />
+              Add all from PO
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="grid gap-2 sm:grid-cols-[1fr_8rem_auto]">
           <select
             className={supplySelectClassName}
             value={lineId}
-            onChange={(event) => setLineId(event.target.value)}
+            onChange={(e) => handleLineChange(e.target.value)}
             title="Choose an open purchase line"
           >
-            <option value="">Choose a purchase line</option>
-            {shippableLines
-              .filter((line) => !lines.some((selected) => selected.purchaseLineId === line.id))
-              .map((line) => (
-                <option key={line.id} value={line.id}>
-                  {line.purchase.purchaseNumber} · {line.productTitle} · {line.sku} · open{' '}
-                  {remainingSupplyQuantity(line.quantity, line.allocatedQuantity)}
-                </option>
-              ))}
+            <option value="">Choose a purchase line to add...</option>
+            {displayedAvailableLines.length === 0 ? (
+              <option value="" disabled>
+                All lines for this selection are already added
+              </option>
+            ) : null}
+            {purchasesToGroup.map((purchase) => {
+              const poLines = displayedAvailableLines.filter((l) => l.purchase.id === purchase.id);
+              if (!poLines.length) return null;
+              return (
+                <optgroup
+                  key={purchase.id}
+                  label={`${purchase.purchaseNumber} · ${purchase.supplierName}`}
+                >
+                  {poLines.map((line) => {
+                    const openQty = remainingSupplyQuantity(line.quantity, line.allocatedQuantity);
+                    return (
+                      <option key={line.id} value={line.id}>
+                        {line.productTitle} · {line.sku} (Open: {openQty})
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              );
+            })}
           </select>
-          <Input
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            type="number"
-            min="0.000001"
-            step="0.000001"
-            title="Quantity to add"
-          />
+
+          <div className="relative flex items-center">
+            <Input
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              type="number"
+              min="0.000001"
+              max={activeLineMax > 0 ? activeLineMax : undefined}
+              step="any"
+              placeholder="Quantity"
+              disabled={!activeLine}
+              className={
+                isQuantityTooHigh
+                  ? 'border-destructive focus-visible:ring-destructive pr-10'
+                  : 'pr-10'
+              }
+              title={activeLine ? `Open quantity: ${activeLineMax}` : 'Select a line first'}
+            />
+            {activeLine && activeLineMax > 0 ? (
+              <button
+                type="button"
+                onClick={() => setQuantity(String(activeLineMax))}
+                className="absolute right-2 text-[10px] font-semibold text-primary hover:underline"
+                title={`Allocate full open quantity (${activeLineMax})`}
+              >
+                MAX
+              </button>
+            ) : null}
+          </div>
+
           <Button
             type="button"
             variant="outline"
-            disabled={!lineId || Number(quantity) <= 0}
-            onClick={() => {
-              setLines([...lines, { purchaseLineId: lineId, quantity }]);
-              setLineId('');
-              setQuantity('1');
-            }}
-            title="Add this line"
+            disabled={isQuantityInvalid}
+            onClick={handleAddLine}
+            title="Add this line to shipment"
           >
-            <Plus /> Add
+            <Plus className="size-4" /> Add
           </Button>
         </div>
-        <div className="mt-3 grid gap-2">
-          {lines.map((line) => {
-            const choice = shippableLines.find((item) => item.id === line.purchaseLineId);
-            return (
-              <div
-                className="flex items-center justify-between rounded-lg bg-muted p-2 text-sm"
-                key={line.purchaseLineId}
+
+        {isQuantityTooHigh && activeLine ? (
+          <p className="flex items-center gap-1 text-xs text-destructive">
+            <AlertCircle className="size-3 shrink-0" />
+            Quantity cannot exceed the open quantity of {activeLineMax}.
+          </p>
+        ) : null}
+
+        {lines.length > 0 ? (
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-1.5 text-xs font-medium">
+              <span>
+                Allocating {lines.length} {lines.length === 1 ? 'line' : 'lines'} ·{' '}
+                {formatSupplyNumber(String(totalUnitsPlanned))} total units
+              </span>
+              <button
+                type="button"
+                onClick={() => setLines([])}
+                className="text-xs text-muted-foreground transition-colors hover:text-destructive"
               >
-                <span>
-                  {choice?.purchase.purchaseNumber} · {choice?.productTitle} · {choice?.sku} · qty{' '}
-                  {line.quantity}
-                </span>
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant="ghost"
-                  onClick={() =>
-                    setLines(lines.filter((item) => item.purchaseLineId !== line.purchaseLineId))
-                  }
-                  title="Remove from shipment"
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            );
-          })}
-          {!lines.length ? (
-            <p className="text-sm text-muted-foreground">No purchase lines added yet.</p>
-          ) : null}
-        </div>
+                Clear all
+              </button>
+            </div>
+
+            <div className="divide-y rounded-lg border bg-background">
+              {lines.map((draftLine) => {
+                const orig = shippableLines.find((l) => l.id === draftLine.purchaseLineId);
+                const maxOpen = orig
+                  ? Number(remainingSupplyQuantity(orig.quantity, orig.allocatedQuantity))
+                  : 0;
+                const currentQty = Number(draftLine.quantity);
+                const isLineInvalid = isNaN(currentQty) || currentQty <= 0 || currentQty > maxOpen;
+                return (
+                  <div
+                    key={draftLine.purchaseLineId}
+                    className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between text-xs"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-foreground">
+                        {orig?.productTitle ?? 'Product line'}
+                      </div>
+                      <div className="truncate text-muted-foreground">
+                        SKU: <span className="font-mono text-foreground/80">{orig?.sku}</span> · PO:{' '}
+                        <span className="font-mono text-foreground/80">
+                          {orig?.purchase.purchaseNumber}
+                        </span>{' '}
+                        ({orig?.purchase.supplierName})
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted-foreground">Qty:</span>
+                        <Input
+                          type="number"
+                          min="0.000001"
+                          max={maxOpen}
+                          step="any"
+                          value={draftLine.quantity}
+                          onChange={(e) =>
+                            handleUpdateLineQty(draftLine.purchaseLineId, e.target.value)
+                          }
+                          className={`h-7 w-20 px-2 text-xs ${isLineInvalid ? 'border-destructive ring-1 ring-destructive' : ''}`}
+                        />
+                        <span className="text-muted-foreground">/ {maxOpen}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        onClick={() =>
+                          setLines(
+                            lines.filter(
+                              (item) => item.purchaseLineId !== draftLine.purchaseLineId,
+                            ),
+                          )
+                        }
+                        title="Remove from shipment"
+                      >
+                        <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <p className="py-2 text-center text-xs text-muted-foreground italic">
+            No purchase lines added to this shipment yet. Choose a line above and click Add.
+          </p>
+        )}
       </div>
+
       <DialogFooter>
         <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-        <Button type="submit" disabled={saving || !lines.length}>
-          {saving ? <Loader2 className="animate-spin" /> : <Ship />} Plan shipment
+        <Button
+          type="submit"
+          disabled={saving || !lines.length || hasLineErrors || !receivingLocationId}
+        >
+          {saving ? <Loader2 className="animate-spin size-4" /> : <Ship className="size-4" />} Plan
+          shipment
+          {lines.length > 0 ? ` (${formatSupplyNumber(String(totalUnitsPlanned))} units)` : ''}
         </Button>
       </DialogFooter>
     </form>
