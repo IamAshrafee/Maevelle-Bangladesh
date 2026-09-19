@@ -21,7 +21,7 @@ import {
   ShipmentForm,
   SupplierForm,
 } from '@/components/supply/supply-forms';
-import { SupplyField as Field } from '@/components/supply/supply-field';
+import { SupplyField as Field, supplySelectClassName } from '@/components/supply/supply-field';
 import {
   HowToDialog,
   PAGE_SIZE,
@@ -568,7 +568,7 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
         open={Boolean(linePurchase)}
         onOpenChange={(open) => !open && setLinePurchase(undefined)}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="overflow-hidden sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add a purchase line</DialogTitle>
             <DialogDescription>
@@ -576,16 +576,13 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
               cost.
             </DialogDescription>
           </DialogHeader>
-          <form className="grid gap-4" onSubmit={addPurchaseLine}>
+          <form className="grid min-w-0 gap-4" onSubmit={addPurchaseLine}>
             <Field label="Product and SKU" hint="Only active catalog variants appear.">
-              <select
-                className="h-9 rounded-lg border bg-background px-3 text-sm"
-                name="variantId"
-                required
-                defaultValue=""
-              >
+              <select className={supplySelectClassName} name="variantId" required defaultValue="">
                 <option value="" disabled>
-                  Choose a product variant
+                  {variants.filter((variant) => variant.status === 'ACTIVE').length === 0
+                    ? 'No active catalog variants found'
+                    : 'Choose a product variant'}
                 </option>
                 {variants
                   .filter((variant) => variant.status === 'ACTIVE')
@@ -597,7 +594,7 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
                   ))}
               </select>
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-4 sm:grid-cols-2">
               <Field label="Quantity">
                 <Input
                   name="quantity"
@@ -624,7 +621,10 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
             </div>
             <DialogFooter>
               <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-              <Button type="submit" disabled={saving}>
+              <Button
+                type="submit"
+                disabled={saving || !variants.some((variant) => variant.status === 'ACTIVE')}
+              >
                 {saving ? <Loader2 className="animate-spin" /> : <Plus />} Add line
               </Button>
             </DialogFooter>

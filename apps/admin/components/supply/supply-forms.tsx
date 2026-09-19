@@ -12,16 +12,13 @@ import type {
   WarehouseLocationDto,
 } from '@maevelle/contracts';
 
-import { SupplyField } from '@/components/supply/supply-field';
+import { SupplyField, supplySelectClassName } from '@/components/supply/supply-field';
 import { Button } from '@/components/ui/button';
 import { DialogClose, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { remainingSupplyQuantity } from '@/lib/supply/api';
-import {
-  isPurchaseDestination,
-  isShipmentReceivingLocation,
-} from '@/lib/supply/location-options';
+import { isPurchaseDestination, isShipmentReceivingLocation } from '@/lib/supply/location-options';
 import type { ReceiptDraftLine, ShipmentDraftLine } from '@/lib/supply/types';
 
 export function SupplierForm({
@@ -43,8 +40,8 @@ export function SupplierForm({
   ];
   const statuses: SupplierStatusDto[] = ['ACTIVE', 'INACTIVE', 'BLOCKED', 'ARCHIVED'];
   return (
-    <form className="grid gap-4" onSubmit={onSubmit}>
-      <div className="grid gap-4 sm:grid-cols-2">
+    <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <SupplyField label="Supplier name">
           <Input name="name" defaultValue={supplier?.name} autoComplete="organization" required />
         </SupplyField>
@@ -53,11 +50,7 @@ export function SupplierForm({
             label="Status"
             hint="Inactive stops normal new use. Blocked signals a stronger restriction."
           >
-            <select
-              className="h-8 rounded-lg border bg-background px-2.5 text-sm"
-              name="status"
-              defaultValue={supplier.status}
-            >
+            <select className={supplySelectClassName} name="status" defaultValue={supplier.status}>
               {statuses.map((item) => (
                 <option key={item}>{item}</option>
               ))}
@@ -70,7 +63,7 @@ export function SupplierForm({
         )}
         <SupplyField label="Supplier type">
           <select
-            className="h-8 rounded-lg border bg-background px-2.5 text-sm"
+            className={supplySelectClassName}
             name="supplierType"
             defaultValue={supplier?.supplierType ?? 'MANUFACTURER'}
           >
@@ -90,7 +83,7 @@ export function SupplierForm({
         </SupplyField>
         <SupplyField label="Preferred currency">
           <select
-            className="h-8 rounded-lg border bg-background px-2.5 text-sm"
+            className={supplySelectClassName}
             name="preferredCurrencyCode"
             defaultValue={supplier?.preferredCurrencyCode ?? ''}
           >
@@ -173,11 +166,11 @@ export function PurchaseForm({
   const params =
     typeof window === 'undefined' ? undefined : new URLSearchParams(window.location.search);
   return (
-    <form className="grid gap-4" onSubmit={onSubmit}>
-      <div className="grid gap-4 sm:grid-cols-2">
+    <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <SupplyField label="Supplier">
           <select
-            className="h-8 rounded-lg border bg-background px-2.5 text-sm"
+            className={supplySelectClassName}
             name="supplierId"
             required
             defaultValue={params?.get('supplier') ?? ''}
@@ -195,11 +188,7 @@ export function PurchaseForm({
           </select>
         </SupplyField>
         <SupplyField label="Purchase currency">
-          <select
-            className="h-8 rounded-lg border bg-background px-2.5 text-sm"
-            name="currencyCode"
-            defaultValue="CNY"
-          >
+          <select className={supplySelectClassName} name="currencyCode" defaultValue="CNY">
             <option>BDT</option>
             <option>CNY</option>
             <option>USD</option>
@@ -222,19 +211,13 @@ export function PurchaseForm({
           <Input name="expectedDate" type="date" />
         </SupplyField>
         <SupplyField label="Expected warehouse">
-          <select
-            className="h-8 rounded-lg border bg-background px-2.5 text-sm"
-            name="destinationLocationId"
-            defaultValue=""
-          >
+          <select className={supplySelectClassName} name="destinationLocationId" defaultValue="">
             <option value="">Choose later</option>
-            {locations
-              .filter(isPurchaseDestination)
-              .map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} · {item.code}
-                </option>
-              ))}
+            {locations.filter(isPurchaseDestination).map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} · {item.code}
+              </option>
+            ))}
           </select>
         </SupplyField>
       </div>
@@ -279,11 +262,11 @@ export function ShipmentForm({
   const [lineId, setLineId] = useState('');
   const [quantity, setQuantity] = useState('1');
   return (
-    <form className="grid gap-4" onSubmit={onSubmit}>
-      <div className="grid gap-4 sm:grid-cols-2">
+    <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <SupplyField label="Receiving warehouse">
           <select
-            className="h-8 rounded-lg border bg-background px-2.5 text-sm"
+            className={supplySelectClassName}
             name="receivingLocationId"
             required
             defaultValue=""
@@ -291,21 +274,15 @@ export function ShipmentForm({
             <option value="" disabled>
               Choose a receiving warehouse
             </option>
-            {locations
-              .filter(isShipmentReceivingLocation)
-              .map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} · {item.code}
-                </option>
-              ))}
+            {locations.filter(isShipmentReceivingLocation).map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} · {item.code}
+              </option>
+            ))}
           </select>
         </SupplyField>
         <SupplyField label="Transport">
-          <select
-            className="h-8 rounded-lg border bg-background px-2.5 text-sm"
-            name="transportMode"
-            defaultValue="SEA"
-          >
+          <select className={supplySelectClassName} name="transportMode" defaultValue="SEA">
             <option value="AIR">Air</option>
             <option value="SEA">Sea</option>
             <option value="ROAD">Road</option>
@@ -330,7 +307,7 @@ export function ShipmentForm({
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_7rem_auto]">
           <select
-            className="h-8 rounded-lg border bg-background px-2 text-sm"
+            className={supplySelectClassName}
             value={lineId}
             onChange={(event) => setLineId(event.target.value)}
             title="Choose an open purchase line"
@@ -437,10 +414,10 @@ export function ReceiptForm({
     if (selected && shipments.some((item) => item.id === selected)) setShipmentId(selected);
   }, [shipments, setShipmentId]);
   return (
-    <form className="grid gap-4" onSubmit={onSubmit}>
+    <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
       <SupplyField label="Arrived shipment">
         <select
-          className="h-8 rounded-lg border bg-background px-2.5 text-sm"
+          className={supplySelectClassName}
           value={shipmentId}
           onChange={(event) => {
             setShipmentId(event.target.value);
@@ -466,7 +443,7 @@ export function ReceiptForm({
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_8rem_7rem_auto]">
           <select
-            className="h-8 rounded-lg border bg-background px-2 text-sm"
+            className={supplySelectClassName}
             value={allocationId}
             onChange={(event) => setAllocationId(event.target.value)}
             title="Choose a shipment line"
@@ -480,7 +457,7 @@ export function ReceiptForm({
             ))}
           </select>
           <select
-            className="h-8 rounded-lg border bg-background px-2 text-sm"
+            className={supplySelectClassName}
             value={condition}
             onChange={(event) => setCondition(event.target.value)}
             title="Actual condition"
@@ -540,7 +517,7 @@ export function ReceiptForm({
           ) : null}
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <SupplyField label="Packing slip reference">
           <Input name="packingSlipReference" />
         </SupplyField>
