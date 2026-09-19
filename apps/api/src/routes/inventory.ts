@@ -7,6 +7,7 @@ import {
   addFoundStocktakeLine,
   createInventoryReservation,
   listInventoryBalances,
+  listInventoryItemChoices,
   listInventoryPositions,
   listInventoryHistory,
   moveInventoryCondition,
@@ -119,6 +120,47 @@ export function registerInventoryRoutes(
   database: DatabaseClient,
   auth: Auth,
 ): void {
+  app.get(
+    '/admin/inventory/items',
+    {
+      schema: {
+        querystring: Type.Object({
+          search: Type.Optional(Type.String({ maxLength: 120 })),
+          sku: Type.Optional(Type.String({ maxLength: 120 })),
+          productId: Type.Optional(Type.String({ format: 'uuid' })),
+          variantId: Type.Optional(Type.String({ format: 'uuid' })),
+          catalogStatus: Type.Optional(
+            Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')]),
+          ),
+          positionState: Type.Optional(
+            Type.Union([Type.Literal('NO_POSITION'), Type.Literal('HAS_POSITION')]),
+          ),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      return {
+        data: await listInventoryItemChoices(
+          database.db,
+          active.organizationId,
+          request.query as {
+            search?: string;
+            sku?: string;
+            productId?: string;
+            variantId?: string;
+            catalogStatus?: 'ACTIVE' | 'ARCHIVED';
+            positionState?: 'NO_POSITION' | 'HAS_POSITION';
+            page?: number;
+            limit?: number;
+          },
+        ),
+      };
+    },
+  );
   app.get(
     '/admin/inventory/positions',
     {

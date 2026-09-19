@@ -16,6 +16,7 @@ import {
   expireInventoryReservations,
   getInventoryStats,
   getInventoryItemDetail,
+  listInventoryItemChoices,
   listInventoryBalances,
   listInventoryHistory,
   listInventoryPositions,
@@ -125,6 +126,46 @@ async function opening(f: Awaited<ReturnType<typeof fixture>>, quantity: string)
 }
 
 describe('ledger-backed inventory', () => {
+  it('lists a new inventory identity before its first stock movement', async () => {
+    const f = await fixture();
+    await sql`insert into inventory.inventory_items (organization_id,variant_id) values (${f.organizationId},${f.variantId})`.execute(
+      database.db,
+    );
+
+    const choices = await listInventoryItemChoices(database.db, f.organizationId, {
+      search: 'Test Hat',
+      catalogStatus: 'ACTIVE',
+    });
+
+    expect(choices).toMatchObject({ totalCount: 1 });
+    expect(choices.items).toEqual([
+      expect.objectContaining({
+        variantId: f.variantId,
+        productId: f.productId,
+        productTitle: 'Test Hat',
+        inventoryStatus: 'ACTIVE',
+        variantStatus: 'ACTIVE',
+      }),
+    ]);
+    await expect(
+      listInventoryItemChoices(database.db, f.organizationId, {
+        variantId: f.variantId,
+        positionState: 'NO_POSITION',
+      }),
+    ).resolves.toMatchObject({ totalCount: 1, items: [{ variantId: f.variantId }] });
+    expect(await listInventoryBalances(database.db, f.organizationId)).toMatchObject({
+      totalCount: 0,
+      items: [],
+    });
+    await opening(f, '1');
+    await expect(
+      listInventoryItemChoices(database.db, f.organizationId, {
+        sku: choices.items[0]!.sku.toLowerCase(),
+        positionState: 'HAS_POSITION',
+      }),
+    ).resolves.toMatchObject({ totalCount: 1, items: [{ variantId: f.variantId }] });
+  });
+
   it('maintains condition balances, ATS, immutable ledger evidence, audit and outbox in one adjustment', async () => {
     const f = await fixture();
     const adjustment = await opening(f, '10');

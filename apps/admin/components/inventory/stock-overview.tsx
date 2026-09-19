@@ -6,6 +6,7 @@ import { RefreshCw, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { useDeferredValue, useEffect, useState } from 'react';
 
 import type {
+  InventoryItemChoiceDto,
   InventoryPositionDto,
   InventoryStatsDto,
   PaginatedDto,
@@ -41,6 +42,9 @@ export function StockOverview() {
   const [stats, setStats] = useState<InventoryStatsDto>();
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
   const [positions, setPositions] = useState<PaginatedDto<InventoryPositionDto>>();
+  const [itemsWithoutPositions, setItemsWithoutPositions] = useState<
+    PaginatedDto<InventoryItemChoiceDto>
+  >();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
@@ -102,11 +106,25 @@ export function StockOverview() {
     parameters.set('sortBy', sort);
     parameters.set('sortOrder', order);
     try {
-      const result = await inventoryRequest<{ data: PaginatedDto<InventoryPositionDto> }>(
-        `/inventory/positions?${parameters.toString()}`,
-        signal ? { signal } : undefined,
-      );
-      setPositions(result.data);
+      const itemParameters = new URLSearchParams({
+        catalogStatus: 'ACTIVE',
+        positionState: 'NO_POSITION',
+        page: '1',
+        limit: '8',
+      });
+      if (deferredQuery) itemParameters.set('search', deferredQuery);
+      const [positionResult, itemResult] = await Promise.all([
+        inventoryRequest<{ data: PaginatedDto<InventoryPositionDto> }>(
+          `/inventory/positions?${parameters.toString()}`,
+          signal ? { signal } : undefined,
+        ),
+        inventoryRequest<{ data: PaginatedDto<InventoryItemChoiceDto> }>(
+          `/inventory/items?${itemParameters.toString()}`,
+          signal ? { signal } : undefined,
+        ),
+      ]);
+      setPositions(positionResult.data);
+      setItemsWithoutPositions(itemResult.data);
       setMessage('');
       setState('ready');
     } catch (error) {
@@ -180,6 +198,46 @@ export function StockOverview() {
       />
 
       <InventoryFeedback isError={state === 'error'} message={message} />
+
+      {itemsWithoutPositions && (itemsWithoutPositions.totalCount ?? 0) > 0 ? (
+        <section className="rounded-lg border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="font-semibold">SKUs awaiting stock setup</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {itemsWithoutPositions.totalCount} active{' '}
+                {itemsWithoutPositions.totalCount === 1 ? 'variant has' : 'variants have'} no stock
+                position yet. Add an opening balance to make the quantity available for sale.
+              </p>
+            </div>
+            {canAdjust ? (
+              <Button
+                variant="outline"
+                render={<Link href="/inventory/adjustments" />}
+                nativeButton={false}
+              >
+                Add stock
+              </Button>
+            ) : null}
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {itemsWithoutPositions.items.map((item) => (
+              <div key={item.variantId} className="rounded-md border bg-background p-3">
+                <p className="truncate text-sm font-medium">{item.productTitle}</p>
+                <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{item.sku}</p>
+                {canAdjust ? (
+                  <Link
+                    className="mt-2 inline-flex text-sm font-medium text-primary hover:underline"
+                    href={`/inventory/adjustments?variantId=${encodeURIComponent(item.variantId)}`}
+                  >
+                    Set opening stock
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section
         aria-label="Stock filters"

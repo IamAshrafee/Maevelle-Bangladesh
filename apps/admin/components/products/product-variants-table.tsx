@@ -196,11 +196,14 @@ export function ProductVariantsTable({
                   </td>
                   <td className="px-3 py-2 text-xs">
                     <Link
-                      href={`/inventory/stock?search=${encodeURIComponent(source.variant.sku)}`}
-                      className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
-                      title={`View ${source.variant.sku} stock`}
+                      href={`/inventory/adjustments?variantId=${encodeURIComponent(source.variant.id)}`}
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      title={`Set or adjust ${source.variant.sku} stock`}
                     >
-                      Stock
+                      <span className="tabular-nums">{source.variant.sellableQuantity}</span>
+                      <span>
+                        {source.variant.sellableQuantity === '0' ? 'Add stock' : 'Adjust'}
+                      </span>
                       <ExternalLink className="h-3 w-3 opacity-70" />
                     </Link>
                   </td>

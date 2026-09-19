@@ -318,7 +318,7 @@ export function InventoryDashboard() {
                                 variant="outline"
                                 render={
                                   <Link
-                                    href={`/inventory/adjustments?sku=${encodeURIComponent(item.sku)}&locationId=${item.locationId}`}
+                                    href={`/inventory/adjustments?variantId=${encodeURIComponent(item.variantId)}&locationId=${encodeURIComponent(item.locationId)}`}
                                   />
                                 }
                               >
@@ -368,7 +368,7 @@ export function InventoryDashboard() {
                                 variant="outline"
                                 render={
                                   <Link
-                                    href={`/inventory/adjustments?sku=${encodeURIComponent(item.sku)}&locationId=${item.locationId}`}
+                                    href={`/inventory/adjustments?variantId=${encodeURIComponent(item.variantId)}&locationId=${encodeURIComponent(item.locationId)}`}
                                   />
                                 }
                               >

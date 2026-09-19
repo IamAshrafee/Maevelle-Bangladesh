@@ -948,6 +948,18 @@ export interface InventoryPositionDto {
   readonly lastMovementAt: string | null;
 }
 
+/** Catalog-backed inventory identity used by stock operations before a SKU has any movement. */
+export interface InventoryItemChoiceDto {
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly productId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly optionSummary: string;
+  readonly inventoryStatus: 'ACTIVE' | 'ARCHIVED';
+  readonly variantStatus: 'ACTIVE' | 'ARCHIVED';
+}
+
 export interface InventoryHistoryDto {
   readonly id: string;
   readonly transactionId: string;

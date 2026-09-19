@@ -102,7 +102,11 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
           {canAdjust ? (
             <Button
               variant="outline"
-              render={<Link href={`/inventory/adjustments?sku=${encodeURIComponent(item.sku)}`} />}
+              render={
+                <Link
+                  href={`/inventory/adjustments?variantId=${encodeURIComponent(item.variantId)}`}
+                />
+              }
               nativeButton={false}
             >
               Adjust Stock
@@ -111,7 +115,9 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
           {canTransfer ? (
             <Button
               render={
-                <Link href={`/inventory/transfers/new?sku=${encodeURIComponent(item.sku)}`} />
+                <Link
+                  href={`/inventory/transfers/new?variantId=${encodeURIComponent(item.variantId)}`}
+                />
               }
               nativeButton={false}
             >

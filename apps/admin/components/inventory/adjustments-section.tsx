@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Calculator, CheckCircle2, RefreshCcw, Search, X } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { z } from 'zod';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 import { inventoryRequest } from '@/lib/inventory/api';
-import type { WarehouseLocationDto } from '@maevelle/contracts';
+import type {
+  InventoryItemChoiceDto,
+  PaginatedDto,
+  WarehouseLocationDto,
+} from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,18 +28,6 @@ import {
 } from '@/components/ui/select';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
-interface StockSearchResult {
-  inventoryItemId: string;
-  variantId: string;
-  sku: string;
-  productTitle: string;
-  locationId: string;
-  locationName: string;
-  availableToSell: string;
-  onHand: string;
-  condition: string;
-}
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -75,7 +68,7 @@ interface VariantSearchProps {
 
 function VariantSearch({ onSelect, selectedLabel, onClear, error }: VariantSearchProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<StockSearchResult[]>([]);
+  const [results, setResults] = useState<readonly InventoryItemChoiceDto[]>([]);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,17 +82,10 @@ function VariantSearch({ onSelect, selectedLabel, onClear, error }: VariantSearc
     }
     setSearching(true);
     try {
-      const res = await inventoryRequest<{
-        data: { items: StockSearchResult[]; totalCount: number };
-      }>(`/inventory/stock?search=${encodeURIComponent(term)}&limit=20`);
-      // Deduplicate by variantId — stock shows one row per condition×location
-      const seen = new Set<string>();
-      const unique = (res.data.items ?? []).filter((r) => {
-        if (seen.has(r.variantId)) return false;
-        seen.add(r.variantId);
-        return true;
-      });
-      setResults(unique);
+      const res = await inventoryRequest<{ data: PaginatedDto<InventoryItemChoiceDto> }>(
+        `/inventory/items?search=${encodeURIComponent(term)}&catalogStatus=ACTIVE&limit=20`,
+      );
+      setResults(res.data.items ?? []);
       setOpen(true);
     } catch {
       setResults([]);
@@ -240,6 +226,10 @@ const REASON_CODES = [
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function AdjustmentsSection() {
+  const searchParameters = useSearchParams();
+  const preselectedVariantId = searchParameters.get('variantId');
+  const preselectedSku = searchParameters.get('sku');
+  const preselectedLocationId = searchParameters.get('locationId');
   const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [successMessage, setSuccessMessage] = useState('');
@@ -272,6 +262,35 @@ export function AdjustmentsSection() {
       note: '',
     },
   });
+
+  useEffect(() => {
+    const identityQuery = preselectedVariantId
+      ? `variantId=${encodeURIComponent(preselectedVariantId)}`
+      : preselectedSku
+        ? `sku=${encodeURIComponent(preselectedSku)}`
+        : '';
+    if (!identityQuery) return;
+    const controller = new AbortController();
+    void inventoryRequest<{ data: PaginatedDto<InventoryItemChoiceDto> }>(
+      `/inventory/items?${identityQuery}&catalogStatus=ACTIVE&limit=1`,
+      { signal: controller.signal },
+    )
+      .then(({ data }) => {
+        const identity = data.items[0];
+        if (!identity) return;
+        adjForm.setValue('variantId', identity.variantId, { shouldValidate: true });
+        setAdjLabel(`${identity.productTitle} — ${identity.sku}`);
+      })
+      .catch((error) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) console.error(error);
+      });
+    return () => controller.abort();
+  }, [adjForm, preselectedSku, preselectedVariantId]);
+
+  useEffect(() => {
+    if (!preselectedLocationId || !locations.some(({ id }) => id === preselectedLocationId)) return;
+    adjForm.setValue('locationId', preselectedLocationId, { shouldValidate: true });
+  }, [adjForm, locations, preselectedLocationId]);
 
   const onAdjust = adjForm.handleSubmit(async (values) => {
     setSuccessMessage('');

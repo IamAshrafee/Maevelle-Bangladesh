@@ -291,7 +291,7 @@ export function ReviewsConsole() {
                 <div>
                   <dt>Product</dt>
                   <dd>
-                    <Link href={`/products?product=${selected.product_id}`}>
+                    <Link href={`/products/${selected.product_id}`}>
                       {selected.product_title}
                     </Link>
                   </dd>

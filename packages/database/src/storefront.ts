@@ -309,6 +309,7 @@ export async function processStorefrontSearchOutbox(
     left join search.projection_receipts receipt on receipt.source_event_id=event.id
     where receipt.source_event_id is null and (
       event.event_type like 'catalog.product.%'
+      or event.event_type like 'pricing.price_definition.%'
       or event.event_type in (
         'inventory.adjusted', 'inventory.condition_moved', 'inventory.reservation.created',
         'inventory.reservation.released', 'inventory.stocktake.posted',

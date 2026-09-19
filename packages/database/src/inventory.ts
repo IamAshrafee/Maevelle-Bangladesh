@@ -1401,6 +1401,111 @@ export async function listInventoryPositions(
   };
 }
 
+/**
+ * Lists inventory identities independently of stock levels. New Catalog variants have an
+ * inventory item before their opening balance, so operational selectors must not use balance
+ * rows as their source of truth.
+ */
+export async function listInventoryItemChoices(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  input: {
+    search?: string;
+    sku?: string;
+    productId?: string;
+    variantId?: string;
+    catalogStatus?: 'ACTIVE' | 'ARCHIVED';
+    positionState?: 'NO_POSITION' | 'HAS_POSITION';
+    page?: number;
+    limit?: number;
+  } = {},
+): Promise<{
+  items: readonly {
+    inventoryItemId: string;
+    variantId: string;
+    productId: string;
+    sku: string;
+    productTitle: string;
+    optionSummary: string;
+    inventoryStatus: 'ACTIVE' | 'ARCHIVED';
+    variantStatus: 'ACTIVE' | 'ARCHIVED';
+  }[];
+  totalCount: number;
+}> {
+  const search = input.search?.trim();
+  const searchFilter = search
+    ? sql`(variant.sku ilike '%' || ${search} || '%' or product.title ilike '%' || ${search} || '%' or coalesce(variant.title, '') ilike '%' || ${search} || '%')`
+    : sql`true`;
+  const productFilter = input.productId ? sql`product.id = ${input.productId}::uuid` : sql`true`;
+  const variantFilter = input.variantId ? sql`variant.id = ${input.variantId}::uuid` : sql`true`;
+  const skuFilter = input.sku ? sql`variant.sku_normalized = upper(${input.sku.trim()})` : sql`true`;
+  const statusFilter =
+    input.catalogStatus === 'ARCHIVED'
+      ? sql`(item.status = 'ARCHIVED' or variant.status = 'ARCHIVED' or product.status = 'ARCHIVED')`
+      : input.catalogStatus === 'ACTIVE'
+        ? sql`(item.status = 'ACTIVE' and variant.status = 'ACTIVE' and product.status <> 'ARCHIVED')`
+        : sql`true`;
+  const positionFilter =
+    input.positionState === 'NO_POSITION'
+      ? sql`not exists (select 1 from inventory.inventory_levels level where level.organization_id=item.organization_id and level.inventory_item_id=item.id)`
+      : input.positionState === 'HAS_POSITION'
+        ? sql`exists (select 1 from inventory.inventory_levels level where level.organization_id=item.organization_id and level.inventory_item_id=item.id)`
+        : sql`true`;
+  const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
+  const page = Math.max(input.page ?? 1, 1);
+  const offset = (page - 1) * limit;
+
+  const result = await sql<{
+    inventory_item_id: string;
+    variant_id: string;
+    product_id: string;
+    sku: string;
+    product_title: string;
+    option_summary: string;
+    inventory_status: 'ACTIVE' | 'ARCHIVED';
+    variant_status: 'ACTIVE' | 'ARCHIVED';
+    total_count: string;
+  }>`
+    select item.id::text as inventory_item_id,variant.id::text as variant_id,
+      product.id::text as product_id,variant.sku,product.title as product_title,
+      coalesce(nullif(variant.title, ''), (
+        select string_agg(axis.name || ': ' || value.display_value, ' · ' order by axis.position,value.position)
+        from catalog.variant_option_values link
+        join catalog.product_option_values value
+          on value.id=link.option_value_id and value.organization_id=link.organization_id
+        join catalog.product_option_axes axis
+          on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
+        where link.organization_id=item.organization_id and link.variant_id=variant.id
+      ), '') as option_summary,
+      item.status as inventory_status,variant.status as variant_status,
+      count(*) over()::text as total_count
+    from inventory.inventory_items item
+    join catalog.product_variants variant
+      on variant.id=item.variant_id and variant.organization_id=item.organization_id
+    join catalog.products product
+      on product.id=variant.product_id and product.organization_id=variant.organization_id
+    where item.organization_id=${organizationId}
+      and ${searchFilter} and ${skuFilter} and ${productFilter} and ${variantFilter}
+      and ${statusFilter} and ${positionFilter}
+    order by product.title,variant.sku,variant.id
+    limit ${limit} offset ${offset}
+  `.execute(db);
+
+  return {
+    items: result.rows.map((row) => ({
+      inventoryItemId: row.inventory_item_id,
+      variantId: row.variant_id,
+      productId: row.product_id,
+      sku: row.sku,
+      productTitle: row.product_title,
+      optionSummary: row.option_summary,
+      inventoryStatus: row.inventory_status,
+      variantStatus: row.variant_status,
+    })),
+    totalCount: Number(result.rows[0]?.total_count ?? 0),
+  };
+}
+
 export async function listInventoryBalances(
   db: Kysely<DatabaseSchema>,
   organizationId: string,

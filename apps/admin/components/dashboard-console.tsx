@@ -281,7 +281,7 @@ export function DashboardConsole() {
                     <strong>{money(order.total)}</strong>
                   </td>
                   <td>
-                    <Link className="row-link" href={`/orders?order=${order.id}`}>
+                    <Link className="row-link" href={`/orders/${order.id}`}>
                       Open <ArrowRight />
                     </Link>
                   </td>

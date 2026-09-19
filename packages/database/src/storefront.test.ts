@@ -170,6 +170,38 @@ describe('public Storefront projection', () => {
     expect(await processStorefrontSearchOutbox(database.db, 10_000)).toBe(0);
   });
 
+  it('refreshes the Storefront price projection after a committed pricing event', async () => {
+    const value = await fixture();
+    await rebuildStorefrontSearch(database.db, value.organizationId);
+    const price = await sql<{ id: string }>`
+      update pricing.price_definitions definition set amount=1490
+      from catalog.product_variants variant
+      where definition.organization_id=${value.organizationId}
+        and variant.organization_id=definition.organization_id
+        and variant.id=definition.variant_id and variant.product_id=${value.productId}
+      returning definition.id::text
+    `.execute(database.db);
+    await sql`
+      insert into platform.outbox_events(
+        organization_id,event_type,event_version,aggregate_type,aggregate_id,
+        aggregate_version,payload,occurred_at
+      ) values(
+        ${value.organizationId},'pricing.price_definition.replaced',1,
+        'pricing.price_definition',${price.rows[0]!.id},1,'{}',now()
+      )
+    `.execute(database.db);
+
+    expect(await processStorefrontSearchOutbox(database.db, 10_000)).toBe(1);
+    expect(
+      (
+        await searchStorefront(database.db, {
+          organizationId: value.organizationId,
+          query: 'Sunset',
+        })
+      ).items[0],
+    ).toMatchObject({ minimumPrice: '1490.0000' });
+  });
+
   it('refreshes projected availability once for committed inventory lifecycle events', async () => {
     const value = await fixture();
     await rebuildStorefrontSearch(database.db, value.organizationId);

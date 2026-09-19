@@ -258,7 +258,7 @@ export function ProductDetails({ productId }: { productId: string }) {
                 variant="outline"
                 render={
                   <Link
-                    href={`/inventory/stock?search=${encodeURIComponent(workspace.title)}`}
+                    href={`/inventory/stock?q=${encodeURIComponent(workspace.title)}`}
                   />
                 }
               >

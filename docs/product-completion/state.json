@@ -7,7 +7,7 @@
   "baseline_commit": "a32c40d",
   "last_checkpoint_commit": "e799499",
   "last_verified_commit": "e799499",
-  "last_completed_action": "Closed stocktake reconciliation hardening through e799499: condition-aware posting now preserves acquired cost provenance for reclassification, writes off only unmatched physical loss, and records only unmatched found stock. Fresh migration baseline, 27 focused Inventory/Procurement tests, Database/API checks, targeted lint, and diff checks passed. Closeout: areas/admin-inventory-operations/stocktake-reconciliation-closeout.md.",
+  "last_completed_action": "Closed the Catalog-to-Inventory setup gap in the current working tree: zero-stock variants are discoverable and actionable, deep-link contracts are repaired, transfer/adjustment preselection uses authoritative identifiers, and pricing events refresh Storefront search. 22 focused Inventory/Storefront tests, targeted TypeScript/lint, Admin production build, and rebuilt service health checks passed.",
   "next_action": "Inventory operations is idle. On a new request, reassess current repository evidence and select the next bounded operational capability; do not infer completion of unrelated future enhancements from this checkpoint.",
   "interrupted": false,
   "blocked_by": [],

@@ -413,7 +413,7 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
                 <div>
                   <dt>Order</dt>
                   <dd>
-                    <Link href={`/orders?order=${selected.order_id}`}>{selected.order_number}</Link>
+                    <Link href={`/orders/${selected.order_id}`}>{selected.order_number}</Link>
                   </dd>
                 </div>
                 <div>

@@ -6,8 +6,9 @@ Admin Inventory Operations
 
 ## Why Now
 
-The active Inventory hardening work is complete. Inventory operations is left
-idle until a new repository-evidenced capability is selected.
+The Catalog-to-Inventory setup gap is closed in the current working tree.
+Inventory operations is left idle until a new repository-evidenced capability
+is selected.
 
 ## Current Status / Substage
 
@@ -15,11 +16,11 @@ idle until a new repository-evidenced capability is selected.
 
 ## Evidence Already Known
 
-The completed Reservation lifecycle is recorded in
-`areas/admin-inventory-operations/reservation-lifecycle-checkpoint.md`. Commit
-`373d7e8` adds configurable manual-payment deadlines, race-safe timeout
-cancellation, Payment review exceptions, stale-owner integrity checks, and the
-existing safe release/fulfillment coordination.
+New Catalog variants are discoverable before their first stock movement through
+a paginated inventory-identity read model. The Stock workspace surfaces active
+SKUs awaiting opening balances, and Product, Inventory dashboard, item-detail,
+adjustment, and transfer links now carry authoritative variant/location
+identifiers. Storefront search also consumes pricing-definition outbox events.
 
 ## Immediate Objective
 
@@ -28,10 +29,11 @@ capability.
 
 ## Last Completed Action
 
-Stocktake hardening closed at `e799499`: review/cancel lifecycle, concurrency
-locking, condition-aware counts, found-SKU lines, responsive Admin workflow,
-and cost-safe condition reclassification are implemented. See
-`areas/admin-inventory-operations/stocktake-reconciliation-closeout.md`.
+Closed the product-setup lifecycle gap in the current working tree: zero-stock
+variants remain visible and actionable, adjustment/transfer preselection works,
+dead cross-module links were repaired, and price changes refresh Storefront
+search. Focused Inventory and Storefront tests, targeted TypeScript/lint, the
+Admin production build, and rebuilt service health checks passed.
 
 ## Important Constraints
 
@@ -42,6 +44,6 @@ movements are immutable facts; corrections must be new explainable movements.
 
 ## Blockers / Owner Review
 
-No technical blocker is recorded. Authenticated visual/owner review remains a
-distinct review gate for the Admin UI and was not performed in this
-checkpoint.
+No technical blocker is recorded. The earlier adjustment selector was visually
+verified; the rebuilt Stock workspace still needs authenticated owner review
+because the service restart invalidated the browser session.

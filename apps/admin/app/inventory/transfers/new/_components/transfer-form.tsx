@@ -46,7 +46,15 @@ const formSchema = z
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function TransferForm({ transferId }: { transferId?: string }) {
+export function TransferForm({
+  transferId,
+  initialVariantId,
+  initialSourceLocationId,
+}: {
+  transferId?: string;
+  initialVariantId?: string | undefined;
+  initialSourceLocationId?: string | undefined;
+}) {
   const router = useRouter();
   const isEditing = Boolean(transferId);
   const commandKey = useRef(crypto.randomUUID());
@@ -124,6 +132,13 @@ export function TransferForm({ transferId }: { transferId?: string }) {
         );
         if (mounted) {
           setLocations(response.data || []);
+          if (
+            !transferId &&
+            initialSourceLocationId &&
+            response.data.some((location) => location.id === initialSourceLocationId)
+          ) {
+            form.setValue('sourceLocationId', initialSourceLocationId);
+          }
           setIsLoadingLocations(false);
         }
       } catch (err) {
@@ -137,7 +152,7 @@ export function TransferForm({ transferId }: { transferId?: string }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [form, initialSourceLocationId, transferId]);
 
   // Fetch available stock when source location changes
   useEffect(() => {
@@ -159,6 +174,14 @@ export function TransferForm({ transferId }: { transferId?: string }) {
             (item) => Number(item.availableToSell) > 0,
           );
           setAvailableStock(transferableStock);
+          if (
+            !transferId &&
+            initialVariantId &&
+            transferableStock.some((item) => item.variantId === initialVariantId) &&
+            !form.getValues('lines.0.variantId')
+          ) {
+            form.setValue('lines.0.variantId', initialVariantId, { shouldValidate: true });
+          }
           setIsLoadingStock(false);
         }
       } catch (err) {
@@ -172,7 +195,7 @@ export function TransferForm({ transferId }: { transferId?: string }) {
     return () => {
       mounted = false;
     };
-  }, [sourceLocationId]);
+  }, [form, initialVariantId, sourceLocationId, transferId]);
 
   const onSubmit = async (values: FormValues) => {
     setError(null);
