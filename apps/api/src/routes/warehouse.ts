@@ -157,6 +157,9 @@ export function registerWarehouseRoutes(
             ]),
           ),
           capabilities: Type.Optional(Type.Array(Type.String(), { minItems: 1 })),
+          address: Type.Optional(
+            Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.Null()]),
+          ),
         }),
       },
     },
@@ -168,7 +171,8 @@ export function registerWarehouseRoutes(
           version: number;
           name?: string;
           status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
-          capabilities?: never[];
+          capabilities?: any[];
+          address?: Record<string, unknown> | null;
         };
         return {
           data: await updateLocation(database.db, {
@@ -179,6 +183,7 @@ export function registerWarehouseRoutes(
             ...(body.name === undefined ? {} : { name: body.name }),
             ...(body.status === undefined ? {} : { status: body.status }),
             ...(body.capabilities === undefined ? {} : { capabilities: body.capabilities }),
+            ...(body.address === undefined ? {} : { address: body.address }),
           }),
         };
       } catch (error) {

@@ -143,6 +143,7 @@ export async function updateLocation(
     name?: string;
     capabilities?: readonly LocationCapability[];
     status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+    address?: Record<string, unknown> | null;
   },
 ): Promise<LocationSummary> {
   return db.transaction().execute(async (transaction) => {
@@ -183,7 +184,12 @@ export async function updateLocation(
       status: LocationSummary['status'];
       version: string;
     }>`
-      update warehouse.locations set name = coalesce(${input.name?.trim() ?? null}, name), status = coalesce(${input.status ?? null}, status), version = version + 1, updated_at = now()
+      update warehouse.locations set
+        name = coalesce(${input.name?.trim() ?? null}, name),
+        status = coalesce(${input.status ?? null}, status),
+        address_json = case when ${input.address !== undefined} then ${input.address ? JSON.stringify(input.address) : null}::jsonb else address_json end,
+        version = version + 1,
+        updated_at = now()
       where id = ${input.locationId} and organization_id = ${input.organizationId}
       returning id, code, name, location_type, status, version::text
     `.execute(transaction);
