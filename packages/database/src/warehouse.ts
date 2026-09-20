@@ -62,51 +62,72 @@ export async function createLocation(
     name: string;
     locationType: string;
     capabilities: readonly LocationCapability[];
+    status?: LocationSummary['status'];
     address?: Record<string, unknown>;
   },
 ): Promise<LocationSummary> {
+  const code = input.code.trim().toUpperCase();
+  const name = input.name.trim();
+  const status = input.status ?? 'ACTIVE';
+  if (!name)
+    throw new WarehouseDomainError(
+      'VALIDATION_FAILED',
+      'Location name is required.',
+    );
+  if (!code)
+    throw new WarehouseDomainError(
+      'VALIDATION_FAILED',
+      'Location code is required.',
+    );
   if (input.capabilities.length === 0)
     throw new WarehouseDomainError(
       'VALIDATION_FAILED',
       'A Location needs at least one capability.',
     );
   return db.transaction().execute(async (transaction) => {
-    const created = await sql<{
-      id: string;
-      code: string;
-      name: string;
-      location_type: string;
-      status: LocationSummary['status'];
-      version: string;
-    }>`
-      insert into warehouse.locations (organization_id, code, name, location_type, status, address_json)
-      values (${input.organizationId}, ${input.code.trim().toUpperCase()}, ${input.name.trim()}, ${input.locationType}, 'ACTIVE', ${input.address ? JSON.stringify(input.address) : null}::jsonb)
-      returning id, code, name, location_type, status, version::text
-    `.execute(transaction);
-    const location = created.rows[0];
-    if (!location) throw new Error('Location creation did not return a location.');
-    for (const capability of [...new Set(input.capabilities)]) {
-      await sql`insert into warehouse.location_capabilities (organization_id, location_id, capability_code) values (${input.organizationId}, ${location.id}, ${capability})`.execute(
+    try {
+      const created = await sql<{
+        id: string;
+        code: string;
+        name: string;
+        location_type: string;
+        status: LocationSummary['status'];
+        version: string;
+      }>`
+        insert into warehouse.locations (organization_id, code, name, location_type, status, address_json)
+        values (${input.organizationId}, ${code}, ${name}, ${input.locationType}, ${status}, ${input.address ? JSON.stringify(input.address) : null}::jsonb)
+        returning id, code, name, location_type, status, version::text
+      `.execute(transaction);
+      const location = created.rows[0];
+      if (!location) throw new Error('Location creation did not return a location.');
+      for (const capability of [...new Set(input.capabilities)]) {
+        await sql`insert into warehouse.location_capabilities (organization_id, location_id, capability_code) values (${input.organizationId}, ${location.id}, ${capability})`.execute(
+          transaction,
+        );
+      }
+      await appendAuditEvent(transaction, {
+        organizationId: input.organizationId,
+        actorType: 'USER',
+        actorId: input.actorId,
+        action: 'warehouse.location.created',
+        targetType: 'warehouse.location',
+        targetId: location.id,
+        metadata: { code: location.code, capabilities: input.capabilities },
+      });
+      await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at)
+        values (${input.organizationId}, 'warehouse.location.created', 1, 'warehouse.location', ${location.id}, 1, ${JSON.stringify({ locationId: location.id })}::jsonb, now())`.execute(
         transaction,
       );
+      return {
+        ...mapLocation({ ...location, capabilities: [...new Set(input.capabilities)] }),
+        version: 1,
+      };
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+        throw new WarehouseDomainError('CONFLICT', `Location with code "${code}" already exists.`);
+      }
+      throw error;
     }
-    await appendAuditEvent(transaction, {
-      organizationId: input.organizationId,
-      actorType: 'USER',
-      actorId: input.actorId,
-      action: 'warehouse.location.created',
-      targetType: 'warehouse.location',
-      targetId: location.id,
-      metadata: { code: location.code, capabilities: input.capabilities },
-    });
-    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at)
-      values (${input.organizationId}, 'warehouse.location.created', 1, 'warehouse.location', ${location.id}, 1, ${JSON.stringify({ locationId: location.id })}::jsonb, now())`.execute(
-      transaction,
-    );
-    return {
-      ...mapLocation({ ...location, capabilities: [...new Set(input.capabilities)] }),
-      version: 1,
-    };
   });
 }
 

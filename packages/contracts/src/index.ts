@@ -986,11 +986,46 @@ export interface InventoryHistoryDto {
   readonly runningBalance: string;
 }
 
+export type LocationType =
+  | 'WAREHOUSE'
+  | 'SHOWROOM'
+  | 'RETAIL_STORE'
+  | 'FULFILLMENT_CENTER'
+  | 'RETURN_CENTER'
+  | 'THIRD_PARTY'
+  | 'OTHER';
+
+export type LocationCapability =
+  | 'STOCK_HOLDING'
+  | 'PURCHASE_RECEIVING'
+  | 'TRANSFER_SEND'
+  | 'TRANSFER_RECEIVE'
+  | 'ORDER_FULFILLMENT'
+  | 'RETURN_RECEIVING'
+  | 'CUSTOMER_PICKUP'
+  | 'INTERNAL_STORAGE';
+
+export interface WarehouseLocationAddressDto {
+  readonly fullAddress?: string;
+  readonly city?: string;
+  readonly postalCode?: string;
+  readonly countryCode?: string;
+}
+
+export interface CreateWarehouseLocationInput {
+  readonly code: string;
+  readonly name: string;
+  readonly locationType: LocationType;
+  readonly capabilities: readonly LocationCapability[];
+  readonly status?: 'ACTIVE' | 'DRAFT';
+  readonly address?: WarehouseLocationAddressDto;
+}
+
 export interface WarehouseLocationDto {
   readonly id: string;
   readonly code: string;
   readonly name: string;
-  readonly locationType: string;
+  readonly locationType: LocationType | string;
   readonly status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   readonly capabilities: readonly string[];
   readonly version: number;
@@ -1221,6 +1256,7 @@ export interface PurchaseDto {
   readonly lines: readonly {
     readonly id: string;
     readonly variantId: string;
+    readonly productId: string;
     readonly sku: string;
     readonly productTitle: string;
     readonly quantity: string;
@@ -1235,6 +1271,7 @@ export interface InboundShipmentDto {
   readonly shipmentNumber: string;
   readonly receivingLocationId: string;
   readonly receivingLocationName: string;
+  readonly currencyCode: 'BDT' | 'CNY' | 'USD';
   readonly transportMode: string;
   readonly originText?: string;
   readonly trackingReference?: string;
@@ -1247,9 +1284,11 @@ export interface InboundShipmentDto {
   readonly allocations: readonly {
     readonly id: string;
     readonly purchaseLineId: string;
+    readonly purchaseId: string;
     readonly purchaseNumber: string;
     readonly supplierName: string;
     readonly variantId: string;
+    readonly productId: string;
     readonly sku: string;
     readonly productTitle: string;
     readonly allocatedQuantity: string;
@@ -1261,7 +1300,9 @@ export interface InboundReceiptDto {
   readonly id: string;
   readonly receiptNumber: string;
   readonly shipmentId: string;
+  readonly shipmentNumber: string;
   readonly locationId: string;
+  readonly locationName: string;
   readonly inventoryTransactionId: string;
   readonly status: 'POSTED';
   readonly packingSlipReference?: string;
@@ -1271,6 +1312,10 @@ export interface InboundReceiptDto {
     readonly id: string;
     readonly shipmentAllocationId: string;
     readonly variantId: string;
+    readonly productId: string;
+    readonly inventoryItemId?: string;
+    readonly sku: string;
+    readonly productTitle: string;
     readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
     readonly quantity: string;
   }[];
@@ -1299,6 +1344,140 @@ export interface PaginatedEnvelope<T> {
   readonly totalCount: number;
 }
 
+export type PaymentMethodCodeDto = 'COD' | 'BKASH_MANUAL' | 'NAGAD_MANUAL';
+
+export interface PaymentMethodDto {
+  readonly id: string;
+  readonly code: PaymentMethodCodeDto;
+  readonly name: string;
+  readonly methodType: 'COD' | 'MOBILE_WALLET';
+  readonly status: 'ACTIVE' | 'DISABLED';
+  readonly instructions: { readonly accountNumber?: string; readonly text?: string };
+  readonly paymentWindowMinutes: number | null;
+  readonly displayOrder: number;
+  readonly version: number;
+}
+
+export interface PaymentAttemptDto {
+  readonly id: string;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly method: PaymentMethodCodeDto;
+  readonly methodName: string;
+  readonly expectedAmount: string;
+  readonly customerReference: string;
+  readonly claimedAmount: string | null;
+  readonly status: 'PENDING_VERIFICATION' | 'VERIFIED' | 'REJECTED';
+  readonly submittedAt: string;
+}
+
+export interface PendingCodCollectionDto {
+  readonly deliveryId: string;
+  readonly deliveryNumber: string;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly expectedAmount: string;
+  readonly outstandingAmount: string;
+  readonly currency: string;
+  readonly carrierName: string | null;
+  readonly trackingReference: string | null;
+  readonly deliveredAt: string;
+}
+
+export interface FinancePostingDto {
+  readonly transactionId: string;
+  readonly transactionNumber: string;
+  readonly accountId: string;
+  readonly accountName: string;
+  readonly postedAt: string;
+}
+
+export interface PaymentDto {
+  readonly id: string;
+  readonly paymentNumber: string;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly method: PaymentMethodCodeDto;
+  readonly amount: string;
+  readonly currency: string;
+  readonly externalReference: string;
+  readonly confirmedAt: string;
+  readonly refunded: string;
+  readonly net: string;
+  readonly financePosting: FinancePostingDto | null;
+}
+
+export interface RefundDto {
+  readonly id: string;
+  readonly refundNumber: string;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly paymentId: string;
+  readonly paymentNumber: string;
+  readonly amount: string;
+  readonly currency: string;
+  readonly status: string;
+  readonly reasonCode: string;
+  readonly externalReference: string | null;
+  readonly requestedAt: string;
+  readonly completedAt: string | null;
+  readonly version: number;
+  readonly financePosting: FinancePostingDto | null;
+}
+
+export interface FinancialAccountDto {
+  readonly id: string;
+  readonly account_number: string;
+  readonly name: string;
+  readonly account_type: string;
+  readonly currency_code: string;
+  readonly status: string;
+  readonly reference_label: string | null;
+  readonly version: string;
+  readonly ledger_balance: string;
+  readonly last_movement_at: string | null;
+}
+
+export interface FinanceExpenseDto {
+  readonly id: string;
+  readonly expense_number: string;
+  readonly description: string;
+  readonly amount: string;
+  readonly currency_code: string;
+  readonly expense_date: string;
+  readonly status: string;
+  readonly category_name: string;
+  readonly paid: string;
+  readonly adjustments: string;
+  readonly outstanding: string;
+  readonly source_domain: string | null;
+  readonly source_id: string | null;
+}
+
+export interface FinanceLedgerEntryDto {
+  readonly id: string;
+  readonly amount_delta: string;
+  readonly currency_code: string;
+  readonly created_at: string;
+  readonly transaction_id: string;
+  readonly transaction_number: string;
+  readonly transaction_type: string;
+  readonly description: string;
+  readonly source_domain: string | null;
+  readonly source_id: string | null;
+  readonly account_name: string;
+}
+
+export interface FinanceReconciliationDto {
+  readonly id: string;
+  readonly account_name: string;
+  readonly observed_balance: string;
+  readonly ledger_balance: string;
+  readonly difference_amount: string;
+  readonly status: string;
+  readonly created_at: string;
+}
+
 export interface OrderSummaryDto {
   readonly id: string;
   readonly orderNumber: string;
@@ -1317,11 +1496,42 @@ export interface OrderDetailDto extends OrderSummaryDto {
   readonly notes: readonly OrderNoteDto[];
   readonly timeline: readonly OrderTimelineEventDto[];
   readonly payment: OrderPaymentSummaryDto;
-  readonly fulfillments?: readonly any[];
-  readonly deliveries?: readonly any[];
-  readonly returnCases?: readonly any[];
-  readonly refunds?: readonly any[];
-  readonly discountApplications?: readonly any[];
+  readonly fulfillments?: readonly {
+    readonly id: string;
+    readonly fulfillmentNumber: string;
+    readonly status: string;
+    readonly locationId: string;
+    readonly dispatchedAt: string | null;
+  }[];
+  readonly deliveries?: readonly {
+    readonly id: string;
+    readonly deliveryNumber: string;
+    readonly status: string;
+    readonly outcomeStatus: string | null;
+    readonly trackingNumber: string | null;
+    readonly dispatchedAt: string | null;
+    readonly deliveredAt: string | null;
+  }[];
+  readonly returnCases?: readonly {
+    readonly id: string;
+    readonly caseNumber: string;
+    readonly status: string;
+    readonly returnType: string;
+    readonly createdAt: string;
+  }[];
+  readonly refunds?: readonly {
+    readonly id: string;
+    readonly amount: string;
+    readonly status: string;
+    readonly createdAt: string;
+  }[];
+  readonly discountApplications?: readonly {
+    readonly promotionName: string;
+    readonly couponCode: string | null;
+    readonly benefitType: string;
+    readonly benefitValue: string;
+    readonly discountAmount: string;
+  }[];
 }
 
 export interface OrderLineDto {

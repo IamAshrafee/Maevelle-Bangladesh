@@ -126,7 +126,7 @@ function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
-      className={cn('flex min-w-0 flex-1 items-center gap-2 truncate text-left', className)}
+      className={cn('flex min-w-0 flex-1 items-center gap-2 truncate text-left font-normal', className)}
       {...props}
     />
   );
@@ -158,11 +158,14 @@ function SelectTrigger({
       className={cn(triggerVariants({ size: resolvedSize, status: resolvedStatus }), 'group', className)}
       {...props}
     >
-      <SelectPrimitive.Value
-        data-slot="select-value"
-        className="flex min-w-0 flex-1 items-center gap-2 truncate text-left"
-      />
-      {children}
+      {children ? (
+        children
+      ) : (
+        <SelectPrimitive.Value
+          data-slot="select-value"
+          className="flex min-w-0 flex-1 items-center gap-2 truncate text-left font-normal"
+        />
+      )}
       <SelectPrimitive.Icon render={<span className="flex shrink-0 items-center" />}>
         {loading ? (
           <Loader2Icon className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -194,7 +197,7 @@ function SelectContent({
   sideOffset = 4,
   align = 'start',
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  alignItemWithTrigger = false,
   ...props
 }: SelectContentProps) {
   return (

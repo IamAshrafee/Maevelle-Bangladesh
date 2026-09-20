@@ -113,9 +113,40 @@ export function registerWarehouseRoutes(
         body: Type.Object({
           code: Type.String({ minLength: 1 }),
           name: Type.String({ minLength: 1 }),
-          locationType: Type.String(),
-          capabilities: Type.Array(Type.String(), { minItems: 1 }),
-          address: Type.Optional(Type.Object({}, { additionalProperties: true })),
+          locationType: Type.Union([
+            Type.Literal('WAREHOUSE'),
+            Type.Literal('SHOWROOM'),
+            Type.Literal('RETAIL_STORE'),
+            Type.Literal('FULFILLMENT_CENTER'),
+            Type.Literal('RETURN_CENTER'),
+            Type.Literal('THIRD_PARTY'),
+            Type.Literal('OTHER'),
+          ]),
+          capabilities: Type.Array(
+            Type.Union([
+              Type.Literal('STOCK_HOLDING'),
+              Type.Literal('PURCHASE_RECEIVING'),
+              Type.Literal('TRANSFER_SEND'),
+              Type.Literal('TRANSFER_RECEIVE'),
+              Type.Literal('ORDER_FULFILLMENT'),
+              Type.Literal('RETURN_RECEIVING'),
+              Type.Literal('CUSTOMER_PICKUP'),
+              Type.Literal('INTERNAL_STORAGE'),
+            ]),
+            { minItems: 1 },
+          ),
+          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('DRAFT')])),
+          address: Type.Optional(
+            Type.Object(
+              {
+                fullAddress: Type.Optional(Type.String()),
+                city: Type.Optional(Type.String()),
+                postalCode: Type.Optional(Type.String()),
+                countryCode: Type.Optional(Type.String()),
+              },
+              { additionalProperties: true },
+            ),
+          ),
         }),
       },
     },
@@ -123,17 +154,24 @@ export function registerWarehouseRoutes(
       const active = await context(database, auth, request.headers, 'warehouse.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
+        const body = request.body as {
+          code: string;
+          name: string;
+          locationType: any;
+          capabilities: any[];
+          status?: 'ACTIVE' | 'DRAFT';
+          address?: Record<string, unknown>;
+        };
         return reply.code(201).send({
           data: await createLocation(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            ...(request.body as {
-              code: string;
-              name: string;
-              locationType: string;
-              capabilities: never[];
-              address?: Record<string, unknown>;
-            }),
+            code: body.code,
+            name: body.name,
+            locationType: body.locationType,
+            capabilities: body.capabilities,
+            ...(body.status ? { status: body.status } : {}),
+            ...(body.address ? { address: body.address } : {}),
           }),
         });
       } catch (error) {
