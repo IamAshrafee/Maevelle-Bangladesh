@@ -191,11 +191,15 @@ export function CloseTransferDiscrepancySheet({
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select disposition" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="MISSING">Missing</SelectItem>
-                          <SelectItem value="LOST">Lost in transfer</SelectItem>
+                          <SelectItem value="MISSING" description="Item unaccounted for during intake">
+                            Missing
+                          </SelectItem>
+                          <SelectItem value="LOST" description="Transit loss or courier discrepancy">
+                            Lost in transfer
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

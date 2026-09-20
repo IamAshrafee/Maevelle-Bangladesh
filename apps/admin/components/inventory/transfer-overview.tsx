@@ -95,11 +95,11 @@ export function TransferOverview() {
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="DRAFT">Draft</SelectItem>
-              <SelectItem value="READY">Ready</SelectItem>
-              <SelectItem value="PARTIALLY_RECEIVED">Partially received</SelectItem>
+              <SelectItem value="READY">Ready for Dispatch</SelectItem>
               <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
+              <SelectItem value="PARTIALLY_RECEIVED">Partially Received</SelectItem>
               <SelectItem value="RECEIVED">Received</SelectItem>
-              <SelectItem value="CLOSED_WITH_DISCREPANCY">Closed with discrepancy</SelectItem>
+              <SelectItem value="CLOSED_WITH_DISCREPANCY">Closed with Discrepancy</SelectItem>
               <SelectItem value="CANCELLED">Cancelled</SelectItem>
             </SelectContent>
           </Select>

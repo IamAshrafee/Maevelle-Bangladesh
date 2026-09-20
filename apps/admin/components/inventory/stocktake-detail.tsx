@@ -395,7 +395,11 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
             </SelectTrigger>
             <SelectContent>
               {variants.map((variant) => (
-                <SelectItem key={variant.id} value={variant.id}>
+                <SelectItem
+                  key={variant.id}
+                  value={variant.id}
+                  label={`${variant.productTitle} — ${variant.sku}`}
+                >
                   {variant.productTitle} — {variant.sku}
                 </SelectItem>
               ))}

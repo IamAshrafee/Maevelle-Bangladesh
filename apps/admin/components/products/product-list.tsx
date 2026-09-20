@@ -328,7 +328,7 @@ export function ProductList() {
               <SelectContent>
                 <SelectItem value="ALL">All Product Types</SelectItem>
                 {types.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
+                  <SelectItem key={type.id} value={type.id} label={type.name}>
                     {type.name}
                   </SelectItem>
                 ))}

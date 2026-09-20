@@ -122,14 +122,16 @@ export function StocktakeForm() {
                 <SelectTrigger id="location">
                   <SelectValue
                     placeholder={isLoadingLocations ? 'Loading locations...' : 'Select a location'}
-                  >
-                    {locationId ? locations.find((l) => l.id === locationId)?.name : undefined}
-                  </SelectValue>
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {locations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name} ({loc.code})
+                    <SelectItem
+                      key={loc.id}
+                      value={loc.id}
+                      label={`${loc.name} (${loc.code})`}
+                    >
+                      {loc.name} <span className="text-muted-foreground text-xs font-mono">({loc.code})</span>
                     </SelectItem>
                   ))}
                 </SelectContent>

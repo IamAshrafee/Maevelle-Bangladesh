@@ -194,7 +194,11 @@ function LocationSelect({
         </SelectTrigger>
         <SelectContent>
           {locations.map((loc) => (
-            <SelectItem key={loc.id} value={loc.id}>
+            <SelectItem
+              key={loc.id}
+              value={loc.id}
+              label={`${loc.name} (${loc.code})`}
+            >
               {loc.name}
               <span className="ml-1.5 text-xs text-muted-foreground font-mono">({loc.code})</span>
             </SelectItem>
@@ -449,7 +453,7 @@ export function AdjustmentsSection() {
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
                           <SelectTrigger id="adj-condition">
-                            <SelectValue />
+                            <SelectValue placeholder="Condition" />
                           </SelectTrigger>
                           <SelectContent>
                             {CONDITIONS.map((c) => (
@@ -487,7 +491,7 @@ export function AdjustmentsSection() {
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
                           <SelectTrigger id="adj-reason">
-                            <SelectValue />
+                            <SelectValue placeholder="Select reason" />
                           </SelectTrigger>
                           <SelectContent>
                             {REASON_CODES.map((r) => (
@@ -587,7 +591,7 @@ export function AdjustmentsSection() {
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
                           <SelectTrigger id="cond-from">
-                            <SelectValue />
+                            <SelectValue placeholder="From Condition" />
                           </SelectTrigger>
                           <SelectContent>
                             {CONDITIONS.map((c) => (
@@ -610,7 +614,7 @@ export function AdjustmentsSection() {
                         <>
                           <Select value={field.value} onValueChange={field.onChange}>
                             <SelectTrigger id="cond-to">
-                              <SelectValue />
+                              <SelectValue placeholder="To Condition" />
                             </SelectTrigger>
                             <SelectContent>
                               {CONDITIONS.map((c) => (

@@ -106,15 +106,76 @@ function useSelectContext() {
 // Root
 // ---------------------------------------------------------------------------
 
+/**
+ * Recursively extracts { value, label } items from React children
+ * so Base UI can resolve selected labels even when items popup is closed/portaled.
+ */
+function extractItemsFromChildren(
+  children: React.ReactNode,
+): Array<{ value: string; label: React.ReactNode }> {
+  const items: Array<{ value: string; label: React.ReactNode }> = [];
+
+  function traverse(node: React.ReactNode): void {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      for (const child of node) traverse(child);
+      return;
+    }
+    if (React.isValidElement(node)) {
+      const props = node.props as Record<string, any> | undefined;
+      if (props && 'value' in props && props.value !== undefined && props.value !== null) {
+        const val = String(props.value);
+        let label = props.label;
+        if (label === undefined) {
+          if (typeof props.children === 'string' || typeof props.children === 'number') {
+            label = String(props.children);
+          } else if (Array.isArray(props.children)) {
+            const textParts: string[] = [];
+            for (const c of props.children) {
+              if (typeof c === 'string' || typeof c === 'number') {
+                textParts.push(String(c));
+              }
+            }
+            if (textParts.length > 0) {
+              label = textParts.join(' ').trim();
+            }
+          }
+        }
+        if (label !== undefined) {
+          items.push({ value: val, label });
+        }
+      }
+      if (props && props.children) {
+        traverse(props.children);
+      }
+    }
+  }
+
+  traverse(children);
+  return items;
+}
+
 type SelectRootProps = SelectPrimitive.Root.Props<string> & {
   size?: SelectSize;
   status?: SelectStatus;
 };
 
-function Select({ size = 'md', status = 'default', children, ...props }: SelectRootProps) {
+function Select({
+  size = 'md',
+  status = 'default',
+  items: explicitItems,
+  children,
+  ...props
+}: SelectRootProps) {
+  const resolvedItems = React.useMemo(() => {
+    if (explicitItems) return explicitItems;
+    const extracted = extractItemsFromChildren(children);
+    return extracted.length > 0 ? extracted : undefined;
+  }, [explicitItems, children]);
+
   return (
     <SelectContext.Provider value={{ size, status }}>
-      <SelectPrimitive.Root data-slot="select" {...props}>
+      <SelectPrimitive.Root data-slot="select" items={resolvedItems} {...props}>
         {children}
       </SelectPrimitive.Root>
     </SelectContext.Provider>
@@ -253,13 +314,15 @@ function SelectContent({
 
 type SelectItemProps = SelectPrimitive.Item.Props & {
   /** Optional icon rendered to the left of the label */
-  icon?: React.ReactNode;
+  icon?: React.ReactNode | undefined;
   /** Secondary line shown below the label */
-  description?: string;
+  description?: string | undefined;
+  /** Explicit text label for the trigger when children contains rich markup */
+  label?: string | undefined;
 };
 
-function SelectItem({ className, children, icon, description, ...props }: SelectItemProps) {
-  const textLabel = typeof children === 'string' ? children : undefined;
+function SelectItem({ className, children, icon, description, label, ...props }: SelectItemProps) {
+  const textLabel = label ?? (typeof children === 'string' ? children : undefined);
   return (
     <SelectPrimitive.Item
       data-slot="select-item"

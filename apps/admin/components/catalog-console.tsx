@@ -2136,7 +2136,7 @@ export function CatalogConsole() {
                   </SelectTrigger>
                   <SelectContent>
                     {types.map((type) => (
-                      <SelectItem key={type.id} value={type.id}>
+                      <SelectItem key={type.id} value={type.id} label={type.name}>
                         {type.name}
                       </SelectItem>
                     ))}

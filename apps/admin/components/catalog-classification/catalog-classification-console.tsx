@@ -334,7 +334,7 @@ export function CatalogClassificationConsole() {
               }}
             >
               <SelectTrigger className="w-full sm:w-40" title="Filter by configured status">
-                <SelectValue />
+                <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All statuses</SelectItem>

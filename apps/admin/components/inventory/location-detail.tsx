@@ -757,17 +757,27 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                     }}
                   >
                     <SelectTrigger id="loc-status" className="h-9 text-xs">
-                      <SelectValue />
+                      <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ACTIVE">ACTIVE (Operational)</SelectItem>
-                      <SelectItem value="INACTIVE" disabled={hasActiveStockOrHolds}>
-                        INACTIVE (Temporarily Closed)
-                        {hasActiveStockOrHolds ? ' — Blocked: Holds stock' : ''}
+                      <SelectItem value="ACTIVE" label="Active (Operational)">
+                        Active (Operational)
                       </SelectItem>
-                      <SelectItem value="ARCHIVED" disabled={hasActiveStockOrHolds}>
-                        ARCHIVED (Decommissioned)
-                        {hasActiveStockOrHolds ? ' — Blocked: Holds stock' : ''}
+                      <SelectItem
+                        value="INACTIVE"
+                        disabled={hasActiveStockOrHolds}
+                        label="Inactive (Temporarily Closed)"
+                        description={hasActiveStockOrHolds ? 'Blocked: Holds stock' : undefined}
+                      >
+                        Inactive (Temporarily Closed)
+                      </SelectItem>
+                      <SelectItem
+                        value="ARCHIVED"
+                        disabled={hasActiveStockOrHolds}
+                        label="Archived (Decommissioned)"
+                        description={hasActiveStockOrHolds ? 'Blocked: Holds stock' : undefined}
+                      >
+                        Archived (Decommissioned)
                       </SelectItem>
                     </SelectContent>
                   </Select>

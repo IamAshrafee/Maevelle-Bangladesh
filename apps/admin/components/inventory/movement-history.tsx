@@ -216,7 +216,7 @@ export function MovementHistory() {
             onValueChange={(value) => replaceQuery({ location: value ?? 'ALL', page: '1' })}
           >
             <SelectTrigger aria-label="Filter history by location">
-              <SelectValue />
+              <SelectValue placeholder="All Locations" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All Locations</SelectItem>
@@ -232,7 +232,7 @@ export function MovementHistory() {
             onValueChange={(value) => replaceQuery({ type: value ?? 'ALL', page: '1' })}
           >
             <SelectTrigger aria-label="Filter by movement type">
-              <SelectValue />
+              <SelectValue placeholder="Movement Type" />
             </SelectTrigger>
             <SelectContent>
               {TRANSACTION_TYPES.map(([value, label]) => (
@@ -247,7 +247,7 @@ export function MovementHistory() {
             onValueChange={(value) => replaceQuery({ condition: value ?? 'ALL', page: '1' })}
           >
             <SelectTrigger aria-label="Filter history by condition">
-              <SelectValue />
+              <SelectValue placeholder="All Conditions" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All Conditions</SelectItem>
@@ -289,7 +289,7 @@ export function MovementHistory() {
               onValueChange={(value) => replaceQuery({ order: value ?? 'DESC', page: '1' })}
             >
               <SelectTrigger className="w-40" aria-label="Sort movement history">
-                <SelectValue />
+                <SelectValue placeholder="Sort order" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="DESC">Newest First</SelectItem>

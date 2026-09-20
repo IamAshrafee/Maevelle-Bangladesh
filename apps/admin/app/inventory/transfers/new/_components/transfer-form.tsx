@@ -287,16 +287,16 @@ export function TransferForm({
                   <SelectTrigger id="source">
                     <SelectValue
                       placeholder={isLoadingLocations ? 'Loading...' : 'Select source location'}
-                    >
-                      {sourceLocationId
-                        ? locations.find((l) => l.id === sourceLocationId)?.name
-                        : undefined}
-                    </SelectValue>
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {sourceLocations.map((loc) => (
-                      <SelectItem key={loc.id} value={loc.id}>
-                        {loc.name} ({loc.code})
+                      <SelectItem
+                        key={loc.id}
+                        value={loc.id}
+                        label={`${loc.name} (${loc.code})`}
+                      >
+                        {loc.name} <span className="text-muted-foreground ml-1 text-xs">({loc.code})</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -323,16 +323,16 @@ export function TransferForm({
                       placeholder={
                         isLoadingLocations ? 'Loading...' : 'Select destination location'
                       }
-                    >
-                      {destinationLocationId
-                        ? locations.find((l) => l.id === destinationLocationId)?.name
-                        : undefined}
-                    </SelectValue>
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {destinationLocations.map((loc) => (
-                      <SelectItem key={loc.id} value={loc.id}>
-                        {loc.name} ({loc.code})
+                      <SelectItem
+                        key={loc.id}
+                        value={loc.id}
+                        label={`${loc.name} (${loc.code})`}
+                      >
+                        {loc.name} <span className="text-muted-foreground ml-1 text-xs">({loc.code})</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -415,11 +415,7 @@ export function TransferForm({
                               placeholder={
                                 isLoadingStock ? 'Loading stock…' : 'Select item to transfer'
                               }
-                            >
-                              {lineVariantId
-                                ? `${selectedStockItem?.productTitle ?? 'Item'} — ${selectedStockItem?.sku ?? ''}`
-                                : undefined}
-                            </SelectValue>
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             {availableStock.length === 0 ? (
@@ -428,10 +424,15 @@ export function TransferForm({
                               </SelectItem>
                             ) : (
                               availableStock.map((stock) => (
-                                <SelectItem key={stock.variantId} value={stock.variantId}>
+                                <SelectItem
+                                  key={stock.variantId}
+                                  value={stock.variantId}
+                                  label={`${stock.productTitle} — ${stock.sku}`}
+                                  description={`${stock.availableToSell} available`}
+                                >
                                   {stock.productTitle}
                                   <span className="text-muted-foreground ml-2 font-mono text-xs">
-                                    {stock.sku} · {stock.availableToSell} avail.
+                                    {stock.sku}
                                   </span>
                                 </SelectItem>
                               ))

@@ -188,14 +188,14 @@ export function ClassificationDialog(props: {
                   onValueChange={(value) => setParentCategoryId(value ?? 'NONE')}
                 >
                   <SelectTrigger id="classification-parent">
-                    <SelectValue />
+                    <SelectValue placeholder="Select parent category" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="NONE">No parent — top level</SelectItem>
                     {props.categories
                       .filter((category) => !invalidParentIds.has(category.id))
                       .map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
+                        <SelectItem key={category.id} value={category.id} label={category.path}>
                           {category.path}
                         </SelectItem>
                       ))}
@@ -217,7 +217,7 @@ export function ClassificationDialog(props: {
                   <SelectContent>
                     <SelectItem value="NONE">None / Inherit from parent</SelectItem>
                     {props.sizeGuides?.map((guide) => (
-                      <SelectItem key={guide.id} value={guide.id}>
+                      <SelectItem key={guide.id} value={guide.id} label={guide.name}>
                         {guide.name}
                       </SelectItem>
                     ))}
@@ -237,7 +237,7 @@ export function ClassificationDialog(props: {
                 onValueChange={(value) => setStatus(value as CatalogCategoryStatusDto)}
               >
                 <SelectTrigger id="classification-status">
-                  <SelectValue />
+                  <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ACTIVE">Active</SelectItem>

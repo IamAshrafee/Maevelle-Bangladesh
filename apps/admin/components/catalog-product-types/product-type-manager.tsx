@@ -138,7 +138,7 @@ function TypeDialog(props: {
                 onValueChange={(value) => setStatus(value as CatalogDefinitionStatusDto)}
               >
                 <SelectTrigger id="product-type-status">
-                  <SelectValue />
+                  <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ACTIVE">Active</SelectItem>
@@ -276,15 +276,18 @@ function AttributeDialog(props: {
                 onValueChange={(value) => setValueType(value as CatalogAttributeValueTypeDto)}
               >
                 <SelectTrigger id="attribute-type">
-                  <SelectValue />
+                  <SelectValue placeholder="Select value type" />
                 </SelectTrigger>
                 <SelectContent>
                   {(['TEXT', 'INTEGER', 'DECIMAL', 'BOOLEAN', 'DATE', 'REFERENCE'] as const).map(
-                    (type) => (
-                      <SelectItem key={type} value={type}>
-                        {type.toLowerCase()}
-                      </SelectItem>
-                    ),
+                    (type) => {
+                      const label = type.charAt(0) + type.slice(1).toLowerCase();
+                      return (
+                        <SelectItem key={type} value={type} label={label}>
+                          {label}
+                        </SelectItem>
+                      );
+                    },
                   )}
                 </SelectContent>
               </Select>
@@ -297,7 +300,7 @@ function AttributeDialog(props: {
                 onValueChange={(value) => setScope(value as CatalogAttributeScopeDto)}
               >
                 <SelectTrigger id="attribute-scope">
-                  <SelectValue />
+                  <SelectValue placeholder="Select scope" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PRODUCT">Product</SelectItem>
@@ -314,7 +317,7 @@ function AttributeDialog(props: {
                 onValueChange={(value) => setStatus(value as CatalogDefinitionStatusDto)}
               >
                 <SelectTrigger id="attribute-status">
-                  <SelectValue />
+                  <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ACTIVE">Active</SelectItem>
@@ -476,7 +479,7 @@ function OptionDialog(props: {
                   onValueChange={(value) => setStatus(value as CatalogDefinitionStatusDto)}
                 >
                   <SelectTrigger id="reference-option-status">
-                    <SelectValue />
+                    <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ACTIVE">Active</SelectItem>

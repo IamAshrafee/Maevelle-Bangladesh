@@ -270,8 +270,12 @@ export function StockOverview() {
             <SelectContent>
               <SelectItem value="ALL">All Locations</SelectItem>
               {locations.map((location) => (
-                <SelectItem key={location.id} value={location.id}>
-                  {location.name} ({location.code})
+                <SelectItem
+                  key={location.id}
+                  value={location.id}
+                  label={`${location.name} (${location.code})`}
+                >
+                  {location.name} <span className="text-muted-foreground text-xs">({location.code})</span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -312,8 +316,8 @@ export function StockOverview() {
               value={catalogStatus}
               onValueChange={(value) => replaceQuery({ catalog: value ?? 'ALL', page: '1' })}
             >
-              <SelectTrigger className="w-40" aria-label="Filter by Catalog status">
-                <SelectValue />
+              <SelectTrigger className="w-44" aria-label="Filter by Catalog status">
+                <SelectValue placeholder="Catalog Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Catalog Items</SelectItem>
@@ -329,7 +333,7 @@ export function StockOverview() {
               }}
             >
               <SelectTrigger className="w-48" aria-label="Sort stock positions">
-                <SelectValue />
+                <SelectValue placeholder="Sort positions" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="PRODUCT:ASC">Product A–Z</SelectItem>
