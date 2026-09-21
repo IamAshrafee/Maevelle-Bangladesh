@@ -15,6 +15,7 @@ import {
   Landmark,
   Layers,
   MoreHorizontal,
+  Plus,
   RotateCcw,
   Scale,
   Smartphone,
@@ -67,6 +68,7 @@ export interface AccountsTableProps {
   readonly onTransfer?: ((accountId: string) => void) | undefined;
   readonly onViewActivity?: ((accountId: string) => void) | undefined;
   readonly onReconcile?: ((accountId: string) => void) | undefined;
+  readonly onCreateAccount?: (() => void) | undefined;
 }
 
 type AccountTypeFilter = 'ALL' | 'BANK' | 'MOBILE_WALLET' | 'CASH' | 'OTHER';
@@ -139,6 +141,7 @@ export function AccountsTable({
   onTransfer,
   onViewActivity,
   onReconcile,
+  onCreateAccount,
 }: AccountsTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<AccountTypeFilter>('ALL');
@@ -244,6 +247,13 @@ export function AccountsTable({
       <OperationalEmptyState
         title="No financial accounts"
         description="Create Cash, Bank, mobile-wallet, or courier holding accounts before recording account-backed money movement."
+        action={
+          onCreateAccount ? (
+            <Button onClick={onCreateAccount}>
+              <Plus className="size-4" /> Create first account
+            </Button>
+          ) : undefined
+        }
       />
     );
   }
@@ -361,6 +371,12 @@ export function AccountsTable({
               <option value="name-desc">Name: Z to A</option>
               <option value="activity-desc">Activity: Most recent</option>
             </NativeSelect>
+
+            {onCreateAccount ? (
+              <Button size="sm" onClick={onCreateAccount} className="h-8 gap-1 text-xs">
+                <Plus className="size-3.5" /> Add account
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>

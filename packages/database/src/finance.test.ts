@@ -292,6 +292,50 @@ describe('Finance operational cash ledger', () => {
     });
   });
 
+  it('handles comma-formatted observed balance and validates input in reconcileFinancialAccount', async () => {
+    const org = await organization('reconciliation-comma');
+    const bank = await account(org, 'City Bank', '25000');
+
+    // Comma-formatted matching balance -> difference 0, auto-closed
+    const matched = await finance.reconcileFinancialAccount(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountId: bank.id,
+      observedBalance: '25,000.00',
+    });
+    expect(matched.difference).toBe('0.0000');
+    expect(matched.status).toBe('CLOSED');
+
+    // Comma-formatted discrepancy -> difference recorded, status OPEN
+    const discrepancy = await finance.reconcileFinancialAccount(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountId: bank.id,
+      observedBalance: '24,500.50',
+    });
+    expect(decimal(discrepancy.difference)).toBe('-499.5000');
+    expect(discrepancy.status).toBe('OPEN');
+
+    // Invalid format rejected with VALIDATION_FAILED
+    await expect(
+      finance.reconcileFinancialAccount(database.db, {
+        organizationId: org,
+        actorId: actor,
+        accountId: bank.id,
+        observedBalance: 'not-a-number',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    await expect(
+      finance.reconcileFinancialAccount(database.db, {
+        organizationId: org,
+        actorId: actor,
+        accountId: bank.id,
+        observedBalance: '',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
   it('rejects sub-cent overdrafts without converting NUMERIC money to floating point', async () => {
     const org = await organization('exact-decimals');
     const source = await account(org, 'Large exact balance', '9007199254740992.0000');
@@ -599,6 +643,99 @@ describe('Finance operational cash ledger', () => {
       adjustment_events: '1',
       cancellation_audits: '1',
       cancellation_events: '1',
+    });
+  });
+
+  it('sanitizes account code, supports comma-formatted opening balance, and reports duplicate conflicts', async () => {
+    const org = await organization('acc-creation');
+    const created = await finance.createFinancialAccount(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountNumber: '  bkash-main  ',
+      name: '  Main bKash Wallet  ',
+      accountType: 'MOBILE_WALLET',
+      currencyCode: 'bdt',
+      referenceLabel: '  01700-000000  ',
+      openingBalance: ' 25,000.00 ',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(created.id).toBeDefined();
+
+    const detail = await finance.getFinancialAccountDetail(database.db, org, created.id);
+    expect(detail.account_number).toBe('BKASH-MAIN');
+    expect(detail.name).toBe('Main bKash Wallet');
+    expect(detail.currency_code).toBe('BDT');
+    expect(detail.reference_label).toBe('01700-000000');
+    expect(decimal(detail.ledger_balance)).toBe('25000.0000');
+
+    // Duplicate account code should throw CONFLICT
+    await expect(
+      finance.createFinancialAccount(database.db, {
+        organizationId: org,
+        actorId: actor,
+        accountNumber: 'BKASH-MAIN',
+        name: 'Another bKash',
+        accountType: 'MOBILE_WALLET',
+        currencyCode: 'BDT',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'Financial account with code "BKASH-MAIN" already exists.',
+    });
+  });
+
+  it('supports comma-formatted transfer amounts and validates account balance invariants', async () => {
+    const org = await organization('transfers-test');
+    const source = await account(org, 'Bank Source', '50000');
+    const dest = await account(org, 'Wallet Dest', '10000');
+
+    // Transfer 15,000 with commas
+    const transferResult = await finance.createInternalTransfer(database.db, {
+      organizationId: org,
+      actorId: actor,
+      sourceAccountId: source.id,
+      destinationAccountId: dest.id,
+      amount: ' 15,000.00 ',
+      reference: '  Weekly bank to wallet refill  ',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(transferResult.financeTransactionId).toBeDefined();
+
+    const sourceDetail = await finance.getFinancialAccountDetail(database.db, org, source.id);
+    const destDetail = await finance.getFinancialAccountDetail(database.db, org, dest.id);
+    expect(decimal(sourceDetail.ledger_balance)).toBe('35000.0000');
+    expect(decimal(destDetail.ledger_balance)).toBe('25000.0000');
+
+    // Insufficient balance transfer
+    await expect(
+      finance.createInternalTransfer(database.db, {
+        organizationId: org,
+        actorId: actor,
+        sourceAccountId: source.id,
+        destinationAccountId: dest.id,
+        amount: '40000',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+
+    // Same account transfer
+    await expect(
+      finance.createInternalTransfer(database.db, {
+        organizationId: org,
+        actorId: actor,
+        sourceAccountId: source.id,
+        destinationAccountId: source.id,
+        amount: '1000',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Transfer accounts must differ.',
     });
   });
 });

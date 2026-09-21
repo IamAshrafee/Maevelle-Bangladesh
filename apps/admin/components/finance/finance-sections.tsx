@@ -424,11 +424,13 @@ export function AccountsSection({
   onTransfer,
   onViewActivity,
   onReconcile,
+  onCreateAccount,
 }: {
   readonly accounts: readonly FinancialAccountDto[];
-  readonly onTransfer?: (accountId: string) => void;
-  readonly onViewActivity?: (accountId: string) => void;
-  readonly onReconcile?: (accountId: string) => void;
+  readonly onTransfer?: ((accountId: string) => void) | undefined;
+  readonly onViewActivity?: ((accountId: string) => void) | undefined;
+  readonly onReconcile?: ((accountId: string) => void) | undefined;
+  readonly onCreateAccount?: (() => void) | undefined;
 }) {
   return (
     <AccountsTable
@@ -436,6 +438,7 @@ export function AccountsSection({
       onTransfer={onTransfer}
       onViewActivity={onViewActivity}
       onReconcile={onReconcile}
+      onCreateAccount={onCreateAccount}
     />
   );
 }

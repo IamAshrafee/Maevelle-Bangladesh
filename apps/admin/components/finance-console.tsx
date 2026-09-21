@@ -716,6 +716,7 @@ export function FinanceConsole({
             onReconcile={(accountId) =>
               setDialog({ kind: 'balance-check', defaultAccountId: accountId })
             }
+            onCreateAccount={canManageAccounts ? () => setDialog({ kind: 'account' }) : undefined}
           />
         ) : null}
 

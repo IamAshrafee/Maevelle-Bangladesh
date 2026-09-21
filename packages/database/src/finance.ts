@@ -762,18 +762,44 @@ export async function createFinancialAccount(
     idempotencyKey: string;
   },
 ) {
+  const accountNumber = input.accountNumber.trim().toUpperCase();
+  const name = input.name.trim();
+  const currencyCode = input.currencyCode.trim().toUpperCase();
+  const referenceLabel = input.referenceLabel?.trim() || null;
+  const rawOpeningBalance = input.openingBalance?.replace(/,/g, '').trim();
+
+  if (!accountNumber) {
+    throw new FinanceDomainError('VALIDATION_FAILED', 'Account code is required.');
+  }
+  if (!name) {
+    throw new FinanceDomainError('VALIDATION_FAILED', 'Account name is required.');
+  }
+  if (!/^[A-Z]{3}$/.test(currencyCode)) {
+    throw new FinanceDomainError(
+      'VALIDATION_FAILED',
+      'Currency code must be a 3-letter uppercase code (e.g. BDT).',
+    );
+  }
+
   return db.transaction().execute(async (tx) => {
     const idempotency = await claim(tx, {
       organizationId: input.organizationId,
       actorId: input.actorId,
       operation: 'finance.account.create',
       key: input.idempotencyKey,
-      body: input,
+      body: {
+        ...input,
+        accountNumber,
+        name,
+        currencyCode,
+        referenceLabel,
+        openingBalance: rawOpeningBalance,
+      },
     });
     if (!idempotency.created) {
       const r = await sql<{
         id: string;
-      }>`select id from finance.financial_accounts where organization_id=${input.organizationId} and account_number=${input.accountNumber}`.execute(
+      }>`select id from finance.financial_accounts where organization_id=${input.organizationId} and account_number=${accountNumber}`.execute(
         tx,
       );
       if (r.rows[0]) return r.rows[0];
@@ -782,7 +808,7 @@ export async function createFinancialAccount(
     try {
       const r = await sql<{
         id: string;
-      }>`insert into finance.financial_accounts (organization_id,account_number,name,account_type,currency_code,reference_label) values (${input.organizationId},${input.accountNumber},${input.name},${input.accountType},${input.currencyCode},${input.referenceLabel ?? null}) returning id`.execute(
+      }>`insert into finance.financial_accounts (organization_id,account_number,name,account_type,currency_code,reference_label) values (${input.organizationId},${accountNumber},${name},${input.accountType},${currencyCode},${referenceLabel}) returning id`.execute(
         tx,
       );
       id = r.rows[0]?.id as string;
@@ -790,19 +816,19 @@ export async function createFinancialAccount(
       if ((error as { code?: string }).code === '23505')
         throw new FinanceDomainError(
           'CONFLICT',
-          'Financial account with this number already exists.',
+          `Financial account with code "${accountNumber}" already exists.`,
         );
       throw error;
     }
     if (!id) throw new Error('Financial account was not created.');
-    if (input.openingBalance && moneyUnits(input.openingBalance) !== 0n) {
-      const amount = signed(input.openingBalance);
+    if (rawOpeningBalance && moneyUnits(rawOpeningBalance) !== 0n) {
+      const amount = signed(rawOpeningBalance);
       const openingTransactionId = await movement(tx, {
         organizationId: input.organizationId,
         actorId: input.actorId,
         accountId: id,
         amount,
-        currency: input.currencyCode,
+        currency: currencyCode,
         type: 'OPENING_BALANCE',
         description: 'Opening balance',
         sourceDomain: 'finance.account',
@@ -1528,8 +1554,11 @@ export async function createInternalTransfer(
     idempotencyKey: string;
   },
 ) {
+  const cleanAmount = input.amount.replace(/,/g, '').trim();
+  const cleanReference = input.reference?.trim() || null;
+  const amount = positive(cleanAmount, 'Transfer amount');
+
   return db.transaction().execute(async (tx) => {
-    const amount = positive(input.amount);
     if (input.sourceAccountId === input.destinationAccountId)
       throw new FinanceDomainError('VALIDATION_FAILED', 'Transfer accounts must differ.');
     const ids = [input.sourceAccountId, input.destinationAccountId].sort();
@@ -1545,23 +1574,24 @@ export async function createInternalTransfer(
         'VALIDATION_FAILED',
         'Transfer accounts must be active and use the same currency.',
       );
-    if (
-      moneyUnits(await balance(tx, input.organizationId, input.sourceAccountId)) <
-      moneyUnits(amount)
-    )
-      throw new FinanceDomainError('CONFLICT', 'Source account has insufficient balance.');
+    const sourceBalance = await balance(tx, input.organizationId, input.sourceAccountId);
+    if (moneyUnits(sourceBalance) < moneyUnits(amount))
+      throw new FinanceDomainError(
+        'CONFLICT',
+        `Source account has insufficient balance (available: ${source.currency_code} ${moneyFromUnits(moneyUnits(sourceBalance))}).`,
+      );
     const c = await claim(tx, {
       organizationId: input.organizationId,
       actorId: input.actorId,
       operation: 'finance.transfer.create',
       key: input.idempotencyKey,
-      body: input,
+      body: { ...input, amount: cleanAmount, reference: cleanReference },
     });
     if (!c.created) throw new FinanceDomainError('CONFLICT', 'Transfer was already processed.');
     const n = await nextNumber(tx, input.organizationId, 'FIN');
     const tr = await sql<{
       id: string;
-    }>`insert into finance.finance_transactions (organization_id,transaction_number,transaction_type,description,created_by) values (${input.organizationId},${n},'INTERNAL_TRANSFER',${input.reference ?? 'Internal transfer'},${input.actorId}::uuid) returning id`.execute(
+    }>`insert into finance.finance_transactions (organization_id,transaction_number,transaction_type,description,created_by) values (${input.organizationId},${n},'INTERNAL_TRANSFER',${cleanReference ?? 'Internal transfer'},${input.actorId}::uuid) returning id`.execute(
       tx,
     );
     const tid = tr.rows[0]?.id;
@@ -1569,7 +1599,7 @@ export async function createInternalTransfer(
     await sql`insert into finance.financial_account_entries (organization_id,finance_transaction_id,financial_account_id,amount_delta,currency_code) values (${input.organizationId},${tid}::uuid,${input.sourceAccountId}::uuid,${`-${amount}`}::numeric,${source.currency_code}),(${input.organizationId},${tid}::uuid,${input.destinationAccountId}::uuid,${amount}::numeric,${source.currency_code})`.execute(
       tx,
     );
-    await sql`insert into finance.internal_transfers (organization_id,finance_transaction_id,source_account_id,destination_account_id,amount,currency_code,reference,created_by) values (${input.organizationId},${tid}::uuid,${input.sourceAccountId}::uuid,${input.destinationAccountId}::uuid,${amount}::numeric,${source.currency_code},${input.reference ?? null},${input.actorId}::uuid)`.execute(
+    await sql`insert into finance.internal_transfers (organization_id,finance_transaction_id,source_account_id,destination_account_id,amount,currency_code,reference,created_by) values (${input.organizationId},${tid}::uuid,${input.sourceAccountId}::uuid,${input.destinationAccountId}::uuid,${amount}::numeric,${source.currency_code},${cleanReference},${input.actorId}::uuid)`.execute(
       tx,
     );
     await appendAuditEvent(tx, {
@@ -2227,14 +2257,18 @@ export async function reconcileFinancialAccount(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; actorId: string; accountId: string; observedBalance: string },
 ) {
+  const observed = input.observedBalance.replace(/,/g, '').trim();
+  if (!observed) {
+    throw new FinanceDomainError('VALIDATION_FAILED', 'Observed balance is required.');
+  }
+  if (!signedMoney.test(observed))
+    throw new FinanceDomainError(
+      'VALIDATION_FAILED',
+      'Observed balance must be a valid numeric amount with up to 4 decimal places.',
+    );
+
   return db.transaction().execute(async (tx) => {
     const a = await account(tx, input.organizationId, input.accountId);
-    const observed = input.observedBalance.trim();
-    if (!signedMoney.test(observed))
-      throw new FinanceDomainError(
-        'VALIDATION_FAILED',
-        'Observed balance must be a decimal with up to 4 places.',
-      );
     const ledger = await balance(tx, input.organizationId, input.accountId);
     const diff = moneyFromUnits(moneyUnits(observed) - moneyUnits(ledger));
     const status = moneyUnits(diff) === 0n ? 'CLOSED' : 'OPEN';
@@ -2266,7 +2300,7 @@ export async function reconcileFinancialAccount(
     await sql`insert into platform.outbox_events (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values (${input.organizationId},'finance.reconciliation.created',1,'finance.reconciliation_session',${id}::uuid,1,${JSON.stringify({ reconciliationId: id, accountId: a.id, status })}::jsonb,now())`.execute(
       tx,
     );
-    return { id, ledgerBalance: ledger, difference: diff };
+    return { id, ledgerBalance: ledger, difference: diff, status };
   });
 }
 

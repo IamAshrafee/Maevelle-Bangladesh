@@ -181,8 +181,8 @@ export function registerFinanceRoutes(
     {
       schema: {
         body: Type.Object({
-          accountNumber: Type.String(),
-          name: Type.String(),
+          accountNumber: Type.String({ minLength: 1, maxLength: 50 }),
+          name: Type.String({ minLength: 1, maxLength: 100 }),
           accountType: Type.Union([
             Type.Literal('CASH'),
             Type.Literal('BANK'),
@@ -190,8 +190,8 @@ export function registerFinanceRoutes(
             Type.Literal('OTHER'),
           ]),
           currencyCode: Type.String({ minLength: 3, maxLength: 3 }),
-          referenceLabel: Type.Optional(Type.String()),
-          openingBalance: Type.Optional(Type.String()),
+          referenceLabel: Type.Optional(Type.String({ maxLength: 200 })),
+          openingBalance: Type.Optional(Type.String({ maxLength: 30 })),
           idempotencyKey: key,
         }),
       },
@@ -456,10 +456,10 @@ export function registerFinanceRoutes(
     {
       schema: {
         body: Type.Object({
-          sourceAccountId: Type.String(),
-          destinationAccountId: Type.String(),
-          amount: Type.String(),
-          reference: Type.Optional(Type.String()),
+          sourceAccountId: Type.String({ minLength: 1 }),
+          destinationAccountId: Type.String({ minLength: 1 }),
+          amount: Type.String({ minLength: 1, maxLength: 30 }),
+          reference: Type.Optional(Type.String({ maxLength: 200 })),
           idempotencyKey: key,
         }),
       },
@@ -587,7 +587,14 @@ export function registerFinanceRoutes(
   });
   app.post(
     '/admin/finance/reconciliations',
-    { schema: { body: Type.Object({ accountId: Type.String(), observedBalance: Type.String() }) } },
+    {
+      schema: {
+        body: Type.Object({
+          accountId: Type.String({ minLength: 1 }),
+          observedBalance: Type.String({ minLength: 1, maxLength: 30 }),
+        }),
+      },
+    },
     async (req, reply) => {
       const a = await admin(database, auth, req.headers, 'finance.reconciliation.manage');
       if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });

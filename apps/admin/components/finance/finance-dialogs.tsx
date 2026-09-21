@@ -21,6 +21,21 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
 import { formatMoney, type ExpenseCategoryDto } from '@/lib/finance/types';
+import {
+  CreateFinancialAccountDialog,
+  type CreateFinancialAccountDialogProps,
+} from './create-account-dialog';
+import { TransferFundsDialog, type TransferFundsDialogProps } from './transfer-dialog';
+import { BalanceCheckDialog, type BalanceCheckDialogProps } from './balance-check-dialog';
+
+export {
+  CreateFinancialAccountDialog,
+  type CreateFinancialAccountDialogProps,
+  TransferFundsDialog,
+  type TransferFundsDialogProps,
+  BalanceCheckDialog,
+  type BalanceCheckDialogProps,
+};
 
 export type FinanceDialogState =
   | { readonly kind: 'account' }
@@ -72,72 +87,53 @@ export function FinanceCommandDialog({
       await onCommand(path, map(values(event.currentTarget)));
     };
 
+  if (state?.kind === 'account') {
+    return (
+      <CreateFinancialAccountDialog
+        open={true}
+        existingAccounts={accounts}
+        busy={busy}
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+        onCommand={onCommand}
+      />
+    );
+  }
+
+  if (state?.kind === 'transfer') {
+    return (
+      <TransferFundsDialog
+        open={true}
+        accounts={accounts}
+        defaultSourceAccountId={state.defaultSourceAccountId}
+        busy={busy}
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+        onCommand={onCommand}
+      />
+    );
+  }
+
+  if (state?.kind === 'balance-check') {
+    return (
+      <BalanceCheckDialog
+        open={true}
+        accounts={accounts}
+        defaultAccountId={state.defaultAccountId}
+        busy={busy}
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+        onCommand={onCommand}
+      />
+    );
+  }
+
   return (
     <Dialog open={Boolean(state)} onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
-        {state?.kind === 'account' ? (
-          <form
-            className="grid gap-4"
-            onSubmit={submit('/admin/finance/accounts', (data) => ({
-              accountNumber: data.accountNumber,
-              name: data.name,
-              accountType: data.accountType,
-              currencyCode: String(data.currencyCode).toUpperCase(),
-              referenceLabel: data.referenceLabel || undefined,
-              openingBalance: data.openingBalance || undefined,
-            }))}
-          >
-            <DialogHeader>
-              <DialogTitle>Create financial account</DialogTitle>
-              <DialogDescription>
-                Add where business money is held. The opening balance becomes an immutable ledger
-                entry and cannot be edited later.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Account name">
-                <Input name="name" placeholder="Main bKash wallet" required autoFocus />
-              </Field>
-              <Field label="Account code">
-                <Input name="accountNumber" placeholder="BKASH-01" required />
-              </Field>
-              <Field label="Account type">
-                <NativeSelect className="w-full" name="accountType" defaultValue="MOBILE_WALLET">
-                  <option value="CASH">Cash</option>
-                  <option value="BANK">Bank</option>
-                  <option value="MOBILE_WALLET">Mobile wallet</option>
-                  <option value="OTHER">Courier wallet / other</option>
-                </NativeSelect>
-              </Field>
-              <Field label="Currency">
-                <Input
-                  name="currencyCode"
-                  defaultValue="BDT"
-                  minLength={3}
-                  maxLength={3}
-                  required
-                />
-              </Field>
-              <Field
-                label="Reference"
-                hint="Optional bank suffix, wallet number, or operational label."
-              >
-                <Input name="referenceLabel" placeholder="Ends 1234" />
-              </Field>
-              <Field label="Opening balance" hint="Leave empty for zero.">
-                <Input name="openingBalance" inputMode="decimal" placeholder="0.00" />
-              </Field>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={busy}>
-                Create account
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : null}
 
         {state?.kind === 'expense' ? (
           <form
@@ -341,70 +337,6 @@ export function FinanceCommandDialog({
           </form>
         ) : null}
 
-        {state?.kind === 'transfer' ? (
-          <form
-            className="grid gap-4"
-            onSubmit={submit('/admin/finance/transfers', (data) => ({
-              sourceAccountId: data.sourceAccountId,
-              destinationAccountId: data.destinationAccountId,
-              amount: data.amount,
-              reference: data.reference || undefined,
-            }))}
-          >
-            <DialogHeader>
-              <DialogTitle>Transfer between accounts</DialogTitle>
-              <DialogDescription>
-                Internal transfers move money without recording income or an expense.
-              </DialogDescription>
-            </DialogHeader>
-            <Field label="From account">
-              <NativeSelect
-                className="w-full"
-                name="sourceAccountId"
-                required
-                defaultValue={state?.kind === 'transfer' ? (state.defaultSourceAccountId ?? '') : ''}
-              >
-                <option value="" disabled>
-                  Choose source
-                </option>
-                {activeAccounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name} · {formatMoney(account.ledger_balance, account.currency_code)}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field label="To account">
-              <NativeSelect className="w-full" name="destinationAccountId" required defaultValue="">
-                <option value="" disabled>
-                  Choose destination
-                </option>
-                {activeAccounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name} · {account.currency_code}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Amount">
-                <Input name="amount" inputMode="decimal" required />
-              </Field>
-              <Field label="Reference">
-                <Input name="reference" placeholder="Courier remittance" />
-              </Field>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={busy || activeAccounts.length < 2}>
-                Transfer funds
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : null}
-
         {state?.kind === 'cash-adjustment' ? (
           <form
             className="grid gap-4"
@@ -455,52 +387,6 @@ export function FinanceCommandDialog({
           </form>
         ) : null}
 
-        {state?.kind === 'balance-check' ? (
-          <form
-            className="grid gap-4"
-            onSubmit={submit('/admin/finance/reconciliations', (data) => ({
-              accountId: data.accountId,
-              observedBalance: data.observedBalance,
-            }))}
-          >
-            <DialogHeader>
-              <DialogTitle>Compare account balance</DialogTitle>
-              <DialogDescription>
-                Enter the balance shown by the bank, wallet, cash count, or courier statement. This
-                comparison never changes Maevelle's ledger.
-              </DialogDescription>
-            </DialogHeader>
-            <Field label="Account">
-              <NativeSelect
-                className="w-full"
-                name="accountId"
-                required
-                defaultValue={state?.kind === 'balance-check' ? (state.defaultAccountId ?? '') : ''}
-              >
-                <option value="" disabled>
-                  Choose account
-                </option>
-                {activeAccounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name} · ledger{' '}
-                    {formatMoney(account.ledger_balance, account.currency_code)}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field label="Observed balance">
-              <Input name="observedBalance" inputMode="decimal" required />
-            </Field>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={busy || activeAccounts.length === 0}>
-                Compare balance
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : null}
 
         {state?.kind === 'reconciliation-resolution' ? (
           <form
