@@ -1344,6 +1344,11 @@ export interface PaginatedEnvelope<T> {
   readonly totalCount: number;
 }
 
+export interface PaginatedResultDto<T> {
+  readonly items: readonly T[];
+  readonly pagination: PaginationDto;
+}
+
 export type PaymentMethodCodeDto = 'COD' | 'BKASH_MANUAL' | 'NAGAD_MANUAL';
 
 export interface PaymentMethodDto {
@@ -1401,10 +1406,43 @@ export interface PaymentDto {
   readonly amount: string;
   readonly currency: string;
   readonly externalReference: string;
+  readonly status: 'CONFIRMED' | 'VOIDED' | 'REVERSED';
   readonly confirmedAt: string;
   readonly refunded: string;
   readonly net: string;
   readonly financePosting: FinancePostingDto | null;
+}
+
+export interface PaymentDetailDto extends PaymentDto {
+  readonly order: {
+    readonly status: string;
+    readonly total: string;
+    readonly currency: string;
+    readonly paymentStatus: string;
+    readonly collected: string;
+    readonly outstanding: string;
+  };
+  readonly customer: {
+    readonly id: string | null;
+    readonly name: string;
+    readonly phone: string;
+    readonly email: string | null;
+  };
+  readonly source:
+    | {
+        readonly type: 'MANUAL_SUBMISSION';
+        readonly id: string;
+        readonly submittedAt: string;
+      }
+    | {
+        readonly type: 'COD_COLLECTION';
+        readonly id: string;
+        readonly deliveryNumber: string;
+        readonly carrierName: string | null;
+        readonly trackingReference: string | null;
+        readonly deliveredAt: string | null;
+      };
+  readonly refunds: readonly RefundDto[];
 }
 
 export interface RefundDto {
@@ -1438,6 +1476,20 @@ export interface FinancialAccountDto {
   readonly last_movement_at: string | null;
 }
 
+export interface FinanceAccountDetailDto extends FinancialAccountDto {
+  readonly summary: {
+    readonly totalInflow: string;
+    readonly totalOutflow: string;
+    readonly entryCount: number;
+  };
+  readonly latestReconciliation: {
+    readonly id: string;
+    readonly status: 'OPEN' | 'CLOSED';
+    readonly differenceAmount: string;
+    readonly observedAt: string;
+  } | null;
+}
+
 export interface FinanceExpenseDto {
   readonly id: string;
   readonly expense_number: string;
@@ -1446,13 +1498,58 @@ export interface FinanceExpenseDto {
   readonly currency_code: string;
   readonly expense_date: string;
   readonly status: string;
+  readonly category_id: string;
   readonly category_name: string;
+  readonly category_classification: string;
   readonly paid: string;
   readonly adjustments: string;
   readonly outstanding: string;
   readonly source_domain: string | null;
   readonly source_id: string | null;
+  readonly source_reference: string | null;
+  readonly source_counterparty: string | null;
+  readonly payee_name: string | null;
+  readonly external_reference: string | null;
+  readonly notes: string | null;
+  readonly created_at: string;
+  readonly version: number;
 }
+
+export interface FinanceExpenseDetailDto extends FinanceExpenseDto {
+  readonly payments: readonly {
+    readonly id: string;
+    readonly amount: string;
+    readonly paidAt: string;
+    readonly reference: string | null;
+    readonly accountId: string;
+    readonly accountName: string;
+    readonly financeTransactionId: string;
+    readonly transactionNumber: string;
+  }[];
+  readonly adjustmentHistory: readonly {
+    readonly id: string;
+    readonly type: string;
+    readonly amount: string;
+    readonly reason: string;
+    readonly createdAt: string;
+  }[];
+  readonly activity: readonly {
+    readonly id: string;
+    readonly action: string;
+    readonly reason: string | null;
+    readonly occurredAt: string;
+    readonly actorId: string | null;
+  }[];
+}
+
+export type FinanceTransactionTypeDto =
+  | 'OPENING_BALANCE'
+  | 'EXPENSE_PAYMENT'
+  | 'INTERNAL_TRANSFER'
+  | 'EXTERNAL_ADJUSTMENT'
+  | 'PAYMENT_SOURCE_POSTING'
+  | 'REFUND_SOURCE_POSTING'
+  | 'COD_SETTLEMENT';
 
 export interface FinanceLedgerEntryDto {
   readonly id: string;
@@ -1461,7 +1558,7 @@ export interface FinanceLedgerEntryDto {
   readonly created_at: string;
   readonly transaction_id: string;
   readonly transaction_number: string;
-  readonly transaction_type: string;
+  readonly transaction_type: FinanceTransactionTypeDto;
   readonly description: string;
   readonly source_domain: string | null;
   readonly source_id: string | null;
@@ -1470,12 +1567,123 @@ export interface FinanceLedgerEntryDto {
 
 export interface FinanceReconciliationDto {
   readonly id: string;
+  readonly account_id: string;
   readonly account_name: string;
   readonly observed_balance: string;
   readonly ledger_balance: string;
   readonly difference_amount: string;
-  readonly status: string;
+  readonly status: 'OPEN' | 'CLOSED';
   readonly created_at: string;
+  readonly resolution: {
+    readonly code: 'EXPLAINED_DIFFERENCE' | 'EXTERNAL_BALANCE_CORRECTED';
+    readonly note: string;
+    readonly resolved_at: string;
+    readonly resolved_by: string | null;
+  } | null;
+}
+
+export interface OutstandingCodSettlementPaymentDto {
+  readonly paymentId: string;
+  readonly paymentNumber: string;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly deliveryId: string;
+  readonly deliveryNumber: string;
+  readonly carrierName: string;
+  readonly trackingReference: string | null;
+  readonly collectedAt: string;
+  readonly amount: string;
+  readonly settledAmount: string;
+  readonly outstandingAmount: string;
+  readonly currency: string;
+  readonly sourceAccountId: string | null;
+  readonly sourceAccountName: string | null;
+  readonly canSettle: boolean;
+}
+
+export interface FinanceCodSettlementDto {
+  readonly id: string;
+  readonly settlementNumber: string;
+  readonly carrierName: string;
+  readonly remittanceReference: string;
+  readonly currency: string;
+  readonly grossAmount: string;
+  readonly deductionAmount: string;
+  readonly netAmount: string;
+  readonly deductionNote: string | null;
+  readonly sourceAccountId: string;
+  readonly sourceAccountName: string;
+  readonly destinationAccountId: string;
+  readonly destinationAccountName: string;
+  readonly financeTransactionId: string;
+  readonly settledAt: string;
+  readonly createdBy: string | null;
+  readonly allocations: readonly {
+    readonly paymentId: string;
+    readonly paymentNumber: string;
+    readonly orderId: string;
+    readonly orderNumber: string;
+    readonly deliveryId: string;
+    readonly deliveryNumber: string;
+    readonly amount: string;
+  }[];
+}
+
+export type FinanceTrendRangeDto = 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS' | 'THIS_MONTH';
+
+export interface FinanceTrendsDto {
+  readonly range: FinanceTrendRangeDto;
+  readonly currency: string;
+  readonly period: {
+    readonly from: string;
+    readonly to: string;
+    readonly label: string;
+  };
+  readonly totals: {
+    readonly collectedPayments: string;
+    readonly completedRefunds: string;
+    readonly paidExpenses: string;
+    readonly courierDeductions: string;
+    readonly netAccountMovement: string;
+  };
+  readonly series: readonly {
+    readonly date: string;
+    readonly collectedPayments: string;
+    readonly completedRefunds: string;
+    readonly paidExpenses: string;
+    readonly courierDeductions: string;
+    readonly netAccountMovement: string;
+  }[];
+}
+
+export interface FinanceOverviewDto {
+  readonly currency: string;
+  readonly period: {
+    readonly from: string;
+    readonly to: string;
+    readonly label: string;
+  };
+  readonly metrics: {
+    readonly collectedPayments: string;
+    readonly completedRefunds: string;
+    readonly paidExpenses: string;
+    readonly netAccountMovement: string;
+    readonly accountBalance: string;
+    readonly outstandingExpenses: string;
+    readonly outstandingSupplierPayments: string;
+    readonly outstandingCodHeld: string;
+  };
+  readonly attention: {
+    readonly pendingPaymentVerifications: number;
+    readonly pendingCodCollections: number;
+    readonly unpostedPayments: number;
+    readonly unpostedRefunds: number;
+    readonly reconciliationDifferences: number;
+    readonly outstandingExpenses: number;
+    readonly outstandingSupplierPayments: number;
+    readonly outstandingCodPayments: number;
+  };
+  readonly recentActivity: readonly FinanceLedgerEntryDto[];
 }
 
 export interface OrderSummaryDto {

@@ -1,5 +1,5 @@
-import { ProcurementConsole } from '@/components/procurement-console';
+import { redirect } from 'next/navigation';
 
 export default function ReceivingPage() {
-  return <ProcurementConsole screen="receiving" />;
+  redirect('/supply#receiving');
 }

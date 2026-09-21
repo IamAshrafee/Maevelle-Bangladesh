@@ -32,6 +32,7 @@ import {
   placePurchase,
   postInboundReceipt,
   removePurchaseLine,
+  updatePurchase,
   updatePurchaseLine,
   updateSupplier,
 } from './procurement.js';
@@ -153,6 +154,25 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       supplierReference: 'SUP-ORDER-42',
       expectedDate: '2026-09-30',
     });
+    const editedDraft = await updatePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: draft.id,
+      expectedVersion: draft.version,
+      supplierId: supplier.id,
+      currencyCode: 'CNY',
+      supplierReference: 'SUP-ORDER-43',
+      orderDate: draft.orderDate,
+      expectedDate: '2026-10-02',
+      destinationLocationId: input.locationId,
+      notes: 'Use reinforced cartons',
+    });
+    expect(editedDraft).toMatchObject({
+      supplierReference: 'SUP-ORDER-43',
+      expectedDate: '2026-10-02',
+      destinationLocationId: input.locationId,
+      notes: 'Use reinforced cartons',
+    });
     const withLine = await addPurchaseLine(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -161,6 +181,17 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       quantity: '3',
       unitPrice: '12.5000',
     });
+    await expect(
+      updatePurchase(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        purchaseId: draft.id,
+        expectedVersion: withLine.version,
+        supplierId: supplier.id,
+        currencyCode: 'USD',
+        orderDate: draft.orderDate,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     const corrected = await updatePurchaseLine(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -169,7 +200,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       quantity: '4',
       unitPrice: '11.7500',
     });
-    expect(corrected).toMatchObject({ supplierReference: 'SUP-ORDER-42', totalAmount: '47.0000' });
+    expect(corrected).toMatchObject({ supplierReference: 'SUP-ORDER-43', totalAmount: '47.0000' });
     const emptyDraft = await removePurchaseLine(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -672,7 +703,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
   });
 
-  it('allows one shipment to consolidate allocated lines from separate suppliers', async () => {
+  it('allows one shipment to consolidate allocated lines from separate suppliers in one currency', async () => {
     const input = await fixture();
     const secondSupplier = await createSupplier(database.db, {
       organizationId: input.organizationId,
@@ -684,7 +715,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       organizationId: input.organizationId,
       actorId: input.actorId,
       supplierId: secondSupplier.id,
-      currencyCode: 'USD',
+      currencyCode: 'CNY',
     });
     const withLine = await addPurchaseLine(database.db, {
       organizationId: input.organizationId,
@@ -713,6 +744,26 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     expect(shipment.allocations.map((allocation) => allocation.supplierName)).toEqual(
       expect.arrayContaining(['Inbound supplier', 'Second supplier']),
     );
+  });
+
+  it('rejects a mixed-currency shipment before an uncostable state can be created', async () => {
+    const input = await fixture();
+    const supplier = await createSupplier(database.db, {
+      organizationId: input.organizationId, actorId: input.actorId, code: `SUP-${crypto.randomUUID().slice(0, 6)}`, name: 'USD supplier',
+    });
+    const purchase = await createPurchase(database.db, {
+      organizationId: input.organizationId, actorId: input.actorId, supplierId: supplier.id, currencyCode: 'USD',
+    });
+    const line = await addPurchaseLine(database.db, {
+      organizationId: input.organizationId, actorId: input.actorId, purchaseId: purchase.id, variantId: input.variantId, quantity: '1', unitPrice: '5',
+    });
+    const placed = await placePurchase(database.db, {
+      organizationId: input.organizationId, actorId: input.actorId, purchaseId: purchase.id, expectedVersion: line.version,
+    });
+    await expect(createShipment(database.db, {
+      organizationId: input.organizationId, actorId: input.actorId, receivingLocationId: input.locationId, transportMode: 'SEA',
+      allocations: [{ purchaseLineId: input.purchaseLineId, quantity: '1' }, { purchaseLineId: placed.lines[0]!.id, quantity: '1' }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 
   it('makes concurrent receipt retry canonical and rolls all receipt effects back on a late fault', async () => {

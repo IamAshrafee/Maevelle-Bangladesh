@@ -1,4 +1,5 @@
-import { FinanceConsole } from '@/components/finance-console';
+import { redirect } from 'next/navigation';
+
 export default function FinanceReconciliationPage() {
-  return <FinanceConsole section="reconciliation" />;
+  redirect('/finance/accounts?tab=reconciliation');
 }

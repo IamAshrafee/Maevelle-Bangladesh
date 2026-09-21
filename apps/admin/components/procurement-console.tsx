@@ -15,6 +15,7 @@ import type {
 } from '@maevelle/contracts';
 
 import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
+import { useAdminCapability } from '@/components/admin-capabilities';
 import {
   PurchaseForm,
   ReceiptForm,
@@ -56,8 +57,18 @@ import type {
   SupplyNotice,
   SupplyScreen,
 } from '@/lib/supply/types';
+import { purchaseWorkflowStatus } from '@/lib/supply/status';
 
 export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }) {
+  const canManageProcurement = useAdminCapability('procurement.manage');
+  const canManageShipments = useAdminCapability('inbound_shipment.manage');
+  const canReceive = useAdminCapability('receiving.post');
+  const canCreate =
+    screen === 'shipments'
+      ? canManageShipments
+      : screen === 'receiving'
+        ? canReceive
+        : canManageProcurement;
   const [suppliers, setSuppliers] = useState<readonly SupplierDto[]>([]);
   const [purchases, setPurchases] = useState<readonly PurchaseDto[]>([]);
   const [shipments, setShipments] = useState<readonly InboundShipmentDto[]>([]);
@@ -71,6 +82,7 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('ALL');
   const [page, setPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<SupplierDto>();
@@ -86,48 +98,55 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
     setLoading(true);
     try {
       const summary = request<ApiEnvelope<SupplyOverviewDto>>('/admin/supply/overview');
+      const listParams = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+      if (query.trim()) listParams.set('q', query.trim());
+      if (status !== 'ALL') listParams.set('status', status);
       if (screen === 'suppliers') {
         const [a, b, c] = await Promise.all([
           summary,
-          request<PagedEnvelope<SupplierDto>>('/admin/suppliers?pageSize=100'),
+          request<PagedEnvelope<SupplierDto>>(`/admin/suppliers?${listParams}`),
           request<PagedEnvelope<PurchaseDto>>('/admin/purchases?pageSize=100'),
         ]);
         setOverview(a.data);
         setSuppliers(b.data);
+        setTotalItems(b.pagination?.totalItems ?? b.data.length);
         setPurchases(c.data);
       } else if (screen === 'purchases') {
         const [a, b, c, d, e] = await Promise.all([
           summary,
           request<PagedEnvelope<SupplierDto>>('/admin/suppliers?pageSize=100'),
-          request<PagedEnvelope<PurchaseDto>>('/admin/purchases?pageSize=100'),
+          request<PagedEnvelope<PurchaseDto>>(`/admin/purchases?${listParams}`),
           request<ApiEnvelope<readonly CatalogVariantChoiceDto[]>>('/admin/catalog/variants'),
           request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations'),
         ]);
         setOverview(a.data);
         setSuppliers(b.data);
         setPurchases(c.data);
+        setTotalItems(c.pagination?.totalItems ?? c.data.length);
         setVariants(d.data);
         setLocations(e.data);
       } else if (screen === 'shipments') {
         const [a, b, c, d] = await Promise.all([
           summary,
           request<PagedEnvelope<PurchaseDto>>('/admin/purchases?pageSize=100'),
-          request<PagedEnvelope<InboundShipmentDto>>('/admin/inbound-shipments?pageSize=100'),
+          request<PagedEnvelope<InboundShipmentDto>>(`/admin/inbound-shipments?${listParams}`),
           request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations'),
         ]);
         setOverview(a.data);
         setPurchases(b.data);
         setShipments(c.data);
+        setTotalItems(c.pagination?.totalItems ?? c.data.length);
         setLocations(d.data);
       } else {
         const [a, b, c] = await Promise.all([
           summary,
           request<PagedEnvelope<InboundShipmentDto>>('/admin/inbound-shipments?pageSize=100'),
-          request<PagedEnvelope<InboundReceiptDto>>('/admin/inbound-receipts?pageSize=100'),
+          request<PagedEnvelope<InboundReceiptDto>>(`/admin/inbound-receipts?${listParams}`),
         ]);
         setOverview(a.data);
         setShipments(b.data);
         setReceipts(c.data);
+        setTotalItems(c.pagination?.totalItems ?? c.data.length);
       }
     } catch (error) {
       setNotice({
@@ -142,8 +161,8 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
   useEffect(() => {
     void reload();
     const params = new URLSearchParams(window.location.search);
-    if (params.has('create')) setCreateOpen(true);
-  }, [screen]);
+    if (params.has('create') && canCreate) setCreateOpen(true);
+  }, [canCreate, page, query, screen, status]);
 
   const allItems =
     screen === 'suppliers'
@@ -153,7 +172,13 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
         : screen === 'shipments'
           ? shipments
           : receipts;
-  const statuses = [...new Set(allItems.map((item) => item.status))];
+  const statuses = [
+    ...new Set(
+      allItems.map((item) =>
+        screen === 'purchases' ? purchaseWorkflowStatus(item as PurchaseDto) : item.status,
+      ),
+    ),
+  ];
   const filtered = allItems.filter((item) => {
     const text =
       screen === 'suppliers'
@@ -165,10 +190,13 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
             : `${(item as InboundReceiptDto).receiptNumber} ${shipments.find((shipment) => shipment.id === (item as InboundReceiptDto).shipmentId)?.shipmentNumber ?? ''}`;
     return (
       (!query.trim() || text.toLowerCase().includes(query.trim().toLowerCase())) &&
-      (status === 'ALL' || item.status === status)
+      (status === 'ALL' ||
+        (screen === 'purchases'
+          ? purchaseWorkflowStatus(item as PurchaseDto) === status
+          : item.status === status))
     );
   });
-  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const visible = filtered;
   const shippableLines = purchases.flatMap((purchase) =>
     purchase.status === 'PLACED'
       ? purchase.lines
@@ -374,7 +402,7 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
 
   const [title, description, actionLabel] = screenCopy[screen];
   return (
-    <main>
+    <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-7xl gap-5">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -398,16 +426,28 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
             >
               <RefreshCw className={loading ? 'animate-spin' : ''} /> Refresh
             </Button>
-            <Button onClick={() => setCreateOpen(true)} title={actionLabel}>
-              <Plus /> {actionLabel}
-            </Button>
+            {(screen === 'suppliers' || screen === 'purchases') && canManageProcurement ? (
+              <Button onClick={() => setCreateOpen(true)} title={actionLabel}>
+                <Plus /> {actionLabel}
+              </Button>
+            ) : null}
+            {screen === 'shipments' && canManageShipments ? (
+              <Button onClick={() => setCreateOpen(true)} title={actionLabel}>
+                <Plus /> {actionLabel}
+              </Button>
+            ) : null}
+            {screen === 'receiving' && canReceive ? (
+              <Button onClick={() => setCreateOpen(true)} title={actionLabel}>
+                <Plus /> {actionLabel}
+              </Button>
+            ) : null}
           </div>
         </header>
         <StatCards overview={overview} screen={screen} />
         {notice ? (
           <OperationalFeedback tone={notice.tone}>{notice.message}</OperationalFeedback>
         ) : null}
-        <section className="overflow-hidden rounded-xl border bg-card">
+        <section className="min-w-0 overflow-hidden rounded-xl border bg-card">
           <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center">
             <label className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
@@ -444,7 +484,7 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
               </select>
             </label>
             <span className="text-sm text-muted-foreground">
-              {filtered.length} result{filtered.length === 1 ? '' : 's'}
+              {totalItems} result{totalItems === 1 ? '' : 's'}
             </span>
           </div>
           {loading ? (
@@ -462,9 +502,11 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
                   : `Use “${actionLabel}” to begin this workflow.`
               }
               action={
-                <Button onClick={() => setCreateOpen(true)}>
-                  <Plus /> {actionLabel}
-                </Button>
+                canCreate ? (
+                  <Button onClick={() => setCreateOpen(true)}>
+                    <Plus /> {actionLabel}
+                  </Button>
+                ) : undefined
               }
             />
           ) : screen === 'suppliers' ? (
@@ -472,6 +514,7 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
               items={visible as SupplierDto[]}
               purchases={purchases}
               onEdit={setEditingSupplier}
+              canManage={canManageProcurement}
             />
           ) : screen === 'purchases' ? (
             <PurchasesTable
@@ -482,6 +525,8 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
               onCancel={(purchase) => setConfirmAction({ kind: 'cancel-purchase', purchase })}
               transition={transition}
               run={run}
+              canManage={canManageProcurement}
+              canManageShipments={canManageShipments}
             />
           ) : screen === 'shipments' ? (
             <ShipmentsTable
@@ -490,12 +535,14 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
               setExpanded={setExpandedShipment}
               onCancel={(shipment) => setConfirmAction({ kind: 'cancel-shipment', shipment })}
               transition={transition}
+              canManage={canManageShipments}
+              canReceive={canReceive}
             />
           ) : (
             <ReceiptsTable items={visible as InboundReceiptDto[]} shipments={shipments} />
           )}
-          {!loading && filtered.length ? (
-            <Pager page={page} total={filtered.length} onChange={setPage} />
+          {!loading && totalItems ? (
+            <Pager page={page} total={totalItems} onChange={setPage} />
           ) : null}
         </section>
       </div>

@@ -13,10 +13,16 @@ const success = new Set([
   'HEALTHY',
   'SUCCEEDED',
   'READY',
+  'MATCHED',
 ]);
 const warning = new Set([
   'PENDING',
   'PARTIALLY_PAID',
+  'PARTIALLY_RECEIVED',
+  'PARTIALLY_SHIPPED',
+  'ORDERED',
+  'SHIPPED',
+  'OUTSTANDING',
   'IN_TRANSIT',
   'INSPECTION',
   'QUARANTINE',
@@ -24,6 +30,10 @@ const warning = new Set([
   'RETRY_WAIT',
   'UNKNOWN_OUTCOME',
   'ATTENTION',
+  'NOT_POSTED',
+  'UNRECONCILED',
+  'OPEN',
+  'EXCEPTION',
 ]);
 const danger = new Set([
   'FAILED',

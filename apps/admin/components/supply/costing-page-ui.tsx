@@ -5,7 +5,6 @@ import type { ComponentType } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,

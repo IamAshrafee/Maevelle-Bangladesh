@@ -181,6 +181,16 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       foreign key (organization_id, delivery_id) references delivery.deliveries(organization_id, id)
     );
 
+    alter table payments.payments
+      add column source_delivery_id uuid unique,
+      add constraint payments_source_delivery_fk
+        foreign key (organization_id, source_delivery_id)
+        references delivery.deliveries(organization_id, id),
+      add constraint payments_exactly_one_collection_source
+        check (num_nonnulls(source_attempt_id, source_delivery_id) = 1);
+    create index payments_source_delivery on payments.payments (organization_id, source_delivery_id)
+      where source_delivery_id is not null;
+
     insert into iam.capability_definitions (capability_code, domain, description, sensitivity) values
       ('delivery.view', 'delivery', 'View delivery, manual courier, and tracking history.', 'INTERNAL'),
       ('delivery.manage', 'delivery', 'Create deliveries and record manual courier bookings.', 'HIGH'),

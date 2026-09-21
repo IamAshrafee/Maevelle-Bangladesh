@@ -4,7 +4,9 @@ export interface Shipment {
   id: string;
   shipmentNumber: string;
   receivingLocationName: string;
+  currencyCode: string;
   status: string;
+  receivingStatus: string;
   allocations: readonly {
     id: string;
     purchaseNumber: string;
@@ -43,6 +45,7 @@ export interface Worksheet {
     fx_rate_recorded_at: string | null;
     fx_source: string | null;
     reference: string | null;
+    finance_expense_id: string | null;
   }[];
   results: readonly {
     allocation_target_id: string;

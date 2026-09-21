@@ -15,7 +15,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create table finance.finance_transactions (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
-      transaction_number text not null, transaction_type text not null check (transaction_type in ('OPENING_BALANCE','EXPENSE_PAYMENT','INTERNAL_TRANSFER','EXTERNAL_ADJUSTMENT','PAYMENT_SOURCE_POSTING','REFUND_SOURCE_POSTING')),
+      transaction_number text not null, transaction_type text not null check (transaction_type in ('OPENING_BALANCE','EXPENSE_PAYMENT','INTERNAL_TRANSFER','EXTERNAL_ADJUSTMENT','PAYMENT_SOURCE_POSTING','REFUND_SOURCE_POSTING','COD_SETTLEMENT')),
       occurred_at timestamptz not null default now(), description text not null, source_domain text null, source_id uuid null, created_by uuid null references iam.users(id), created_at timestamptz not null default now(),
       unique (organization_id, transaction_number), unique (organization_id, id)
     );
@@ -39,7 +39,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), expense_number text not null,
       expense_category_id uuid not null references finance.expense_categories(id), currency_code text not null check (currency_code ~ '^[A-Z]{3}$'), amount numeric(20,4) not null check (amount > 0),
       expense_date date not null, description text not null, payee_type text null, payee_reference_id uuid null, status text not null default 'RECORDED' check (status in ('DRAFT','RECORDED','CANCELLED')),
-      source_domain text null, source_id uuid null, notes text null, created_by uuid null references iam.users(id), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
+      payee_name text null, external_reference text null, source_domain text null, source_id uuid null, notes text null, created_by uuid null references iam.users(id), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
       unique (organization_id, expense_number), unique (organization_id, id), foreign key (organization_id, expense_category_id) references finance.expense_categories(organization_id,id)
     );
     create table finance.expense_links (
@@ -47,9 +47,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       source_domain text not null, source_id uuid not null, created_at timestamptz not null default now(), unique (organization_id, expense_id, source_domain, source_id),
       foreign key (organization_id, expense_id) references finance.expenses(organization_id,id)
     );
+    alter table landed_cost.cost_components
+      add column finance_expense_id uuid unique references finance.expenses(id) on delete restrict,
+      add foreign key (organization_id, finance_expense_id) references finance.expenses(organization_id, id);
     create table finance.expense_payments (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), expense_id uuid not null references finance.expenses(id),
-      finance_transaction_id uuid not null unique references finance.finance_transactions(id), amount numeric(20,4) not null check (amount > 0), paid_at timestamptz not null default now(), created_at timestamptz not null default now(),
+      finance_transaction_id uuid not null unique references finance.finance_transactions(id), amount numeric(20,4) not null check (amount > 0), reference text null, paid_at timestamptz not null default now(), created_by uuid null references iam.users(id), created_at timestamptz not null default now(),
       unique (organization_id,id), foreign key (organization_id,expense_id) references finance.expenses(organization_id,id), foreign key (organization_id,finance_transaction_id) references finance.finance_transactions(organization_id,id)
     );
     create table finance.expense_adjustments (
@@ -62,6 +65,22 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       source_account_id uuid not null references finance.financial_accounts(id), destination_account_id uuid not null references finance.financial_accounts(id), amount numeric(20,4) not null check (amount > 0), currency_code text not null check (currency_code ~ '^[A-Z]{3}$'), reference text null, created_by uuid null references iam.users(id), created_at timestamptz not null default now(),
       check (source_account_id <> destination_account_id), unique (organization_id,id), foreign key (organization_id,finance_transaction_id) references finance.finance_transactions(organization_id,id), foreign key (organization_id,source_account_id) references finance.financial_accounts(organization_id,id), foreign key (organization_id,destination_account_id) references finance.financial_accounts(organization_id,id)
     );
+    create table finance.cod_settlements (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), settlement_number text not null,
+      finance_transaction_id uuid not null unique references finance.finance_transactions(id), source_account_id uuid not null references finance.financial_accounts(id), destination_account_id uuid not null references finance.financial_accounts(id),
+      carrier_name text not null check (length(trim(carrier_name)) > 0), remittance_reference text not null check (length(trim(remittance_reference)) > 0), normalized_remittance_reference text not null,
+      currency_code text not null check (currency_code ~ '^[A-Z]{3}$'), gross_amount numeric(20,4) not null check (gross_amount > 0), deduction_amount numeric(20,4) not null default 0 check (deduction_amount >= 0), net_amount numeric(20,4) not null check (net_amount > 0), deduction_note text null,
+      settled_at timestamptz not null, created_by uuid null references iam.users(id), created_at timestamptz not null default now(),
+      check (source_account_id <> destination_account_id), check (net_amount = gross_amount - deduction_amount), check ((deduction_amount = 0 and deduction_note is null) or (deduction_amount > 0 and length(trim(deduction_note)) > 0)),
+      unique (organization_id, settlement_number), unique (organization_id, normalized_remittance_reference), unique (organization_id, id),
+      foreign key (organization_id,finance_transaction_id) references finance.finance_transactions(organization_id,id), foreign key (organization_id,source_account_id) references finance.financial_accounts(organization_id,id), foreign key (organization_id,destination_account_id) references finance.financial_accounts(organization_id,id)
+    );
+    create table finance.cod_settlement_allocations (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), settlement_id uuid not null references finance.cod_settlements(id), payment_id uuid not null references payments.payments(id), amount numeric(20,4) not null check (amount > 0), created_at timestamptz not null default now(),
+      unique (organization_id,id), unique (organization_id,settlement_id,payment_id), foreign key (organization_id,settlement_id) references finance.cod_settlements(organization_id,id), foreign key (organization_id,payment_id) references payments.payments(organization_id,id)
+    );
+    create index finance_cod_settlements_org_time on finance.cod_settlements(organization_id,settled_at desc,id desc);
+    create index finance_cod_allocations_payment on finance.cod_settlement_allocations(organization_id,payment_id);
     create table finance.reconciliation_sessions (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), financial_account_id uuid not null references finance.financial_accounts(id),
       observed_balance numeric(20,4) not null, ledger_balance numeric(20,4) not null, difference_amount numeric(20,4) not null, status text not null default 'OPEN' check (status in ('OPEN','CLOSED')), observed_at timestamptz not null default now(), created_by uuid null references iam.users(id), created_at timestamptz not null default now(),
@@ -78,10 +97,11 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('finance.expenses.view','finance','View expenses.','INTERNAL'), ('finance.expenses.create','finance','Create expenses.','HIGH'), ('finance.expenses.pay','finance','Pay recorded expenses.','HIGH'),
       ('finance.categories.manage','finance','Manage expense categories.','HIGH'), ('finance.cash.view','finance','View cash movements.','INTERNAL'), ('finance.cash.record_manual','finance','Record controlled external cash adjustments.','HIGH'),
       ('finance.transfers.create','finance','Create internal cash transfers.','HIGH'), ('finance.reconciliation.view','finance','View account reconciliations.','INTERNAL'), ('finance.reconciliation.manage','finance','Create account reconciliations.','HIGH')
+      ,('finance.cod_settlements.view','finance','View courier COD settlement obligations and remittances.','INTERNAL'), ('finance.cod_settlements.manage','finance','Record courier COD remittances and deductions.','HIGH')
     on conflict (capability_code) do nothing;
     insert into iam.membership_capability_grants (membership_id, capability_code)
       select membership.id, capability.capability_code from iam.organization_memberships membership
-      cross join (values ('finance.accounts.view'), ('finance.accounts.manage'), ('finance.expenses.view'), ('finance.expenses.create'), ('finance.expenses.pay'), ('finance.categories.manage'), ('finance.cash.view'), ('finance.cash.record_manual'), ('finance.transfers.create'), ('finance.reconciliation.view'), ('finance.reconciliation.manage')) as capability(capability_code)
+      cross join (values ('finance.accounts.view'), ('finance.accounts.manage'), ('finance.expenses.view'), ('finance.expenses.create'), ('finance.expenses.pay'), ('finance.categories.manage'), ('finance.cash.view'), ('finance.cash.record_manual'), ('finance.transfers.create'), ('finance.reconciliation.view'), ('finance.reconciliation.manage'), ('finance.cod_settlements.view'), ('finance.cod_settlements.manage')) as capability(capability_code)
       where membership.membership_type='OWNER' and membership.status='ACTIVE' on conflict do nothing;
   `.execute(db);
 }

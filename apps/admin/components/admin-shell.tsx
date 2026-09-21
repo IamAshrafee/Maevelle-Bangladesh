@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
+  Banknote,
   Bell,
   Boxes,
   Building2,
-  Calculator,
   ChartNoAxesCombined,
   ChevronRight,
   CircleDollarSign,
@@ -19,6 +19,7 @@ import {
   HandCoins,
   HeartHandshake,
   Image,
+  Landmark,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -146,27 +147,26 @@ const navigation: readonly NavGroup[] = [
         icon: PackageOpen,
         capability: 'inventory.view',
       },
+      {
+        label: 'Cost & valuation',
+        href: '/costing',
+        icon: CircleDollarSign,
+        capability: 'costing.view',
+      },
     ],
   },
   {
     label: 'Supply',
     items: [
-      { label: 'Suppliers', href: '/suppliers', icon: Building2, capability: 'procurement.view' },
+      { label: 'Overview', href: '/supply', icon: LayoutDashboard, capability: 'procurement.view' },
       { label: 'Purchases', href: '/purchases', icon: ReceiptText, capability: 'procurement.view' },
       {
-        label: 'Inbound shipments',
+        label: 'Shipments',
         href: '/inbound-shipments',
         icon: PackageOpen,
         capability: 'inbound_shipment.view',
       },
-      { label: 'Receiving', href: '/receiving', icon: PackageCheck, capability: 'receiving.view' },
-      {
-        label: 'Landed cost',
-        href: '/landed-cost',
-        icon: Calculator,
-        capability: 'landed_cost.view',
-      },
-      { label: 'Costing', href: '/costing', icon: CircleDollarSign, capability: 'costing.view' },
+      { label: 'Suppliers', href: '/suppliers', icon: Building2, capability: 'procurement.view' },
     ],
   },
   {
@@ -181,30 +181,40 @@ const navigation: readonly NavGroup[] = [
   {
     label: 'Payments & finance',
     items: [
-      { label: 'Payments', href: '/payments', icon: CreditCard, capability: 'payments.view' },
       {
-        label: 'Finance overview',
+        label: 'Payments',
+        href: '/payments',
+        icon: CreditCard,
+        capability: 'payments.view',
+        keywords: 'collections refunds verification gateways methods queue transactions',
+      },
+      {
+        label: 'Overview',
         href: '/finance',
         icon: CircleDollarSign,
         capability: 'finance.cash.view',
+        keywords: 'cash balance trends burn net position metrics summary',
+      },
+      {
+        label: 'Accounts & activity',
+        href: '/finance/accounts',
+        icon: Landmark,
+        capability: 'finance.accounts.view',
+        keywords: 'banks wallets cash financial accounts ledger balances provenance transfers reconciliation',
+      },
+      {
+        label: 'COD settlements',
+        href: '/finance/cod-settlements',
+        icon: Banknote,
+        capability: 'finance.cod_settlements.view',
+        keywords: 'courier remittances collections deductions outstanding settlements',
       },
       {
         label: 'Expenses',
         href: '/finance/expenses',
         icon: ReceiptText,
         capability: 'finance.expenses.view',
-      },
-      {
-        label: 'Accounts',
-        href: '/finance/accounts',
-        icon: Building2,
-        capability: 'finance.accounts.view',
-      },
-      {
-        label: 'Reconciliation',
-        href: '/finance/reconciliation',
-        icon: ClipboardCheck,
-        capability: 'finance.reconciliation.view',
+        keywords: 'operational expenses bills pay categories adjustments obligations receipts',
       },
     ],
   },
@@ -269,7 +279,7 @@ const quickCommands: readonly NavItem[] = [
   },
   {
     label: 'Receive a shipment',
-    href: '/receiving',
+    href: '/supply#receiving',
     icon: PackageCheck,
     capability: 'receiving.post',
     keywords: 'warehouse inbound',
@@ -295,9 +305,18 @@ function hasCapability(context: AdminContext | undefined, capability?: string) {
   return context?.capabilities.includes(capability) ?? false;
 }
 
-function isActive(pathname: string, href: string) {
+const allNavHrefs = navigation.flatMap((group) => group.items.map((item) => item.href));
+
+function isNavActive(pathname: string, href: string) {
   if (href === '/') return pathname === '/';
-  return pathname === href || pathname.startsWith(`${href}/`);
+  if (pathname === href) return true;
+  if (!pathname.startsWith(`${href}/`)) return false;
+  return !allNavHrefs.some(
+    (other) =>
+      other !== href &&
+      other.startsWith(`${href}/`) &&
+      (pathname === other || pathname.startsWith(`${other}/`)),
+  );
 }
 
 function CommandPalette({
@@ -505,7 +524,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                   return (
                     <Link
                       key={item.href}
-                      aria-current={isActive(pathname, item.href) ? 'page' : undefined}
+                      aria-current={isNavActive(pathname, item.href) ? 'page' : undefined}
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
                       title={collapsed ? item.label : undefined}

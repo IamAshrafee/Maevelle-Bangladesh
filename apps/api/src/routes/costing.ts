@@ -104,7 +104,7 @@ export function registerCostingRoutes(
       schema: {
         body: Type.Object({
           shipmentId: Type.String({ minLength: 1 }),
-          baseCurrencyCode: Type.String({ minLength: 3, maxLength: 3 }),
+          baseCurrencyCode: Type.Optional(Type.String({ minLength: 3, maxLength: 3 })),
           notes: Type.Optional(Type.String()),
         }),
       },
@@ -127,7 +127,13 @@ export function registerCostingRoutes(
   app.get('/admin/landed-cost/worksheets', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'landed_cost.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listLandedCostWorksheets(database.db, active.organizationId) };
+    return {
+      data: await listLandedCostWorksheets(
+        database.db,
+        active.organizationId,
+        request.query as { shipmentId?: string },
+      ),
+    };
   });
   app.get('/admin/landed-cost/worksheets/:worksheetId', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'landed_cost.view');
@@ -187,6 +193,7 @@ export function registerCostingRoutes(
           ]),
           allocationMethod: methods,
           reference: Type.Optional(Type.String()),
+          financeExpenseId: Type.Optional(Type.String()),
           notes: Type.Optional(Type.String()),
         }),
       },

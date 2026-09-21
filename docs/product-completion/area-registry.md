@@ -13,11 +13,11 @@ means meaningful current implementation exists; it does not mean acceptance.
 | Warehouse and inventory | `ACTIVE_ASSESSMENT_COMPLETE` | Current-head report and roadmap in `areas/admin-inventory-operations`; `warehouse.*`, `inventory.*`, Admin Inventory, Orders, Supply, Fulfillment, Returns, Costing, Search and Analytics traces |
 | Customers and geography | `CODE_SUBSTANTIAL` | `customers.*`, `geography.*`, Admin customer routes |
 | Cart, checkout and orders | `CODE_SUBSTANTIAL` | `cart.*`, `orders.*`, Storefront and Admin order routes |
-| Payments and refunds | `CODE_SUBSTANTIAL` | `payments.*`, payment/admin routes |
+| Payments and refunds | `ACTIVE_IMPLEMENTATION` | Assessment and foundation checkpoint in `areas/admin-payments-finance`; `payments.*`, payment/admin routes |
 | Supply, receiving and costing | `CODE_SUBSTANTIAL` | procurement, inbound shipment, receiving, landed-cost and costing modules |
 | Fulfillment and delivery | `CODE_SUBSTANTIAL` | fulfillment/delivery modules and Admin workspaces |
 | Returns and RTO | `CODE_SUBSTANTIAL` | returns modules and Admin routes |
-| Finance | `CODE_SUBSTANTIAL` | finance modules and Admin routes |
+| Finance | `ACTIVE_IMPLEMENTATION` | Assessment and foundation checkpoint in `areas/admin-payments-finance`; finance modules and Admin routes |
 | Reviews | `CODE_SUBSTANTIAL` | reviews modules, Admin moderation, Storefront display/submission |
 | Notifications and integrations | `CODE_SUBSTANTIAL` | notification/integration tables, routes and worker processing |
 | Analytics, search and audit | `CODE_SUBSTANTIAL` | analytics/search/audit schemas, worker processors and Admin pages |

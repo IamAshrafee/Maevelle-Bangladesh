@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiEnvelope } from '@maevelle/contracts';
 
@@ -57,10 +56,6 @@ export function IntegrityConsole() {
           Transactional truth is diagnosis-only. Repair actions are restricted to documented
           rebuildable projections.
         </p>
-        <nav>
-          <Link href="/operations">Operations</Link> · <Link href="/analytics">Analytics</Link> ·{' '}
-          <Link href="/team">Team & access</Link>
-        </nav>
         <p role="status">{message}</p>
         <p>
           <button type="button" onClick={() => void repair('ANALYTICS')}>

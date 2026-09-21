@@ -244,14 +244,6 @@ export function OperationsConsole() {
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        <nav className="operations-shortcuts" aria-label="Operations navigation">
-          <Link href="/analytics">Analytics</Link>
-          <Link href="/integrity">Integrity</Link>
-          <Link href="/team">Team & access</Link>
-          <Link href="/settings">Settings</Link>
-          <Link href="/notifications">Notifications</Link>
-          <Link href="/integrations">Integrations</Link>
-        </nav>
         <section className="panel">
           <div className="panel-header">
             <div>

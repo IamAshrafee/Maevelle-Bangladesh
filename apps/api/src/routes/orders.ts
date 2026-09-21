@@ -24,14 +24,16 @@ import {
   completeManualRefund,
   configurePaymentMethod,
   createRefund,
-  getPayment,
+  getPaymentDetail,
   getOrderPaymentInstructions,
   getPaymentAttempt,
   listPaymentMethods,
   listPayments,
+  listPendingCodCollections,
   listPendingPaymentAttempts,
   listRefunds,
   PaymentDomainError,
+  recordCodCollection,
   rejectManualPayment,
   submitManualPayment,
   verifyManualPayment,
@@ -625,6 +627,51 @@ export function registerOrderRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await listPendingPaymentAttempts(database.db, active.organizationId) };
   });
+  app.get('/admin/payments/cod-collections/pending', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'payments.verify');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listPendingCodCollections(database.db, active.organizationId) };
+  });
+  app.post(
+    '/admin/payments/cod-collections',
+    {
+      schema: {
+        body: Type.Object({
+          deliveryId: Type.String({ minLength: 1 }),
+          amount: Type.String({ minLength: 1 }),
+          externalReference: Type.String({ minLength: 4 }),
+          note: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'payments.verify');
+      const key = request.headers['idempotency-key'];
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      if (typeof key !== 'string' || !key.trim())
+        return reply
+          .code(422)
+          .send({ error: { code: 'VALIDATION_FAILED', message: 'Idempotency-Key is required.' } });
+      try {
+        const body = request.body as {
+          deliveryId: string;
+          amount: string;
+          externalReference: string;
+          note?: string;
+        };
+        return reply.code(201).send({
+          data: await recordCodCollection(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            ...body,
+            idempotencyKey: key,
+          }),
+        });
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
   app.get('/admin/payments/attempts/:attemptId', async (request, reply) => {
     const active = await admin(database, auth, request.headers, 'payments.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -694,17 +741,56 @@ export function registerOrderRoutes(
       }
     },
   );
-  app.get('/admin/payments', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'payments.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listPayments(database.db, active.organizationId) };
-  });
+  app.get(
+    '/admin/payments',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          q: Type.Optional(Type.String({ maxLength: 160 })),
+          method: Type.Optional(
+            Type.Union([
+              Type.Literal('COD'),
+              Type.Literal('BKASH_MANUAL'),
+              Type.Literal('NAGAD_MANUAL'),
+            ]),
+          ),
+          posting: Type.Optional(
+            Type.Union([Type.Literal('ALL'), Type.Literal('POSTED'), Type.Literal('UNPOSTED')]),
+          ),
+          from: Type.Optional(Type.String({ format: 'date-time' })),
+          to: Type.Optional(Type.String({ format: 'date-time' })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'payments.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as {
+        page?: number;
+        pageSize?: number;
+        q?: string;
+        method?: PaymentMethodCode;
+        posting?: 'ALL' | 'POSTED' | 'UNPOSTED';
+        from?: string;
+        to?: string;
+      };
+      const { q, ...filters } = query;
+      return {
+        data: await listPayments(database.db, active.organizationId, {
+          ...filters,
+          ...(q ? { query: q } : {}),
+        }),
+      };
+    },
+  );
   app.get('/admin/payments/:paymentId', async (request, reply) => {
     const active = await admin(database, auth, request.headers, 'payments.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     try {
       return {
-        data: await getPayment(
+        data: await getPaymentDetail(
           database.db,
           active.organizationId,
           (request.params as { paymentId: string }).paymentId,
@@ -714,11 +800,53 @@ export function registerOrderRoutes(
       return sendError(reply, caught);
     }
   });
-  app.get('/admin/refunds', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'refunds.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listRefunds(database.db, active.organizationId) };
-  });
+  app.get(
+    '/admin/refunds',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          q: Type.Optional(Type.String({ maxLength: 160 })),
+          status: Type.Optional(
+            Type.Union([
+              Type.Literal('REQUESTED'),
+              Type.Literal('PROCESSING'),
+              Type.Literal('UNKNOWN_EXTERNAL_OUTCOME'),
+              Type.Literal('COMPLETED'),
+              Type.Literal('FAILED'),
+              Type.Literal('CANCELLED_BEFORE_PROCESSING'),
+            ]),
+          ),
+          posting: Type.Optional(
+            Type.Union([Type.Literal('ALL'), Type.Literal('POSTED'), Type.Literal('UNPOSTED')]),
+          ),
+          from: Type.Optional(Type.String({ format: 'date-time' })),
+          to: Type.Optional(Type.String({ format: 'date-time' })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'refunds.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as {
+        page?: number;
+        pageSize?: number;
+        q?: string;
+        status?: string;
+        posting?: 'ALL' | 'POSTED' | 'UNPOSTED';
+        from?: string;
+        to?: string;
+      };
+      const { q, ...filters } = query;
+      return {
+        data: await listRefunds(database.db, active.organizationId, {
+          ...filters,
+          ...(q ? { query: q } : {}),
+        }),
+      };
+    },
+  );
   app.post(
     '/admin/payments/:paymentId/refunds',
     {

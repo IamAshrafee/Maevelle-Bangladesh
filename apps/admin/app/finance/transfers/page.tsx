@@ -1,4 +1,5 @@
-import { FinanceConsole } from '@/components/finance-console';
+import { redirect } from 'next/navigation';
+
 export default function FinanceTransfersPage() {
-  return <FinanceConsole section="transfers" />;
+  redirect('/finance/accounts?tab=transfers');
 }

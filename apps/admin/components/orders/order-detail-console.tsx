@@ -1,6 +1,13 @@
 'use client';
 
-import { ArrowLeft, Box, CheckCircle2, CircleDollarSign, PackageSearch, RefreshCw, XCircle } from 'lucide-react';
+import {
+  Box,
+  CheckCircle2,
+  CircleDollarSign,
+  PackageSearch,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -103,7 +110,10 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               <StatusBadge status={order.status} />
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Placed on {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(order.createdAt))}
+              Placed on{' '}
+              {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium', timeStyle: 'short' }).format(
+                new Date(order.createdAt),
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -124,11 +134,7 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
             {order.status === 'CONFIRMED' && (
               <HoldOrderDialog orderId={order.id} currentVersion={order.version} />
             )}
-            {order.status === 'ON_HOLD' && (
-              <Button onClick={resumeOrder}>
-                Resume Order
-              </Button>
-            )}
+            {order.status === 'ON_HOLD' && <Button onClick={resumeOrder}>Resume Order</Button>}
           </div>
         </div>
       </header>
@@ -136,7 +142,6 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left Column - Main Details */}
         <div className="space-y-6 lg:col-span-2">
-          
           {/* Order Items */}
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="border-b px-6 py-4">
@@ -159,13 +164,17 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                       <div className="text-xs text-muted-foreground">SKU: {line.sku}</div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {new Intl.NumberFormat('en-BD', { style: 'currency', currency: order.currency }).format(Number(line.unitPrice))}
+                      {new Intl.NumberFormat('en-BD', {
+                        style: 'currency',
+                        currency: order.currency,
+                      }).format(Number(line.unitPrice))}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {line.quantity}
-                    </TableCell>
+                    <TableCell className="text-right">{line.quantity}</TableCell>
                     <TableCell className="text-right font-medium">
-                      {new Intl.NumberFormat('en-BD', { style: 'currency', currency: order.currency }).format(Number(line.total))}
+                      {new Intl.NumberFormat('en-BD', {
+                        style: 'currency',
+                        currency: order.currency,
+                      }).format(Number(line.total))}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -175,12 +184,22 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               <div className="w-full max-w-sm space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>{new Intl.NumberFormat('en-BD', { style: 'currency', currency: order.currency }).format(Number(order.total))}</span>
+                  <span>
+                    {new Intl.NumberFormat('en-BD', {
+                      style: 'currency',
+                      currency: order.currency,
+                    }).format(Number(order.total))}
+                  </span>
                 </div>
                 {/* Note: In a full app, you'd show discounts/taxes here */}
                 <div className="flex justify-between border-t pt-2 text-base font-medium">
                   <span>Total</span>
-                  <span>{new Intl.NumberFormat('en-BD', { style: 'currency', currency: order.currency }).format(Number(order.total))}</span>
+                  <span>
+                    {new Intl.NumberFormat('en-BD', {
+                      style: 'currency',
+                      currency: order.currency,
+                    }).format(Number(order.total))}
+                  </span>
                 </div>
               </div>
             </div>
@@ -192,7 +211,16 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               <h2 className="flex items-center gap-2 text-lg font-medium text-foreground">
                 <CircleDollarSign className="size-5 text-muted-foreground" /> Payment
               </h2>
-              <StatusBadge status={order.payment.status} />
+              <div className="flex items-center gap-2">
+                <StatusBadge status={order.payment.status} />
+                <Button
+                  render={<Link href={`/payments?q=${encodeURIComponent(order.orderNumber)}`} />}
+                  size="sm"
+                  variant="outline"
+                >
+                  Payment operations
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4 px-6 py-4 sm:grid-cols-4">
               <div>
@@ -202,30 +230,43 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               <div>
                 <p className="text-xs text-muted-foreground">Expected</p>
                 <p className="mt-1 font-medium">
-                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: order.currency }).format(Number(order.payment.expected))}
+                  {new Intl.NumberFormat('en-BD', {
+                    style: 'currency',
+                    currency: order.currency,
+                  }).format(Number(order.payment.expected))}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Collected</p>
                 <p className="mt-1 font-medium text-emerald-600">
-                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: order.currency }).format(Number(order.payment.collected))}
+                  {new Intl.NumberFormat('en-BD', {
+                    style: 'currency',
+                    currency: order.currency,
+                  }).format(Number(order.payment.collected))}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Outstanding</p>
                 <p className="mt-1 font-medium text-rose-600">
-                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: order.currency }).format(Number(order.payment.outstanding))}
+                  {new Intl.NumberFormat('en-BD', {
+                    style: 'currency',
+                    currency: order.currency,
+                  }).format(Number(order.payment.outstanding))}
                 </p>
               </div>
             </div>
           </section>
-          
+
           {/* Fulfillments Section */}
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Fulfillments</h2>
               {(order.status === 'PENDING' || order.status === 'CONFIRMED') && (
-                <CreateFulfillmentDialog orderId={order.id} currentVersion={order.version} lines={order.lines} />
+                <CreateFulfillmentDialog
+                  orderId={order.id}
+                  currentVersion={order.version}
+                  lines={order.lines}
+                />
               )}
             </div>
             <div className="p-6">
@@ -236,12 +277,14 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {order.fulfillments.map((fulfillment: any) => (
+                  {order.fulfillments.map((fulfillment) => (
                     <div key={fulfillment.id} className="relative rounded-lg border p-4">
                       <p className="font-medium text-foreground">{fulfillment.fulfillmentNumber}</p>
                       <StatusBadge status={fulfillment.status} />
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {fulfillment.dispatchedAt ? `Dispatched: ${new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(new Date(fulfillment.dispatchedAt))}` : 'Pending Dispatch'}
+                        {fulfillment.dispatchedAt
+                          ? `Dispatched: ${new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(new Date(fulfillment.dispatchedAt))}`
+                          : 'Pending Dispatch'}
                       </p>
                     </div>
                   ))}
@@ -263,15 +306,19 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {order.deliveries.map((delivery: any) => (
+                  {order.deliveries.map((delivery) => (
                     <div key={delivery.id} className="relative rounded-lg border p-4">
                       <p className="font-medium text-foreground">{delivery.deliveryNumber}</p>
                       <StatusBadge status={delivery.status} />
                       {delivery.trackingNumber && (
-                        <p className="mt-2 text-sm text-primary">Tracking: {delivery.trackingNumber}</p>
+                        <p className="mt-2 text-sm text-primary">
+                          Tracking: {delivery.trackingNumber}
+                        </p>
                       )}
                       {delivery.status !== 'DELIVERED' && delivery.status !== 'FAILED' && (
-                        <Button variant="outline" size="sm" className="mt-4 w-full">Initiate RTO</Button>
+                        <Button variant="outline" size="sm" className="mt-4 w-full">
+                          Initiate RTO
+                        </Button>
                       )}
                     </div>
                   ))}
@@ -293,12 +340,15 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {order.returnCases.map((rc: any) => (
+                  {order.returnCases.map((rc) => (
                     <div key={rc.id} className="relative rounded-lg border p-4">
                       <p className="font-medium text-foreground">{rc.caseNumber}</p>
                       <StatusBadge status={rc.status} />
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {rc.returnType} • {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(new Date(rc.createdAt))}
+                        {rc.returnType} •{' '}
+                        {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
+                          new Date(rc.createdAt),
+                        )}
                       </p>
                     </div>
                   ))}
@@ -306,12 +356,10 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               )}
             </div>
           </section>
-
         </div>
 
         {/* Right Column - Customer & Timeline */}
         <div className="space-y-6">
-          
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Customer</h2>
@@ -319,16 +367,22 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
             <div className="px-6 py-4 text-sm">
               <div className="font-medium text-foreground">
                 {order.customerId ? (
-                  <Link href={`/customers/${order.customerId}`} className="hover:underline text-primary">
+                  <Link
+                    href={`/customers/${order.customerId}`}
+                    className="hover:underline text-primary"
+                  >
                     {order.customerName ?? 'Guest'}
                   </Link>
                 ) : (
-                  order.customerName ?? 'Guest'
+                  (order.customerName ?? 'Guest')
                 )}
               </div>
               {order.customerEmail ? (
                 <div className="mt-1 text-muted-foreground">
-                  <a href={`mailto:${order.customerEmail}`} className="hover:underline text-blue-600">
+                  <a
+                    href={`mailto:${order.customerEmail}`}
+                    className="hover:underline text-blue-600"
+                  >
                     {order.customerEmail}
                   </a>
                 </div>
@@ -356,7 +410,10 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                       <div className="flex flex-col pb-4">
                         <span className="text-sm font-medium">{event.eventType}</span>
                         <span className="text-xs text-muted-foreground">
-                          {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(event.occurredAt))}
+                          {new Intl.DateTimeFormat('en-BD', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          }).format(new Date(event.occurredAt))}
                         </span>
                       </div>
                     </li>
@@ -365,7 +422,6 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               </ul>
             </div>
           </section>
-          
         </div>
       </div>
     </main>

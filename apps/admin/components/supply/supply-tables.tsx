@@ -35,15 +35,18 @@ import {
   formatSupplyNumber,
   supplyRequest,
 } from '@/lib/supply/api';
+import { purchaseWorkflowStatus } from '@/lib/supply/status';
 
 export function SuppliersTable({
   items,
   purchases,
   onEdit,
+  canManage,
 }: {
   items: SupplierDto[];
   purchases: readonly PurchaseDto[];
   onEdit: (supplier: SupplierDto) => void;
+  canManage: boolean;
 }) {
   return (
     <Table>
@@ -62,7 +65,12 @@ export function SuppliersTable({
           return (
             <TableRow key={supplier.id}>
               <TableCell>
-                <div className="font-medium">{supplier.name}</div>
+                <Link
+                  className="font-medium hover:text-primary hover:underline"
+                  href={`/suppliers/${supplier.id}`}
+                >
+                  {supplier.name}
+                </Link>
                 <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                   <span>{supplier.code}</span>
                   <StatusBadge status={supplier.status} />
@@ -96,21 +104,25 @@ export function SuppliersTable({
               </TableCell>
               <TableCell>
                 <div className="flex justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onEdit(supplier)}
-                    title={`Edit ${supplier.name}`}
-                  >
-                    <Edit3 /> Edit
-                  </Button>
-                  <Link
-                    href={`/purchases?create=purchase&supplier=${supplier.id}`}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground no-underline"
-                    title={`Create a purchase from ${supplier.name}`}
-                  >
-                    New purchase <ArrowRight className="size-3.5" />
-                  </Link>
+                  {canManage ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onEdit(supplier)}
+                      title={`Edit ${supplier.name}`}
+                    >
+                      <Edit3 /> Edit
+                    </Button>
+                  ) : null}
+                  {canManage ? (
+                    <Link
+                      href={`/purchases?create=purchase&supplier=${supplier.id}`}
+                      className="inline-flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground no-underline"
+                      title={`Create a purchase from ${supplier.name}`}
+                    >
+                      New purchase <ArrowRight className="size-3.5" />
+                    </Link>
+                  ) : null}
                 </div>
               </TableCell>
             </TableRow>
@@ -129,6 +141,8 @@ export function PurchasesTable({
   onCancel,
   transition,
   run,
+  canManage,
+  canManageShipments,
 }: {
   items: PurchaseDto[];
   expanded: string | undefined;
@@ -137,6 +151,8 @@ export function PurchasesTable({
   onCancel: (purchase: PurchaseDto) => void;
   transition: (path: string, version: number, message: string, idempotent?: boolean) => void;
   run: (action: () => Promise<unknown>, message: string) => Promise<void>;
+  canManage: boolean;
+  canManageShipments: boolean;
 }) {
   return (
     <Table>
@@ -170,8 +186,14 @@ export function PurchasesTable({
                   />{' '}
                   {purchase.purchaseNumber}
                 </button>
+                <Link
+                  className="mt-1 inline-block text-xs font-medium text-primary hover:underline"
+                  href={`/purchases/${purchase.id}`}
+                >
+                  Open purchase
+                </Link>
                 <div className="mt-1">
-                  <StatusBadge status={purchase.status} />
+                  <StatusBadge status={purchaseWorkflowStatus(purchase)} />
                 </div>
                 {expanded === purchase.id ? (
                   <div className="mt-3 grid min-w-80 gap-2">
@@ -187,7 +209,7 @@ export function PurchasesTable({
                             {formatSupplyNumber(line.receivedQuantity)} ·{' '}
                             {formatSupplyMoney(line.unitPrice, purchase.currencyCode)} each
                           </div>
-                          {purchase.status === 'DRAFT' ? (
+                          {purchase.status === 'DRAFT' && canManage ? (
                             <Button
                               size="xs"
                               variant="destructive"
@@ -241,7 +263,7 @@ export function PurchasesTable({
               </TableCell>
               <TableCell>
                 <div className="flex justify-end gap-2">
-                  {purchase.status === 'DRAFT' ? (
+                  {purchase.status === 'DRAFT' && canManage ? (
                     <>
                       <Button
                         size="sm"
@@ -276,21 +298,25 @@ export function PurchasesTable({
                     </>
                   ) : purchase.status === 'PLACED' ? (
                     <>
-                      <Link
-                        href={`/inbound-shipments?create=shipment&purchase=${purchase.id}`}
-                        className="inline-flex h-7 items-center rounded-lg border px-2.5 text-[0.8rem] font-medium no-underline hover:bg-muted"
-                        title="Plan a shipment for this purchase"
-                      >
-                        Plan shipment
-                      </Link>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => onCancel(purchase)}
-                        title="Cancel only if nothing is allocated"
-                      >
-                        Cancel
-                      </Button>
+                      {canManageShipments ? (
+                        <Link
+                          href={`/inbound-shipments?create=shipment&purchase=${purchase.id}`}
+                          className="inline-flex h-7 items-center rounded-lg border px-2.5 text-[0.8rem] font-medium no-underline hover:bg-muted"
+                          title="Plan a shipment for this purchase"
+                        >
+                          Plan shipment
+                        </Link>
+                      ) : null}
+                      {canManage ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => onCancel(purchase)}
+                          title="Cancel only if nothing is allocated"
+                        >
+                          Cancel
+                        </Button>
+                      ) : null}
                     </>
                   ) : null}
                 </div>
@@ -309,12 +335,16 @@ export function ShipmentsTable({
   setExpanded,
   onCancel,
   transition,
+  canManage,
+  canReceive,
 }: {
   items: InboundShipmentDto[];
   expanded: string | undefined;
   setExpanded: (id?: string) => void;
   onCancel: (shipment: InboundShipmentDto) => void;
   transition: (path: string, version: number, message: string, idempotent?: boolean) => void;
+  canManage: boolean;
+  canReceive: boolean;
 }) {
   return (
     <Table>
@@ -342,6 +372,12 @@ export function ShipmentsTable({
                 />{' '}
                 {shipment.shipmentNumber}
               </button>
+              <Link
+                className="mt-1 inline-block text-xs font-medium text-primary hover:underline"
+                href={`/inbound-shipments/${shipment.id}`}
+              >
+                Open shipment
+              </Link>
               <div className="text-xs text-muted-foreground">
                 {shipment.trackingReference ?? 'No tracking reference'} · {shipment.transportMode}
               </div>
@@ -383,7 +419,7 @@ export function ShipmentsTable({
             </TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">
-                {shipment.status === 'PLANNED' ? (
+                {shipment.status === 'PLANNED' && canManage ? (
                   <>
                     <Button
                       size="sm"
@@ -408,7 +444,7 @@ export function ShipmentsTable({
                       Cancel
                     </Button>
                   </>
-                ) : shipment.status === 'IN_TRANSIT' ? (
+                ) : shipment.status === 'IN_TRANSIT' && canManage ? (
                   <Button
                     size="sm"
                     onClick={() =>
@@ -423,7 +459,9 @@ export function ShipmentsTable({
                   >
                     <PackageCheck /> Mark arrived
                   </Button>
-                ) : shipment.status === 'ARRIVED' && shipment.receivingStatus !== 'RECEIVED' ? (
+                ) : shipment.status === 'ARRIVED' &&
+                  shipment.receivingStatus !== 'RECEIVED' &&
+                  canReceive ? (
                   <Link
                     href={`/receiving?create=receipt&shipment=${shipment.id}`}
                     className="inline-flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground no-underline"
@@ -466,7 +504,12 @@ export function ReceiptsTable({
           return (
             <TableRow key={receipt.id}>
               <TableCell className="font-medium">
-                {receipt.receiptNumber}
+                <Link
+                  className="hover:text-primary hover:underline"
+                  href={`/receiving/${receipt.id}`}
+                >
+                  {receipt.receiptNumber}
+                </Link>
                 <div className="mt-1">
                   <StatusBadge status={receipt.status} />
                 </div>

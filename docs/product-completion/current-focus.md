@@ -2,48 +2,59 @@
 
 ## Active Area
 
-Admin Inventory Operations
+Admin Payments & Finance
 
 ## Why Now
 
-The Catalog-to-Inventory setup gap is closed in the current working tree.
-Inventory operations is left idle until a new repository-evidenced capability
-is selected.
+Payments & Finance is the selected module-completion area. Core Payment,
+Refund, account-ledger, supplier-payable, manual reconciliation, and courier COD
+settlement workflows are now materially stronger; compact reporting and the
+everyday Expense workflow now have authoritative read models, complete detail
+context, and safe money/lifecycle actions. Financial Activity and account
+detail are the next material scaling gap.
 
 ## Current Status / Substage
 
-`IDLE`
+`FOUNDATION / IN_PROGRESS`
 
 ## Evidence Already Known
 
-New Catalog variants are discoverable before their first stock movement through
-a paginated inventory-identity read model. The Stock workspace surfaces active
-SKUs awaiting opening balances, and Product, Inventory dashboard, item-detail,
-adjustment, and transfer links now carry authoritative variant/location
-identifiers. Storefront search also consumes pricing-definition outbox events.
+Confirmed payments, refunds, COD collection, order allocation, financial account
+entries, transfers, expenses, audit, outbox, and idempotency foundations exist.
+The Finance home now consumes an authoritative server-side monthly read model,
+confirmed Payments have a traceable detail route, and Payment/Refund worklists
+use paginated server filters instead of capped client aggregation. Manual
+reconciliation supports audited resolution/reopen, and supplier invoices are
+validated and traceable to their placed Purchase. Courier-held COD is now
+tracked independently from Delivery and customer collection through partial or
+batch remittance allocations, deductions, account receipt, and immutable
+settlement history.
 
 ## Immediate Objective
 
-None. Reassess the current repository before starting the next Inventory
-capability.
+Replace unbounded Financial Activity and client-side account aggregation with
+paginated server filters and authoritative account summaries. Complete account
+lifecycle controls, then perform authenticated responsive review of Payments
+and Finance.
 
 ## Last Completed Action
 
-Closed the product-setup lifecycle gap in the current working tree: zero-stock
-variants remain visible and actionable, adjustment/transfer preselection works,
-dead cross-module links were repaired, and price changes refresh Storefront
-search. Focused Inventory and Storefront tests, targeted TypeScript/lint, the
-Admin production build, and rebuilt service health checks passed.
+Completed a production-grade daily Expense workflow: scalable cross-module
+filters, optional immediate account payment, payee/reference/notes context,
+responsive detail and payment history, versioned correction/credit rules,
+unpaid cancellation, retry safety, audit, and outbox evidence. Thirty-one
+focused Payments/Finance/Procurement tests, fresh development/test migrations,
+targeted TypeScript/lint, and API/Admin production builds pass.
 
 ## Important Constraints
 
-Preserve the existing Warehouse Transfer authority, Inventory movement ledger,
-Costing provenance, tenant isolation, capability authorization, idempotency,
-optimistic concurrency, audit, and outbox behavior. Posted dispatch/receipt
-movements are immutable facts; corrections must be new explainable movements.
+Preserve Payment allocation as the source of Order collection truth, immutable
+account entries as the source of account balances, separate Delivery/COD
+collection and settlement facts, and existing tenant isolation, capability,
+idempotency, audit, outbox, and transaction boundaries.
 
 ## Blockers / Owner Review
 
-No technical blocker is recorded. The earlier adjustment selector was visually
-verified; the rebuilt Stock workspace still needs authenticated owner review
-because the service restart invalidated the browser session.
+No technical blocker is recorded. Authenticated owner review is still required
+for the Finance overview, Payment and Expense detail, paginated worklists,
+reconciliation actions, supplier traceability, and COD settlement surfaces.

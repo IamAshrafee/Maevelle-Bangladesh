@@ -70,6 +70,7 @@ export interface PurchaseView {
   readonly lines: readonly {
     id: string;
     variantId: string;
+    productId: string;
     sku: string;
     productTitle: string;
     quantity: string;
@@ -84,6 +85,7 @@ export interface ShipmentView {
   readonly shipmentNumber: string;
   readonly receivingLocationId: string;
   readonly receivingLocationName: string;
+  readonly currencyCode: 'BDT' | 'CNY' | 'USD';
   readonly transportMode: string;
   readonly originText?: string;
   readonly trackingReference?: string;
@@ -96,9 +98,11 @@ export interface ShipmentView {
   readonly allocations: readonly {
     id: string;
     purchaseLineId: string;
+    purchaseId: string;
     purchaseNumber: string;
     supplierName: string;
     variantId: string;
+    productId: string;
     sku: string;
     productTitle: string;
     allocatedQuantity: string;
@@ -110,7 +114,9 @@ export interface InboundReceiptView {
   readonly id: string;
   readonly receiptNumber: string;
   readonly shipmentId: string;
+  readonly shipmentNumber: string;
   readonly locationId: string;
+  readonly locationName: string;
   readonly inventoryTransactionId: string;
   readonly status: 'POSTED';
   readonly packingSlipReference?: string;
@@ -120,6 +126,10 @@ export interface InboundReceiptView {
     id: string;
     shipmentAllocationId: string;
     variantId: string;
+    productId: string;
+    inventoryItemId?: string;
+    sku: string;
+    productTitle: string;
     condition: InventoryCondition;
     quantity: string;
   }[];
@@ -354,6 +364,33 @@ export async function listSuppliers(
   return result.rows.map(mapSupplier);
 }
 
+export async function getSupplier(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; supplierId: string },
+): Promise<SupplierView> {
+  const suppliers = await sql<{
+    id: string;
+    code: string;
+    name: string;
+    status: SupplierView['status'];
+    contact_name: string | null;
+    contact_email: string | null;
+    contact_phone: string | null;
+    supplier_type: SupplierView['supplierType'];
+    country_code: string | null;
+    preferred_currency_code: PurchaseView['currencyCode'] | null;
+    payment_terms: string | null;
+    lead_time_days: number | null;
+    website_url: string | null;
+    notes: string | null;
+    version: string;
+  }>`select id, code, name, status, contact_name, contact_email, contact_phone, supplier_type, country_code, preferred_currency_code, payment_terms, lead_time_days, website_url, notes, version::text from procurement.suppliers where organization_id = ${input.organizationId} and id = ${input.supplierId}`.execute(
+    db,
+  );
+  if (!suppliers.rows[0]) throw new ProcurementDomainError('NOT_FOUND', 'Supplier was not found.');
+  return mapSupplier(suppliers.rows[0]);
+}
+
 export async function updateSupplier(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -514,16 +551,17 @@ async function getPurchaseIn(
   const lines = await sql<{
     id: string;
     variant_id: string;
+    product_id: string;
     sku_snapshot: string;
     product_title_snapshot: string;
     quantity: string;
     unit_price: string;
     allocated_quantity: string;
     received_quantity: string;
-  }>`select line.id, line.variant_id, line.sku_snapshot, line.product_title_snapshot, line.quantity::text, line.unit_price::text,
+  }>`select line.id, line.variant_id, variant.product_id, line.sku_snapshot, line.product_title_snapshot, line.quantity::text, line.unit_price::text,
       coalesce((select sum(allocation.allocated_quantity) from inbound_shipment.purchase_line_allocations allocation where allocation.purchase_line_id = line.id), 0)::text as allocated_quantity,
       coalesce((select sum(receipt.quantity) from receiving.inbound_receipt_lines receipt join inbound_shipment.purchase_line_allocations allocation on allocation.id = receipt.shipment_allocation_id where allocation.purchase_line_id = line.id), 0)::text as received_quantity
-    from procurement.purchase_lines line where line.organization_id = ${organizationId} and line.purchase_id = ${purchaseId} order by line.created_at, line.id`.execute(
+    from procurement.purchase_lines line join catalog.product_variants variant on variant.id = line.variant_id where line.organization_id = ${organizationId} and line.purchase_id = ${purchaseId} order by line.created_at, line.id`.execute(
     db,
   );
   const totals = await sql<{
@@ -552,6 +590,7 @@ async function getPurchaseIn(
     lines: lines.rows.map((line) => ({
       id: line.id,
       variantId: line.variant_id,
+      productId: line.product_id,
       sku: line.sku_snapshot,
       productTitle: line.product_title_snapshot,
       quantity: line.quantity,
@@ -572,10 +611,11 @@ export async function getPurchase(
 export async function listPurchases(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
+  input: { supplierId?: string } = {},
 ): Promise<readonly PurchaseView[]> {
   const ids = await sql<{
     id: string;
-  }>`select id from procurement.purchases where organization_id = ${organizationId} order by created_at desc, id desc`.execute(
+  }>`select id from procurement.purchases where organization_id = ${organizationId} and (${input.supplierId ?? null}::uuid is null or supplier_id = ${input.supplierId ?? null}::uuid) order by created_at desc, id desc`.execute(
     db,
   );
   return Promise.all(ids.rows.map((row) => getPurchaseIn(db, organizationId, row.id)));
@@ -618,6 +658,85 @@ export async function createPurchase(
       targetId: purchase.id,
     });
     return purchase;
+  });
+}
+
+export async function updatePurchase(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    purchaseId: string;
+    expectedVersion: number;
+    supplierId: string;
+    currencyCode: PurchaseView['currencyCode'];
+    notes?: string | null;
+    supplierReference?: string | null;
+    orderDate: string;
+    expectedDate?: string | null;
+    destinationLocationId?: string | null;
+  },
+): Promise<PurchaseView> {
+  return db.transaction().execute(async (transaction) => {
+    const current = await sql<{
+      supplier_id: string;
+      currency_code: PurchaseView['currencyCode'];
+      status: PurchaseStatus;
+      version: string;
+      line_count: string;
+    }>`select purchase.supplier_id, purchase.currency_code, purchase.status, purchase.version::text,
+        (select count(*)::text from procurement.purchase_lines line where line.purchase_id = purchase.id) as line_count
+      from procurement.purchases purchase
+      where purchase.organization_id = ${input.organizationId} and purchase.id = ${input.purchaseId}
+      for update`.execute(transaction);
+    const purchase = current.rows[0];
+    if (!purchase) throw new ProcurementDomainError('NOT_FOUND', 'Purchase was not found.');
+    if (purchase.status !== 'DRAFT')
+      throw new ProcurementDomainError('INVALID_TRANSITION', 'Only Draft Purchases can be edited.');
+    if (Number(purchase.version) !== input.expectedVersion)
+      throw new ProcurementDomainError(
+        'STALE_VERSION',
+        'This purchase changed after it was opened. Refresh and try again.',
+      );
+    if (
+      Number(purchase.line_count) > 0 &&
+      (purchase.supplier_id !== input.supplierId || purchase.currency_code !== input.currencyCode)
+    )
+      throw new ProcurementDomainError(
+        'VALIDATION_FAILED',
+        'Remove all purchase items before changing the supplier or currency.',
+      );
+
+    const supplier = await sql<{ id: string }>`select id from procurement.suppliers
+      where organization_id = ${input.organizationId} and id = ${input.supplierId} and status = 'ACTIVE'
+      for key share`.execute(transaction);
+    if (!supplier.rows[0])
+      throw new ProcurementDomainError('NOT_FOUND', 'Active Supplier was not found.');
+
+    const updated = await sql<{ id: string }>`update procurement.purchases set
+        supplier_id = ${input.supplierId},
+        currency_code = ${input.currencyCode},
+        supplier_reference = ${input.supplierReference?.trim() || null},
+        order_date = ${input.orderDate}::date,
+        expected_date = ${input.expectedDate || null}::date,
+        destination_location_id = ${input.destinationLocationId || null}::uuid,
+        notes = ${input.notes?.trim() || null},
+        version = version + 1,
+        updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.purchaseId}
+      returning id`.execute(transaction);
+    if (!updated.rows[0]) throw new ProcurementDomainError('NOT_FOUND', 'Purchase was not found.');
+
+    const view = await getPurchaseIn(transaction, input.organizationId, input.purchaseId);
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'procurement.purchase.updated',
+      eventType: 'procurement.purchase.updated',
+      targetType: 'procurement.purchase',
+      targetId: input.purchaseId,
+    });
+    return view;
   });
 }
 
@@ -877,6 +996,7 @@ async function getShipmentIn(
     shipment_number: string;
     receiving_location_id: string;
     receiving_location_name: string;
+    currency_code: 'BDT' | 'CNY' | 'USD';
     transport_mode: string;
     origin_text: string | null;
     tracking_reference: string | null;
@@ -886,7 +1006,7 @@ async function getShipmentIn(
     status: ShipmentStatus;
     receiving_status: ReceivingStatus;
     version: string;
-  }>`select shipment.id, shipment.shipment_number, shipment.receiving_location_id, location.name as receiving_location_name, shipment.transport_mode, shipment.origin_text, shipment.tracking_reference, shipment.expected_arrival_date::text, shipment.arrived_at::text, shipment.created_at::text, shipment.status, shipment.receiving_status, shipment.version::text from inbound_shipment.shipments shipment join warehouse.locations location on location.id = shipment.receiving_location_id where shipment.organization_id = ${organizationId} and shipment.id = ${shipmentId}`.execute(
+  }>`select shipment.id, shipment.shipment_number, shipment.receiving_location_id, location.name as receiving_location_name, min(purchase.currency_code) as currency_code, shipment.transport_mode, shipment.origin_text, shipment.tracking_reference, shipment.expected_arrival_date::text, shipment.arrived_at::text, shipment.created_at::text, shipment.status, shipment.receiving_status, shipment.version::text from inbound_shipment.shipments shipment join warehouse.locations location on location.id = shipment.receiving_location_id join inbound_shipment.purchase_line_allocations allocation on allocation.shipment_id = shipment.id join procurement.purchase_lines line on line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = line.purchase_id where shipment.organization_id = ${organizationId} and shipment.id = ${shipmentId} group by shipment.id, location.name`.execute(
     db,
   );
   const row = header.rows[0];
@@ -894,14 +1014,16 @@ async function getShipmentIn(
   const allocations = await sql<{
     id: string;
     purchase_line_id: string;
+    purchase_id: string;
     purchase_number: string;
     supplier_name: string;
     variant_id: string;
+    product_id: string;
     sku_snapshot: string;
     product_title_snapshot: string;
     allocated_quantity: string;
     received_quantity: string;
-  }>`select allocation.id, allocation.purchase_line_id, purchase.purchase_number, supplier.name as supplier_name, allocation.variant_id, allocation.sku_snapshot, allocation.product_title_snapshot, allocation.allocated_quantity::text, coalesce(sum(receipt_line.quantity), 0)::text as received_quantity from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines purchase_line on purchase_line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = purchase_line.purchase_id join procurement.suppliers supplier on supplier.id = purchase.supplier_id left join receiving.inbound_receipt_lines receipt_line on receipt_line.shipment_allocation_id = allocation.id where allocation.organization_id = ${organizationId} and allocation.shipment_id = ${shipmentId} group by allocation.id, purchase.purchase_number, supplier.name order by allocation.created_at, allocation.id`.execute(
+  }>`select allocation.id, allocation.purchase_line_id, purchase.id as purchase_id, purchase.purchase_number, supplier.name as supplier_name, allocation.variant_id, variant.product_id, allocation.sku_snapshot, allocation.product_title_snapshot, allocation.allocated_quantity::text, coalesce(sum(receipt_line.quantity), 0)::text as received_quantity from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines purchase_line on purchase_line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = purchase_line.purchase_id join procurement.suppliers supplier on supplier.id = purchase.supplier_id join catalog.product_variants variant on variant.id = allocation.variant_id left join receiving.inbound_receipt_lines receipt_line on receipt_line.shipment_allocation_id = allocation.id where allocation.organization_id = ${organizationId} and allocation.shipment_id = ${shipmentId} group by allocation.id, purchase.id, purchase.purchase_number, supplier.name, variant.product_id order by allocation.created_at, allocation.id`.execute(
     db,
   );
   return {
@@ -909,6 +1031,7 @@ async function getShipmentIn(
     shipmentNumber: row.shipment_number,
     receivingLocationId: row.receiving_location_id,
     receivingLocationName: row.receiving_location_name,
+    currencyCode: row.currency_code,
     transportMode: row.transport_mode,
     ...(row.origin_text ? { originText: row.origin_text } : {}),
     ...(row.tracking_reference ? { trackingReference: row.tracking_reference } : {}),
@@ -921,9 +1044,11 @@ async function getShipmentIn(
     allocations: allocations.rows.map((allocation) => ({
       id: allocation.id,
       purchaseLineId: allocation.purchase_line_id,
+      purchaseId: allocation.purchase_id,
       purchaseNumber: allocation.purchase_number,
       supplierName: allocation.supplier_name,
       variantId: allocation.variant_id,
+      productId: allocation.product_id,
       sku: allocation.sku_snapshot,
       productTitle: allocation.product_title_snapshot,
       allocatedQuantity: allocation.allocated_quantity,
@@ -942,10 +1067,11 @@ export async function getShipment(
 export async function listShipments(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
+  input: { purchaseId?: string } = {},
 ): Promise<readonly ShipmentView[]> {
   const ids = await sql<{
     id: string;
-  }>`select id from inbound_shipment.shipments where organization_id = ${organizationId} order by created_at desc, id desc`.execute(
+  }>`select shipment.id from inbound_shipment.shipments shipment where shipment.organization_id = ${organizationId} and (${input.purchaseId ?? null}::uuid is null or exists (select 1 from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines line on line.id = allocation.purchase_line_id where allocation.shipment_id = shipment.id and line.purchase_id = ${input.purchaseId ?? null}::uuid)) order by shipment.created_at desc, shipment.id desc`.execute(
     db,
   );
   return Promise.all(ids.rows.map((row) => getShipmentIn(db, organizationId, row.id)));
@@ -994,6 +1120,7 @@ export async function createShipment(
       transaction,
     );
     const shipmentId = inserted.rows[0]!.id;
+    let shipmentCurrency: PurchaseView['currencyCode'] | undefined;
     for (const allocation of [...input.allocations].sort((left, right) =>
       left.purchaseLineId.localeCompare(right.purchaseLineId),
     )) {
@@ -1003,7 +1130,8 @@ export async function createShipment(
         sku_snapshot: string;
         product_title_snapshot: string;
         quantity: string;
-      }>`select line.id, line.variant_id, line.sku_snapshot, line.product_title_snapshot, line.quantity::text from procurement.purchase_lines line join procurement.purchases purchase on purchase.id = line.purchase_id where line.organization_id = ${input.organizationId} and line.id = ${allocation.purchaseLineId} and purchase.status = 'PLACED' for update of line`.execute(
+        currency_code: PurchaseView['currencyCode'];
+      }>`select line.id, line.variant_id, line.sku_snapshot, line.product_title_snapshot, line.quantity::text, purchase.currency_code from procurement.purchase_lines line join procurement.purchases purchase on purchase.id = line.purchase_id where line.organization_id = ${input.organizationId} and line.id = ${allocation.purchaseLineId} and purchase.status = 'PLACED' for update of line`.execute(
         transaction,
       );
       const purchaseLine = line.rows[0];
@@ -1012,6 +1140,12 @@ export async function createShipment(
           'NOT_FOUND',
           'Placed Purchase Line was not found in this organization.',
         );
+      if (shipmentCurrency && shipmentCurrency !== purchaseLine.currency_code)
+        throw new ProcurementDomainError(
+          'VALIDATION_FAILED',
+          'A shipment can only contain purchase lines in one currency. Create a separate shipment for the other currency.',
+        );
+      shipmentCurrency = purchaseLine.currency_code;
       const assigned = await sql<{
         quantity: string;
       }>`select coalesce(sum(allocated_quantity), 0)::text as quantity from inbound_shipment.purchase_line_allocations where organization_id = ${input.organizationId} and purchase_line_id = ${allocation.purchaseLineId}`.execute(
@@ -1223,12 +1357,14 @@ async function getReceiptIn(
     id: string;
     receipt_number: string;
     shipment_id: string;
+    shipment_number: string;
     receiving_location_id: string;
+    location_name: string;
     posted_inventory_transaction_id: string;
     packing_slip_reference: string | null;
     notes: string | null;
     posted_at: string;
-  }>`select id, receipt_number, shipment_id, receiving_location_id, posted_inventory_transaction_id, packing_slip_reference, notes, posted_at::text from receiving.inbound_receipts where organization_id = ${organizationId} and id = ${receiptId}`.execute(
+  }>`select receipt.id, receipt.receipt_number, receipt.shipment_id, shipment.shipment_number, receipt.receiving_location_id, location.name as location_name, receipt.posted_inventory_transaction_id, receipt.packing_slip_reference, receipt.notes, receipt.posted_at::text from receiving.inbound_receipts receipt join inbound_shipment.shipments shipment on shipment.id = receipt.shipment_id and shipment.organization_id = receipt.organization_id join warehouse.locations location on location.id = receipt.receiving_location_id and location.organization_id = receipt.organization_id where receipt.organization_id = ${organizationId} and receipt.id = ${receiptId}`.execute(
     db,
   );
   const receipt = header.rows[0];
@@ -1237,16 +1373,22 @@ async function getReceiptIn(
     id: string;
     shipment_allocation_id: string;
     variant_id: string;
+    product_id: string;
+    inventory_item_id: string | null;
+    sku_snapshot: string;
+    product_title_snapshot: string;
     condition_code: InventoryCondition;
     quantity: string;
-  }>`select id, shipment_allocation_id, variant_id, condition_code, quantity::text from receiving.inbound_receipt_lines where organization_id = ${organizationId} and inbound_receipt_id = ${receiptId} order by created_at, id`.execute(
+  }>`select line.id, line.shipment_allocation_id, line.variant_id, variant.product_id, item.id as inventory_item_id, allocation.sku_snapshot, allocation.product_title_snapshot, line.condition_code, line.quantity::text from receiving.inbound_receipt_lines line join inbound_shipment.purchase_line_allocations allocation on allocation.id = line.shipment_allocation_id and allocation.organization_id = line.organization_id join catalog.product_variants variant on variant.id = line.variant_id left join inventory.inventory_items item on item.organization_id = line.organization_id and item.variant_id = line.variant_id where line.organization_id = ${organizationId} and line.inbound_receipt_id = ${receiptId} order by line.created_at, line.id`.execute(
     db,
   );
   return {
     id: receipt.id,
     receiptNumber: receipt.receipt_number,
     shipmentId: receipt.shipment_id,
+    shipmentNumber: receipt.shipment_number,
     locationId: receipt.receiving_location_id,
+    locationName: receipt.location_name,
     inventoryTransactionId: receipt.posted_inventory_transaction_id,
     status: 'POSTED',
     ...(receipt.packing_slip_reference
@@ -1258,6 +1400,10 @@ async function getReceiptIn(
       id: line.id,
       shipmentAllocationId: line.shipment_allocation_id,
       variantId: line.variant_id,
+      productId: line.product_id,
+      ...(line.inventory_item_id ? { inventoryItemId: line.inventory_item_id } : {}),
+      sku: line.sku_snapshot,
+      productTitle: line.product_title_snapshot,
       condition: line.condition_code,
       quantity: line.quantity,
     })),
@@ -1267,13 +1413,21 @@ async function getReceiptIn(
 export async function listInboundReceipts(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
+  input: { shipmentId?: string } = {},
 ): Promise<readonly InboundReceiptView[]> {
   const ids = await sql<{
     id: string;
-  }>`select id from receiving.inbound_receipts where organization_id = ${organizationId} order by posted_at desc, id desc`.execute(
+  }>`select id from receiving.inbound_receipts where organization_id = ${organizationId} and (${input.shipmentId ?? null}::uuid is null or shipment_id = ${input.shipmentId ?? null}::uuid) order by posted_at desc, id desc`.execute(
     db,
   );
   return Promise.all(ids.rows.map((row) => getReceiptIn(db, organizationId, row.id)));
+}
+
+export async function getInboundReceipt(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; receiptId: string },
+): Promise<InboundReceiptView> {
+  return getReceiptIn(db, input.organizationId, input.receiptId);
 }
 
 export async function postInboundReceipt(

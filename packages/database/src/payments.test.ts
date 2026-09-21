@@ -2,7 +2,15 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
 
 import { addGuestCartLine, createGuestCart } from './cart.js';
+import * as finance from './finance.js';
 import { createDatabase } from './index.js';
+import {
+  createDelivery,
+  dispatchDelivery,
+  markDelivered,
+  recordManualCourierBooking,
+} from './delivery.js';
+import { createFulfillment, dispatchFulfillment, transitionFulfillment } from './fulfillment.js';
 import {
   adjustInventory,
   listInventoryReservations,
@@ -21,8 +29,15 @@ import {
   completeManualRefund,
   configurePaymentMethod,
   createRefund,
+  getPayment,
+  getPaymentDetail,
+  getRefund,
   getOrderPaymentSummary,
   getPaymentAttempt,
+  listPayments,
+  listPendingCodCollections,
+  listRefunds,
+  recordCodCollection,
   rejectManualPayment,
   submitManualPayment,
   verifyManualPayment,
@@ -36,6 +51,7 @@ const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
   maxConnections: 12,
 });
+const decimal = (value: string | undefined) => Number(value).toFixed(4);
 afterAll(async () => database.close());
 
 async function fixture(quantity = '4') {
@@ -169,6 +185,80 @@ async function orderFor(
   return { checkoutToken: checkout.token, order: placed.order };
 }
 
+async function deliverCodOrder(
+  input: Awaited<ReturnType<typeof fixture>>,
+  order: Awaited<ReturnType<typeof orderFor>>['order'],
+) {
+  const line = await sql<{ id: string; quantity: string }>`
+    select id, quantity::text from orders.order_lines where order_id = ${order.id}
+  `.execute(database.db);
+  const created = await createFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    orderId: order.id,
+    locationId: input.locationId,
+    lines: [{ orderLineId: line.rows[0]!.id, quantity: line.rows[0]!.quantity }],
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const ready = await transitionFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: created.id,
+    expectedVersion: created.version,
+    nextStatus: 'READY',
+  });
+  const picking = await transitionFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: ready.id,
+    expectedVersion: ready.version,
+    nextStatus: 'PICKING',
+  });
+  const packed = await transitionFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: picking.id,
+    expectedVersion: picking.version,
+    nextStatus: 'PACKED',
+  });
+  const dispatched = await dispatchFulfillment(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: packed.id,
+    expectedVersion: packed.version,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const delivery = await createDelivery(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: dispatched.id,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const booked = await recordManualCourierBooking(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    deliveryId: delivery.id,
+    expectedVersion: delivery.version,
+    carrierName: 'Test courier',
+    trackingReference: `COD-${crypto.randomUUID().slice(0, 8)}`,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const inTransit = await dispatchDelivery(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    deliveryId: booked.id,
+    expectedVersion: booked.version,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  return markDelivered(database.db, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    deliveryId: inTransit.id,
+    expectedVersion: inTransit.version,
+    idempotencyKey: crypto.randomUUID(),
+  });
+}
+
 describe('payment facts, manual wallet verification, and refunds', () => {
   it('requires a bounded timeout policy before a manual payment method can be active', async () => {
     await expect(
@@ -300,6 +390,295 @@ describe('payment facts, manual wallet verification, and refunds', () => {
       collected: '0.0000',
       outstanding: '1161.0000',
     });
+  });
+
+  it('records delivered COD as an idempotent collection without conflating delivery and payment', async () => {
+    const input = await fixture();
+    const flow = await orderFor(input, 'COD');
+    const delivered = await deliverCodOrder(input, flow.order);
+
+    const queue = await listPendingCodCollections(database.db, input.organizationId);
+    expect(queue).toEqual([
+      expect.objectContaining({
+        deliveryId: delivered.id,
+        orderId: flow.order.id,
+        expectedAmount: '1161.0000',
+        outstandingAmount: '1161.0000',
+      }),
+    ]);
+    await expect(
+      finance.getFinanceOverview(database.db, input.organizationId),
+    ).resolves.toMatchObject({ attention: { pendingCodCollections: 1 } });
+
+    const idempotencyKey = crypto.randomUUID();
+    const payment = await recordCodCollection(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: delivered.id,
+      amount: '1161.0000',
+      externalReference: 'COD-DELIVERED-001',
+      note: 'Courier confirmed collection.',
+      idempotencyKey,
+    });
+    expect(payment).toMatchObject({
+      orderId: flow.order.id,
+      method: 'COD',
+      amount: '1161.0000',
+      externalReference: 'COD-DELIVERED-001',
+    });
+    expect(
+      (
+        await recordCodCollection(database.db, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          deliveryId: delivered.id,
+          amount: '1161.0000',
+          externalReference: 'COD-DELIVERED-001',
+          note: 'Courier confirmed collection.',
+          idempotencyKey,
+        })
+      ).id,
+    ).toBe(payment.id);
+    await expect(listPendingCodCollections(database.db, input.organizationId)).resolves.toEqual([]);
+    await expect(
+      finance.getFinanceOverview(database.db, input.organizationId),
+    ).resolves.toMatchObject({ attention: { pendingCodCollections: 0 } });
+    await expect(
+      recordCodCollection(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        deliveryId: delivered.id,
+        amount: '1.0000',
+        externalReference: 'COD-DUPLICATE-001',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'COD_DELIVERY_NOT_ELIGIBLE' });
+    await expect(
+      getOrderPaymentSummary(database.db, {
+        organizationId: input.organizationId,
+        orderId: flow.order.id,
+        paymentMethod: 'COD',
+        expectedAmount: '1161.0000',
+      }),
+    ).resolves.toMatchObject({ status: 'PAID', outstanding: '0.0000' });
+    const evidence = await sql<{ audit: string; outbox: string }>`
+      select
+        (select count(*) from audit.audit_events where organization_id = ${input.organizationId} and action = 'payments.cod_collection.recorded')::text as audit,
+        (select count(*) from platform.outbox_events where organization_id = ${input.organizationId} and event_type = 'payments.cod_collection.recorded')::text as outbox
+    `.execute(database.db);
+    expect(evidence.rows[0]).toEqual({ audit: '1', outbox: '1' });
+  });
+
+  it('settles courier-held COD through partial remittances with explicit deductions', async () => {
+    const input = await fixture();
+    const flow = await orderFor(input, 'COD');
+    const delivered = await deliverCodOrder(input, flow.order);
+    const payment = await recordCodCollection(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: delivered.id,
+      amount: '1161.0000',
+      externalReference: `COD-${crypto.randomUUID()}`,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await expect(
+      finance.listOutstandingCodSettlementPayments(database.db, input.organizationId),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        paymentId: payment.id,
+        carrierName: 'Test courier',
+        outstandingAmount: '1161.0000',
+        sourceAccountId: null,
+        canSettle: false,
+      }),
+    ]);
+    await expect(
+      finance.getFinanceOverview(database.db, input.organizationId),
+    ).resolves.toMatchObject({
+      metrics: { outstandingCodHeld: '1161.0000' },
+      attention: { outstandingCodPayments: 1 },
+    });
+
+    const financeActor = undefined as never;
+    await expect(
+      finance.createCodSettlement(database.db, {
+        organizationId: input.organizationId,
+        actorId: financeActor,
+        destinationAccountId: crypto.randomUUID(),
+        remittanceReference: 'UNPOSTED-REMITTANCE',
+        allocations: [{ paymentId: payment.id, amount: '100.0000' }],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const holding = await finance.createFinancialAccount(database.db, {
+      organizationId: input.organizationId,
+      actorId: financeActor,
+      accountNumber: `COURIER-${crypto.randomUUID().slice(0, 8)}`,
+      name: 'Test courier receivable',
+      accountType: 'OTHER',
+      currencyCode: 'BDT',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const bank = await finance.createFinancialAccount(database.db, {
+      organizationId: input.organizationId,
+      actorId: financeActor,
+      accountNumber: `BANK-${crypto.randomUUID().slice(0, 8)}`,
+      name: 'Settlement bank',
+      accountType: 'BANK',
+      currencyCode: 'BDT',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await finance.postPaymentToFinancialAccount(database.db, {
+      organizationId: input.organizationId,
+      actorId: financeActor,
+      paymentId: payment.id,
+      accountId: holding.id,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await expect(
+      finance.createCodSettlement(database.db, {
+        organizationId: input.organizationId,
+        actorId: financeActor,
+        destinationAccountId: bank.id,
+        remittanceReference: 'MISSING-DEDUCTION-NOTE',
+        deductionAmount: '1.0000',
+        allocations: [{ paymentId: payment.id, amount: '100.0000' }],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      finance.createCodSettlement(database.db, {
+        organizationId: input.organizationId,
+        actorId: financeActor,
+        destinationAccountId: holding.id,
+        remittanceReference: 'SAME-ACCOUNT',
+        allocations: [{ paymentId: payment.id, amount: '100.0000' }],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    const idempotencyKey = crypto.randomUUID();
+    const first = await finance.createCodSettlement(database.db, {
+      organizationId: input.organizationId,
+      actorId: financeActor,
+      destinationAccountId: bank.id,
+      remittanceReference: 'TEST-REMIT-001',
+      deductionAmount: '50.0000',
+      deductionNote: 'Courier delivery charge withheld from remittance.',
+      allocations: [{ paymentId: payment.id, amount: '600.0000' }],
+      idempotencyKey,
+    });
+    await expect(
+      finance.createCodSettlement(database.db, {
+        organizationId: input.organizationId,
+        actorId: financeActor,
+        destinationAccountId: bank.id,
+        remittanceReference: 'TEST-REMIT-001',
+        deductionAmount: '50.0000',
+        deductionNote: 'Courier delivery charge withheld from remittance.',
+        allocations: [{ paymentId: payment.id, amount: '600.0000' }],
+        idempotencyKey,
+      }),
+    ).resolves.toEqual(first);
+    await expect(
+      finance.createCodSettlement(database.db, {
+        organizationId: input.organizationId,
+        actorId: financeActor,
+        destinationAccountId: bank.id,
+        remittanceReference: ' test-remit-001 ',
+        allocations: [{ paymentId: payment.id, amount: '1.0000' }],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(
+      finance.createCodSettlement(database.db, {
+        organizationId: input.organizationId,
+        actorId: financeActor,
+        destinationAccountId: bank.id,
+        remittanceReference: 'TEST-REMIT-OVER',
+        allocations: [{ paymentId: payment.id, amount: '562.0000' }],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(
+      finance.listOutstandingCodSettlementPayments(database.db, input.organizationId),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        paymentId: payment.id,
+        settledAmount: '600.0000',
+        outstandingAmount: '561.0000',
+        sourceAccountId: holding.id,
+        canSettle: true,
+      }),
+    ]);
+    await expect(
+      finance.listCodSettlements(database.db, input.organizationId),
+    ).resolves.toMatchObject({
+      pagination: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
+      items: [
+        {
+          id: first.id,
+          carrierName: 'Test courier',
+          remittanceReference: 'TEST-REMIT-001',
+          grossAmount: '600.0000',
+          deductionAmount: '50.0000',
+          netAmount: '550.0000',
+          sourceAccountId: holding.id,
+          destinationAccountId: bank.id,
+          allocations: [expect.objectContaining({ paymentId: payment.id, amount: '600.0000' })],
+        },
+      ],
+    });
+    await finance.createCodSettlement(database.db, {
+      organizationId: input.organizationId,
+      actorId: financeActor,
+      destinationAccountId: bank.id,
+      remittanceReference: 'TEST-REMIT-002',
+      allocations: [{ paymentId: payment.id, amount: '561.0000' }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await expect(
+      finance.listOutstandingCodSettlementPayments(database.db, input.organizationId),
+    ).resolves.toEqual([]);
+    const balances = await finance.listFinancialAccounts(database.db, input.organizationId);
+    expect(decimal(balances.find((value) => value.id === holding.id)?.ledger_balance)).toBe(
+      '0.0000',
+    );
+    expect(decimal(balances.find((value) => value.id === bank.id)?.ledger_balance)).toBe(
+      '1111.0000',
+    );
+    const trends = await finance.getFinanceTrends(database.db, input.organizationId, 'LAST_7_DAYS');
+    expect(trends).toMatchObject({
+      range: 'LAST_7_DAYS',
+      currency: 'BDT',
+      totals: {
+        collectedPayments: '1161.0000',
+        completedRefunds: '0.0000',
+        paidExpenses: '0.0000',
+        courierDeductions: '50.0000',
+        netAccountMovement: '1111.0000',
+      },
+    });
+    expect(trends.series).toHaveLength(7);
+    expect(trends.series.at(-1)).toMatchObject({
+      collectedPayments: '1161.0000',
+      courierDeductions: '50.0000',
+      netAccountMovement: '1111.0000',
+    });
+    await expect(
+      finance.getFinanceOverview(database.db, input.organizationId),
+    ).resolves.toMatchObject({
+      metrics: { outstandingCodHeld: '0.0000' },
+      attention: { outstandingCodPayments: 0 },
+    });
+    await expect(
+      finance.verifyFinanceIntegrity(database.db, input.organizationId),
+    ).resolves.toEqual([]);
+    const evidence = await sql<{ audit: string; outbox: string }>`select
+      (select count(*) from audit.audit_events where organization_id=${input.organizationId} and action='finance.cod_settlement.created')::text as audit,
+      (select count(*) from platform.outbox_events where organization_id=${input.organizationId} and event_type='finance.cod_settlement.created')::text as outbox`.execute(
+      database.db,
+    );
+    expect(evidence.rows[0]).toEqual({ audit: '2', outbox: '2' });
   });
 
   it('creates an intent, preserves a pending manual claim, then atomically posts a payment and allocation', async () => {
@@ -619,5 +998,115 @@ describe('payment facts, manual wallet verification, and refunds', () => {
       database.db,
     );
     expect(retryRefund.rows[0]).toEqual({ status: 'REQUESTED', completed: 'false' });
+  });
+
+  it('exposes the account posting for verified payments and completed refunds', async () => {
+    const input = await fixture();
+    const flow = await orderFor(input, 'BKASH_MANUAL');
+    const attempt = await submitManualPayment(database.db, {
+      organizationId: input.organizationId,
+      orderId: flow.order.id,
+      customerReference: 'BK-FINANCE-001',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const payment = await verifyManualPayment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      attemptId: attempt.id,
+      confirmedAmount: '1161.0000',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const financeActor = undefined as never;
+    const wallet = await finance.createFinancialAccount(database.db, {
+      organizationId: input.organizationId,
+      actorId: financeActor,
+      accountNumber: `WALLET-${crypto.randomUUID().slice(0, 8)}`,
+      name: 'bKash wallet',
+      accountType: 'MOBILE_WALLET',
+      currencyCode: 'BDT',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await finance.postPaymentToFinancialAccount(database.db, {
+      organizationId: input.organizationId,
+      actorId: financeActor,
+      paymentId: payment.id,
+      accountId: wallet.id,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(await getPayment(database.db, input.organizationId, payment.id)).toMatchObject({
+      financePosting: { accountId: wallet.id, accountName: 'bKash wallet' },
+    });
+
+    const requested = await createRefund(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      paymentId: payment.id,
+      amount: '100.0000',
+      reasonCode: 'CUSTOMER_REQUEST',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const completed = await completeManualRefund(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      refundId: requested.id,
+      externalReference: 'RFD-FINANCE-001',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await finance.postRefundToFinancialAccount(database.db, {
+      organizationId: input.organizationId,
+      actorId: financeActor,
+      refundId: completed.id,
+      accountId: wallet.id,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(await getRefund(database.db, input.organizationId, completed.id)).toMatchObject({
+      orderNumber: flow.order.orderNumber,
+      paymentNumber: payment.paymentNumber,
+      financePosting: { accountId: wallet.id, accountName: 'bKash wallet' },
+    });
+    expect(await getPaymentDetail(database.db, input.organizationId, payment.id)).toMatchObject({
+      order: {
+        status: 'PENDING',
+        paymentStatus: 'PARTIALLY_REFUNDED',
+        collected: '1161.0000',
+        outstanding: '0.0000',
+      },
+      customer: { name: 'Payment Buyer', phone: '01700000000' },
+      source: { type: 'MANUAL_SUBMISSION', id: attempt.id },
+      refunds: [{ id: completed.id, status: 'COMPLETED' }],
+    });
+    await expect(
+      listPayments(database.db, input.organizationId, {
+        page: 1,
+        pageSize: 1,
+        query: payment.paymentNumber,
+        method: 'BKASH_MANUAL',
+        posting: 'POSTED',
+      }),
+    ).resolves.toMatchObject({
+      items: [{ id: payment.id, financePosting: { accountId: wallet.id } }],
+      pagination: { page: 1, pageSize: 1, totalItems: 1, totalPages: 1 },
+    });
+    await expect(
+      listPayments(database.db, input.organizationId, {
+        page: 2,
+        pageSize: 1,
+        query: payment.paymentNumber,
+      }),
+    ).resolves.toMatchObject({
+      items: [],
+      pagination: { page: 2, pageSize: 1, totalItems: 1, totalPages: 1 },
+    });
+    await expect(
+      listRefunds(database.db, input.organizationId, {
+        pageSize: 1,
+        query: flow.order.orderNumber,
+        status: 'COMPLETED',
+        posting: 'POSTED',
+      }),
+    ).resolves.toMatchObject({
+      items: [{ id: completed.id, financePosting: { accountId: wallet.id } }],
+      pagination: { page: 1, pageSize: 1, totalItems: 1, totalPages: 1 },
+    });
   });
 });

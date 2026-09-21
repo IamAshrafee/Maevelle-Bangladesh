@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
@@ -153,10 +152,6 @@ export function AnalyticsConsole() {
             replace transactional records.
           </p>
         </div>
-        <nav aria-label="Reporting navigation">
-          <Link href="/finance">Finance</Link> · <Link href="/inventory/stock">Inventory</Link> ·{' '}
-          <Link href="/costing">Costing</Link>
-        </nav>
       </header>
       {message ? (
         <p className="status-message" role="status">

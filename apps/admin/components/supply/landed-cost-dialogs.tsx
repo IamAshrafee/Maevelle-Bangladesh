@@ -23,9 +23,11 @@ export function WorksheetDialog({
   open,
   onOpenChange,
   shipmentId,
+  currencyCode,
   onSubmit,
 }: DialogProps & {
   shipmentId: string;
+  currencyCode: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -41,16 +43,7 @@ export function WorksheetDialog({
           <input name="shipmentId" readOnly type="hidden" value={shipmentId} />
           <label className="grid gap-1 text-sm">
             Base currency
-            <select
-              className="rounded-md border bg-background p-2"
-              defaultValue="CNY"
-              name="baseCurrencyCode"
-              required
-            >
-              <option>BDT</option>
-              <option>CNY</option>
-              <option>USD</option>
-            </select>
+            <input className="rounded-md border bg-muted p-2" name="baseCurrencyCode" readOnly value={currencyCode} />
           </label>
           <label className="grid gap-1 text-sm">
             Notes <textarea className="rounded-md border p-2" name="notes" />
@@ -72,10 +65,12 @@ export function CostComponentDialog({
   onOpenChange,
   worksheet,
   shipment,
+  expenses,
   onSubmit,
 }: DialogProps & {
   worksheet: Worksheet;
   shipment: Shipment | undefined;
+  expenses: readonly { id: string; expense_number: string; description: string; amount: string; currency_code: string; status: string; source_domain: string | null }[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -96,14 +91,14 @@ export function CostComponentDialog({
                 defaultValue="INTERNATIONAL_FREIGHT"
                 name="costType"
               >
-                <option>INTERNATIONAL_FREIGHT</option>
-                <option>LOCAL_FREIGHT</option>
-                <option>CUSTOMS_DUTY</option>
-                <option>TAX_OR_IMPORT_FEE</option>
-                <option>FORWARDER_FEE</option>
-                <option>HANDLING</option>
-                <option>INSURANCE</option>
-                <option>OTHER_ACQUISITION_COST</option>
+                <option value="INTERNATIONAL_FREIGHT">International freight</option>
+                <option value="LOCAL_FREIGHT">Local transport</option>
+                <option value="CUSTOMS_DUTY">Customs duty</option>
+                <option value="TAX_OR_IMPORT_FEE">Tax or import fee</option>
+                <option value="FORWARDER_FEE">Forwarder fee</option>
+                <option value="HANDLING">Handling</option>
+                <option value="INSURANCE">Insurance</option>
+                <option value="OTHER_ACQUISITION_COST">Other acquisition cost</option>
               </select>
             </label>
             <label className="grid gap-1 text-sm">
@@ -134,9 +129,9 @@ export function CostComponentDialog({
                 defaultValue="ACTUAL"
                 name="valueStatus"
               >
-                <option>ESTIMATED</option>
-                <option>ACTUAL</option>
-                <option>CREDIT</option>
+                <option value="ESTIMATED">Estimated</option>
+                <option value="ACTUAL">Actual</option>
+                <option value="CREDIT">Supplier credit</option>
               </select>
             </label>
             <label className="grid gap-1 text-sm">
@@ -146,8 +141,8 @@ export function CostComponentDialog({
                 defaultValue="GLOBAL"
                 name="scope"
               >
-                <option>GLOBAL</option>
-                <option>DIRECT</option>
+                <option value="GLOBAL">Across all received items</option>
+                <option value="DIRECT">One specific item</option>
               </select>
             </label>
             <label className="grid gap-1 text-sm">
@@ -157,14 +152,9 @@ export function CostComponentDialog({
                 defaultValue="QUANTITY"
                 name="allocationMethod"
               >
-                <option>QUANTITY</option>
-                <option>EQUAL</option>
-                <option>PURCHASE_VALUE</option>
-                <option>WEIGHT</option>
-                <option>VOLUME</option>
-                <option>CHARGEABLE_WEIGHT</option>
-                <option>PERCENTAGE</option>
-                <option>MANUAL</option>
+                <option value="QUANTITY">By received quantity</option>
+                <option value="PURCHASE_VALUE">By purchase value</option>
+                <option value="EQUAL">Equally by item line</option>
               </select>
             </label>
             <label className="grid gap-1 text-sm">
@@ -196,6 +186,23 @@ export function CostComponentDialog({
           </label>
           <label className="grid gap-1 text-sm">
             Reference <input className="rounded-md border p-2" name="reference" />
+          </label>
+          <label className="grid gap-1 text-sm">
+            Finance expense <span className="text-muted-foreground">(optional shared record)</span>
+            <select className="rounded-md border bg-background p-2" name="financeExpenseId" defaultValue="" onChange={(event) => {
+              const expense = expenses.find((item) => item.id === event.target.value);
+              const form = event.currentTarget.form;
+              if (!expense || !form) return;
+              const amount = form.elements.namedItem('amount') as HTMLInputElement | null;
+              if (amount) amount.value = expense.amount;
+              const currency = form.elements.namedItem('currencyCode') as HTMLInputElement | null;
+              if (currency) currency.value = expense.currency_code;
+            }}>
+              <option value="">Not recorded in Finance</option>
+              {expenses.filter((expense) => expense.status !== 'CANCELLED' && expense.source_domain !== 'procurement.purchase').map((expense) => (
+                <option key={expense.id} value={expense.id}>{expense.expense_number} · {expense.currency_code} {expense.amount} · {expense.description}</option>
+              ))}
+            </select>
           </label>
           <label className="grid gap-1 text-sm">
             Notes <textarea className="rounded-md border p-2" name="notes" />

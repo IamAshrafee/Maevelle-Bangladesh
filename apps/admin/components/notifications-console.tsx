@@ -2,7 +2,6 @@
 
 import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
@@ -225,10 +224,6 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
               : 'An operational inbox for required action, delivery failures, and team communication preferences.'}
           </p>
         </div>
-        <nav aria-label="Communication operations">
-          <Link href="/notifications">Notifications</Link> ·{' '}
-          <Link href="/integrations">Integrations</Link> · <Link href="/reviews">Reviews</Link>
-        </nav>
       </header>
       {message ? (
         <p className="success-message" role="status">

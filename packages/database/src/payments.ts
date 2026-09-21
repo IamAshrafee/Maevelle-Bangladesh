@@ -12,6 +12,8 @@ export class PaymentDomainError extends Error {
       | 'PAYMENT_METHOD_UNAVAILABLE'
       | 'VALIDATION_FAILED'
       | 'PAYMENT_ATTEMPT_ALREADY_REVIEWED'
+      | 'COD_DELIVERY_NOT_ELIGIBLE'
+      | 'COD_COLLECTION_EXCEEDS_OUTSTANDING'
       | 'DUPLICATE_EXTERNAL_TRANSACTION'
       | 'PAYMENT_ALREADY_SATISFIED'
       | 'REFUND_EXCEEDS_REFUNDABLE'
@@ -61,6 +63,19 @@ export interface PaymentAttemptView {
   readonly submittedAt: string;
 }
 
+export interface PendingCodCollectionView {
+  readonly deliveryId: string;
+  readonly deliveryNumber: string;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly expectedAmount: string;
+  readonly outstandingAmount: string;
+  readonly currency: string;
+  readonly carrierName: string | null;
+  readonly trackingReference: string | null;
+  readonly deliveredAt: string;
+}
+
 export interface PaymentView {
   readonly id: string;
   readonly paymentNumber: string;
@@ -70,23 +85,216 @@ export interface PaymentView {
   readonly amount: string;
   readonly currency: string;
   readonly externalReference: string;
+  readonly status: 'CONFIRMED' | 'VOIDED' | 'REVERSED';
   readonly confirmedAt: string;
   readonly refunded: string;
   readonly net: string;
+  readonly financePosting: FinancePostingView | null;
 }
 
 export interface RefundView {
   readonly id: string;
   readonly refundNumber: string;
   readonly orderId: string;
+  readonly orderNumber: string;
   readonly paymentId: string;
+  readonly paymentNumber: string;
   readonly amount: string;
+  readonly currency: string;
   readonly status: string;
   readonly reasonCode: string;
   readonly externalReference: string | null;
   readonly requestedAt: string;
   readonly completedAt: string | null;
   readonly version: number;
+  readonly financePosting: FinancePostingView | null;
+}
+
+export interface PaginationView {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly totalItems: number;
+  readonly totalPages: number;
+}
+
+export interface PaginatedResultView<T> {
+  readonly items: readonly T[];
+  readonly pagination: PaginationView;
+}
+
+export interface PaymentListFilters {
+  readonly page?: number;
+  readonly pageSize?: number;
+  readonly query?: string;
+  readonly method?: PaymentMethodCode;
+  readonly posting?: 'ALL' | 'POSTED' | 'UNPOSTED';
+  readonly from?: string;
+  readonly to?: string;
+}
+
+export interface RefundListFilters {
+  readonly page?: number;
+  readonly pageSize?: number;
+  readonly query?: string;
+  readonly status?: string;
+  readonly posting?: 'ALL' | 'POSTED' | 'UNPOSTED';
+  readonly from?: string;
+  readonly to?: string;
+}
+
+export interface PaymentDetailView extends PaymentView {
+  readonly order: {
+    readonly status: string;
+    readonly total: string;
+    readonly currency: string;
+    readonly paymentStatus: PaymentSummary['status'];
+    readonly collected: string;
+    readonly outstanding: string;
+  };
+  readonly customer: {
+    readonly id: string | null;
+    readonly name: string;
+    readonly phone: string;
+    readonly email: string | null;
+  };
+  readonly source:
+    | { readonly type: 'MANUAL_SUBMISSION'; readonly id: string; readonly submittedAt: string }
+    | {
+        readonly type: 'COD_COLLECTION';
+        readonly id: string;
+        readonly deliveryNumber: string;
+        readonly carrierName: string | null;
+        readonly trackingReference: string | null;
+        readonly deliveredAt: string | null;
+      };
+  readonly refunds: readonly RefundView[];
+}
+
+export interface FinancePostingView {
+  readonly transactionId: string;
+  readonly transactionNumber: string;
+  readonly accountId: string;
+  readonly accountName: string;
+  readonly postedAt: string;
+}
+
+interface PaymentRow {
+  readonly id: string;
+  readonly payment_number: string;
+  readonly order_id: string;
+  readonly order_number_snapshot: string;
+  readonly code: PaymentMethodCode;
+  readonly amount: string;
+  readonly currency_code: string;
+  readonly external_reference: string;
+  readonly status: 'CONFIRMED' | 'VOIDED' | 'REVERSED';
+  readonly confirmed_at: Date;
+  readonly refunded: string;
+  readonly net: string;
+  readonly finance_transaction_id: string | null;
+  readonly finance_transaction_number: string | null;
+  readonly financial_account_id: string | null;
+  readonly financial_account_name: string | null;
+  readonly finance_posted_at: Date | null;
+}
+
+interface RefundRow {
+  readonly id: string;
+  readonly refund_number: string;
+  readonly order_id: string;
+  readonly order_number_snapshot: string;
+  readonly payment_id: string;
+  readonly payment_number: string;
+  readonly amount: string;
+  readonly currency_code: string;
+  readonly status: string;
+  readonly reason_code: string;
+  readonly external_reference: string | null;
+  readonly requested_at: Date;
+  readonly completed_at: Date | null;
+  readonly version: string;
+  readonly finance_transaction_id: string | null;
+  readonly finance_transaction_number: string | null;
+  readonly financial_account_id: string | null;
+  readonly financial_account_name: string | null;
+  readonly finance_posted_at: Date | null;
+}
+
+function financePosting(row: {
+  finance_transaction_id: string | null;
+  finance_transaction_number: string | null;
+  financial_account_id: string | null;
+  financial_account_name: string | null;
+  finance_posted_at: Date | null;
+}): FinancePostingView | null {
+  if (
+    !row.finance_transaction_id ||
+    !row.finance_transaction_number ||
+    !row.financial_account_id ||
+    !row.financial_account_name ||
+    !row.finance_posted_at
+  )
+    return null;
+  return {
+    transactionId: row.finance_transaction_id,
+    transactionNumber: row.finance_transaction_number,
+    accountId: row.financial_account_id,
+    accountName: row.financial_account_name,
+    postedAt: row.finance_posted_at.toISOString(),
+  };
+}
+
+function paymentView(row: PaymentRow): PaymentView {
+  return {
+    id: row.id,
+    paymentNumber: row.payment_number,
+    orderId: row.order_id,
+    orderNumber: row.order_number_snapshot,
+    method: row.code,
+    amount: row.amount,
+    currency: row.currency_code,
+    externalReference: row.external_reference,
+    status: row.status,
+    confirmedAt: row.confirmed_at.toISOString(),
+    refunded: row.refunded,
+    net: row.net,
+    financePosting: financePosting(row),
+  };
+}
+
+function refundView(row: RefundRow): RefundView {
+  return {
+    id: row.id,
+    refundNumber: row.refund_number,
+    orderId: row.order_id,
+    orderNumber: row.order_number_snapshot,
+    paymentId: row.payment_id,
+    paymentNumber: row.payment_number,
+    amount: row.amount,
+    currency: row.currency_code,
+    status: row.status,
+    reasonCode: row.reason_code,
+    externalReference: row.external_reference,
+    requestedAt: row.requested_at.toISOString(),
+    completedAt: row.completed_at?.toISOString() ?? null,
+    version: Number(row.version),
+    financePosting: financePosting(row),
+  };
+}
+
+function pagination(page: number, pageSize: number, totalItems: number): PaginationView {
+  return {
+    page,
+    pageSize,
+    totalItems,
+    totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+  };
+}
+
+function normalizedPage(filters: { readonly page?: number; readonly pageSize?: number }) {
+  const page = Math.max(1, Math.trunc(filters.page ?? 1));
+  const pageSize = Math.min(100, Math.max(1, Math.trunc(filters.pageSize ?? 25)));
+  return { page, pageSize, offset: (page - 1) * pageSize };
 }
 
 const moneyPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/;
@@ -571,6 +779,269 @@ export async function listPendingPaymentAttempts(
   return Promise.all(ids.rows.map((row) => getPaymentAttempt(db, organizationId, row.id)));
 }
 
+/**
+ * Delivered COD parcels remain collection obligations until an operator records
+ * the money actually collected. Delivery is physical truth; this queue does not
+ * infer a Payment merely from a successful delivery outcome.
+ */
+export async function listPendingCodCollections(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly PendingCodCollectionView[]> {
+  const result = await sql<{
+    delivery_id: string;
+    delivery_number: string;
+    order_id: string;
+    order_number: string;
+    expected_amount: string;
+    outstanding_amount: string;
+    currency_code: string;
+    manual_carrier_name: string | null;
+    tracking_reference: string | null;
+    delivered_at: Date;
+  }>`
+    select delivery.id as delivery_id, delivery.delivery_number, delivery.order_id,
+      order_row.order_number,
+      least(instruction.expected_amount, greatest(intent.expected_amount - coalesce(collected.amount, 0), 0))::numeric(20,4)::text as expected_amount,
+      greatest(intent.expected_amount - coalesce(collected.amount, 0), 0)::numeric(20,4)::text as outstanding_amount,
+      delivery.currency_code, delivery.manual_carrier_name, delivery.tracking_reference,
+      delivery.delivered_at
+    from delivery.deliveries delivery
+    join orders.orders order_row on order_row.id = delivery.order_id
+    join delivery.cod_collection_instructions instruction
+      on instruction.delivery_id = delivery.id and instruction.status = 'ACTIVE'
+    join payments.payment_intents intent
+      on intent.organization_id = delivery.organization_id
+      and intent.order_id = delivery.order_id
+      and intent.status = 'READY'
+    join payments.payment_methods method on method.id = intent.payment_method_id and method.code = 'COD'
+    left join lateral (
+      select sum(allocation.amount) as amount
+      from payments.payment_allocations allocation
+      join payments.payments payment on payment.id = allocation.payment_id
+      where allocation.organization_id = delivery.organization_id
+        and allocation.order_id = delivery.order_id
+        and payment.status = 'CONFIRMED'
+    ) collected on true
+    where delivery.organization_id = ${organizationId}
+      and delivery.outcome_status = 'DELIVERED'
+      and delivery.cod_required
+      and delivery.delivered_at is not null
+      and greatest(intent.expected_amount - coalesce(collected.amount, 0), 0) > 0
+      and not exists (
+        select 1 from payments.payments payment
+        where payment.organization_id = delivery.organization_id
+          and payment.source_delivery_id = delivery.id
+      )
+    order by delivery.delivered_at asc, delivery.id asc
+    limit 100
+  `.execute(db);
+  return result.rows.map((row) => ({
+    deliveryId: row.delivery_id,
+    deliveryNumber: row.delivery_number,
+    orderId: row.order_id,
+    orderNumber: row.order_number,
+    expectedAmount: row.expected_amount,
+    outstandingAmount: row.outstanding_amount,
+    currency: row.currency_code,
+    carrierName: row.manual_carrier_name,
+    trackingReference: row.tracking_reference,
+    deliveredAt: row.delivered_at.toISOString(),
+  }));
+}
+
+export async function recordCodCollection(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    deliveryId: string;
+    amount: string;
+    externalReference: string;
+    note?: string;
+    idempotencyKey: string;
+  },
+): Promise<PaymentView> {
+  const amount = checkedAmount(input.amount, 'Collected amount');
+  const normalizedReference = normalizeExternalReference(input.externalReference);
+  return db.transaction().execute(async (transaction) => {
+    let recordId: string;
+    try {
+      const record = await claimIdempotencyRecord(transaction, {
+        organizationId: input.organizationId,
+        principalType: 'USER',
+        principalId: input.actorId,
+        operationType: 'payments.cod-collection',
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint: `${input.deliveryId}:${amount}:${normalizedReference}:${input.note?.trim() ?? ''}`,
+      });
+      if (!record.created) {
+        if (record.status === 'SUCCEEDED') {
+          const replay = await sql<{ id: string }>`
+            select result_entity_id::text as id from platform.idempotency_records where id = ${record.id}
+          `.execute(transaction);
+          if (replay.rows[0]?.id)
+            return getPayment(transaction, input.organizationId, replay.rows[0].id);
+        }
+        throw new PaymentDomainError(
+          'IDEMPOTENCY_CONFLICT',
+          'This COD collection is already in progress.',
+        );
+      }
+      recordId = record.id;
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError)
+        throw new PaymentDomainError(
+          'IDEMPOTENCY_CONFLICT',
+          'The idempotency key was reused for a different COD collection.',
+        );
+      throw error;
+    }
+
+    const source = await sql<{
+      delivery_number: string;
+      order_id: string;
+      order_number: string;
+      outcome_status: string;
+      cod_required: boolean;
+      expected_amount: string;
+      currency_code: string;
+      intent_id: string;
+      intent_status: string;
+      intent_expected_amount: string;
+      payment_method_id: string;
+    }>`
+      select delivery.delivery_number, delivery.order_id, order_row.order_number,
+        delivery.outcome_status, delivery.cod_required, instruction.expected_amount::text,
+        delivery.currency_code, intent.id as intent_id, intent.status as intent_status,
+        intent.expected_amount::text as intent_expected_amount, intent.payment_method_id
+      from delivery.deliveries delivery
+      join orders.orders order_row on order_row.id = delivery.order_id
+      join delivery.cod_collection_instructions instruction
+        on instruction.delivery_id = delivery.id and instruction.status = 'ACTIVE'
+      join payments.payment_intents intent
+        on intent.organization_id = delivery.organization_id and intent.order_id = delivery.order_id
+      join payments.payment_methods method on method.id = intent.payment_method_id and method.code = 'COD'
+      where delivery.organization_id = ${input.organizationId} and delivery.id = ${input.deliveryId}
+      order by intent.created_at desc
+      limit 1
+      for update of delivery, intent
+    `.execute(transaction);
+    const row = source.rows[0];
+    if (!row) throw new PaymentDomainError('NOT_FOUND', 'COD delivery was not found.');
+    if (!row.cod_required || row.outcome_status !== 'DELIVERED' || row.intent_status !== 'READY')
+      throw new PaymentDomainError(
+        'COD_DELIVERY_NOT_ELIGIBLE',
+        'Only a delivered COD obligation with an open payment intent can be collected.',
+      );
+
+    const existing = await sql<{ id: string }>`
+      select id from payments.payments
+      where organization_id = ${input.organizationId} and source_delivery_id = ${input.deliveryId}
+      for update
+    `.execute(transaction);
+    if (existing.rows[0])
+      throw new PaymentDomainError(
+        'COD_DELIVERY_NOT_ELIGIBLE',
+        'A collection has already been recorded for this delivery.',
+      );
+
+    const totals = await sql<{ collected: string; maximum: string }>`
+      select coalesce(sum(allocation.amount), 0)::numeric(20,4)::text as collected,
+        least(${row.expected_amount}::numeric, greatest(${row.intent_expected_amount}::numeric - coalesce(sum(allocation.amount), 0), 0))::numeric(20,4)::text as maximum
+      from payments.payment_allocations allocation
+      join payments.payments payment on payment.id = allocation.payment_id and payment.status = 'CONFIRMED'
+      where allocation.organization_id = ${input.organizationId} and allocation.order_id = ${row.order_id}
+    `.execute(transaction);
+    const available = totals.rows[0]!;
+    const validity = await sql<{ allowed: boolean }>`
+      select ${amount}::numeric <= ${available.maximum}::numeric and ${available.maximum}::numeric > 0 as allowed
+    `.execute(transaction);
+    if (!validity.rows[0]!.allowed)
+      throw new PaymentDomainError(
+        'COD_COLLECTION_EXCEEDS_OUTSTANDING',
+        `Collected amount cannot exceed the delivery's outstanding COD amount of ${available.maximum} ${row.currency_code}.`,
+      );
+
+    const duplicate = await sql<{ id: string }>`
+      select id from payments.payments
+      where organization_id = ${input.organizationId}
+        and payment_method_id = ${row.payment_method_id}
+        and normalized_external_reference = ${normalizedReference}
+        and status = 'CONFIRMED'
+      for update
+    `.execute(transaction);
+    if (duplicate.rows[0])
+      throw new PaymentDomainError(
+        'DUPLICATE_EXTERNAL_TRANSACTION',
+        'This collection reference is already used by another COD payment.',
+      );
+
+    const created = await sql<{ id: string }>`
+      insert into payments.payments (
+        organization_id, payment_number, payment_method_id, currency_code, amount,
+        external_reference, normalized_external_reference, source_delivery_id, confirmed_by_actor_id
+      ) values (
+        ${input.organizationId}, 'PAY-' || upper(replace(uuidv7()::text, '-', '')),
+        ${row.payment_method_id}, ${row.currency_code}, ${amount}::numeric,
+        ${input.externalReference.trim()}, ${normalizedReference}, ${input.deliveryId}, ${input.actorId}
+      ) returning id
+    `.execute(transaction);
+    const paymentId = created.rows[0]?.id;
+    if (!paymentId) throw new Error('COD payment creation did not return an id.');
+    await sql`
+      insert into payments.payment_allocations (
+        organization_id, payment_id, order_id, order_number_snapshot, amount
+      ) values (
+        ${input.organizationId}, ${paymentId}, ${row.order_id}, ${row.order_number}, ${amount}::numeric
+      )
+    `.execute(transaction);
+    const remaining = await sql<{ amount: string }>`
+      select greatest(${row.intent_expected_amount}::numeric - (${available.collected}::numeric + ${amount}::numeric), 0)::numeric(20,4)::text as amount
+    `.execute(transaction);
+    await sql`
+      update payments.payment_intents
+      set status = case when ${remaining.rows[0]!.amount}::numeric = 0 then 'SATISFIED' else status end,
+        version = version + 1, updated_at = now()
+      where id = ${row.intent_id}
+    `.execute(transaction);
+    await sql`
+      update platform.idempotency_records
+      set status = 'SUCCEEDED', result_entity_type = 'payments.payment',
+        result_entity_id = ${paymentId}::uuid,
+        safe_response = ${JSON.stringify({ paymentId })}::jsonb, completed_at = now()
+      where id = ${recordId}
+    `.execute(transaction);
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'payments.cod_collection.recorded',
+      targetType: 'payments.payment',
+      targetId: paymentId,
+      metadata: {
+        deliveryId: input.deliveryId,
+        orderId: row.order_id,
+        amount,
+        externalReference: input.externalReference.trim(),
+        ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      },
+    });
+    await sql`
+      insert into platform.outbox_events (
+        organization_id, event_type, event_version, aggregate_type, aggregate_id,
+        aggregate_version, payload, occurred_at
+      ) values (
+        ${input.organizationId}, 'payments.cod_collection.recorded', 1,
+        'payments.payment', ${paymentId}, 1,
+        ${JSON.stringify({ paymentId, deliveryId: input.deliveryId, orderId: row.order_id })}::jsonb,
+        now()
+      )
+    `.execute(transaction);
+    return getPayment(transaction, input.organizationId, paymentId);
+  });
+}
+
 export async function verifyManualPayment(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -772,58 +1243,102 @@ export async function getPayment(
   organizationId: string,
   paymentId: string,
 ): Promise<PaymentView> {
-  const result = await sql<{
-    id: string;
-    payment_number: string;
-    order_id: string;
-    order_number_snapshot: string;
-    code: PaymentMethodCode;
-    amount: string;
-    currency_code: string;
-    external_reference: string;
-    confirmed_at: Date;
-    refunded: string;
-  }>`
+  const result = await sql<PaymentRow>`
     select payment.id, payment.payment_number, allocation.order_id, allocation.order_number_snapshot, method.code, payment.amount::text, payment.currency_code,
-      payment.external_reference, payment.confirmed_at, coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0)::numeric(20,4)::text as refunded
+      payment.external_reference, payment.status, payment.confirmed_at,
+      coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0)::numeric(20,4)::text as refunded,
+      greatest(payment.amount - coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0), 0)::numeric(20,4)::text as net,
+      finance_transaction.id as finance_transaction_id,
+      finance_transaction.transaction_number as finance_transaction_number,
+      financial_account.id as financial_account_id,
+      financial_account.name as financial_account_name,
+      finance_transaction.occurred_at as finance_posted_at
     from payments.payments payment join payments.payment_allocations allocation on allocation.payment_id = payment.id
     join payments.payment_methods method on method.id = payment.payment_method_id
     left join payments.refunds refund on refund.payment_id = payment.id
+    left join finance.finance_transactions finance_transaction
+      on finance_transaction.organization_id = payment.organization_id
+      and finance_transaction.transaction_type = 'PAYMENT_SOURCE_POSTING'
+      and finance_transaction.source_domain = 'payments.payment'
+      and finance_transaction.source_id = payment.id
+    left join finance.financial_account_entries finance_entry on finance_entry.finance_transaction_id = finance_transaction.id
+    left join finance.financial_accounts financial_account on financial_account.id = finance_entry.financial_account_id
     where payment.organization_id = ${organizationId} and payment.id = ${paymentId}
-    group by payment.id, allocation.order_id, allocation.order_number_snapshot, method.code
+    group by payment.id, allocation.order_id, allocation.order_number_snapshot, method.code,
+      finance_transaction.id, financial_account.id
   `.execute(db);
   const row = result.rows[0];
   if (!row) throw new PaymentDomainError('NOT_FOUND', 'Payment was not found.');
-  const net = await sql<{
-    net: string;
-  }>`select greatest(${row.amount}::numeric - ${row.refunded}::numeric, 0)::text as net`.execute(
-    db,
-  );
-  return {
-    id: row.id,
-    paymentNumber: row.payment_number,
-    orderId: row.order_id,
-    orderNumber: row.order_number_snapshot,
-    method: row.code,
-    amount: row.amount,
-    currency: row.currency_code,
-    externalReference: row.external_reference,
-    confirmedAt: row.confirmed_at.toISOString(),
-    refunded: row.refunded,
-    net: net.rows[0]!.net,
-  };
+  return paymentView(row);
 }
 
 export async function listPayments(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-): Promise<readonly PaymentView[]> {
-  const ids = await sql<{
-    id: string;
-  }>`select id from payments.payments where organization_id = ${organizationId} and status = 'CONFIRMED' order by confirmed_at desc, id desc limit 100`.execute(
-    db,
-  );
-  return Promise.all(ids.rows.map((row) => getPayment(db, organizationId, row.id)));
+  filters: PaymentListFilters = {},
+): Promise<PaginatedResultView<PaymentView>> {
+  const { page, pageSize, offset } = normalizedPage(filters);
+  const query = filters.query?.trim() || null;
+  const method = filters.method ?? null;
+  const posting = filters.posting ?? 'ALL';
+  const from = filters.from ?? null;
+  const to = filters.to ?? null;
+  const [result, countResult] = await Promise.all([
+    sql<PaymentRow>`
+    select payment.id, payment.payment_number, allocation.order_id, allocation.order_number_snapshot, method.code,
+      payment.amount::text, payment.currency_code, payment.external_reference, payment.status, payment.confirmed_at,
+      coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0)::numeric(20,4)::text as refunded,
+      greatest(payment.amount - coalesce(sum(refund.amount) filter (where refund.status = 'COMPLETED'), 0), 0)::numeric(20,4)::text as net,
+      finance_transaction.id as finance_transaction_id,
+      finance_transaction.transaction_number as finance_transaction_number,
+      financial_account.id as financial_account_id,
+      financial_account.name as financial_account_name,
+      finance_transaction.occurred_at as finance_posted_at
+    from payments.payments payment
+    join payments.payment_allocations allocation on allocation.payment_id = payment.id
+    join payments.payment_methods method on method.id = payment.payment_method_id
+    left join payments.refunds refund on refund.payment_id = payment.id
+    left join finance.finance_transactions finance_transaction
+      on finance_transaction.organization_id = payment.organization_id
+      and finance_transaction.transaction_type = 'PAYMENT_SOURCE_POSTING'
+      and finance_transaction.source_domain = 'payments.payment'
+      and finance_transaction.source_id = payment.id
+    left join finance.financial_account_entries finance_entry on finance_entry.finance_transaction_id = finance_transaction.id
+    left join finance.financial_accounts financial_account on financial_account.id = finance_entry.financial_account_id
+    where payment.organization_id = ${organizationId} and payment.status = 'CONFIRMED'
+      and (${query}::text is null or concat_ws(' ', payment.payment_number, allocation.order_number_snapshot, payment.external_reference, method.code) ilike '%' || ${query}::text || '%')
+      and (${method}::text is null or method.code = ${method}::text)
+      and (${from}::text is null or payment.confirmed_at >= ${from}::timestamptz)
+      and (${to}::text is null or payment.confirmed_at <= ${to}::timestamptz)
+      and (${posting}::text = 'ALL' or (${posting}::text = 'POSTED' and finance_transaction.id is not null) or (${posting}::text = 'UNPOSTED' and finance_transaction.id is null))
+    group by payment.id, allocation.order_id, allocation.order_number_snapshot, method.code,
+      finance_transaction.id, financial_account.id
+    order by payment.confirmed_at desc, payment.id desc
+    limit ${pageSize} offset ${offset}
+  `.execute(db),
+    sql<{ total: string }>`
+      select count(distinct payment.id)::text as total
+      from payments.payments payment
+      join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      join payments.payment_methods method on method.id = payment.payment_method_id
+      left join finance.finance_transactions finance_transaction
+        on finance_transaction.organization_id = payment.organization_id
+        and finance_transaction.transaction_type = 'PAYMENT_SOURCE_POSTING'
+        and finance_transaction.source_domain = 'payments.payment'
+        and finance_transaction.source_id = payment.id
+      where payment.organization_id = ${organizationId} and payment.status = 'CONFIRMED'
+        and (${query}::text is null or concat_ws(' ', payment.payment_number, allocation.order_number_snapshot, payment.external_reference, method.code) ilike '%' || ${query}::text || '%')
+        and (${method}::text is null or method.code = ${method}::text)
+        and (${from}::text is null or payment.confirmed_at >= ${from}::timestamptz)
+        and (${to}::text is null or payment.confirmed_at <= ${to}::timestamptz)
+        and (${posting}::text = 'ALL' or (${posting}::text = 'POSTED' and finance_transaction.id is not null) or (${posting}::text = 'UNPOSTED' and finance_transaction.id is null))
+    `.execute(db),
+  ]);
+  const totalItems = Number(countResult.rows[0]?.total ?? 0);
+  return {
+    items: result.rows.map(paymentView),
+    pagination: pagination(page, pageSize, totalItems),
+  };
 }
 
 export async function createRefund(
@@ -1024,47 +1539,188 @@ export async function getRefund(
   organizationId: string,
   refundId: string,
 ): Promise<RefundView> {
-  const result = await sql<{
-    id: string;
-    refund_number: string;
-    order_id: string;
-    payment_id: string;
-    amount: string;
-    status: string;
-    reason_code: string;
-    external_reference: string | null;
-    requested_at: Date;
-    completed_at: Date | null;
-    version: string;
-  }>`
-    select id, refund_number, order_id, payment_id, amount::text, status, reason_code, external_reference, requested_at, completed_at, version::text
-    from payments.refunds where organization_id = ${organizationId} and id = ${refundId}
+  const result = await sql<RefundRow>`
+    select refund.id, refund.refund_number, refund.order_id, allocation.order_number_snapshot,
+      refund.payment_id, payment.payment_number, refund.amount::text, refund.currency_code,
+      refund.status, refund.reason_code, refund.external_reference, refund.requested_at,
+      refund.completed_at, refund.version::text,
+      finance_transaction.id as finance_transaction_id,
+      finance_transaction.transaction_number as finance_transaction_number,
+      financial_account.id as financial_account_id,
+      financial_account.name as financial_account_name,
+      finance_transaction.occurred_at as finance_posted_at
+    from payments.refunds refund
+    join payments.payments payment on payment.id = refund.payment_id
+    join payments.payment_allocations allocation on allocation.payment_id = payment.id
+    left join finance.finance_transactions finance_transaction
+      on finance_transaction.organization_id = refund.organization_id
+      and finance_transaction.transaction_type = 'REFUND_SOURCE_POSTING'
+      and finance_transaction.source_domain = 'payments.refund'
+      and finance_transaction.source_id = refund.id
+    left join finance.financial_account_entries finance_entry on finance_entry.finance_transaction_id = finance_transaction.id
+    left join finance.financial_accounts financial_account on financial_account.id = finance_entry.financial_account_id
+    where refund.organization_id = ${organizationId} and refund.id = ${refundId}
   `.execute(db);
   const row = result.rows[0];
   if (!row) throw new PaymentDomainError('NOT_FOUND', 'Refund was not found.');
-  return {
-    id: row.id,
-    refundNumber: row.refund_number,
-    orderId: row.order_id,
-    paymentId: row.payment_id,
-    amount: row.amount,
-    status: row.status,
-    reasonCode: row.reason_code,
-    externalReference: row.external_reference,
-    requestedAt: row.requested_at.toISOString(),
-    completedAt: row.completed_at?.toISOString() ?? null,
-    version: Number(row.version),
-  };
+  return refundView(row);
 }
 
 export async function listRefunds(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-): Promise<readonly RefundView[]> {
-  const ids = await sql<{
-    id: string;
-  }>`select id from payments.refunds where organization_id = ${organizationId} order by requested_at desc, id desc limit 100`.execute(
-    db,
-  );
-  return Promise.all(ids.rows.map((row) => getRefund(db, organizationId, row.id)));
+  filters: RefundListFilters = {},
+): Promise<PaginatedResultView<RefundView>> {
+  const { page, pageSize, offset } = normalizedPage(filters);
+  const query = filters.query?.trim() || null;
+  const status = filters.status?.trim() || 'ALL';
+  const posting = filters.posting ?? 'ALL';
+  const from = filters.from ?? null;
+  const to = filters.to ?? null;
+  const [result, countResult] = await Promise.all([
+    sql<RefundRow>`
+      select refund.id, refund.refund_number, refund.order_id, allocation.order_number_snapshot,
+        refund.payment_id, payment.payment_number, refund.amount::text, refund.currency_code,
+        refund.status, refund.reason_code, refund.external_reference, refund.requested_at,
+        refund.completed_at, refund.version::text,
+        finance_transaction.id as finance_transaction_id,
+        finance_transaction.transaction_number as finance_transaction_number,
+        financial_account.id as financial_account_id,
+        financial_account.name as financial_account_name,
+        finance_transaction.occurred_at as finance_posted_at
+      from payments.refunds refund
+      join payments.payments payment on payment.id = refund.payment_id
+      join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      left join finance.finance_transactions finance_transaction
+        on finance_transaction.organization_id = refund.organization_id
+        and finance_transaction.transaction_type = 'REFUND_SOURCE_POSTING'
+        and finance_transaction.source_domain = 'payments.refund'
+        and finance_transaction.source_id = refund.id
+      left join finance.financial_account_entries finance_entry on finance_entry.finance_transaction_id = finance_transaction.id
+      left join finance.financial_accounts financial_account on financial_account.id = finance_entry.financial_account_id
+      where refund.organization_id = ${organizationId}
+        and (${query}::text is null or concat_ws(' ', refund.refund_number, allocation.order_number_snapshot, payment.payment_number, refund.external_reference, refund.reason_code) ilike '%' || ${query}::text || '%')
+        and (${status}::text = 'ALL' or refund.status = ${status}::text)
+        and (${from}::text is null or refund.requested_at >= ${from}::timestamptz)
+        and (${to}::text is null or refund.requested_at <= ${to}::timestamptz)
+        and (${posting}::text = 'ALL' or (${posting}::text = 'POSTED' and finance_transaction.id is not null) or (${posting}::text = 'UNPOSTED' and finance_transaction.id is null))
+      order by refund.requested_at desc, refund.id desc
+      limit ${pageSize} offset ${offset}
+    `.execute(db),
+    sql<{ total: string }>`
+      select count(distinct refund.id)::text as total
+      from payments.refunds refund
+      join payments.payments payment on payment.id = refund.payment_id
+      join payments.payment_allocations allocation on allocation.payment_id = payment.id
+      left join finance.finance_transactions finance_transaction
+        on finance_transaction.organization_id = refund.organization_id
+        and finance_transaction.transaction_type = 'REFUND_SOURCE_POSTING'
+        and finance_transaction.source_domain = 'payments.refund'
+        and finance_transaction.source_id = refund.id
+      where refund.organization_id = ${organizationId}
+        and (${query}::text is null or concat_ws(' ', refund.refund_number, allocation.order_number_snapshot, payment.payment_number, refund.external_reference, refund.reason_code) ilike '%' || ${query}::text || '%')
+        and (${status}::text = 'ALL' or refund.status = ${status}::text)
+        and (${from}::text is null or refund.requested_at >= ${from}::timestamptz)
+        and (${to}::text is null or refund.requested_at <= ${to}::timestamptz)
+        and (${posting}::text = 'ALL' or (${posting}::text = 'POSTED' and finance_transaction.id is not null) or (${posting}::text = 'UNPOSTED' and finance_transaction.id is null))
+    `.execute(db),
+  ]);
+  const totalItems = Number(countResult.rows[0]?.total ?? 0);
+  return { items: result.rows.map(refundView), pagination: pagination(page, pageSize, totalItems) };
+}
+
+export async function getPaymentDetail(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  paymentId: string,
+): Promise<PaymentDetailView> {
+  const [payment, context, refundIds] = await Promise.all([
+    getPayment(db, organizationId, paymentId),
+    sql<{
+      order_status: string;
+      order_total: string;
+      order_currency: string;
+      payment_method: PaymentMethodCode;
+      customer_id: string | null;
+      customer_name: string;
+      customer_phone: string;
+      customer_email: string | null;
+      source_attempt_id: string | null;
+      attempt_submitted_at: Date | null;
+      source_delivery_id: string | null;
+      delivery_number: string | null;
+      carrier_name: string | null;
+      tracking_reference: string | null;
+      delivered_at: Date | null;
+    }>`
+      select order_row.order_status, order_row.total_amount::text as order_total,
+        order_row.currency_code as order_currency, order_row.payment_method,
+        customer.customer_id, customer.display_name as customer_name,
+        customer.phone as customer_phone, customer.email as customer_email,
+        payment.source_attempt_id, attempt.submitted_at as attempt_submitted_at,
+        payment.source_delivery_id, delivery.delivery_number,
+        delivery.manual_carrier_name as carrier_name, delivery.tracking_reference,
+        delivery.delivered_at
+      from payments.payments payment
+      join payments.payment_allocations allocation
+        on allocation.organization_id = payment.organization_id and allocation.payment_id = payment.id
+      join orders.orders order_row
+        on order_row.organization_id = allocation.organization_id and order_row.id = allocation.order_id
+      join orders.order_customer_snapshots customer
+        on customer.organization_id = order_row.organization_id and customer.order_id = order_row.id
+      left join payments.payment_attempts attempt on attempt.id = payment.source_attempt_id
+      left join delivery.deliveries delivery on delivery.id = payment.source_delivery_id
+      where payment.organization_id = ${organizationId} and payment.id = ${paymentId}
+      limit 1
+    `.execute(db),
+    sql<{ id: string }>`
+      select id from payments.refunds
+      where organization_id = ${organizationId} and payment_id = ${paymentId}
+      order by requested_at desc, id desc
+    `.execute(db),
+  ]);
+  const row = context.rows[0];
+  if (!row) throw new PaymentDomainError('NOT_FOUND', 'Payment context was not found.');
+  const [summary, refunds] = await Promise.all([
+    getOrderPaymentSummary(db, {
+      organizationId,
+      orderId: payment.orderId,
+      paymentMethod: row.payment_method,
+      expectedAmount: row.order_total,
+    }),
+    Promise.all(refundIds.rows.map((refund) => getRefund(db, organizationId, refund.id))),
+  ]);
+  const source: PaymentDetailView['source'] = row.source_attempt_id
+    ? {
+        type: 'MANUAL_SUBMISSION',
+        id: row.source_attempt_id,
+        submittedAt: row.attempt_submitted_at?.toISOString() ?? payment.confirmedAt,
+      }
+    : {
+        type: 'COD_COLLECTION',
+        id: row.source_delivery_id as string,
+        deliveryNumber: row.delivery_number ?? 'Delivery',
+        carrierName: row.carrier_name,
+        trackingReference: row.tracking_reference,
+        deliveredAt: row.delivered_at?.toISOString() ?? null,
+      };
+  return {
+    ...payment,
+    order: {
+      status: row.order_status,
+      total: row.order_total,
+      currency: row.order_currency,
+      paymentStatus: summary.status,
+      collected: summary.collected,
+      outstanding: summary.outstanding,
+    },
+    customer: {
+      id: row.customer_id,
+      name: row.customer_name,
+      phone: row.customer_phone,
+      email: row.customer_email,
+    },
+    source,
+    refunds,
+  };
 }

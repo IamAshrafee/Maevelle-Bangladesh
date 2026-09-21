@@ -10,7 +10,7 @@ function sourceHref(record: InventoryHistoryDto): string | null {
     case 'inventory.stocktake':
       return `/inventory/stocktakes/${record.referenceId}`;
     case 'receiving.inbound_receipt':
-      return '/receiving';
+      return `/receiving/${record.referenceId}`;
     case 'fulfillment.fulfillment':
       return '/fulfillments';
     case 'returns.return_receipt':

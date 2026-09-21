@@ -1,9 +1,12 @@
 'use client';
 
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
-import type { ApiEnvelope } from '@maevelle/contracts';
+import type { ApiEnvelope, PaginatedResultDto } from '@maevelle/contracts';
 
+import { useAdminCapability } from '@/components/admin-capabilities';
 import { CostingEvidence } from '@/components/supply/costing-evidence';
 import {
   CostingHelpButton,
@@ -37,12 +40,27 @@ const date = (value: string | null) =>
     : '—';
 
 export function CostingConsole({ section }: { readonly section: Screen }) {
+  const searchParams = useSearchParams();
+  const requestedShipmentId = searchParams.get('shipment') ?? '';
+  const canManageCost = useAdminCapability('landed_cost.manage');
+  const canFinalizeCost = useAdminCapability('landed_cost.finalize');
   const [shipments, setShipments] = useState<readonly Shipment[]>([]);
   const [worksheets, setWorksheets] = useState<readonly Worksheet[]>([]);
   const [layers, setLayers] = useState<readonly Layer[]>([]);
   const [assignments, setAssignments] = useState<readonly Assignment[]>([]);
   const [cogs, setCogs] = useState<readonly Cogs[]>([]);
   const [valuation, setValuation] = useState<readonly Valuation[]>([]);
+  const [expenses, setExpenses] = useState<
+    readonly {
+      id: string;
+      expense_number: string;
+      description: string;
+      amount: string;
+      currency_code: string;
+      status: string;
+      source_domain: string | null;
+    }[]
+  >([]);
   const [shipmentId, setShipmentId] = useState('');
   const [worksheetId, setWorksheetId] = useState('');
   const [preview, setPreview] = useState<Preview>();
@@ -70,13 +88,42 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
     setLoading(true);
     try {
       if (section === 'landed-cost') {
-        const [shipmentResult, worksheetResult] = await Promise.all([
+        const [shipmentResult, worksheetResult, expenseResult] = await Promise.all([
           request<ApiEnvelope<readonly Shipment[]>>('/admin/inbound-shipments?pageSize=100'),
-          request<ApiEnvelope<readonly Worksheet[]>>('/admin/landed-cost/worksheets'),
+          request<ApiEnvelope<readonly Worksheet[]>>(
+            requestedShipmentId
+              ? `/admin/landed-cost/worksheets?shipmentId=${encodeURIComponent(requestedShipmentId)}`
+              : '/admin/landed-cost/worksheets',
+          ),
+          request<
+            ApiEnvelope<
+              PaginatedResultDto<{
+                id: string;
+                expense_number: string;
+                description: string;
+                amount: string;
+                currency_code: string;
+                status: string;
+                source_domain: string | null;
+              }>
+            >
+          >('/admin/finance/expenses?pageSize=100').catch(() => ({
+            data: {
+              items: [],
+              pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 },
+            },
+          })),
         ]);
         setShipments(shipmentResult.data);
         setWorksheets(worksheetResult.data);
-        setShipmentId((current) => current || shipmentResult.data[0]?.id || '');
+        setExpenses(expenseResult.data.items);
+        setShipmentId(
+          (current) =>
+            requestedShipmentId ||
+            current ||
+            shipmentResult.data.find((item) => item.receivingStatus === 'RECEIVED')?.id ||
+            '',
+        );
         setWorksheetId((current) => current || worksheetResult.data[0]?.id || '');
       } else {
         const [layerResult, assignmentResult, cogsResult, valuationResult] = await Promise.all([
@@ -98,7 +145,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
   }
   useEffect(() => {
     void reload();
-  }, [section]);
+  }, [requestedShipmentId, section]);
 
   async function createWorksheet(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -144,6 +191,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
           valueStatus: form.get('valueStatus'),
           allocationMethod: scope === 'DIRECT' ? 'DIRECT' : form.get('allocationMethod'),
           reference: form.get('reference') || undefined,
+          financeExpenseId: form.get('financeExpenseId') || undefined,
           notes: form.get('notes') || undefined,
         }),
       });
@@ -203,29 +251,29 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
     }
   }
   return (
-    <main >
+    <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-7xl gap-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-muted-foreground">Maevelle / Operations</p>
+            <p className="text-sm font-medium text-primary">
+              {section === 'landed-cost'
+                ? 'Supply / Shipment cost'
+                : 'Inventory / Cost & valuation'}
+            </p>
             <h1 className="text-3xl font-semibold tracking-tight">
               {section === 'landed-cost' ? 'Landed Cost' : 'Costing'}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {section === 'landed-cost'
-                ? 'Revisioned acquisition costing. Finalized evidence is immutable.'
-                : 'Read-only FIFO, outbound-cost, COGS, and valuation facts.'}
+                ? 'Add freight, duty, and handling to received goods, then finalize the true unit cost.'
+                : 'Trace receipt-backed FIFO cost, inventory value, outbound assignments, and recognized COGS.'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <CostingHelpButton onClick={() => setHelpOpen(true)} />
-            <button
-              className="rounded-md border px-3 py-2 text-sm"
-              onClick={() => void reload()}
-              type="button"
-            >
+            <Button variant="outline" onClick={() => void reload()} type="button">
               Refresh
-            </button>
+            </Button>
           </div>
         </header>
         {notice ? (
@@ -262,21 +310,23 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
               <div className="grid gap-4">
                 <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
                   <h2 className="font-semibold">1. Select inbound shipment</h2>
-                  {shipments.length ? (
+                  {shipments.some((item) => item.receivingStatus === 'RECEIVED') ? (
                     <select
                       className="mt-3 w-full rounded-md border bg-background p-2"
                       onChange={(event) => setShipmentId(event.target.value)}
                       value={shipmentId}
                     >
-                      {shipments.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.shipmentNumber} · {item.status} · {item.receivingLocationName}
-                        </option>
-                      ))}
+                      {shipments
+                        .filter((item) => item.receivingStatus === 'RECEIVED')
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.shipmentNumber} · received · {item.receivingLocationName}
+                          </option>
+                        ))}
                     </select>
                   ) : (
                     <p className="mt-2 text-sm text-muted-foreground">
-                      No inbound shipments are available yet.
+                      No fully received shipments are ready for landed cost.
                     </p>
                   )}
                   {shipment ? (
@@ -302,13 +352,28 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
                   </p>
                   <Button
                     className="mt-3"
-                    disabled={!shipmentId}
+                    disabled={
+                      !shipmentId ||
+                      Boolean(worksheets.find((item) => item.shipment_id === shipmentId)) ||
+                      !canManageCost
+                    }
                     onClick={() => setWorksheetDialogOpen(true)}
                     title="Create a landed cost worksheet"
                     type="button"
                   >
-                    Create draft worksheet
+                    {worksheets.find((item) => item.shipment_id === shipmentId)
+                      ? 'Worksheet already exists'
+                      : 'Create draft worksheet'}
                   </Button>
+                  {shipmentId ? (
+                    <Button
+                      className="mt-3 ml-2"
+                      variant="ghost"
+                      render={<Link href={`/inbound-shipments/${shipmentId}`} />}
+                    >
+                      Back to shipment
+                    </Button>
+                  ) : null}
                 </section>
               </div>
               <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
@@ -353,7 +418,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
                         </div>
                       ))}
                     </div>
-                    {worksheet.status === 'FINALIZED' ? (
+                    {worksheet.status === 'FINALIZED' && canManageCost ? (
                       <div className="mt-4 flex flex-wrap gap-2">
                         <button
                           className="rounded-md border px-3 py-2 text-sm"
@@ -379,7 +444,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
               <section className="grid gap-6 lg:grid-cols-2">
                 <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
                   <h2 className="font-semibold">3. Add cost component</h2>
-                  {mutable ? (
+                  {mutable && canManageCost ? (
                     <>
                       <p className="mt-2 text-sm text-muted-foreground">
                         Add freight, duty, handling, or another acquisition cost in a focused form.
@@ -397,6 +462,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
                         onOpenChange={setComponentDialogOpen}
                         worksheet={worksheet}
                         shipment={worksheetShipment}
+                        expenses={expenses}
                         onSubmit={(event) => void addComponent(event)}
                       />
                     </>
@@ -430,21 +496,13 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
                     Allocation, acquisition totals, and unit cost are calculated only by the server.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      className="rounded-md border px-3 py-2 text-sm"
-                      onClick={() => void loadPreview()}
-                      type="button"
-                    >
+                    <Button variant="outline" onClick={() => void loadPreview()} type="button">
                       Load allocation preview
-                    </button>
-                    {mutable ? (
-                      <button
-                        className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
-                        onClick={() => void finalize()}
-                        type="button"
-                      >
+                    </Button>
+                    {mutable && canFinalizeCost ? (
+                      <Button onClick={() => void finalize()} type="button">
                         Finalize immutable revision
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                   {preview ? (
@@ -522,6 +580,7 @@ export function CostingConsole({ section }: { readonly section: Screen }) {
         open={worksheetDialogOpen}
         onOpenChange={setWorksheetDialogOpen}
         shipmentId={shipmentId}
+        currencyCode={shipment?.currencyCode ?? 'BDT'}
         onSubmit={(event) => void createWorksheet(event)}
       />
       {section === 'landed-cost' ? (

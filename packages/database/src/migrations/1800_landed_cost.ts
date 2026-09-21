@@ -21,6 +21,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       finalized_at timestamptz,
       version integer not null default 1 check (version > 0),
       unique (organization_id, worksheet_number),
+      unique (organization_id, shipment_id),
       unique (organization_id, id),
       foreign key (organization_id, shipment_id) references inbound_shipment.shipments(organization_id, id)
     );

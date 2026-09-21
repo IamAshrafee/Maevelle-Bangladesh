@@ -183,20 +183,44 @@ export async function createLandedCostWorksheet(
     organizationId: string;
     actorId: string;
     shipmentId: string;
-    baseCurrencyCode: string;
+    baseCurrencyCode?: string;
     notes?: string;
   },
 ): Promise<{ id: string; revisionId: string }> {
   return db.transaction().execute(async (tx) => {
-    const shipment =
-      await sql`select id from inbound_shipment.shipments where organization_id = ${input.organizationId} and id = ${input.shipmentId} for update`.execute(
-        tx,
-      );
+    const shipment = await sql<{
+      id: string;
+      status: string;
+      receiving_status: string;
+    }>`select id, status, receiving_status from inbound_shipment.shipments where organization_id = ${input.organizationId} and id = ${input.shipmentId} for update`.execute(
+      tx,
+    );
     if (!shipment.rows[0])
       throw new CostingDomainError('NOT_FOUND', 'Inbound Shipment was not found.');
+    if (shipment.rows[0].status !== 'ARRIVED' || shipment.rows[0].receiving_status !== 'RECEIVED')
+      throw new CostingDomainError(
+        'INVALID_TRANSITION',
+        'Finish receiving the shipment before starting landed cost.',
+      );
+    const currency = await sql<{ currency_code: string; count: string }>`select min(purchase.currency_code) as currency_code, count(distinct purchase.currency_code)::text as count from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines line on line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = line.purchase_id where allocation.organization_id = ${input.organizationId} and allocation.shipment_id = ${input.shipmentId}`.execute(tx);
+    const shipmentCurrency = currency.rows[0];
+    if (!shipmentCurrency || shipmentCurrency.count !== '1')
+      throw new CostingDomainError('VALIDATION_FAILED', 'A landed-cost worksheet needs one purchase currency per shipment.');
+    if (input.baseCurrencyCode && input.baseCurrencyCode !== shipmentCurrency.currency_code)
+      throw new CostingDomainError('VALIDATION_FAILED', 'Worksheet currency must match the shipment purchase currency.');
+    const existing = await sql<{
+      id: string;
+    }>`select id from landed_cost.worksheets where organization_id = ${input.organizationId} and shipment_id = ${input.shipmentId}`.execute(
+      tx,
+    );
+    if (existing.rows[0])
+      throw new CostingDomainError(
+        'CONFLICT',
+        'This shipment already has a landed-cost worksheet. Open it instead of creating another.',
+      );
     const worksheet = await sql<{
       id: string;
-    }>`insert into landed_cost.worksheets (organization_id, shipment_id, worksheet_number, base_currency_code, notes, created_by_actor_id) values (${input.organizationId}, ${input.shipmentId}, ${number('LCW')}, ${input.baseCurrencyCode}, ${input.notes ?? null}, ${input.actorId}) returning id`.execute(
+    }>`insert into landed_cost.worksheets (organization_id, shipment_id, worksheet_number, base_currency_code, notes, created_by_actor_id) values (${input.organizationId}, ${input.shipmentId}, ${number('LCW')}, ${shipmentCurrency.currency_code}, ${input.notes ?? null}, ${input.actorId}) returning id`.execute(
       tx,
     );
     const id = worksheet.rows[0]!.id;
@@ -209,13 +233,15 @@ export async function createLandedCostWorksheet(
     await sql`update landed_cost.worksheets set current_revision_id = ${revisionId}::uuid where id = ${id}`.execute(
       tx,
     );
-    const targets = await sql<{ id: string; allocated_quantity: string; unit_price: string }>`
-      select allocation.id, allocation.allocated_quantity::text, line.unit_price::text
+    const targets = await sql<{ id: string; received_quantity: string; unit_price: string }>`
+      select allocation.id, sum(receipt_line.quantity)::text as received_quantity, line.unit_price::text
       from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines line on line.id = allocation.purchase_line_id
-      where allocation.organization_id = ${input.organizationId} and allocation.shipment_id = ${input.shipmentId} order by allocation.id
+      join receiving.inbound_receipt_lines receipt_line on receipt_line.shipment_allocation_id = allocation.id and receipt_line.organization_id = allocation.organization_id
+      where allocation.organization_id = ${input.organizationId} and allocation.shipment_id = ${input.shipmentId}
+      group by allocation.id, line.unit_price order by allocation.id
     `.execute(tx);
     for (const target of targets.rows)
-      await sql`insert into landed_cost.allocation_targets (organization_id, worksheet_revision_id, shipment_allocation_id, eligible_quantity, purchase_value) values (${input.organizationId}, ${revisionId}, ${target.id}, ${target.allocated_quantity}::numeric, (${target.allocated_quantity}::numeric * ${target.unit_price}::numeric))`.execute(
+      await sql`insert into landed_cost.allocation_targets (organization_id, worksheet_revision_id, shipment_allocation_id, eligible_quantity, purchase_value) values (${input.organizationId}, ${revisionId}, ${target.id}, ${target.received_quantity}::numeric, (${target.received_quantity}::numeric * ${target.unit_price}::numeric))`.execute(
         tx,
       );
     await appendAuditEvent(tx, {
@@ -246,10 +272,19 @@ export async function addLandedCostComponent(
     allocationMethod: AllocationMethod;
     reference?: string;
     notes?: string;
+    financeExpenseId?: string;
   },
 ): Promise<{ id: string }> {
   return db.transaction().execute(async (tx) => {
     const revision = await assertRevisionMutable(tx, input.organizationId, input.revisionId);
+    if (input.financeExpenseId) {
+      const expense = await sql<{ currency_code: string; amount: string; status: string }>`select currency_code, amount::text, status from finance.expenses where organization_id = ${input.organizationId} and id = ${input.financeExpenseId} for key share`.execute(tx);
+      const row = expense.rows[0];
+      if (!row || row.status === 'CANCELLED')
+        throw new CostingDomainError('NOT_FOUND', 'An active Finance expense was not found.');
+      if (row.currency_code !== input.originalCurrencyCode || row.amount !== input.originalAmount)
+        throw new CostingDomainError('VALIDATION_FAILED', 'The linked Finance expense must use the same source currency and amount.');
+    }
     const original = cents(input.originalAmount);
     if (!original || (original < 0n && input.valueStatus !== 'CREDIT'))
       throw new CostingDomainError(
@@ -273,7 +308,7 @@ export async function addLandedCostComponent(
     const converted = (original * rate) / 1_000_000_000_000n;
     const row = await sql<{
       id: string;
-    }>`insert into landed_cost.cost_components (organization_id, worksheet_revision_id, cost_type, reference, scope, direct_shipment_allocation_id, original_amount, original_currency_code, fx_rate, fx_rate_recorded_at, fx_source, worksheet_amount, value_status, allocation_method, notes) values (${input.organizationId}, ${input.revisionId}, ${input.costType}, ${input.reference ?? null}, ${input.scope}, ${input.directShipmentAllocationId ?? null}::uuid, ${decimal(original, moneyScale)}::numeric, ${input.originalCurrencyCode}, ${needsFx ? input.fxRate! : null}::numeric, ${needsFx ? sql`now()` : null}, ${input.fxSource ?? null}, ${decimal(converted, moneyScale)}::numeric, ${input.valueStatus}, ${input.scope === 'DIRECT' ? 'DIRECT' : input.allocationMethod}, ${input.notes ?? null}) returning id`.execute(
+    }>`insert into landed_cost.cost_components (organization_id, worksheet_revision_id, cost_type, reference, finance_expense_id, scope, direct_shipment_allocation_id, original_amount, original_currency_code, fx_rate, fx_rate_recorded_at, fx_source, worksheet_amount, value_status, allocation_method, notes) values (${input.organizationId}, ${input.revisionId}, ${input.costType}, ${input.reference ?? null}, ${input.financeExpenseId ?? null}::uuid, ${input.scope}, ${input.directShipmentAllocationId ?? null}::uuid, ${decimal(original, moneyScale)}::numeric, ${input.originalCurrencyCode}, ${needsFx ? input.fxRate! : null}::numeric, ${needsFx ? sql`now()` : null}, ${input.fxSource ?? null}, ${decimal(converted, moneyScale)}::numeric, ${input.valueStatus}, ${input.scope === 'DIRECT' ? 'DIRECT' : input.allocationMethod}, ${input.notes ?? null}) returning id`.execute(
       tx,
     );
     return { id: row.rows[0]!.id };
@@ -1284,9 +1319,10 @@ export async function getLandedCostWorksheet(
       fx_rate_recorded_at: string | null;
       fx_source: string | null;
       reference: string | null;
+      finance_expense_id: string | null;
       notes: string | null;
     }>`
-      select id, worksheet_revision_id as revision_id, cost_type, original_amount::text, original_currency_code,
+      select id, worksheet_revision_id as revision_id, cost_type, original_amount::text, original_currency_code, finance_expense_id,
         worksheet_amount::text, value_status, allocation_method, scope, fx_rate::text, fx_rate_recorded_at::text, fx_source, reference, notes
       from landed_cost.cost_components
       where organization_id = ${input.organizationId} and worksheet_revision_id = ${header.current_revision_id}::uuid
@@ -1322,9 +1358,13 @@ export async function getLandedCostWorksheet(
   };
 }
 
-export async function listLandedCostWorksheets(db: Kysely<DatabaseSchema>, organizationId: string) {
+export async function listLandedCostWorksheets(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  input: { shipmentId?: string } = {},
+) {
   const ids = await sql<{ id: string }>`
-    select id from landed_cost.worksheets where organization_id = ${organizationId} order by created_at desc, id desc
+    select id from landed_cost.worksheets where organization_id = ${organizationId} and (${input.shipmentId ?? null}::uuid is null or shipment_id = ${input.shipmentId ?? null}::uuid) order by created_at desc, id desc
   `.execute(db);
   return Promise.all(
     ids.rows.map((row) => getLandedCostWorksheet(db, { organizationId, worksheetId: row.id })),

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Stats, StatsCard, StatsTitle, StatsValue } from '@/components/ui/stats';
 
-import type { ApiEnvelope, PaginatedEnvelope } from '@maevelle/contracts';
+import type { ApiEnvelope, PaginatedEnvelope, PaginatedResultDto } from '@maevelle/contracts';
 
 import { StatusBadge } from './status-badge';
 
@@ -110,13 +110,13 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
         request<ApiEnvelope<PaginatedEnvelope<OrderSummary>>>('/admin/orders'),
         request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries'),
         request<ApiEnvelope<readonly Location[]>>('/admin/warehouse/locations'),
-        request<ApiEnvelope<readonly Refund[]>>('/admin/refunds'),
+        request<ApiEnvelope<PaginatedResultDto<Refund>>>('/admin/refunds?pageSize=100'),
       ]);
       setCases(caseRows.data);
       setOrders(orderRows.data.items);
       setDeliveries(deliveryRows.data);
       setLocations(locationRows.data.filter((item) => item.capabilities.includes('STOCK_HOLDING')));
-      setRefunds(refundRows.data);
+      setRefunds(refundRows.data.items);
       const parameters = new URLSearchParams(window.location.search);
       const requested = parameters.get('return');
       const currentId =
@@ -184,10 +184,6 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
               : 'Keep commercial return intent, physical receipt, refund, and cost recovery as connected but separate facts.'}
           </p>
         </div>
-        <nav aria-label="Reverse logistics">
-          <Link href="/returns">Customer returns</Link> · <Link href="/rto">RTO</Link> ·{' '}
-          <Link href="/payments">Refunds</Link> · <Link href="/costing">Costing</Link>
-        </nav>
       </header>
       <Stats>
         <StatsCard>
@@ -196,15 +192,21 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
         </StatsCard>
         <StatsCard>
           <StatsTitle>Awaiting authorization</StatsTitle>
-          <StatsValue>{visible.filter((item) => item.authorization_status === 'PENDING').length}</StatsValue>
+          <StatsValue>
+            {visible.filter((item) => item.authorization_status === 'PENDING').length}
+          </StatsValue>
         </StatsCard>
         <StatsCard>
           <StatsTitle>Partial receipts</StatsTitle>
-          <StatsValue>{visible.filter((item) => item.receipt_status === 'PARTIALLY_RECEIVED').length}</StatsValue>
+          <StatsValue>
+            {visible.filter((item) => item.receipt_status === 'PARTIALLY_RECEIVED').length}
+          </StatsValue>
         </StatsCard>
         <StatsCard>
           <StatsTitle>Resolved</StatsTitle>
-          <StatsValue>{visible.filter((item) => item.case_status === 'RESOLVED').length}</StatsValue>
+          <StatsValue>
+            {visible.filter((item) => item.case_status === 'RESOLVED').length}
+          </StatsValue>
         </StatsCard>
       </Stats>
       {message ? (

@@ -166,16 +166,21 @@ export function SupplierForm({
 export function PurchaseForm({
   suppliers,
   locations,
+  purchase,
   onSubmit,
   saving,
 }: {
   suppliers: readonly SupplierDto[];
   locations: readonly WarehouseLocationDto[];
+  purchase?: PurchaseDto;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   saving: boolean;
 }) {
   const params =
     typeof window === 'undefined' ? undefined : new URLSearchParams(window.location.search);
+  const commercialFieldsLocked = Boolean(purchase?.lines.length);
+  const supplierId = purchase?.supplierId ?? params?.get('supplier') ?? '';
+  const currencyCode = purchase?.currencyCode ?? 'CNY';
   return (
     <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -184,7 +189,8 @@ export function PurchaseForm({
             className={supplySelectClassName}
             name="supplierId"
             required
-            defaultValue={params?.get('supplier') ?? ''}
+            defaultValue={supplierId}
+            disabled={commercialFieldsLocked}
           >
             <option value="" disabled>
               Choose an active supplier
@@ -197,32 +203,47 @@ export function PurchaseForm({
                 </option>
               ))}
           </select>
+          {commercialFieldsLocked ? (
+            <input type="hidden" name="supplierId" value={supplierId} />
+          ) : null}
         </SupplyField>
         <SupplyField label="Purchase currency">
-          <select className={supplySelectClassName} name="currencyCode" defaultValue="CNY">
+          <select
+            className={supplySelectClassName}
+            name="currencyCode"
+            defaultValue={currencyCode}
+            disabled={commercialFieldsLocked}
+          >
             <option>BDT</option>
             <option>CNY</option>
             <option>USD</option>
           </select>
+          {commercialFieldsLocked ? (
+            <input type="hidden" name="currencyCode" value={currencyCode} />
+          ) : null}
         </SupplyField>
         <SupplyField
           label="Supplier reference"
           hint="The supplier’s order number, if they gave one."
         >
-          <Input name="supplierReference" />
+          <Input name="supplierReference" defaultValue={purchase?.supplierReference} />
         </SupplyField>
         <SupplyField label="Order date">
           <Input
             name="orderDate"
             type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
+            defaultValue={purchase?.orderDate ?? new Date().toISOString().slice(0, 10)}
           />
         </SupplyField>
         <SupplyField label="Expected date">
-          <Input name="expectedDate" type="date" />
+          <Input name="expectedDate" type="date" defaultValue={purchase?.expectedDate} />
         </SupplyField>
         <SupplyField label="Expected warehouse">
-          <select className={supplySelectClassName} name="destinationLocationId" defaultValue="">
+          <select
+            className={supplySelectClassName}
+            name="destinationLocationId"
+            defaultValue={purchase?.destinationLocationId ?? ''}
+          >
             <option value="">Choose later</option>
             {locations.filter(isPurchaseDestination).map((item) => (
               <option key={item.id} value={item.id}>
@@ -235,12 +256,16 @@ export function PurchaseForm({
       <SupplyField label="Notes">
         <Textarea
           name="notes"
+          defaultValue={purchase?.notes}
           placeholder="Terms, packing request, or anything the buyer should remember"
         />
       </SupplyField>
       <div className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-        This creates a draft. Add product lines from its row, then place it after checking the
-        total.
+        {purchase
+          ? commercialFieldsLocked
+            ? 'Supplier and currency are locked once items exist. Dates, destination, reference, and notes remain editable while this purchase is a draft.'
+            : 'Draft purchases can change supplier and currency until the first item is added.'
+          : 'This creates a draft. Add product lines from its detail page, then place it after checking the total.'}
       </div>
       <DialogFooter>
         <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
@@ -248,7 +273,8 @@ export function PurchaseForm({
           type="submit"
           disabled={saving || !suppliers.some((item) => item.status === 'ACTIVE')}
         >
-          {saving ? <Loader2 className="animate-spin" /> : <Plus />} Create draft
+          {saving ? <Loader2 className="animate-spin" /> : purchase ? <Check /> : <Plus />}{' '}
+          {purchase ? 'Save purchase' : 'Create draft'}
         </Button>
       </DialogFooter>
     </form>
@@ -727,13 +753,59 @@ export function ReceiptForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   saving: boolean;
 }) {
-  const [allocationId, setAllocationId] = useState('');
-  const [condition, setCondition] = useState('SELLABLE');
-  const [quantity, setQuantity] = useState('1');
+  const conditions = ['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION'] as const;
   useEffect(() => {
     const selected = new URLSearchParams(window.location.search).get('shipment');
     if (selected && shipments.some((item) => item.id === selected)) setShipmentId(selected);
   }, [shipments, setShipmentId]);
+
+  const quantityFor = (allocationId: string, condition: string) =>
+    lines.find((line) => line.shipmentAllocationId === allocationId && line.condition === condition)
+      ?.quantity ?? '';
+  const updateQuantity = (allocationId: string, condition: string, quantity: string) => {
+    const without = lines.filter(
+      (line) => !(line.shipmentAllocationId === allocationId && line.condition === condition),
+    );
+    setLines(
+      Number(quantity) > 0
+        ? [...without, { shipmentAllocationId: allocationId, condition, quantity }]
+        : without,
+    );
+  };
+  const countFor = (allocationId: string) =>
+    lines
+      .filter((line) => line.shipmentAllocationId === allocationId)
+      .reduce((total, line) => total + (Number(line.quantity) || 0), 0);
+  const overCounted = allocations.some(
+    (allocation) =>
+      countFor(allocation.id) >
+      Number(remainingSupplyQuantity(allocation.allocatedQuantity, allocation.receivedQuantity)),
+  );
+  const totalExpected = allocations.reduce(
+    (total, allocation) =>
+      total +
+      Number(remainingSupplyQuantity(allocation.allocatedQuantity, allocation.receivedQuantity)),
+    0,
+  );
+  const totalCounted = lines.reduce((total, line) => total + (Number(line.quantity) || 0), 0);
+
+  if (!shipments.length) {
+    return (
+      <div className="grid justify-items-center gap-3 rounded-xl border border-dashed p-8 text-center">
+        <PackageCheck className="size-8 text-muted-foreground" />
+        <div>
+          <h3 className="font-semibold">Nothing is ready to receive</h3>
+          <p className="mt-1 max-w-md text-sm text-muted-foreground">
+            A shipment must be marked arrived before its physical count can be posted.
+          </p>
+        </div>
+        <Button variant="outline" render={<Link href="/inbound-shipments" />}>
+          View shipments
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
       <SupplyField label="Arrived shipment">
@@ -743,7 +815,6 @@ export function ReceiptForm({
           onChange={(event) => {
             setShipmentId(event.target.value);
             setLines([]);
-            setAllocationId('');
           }}
           required
         >
@@ -757,84 +828,98 @@ export function ReceiptForm({
           ))}
         </select>
       </SupplyField>
-      <div className="rounded-xl border p-4">
-        <h3 className="font-medium">Physical count</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Add separate rows when one product arrived in different conditions.
-        </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_8rem_7rem_auto]">
-          <select
-            className={supplySelectClassName}
-            value={allocationId}
-            onChange={(event) => setAllocationId(event.target.value)}
-            title="Choose a shipment line"
-          >
-            <option value="">Choose a shipment line</option>
-            {allocations.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.productTitle} · {item.sku} · remaining{' '}
-                {remainingSupplyQuantity(item.allocatedQuantity, item.receivedQuantity)}
-              </option>
-            ))}
-          </select>
-          <select
-            className={supplySelectClassName}
-            value={condition}
-            onChange={(event) => setCondition(event.target.value)}
-            title="Actual condition"
-          >
-            <option value="SELLABLE">Sellable</option>
-            <option value="DAMAGED">Damaged</option>
-            <option value="QUARANTINE">Quarantine</option>
-            <option value="INSPECTION">Inspection</option>
-          </select>
-          <Input
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            type="number"
-            min="0.000001"
-            step="0.000001"
-            title="Counted quantity"
-          />
+      <div className="overflow-hidden rounded-xl border">
+        <div className="flex flex-col gap-2 border-b bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-medium">Physical count</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Enter each item by condition. Leave a field blank when none arrived in that condition.
+            </p>
+          </div>
           <Button
             type="button"
+            size="sm"
             variant="outline"
-            disabled={!allocationId || Number(quantity) <= 0}
-            onClick={() => {
-              setLines([...lines, { shipmentAllocationId: allocationId, condition, quantity }]);
-              setQuantity('1');
-            }}
-            title="Add counted quantity"
+            disabled={!allocations.length}
+            onClick={() =>
+              setLines(
+                allocations.map((allocation) => ({
+                  shipmentAllocationId: allocation.id,
+                  condition: 'SELLABLE',
+                  quantity: remainingSupplyQuantity(
+                    allocation.allocatedQuantity,
+                    allocation.receivedQuantity,
+                  ),
+                })),
+              )
+            }
           >
-            <Plus /> Add
+            <Check /> Receive all as sellable
           </Button>
         </div>
-        <div className="mt-3 grid gap-2">
-          {lines.map((line, index) => {
-            const choice = allocations.find((item) => item.id === line.shipmentAllocationId);
+        <div className="divide-y">
+          {allocations.map((allocation) => {
+            const remaining = Number(
+              remainingSupplyQuantity(allocation.allocatedQuantity, allocation.receivedQuantity),
+            );
+            const counted = countFor(allocation.id);
+            const invalid = counted > remaining;
             return (
-              <div
-                className="flex items-center justify-between rounded-lg bg-muted p-2 text-sm"
-                key={`${line.shipmentAllocationId}-${line.condition}-${index}`}
-              >
-                <span>
-                  {choice?.productTitle} · {choice?.sku} · {line.quantity}{' '}
-                  {line.condition.toLowerCase()}
-                </span>
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant="ghost"
-                  onClick={() => setLines(lines.filter((_, itemIndex) => itemIndex !== index))}
-                  title="Remove this count"
+              <div className="grid gap-3 p-4" key={allocation.id}>
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{allocation.productTitle}</p>
+                    <p className="font-mono text-xs text-muted-foreground">{allocation.sku}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Expected now{' '}
+                    <strong className="text-foreground">
+                      {formatSupplyNumber(String(remaining))}
+                    </strong>
+                    {Number(allocation.receivedQuantity) > 0
+                      ? ` · ${formatSupplyNumber(allocation.receivedQuantity)} received earlier`
+                      : ''}
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {conditions.map((item) => (
+                    <label className="grid gap-1 text-xs font-medium" key={item}>
+                      {item.charAt(0) + item.slice(1).toLowerCase()}
+                      <Input
+                        aria-label={`${allocation.productTitle} ${item.toLowerCase()} quantity`}
+                        className={invalid ? 'border-destructive' : undefined}
+                        min="0"
+                        step="0.000001"
+                        type="number"
+                        value={quantityFor(allocation.id, item)}
+                        onChange={(event) =>
+                          updateQuantity(allocation.id, item, event.target.value)
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div
+                  className={`flex justify-between text-xs ${invalid ? 'text-destructive' : 'text-muted-foreground'}`}
                 >
-                  <Trash2 />
-                </Button>
+                  <span>
+                    {invalid
+                      ? 'Count exceeds the remaining shipment quantity.'
+                      : counted < remaining
+                        ? `${formatSupplyNumber(String(remaining - counted))} not counted in this session`
+                        : 'Expected quantity fully counted'}
+                  </span>
+                  <strong>
+                    {formatSupplyNumber(String(counted))} / {formatSupplyNumber(String(remaining))}
+                  </strong>
+                </div>
               </div>
             );
           })}
-          {!lines.length ? (
-            <p className="text-sm text-muted-foreground">No counted lines added yet.</p>
+          {!allocations.length && shipmentId ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              Every item in this shipment has already been received.
+            </p>
           ) : null}
         </div>
       </div>
@@ -847,11 +932,13 @@ export function ReceiptForm({
         </SupplyField>
       </div>
       <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
-        Check the count before posting. Posted receipts are permanent evidence.
+        {totalCounted < totalExpected
+          ? `This will be a partial receipt. ${formatSupplyNumber(String(totalExpected - totalCounted))} units will remain open for another receiving session.`
+          : 'Check the count before posting. Posted receipts are permanent Inventory evidence.'}
       </div>
       <DialogFooter>
         <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-        <Button type="submit" disabled={saving || !lines.length}>
+        <Button type="submit" disabled={saving || !lines.length || overCounted}>
           {saving ? <Loader2 className="animate-spin" /> : <PackageCheck />} Post receipt
         </Button>
       </DialogFooter>

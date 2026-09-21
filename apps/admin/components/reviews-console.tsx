@@ -159,9 +159,6 @@ export function ReviewsConsole() {
           <h1>Reviews</h1>
           <p>Publish useful customer feedback while preserving policy-based moderation history.</p>
         </div>
-        <nav aria-label="Review operations">
-          <Link href="/products">Products</Link> · <Link href="/orders">Orders</Link>
-        </nav>
       </header>
 
       <Stats aria-label="Review queue summary">

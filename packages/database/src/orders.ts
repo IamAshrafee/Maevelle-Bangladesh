@@ -1107,10 +1107,7 @@ export async function getOrderForAdmin(
     sql<{ id: string; amount: string; status: string; created_at: Date }>`
       select r.id, r.amount::text, r.status, r.created_at
       from payments.refunds r
-      join payments.payments p on p.id = r.payment_id
-      join payments.payment_attempts pa on pa.id = p.source_attempt_id
-      join payments.payment_intents pi on pi.id = pa.payment_intent_id
-      where pi.order_id = ${input.orderId}
+      where r.organization_id = ${input.organizationId} and r.order_id = ${input.orderId}
       order by r.created_at desc
     `.execute(db),
     sql<{
@@ -1290,10 +1287,17 @@ export async function listOrders(
     left join lateral (
       select
         pi.status,
-        coalesce((select sum(p.amount) from payments.payments p join payments.payment_attempts pa on pa.id = p.source_attempt_id where pa.payment_intent_id = pi.id), 0)::text as collected,
-        coalesce((select sum(r.amount) from payments.refunds r where r.payment_id in (
-          select p2.id from payments.payments p2 join payments.payment_attempts pa2 on pa2.id = p2.source_attempt_id where pa2.payment_intent_id = pi.id
-        )), 0)::text as refunded
+        coalesce((select sum(allocation.amount)
+          from payments.payment_allocations allocation
+          join payments.payments payment on payment.id = allocation.payment_id
+          where allocation.organization_id = o.organization_id
+            and allocation.order_id = o.id
+            and payment.status = 'CONFIRMED'), 0)::text as collected,
+        coalesce((select sum(refund.amount)
+          from payments.refunds refund
+          where refund.organization_id = o.organization_id
+            and refund.order_id = o.id
+            and refund.status = 'COMPLETED'), 0)::text as refunded
       from payments.payment_intents pi
       where pi.order_id = o.id
       order by pi.created_at desc

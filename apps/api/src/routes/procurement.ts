@@ -10,7 +10,9 @@ import {
   createPurchase,
   createShipment,
   createSupplier,
+  getInboundReceipt,
   getPurchase,
+  getSupplier,
   getSupplyOverview,
   getShipment,
   listInboundReceipts,
@@ -23,6 +25,7 @@ import {
   postInboundReceipt,
   ProcurementDomainError,
   removePurchaseLine,
+  updatePurchase,
   updatePurchaseLine,
   updateSupplier,
 } from '@maevelle/database/procurement';
@@ -50,12 +53,27 @@ const supplierType = Type.Union([
 ]);
 
 function pageOf<T>(items: readonly T[], query: unknown) {
-  const input = (query ?? {}) as { page?: string; pageSize?: string };
+  const input = (query ?? {}) as { page?: string; pageSize?: string; q?: string; status?: string };
   const page = Math.max(1, Number.parseInt(input.page ?? '1', 10) || 1);
   const pageSize = Math.min(100, Math.max(5, Number.parseInt(input.pageSize ?? '20', 10) || 20));
-  const totalItems = items.length;
+  const needle = input.q?.trim().toLowerCase() ?? '';
+  const statusOf = (item: T) => {
+    const record = item as { status?: string; lines?: readonly { quantity: string; allocatedQuantity: string; receivedQuantity: string }[] };
+    if (record.status !== 'PLACED' || !record.lines) return record.status;
+    const totals = record.lines.reduce((total, line) => ({ ordered: total.ordered + Number(line.quantity), allocated: total.allocated + Number(line.allocatedQuantity), received: total.received + Number(line.receivedQuantity) }), { ordered: 0, allocated: 0, received: 0 });
+    if (totals.ordered > 0 && totals.received >= totals.ordered) return 'RECEIVED';
+    if (totals.received > 0) return 'PARTIALLY_RECEIVED';
+    if (totals.ordered > 0 && totals.allocated >= totals.ordered) return 'SHIPPED';
+    if (totals.allocated > 0) return 'PARTIALLY_SHIPPED';
+    return 'ORDERED';
+  };
+  const filtered = items.filter((item) => {
+    return (!needle || JSON.stringify(item).toLowerCase().includes(needle)) &&
+      (!input.status || input.status === 'ALL' || statusOf(item) === input.status);
+  });
+  const totalItems = filtered.length;
   return {
-    data: items.slice((page - 1) * pageSize, page * pageSize),
+    data: filtered.slice((page - 1) * pageSize, page * pageSize),
     pagination: {
       page,
       pageSize,
@@ -141,6 +159,20 @@ export function registerProcurementRoutes(
     const active = await requireAdmin(database, auth, request.headers, 'procurement.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     return pageOf(await listSuppliers(database.db, active.organizationId), request.query);
+  });
+  app.get('/admin/suppliers/:supplierId', async (request, reply) => {
+    const active = await requireAdmin(database, auth, request.headers, 'procurement.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      return {
+        data: await getSupplier(database.db, {
+          organizationId: active.organizationId,
+          supplierId: (request.params as { supplierId: string }).supplierId,
+        }),
+      };
+    } catch (error) {
+      return sendError(reply, error);
+    }
   });
   app.post(
     '/admin/suppliers',
@@ -261,7 +293,8 @@ export function registerProcurementRoutes(
   app.get('/admin/purchases', async (request, reply) => {
     const active = await requireAdmin(database, auth, request.headers, 'procurement.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return pageOf(await listPurchases(database.db, active.organizationId), request.query);
+    const query = request.query as { supplierId?: string };
+    return pageOf(await listPurchases(database.db, active.organizationId, query), request.query);
   });
   app.get('/admin/purchases/:purchaseId', async (request, reply) => {
     const active = await requireAdmin(database, auth, request.headers, 'procurement.view');
@@ -308,6 +341,59 @@ export function registerProcurementRoutes(
         return reply.code(201).send({
           data: await createPurchase(database.db, { ...active, ...body }),
         });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+  app.patch(
+    '/admin/purchases/:purchaseId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          supplierId: Type.String({ minLength: 1 }),
+          currencyCode: currency,
+          notes: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          supplierReference: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          orderDate: Type.String({ format: 'date' }),
+          expectedDate: Type.Optional(Type.Union([Type.String({ format: 'date' }), Type.Null()])),
+          destinationLocationId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await requireAdmin(database, auth, request.headers, 'procurement.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          version: number;
+          supplierId: string;
+          currencyCode: 'BDT' | 'CNY' | 'USD';
+          notes?: string | null;
+          supplierReference?: string | null;
+          orderDate: string;
+          expectedDate?: string | null;
+          destinationLocationId?: string | null;
+        };
+        return {
+          data: await updatePurchase(database.db, {
+            ...active,
+            purchaseId: (request.params as { purchaseId: string }).purchaseId,
+            expectedVersion: body.version,
+            supplierId: body.supplierId,
+            currencyCode: body.currencyCode,
+            orderDate: body.orderDate,
+            ...(body.notes !== undefined ? { notes: body.notes } : {}),
+            ...(body.supplierReference !== undefined
+              ? { supplierReference: body.supplierReference }
+              : {}),
+            ...(body.expectedDate !== undefined ? { expectedDate: body.expectedDate } : {}),
+            ...(body.destinationLocationId !== undefined
+              ? { destinationLocationId: body.destinationLocationId }
+              : {}),
+          }),
+        };
       } catch (error) {
         return sendError(reply, error);
       }
@@ -433,7 +519,8 @@ export function registerProcurementRoutes(
   app.get('/admin/inbound-shipments', async (request, reply) => {
     const active = await requireAdmin(database, auth, request.headers, 'inbound_shipment.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return pageOf(await listShipments(database.db, active.organizationId), request.query);
+    const query = request.query as { purchaseId?: string };
+    return pageOf(await listShipments(database.db, active.organizationId, query), request.query);
   });
   app.get('/admin/inbound-shipments/:shipmentId', async (request, reply) => {
     const active = await requireAdmin(database, auth, request.headers, 'inbound_shipment.view');
@@ -568,7 +655,25 @@ export function registerProcurementRoutes(
   app.get('/admin/inbound-receipts', async (request, reply) => {
     const active = await requireAdmin(database, auth, request.headers, 'receiving.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return pageOf(await listInboundReceipts(database.db, active.organizationId), request.query);
+    const query = request.query as { shipmentId?: string };
+    return pageOf(
+      await listInboundReceipts(database.db, active.organizationId, query),
+      request.query,
+    );
+  });
+  app.get('/admin/inbound-receipts/:receiptId', async (request, reply) => {
+    const active = await requireAdmin(database, auth, request.headers, 'receiving.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      return {
+        data: await getInboundReceipt(database.db, {
+          organizationId: active.organizationId,
+          receiptId: (request.params as { receiptId: string }).receiptId,
+        }),
+      };
+    } catch (error) {
+      return sendError(reply, error);
+    }
   });
   app.post(
     '/admin/inbound-shipments/:shipmentId/receipts',
