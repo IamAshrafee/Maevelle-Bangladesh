@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import type {
   ApiEnvelope,
@@ -515,26 +516,34 @@ export function PaymentsConsole() {
           </StatsCard>
         </Stats>
         {message ? <OperationalFeedback tone={messageTone}>{message}</OperationalFeedback> : null}
-        <nav className="workspace-tabs" aria-label="Payment operations">
-          {(
-            [
-              ['verification', 'Verification queue', pending.length],
-              ['cod', 'COD collections', pendingCod.length],
-              ['payments', 'Collected payments', paymentPagination.totalItems],
-              ['refunds', 'Refunds', refundPagination.totalItems],
-              ['methods', 'Payment methods', methods.length],
-            ] as const
-          ).map(([value, label, count]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={tab === value}
-              onClick={() => setTab(value)}
-            >
-              {label} <span>{count}</span>
-            </button>
-          ))}
-        </nav>
+        <Tabs
+          value={tab}
+          onValueChange={(val) => {
+            if (val) setTab(val as PaymentTab);
+          }}
+          className="w-full"
+        >
+          <TabsList className="inline-flex h-9 w-full justify-start overflow-x-auto sm:w-fit">
+            {(
+              [
+                ['verification', 'Verification queue', pending.length],
+                ['cod', 'COD collections', pendingCod.length],
+                ['payments', 'Collected payments', paymentPagination.totalItems],
+                ['refunds', 'Refunds', refundPagination.totalItems],
+                ['methods', 'Payment methods', methods.length],
+              ] as const
+            ).map(([value, label, count]) => (
+              <TabsTrigger key={value} value={value} className="gap-1.5 px-3 text-xs sm:text-sm">
+                <span>{label}</span>
+                {count !== undefined && count > 0 ? (
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                    {count}
+                  </span>
+                ) : null}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         {tab === 'verification' || tab === 'cod' ? (
           <label className="table-search standalone-search">
             <CreditCard aria-hidden="true" />

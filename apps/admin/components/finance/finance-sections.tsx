@@ -1,13 +1,9 @@
 'use client';
 
 import {
-  Activity,
   AlertTriangle,
   ArrowDownLeft,
-  ArrowLeftRight,
   ArrowUpRight,
-  ChevronRight,
-  Landmark,
   Link2,
   Scale,
 } from 'lucide-react';
@@ -24,6 +20,7 @@ import type {
   FinancialAccountDto,
 } from '@maevelle/contracts';
 
+import { AccountsTable } from '@/components/finance/accounts-table';
 import { OperationalEmptyState } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -420,6 +417,8 @@ export function FinanceOverview({
   );
 }
 
+export { AccountsTable };
+
 export function AccountsSection({
   accounts,
   onTransfer,
@@ -431,88 +430,13 @@ export function AccountsSection({
   readonly onViewActivity?: (accountId: string) => void;
   readonly onReconcile?: (accountId: string) => void;
 }) {
-  if (!accounts.length)
-    return (
-      <OperationalEmptyState
-        title="No financial accounts"
-        description="Create Cash, Bank, mobile-wallet, or courier holding accounts before recording account-backed money movement."
-      />
-    );
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {accounts.map((account) => (
-        <div
-          key={account.id}
-          className="flex flex-col justify-between rounded-xl border bg-card p-4 shadow-sm transition hover:border-primary/30 hover:shadow-md"
-        >
-          <div>
-            <div className="flex items-start justify-between gap-3">
-              <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Landmark className="size-4" />
-              </span>
-              <StatusBadge status={account.status} />
-            </div>
-            <Link
-              href={`/finance/accounts/${account.id}`}
-              className="mt-3 block text-base font-semibold hover:underline"
-            >
-              {account.name}
-            </Link>
-            <span className="text-xs text-muted-foreground">
-              {humanizeFinanceCode(account.account_type)} · {account.account_number}
-            </span>
-            <span className="mt-3 block text-2xl font-semibold tracking-tight">
-              {formatMoney(account.ledger_balance, account.currency_code)}
-            </span>
-            <span className="mt-1 block text-xs text-muted-foreground">
-              {account.last_movement_at
-                ? `Last movement ${formatFinanceDate(account.last_movement_at)}`
-                : 'No movements yet'}
-            </span>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t pt-3">
-            {onTransfer ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1"
-                onClick={() => onTransfer(account.id)}
-              >
-                <ArrowLeftRight className="size-3" /> Transfer
-              </Button>
-            ) : null}
-            {onViewActivity ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs gap-1"
-                onClick={() => onViewActivity(account.id)}
-              >
-                <Activity className="size-3" /> Activity
-              </Button>
-            ) : null}
-            {onReconcile ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs gap-1"
-                onClick={() => onReconcile(account.id)}
-              >
-                <Scale className="size-3" /> Reconcile
-              </Button>
-            ) : null}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto h-7 text-xs text-muted-foreground hover:text-foreground"
-              render={<Link href={`/finance/accounts/${account.id}`} />}
-            >
-              Provenance <ChevronRight className="size-3 ml-0.5" />
-            </Button>
-          </div>
-        </div>
-      ))}
-    </div>
+    <AccountsTable
+      accounts={accounts}
+      onTransfer={onTransfer}
+      onViewActivity={onViewActivity}
+      onReconcile={onReconcile}
+    />
   );
 }
 

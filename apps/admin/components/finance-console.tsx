@@ -527,19 +527,19 @@ export function FinanceConsole({
             }}
             className="w-full"
           >
-            <TabsList variant="line" className="h-auto w-full justify-start overflow-x-auto border-b">
+            <TabsList className="inline-flex h-9 w-full justify-start overflow-x-auto sm:w-fit">
               {treasuryTabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <TabsTrigger
                     key={tab.key}
                     value={tab.key}
-                    className="flex items-center gap-2 px-3.5 py-2.5 text-sm"
+                    className="gap-2 px-3 text-xs sm:text-sm"
                   >
                     <Icon className="size-4" />
                     <span>{tab.label}</span>
                     {tab.badge ? (
-                      <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                      <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                         {tab.badge}
                       </span>
                     ) : null}
@@ -553,35 +553,43 @@ export function FinanceConsole({
         {mode === 'treasury' &&
         (activeSection === 'movements' || activeSection === 'transfers') &&
         state === 'ready' ? (
-          <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-1.5" aria-label="Activity filter">
-              {(
-                [
-                  ['ALL', 'All movements'],
-                  ['TRANSFERS', 'Transfers'],
-                  ['IN', 'Money in'],
-                  ['OUT', 'Money out'],
-                  ['ADJUSTMENTS', 'Adjustments'],
-                ] as const
-              ).map(([filterVal, label]) => (
-                <Button
-                  key={filterVal}
-                  size="sm"
-                  variant={activityFilter === filterVal ? 'default' : 'outline'}
-                  onClick={() => setActivityFilter(filterVal)}
-                  className="h-8 text-xs"
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
+          <div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-card p-2.5 sm:p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+            <Tabs
+              value={activityFilter}
+              onValueChange={(val) => {
+                if (val) setActivityFilter(val as typeof activityFilter);
+              }}
+              aria-label="Activity filter"
+              className="w-full sm:w-auto"
+            >
+              <TabsList className="h-8 p-0.5 w-full justify-start overflow-x-auto sm:w-fit bg-muted/70">
+                {(
+                  [
+                    ['ALL', 'All movements'],
+                    ['TRANSFERS', 'Transfers'],
+                    ['IN', 'Money in'],
+                    ['OUT', 'Money out'],
+                    ['ADJUSTMENTS', 'Adjustments'],
+                  ] as const
+                ).map(([filterVal, label]) => (
+                  <TabsTrigger
+                    key={filterVal}
+                    value={filterVal}
+                    className="px-2.5 py-1 text-xs font-medium"
+                  >
+                    {label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
             <div className="flex flex-wrap items-center gap-2">
               {data.accounts.length > 0 ? (
                 <NativeSelect
                   value={activityAccountName}
                   onChange={(e) => setActivityAccountName(e.target.value)}
-                  className="h-8 text-xs"
+                  className="h-8 text-xs bg-background shadow-2xs"
+                  aria-label="Filter by account"
                 >
                   <option value="">All accounts</option>
                   {data.accounts.map((acc) => (
@@ -595,7 +603,7 @@ export function FinanceConsole({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search activity..."
-                className="h-8 w-44 text-xs sm:w-56"
+                className="h-8 w-44 text-xs sm:w-56 bg-background shadow-2xs"
               />
             </div>
           </div>
