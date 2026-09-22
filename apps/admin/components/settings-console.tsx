@@ -4,6 +4,7 @@ import { Building2, RefreshCw, Save, Store } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+import { SettingsNav } from './settings/settings-nav';
 import { OperationalFeedback, OperationalPageHeader } from './operational-worklist';
 
 type Profile = {
@@ -136,6 +137,7 @@ export function SettingsConsole() {
             </button>
           }
         />
+        <SettingsNav />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
         <Stats>
           <StatsCard>

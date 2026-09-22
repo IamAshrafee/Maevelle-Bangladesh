@@ -15,7 +15,8 @@ export class CatalogDomainError extends Error {
     | 'STALE_VERSION'
     | 'CATEGORY_CYCLE'
     | 'OPTION_STRUCTURE_IN_USE'
-    | 'PUBLISHED_VARIANT_INTEGRITY';
+    | 'PUBLISHED_VARIANT_INTEGRITY'
+    | 'COLOR_IN_USE';
 
   public constructor(
     code: CatalogDomainError['code'],
@@ -110,6 +111,10 @@ export interface CatalogColor {
   readonly hexValue: string | null;
   readonly status: 'ACTIVE' | 'ARCHIVED';
   readonly version: number;
+  readonly usageCount?: number;
+  readonly variantCount?: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
 }
 
 export interface CatalogProductMedia {
@@ -263,8 +268,29 @@ export async function listCatalogColors(
     hex_value: string | null;
     status: CatalogColor['status'];
     version: string;
-  }>`select id::text,code,name,hex_value,status,version::text from catalog.colors
-    where organization_id=${organizationId} order by status,name,id`.execute(db);
+    created_at: string;
+    updated_at: string;
+    usage_count: string;
+    variant_count: string;
+  }>`select
+      c.id::text,
+      c.code,
+      c.name,
+      c.hex_value,
+      c.status,
+      c.version::text,
+      c.created_at::text,
+      c.updated_at::text,
+      (count(distinct vc.variant_id) + count(distinct pov.id))::text as usage_count,
+      count(distinct vc.variant_id)::text as variant_count
+    from catalog.colors c
+    left join catalog.variant_colors vc
+      on vc.organization_id = c.organization_id and vc.color_id = c.id
+    left join catalog.product_option_values pov
+      on pov.organization_id = c.organization_id and pov.color_id = c.id
+    where c.organization_id = ${organizationId}
+    group by c.id, c.code, c.name, c.hex_value, c.status, c.version, c.created_at, c.updated_at
+    order by c.status, c.name, c.id`.execute(db);
   return result.rows.map((color) => ({
     id: color.id,
     code: color.code,
@@ -272,6 +298,10 @@ export async function listCatalogColors(
     hexValue: color.hex_value,
     status: color.status,
     version: Number(color.version),
+    createdAt: color.created_at,
+    updatedAt: color.updated_at,
+    usageCount: Number(color.usage_count || 0),
+    variantCount: Number(color.variant_count || 0),
   }));
 }
 
@@ -296,9 +326,11 @@ export async function createCatalogColor(
     hex_value: string | null;
     status: CatalogColor['status'];
     version: string;
+    created_at: string;
+    updated_at: string;
   }>`insert into catalog.colors (organization_id,code,name,hex_value)
     values (${input.organizationId},${code},${name},${hexValue})
-    returning id::text,code,name,hex_value,status,version::text`.execute(db);
+    returning id::text,code,name,hex_value,status,version::text,created_at::text,updated_at::text`.execute(db);
   const color = result.rows[0];
   if (!color) throw new Error('Color creation did not return a Color.');
   return {
@@ -308,6 +340,10 @@ export async function createCatalogColor(
     hexValue: color.hex_value,
     status: color.status,
     version: Number(color.version),
+    createdAt: color.created_at,
+    updatedAt: color.updated_at,
+    usageCount: 0,
+    variantCount: 0,
   };
 }
 
@@ -318,14 +354,21 @@ export async function updateCatalogColor(
     colorId: string;
     expectedVersion: number;
     name?: string;
+    code?: string;
     hexValue?: string | null;
     status?: 'ACTIVE' | 'ARCHIVED';
   },
 ): Promise<CatalogColor> {
   const name = input.name?.trim();
+  const code = input.code?.trim().toLowerCase();
   const hexValue = input.hexValue?.trim().toUpperCase() || null;
   if (input.name !== undefined && !name)
     throw new CatalogDomainError('VALIDATION_FAILED', 'Color name is required.');
+  if (code !== undefined && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(code))
+    throw new CatalogDomainError(
+      'VALIDATION_FAILED',
+      'Color code must use lowercase words separated by hyphens.',
+    );
   if (input.hexValue && !/^#[0-9A-F]{6}$/.test(hexValue ?? ''))
     throw new CatalogDomainError('VALIDATION_FAILED', 'Color HEX must use the format #RRGGBB.');
   const result = await sql<{
@@ -335,13 +378,16 @@ export async function updateCatalogColor(
     hex_value: string | null;
     status: CatalogColor['status'];
     version: string;
+    created_at: string;
+    updated_at: string;
   }>`update catalog.colors set
       name=case when ${input.name !== undefined} then ${name ?? ''} else name end,
+      code=case when ${code !== undefined} then ${code ?? ''} else code end,
       hex_value=case when ${input.hexValue !== undefined} then ${hexValue} else hex_value end,
       status=coalesce(${input.status ?? null},status),version=version+1,updated_at=now()
     where organization_id=${input.organizationId} and id=${input.colorId}::uuid
       and version=${input.expectedVersion}
-    returning id::text,code,name,hex_value,status,version::text`.execute(db);
+    returning id::text,code,name,hex_value,status,version::text,created_at::text,updated_at::text`.execute(db);
   const color = result.rows[0];
   if (!color)
     throw new CatalogDomainError('STALE_VERSION', 'Color changed while you were editing it.');
@@ -352,7 +398,42 @@ export async function updateCatalogColor(
     hexValue: color.hex_value,
     status: color.status,
     version: Number(color.version),
+    createdAt: color.created_at,
+    updatedAt: color.updated_at,
   };
+}
+
+export async function deleteCatalogColor(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    colorId: string;
+  },
+): Promise<void> {
+  const usage = await sql<{ count: string }>`
+    select (
+      (select count(*) from catalog.variant_colors where organization_id = ${input.organizationId} and color_id = ${input.colorId}::uuid)
+      +
+      (select count(*) from catalog.product_option_values where organization_id = ${input.organizationId} and color_id = ${input.colorId}::uuid)
+    )::text as count
+  `.execute(db);
+
+  const count = Number(usage.rows[0]?.count || 0);
+  if (count > 0) {
+    throw new CatalogDomainError(
+      'COLOR_IN_USE',
+      `Cannot delete this color because it is assigned to ${count} product option(s) or variant(s). Archive it instead to hide it from new products without breaking existing items.`,
+    );
+  }
+
+  const result = await sql`
+    delete from catalog.colors
+    where organization_id = ${input.organizationId} and id = ${input.colorId}::uuid
+  `.execute(db);
+
+  if (Number(result.numAffectedRows ?? 0) === 0) {
+    throw new CatalogDomainError('NOT_FOUND', 'Color not found.');
+  }
 }
 
 export async function createProductOptionAxis(

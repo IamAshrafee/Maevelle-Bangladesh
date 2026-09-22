@@ -22,7 +22,7 @@ import type {
   CatalogProductTypeDefinitionDto,
 } from '@maevelle/contracts';
 
-import { ProductTypeManager } from '@/components/catalog-product-types/product-type-manager';
+import { ProductTypeManager } from '@/components/product-types';
 import { productReadinessResolutionHref } from '@/components/products/product-workspace-links';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';

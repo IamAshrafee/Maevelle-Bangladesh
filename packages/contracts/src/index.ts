@@ -42,6 +42,10 @@ export interface CatalogColorDto {
   readonly hexValue: string | null;
   readonly status: 'ACTIVE' | 'ARCHIVED';
   readonly version: number;
+  readonly usageCount?: number;
+  readonly variantCount?: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
 }
 
 export interface CatalogProductMediaDto {

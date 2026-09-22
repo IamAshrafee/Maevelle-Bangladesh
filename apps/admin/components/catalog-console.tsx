@@ -41,7 +41,7 @@ import {
   type CatalogContentValues,
 } from '@/components/catalog-content-state';
 import { CatalogContentEditor } from '@/components/catalog-content-editor';
-import { ProductTypeManager } from '@/components/catalog-product-types/product-type-manager';
+import { ProductTypeManager } from '@/components/product-types';
 import {
   catalogOverviewFromWorkspace,
   isCatalogOverviewDirty,

@@ -45,7 +45,8 @@ export function sendCatalogDomainError(
       : error.code === 'STALE_VERSION' ||
           error.code === 'CONFLICT' ||
           error.code === 'OPTION_STRUCTURE_IN_USE' ||
-          error.code === 'PUBLISHED_VARIANT_INTEGRITY'
+          error.code === 'PUBLISHED_VARIANT_INTEGRITY' ||
+          error.code === 'COLOR_IN_USE'
         ? 409
         : 422;
   return reply.code(statusCode).send({

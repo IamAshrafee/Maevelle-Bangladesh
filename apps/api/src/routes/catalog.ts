@@ -14,6 +14,7 @@ import {
   createProductOptionValue,
   archiveCatalogProduct,
   createCatalogColor,
+  deleteCatalogColor,
   createCatalogProduct,
   createCatalogVariant,
   createCatalogVariants,
@@ -162,6 +163,7 @@ export function registerCatalogRoutes(
         body: Type.Object({
           version: Type.Integer({ minimum: 1 }),
           name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+          code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
           hexValue: Type.Optional(
             Type.Union([Type.String({ pattern: '^#[0-9a-fA-F]{6}$' }), Type.Null()]),
           ),
@@ -176,6 +178,7 @@ export function registerCatalogRoutes(
         const body = request.body as {
           version: number;
           name?: string;
+          code?: string;
           hexValue?: string | null;
           status?: 'ACTIVE' | 'ARCHIVED';
         };
@@ -185,6 +188,7 @@ export function registerCatalogRoutes(
             colorId: (request.params as { colorId: string }).colorId,
             expectedVersion: body.version,
             ...(body.name !== undefined ? { name: body.name } : {}),
+            ...(body.code !== undefined ? { code: body.code } : {}),
             ...(body.hexValue !== undefined ? { hexValue: body.hexValue } : {}),
             ...(body.status !== undefined ? { status: body.status } : {}),
           }),
@@ -194,6 +198,20 @@ export function registerCatalogRoutes(
       }
     },
   );
+
+  app.delete('/admin/catalog/colors/:colorId', async (request, reply) => {
+    const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+    if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      await deleteCatalogColor(database.db, {
+        organizationId: context.organizationId,
+        colorId: (request.params as { colorId: string }).colorId,
+      });
+      return reply.code(204).send();
+    } catch (error) {
+      return domainError(reply, error);
+    }
+  });
 
   app.get('/admin/catalog/categories', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'catalog.view');
