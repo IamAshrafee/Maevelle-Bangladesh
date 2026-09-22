@@ -491,6 +491,103 @@ export function registerCatalogRoutes(
           tagIds: Type.Optional(Type.Array(organizationIdParameter, { uniqueItems: true })),
           occasionIds: Type.Optional(Type.Array(organizationIdParameter, { uniqueItems: true })),
           collectionIds: Type.Optional(Type.Array(organizationIdParameter, { uniqueItems: true })),
+          sizeSystemId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+          sizeGuideId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+          attributes: Type.Optional(
+            Type.Array(
+              Type.Object({
+                attributeDefinitionId: organizationIdParameter,
+                value: Type.Union([Type.String(), Type.Boolean(), Type.Null()]),
+              }),
+            ),
+          ),
+          initialVariant: Type.Optional(
+            Type.Object({
+              sku: Type.String({ minLength: 1, maxLength: 120 }),
+              barcode: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
+              priceAmount: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
+              compareAtAmount: Type.Optional(
+                Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
+              ),
+              currency: Type.Optional(Type.String({ pattern: '^[A-Z]{3}$' })),
+            }),
+          ),
+          options: Type.Optional(
+            Type.Array(
+              Type.Object({
+                name: Type.String({ minLength: 1 }),
+                code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
+                position: Type.Optional(Type.Integer({ minimum: 0 })),
+                values: Type.Array(
+                  Type.Object({
+                    displayValue: Type.String({ minLength: 1 }),
+                    code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
+                    position: Type.Optional(Type.Integer({ minimum: 0 })),
+                    colorId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+                    sizeDefinitionId: Type.Optional(
+                      Type.Union([organizationIdParameter, Type.Null()]),
+                    ),
+                  }),
+                  { minItems: 1 },
+                ),
+              }),
+            ),
+          ),
+          variants: Type.Optional(
+            Type.Array(
+              Type.Object({
+                sku: Type.String({ minLength: 1, maxLength: 120 }),
+                title: Type.Optional(Type.Union([Type.String({ maxLength: 180 }), Type.Null()])),
+                barcode: Type.Optional(Type.Union([Type.String({ maxLength: 120 }), Type.Null()])),
+                priceAmount: Type.Optional(
+                  Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
+                ),
+                compareAtAmount: Type.Optional(
+                  Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
+                ),
+                currency: Type.Optional(Type.String({ pattern: '^[A-Z]{3}$' })),
+                weight: Type.Optional(
+                  Type.Union([
+                    Type.Object({
+                      value: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+                      unit: Type.Union([
+                        Type.Literal('G'),
+                        Type.Literal('KG'),
+                        Type.Literal('OZ'),
+                        Type.Literal('LB'),
+                      ]),
+                    }),
+                    Type.Null(),
+                  ]),
+                ),
+                dimensions: Type.Optional(
+                  Type.Union([
+                    Type.Object({
+                      length: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+                      width: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+                      height: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+                      unit: Type.Union([Type.Literal('MM'), Type.Literal('CM'), Type.Literal('IN')]),
+                    }),
+                    Type.Null(),
+                  ]),
+                ),
+                primaryColorId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
+                associatedColorIds: Type.Optional(
+                  Type.Array(organizationIdParameter, { maxItems: 12, uniqueItems: true }),
+                ),
+                optionSelections: Type.Optional(
+                  Type.Array(
+                    Type.Object({
+                      axisName: Type.String({ minLength: 1 }),
+                      valueDisplay: Type.String({ minLength: 1 }),
+                    }),
+                  ),
+                ),
+              }),
+            ),
+          ),
+          seoTitle: Type.Optional(Type.Union([Type.String({ maxLength: 180 }), Type.Null()])),
+          seoDescription: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
         }),
       },
     },

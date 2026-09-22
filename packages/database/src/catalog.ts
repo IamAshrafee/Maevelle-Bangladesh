@@ -1160,6 +1160,46 @@ export async function createCatalogProduct(
     tagIds?: readonly string[];
     occasionIds?: readonly string[];
     collectionIds?: readonly string[];
+    sizeSystemId?: string | null;
+    sizeGuideId?: string | null;
+    attributes?: readonly { attributeDefinitionId: string; value: string | boolean | null }[];
+    initialVariant?: {
+      sku: string;
+      barcode?: string | null;
+      priceAmount?: string;
+      compareAtAmount?: string | null;
+      currency?: string;
+    };
+    options?: readonly {
+      code?: string;
+      name: string;
+      position?: number;
+      values: readonly {
+        code?: string;
+        displayValue: string;
+        position?: number;
+        colorId?: string | null;
+        sizeDefinitionId?: string | null;
+      }[];
+    }[];
+    variants?: readonly {
+      sku: string;
+      title?: string | null;
+      barcode?: string | null;
+      priceAmount?: string | null;
+      compareAtAmount?: string | null;
+      currency?: string;
+      weight?: { value: string; unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+      dimensions?: { length: string; width: string; height: string; unit: 'MM' | 'CM' | 'IN' } | null;
+      primaryColorId?: string | null;
+      associatedColorIds?: readonly string[];
+      optionSelections?: readonly {
+        axisName: string;
+        valueDisplay: string;
+      }[];
+    }[];
+    seoTitle?: string | null;
+    seoDescription?: string | null;
   },
 ): Promise<ProductSummary> {
   return db.transaction().execute(async (transaction) => {
@@ -1225,9 +1265,10 @@ export async function createCatalogProduct(
       version: string;
     }>`
       insert into catalog.products
-        (organization_id,product_type_id,handle,title,description,primary_category_id)
+        (organization_id,product_type_id,handle,title,description,primary_category_id,seo_title,seo_description)
       values (${input.organizationId},${input.productTypeId},${input.handle},${input.title},
-        ${input.description ?? null},${input.primaryCategoryId ?? null}::uuid)
+        ${input.description ?? null},${input.primaryCategoryId ?? null}::uuid,
+        ${input.seoTitle ?? null},${input.seoDescription ?? null})
       returning id, handle, title, status, publication_status, version::text
     `.execute(transaction);
     const product = created.rows[0];
@@ -1245,6 +1286,251 @@ export async function createCatalogProduct(
       await sql`insert into catalog.product_collections
         (organization_id,product_id,collection_id)
         values (${input.organizationId},${product.id},${collectionId})`.execute(transaction);
+
+    if (input.sizeSystemId) {
+      if (input.sizeGuideId) {
+        const guide = await sql<{ size_system_id: string }>`
+          select size_system_id::text from sizing.size_guides
+          where organization_id=${input.organizationId} and id=${input.sizeGuideId}::uuid and status='ACTIVE'
+        `.execute(transaction);
+        if (!guide.rows[0] || guide.rows[0].size_system_id !== input.sizeSystemId) {
+          throw new CatalogDomainError(
+            'VALIDATION_FAILED',
+            'Selected size guide does not match size system.',
+          );
+        }
+      }
+      await sql`
+        insert into sizing.product_size_configurations (organization_id, product_id, size_system_id, size_guide_id, status)
+        values (${input.organizationId}, ${product.id}::uuid, ${input.sizeSystemId}::uuid, ${input.sizeGuideId ?? null}::uuid, 'ACTIVE')
+      `.execute(transaction);
+    }
+
+    if (input.attributes && input.attributes.length > 0) {
+      const definitions = await sql<{
+        id: string;
+        name: string;
+        value_type: CatalogProductAttribute['valueType'];
+        is_required: boolean;
+        reference_option_ids: string[];
+      }>`
+        select definition.id::text,definition.name,definition.value_type,binding.is_required,
+          array(select option.id::text from catalog.attribute_reference_options option
+            where option.organization_id=product.organization_id
+              and option.attribute_definition_id=definition.id
+              and option.status='ACTIVE') as reference_option_ids
+        from catalog.products product
+        join catalog.product_type_attributes binding
+          on binding.organization_id=product.organization_id
+          and binding.product_type_id=product.product_type_id
+        join catalog.attribute_definitions definition
+          on definition.id=binding.attribute_definition_id
+          and definition.organization_id=product.organization_id
+          and definition.scope='PRODUCT' and definition.status='ACTIVE'
+        where product.organization_id=${input.organizationId} and product.id=${product.id}::uuid
+      `.execute(transaction);
+      const byId = new Map(definitions.rows.map((def) => [def.id, def]));
+      const supplied = new Map<string, string | boolean | null>();
+      for (const entry of input.attributes) {
+        if (supplied.has(entry.attributeDefinitionId))
+          throw new CatalogDomainError('VALIDATION_FAILED', 'Provide each Product attribute once.');
+        if (!byId.has(entry.attributeDefinitionId))
+          throw new CatalogDomainError(
+            'VALIDATION_FAILED',
+            'An attribute is not active for this Product Type.',
+          );
+        supplied.set(entry.attributeDefinitionId, entry.value);
+      }
+      const normalized = definitions.rows.map((definition) => {
+        const value = normalizedAttributeValue(definition, supplied.get(definition.id) ?? null);
+        if (
+          definition.value_type === 'REFERENCE' &&
+          value !== undefined &&
+          !definition.reference_option_ids.includes(String(value.value))
+        )
+          throw new CatalogDomainError(
+            'VALIDATION_FAILED',
+            `${definition.name} selection is not available for this tenant attribute.`,
+          );
+        return { definition, value };
+      });
+      for (const entry of normalized) {
+        if (entry.value === undefined) continue;
+        if (entry.value.column === 'value_reference_id') {
+          await sql`
+            insert into catalog.product_attribute_values
+              (organization_id,product_id,attribute_definition_id,value_reference_id)
+            values (${input.organizationId},${product.id}::uuid,
+              ${entry.definition.id}::uuid,${entry.value.value}::uuid)
+          `.execute(transaction);
+        } else {
+          await sql`
+            insert into catalog.product_attribute_values
+              (organization_id,product_id,attribute_definition_id,${sql.raw(entry.value.column)})
+            values (${input.organizationId},${product.id}::uuid,${entry.definition.id}::uuid,${entry.value.value})
+          `.execute(transaction);
+        }
+      }
+    }
+
+    if (input.options && input.options.length > 0) {
+      const createdValues = new Map<string, { id: string; axisId: string }>();
+      for (const [axisIdx, axis] of input.options.entries()) {
+        const rawCode = (axis.code || axis.name)
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+        const axisCode = rawCode || `opt-${axisIdx + 1}`;
+        const axisResult = await sql<{ id: string }>`
+          insert into catalog.product_option_axes (organization_id, product_id, code, name, position)
+          values (${input.organizationId}, ${product.id}::uuid, ${axisCode}, ${axis.name.trim()}, ${axis.position ?? axisIdx})
+          returning id::text
+        `.execute(transaction);
+        const axisId = axisResult.rows[0]?.id;
+        if (!axisId) continue;
+
+        for (const [valIdx, val] of axis.values.entries()) {
+          const rawValCode = (val.code || val.displayValue)
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          const valCode = rawValCode || `val-${valIdx + 1}`;
+          const valResult = await sql<{ id: string }>`
+            insert into catalog.product_option_values (
+              organization_id, option_axis_id, code, display_value, position, color_id, size_definition_id
+            ) values (
+              ${input.organizationId}, ${axisId}::uuid, ${valCode}, ${val.displayValue.trim()},
+              ${val.position ?? valIdx}, ${val.colorId ?? null}::uuid, ${val.sizeDefinitionId ?? null}::uuid
+            ) returning id::text
+          `.execute(transaction);
+          const valId = valResult.rows[0]?.id;
+          if (valId) {
+            createdValues.set(
+              `${axis.name.toLowerCase().trim()}:::${val.displayValue.toLowerCase().trim()}`,
+              { id: valId, axisId },
+            );
+          }
+        }
+      }
+
+      if (input.variants && input.variants.length > 0) {
+        for (const v of input.variants) {
+          const normalizedSku = v.sku.trim().toUpperCase();
+          if (!normalizedSku) continue;
+
+          const matchedValues: { axisId: string; valueId: string }[] = [];
+          if (v.optionSelections) {
+            for (const sel of v.optionSelections) {
+              const key = `${sel.axisName.toLowerCase().trim()}:::${sel.valueDisplay.toLowerCase().trim()}`;
+              const match = createdValues.get(key);
+              if (match) {
+                matchedValues.push({ axisId: match.axisId, valueId: match.id });
+              }
+            }
+          }
+
+          const optIds = matchedValues.map((m) => m.valueId);
+          const signature = optIds.length > 0 ? [...optIds].sort().join(':') : 'default';
+
+          const weightVal = v.weight?.value ? Number(v.weight.value) : null;
+          const weightUnit = weightVal && v.weight?.unit ? v.weight.unit : null;
+          const lenVal = v.dimensions?.length ? Number(v.dimensions.length) : null;
+          const widthVal = v.dimensions?.width ? Number(v.dimensions.width) : null;
+          const heightVal = v.dimensions?.height ? Number(v.dimensions.height) : null;
+          const dimUnit =
+            lenVal && widthVal && heightVal && v.dimensions?.unit ? v.dimensions.unit : null;
+
+          const variantResult = await sql<{ id: string }>`
+            insert into catalog.product_variants (
+              organization_id, product_id, title, sku, sku_normalized, barcode, option_signature,
+              weight_value, weight_unit, length_value, width_value, height_value, dimension_unit, status
+            ) values (
+              ${input.organizationId}, ${product.id}::uuid, ${v.title?.trim() || null}, ${v.sku.trim()},
+              ${normalizedSku}, ${v.barcode?.trim() || null}, ${signature},
+              ${weightVal}, ${weightUnit},
+              ${lenVal}, ${widthVal}, ${heightVal}, ${dimUnit},
+              'ACTIVE'
+            ) returning id::text
+          `.execute(transaction);
+          const variantId = variantResult.rows[0]?.id;
+          if (!variantId) continue;
+
+          for (const item of matchedValues) {
+            await sql`
+              insert into catalog.variant_option_values (organization_id, variant_id, option_axis_id, option_value_id)
+              values (${input.organizationId}, ${variantId}::uuid, ${item.axisId}::uuid, ${item.valueId}::uuid)
+            `.execute(transaction);
+          }
+
+          if (v.primaryColorId) {
+            await sql`
+              insert into catalog.variant_colors (organization_id, variant_id, color_id, role, position)
+              values (${input.organizationId}, ${variantId}::uuid, ${v.primaryColorId}::uuid, 'PRIMARY', 0)
+            `.execute(transaction);
+          }
+
+          for (const [pos, colorId] of (v.associatedColorIds ?? []).entries()) {
+            await sql`
+              insert into catalog.variant_colors (organization_id, variant_id, color_id, role, position)
+              values (${input.organizationId}, ${variantId}::uuid, ${colorId}::uuid, 'ASSOCIATED', ${pos})
+            `.execute(transaction);
+          }
+
+          await sql`
+            insert into inventory.inventory_items (organization_id, variant_id)
+            values (${input.organizationId}, ${variantId}::uuid)
+            on conflict (variant_id) do nothing
+          `.execute(transaction);
+
+          if (v.priceAmount) {
+            const currency = v.currency || 'BDT';
+            await sql`
+              insert into pricing.price_definitions (
+                organization_id, variant_id, currency_code, amount, compare_at_amount, status
+              ) values (
+                ${input.organizationId}, ${variantId}::uuid, ${currency}, ${v.priceAmount}::numeric,
+                ${v.compareAtAmount ? sql`${v.compareAtAmount}::numeric` : null}, 'ACTIVE'
+              )
+            `.execute(transaction);
+          }
+        }
+      }
+    } else if (input.initialVariant && input.initialVariant.sku) {
+      const normalizedSku = input.initialVariant.sku.trim().toUpperCase();
+      if (normalizedSku) {
+        const variantResult = await sql<{ id: string }>`
+          insert into catalog.product_variants (
+            organization_id, product_id, sku, barcode, status
+          ) values (
+            ${input.organizationId}, ${product.id}::uuid, ${normalizedSku}, ${input.initialVariant.barcode?.trim() || null}, 'ACTIVE'
+          ) returning id::text
+        `.execute(transaction);
+        const createdVariant = variantResult.rows[0];
+        if (createdVariant) {
+          await sql`
+            insert into inventory.inventory_items (organization_id, variant_id)
+            values (${input.organizationId}, ${createdVariant.id}::uuid)
+            on conflict (variant_id) do nothing
+          `.execute(transaction);
+          if (input.initialVariant.priceAmount) {
+            const currency = input.initialVariant.currency || 'BDT';
+            const amount = input.initialVariant.priceAmount;
+            const compareAtAmount = input.initialVariant.compareAtAmount ?? null;
+            await sql`
+              insert into pricing.price_definitions (
+                organization_id, variant_id, currency_code, amount, compare_at_amount, status
+              ) values (
+                ${input.organizationId}, ${createdVariant.id}::uuid, ${currency}, ${amount}::numeric,
+                ${compareAtAmount ? sql`${compareAtAmount}::numeric` : null}, 'ACTIVE'
+              )
+            `.execute(transaction);
+          }
+        }
+      }
+    }
+
     await emitCatalogEvent(transaction, {
       organizationId: input.organizationId,
       productId: product.id,

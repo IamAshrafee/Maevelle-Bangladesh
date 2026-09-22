@@ -33,6 +33,57 @@ export interface CatalogProductCreateDto {
   readonly tagIds?: readonly string[];
   readonly occasionIds?: readonly string[];
   readonly collectionIds?: readonly string[];
+  readonly sizeSystemId?: string | null;
+  readonly sizeGuideId?: string | null;
+  readonly attributes?: readonly {
+    readonly attributeDefinitionId: string;
+    readonly value: string | boolean | null;
+  }[];
+  readonly initialVariant?: {
+    readonly sku: string;
+    readonly barcode?: string | null;
+    readonly priceAmount?: string;
+    readonly compareAtAmount?: string | null;
+    readonly currency?: string;
+  };
+  readonly options?: readonly {
+    readonly code?: string;
+    readonly name: string;
+    readonly position?: number;
+    readonly values: readonly {
+      readonly code?: string;
+      readonly displayValue: string;
+      readonly position?: number;
+      readonly colorId?: string | null;
+      readonly sizeDefinitionId?: string | null;
+    }[];
+  }[];
+  readonly variants?: readonly {
+    readonly sku: string;
+    readonly title?: string | null;
+    readonly barcode?: string | null;
+    readonly priceAmount?: string | null;
+    readonly compareAtAmount?: string | null;
+    readonly currency?: string;
+    readonly weight?: {
+      readonly value: string;
+      readonly unit: 'G' | 'KG' | 'OZ' | 'LB';
+    } | null;
+    readonly dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
+    readonly primaryColorId?: string | null;
+    readonly associatedColorIds?: readonly string[];
+    readonly optionSelections?: readonly {
+      readonly axisName: string;
+      readonly valueDisplay: string;
+    }[];
+  }[];
+  readonly seoTitle?: string | null;
+  readonly seoDescription?: string | null;
 }
 
 export interface CatalogColorDto {
