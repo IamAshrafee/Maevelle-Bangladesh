@@ -16,10 +16,10 @@ import type {
 
 import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
 import { useAdminCapability } from '@/components/admin-capabilities';
+import { CreatePurchaseDialog } from '@/components/supply/create-purchase-dialog';
+import { PlanShipmentDialog } from '@/components/supply/plan-shipment-dialog';
 import {
-  PurchaseForm,
   ReceiptForm,
-  ShipmentForm,
   SupplierForm,
 } from '@/components/supply/supply-forms';
 import { SupplyField as Field, supplySelectClassName } from '@/components/supply/supply-field';
@@ -53,7 +53,6 @@ import type {
   ConfirmSupplyAction,
   PagedEnvelope,
   ReceiptDraftLine,
-  ShipmentDraftLine,
   SupplyNotice,
   SupplyScreen,
 } from '@/lib/supply/types';
@@ -90,7 +89,6 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
   const [expandedPurchase, setExpandedPurchase] = useState<string>();
   const [expandedShipment, setExpandedShipment] = useState<string>();
   const [confirmAction, setConfirmAction] = useState<ConfirmSupplyAction>();
-  const [shipmentLines, setShipmentLines] = useState<ShipmentDraftLine[]>([]);
   const [receiptShipmentId, setReceiptShipmentId] = useState('');
   const [receiptLines, setReceiptLines] = useState<ReceiptDraftLine[]>([]);
 
@@ -160,9 +158,12 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
 
   useEffect(() => {
     void reload();
+  }, [canCreate, page, query, screen, status]);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('create') && canCreate) setCreateOpen(true);
-  }, [canCreate, page, query, screen, status]);
+  }, [canCreate, screen]);
 
   const allItems =
     screen === 'suppliers'
@@ -289,27 +290,6 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
     );
   }
 
-  function createPurchase(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    void run(
-      () =>
-        request('/admin/purchases', {
-          method: 'POST',
-          body: JSON.stringify({
-            supplierId: form.get('supplierId'),
-            currencyCode: form.get('currencyCode'),
-            supplierReference: form.get('supplierReference') || undefined,
-            orderDate: form.get('orderDate') || undefined,
-            expectedDate: form.get('expectedDate') || undefined,
-            destinationLocationId: form.get('destinationLocationId') || undefined,
-            notes: form.get('notes') || undefined,
-          }),
-        }),
-      'Draft purchase created. Add its product lines next.',
-      () => setCreateOpen(false),
-    );
-  }
 
   function addPurchaseLine(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -327,34 +307,6 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
         }),
       'Purchase line added.',
       () => setLinePurchase(undefined),
-    );
-  }
-
-  function createShipment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    if (!shipmentLines.length) {
-      setNotice({ tone: 'warning', message: 'Add at least one purchase line.' });
-      return;
-    }
-    void run(
-      () =>
-        request('/admin/inbound-shipments', {
-          method: 'POST',
-          body: JSON.stringify({
-            receivingLocationId: form.get('receivingLocationId'),
-            transportMode: form.get('transportMode'),
-            originText: form.get('originText') || undefined,
-            trackingReference: form.get('trackingReference') || undefined,
-            expectedArrivalDate: form.get('expectedArrivalDate') || undefined,
-            allocations: shipmentLines,
-          }),
-        }),
-      'Shipment planned. Record departure when the goods start moving.',
-      () => {
-        setCreateOpen(false);
-        setShipmentLines([]);
-      },
     );
   }
 
@@ -548,61 +500,106 @@ export function ProcurementConsole({ screen }: { readonly screen: SupplyScreen }
       </div>
 
       <HowToDialog screen={screen} open={helpOpen} onOpenChange={setHelpOpen} />
-      <Dialog
-        open={createOpen}
-        onOpenChange={(open) => {
-          setCreateOpen(open);
-          if (!open) {
-            setShipmentLines([]);
+      {screen === 'purchases' ? (
+        <CreatePurchaseDialog
+          open={createOpen}
+          onOpenChange={(open) => {
+            setCreateOpen(open);
+            if (!open && typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              if (url.searchParams.has('create') || url.searchParams.has('supplier')) {
+                url.searchParams.delete('create');
+                url.searchParams.delete('supplier');
+                window.history.replaceState({}, '', url.toString());
+              }
+            }
+          }}
+          suppliers={suppliers}
+          locations={locations}
+          variants={variants}
+          defaultSupplierId={
+            typeof window !== 'undefined'
+              ? new URLSearchParams(window.location.search).get('supplier') ?? ''
+              : ''
           }
-        }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{actionLabel}</DialogTitle>
-            <DialogDescription>
-              {screen === 'receiving'
-                ? 'Record the physical count. Expected quantity is only a guide.'
-                : screen === 'shipments'
-                  ? 'Consolidate placed purchase lines into an inbound freight shipment.'
+          onSuccess={() => {
+            void reload();
+            setNotice({ tone: 'success', message: 'Purchase draft created.' });
+          }}
+        />
+      ) : screen === 'shipments' ? (
+        <PlanShipmentDialog
+          open={createOpen}
+          onOpenChange={(open) => {
+            setCreateOpen(open);
+            if (!open && typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              if (url.searchParams.has('create') || url.searchParams.has('purchase')) {
+                url.searchParams.delete('create');
+                url.searchParams.delete('purchase');
+                window.history.replaceState({}, '', url.toString());
+              }
+            }
+          }}
+          locations={locations}
+          shippableLines={shippableLines}
+          defaultPurchaseId={
+            typeof window !== 'undefined'
+              ? new URLSearchParams(window.location.search).get('purchase') ?? ''
+              : ''
+          }
+          onSuccess={() => {
+            void reload();
+            setNotice({
+              tone: 'success',
+              message: 'Inbound freight shipment planned. Record departure when the goods start moving.',
+            });
+          }}
+        />
+      ) : (
+        <Dialog
+          open={createOpen}
+          onOpenChange={(open) => {
+            setCreateOpen(open);
+            if (!open) {
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                if (url.searchParams.has('create') || url.searchParams.has('supplier')) {
+                  url.searchParams.delete('create');
+                  url.searchParams.delete('supplier');
+                  window.history.replaceState({}, '', url.toString());
+                }
+              }
+            }
+          }}
+        >
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{actionLabel}</DialogTitle>
+              <DialogDescription>
+                {screen === 'receiving'
+                  ? 'Record the physical count. Expected quantity is only a guide.'
                   : 'Only useful details are shown here.'}
-            </DialogDescription>
-          </DialogHeader>
-          {screen === 'suppliers' ? (
-            <SupplierForm onSubmit={createSupplier} saving={saving} />
-          ) : null}
-          {screen === 'purchases' ? (
-            <PurchaseForm
-              suppliers={suppliers}
-              locations={locations}
-              onSubmit={createPurchase}
-              saving={saving}
-            />
-          ) : null}
-          {screen === 'shipments' ? (
-            <ShipmentForm
-              locations={locations}
-              shippableLines={shippableLines}
-              lines={shipmentLines}
-              setLines={setShipmentLines}
-              onSubmit={createShipment}
-              saving={saving}
-            />
-          ) : null}
-          {screen === 'receiving' ? (
-            <ReceiptForm
-              shipments={receivableShipments}
-              allocations={receivableAllocations}
-              shipmentId={receiptShipmentId}
-              setShipmentId={setReceiptShipmentId}
-              lines={receiptLines}
-              setLines={setReceiptLines}
-              onSubmit={postReceipt}
-              saving={saving}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+              </DialogDescription>
+            </DialogHeader>
+            {screen === 'suppliers' ? (
+              <SupplierForm onSubmit={createSupplier} saving={saving} />
+            ) : null}
+            {screen === 'receiving' ? (
+              <ReceiptForm
+                shipments={receivableShipments}
+                allocations={receivableAllocations}
+                shipmentId={receiptShipmentId}
+                setShipmentId={setReceiptShipmentId}
+                lines={receiptLines}
+                setLines={setReceiptLines}
+                onSubmit={postReceipt}
+                saving={saving}
+              />
+            ) : null}
+          </DialogContent>
+        </Dialog>
+      )}
       <Dialog
         open={Boolean(editingSupplier)}
         onOpenChange={(open) => !open && setEditingSupplier(undefined)}

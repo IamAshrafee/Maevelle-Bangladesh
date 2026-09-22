@@ -24,18 +24,26 @@ export interface Worksheet {
   base_currency_code: string;
   status: string;
   current_revision_id: string | null;
+  created_at: string;
   finalized_at: string | null;
+  shipment_number?: string | null;
+  receiving_location_name?: string | null;
+  shipment_status?: string | null;
+  shipment_receiving_status?: string | null;
   revisions: readonly {
     id: string;
     revision_number: string;
     revision_kind: string;
     status: string;
+    supersedes_revision_id?: string | null;
     created_at: string;
     finalized_at: string | null;
     total_effect: string;
+    component_count?: string;
   }[];
   components: readonly {
     id: string;
+    revision_id: string;
     cost_type: string;
     original_amount: string;
     original_currency_code: string;
@@ -49,6 +57,7 @@ export interface Worksheet {
   }[];
   results: readonly {
     allocation_target_id: string;
+    revision_id?: string;
     purchase_cost: string;
     additional_cost: string;
     total_acquisition_cost: string;

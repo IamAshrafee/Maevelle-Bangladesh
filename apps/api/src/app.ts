@@ -90,6 +90,19 @@ export function buildApi(options: BuildApiOptions) {
     }
   });
 
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    if (typeof body !== 'string' || body.trim() === '') {
+      done(null, undefined);
+      return;
+    }
+    try {
+      done(null, JSON.parse(body));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   app.setErrorHandler((error, request, reply) => {
     if (
       typeof error === 'object' &&
@@ -101,6 +114,19 @@ export function buildApi(options: BuildApiOptions) {
         error: {
           code: 'VALIDATION_FAILED',
           message: 'Request validation failed.',
+          requestId: request.id,
+        },
+      });
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'FST_ERR_CTP_EMPTY_JSON_BODY'
+    )
+      return reply.status(400).send({
+        error: {
+          code: 'EMPTY_BODY',
+          message: 'Request body cannot be empty.',
           requestId: request.id,
         },
       });

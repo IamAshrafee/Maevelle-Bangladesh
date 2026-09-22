@@ -1251,6 +1251,7 @@ export interface PurchaseDto {
   readonly destinationLocationName?: string;
   readonly notes?: string;
   readonly createdAt: string;
+  readonly placedAt?: string;
   readonly totalAmount: string;
   readonly version: number;
   readonly lines: readonly {
@@ -1259,11 +1260,29 @@ export interface PurchaseDto {
     readonly productId: string;
     readonly sku: string;
     readonly productTitle: string;
+    readonly optionSummary?: string;
     readonly quantity: string;
     readonly unitPrice: string;
     readonly allocatedQuantity: string;
     readonly receivedQuantity: string;
   }[];
+}
+
+export interface CreatePurchaseLineInputDto {
+  readonly variantId: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+}
+
+export interface CreatePurchaseInputDto {
+  readonly supplierId: string;
+  readonly currencyCode: 'BDT' | 'CNY' | 'USD';
+  readonly notes?: string;
+  readonly supplierReference?: string;
+  readonly orderDate?: string;
+  readonly expectedDate?: string;
+  readonly destinationLocationId?: string;
+  readonly lines?: readonly CreatePurchaseLineInputDto[];
 }
 
 export interface InboundShipmentDto {
@@ -1293,7 +1312,17 @@ export interface InboundShipmentDto {
     readonly productTitle: string;
     readonly allocatedQuantity: string;
     readonly receivedQuantity: string;
+    readonly optionSummary?: string;
+    readonly unitPrice?: string;
   }[];
+}
+
+export interface UpdateInboundShipmentInputDto {
+  readonly version: number;
+  readonly trackingReference?: string;
+  readonly expectedArrivalDate?: string;
+  readonly originText?: string;
+  readonly transportMode?: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER';
 }
 
 export interface InboundReceiptDto {

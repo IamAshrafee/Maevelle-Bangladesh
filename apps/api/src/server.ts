@@ -77,8 +77,8 @@ if (entrypoint && import.meta.url === pathToFileURL(entrypoint).href) {
       installApiShutdownHandlers(runtime);
       runtime.app.log.info('API listening.');
     })
-    .catch(() => {
-      console.error('API startup failed. Check configuration and PostgreSQL availability.');
+    .catch((err) => {
+      console.error('API startup failed. Check configuration and PostgreSQL availability:', err);
       process.exitCode = 1;
     });
 }

@@ -23,13 +23,14 @@ import type {
   WarehouseLocationDto,
 } from '@maevelle/contracts';
 
+import { PurchaseFormFields } from '@/components/supply/purchase-form-fields';
 import { SupplyField, supplySelectClassName } from '@/components/supply/supply-field';
 import { Button } from '@/components/ui/button';
 import { DialogClose, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { formatSupplyNumber, remainingSupplyQuantity } from '@/lib/supply/api';
-import { isPurchaseDestination, isShipmentReceivingLocation } from '@/lib/supply/location-options';
+import { isShipmentReceivingLocation } from '@/lib/supply/location-options';
 import type { ReceiptDraftLine, ShipmentDraftLine } from '@/lib/supply/types';
 
 export function SupplierForm({
@@ -179,88 +180,47 @@ export function PurchaseForm({
   const params =
     typeof window === 'undefined' ? undefined : new URLSearchParams(window.location.search);
   const commercialFieldsLocked = Boolean(purchase?.lines.length);
-  const supplierId = purchase?.supplierId ?? params?.get('supplier') ?? '';
-  const currencyCode = purchase?.currencyCode ?? 'CNY';
+  const [supplierId, setSupplierId] = useState(
+    purchase?.supplierId ?? params?.get('supplier') ?? '',
+  );
+  const [currencyCode, setCurrencyCode] = useState<'BDT' | 'CNY' | 'USD'>(
+    purchase?.currencyCode ?? 'CNY',
+  );
+  const [orderDate, setOrderDate] = useState(
+    purchase?.orderDate ?? new Date().toISOString().slice(0, 10),
+  );
+  const [expectedDate, setExpectedDate] = useState(purchase?.expectedDate ?? '');
+  const [destinationLocationId, setDestinationLocationId] = useState(
+    purchase?.destinationLocationId ?? '',
+  );
+  const [supplierReference, setSupplierReference] = useState(
+    purchase?.supplierReference ?? '',
+  );
+  const [notes, setNotes] = useState(purchase?.notes ?? '');
+
   return (
     <form className="grid min-w-0 gap-4" onSubmit={onSubmit}>
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <SupplyField label="Supplier">
-          <select
-            className={supplySelectClassName}
-            name="supplierId"
-            required
-            defaultValue={supplierId}
-            disabled={commercialFieldsLocked}
-          >
-            <option value="" disabled>
-              Choose an active supplier
-            </option>
-            {suppliers
-              .filter((item) => item.status === 'ACTIVE')
-              .map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} · {item.code}
-                </option>
-              ))}
-          </select>
-          {commercialFieldsLocked ? (
-            <input type="hidden" name="supplierId" value={supplierId} />
-          ) : null}
-        </SupplyField>
-        <SupplyField label="Purchase currency">
-          <select
-            className={supplySelectClassName}
-            name="currencyCode"
-            defaultValue={currencyCode}
-            disabled={commercialFieldsLocked}
-          >
-            <option>BDT</option>
-            <option>CNY</option>
-            <option>USD</option>
-          </select>
-          {commercialFieldsLocked ? (
-            <input type="hidden" name="currencyCode" value={currencyCode} />
-          ) : null}
-        </SupplyField>
-        <SupplyField
-          label="Supplier reference"
-          hint="The supplier’s order number, if they gave one."
-        >
-          <Input name="supplierReference" defaultValue={purchase?.supplierReference} />
-        </SupplyField>
-        <SupplyField label="Order date">
-          <Input
-            name="orderDate"
-            type="date"
-            defaultValue={purchase?.orderDate ?? new Date().toISOString().slice(0, 10)}
-          />
-        </SupplyField>
-        <SupplyField label="Expected date">
-          <Input name="expectedDate" type="date" defaultValue={purchase?.expectedDate} />
-        </SupplyField>
-        <SupplyField label="Expected warehouse">
-          <select
-            className={supplySelectClassName}
-            name="destinationLocationId"
-            defaultValue={purchase?.destinationLocationId ?? ''}
-          >
-            <option value="">Choose later</option>
-            {locations.filter(isPurchaseDestination).map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} · {item.code}
-              </option>
-            ))}
-          </select>
-        </SupplyField>
-      </div>
-      <SupplyField label="Notes">
-        <Textarea
-          name="notes"
-          defaultValue={purchase?.notes}
-          placeholder="Terms, packing request, or anything the buyer should remember"
-        />
-      </SupplyField>
-      <div className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+      <PurchaseFormFields
+        suppliers={suppliers}
+        locations={locations}
+        supplierId={supplierId}
+        onSupplierChange={setSupplierId}
+        currencyCode={currencyCode}
+        onCurrencyChange={setCurrencyCode}
+        orderDate={orderDate}
+        onOrderDateChange={setOrderDate}
+        expectedDate={expectedDate}
+        onExpectedDateChange={setExpectedDate}
+        destinationLocationId={destinationLocationId}
+        onDestinationLocationChange={setDestinationLocationId}
+        supplierReference={supplierReference}
+        onSupplierReferenceChange={setSupplierReference}
+        notes={notes}
+        onNotesChange={setNotes}
+        commercialFieldsLocked={commercialFieldsLocked}
+        disabled={saving}
+      />
+      <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
         {purchase
           ? commercialFieldsLocked
             ? 'Supplier and currency are locked once items exist. Dates, destination, reference, and notes remain editable while this purchase is a draft.'

@@ -27,6 +27,7 @@ import {
   removePurchaseLine,
   updatePurchase,
   updatePurchaseLine,
+  updateShipment,
   updateSupplier,
 } from '@maevelle/database/procurement';
 import { findActiveAdminContext } from '@maevelle/database/platform';
@@ -322,6 +323,15 @@ export function registerProcurementRoutes(
           orderDate: Type.Optional(Type.String({ format: 'date' })),
           expectedDate: Type.Optional(Type.String({ format: 'date' })),
           destinationLocationId: Type.Optional(Type.String()),
+          lines: Type.Optional(
+            Type.Array(
+              Type.Object({
+                variantId: Type.String({ minLength: 1 }),
+                quantity: Type.String({ minLength: 1 }),
+                unitPrice: Type.String({ minLength: 1 }),
+              }),
+            ),
+          ),
         }),
       },
     },
@@ -337,6 +347,11 @@ export function registerProcurementRoutes(
           orderDate?: string;
           expectedDate?: string;
           destinationLocationId?: string;
+          lines?: Array<{
+            variantId: string;
+            quantity: string;
+            unitPrice: string;
+          }>;
         };
         return reply.code(201).send({
           data: await createPurchase(database.db, { ...active, ...body }),
@@ -574,6 +589,54 @@ export function registerProcurementRoutes(
         return reply.code(201).send({
           data: await createShipment(database.db, { ...active, ...body }),
         });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+  app.patch(
+    '/admin/inbound-shipments/:shipmentId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          trackingReference: Type.Optional(Type.String()),
+          expectedArrivalDate: Type.Optional(Type.String({ format: 'date' })),
+          originText: Type.Optional(Type.String()),
+          transportMode: Type.Optional(
+            Type.Union([
+              Type.Literal('AIR'),
+              Type.Literal('SEA'),
+              Type.Literal('ROAD'),
+              Type.Literal('RAIL'),
+              Type.Literal('OTHER'),
+            ]),
+          ),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await requireAdmin(database, auth, request.headers, 'inbound_shipment.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          version: number;
+          trackingReference?: string;
+          expectedArrivalDate?: string;
+          originText?: string;
+          transportMode?: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER';
+        };
+        return {
+          data: await updateShipment(database.db, {
+            ...active,
+            shipmentId: (request.params as { shipmentId: string }).shipmentId,
+            expectedVersion: body.version,
+            trackingReference: body.trackingReference,
+            expectedArrivalDate: body.expectedArrivalDate,
+            originText: body.originText,
+            transportMode: body.transportMode,
+          }),
+        };
       } catch (error) {
         return sendError(reply, error);
       }

@@ -7,6 +7,8 @@ import {
   CostingDomainError,
   createLandedCostRevision,
   createLandedCostWorksheet,
+  deleteLandedCostComponent,
+  discardLandedCostDraftRevision,
   finalizeLandedCostWorksheet,
   getInventoryValuation,
   getLandedCostWorksheet,
@@ -60,10 +62,20 @@ function sendError(
   reply: { code(status: number): { send(value: unknown): unknown } },
   error: unknown,
 ) {
-  if (error instanceof CostingDomainError)
+  if (
+    error instanceof CostingDomainError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      error.name === 'CostingDomainError' &&
+      'code' in error &&
+      'message' in error)
+  ) {
+    const err = error as { code: string; message: string };
     return reply
-      .code(error.code === 'NOT_FOUND' ? 404 : error.code === 'CONFLICT' ? 409 : 422)
-      .send({ error: { code: error.code, message: error.message } });
+      .code(err.code === 'NOT_FOUND' ? 404 : err.code === 'CONFLICT' ? 409 : 422)
+      .send({ error: { code: err.code, message: err.message } });
+  }
   throw error;
 }
 
@@ -175,6 +187,24 @@ export function registerCostingRoutes(
     },
   );
   app.post(
+    '/admin/landed-cost/worksheets/:worksheetId/revisions/:revisionId/discard',
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'landed_cost.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.send({
+          data: await discardLandedCostDraftRevision(database.db, {
+            ...active,
+            worksheetId: (request.params as { worksheetId: string; revisionId: string }).worksheetId,
+            revisionId: (request.params as { worksheetId: string; revisionId: string }).revisionId,
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+  app.post(
     '/admin/landed-cost/revisions/:revisionId/components',
     {
       schema: {
@@ -238,6 +268,19 @@ export function registerCostingRoutes(
       await finalizeLandedCostWorksheet(database.db, {
         ...active,
         revisionId: (request.params as { revisionId: string }).revisionId,
+      });
+      return reply.code(204).send();
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+  app.delete('/admin/landed-cost/components/:componentId', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'landed_cost.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      await deleteLandedCostComponent(database.db, {
+        ...active,
+        componentId: (request.params as { componentId: string }).componentId,
       });
       return reply.code(204).send();
     } catch (error) {

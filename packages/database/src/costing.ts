@@ -177,6 +177,74 @@ export async function createLandedCostRevision(
   });
 }
 
+/** Discards an open draft adjustment/credit revision and reverts the worksheet to the superseded finalized revision. */
+export async function discardLandedCostDraftRevision(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    worksheetId: string;
+    revisionId: string;
+  },
+): Promise<{ worksheetId: string; restoredRevisionId: string }> {
+  return db.transaction().execute(async (tx) => {
+    const worksheet = await sql<{
+      id: string;
+      current_revision_id: string | null;
+    }>`select id, current_revision_id from landed_cost.worksheets where organization_id = ${input.organizationId} and id = ${input.worksheetId} for update`.execute(tx);
+    const current = worksheet.rows[0];
+    if (!current) throw new CostingDomainError('NOT_FOUND', 'Landed Cost Worksheet was not found.');
+
+    const revision = await sql<{
+      id: string;
+      status: string;
+      supersedes_revision_id: string | null;
+    }>`select id, status, supersedes_revision_id from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${input.revisionId} and worksheet_id = ${input.worksheetId} for update`.execute(tx);
+    const target = revision.rows[0];
+    if (!target) throw new CostingDomainError('NOT_FOUND', 'Worksheet revision was not found.');
+
+    if (target.status !== 'DRAFT') {
+      throw new CostingDomainError('INVALID_TRANSITION', 'Only a draft revision can be discarded.');
+    }
+    if (!target.supersedes_revision_id) {
+      throw new CostingDomainError('INVALID_TRANSITION', 'The initial worksheet revision cannot be discarded.');
+    }
+
+    const prior = await sql<{
+      id: string;
+      status: string;
+      finalized_at: string | null;
+    }>`select id, status, finalized_at::text from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${target.supersedes_revision_id} for update`.execute(tx);
+    const priorRev = prior.rows[0];
+    if (!priorRev) {
+      throw new CostingDomainError('NOT_FOUND', 'Prior finalized revision was not found.');
+    }
+
+    // Delete child records for this draft revision
+    await sql`delete from landed_cost.component_allocations where organization_id = ${input.organizationId} and cost_component_id in (select id from landed_cost.cost_components where worksheet_revision_id = ${input.revisionId}::uuid)`.execute(tx);
+    await sql`delete from landed_cost.cost_components where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(tx);
+    await sql`delete from landed_cost.allocation_targets where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(tx);
+    await sql`delete from landed_cost.acquisition_cost_results where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(tx);
+
+    // Revert worksheet pointer and status
+    await sql`update landed_cost.worksheets set current_revision_id = ${priorRev.id}::uuid, status = 'FINALIZED', finalized_at = ${priorRev.finalized_at}::timestamptz, version = version + 1 where id = ${input.worksheetId}`.execute(tx);
+
+    // Delete the draft revision itself
+    await sql`delete from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${input.revisionId}::uuid`.execute(tx);
+
+    await appendAuditEvent(tx, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'landed_cost.revision.discarded',
+      targetType: 'landed_cost.worksheet',
+      targetId: input.worksheetId,
+    });
+
+    return { worksheetId: input.worksheetId, restoredRevisionId: priorRev.id };
+  });
+}
+
 export async function createLandedCostWorksheet(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -312,6 +380,32 @@ export async function addLandedCostComponent(
       tx,
     );
     return { id: row.rows[0]!.id };
+  });
+}
+
+export async function deleteLandedCostComponent(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    componentId: string;
+  },
+): Promise<void> {
+  return db.transaction().execute(async (tx) => {
+    const comp = await sql<{ id: string; status: string }>`
+      select c.id, r.status
+      from landed_cost.cost_components c
+      join landed_cost.worksheet_revisions r on r.id = c.worksheet_revision_id
+      where c.organization_id = ${input.organizationId} and c.id = ${input.componentId}
+      for update of c
+    `.execute(tx);
+    if (!comp.rows[0])
+      throw new CostingDomainError('NOT_FOUND', 'Cost component was not found.');
+    if (comp.rows[0].status !== 'DRAFT')
+      throw new CostingDomainError('INVALID_TRANSITION', 'Only draft components can be removed.');
+
+    await sql`delete from landed_cost.component_allocations where organization_id = ${input.organizationId} and cost_component_id = ${input.componentId}`.execute(tx);
+    await sql`delete from landed_cost.cost_components where organization_id = ${input.organizationId} and id = ${input.componentId}`.execute(tx);
   });
 }
 
@@ -1278,10 +1372,19 @@ export async function getLandedCostWorksheet(
     current_revision_id: string | null;
     created_at: string;
     finalized_at: string | null;
+    shipment_number: string | null;
+    receiving_location_name: string | null;
+    shipment_status: string | null;
+    shipment_receiving_status: string | null;
   }>`
-    select id, shipment_id, worksheet_number, base_currency_code, status, current_revision_id, created_at::text, finalized_at::text
-    from landed_cost.worksheets
-    where organization_id = ${input.organizationId} and id = ${input.worksheetId}
+    select w.id, w.shipment_id, w.worksheet_number, w.base_currency_code, w.status, w.current_revision_id,
+      w.created_at::text, w.finalized_at::text,
+      s.shipment_number, s.status as shipment_status, s.receiving_status as shipment_receiving_status,
+      loc.name as receiving_location_name
+    from landed_cost.worksheets w
+    left join inbound_shipment.shipments s on s.id = w.shipment_id and s.organization_id = w.organization_id
+    left join inventory.warehouse_locations loc on loc.id = s.receiving_location_id and loc.organization_id = w.organization_id
+    where w.organization_id = ${input.organizationId} and w.id = ${input.worksheetId}
   `.execute(db);
   const header = worksheet.rows[0];
   if (!header) throw new CostingDomainError('NOT_FOUND', 'Landed Cost Worksheet was not found.');
@@ -1298,7 +1401,8 @@ export async function getLandedCostWorksheet(
     }>`
       select revision.id, revision.revision_number::text, revision.revision_kind, revision.status, revision.supersedes_revision_id,
         revision.created_at::text, revision.finalized_at::text,
-        coalesce(sum(component.worksheet_amount), 0)::text as total_effect
+        coalesce(sum(component.worksheet_amount), 0)::text as total_effect,
+        count(component.id)::text as component_count
       from landed_cost.worksheet_revisions revision
       left join landed_cost.cost_components component on component.worksheet_revision_id = revision.id
       where revision.organization_id = ${input.organizationId} and revision.worksheet_id = ${input.worksheetId}
@@ -1325,11 +1429,13 @@ export async function getLandedCostWorksheet(
       select id, worksheet_revision_id as revision_id, cost_type, original_amount::text, original_currency_code, finance_expense_id,
         worksheet_amount::text, value_status, allocation_method, scope, fx_rate::text, fx_rate_recorded_at::text, fx_source, reference, notes
       from landed_cost.cost_components
-      where organization_id = ${input.organizationId} and worksheet_revision_id = ${header.current_revision_id}::uuid
+      where organization_id = ${input.organizationId}
+        and worksheet_revision_id in (select id from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and worksheet_id = ${input.worksheetId})
       order by created_at, id
     `.execute(db),
     sql<{
       allocation_target_id: string;
+      revision_id: string;
       purchase_cost: string;
       additional_cost: string;
       total_acquisition_cost: string;
@@ -1339,14 +1445,16 @@ export async function getLandedCostWorksheet(
       product_title: string;
       quantity: string;
     }>`
-      select result.allocation_target_id, result.purchase_cost::text, result.additional_cost::text,
+      select result.allocation_target_id, result.worksheet_revision_id as revision_id,
+        result.purchase_cost::text, result.additional_cost::text,
         result.total_acquisition_cost::text, result.unit_acquisition_cost::text, result.currency_code,
         allocation.sku_snapshot as sku, allocation.product_title_snapshot as product_title,
         target.eligible_quantity::text as quantity
       from landed_cost.acquisition_cost_results result
       join landed_cost.allocation_targets target on target.id = result.allocation_target_id
       join inbound_shipment.purchase_line_allocations allocation on allocation.id = target.shipment_allocation_id
-      where result.organization_id = ${input.organizationId} and result.worksheet_revision_id = ${header.current_revision_id}::uuid
+      where result.organization_id = ${input.organizationId}
+        and result.worksheet_revision_id in (select id from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and worksheet_id = ${input.worksheetId})
       order by allocation.product_title_snapshot, allocation.sku_snapshot
     `.execute(db),
   ]);

@@ -8,6 +8,7 @@ import {
   CostingDomainError,
   createLandedCostRevision,
   createLandedCostWorksheet,
+  discardLandedCostDraftRevision,
   finalizeLandedCostWorksheet,
   getInventoryValuation,
   listCostLayers,
@@ -396,6 +397,83 @@ describe('landed-cost deterministic allocation', () => {
       database.db,
     );
     expect(effects.rows[0]).toMatchObject({ delta: '0.00000000', remaining: '10.000000' });
+  });
+
+  it('discards an unfinalized draft revision and safely restores the worksheet to the prior finalized revision', async () => {
+    const input = await receivedShipment();
+    const worksheet = await createLandedCostWorksheet(database.db, {
+      ...input,
+      baseCurrencyCode: 'CNY',
+    });
+    await addLandedCostComponent(database.db, {
+      organizationId: input.organizationId,
+      revisionId: worksheet.revisionId,
+      costType: 'INTERNATIONAL_FREIGHT',
+      scope: 'GLOBAL',
+      originalAmount: '100.0000',
+      originalCurrencyCode: 'CNY',
+      valueStatus: 'ACTUAL',
+      allocationMethod: 'QUANTITY',
+    });
+    await finalizeLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      revisionId: worksheet.revisionId,
+    });
+
+    // Create an accidental adjustment revision
+    const adjustment = await createLandedCostRevision(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      worksheetId: worksheet.id,
+      kind: 'ADJUSTMENT',
+    });
+
+    // Add a draft component
+    await addLandedCostComponent(database.db, {
+      organizationId: input.organizationId,
+      revisionId: adjustment.revisionId,
+      costType: 'HANDLING',
+      scope: 'GLOBAL',
+      originalAmount: '25.0000',
+      originalCurrencyCode: 'CNY',
+      valueStatus: 'ACTUAL',
+      allocationMethod: 'QUANTITY',
+    });
+
+    // Discard the draft revision
+    const discarded = await discardLandedCostDraftRevision(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      worksheetId: worksheet.id,
+      revisionId: adjustment.revisionId,
+    });
+    expect(discarded.restoredRevisionId).toBe(worksheet.revisionId);
+
+    // Verify worksheet is back to FINALIZED pointing to revision 1
+    const ws = await sql<{
+      status: string;
+      current_revision_id: string;
+    }>`select status, current_revision_id from landed_cost.worksheets where id = ${worksheet.id}`.execute(database.db);
+    expect(ws.rows[0]?.status).toBe('FINALIZED');
+    expect(ws.rows[0]?.current_revision_id).toBe(worksheet.revisionId);
+
+    // Verify only revision 1 remains
+    const revisions = await sql<{
+      revision_number: string;
+      status: string;
+    }>`select revision_number::text, status from landed_cost.worksheet_revisions where worksheet_id = ${worksheet.id}`.execute(database.db);
+    expect(revisions.rows).toEqual([{ revision_number: '1', status: 'FINALIZED' }]);
+
+    // Verify attempting to discard initial revision fails
+    await expect(
+      discardLandedCostDraftRevision(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        worksheetId: worksheet.id,
+        revisionId: worksheet.revisionId,
+      }),
+    ).rejects.toThrow('Only a draft revision can be discarded');
   });
 
   it('consumes receipt-backed FIFO cost at dispatch and recognizes immutable COGS only at successful delivery', async () => {

@@ -34,6 +34,7 @@ import {
   removePurchaseLine,
   updatePurchase,
   updatePurchaseLine,
+  updateShipment,
   updateSupplier,
 } from './procurement.js';
 import { createOrganization } from './platform.js';
@@ -239,14 +240,44 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
 
     const planned = await shipmentFor(input, '1');
-    const cancelled = await cancelShipment(database.db, {
+    expect(planned.allocations[0]?.unitPrice).toBeDefined();
+
+    const updated = await updateShipment(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,
       shipmentId: planned.id,
       expectedVersion: planned.version,
+      trackingReference: 'TRK-998877',
+      originText: 'Shenzhen Yantian Port',
+      expectedArrivalDate: '2026-11-15',
+      transportMode: 'SEA',
+    });
+    expect(updated).toMatchObject({
+      trackingReference: 'TRK-998877',
+      originText: 'Shenzhen Yantian Port',
+      expectedArrivalDate: '2026-11-15',
+      transportMode: 'SEA',
+      version: planned.version + 1,
+    });
+
+    const cancelled = await cancelShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: updated.id,
+      expectedVersion: updated.version,
       reason: 'Shipment booking was duplicated',
     });
     expect(cancelled.status).toBe('CANCELLED');
+
+    await expect(
+      updateShipment(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        shipmentId: cancelled.id,
+        expectedVersion: cancelled.version,
+        trackingReference: 'CANNOT-UPDATE-CANCELLED',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
   });
 
   it('serializes purchase-line allocation and keeps shipment arrival separate from physical inventory', async () => {
@@ -862,5 +893,53 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
         allocations: [{ purchaseLineId: input.purchaseLineId, quantity: '1' }],
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('atomically creates a purchase with initial lines and validates dates and locations', async () => {
+    const input = await fixture();
+
+    // 1. Rejects expected date earlier than order date
+    await expect(
+      createPurchase(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        supplierId: input.supplier.id,
+        currencyCode: 'CNY',
+        orderDate: '2026-09-22',
+        expectedDate: '2026-09-20',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    // 2. Rejects inactive or non-existent destination location
+    await expect(
+      createPurchase(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        supplierId: input.supplier.id,
+        currencyCode: 'CNY',
+        destinationLocationId: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    // 3. Atomically creates purchase with lines
+    const purchase = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: input.supplier.id,
+      currencyCode: 'CNY',
+      orderDate: '2026-09-22',
+      expectedDate: '2026-10-05',
+      destinationLocationId: input.locationId,
+      lines: [
+        { variantId: input.variantId, quantity: '5', unitPrice: '12.50' },
+      ],
+    });
+
+    expect(purchase.status).toBe('DRAFT');
+    expect(purchase.lines).toHaveLength(1);
+    expect(purchase.lines[0]?.quantity).toBe('5.000000');
+    expect(purchase.lines[0]?.unitPrice).toBe('12.5000');
+    expect(purchase.totalAmount).toBe('62.5000');
+    expect(purchase.destinationLocationId).toBe(input.locationId);
   });
 });

@@ -65,6 +65,7 @@ export interface PurchaseView {
   readonly destinationLocationName?: string;
   readonly notes?: string;
   readonly createdAt: string;
+  readonly placedAt?: string;
   readonly totalAmount: string;
   readonly version: number;
   readonly lines: readonly {
@@ -73,6 +74,7 @@ export interface PurchaseView {
     productId: string;
     sku: string;
     productTitle: string;
+    optionSummary?: string;
     quantity: string;
     unitPrice: string;
     allocatedQuantity: string;
@@ -107,6 +109,8 @@ export interface ShipmentView {
     productTitle: string;
     allocatedQuantity: string;
     receivedQuantity: string;
+    optionSummary?: string;
+    unitPrice?: string;
   }[];
 }
 
@@ -542,8 +546,9 @@ async function getPurchaseIn(
     destination_location_name: string | null;
     notes: string | null;
     created_at: string;
+    placed_at: string | null;
     version: string;
-  }>`select purchase.id, purchase.purchase_number, purchase.supplier_id, supplier.name as supplier_name, purchase.currency_code, purchase.status, purchase.supplier_reference, purchase.order_date::text, purchase.expected_date::text, purchase.destination_location_id, location.name as destination_location_name, purchase.notes, purchase.created_at::text, purchase.version::text from procurement.purchases purchase join procurement.suppliers supplier on supplier.id = purchase.supplier_id left join warehouse.locations location on location.id = purchase.destination_location_id where purchase.organization_id = ${organizationId} and purchase.id = ${purchaseId}`.execute(
+  }>`select purchase.id, purchase.purchase_number, purchase.supplier_id, supplier.name as supplier_name, purchase.currency_code, purchase.status, purchase.supplier_reference, purchase.order_date::text, purchase.expected_date::text, purchase.destination_location_id, location.name as destination_location_name, purchase.notes, purchase.created_at::text, purchase.placed_at::text, purchase.version::text from procurement.purchases purchase join procurement.suppliers supplier on supplier.id = purchase.supplier_id left join warehouse.locations location on location.id = purchase.destination_location_id where purchase.organization_id = ${organizationId} and purchase.id = ${purchaseId}`.execute(
     db,
   );
   const row = header.rows[0];
@@ -554,11 +559,20 @@ async function getPurchaseIn(
     product_id: string;
     sku_snapshot: string;
     product_title_snapshot: string;
+    option_summary: string | null;
     quantity: string;
     unit_price: string;
     allocated_quantity: string;
     received_quantity: string;
-  }>`select line.id, line.variant_id, variant.product_id, line.sku_snapshot, line.product_title_snapshot, line.quantity::text, line.unit_price::text,
+  }>`select line.id, line.variant_id, variant.product_id, line.sku_snapshot, line.product_title_snapshot,
+      coalesce((
+        select string_agg(axis.name || ': ' || val.display_value, ' · ' order by axis.position, val.position)
+        from catalog.variant_option_values link
+        join catalog.product_option_axes axis on axis.id = link.option_axis_id
+        join catalog.product_option_values val on val.id = link.option_value_id
+        where link.variant_id = line.variant_id and link.organization_id = ${organizationId}
+      ), '') as option_summary,
+      line.quantity::text, line.unit_price::text,
       coalesce((select sum(allocation.allocated_quantity) from inbound_shipment.purchase_line_allocations allocation where allocation.purchase_line_id = line.id), 0)::text as allocated_quantity,
       coalesce((select sum(receipt.quantity) from receiving.inbound_receipt_lines receipt join inbound_shipment.purchase_line_allocations allocation on allocation.id = receipt.shipment_allocation_id where allocation.purchase_line_id = line.id), 0)::text as received_quantity
     from procurement.purchase_lines line join catalog.product_variants variant on variant.id = line.variant_id where line.organization_id = ${organizationId} and line.purchase_id = ${purchaseId} order by line.created_at, line.id`.execute(
@@ -585,6 +599,7 @@ async function getPurchaseIn(
       : {}),
     ...(row.notes ? { notes: row.notes } : {}),
     createdAt: row.created_at,
+    ...(row.placed_at ? { placedAt: row.placed_at } : {}),
     totalAmount: totals.rows[0]?.total_amount ?? '0.0000',
     version: Number(row.version),
     lines: lines.rows.map((line) => ({
@@ -593,6 +608,7 @@ async function getPurchaseIn(
       productId: line.product_id,
       sku: line.sku_snapshot,
       productTitle: line.product_title_snapshot,
+      ...(line.option_summary ? { optionSummary: line.option_summary } : {}),
       quantity: line.quantity,
       unitPrice: line.unit_price,
       allocatedQuantity: line.allocated_quantity,
@@ -633,8 +649,32 @@ export async function createPurchase(
     orderDate?: string;
     expectedDate?: string;
     destinationLocationId?: string;
+    lines?: Array<{
+      variantId: string;
+      quantity: string;
+      unitPrice: string;
+    }>;
   },
 ): Promise<PurchaseView> {
+  if (input.orderDate && input.expectedDate && input.expectedDate < input.orderDate) {
+    throw new ProcurementDomainError(
+      'VALIDATION_FAILED',
+      'Expected date cannot be earlier than order date.',
+    );
+  }
+
+  if (input.lines && input.lines.length > 0) {
+    for (const line of input.lines) {
+      positiveQuantity(line.quantity);
+      if (!/^\d+(?:\.\d{1,4})?$/.test(line.unitPrice)) {
+        throw new ProcurementDomainError(
+          'VALIDATION_FAILED',
+          'Unit price must be a non-negative decimal.',
+        );
+      }
+    }
+  }
+
   return db.transaction().execute(async (transaction) => {
     const supplier = await sql<{
       id: string;
@@ -643,12 +683,48 @@ export async function createPurchase(
     );
     if (!supplier.rows[0])
       throw new ProcurementDomainError('NOT_FOUND', 'Active Supplier was not found.');
+
+    if (input.destinationLocationId) {
+      const location = await sql<{
+        id: string;
+      }>`select id from warehouse.locations where organization_id = ${input.organizationId} and id = ${input.destinationLocationId}::uuid and status = 'ACTIVE' for key share`.execute(
+        transaction,
+      );
+      if (!location.rows[0])
+        throw new ProcurementDomainError(
+          'NOT_FOUND',
+          'Warehouse destination location was not found or is inactive.',
+        );
+    }
+
     const created = await sql<{
       id: string;
     }>`insert into procurement.purchases (organization_id, purchase_number, supplier_id, currency_code, notes, supplier_reference, order_date, expected_date, destination_location_id, created_by_actor_id) values (${input.organizationId}, ${randomNumber('PO')}, ${input.supplierId}, ${input.currencyCode}, ${input.notes?.trim() || null}, ${input.supplierReference?.trim() || null}, coalesce(${input.orderDate ?? null}::date, current_date), ${input.expectedDate ?? null}::date, ${input.destinationLocationId ?? null}::uuid, ${input.actorId}) returning id`.execute(
       transaction,
     );
-    const purchase = await getPurchaseIn(transaction, input.organizationId, created.rows[0]!.id);
+    const purchaseId = created.rows[0]!.id;
+
+    if (input.lines && input.lines.length > 0) {
+      for (const line of input.lines) {
+        const variant = await sql<{
+          sku: string;
+          title: string;
+        }>`select variant.sku, product.title from catalog.product_variants variant join catalog.products product on product.id = variant.product_id where variant.organization_id = ${input.organizationId} and variant.id = ${line.variantId}`.execute(
+          transaction,
+        );
+        if (!variant.rows[0]) {
+          throw new ProcurementDomainError(
+            'NOT_FOUND',
+            `Catalog Variant was not found: ${line.variantId}`,
+          );
+        }
+        await sql`insert into procurement.purchase_lines (organization_id, purchase_id, variant_id, sku_snapshot, product_title_snapshot, quantity, unit_price) values (${input.organizationId}, ${purchaseId}, ${line.variantId}, ${variant.rows[0].sku}, ${variant.rows[0].title}, ${line.quantity}::numeric, ${line.unitPrice}::numeric)`.execute(
+          transaction,
+        );
+      }
+    }
+
+    const purchase = await getPurchaseIn(transaction, input.organizationId, purchaseId);
     await emit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -677,6 +753,13 @@ export async function updatePurchase(
     destinationLocationId?: string | null;
   },
 ): Promise<PurchaseView> {
+  if (input.orderDate && input.expectedDate && input.expectedDate < input.orderDate) {
+    throw new ProcurementDomainError(
+      'VALIDATION_FAILED',
+      'Expected date cannot be earlier than order date.',
+    );
+  }
+
   return db.transaction().execute(async (transaction) => {
     const current = await sql<{
       supplier_id: string;
@@ -1023,7 +1106,9 @@ async function getShipmentIn(
     product_title_snapshot: string;
     allocated_quantity: string;
     received_quantity: string;
-  }>`select allocation.id, allocation.purchase_line_id, purchase.id as purchase_id, purchase.purchase_number, supplier.name as supplier_name, allocation.variant_id, variant.product_id, allocation.sku_snapshot, allocation.product_title_snapshot, allocation.allocated_quantity::text, coalesce(sum(receipt_line.quantity), 0)::text as received_quantity from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines purchase_line on purchase_line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = purchase_line.purchase_id join procurement.suppliers supplier on supplier.id = purchase.supplier_id join catalog.product_variants variant on variant.id = allocation.variant_id left join receiving.inbound_receipt_lines receipt_line on receipt_line.shipment_allocation_id = allocation.id where allocation.organization_id = ${organizationId} and allocation.shipment_id = ${shipmentId} group by allocation.id, purchase.id, purchase.purchase_number, supplier.name, variant.product_id order by allocation.created_at, allocation.id`.execute(
+    unit_price: string;
+    option_summary: string | null;
+  }>`select allocation.id, allocation.purchase_line_id, purchase.id as purchase_id, purchase.purchase_number, supplier.name as supplier_name, allocation.variant_id, variant.product_id, allocation.sku_snapshot, allocation.product_title_snapshot, allocation.allocated_quantity::text, coalesce(sum(receipt_line.quantity), 0)::text as received_quantity, purchase_line.unit_price::text as unit_price, coalesce((select string_agg(axis.name || ': ' || val.display_value, ' · ' order by axis.position, val.position) from catalog.variant_option_values link join catalog.product_option_axes axis on axis.id = link.option_axis_id join catalog.product_option_values val on val.id = link.option_value_id where link.variant_id = allocation.variant_id and link.organization_id = ${organizationId}), '') as option_summary from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines purchase_line on purchase_line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = purchase_line.purchase_id join procurement.suppliers supplier on supplier.id = purchase.supplier_id join catalog.product_variants variant on variant.id = allocation.variant_id left join receiving.inbound_receipt_lines receipt_line on receipt_line.shipment_allocation_id = allocation.id where allocation.organization_id = ${organizationId} and allocation.shipment_id = ${shipmentId} group by allocation.id, purchase.id, purchase.purchase_number, supplier.name, variant.product_id, purchase_line.unit_price order by allocation.created_at, allocation.id`.execute(
     db,
   );
   return {
@@ -1053,6 +1138,8 @@ async function getShipmentIn(
       productTitle: allocation.product_title_snapshot,
       allocatedQuantity: allocation.allocated_quantity,
       receivedQuantity: allocation.received_quantity,
+      ...(allocation.option_summary ? { optionSummary: allocation.option_summary } : {}),
+      ...(allocation.unit_price ? { unitPrice: allocation.unit_price } : {}),
     })),
   };
 }
@@ -1282,6 +1369,67 @@ export async function cancelShipment(
       targetType: 'inbound_shipment.shipment',
       targetId: view.id,
       metadata: { reason: input.reason.trim() },
+    });
+    return view;
+  });
+}
+
+export async function updateShipment(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    shipmentId: string;
+    expectedVersion: number;
+    trackingReference?: string | undefined;
+    expectedArrivalDate?: string | undefined;
+    originText?: string | undefined;
+    transportMode?: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER' | undefined;
+  },
+): Promise<ShipmentView> {
+  return db.transaction().execute(async (transaction) => {
+    const current = await sql<{
+      status: ShipmentStatus;
+      version: string;
+    }>`select status, version::text from inbound_shipment.shipments where organization_id = ${input.organizationId} and id = ${input.shipmentId} for update`.execute(
+      transaction,
+    );
+    if (!current.rows[0])
+      throw new ProcurementDomainError('NOT_FOUND', 'Inbound Shipment was not found.');
+    if (Number(current.rows[0].version) !== input.expectedVersion)
+      throw new ProcurementDomainError(
+        'STALE_VERSION',
+        'Shipment changed; reload before updating it.',
+      );
+    if (current.rows[0].status === 'CANCELLED')
+      throw new ProcurementDomainError(
+        'INVALID_TRANSITION',
+        'A cancelled shipment cannot be edited.',
+      );
+
+    await sql`update inbound_shipment.shipments set
+      tracking_reference = case when ${input.trackingReference !== undefined} then ${input.trackingReference?.trim() || null} else tracking_reference end,
+      origin_text = case when ${input.originText !== undefined} then ${input.originText?.trim() || null} else origin_text end,
+      expected_arrival_date = case when ${input.expectedArrivalDate !== undefined} then ${input.expectedArrivalDate || null}::date else expected_arrival_date end,
+      transport_mode = case when ${input.transportMode !== undefined} then ${input.transportMode} else transport_mode end,
+      version = version + 1,
+      updated_at = now()
+      where id = ${input.shipmentId} and organization_id = ${input.organizationId}`.execute(transaction);
+
+    const view = await getShipmentIn(transaction, input.organizationId, input.shipmentId);
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'inbound_shipment.updated',
+      eventType: 'inbound_shipment.updated',
+      targetType: 'inbound_shipment.shipment',
+      targetId: view.id,
+      metadata: {
+        ...(input.trackingReference !== undefined ? { trackingReference: input.trackingReference } : {}),
+        ...(input.expectedArrivalDate !== undefined ? { expectedArrivalDate: input.expectedArrivalDate } : {}),
+        ...(input.originText !== undefined ? { originText: input.originText } : {}),
+        ...(input.transportMode !== undefined ? { transportMode: input.transportMode } : {}),
+      },
     });
     return view;
   });

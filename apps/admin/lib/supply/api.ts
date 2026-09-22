@@ -1,8 +1,14 @@
 export async function supplyRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (init?.body !== undefined && !headers['content-type'] && !headers['Content-Type']) {
+    headers['content-type'] = 'application/json';
+  }
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
     ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+    headers,
   });
   const body = (await response.json().catch(() => ({}))) as T & {
     error?: { message?: string } | string;
