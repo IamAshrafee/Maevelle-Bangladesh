@@ -53,6 +53,16 @@ function mapLocation(row: {
   };
 }
 
+function withWarehouseTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  callback: (trx: Kysely<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  if ('isTransaction' in db && (db as { isTransaction?: boolean }).isTransaction) {
+    return callback(db);
+  }
+  return db.transaction().execute(callback);
+}
+
 export async function createLocation(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -84,7 +94,7 @@ export async function createLocation(
       'VALIDATION_FAILED',
       'A Location needs at least one capability.',
     );
-  return db.transaction().execute(async (transaction) => {
+  return withWarehouseTransaction(db, async (transaction) => {
     try {
       const created = await sql<{
         id: string;
@@ -167,7 +177,7 @@ export async function updateLocation(
     address?: Record<string, unknown> | null;
   },
 ): Promise<LocationSummary> {
-  return db.transaction().execute(async (transaction) => {
+  return withWarehouseTransaction(db, async (transaction) => {
     const existing = await sql<{
       id: string;
       version: string;

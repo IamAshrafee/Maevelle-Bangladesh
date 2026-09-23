@@ -17,8 +17,19 @@ import {
   productTypesSeedModule,
   createProductTypesSeedModule,
 } from './modules/product-types.seed.js';
+import {
+  warehousesSeedModule,
+  createWarehousesSeedModule,
+} from './modules/warehouses.seed.js';
+import { warehouseSeedData, ALL_LOCATION_CAPABILITIES } from './data/warehouses.js';
 import { runSeeds, sortSeedModules, DEFAULT_SEED_MODULES } from './runner.js';
-import type { CategorySeedItem, SeedModule, VocabularySeedItem } from './types.js';
+import type {
+  CategorySeedItem,
+  SeedModule,
+  VocabularySeedItem,
+  WarehouseSeedItem,
+} from './types.js';
+
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -662,6 +673,179 @@ describe('database seed system', () => {
     });
   });
 
+  describe('warehouses seed module', () => {
+    it('seeds canonical warehouses with all 8 operational capabilities and addresses', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['warehouses'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome.results).toHaveLength(1);
+      const res = outcome.results[0]!;
+      expect(res.moduleId).toBe('warehouses');
+      expect(res.totalCount).toBe(2);
+      expect(res.createdCount).toBe(2);
+      expect(res.unchangedCount).toBe(0);
+      expect(res.updatedCount).toBe(0);
+
+      // Verify records in warehouse.locations
+      const locations = (
+        await sql<{
+          id: string;
+          code: string;
+          name: string;
+          location_type: string;
+          status: string;
+          address_json: { fullAddress: string; city: string; postalCode: string; countryCode: string };
+        }>`
+          select id::text, code, name, location_type, status, address_json
+          from warehouse.locations
+          where organization_id = ${organizationId}
+          order by code
+        `.execute(database.db)
+      ).rows;
+
+      expect(locations).toHaveLength(2);
+      expect(locations[0]?.code).toBe('WH-EAST-MAISHA');
+      expect(locations[0]?.name).toBe('East Warehouse (Maisha)');
+      expect(locations[0]?.location_type).toBe('WAREHOUSE');
+      expect(locations[0]?.status).toBe('ACTIVE');
+      expect(locations[0]?.address_json.fullAddress).toBe(
+        'House 486, West Kazipara, 5 No Goli, Mirpur, Dhaka 1216',
+      );
+      expect(locations[0]?.address_json.city).toBe('Dhaka');
+      expect(locations[0]?.address_json.postalCode).toBe('1216');
+
+      expect(locations[1]?.code).toBe('WH-WEST-ASHRAFEE');
+      expect(locations[1]?.name).toBe('West Warehouse (Ashrafee)');
+      expect(locations[1]?.location_type).toBe('WAREHOUSE');
+      expect(locations[1]?.status).toBe('ACTIVE');
+      expect(locations[1]?.address_json.fullAddress).toBe(
+        'House -627, West Kazipara, Mirpur, Dhaka 1216',
+      );
+      expect(locations[1]?.address_json.city).toBe('Dhaka');
+      expect(locations[1]?.address_json.postalCode).toBe('1216');
+
+      // Verify all 8 capabilities for each location
+      const caps = (
+        await sql<{
+          location_id: string;
+          capability_code: string;
+        }>`
+          select location_id::text, capability_code
+          from warehouse.location_capabilities
+          where organization_id = ${organizationId}
+          order by location_id, capability_code
+        `.execute(database.db)
+      ).rows;
+
+      // 8 capabilities * 2 warehouses = 16 capability rows
+      expect(caps).toHaveLength(16);
+      for (const loc of locations) {
+        const locCaps = caps.filter((c) => c.location_id === loc.id).map((c) => c.capability_code);
+        expect(locCaps).toHaveLength(8);
+        expect(locCaps.sort()).toEqual([...ALL_LOCATION_CAPABILITIES].sort());
+      }
+    });
+
+    it('is strictly idempotent when run repeatedly', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Run 1: initial seed
+      await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['warehouses'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      // Run 2: immediately re-run
+      const outcome2 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['warehouses'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome2.results[0]?.createdCount).toBe(0);
+      expect(outcome2.results[0]?.updatedCount).toBe(0);
+      expect(outcome2.results[0]?.unchangedCount).toBe(2);
+    });
+
+    it('updates warehouse address and capabilities in-place without creating duplicates', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Seed first
+      await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['warehouses'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      // Modify seed item with updated address
+      const modifiedModule = createWarehousesSeedModule([
+        {
+          code: 'WH-WEST-ASHRAFEE',
+          name: 'West Warehouse (Ashrafee)',
+          locationType: 'WAREHOUSE',
+          status: 'ACTIVE',
+          capabilities: ALL_LOCATION_CAPABILITIES,
+          address: {
+            fullAddress: 'House -627, West Kazipara, Mirpur, Dhaka 1216 (Updated Floor 2)',
+            city: 'Dhaka',
+            postalCode: '1216',
+            countryCode: 'BD',
+          },
+        },
+      ]);
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, verbose: false },
+        [modifiedModule],
+      );
+
+      expect(outcome.results[0]?.createdCount).toBe(0);
+      expect(outcome.results[0]?.updatedCount).toBe(1);
+      expect(outcome.results[0]?.unchangedCount).toBe(0);
+
+      const westRow = (
+        await sql<{
+          address_json: { fullAddress: string };
+        }>`
+          select address_json from warehouse.locations
+          where organization_id = ${organizationId} and code = 'WH-WEST-ASHRAFEE'
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(westRow?.address_json.fullAddress).toBe(
+        'House -627, West Kazipara, Mirpur, Dhaka 1216 (Updated Floor 2)',
+      );
+    });
+
+    it('supports dry-run mode without committing changes to the database', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['warehouses'], dryRun: true, verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome.results[0]?.createdCount).toBe(2);
+
+      const count = (
+        await sql<{ count: string }>`
+          select count(*)::text from warehouse.locations
+          where organization_id = ${organizationId}
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(Number(count?.count)).toBe(0);
+    });
+  });
+
   describe('multi-module comprehensive seed run', () => {
     it('includes category dependencies for a targeted Product Types run', async () => {
       const { organizationCode, organizationId } = await createTestOrg();
@@ -682,7 +866,7 @@ describe('database seed system', () => {
       expect(Number(types.rows[0]?.count)).toBe(23);
     });
 
-    it('seeds categories, product types, tags, occasions, collections, and sizing together in one transaction', async () => {
+    it('seeds categories, product types, tags, occasions, collections, sizing, and warehouses together in one transaction', async () => {
       const { organizationCode, organizationId } = await createTestOrg();
 
       const outcome = await runSeeds(
@@ -691,7 +875,7 @@ describe('database seed system', () => {
         DEFAULT_SEED_MODULES,
       );
 
-      expect(outcome.results).toHaveLength(7);
+      expect(outcome.results).toHaveLength(8);
       expect(outcome.results.map((r) => r.moduleId)).toEqual([
         'categories',
         'product-types',
@@ -700,9 +884,10 @@ describe('database seed system', () => {
         'occasions',
         'collections',
         'sizing',
+        'warehouses',
       ]);
 
-      const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes] = outcome.results;
+      const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes, whRes] = outcome.results;
       expect(catRes?.createdCount).toBe(44);
       expect(typeRes?.createdCount).toBe(23);
       expect(attributeRes?.totalCount).toBe(148);
@@ -710,9 +895,10 @@ describe('database seed system', () => {
       expect(occRes?.createdCount).toBe(9);
       expect(colRes?.createdCount).toBe(14);
       expect(sizRes?.createdCount).toBe(61);
+      expect(whRes?.createdCount).toBe(2);
 
       // Verify all counts in database
-      const [cats, types, fields, tags, occs, cols, sizDomains] = await Promise.all([
+      const [cats, types, fields, tags, occs, cols, sizDomains, whLocations] = await Promise.all([
         sql<{
           count: string;
         }>`select count(*)::text from catalog.categories where organization_id=${organizationId}`.execute(
@@ -747,6 +933,11 @@ describe('database seed system', () => {
         }>`select count(*)::text from sizing.sizing_domains where organization_id=${organizationId}`.execute(
           database.db,
         ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from warehouse.locations where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
       ]);
 
       expect(Number(cats.rows[0]?.count)).toBe(44);
@@ -756,6 +947,8 @@ describe('database seed system', () => {
       expect(Number(occs.rows[0]?.count)).toBe(9);
       expect(Number(cols.rows[0]?.count)).toBe(14);
       expect(Number(sizDomains.rows[0]?.count)).toBe(3);
+      expect(Number(whLocations.rows[0]?.count)).toBe(2);
     });
   });
 });
+

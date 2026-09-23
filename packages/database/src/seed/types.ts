@@ -1,4 +1,5 @@
 import type { MaevelleDatabase } from '../index.js';
+import type { LocationCapability } from '../warehouse.js';
 
 export type SeedScope = 'bootstrap' | 'development' | 'test';
 
@@ -65,3 +66,38 @@ export interface ProductTypeSeedItem {
   readonly primaryCategoryHandle: string;
   readonly status?: 'ACTIVE' | 'ARCHIVED';
 }
+
+export interface WarehouseSeedAddress {
+  readonly fullAddress?: string;
+  readonly city?: string;
+  readonly postalCode?: string;
+  readonly countryCode?: string;
+  readonly [key: string]: unknown;
+}
+
+export interface WarehouseSeedItem {
+  readonly code: string;
+  readonly name: string;
+  readonly locationType?:
+    | 'WAREHOUSE'
+    | 'FULFILLMENT_CENTER'
+    | 'RETAIL_STORE'
+    | 'SHOWROOM'
+    | 'RETURN_CENTER'
+    | 'THIRD_PARTY'
+    | 'OTHER';
+  readonly status?: 'ACTIVE' | 'DRAFT' | 'INACTIVE' | 'ARCHIVED';
+  readonly capabilities?: readonly LocationCapability[];
+  readonly address?: WarehouseSeedAddress;
+  readonly previousCodes?: readonly string[];
+}
+
+export interface ColorSeedItem {
+  readonly code: string;
+  readonly name: string;
+  readonly hexValue: string | null;
+  readonly status?: 'ACTIVE' | 'ARCHIVED';
+  readonly previousCodes?: readonly string[];
+}
+
+

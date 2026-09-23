@@ -8,6 +8,7 @@ import { productTypesSeedModule } from './modules/product-types.seed.js';
 import { productTypeAttributesSeedModule } from './modules/product-type-attributes.seed.js';
 import { sizingSeedModule } from './modules/sizing.seed.js';
 import { tagsSeedModule } from './modules/tags.seed.js';
+import { warehousesSeedModule } from './modules/warehouses.seed.js';
 import type { SeedContext, SeedModule, SeedModuleResult, SeedRunnerOptions } from './types.js';
 
 export const DEFAULT_SEED_MODULES: readonly SeedModule[] = [
@@ -18,7 +19,9 @@ export const DEFAULT_SEED_MODULES: readonly SeedModule[] = [
   occasionsSeedModule,
   collectionsSeedModule,
   sizingSeedModule,
+  warehousesSeedModule,
 ];
+
 
 class DryRunRollbackSignal extends Error {
   public constructor(public readonly results: SeedModuleResult[]) {
