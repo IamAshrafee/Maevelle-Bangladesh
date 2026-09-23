@@ -21,14 +21,21 @@ import {
   warehousesSeedModule,
   createWarehousesSeedModule,
 } from './modules/warehouses.seed.js';
+import {
+  colorsSeedModule,
+  createColorsSeedModule,
+} from './modules/colors.seed.js';
 import { warehouseSeedData, ALL_LOCATION_CAPABILITIES } from './data/warehouses.js';
+import { colorSeedData } from './data/colors.js';
 import { runSeeds, sortSeedModules, DEFAULT_SEED_MODULES } from './runner.js';
 import type {
   CategorySeedItem,
+  ColorSeedItem,
   SeedModule,
   VocabularySeedItem,
   WarehouseSeedItem,
 } from './types.js';
+
 
 
 const database = createDatabase({
@@ -846,6 +853,142 @@ describe('database seed system', () => {
     });
   });
 
+  describe('colors seed module', () => {
+    it('seeds canonical fashion colors with correct codes and hex values', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['colors'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome.results).toHaveLength(1);
+      const res = outcome.results[0]!;
+      expect(res.moduleId).toBe('colors');
+      expect(res.totalCount).toBe(colorSeedData.length);
+      expect(res.createdCount).toBe(colorSeedData.length);
+      expect(res.unchangedCount).toBe(0);
+      expect(res.updatedCount).toBe(0);
+
+      // Verify records in catalog.colors
+      const colors = (
+        await sql<{
+          id: string;
+          code: string;
+          name: string;
+          hex_value: string;
+          status: string;
+        }>`
+          select id::text, code, name, hex_value, status
+          from catalog.colors
+          where organization_id = ${organizationId}
+          order by code
+        `.execute(database.db)
+      ).rows;
+
+      expect(colors).toHaveLength(colorSeedData.length);
+      const black = colors.find((c) => c.code === 'black');
+      expect(black?.name).toBe('Black');
+      expect(black?.hex_value).toBe('#000000');
+      expect(black?.status).toBe('ACTIVE');
+
+      const navy = colors.find((c) => c.code === 'navy-blue');
+      expect(navy?.name).toBe('Navy Blue');
+      expect(navy?.hex_value).toBe('#000080');
+
+      const burgundy = colors.find((c) => c.code === 'burgundy');
+      expect(burgundy?.name).toBe('Burgundy');
+      expect(burgundy?.hex_value).toBe('#800020');
+    });
+
+    it('is strictly idempotent when run repeatedly', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Run 1: initial seed
+      await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['colors'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      // Run 2: immediately re-run
+      const outcome2 = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['colors'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome2.results[0]?.createdCount).toBe(0);
+      expect(outcome2.results[0]?.updatedCount).toBe(0);
+      expect(outcome2.results[0]?.unchangedCount).toBe(colorSeedData.length);
+    });
+
+    it('updates color hex and names in-place without creating duplicates', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Seed first
+      await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['colors'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      // Modify seed item with updated hex
+      const modifiedModule = createColorsSeedModule([
+        {
+          code: 'black',
+          name: 'Jet Black',
+          hexValue: '#0A0A0A',
+        },
+      ]);
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, verbose: false },
+        [modifiedModule],
+      );
+
+      expect(outcome.results[0]?.createdCount).toBe(0);
+      expect(outcome.results[0]?.updatedCount).toBe(1);
+      expect(outcome.results[0]?.unchangedCount).toBe(0);
+
+      const blackRow = (
+        await sql<{
+          name: string;
+          hex_value: string;
+        }>`
+          select name, hex_value from catalog.colors
+          where organization_id = ${organizationId} and code = 'black'
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(blackRow?.name).toBe('Jet Black');
+      expect(blackRow?.hex_value).toBe('#0A0A0A');
+    });
+
+    it('supports dry-run mode without committing changes to the database', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const outcome = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['colors'], dryRun: true, verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(outcome.results[0]?.createdCount).toBe(colorSeedData.length);
+
+      const count = (
+        await sql<{ count: string }>`
+          select count(*)::text from catalog.colors
+          where organization_id = ${organizationId}
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(Number(count?.count)).toBe(0);
+    });
+  });
+
   describe('multi-module comprehensive seed run', () => {
     it('includes category dependencies for a targeted Product Types run', async () => {
       const { organizationCode, organizationId } = await createTestOrg();
@@ -866,7 +1009,7 @@ describe('database seed system', () => {
       expect(Number(types.rows[0]?.count)).toBe(23);
     });
 
-    it('seeds categories, product types, tags, occasions, collections, sizing, and warehouses together in one transaction', async () => {
+    it('seeds categories, product types, tags, occasions, collections, sizing, warehouses, and colors together in one transaction', async () => {
       const { organizationCode, organizationId } = await createTestOrg();
 
       const outcome = await runSeeds(
@@ -875,7 +1018,7 @@ describe('database seed system', () => {
         DEFAULT_SEED_MODULES,
       );
 
-      expect(outcome.results).toHaveLength(8);
+      expect(outcome.results).toHaveLength(9);
       expect(outcome.results.map((r) => r.moduleId)).toEqual([
         'categories',
         'product-types',
@@ -885,9 +1028,10 @@ describe('database seed system', () => {
         'collections',
         'sizing',
         'warehouses',
+        'colors',
       ]);
 
-      const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes, whRes] = outcome.results;
+      const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes, whRes, colorRes] = outcome.results;
       expect(catRes?.createdCount).toBe(44);
       expect(typeRes?.createdCount).toBe(23);
       expect(attributeRes?.totalCount).toBe(148);
@@ -896,9 +1040,10 @@ describe('database seed system', () => {
       expect(colRes?.createdCount).toBe(14);
       expect(sizRes?.createdCount).toBe(61);
       expect(whRes?.createdCount).toBe(2);
+      expect(colorRes?.createdCount).toBe(colorSeedData.length);
 
       // Verify all counts in database
-      const [cats, types, fields, tags, occs, cols, sizDomains, whLocations] = await Promise.all([
+      const [cats, types, fields, tags, occs, cols, sizDomains, whLocations, colorsCount] = await Promise.all([
         sql<{
           count: string;
         }>`select count(*)::text from catalog.categories where organization_id=${organizationId}`.execute(
@@ -938,6 +1083,11 @@ describe('database seed system', () => {
         }>`select count(*)::text from warehouse.locations where organization_id=${organizationId}`.execute(
           database.db,
         ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from catalog.colors where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
       ]);
 
       expect(Number(cats.rows[0]?.count)).toBe(44);
@@ -948,7 +1098,9 @@ describe('database seed system', () => {
       expect(Number(cols.rows[0]?.count)).toBe(14);
       expect(Number(sizDomains.rows[0]?.count)).toBe(3);
       expect(Number(whLocations.rows[0]?.count)).toBe(2);
+      expect(Number(colorsCount.rows[0]?.count)).toBe(colorSeedData.length);
     });
   });
 });
+
 
