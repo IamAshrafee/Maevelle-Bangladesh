@@ -29,14 +29,20 @@ import {
   accountsSeedModule,
   createAccountsSeedModule,
 } from './modules/accounts.seed.js';
+import {
+  productsSeedModule,
+  createProductsSeedModule,
+} from './modules/products.seed.js';
 import { warehouseSeedData, ALL_LOCATION_CAPABILITIES } from './data/warehouses.js';
 import { colorSeedData } from './data/colors.js';
 import { accountSeedData } from './data/accounts.js';
+import { productSeedData } from './data/products.js';
 import { runSeeds, sortSeedModules, DEFAULT_SEED_MODULES } from './runner.js';
 import type {
   CategorySeedItem,
   ColorSeedItem,
   FinancialAccountSeedItem,
+  ProductSeedItem,
   SeedModule,
   VocabularySeedItem,
   WarehouseSeedItem,
@@ -1131,129 +1137,254 @@ describe('database seed system', () => {
 
       expect(Number(count?.count)).toBe(0);
     });
-  });
-
-  describe('multi-module comprehensive seed run', () => {
-    it('includes category dependencies for a targeted Product Types run', async () => {
-      const { organizationCode, organizationId } = await createTestOrg();
-
-      const outcome = await runSeeds(
-        database.db,
-        { organizationCode, targetModules: ['product-types'], verbose: false },
-        DEFAULT_SEED_MODULES,
-      );
-
-      expect(outcome.results.map((result) => result.moduleId)).toEqual([
-        'categories',
-        'product-types',
-      ]);
-      expect(outcome.results[1]?.createdCount).toBe(23);
-      const types = await sql<{ count: string }>`select count(*)::text from catalog.product_types
-        where organization_id=${organizationId}`.execute(database.db);
-      expect(Number(types.rows[0]?.count)).toBe(23);
     });
 
-    it('seeds categories, product types, tags, occasions, collections, sizing, warehouses, colors, and accounts together in one transaction', async () => {
-      const { organizationCode, organizationId } = await createTestOrg();
+    describe('products seed module', () => {
+      it('creates rich products, variants, options, prices, media, and inventory stock across warehouses', async () => {
+        const { organizationCode, organizationId } = await createTestOrg();
 
-      const outcome = await runSeeds(
-        database.db,
-        { organizationCode, verbose: false },
-        DEFAULT_SEED_MODULES,
-      );
+        // Run dependent modules first
+        await runSeeds(
+          database.db,
+          {
+            organizationCode,
+            targetModules: [
+              'categories',
+              'product-types',
+              'tags',
+              'occasions',
+              'collections',
+              'sizing',
+              'warehouses',
+              'colors',
+            ],
+            verbose: false,
+          },
+          DEFAULT_SEED_MODULES,
+        );
 
-      expect(outcome.results).toHaveLength(10);
-      expect(outcome.results.map((r) => r.moduleId)).toEqual([
-        'categories',
-        'product-types',
-        'product-type-attributes',
-        'tags',
-        'occasions',
-        'collections',
-        'sizing',
-        'warehouses',
-        'colors',
-        'accounts',
-      ]);
+        // Run products seed
+        const outcome = await runSeeds(
+          database.db,
+          { organizationCode, targetModules: ['products'], verbose: false },
+          DEFAULT_SEED_MODULES,
+        );
 
-      const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes, whRes, colorRes, accRes] = outcome.results;
-      expect(catRes?.createdCount).toBe(44);
-      expect(typeRes?.createdCount).toBe(23);
-      expect(attributeRes?.totalCount).toBe(148);
-      expect(tagRes?.createdCount).toBe(29);
-      expect(occRes?.createdCount).toBe(9);
-      expect(colRes?.createdCount).toBe(14);
-      expect(sizRes?.createdCount).toBe(61);
-      expect(whRes?.createdCount).toBe(2);
-      expect(colorRes?.createdCount).toBe(colorSeedData.length);
-      expect(accRes?.createdCount).toBe(4);
+        const productsResult = outcome.results.find((r) => r.moduleId === 'products');
+        expect(productsResult).toBeDefined();
+        expect(productsResult?.createdCount).toBe(8);
+        expect(productsResult?.unchangedCount).toBe(0);
 
-      // Verify all counts in database
-      const [cats, types, fields, tags, occs, cols, sizDomains, whLocations, colorsCount, accountsCount] = await Promise.all([
-        sql<{
-          count: string;
-        }>`select count(*)::text from catalog.categories where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-        sql<{
-          count: string;
-        }>`select count(*)::text from catalog.product_types where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-        sql<{
-          count: string;
-        }>`select count(*)::text from catalog.product_type_attributes
-          where organization_id=${organizationId}`.execute(database.db),
-        sql<{
-          count: string;
-        }>`select count(*)::text from catalog.tags where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-        sql<{
-          count: string;
-        }>`select count(*)::text from catalog.occasions where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-        sql<{
-          count: string;
-        }>`select count(*)::text from catalog.collections where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-        sql<{
-          count: string;
-        }>`select count(*)::text from sizing.sizing_domains where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-        sql<{
-          count: string;
-        }>`select count(*)::text from warehouse.locations where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-        sql<{
-          count: string;
-        }>`select count(*)::text from catalog.colors where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-        sql<{
-          count: string;
-        }>`select count(*)::text from finance.financial_accounts where organization_id=${organizationId}`.execute(
-          database.db,
-        ),
-      ]);
+        // 1. Verify products in DB
+        const products = await sql<{
+          id: string;
+          title: string;
+          status: string;
+          publication_status: string;
+        }>`
+          select id::text, title, status, publication_status
+          from catalog.products
+          where organization_id = ${organizationId}
+          order by title
+        `.execute(database.db);
 
-      expect(Number(cats.rows[0]?.count)).toBe(44);
-      expect(Number(types.rows[0]?.count)).toBe(23);
-      expect(Number(fields.rows[0]?.count)).toBe(148);
-      expect(Number(tags.rows[0]?.count)).toBe(29);
-      expect(Number(occs.rows[0]?.count)).toBe(9);
-      expect(Number(cols.rows[0]?.count)).toBe(14);
-      expect(Number(sizDomains.rows[0]?.count)).toBe(3);
-      expect(Number(whLocations.rows[0]?.count)).toBe(2);
-      expect(Number(colorsCount.rows[0]?.count)).toBe(colorSeedData.length);
-      expect(Number(accountsCount.rows[0]?.count)).toBe(4);
+        expect(products.rows).toHaveLength(8);
+        for (const p of products.rows) {
+          expect(p.status).toBe('ACTIVE');
+          expect(p.publication_status).toBe('PUBLISHED');
+        }
+
+        // 2. Verify variants and prices
+        const variants = await sql<{
+          id: string;
+          sku: string;
+          price_amount: string;
+        }>`
+          select v.id::text, v.sku, p.amount::text as price_amount
+          from catalog.product_variants v
+          join pricing.price_definitions p on p.variant_id = v.id and p.status = 'ACTIVE'
+          where v.organization_id = ${organizationId}
+        `.execute(database.db);
+
+        expect(variants.rows.length).toBe(51);
+
+        // 3. Verify media attached to products
+        const mediaLinks = await sql<{
+          id: string;
+          product_id: string;
+          role: string;
+          object_key: string;
+        }>`
+          select pm.id::text, pm.product_id::text, pm.role, mo.object_key
+          from catalog.product_media pm
+          join media.media_assets ma on ma.id = pm.asset_id
+          join media.media_objects mo on mo.id = ma.current_object_id
+          where pm.organization_id = ${organizationId}
+        `.execute(database.db);
+
+        expect(mediaLinks.rows.length).toBeGreaterThanOrEqual(8);
+        for (const m of mediaLinks.rows) {
+          expect(m.object_key).toMatch(/^https?:\/\//);
+        }
+
+        // 4. Verify inventory stocks across both warehouses
+        const inventoryLevels = await sql<{
+          warehouse_code: string;
+          sellable_quantity: string;
+        }>`
+          select loc.code as warehouse_code, lvl.sellable_quantity::text
+          from inventory.inventory_levels lvl
+          join warehouse.locations loc on loc.id = lvl.location_id
+          where lvl.organization_id = ${organizationId}
+        `.execute(database.db);
+
+        const westLevels = inventoryLevels.rows.filter((l) => l.warehouse_code.includes('WEST'));
+        const eastLevels = inventoryLevels.rows.filter((l) => l.warehouse_code.includes('EAST'));
+        expect(westLevels.length).toBe(51);
+        expect(eastLevels.length).toBe(51);
+
+        // 5. Test idempotency
+        const rerunOutcome = await runSeeds(
+          database.db,
+          { organizationCode, targetModules: ['products'], verbose: false },
+          DEFAULT_SEED_MODULES,
+        );
+        const rerunResult = rerunOutcome.results.find((r) => r.moduleId === 'products');
+        expect(rerunResult?.createdCount).toBe(0);
+        expect(rerunResult?.unchangedCount).toBe(8);
+      });
+    });
+
+    describe('multi-module comprehensive seed run', () => {
+      it('includes category dependencies for a targeted Product Types run', async () => {
+        const { organizationCode, organizationId } = await createTestOrg();
+
+        const outcome = await runSeeds(
+          database.db,
+          { organizationCode, targetModules: ['product-types'], verbose: false },
+          DEFAULT_SEED_MODULES,
+        );
+
+        expect(outcome.results.map((result) => result.moduleId)).toEqual([
+          'categories',
+          'product-types',
+        ]);
+        expect(outcome.results[1]?.createdCount).toBe(23);
+        const types = await sql<{ count: string }>`select count(*)::text from catalog.product_types
+          where organization_id=${organizationId}`.execute(database.db);
+        expect(Number(types.rows[0]?.count)).toBe(23);
+      });
+
+      it('seeds categories, product types, tags, occasions, collections, sizing, warehouses, colors, accounts, and products together in one transaction', async () => {
+        const { organizationCode, organizationId } = await createTestOrg();
+
+        const outcome = await runSeeds(
+          database.db,
+          { organizationCode, verbose: false },
+          DEFAULT_SEED_MODULES,
+        );
+
+        expect(outcome.results).toHaveLength(11);
+        expect(outcome.results.map((r) => r.moduleId)).toEqual([
+          'categories',
+          'product-types',
+          'product-type-attributes',
+          'tags',
+          'occasions',
+          'collections',
+          'sizing',
+          'warehouses',
+          'colors',
+          'accounts',
+          'products',
+        ]);
+
+        const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes, whRes, colorRes, accRes, prodRes] = outcome.results;
+        expect(catRes?.createdCount).toBe(44);
+        expect(typeRes?.createdCount).toBe(23);
+        expect(attributeRes?.totalCount).toBe(148);
+        expect(tagRes?.createdCount).toBe(29);
+        expect(occRes?.createdCount).toBe(9);
+        expect(colRes?.createdCount).toBe(14);
+        expect(sizRes?.createdCount).toBe(61);
+        expect(whRes?.createdCount).toBe(2);
+        expect(colorRes?.createdCount).toBe(colorSeedData.length);
+        expect(accRes?.createdCount).toBe(4);
+        expect(prodRes?.createdCount).toBe(8);
+
+        // Verify all counts in database
+        const [cats, types, fields, tags, occs, cols, sizDomains, whLocations, colorsCount, accountsCount, productsCount] = await Promise.all([
+          sql<{
+            count: string;
+          }>`select count(*)::text from catalog.categories where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from catalog.product_types where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from catalog.product_type_attributes
+            where organization_id=${organizationId}`.execute(database.db),
+          sql<{
+            count: string;
+          }>`select count(*)::text from catalog.tags where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from catalog.occasions where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from catalog.collections where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from sizing.sizing_domains where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from warehouse.locations where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from catalog.colors where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from finance.financial_accounts where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+          sql<{
+            count: string;
+          }>`select count(*)::text from catalog.products where organization_id=${organizationId}`.execute(
+            database.db,
+          ),
+        ]);
+
+        expect(Number(cats.rows[0]?.count)).toBe(44);
+        expect(Number(types.rows[0]?.count)).toBe(23);
+        expect(Number(fields.rows[0]?.count)).toBe(148);
+        expect(Number(tags.rows[0]?.count)).toBe(29);
+        expect(Number(occs.rows[0]?.count)).toBe(9);
+        expect(Number(cols.rows[0]?.count)).toBe(14);
+        expect(Number(sizDomains.rows[0]?.count)).toBe(3);
+        expect(Number(whLocations.rows[0]?.count)).toBe(2);
+        expect(Number(colorsCount.rows[0]?.count)).toBe(colorSeedData.length);
+        expect(Number(accountsCount.rows[0]?.count)).toBe(4);
+        expect(Number(productsCount.rows[0]?.count)).toBe(8);
+      });
     });
   });
-});
+
 
 
 

@@ -30,6 +30,28 @@ import {
 } from '@/components/ui/table';
 import { fetchApiData } from '@/lib/api';
 
+function formatDateTime(value?: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(date);
+}
+
+function formatMoney(amount: number | string | undefined | null, currency = 'BDT'): string {
+  const num = Number(amount ?? 0);
+  return new Intl.NumberFormat('en-BD', {
+    style: 'currency',
+    currency: currency || 'BDT',
+  }).format(Number.isNaN(num) ? 0 : num);
+}
+
 export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
   const router = useRouter();
   const [order, setOrder] = useState<OrderDetailDto>();
@@ -110,10 +132,7 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               <StatusBadge status={order.status} />
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Placed on{' '}
-              {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium', timeStyle: 'short' }).format(
-                new Date(order.createdAt),
-              )}
+              Placed on {formatDateTime(order.createdAt)}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -164,17 +183,11 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                       <div className="text-xs text-muted-foreground">SKU: {line.sku}</div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {new Intl.NumberFormat('en-BD', {
-                        style: 'currency',
-                        currency: order.currency,
-                      }).format(Number(line.unitPrice))}
+                      {formatMoney(line.unitPrice, order.currency)}
                     </TableCell>
                     <TableCell className="text-right">{line.quantity}</TableCell>
                     <TableCell className="text-right font-medium">
-                      {new Intl.NumberFormat('en-BD', {
-                        style: 'currency',
-                        currency: order.currency,
-                      }).format(Number(line.total))}
+                      {formatMoney(line.total, order.currency)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -184,22 +197,12 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               <div className="w-full max-w-sm space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>
-                    {new Intl.NumberFormat('en-BD', {
-                      style: 'currency',
-                      currency: order.currency,
-                    }).format(Number(order.total))}
-                  </span>
+                  <span>{formatMoney(order.total, order.currency)}</span>
                 </div>
                 {/* Note: In a full app, you'd show discounts/taxes here */}
                 <div className="flex justify-between border-t pt-2 text-base font-medium">
                   <span>Total</span>
-                  <span>
-                    {new Intl.NumberFormat('en-BD', {
-                      style: 'currency',
-                      currency: order.currency,
-                    }).format(Number(order.total))}
-                  </span>
+                  <span>{formatMoney(order.total, order.currency)}</span>
                 </div>
               </div>
             </div>
@@ -230,28 +233,19 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               <div>
                 <p className="text-xs text-muted-foreground">Expected</p>
                 <p className="mt-1 font-medium">
-                  {new Intl.NumberFormat('en-BD', {
-                    style: 'currency',
-                    currency: order.currency,
-                  }).format(Number(order.payment.expected))}
+                  {formatMoney(order.payment.expected, order.currency)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Collected</p>
                 <p className="mt-1 font-medium text-emerald-600">
-                  {new Intl.NumberFormat('en-BD', {
-                    style: 'currency',
-                    currency: order.currency,
-                  }).format(Number(order.payment.collected))}
+                  {formatMoney(order.payment.collected, order.currency)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Outstanding</p>
                 <p className="mt-1 font-medium text-rose-600">
-                  {new Intl.NumberFormat('en-BD', {
-                    style: 'currency',
-                    currency: order.currency,
-                  }).format(Number(order.payment.outstanding))}
+                  {formatMoney(order.payment.outstanding, order.currency)}
                 </p>
               </div>
             </div>
@@ -283,7 +277,7 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                       <StatusBadge status={fulfillment.status} />
                       <p className="mt-2 text-sm text-muted-foreground">
                         {fulfillment.dispatchedAt
-                          ? `Dispatched: ${new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(new Date(fulfillment.dispatchedAt))}`
+                          ? `Dispatched: ${formatDate(fulfillment.dispatchedAt)}`
                           : 'Pending Dispatch'}
                       </p>
                     </div>
@@ -345,10 +339,7 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                       <p className="font-medium text-foreground">{rc.caseNumber}</p>
                       <StatusBadge status={rc.status} />
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {rc.returnType} •{' '}
-                        {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
-                          new Date(rc.createdAt),
-                        )}
+                        {rc.returnType} • {formatDate(rc.createdAt)}
                       </p>
                     </div>
                   ))}
@@ -410,10 +401,7 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                       <div className="flex flex-col pb-4">
                         <span className="text-sm font-medium">{event.eventType}</span>
                         <span className="text-xs text-muted-foreground">
-                          {new Intl.DateTimeFormat('en-BD', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          }).format(new Date(event.occurredAt))}
+                          {formatDateTime(event.occurredAt)}
                         </span>
                       </div>
                     </li>

@@ -42,6 +42,16 @@ export interface ProductSummary {
   readonly updatedAt?: string;
 }
 
+function withCatalogTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  callback: (trx: Kysely<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  if ('isTransaction' in db && (db as { isTransaction?: boolean }).isTransaction) {
+    return callback(db);
+  }
+  return db.transaction().execute(callback);
+}
+
 export interface CatalogProductWorkspace extends ProductSummary {
   readonly sizeSystemId: string | null;
   readonly sizeGuideId: string | null;
@@ -1202,7 +1212,7 @@ export async function createCatalogProduct(
     seoDescription?: string | null;
   },
 ): Promise<ProductSummary> {
-  return db.transaction().execute(async (transaction) => {
+  return withCatalogTransaction(db, async (transaction) => {
     const productType = await sql<{ id: string }>`
       select id from catalog.product_types where id = ${input.productTypeId} and organization_id = ${input.organizationId} and status = 'ACTIVE'
     `.execute(transaction);
@@ -1630,7 +1640,7 @@ export async function publishCatalogProduct(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; actorId: string; productId: string; expectedVersion: number },
 ): Promise<ProductSummary> {
-  return db.transaction().execute(async (transaction) => {
+  return withCatalogTransaction(db, async (transaction) => {
     const locked = await lockCatalogProduct(transaction, input.organizationId, input.productId);
     if (!locked) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
     if (locked.version !== input.expectedVersion)

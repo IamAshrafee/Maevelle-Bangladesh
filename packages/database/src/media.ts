@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
@@ -48,6 +49,17 @@ export interface MediaLibraryAsset {
   }[];
 }
 
+function withMediaTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  callback: (trx: Kysely<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  if ('isTransaction' in db && (db as { isTransaction?: boolean }).isTransaction) {
+    return callback(db);
+  }
+
+  return db.transaction().execute(callback);
+}
+
 function asAsset(row: {
   id: string;
   visibility_class: 'PUBLIC' | 'PRIVATE';
@@ -84,7 +96,7 @@ export async function registerUploadedMedia(
     heightPx?: number;
   },
 ): Promise<MediaAsset> {
-  return db.transaction().execute(async (transaction) => {
+  return withMediaTransaction(db, async (transaction) => {
     const asset = await sql<{ id: string }>`
       insert into media.media_assets (organization_id, asset_type, visibility_class, status, title, alt_text)
       values (${input.organizationId}, 'IMAGE', ${input.visibility}, 'UPLOADING', ${input.title ?? null}, ${input.altText ?? null})
@@ -101,6 +113,91 @@ export async function registerUploadedMedia(
     `.execute(transaction);
     const objectId = object.rows[0]?.id;
     if (!objectId) throw new Error('Media object registration did not return an id.');
+    const result = await sql<{
+      id: string;
+      visibility_class: 'PUBLIC' | 'PRIVATE';
+      status: 'READY' | 'ARCHIVED';
+      mime_type: MediaAsset['mimeType'];
+      byte_size: string;
+      object_key: string;
+      alt_text: string | null;
+    }>`
+      update media.media_assets set current_object_id = ${objectId}, status = 'READY', updated_at = now()
+      where id = ${assetId}
+      returning id, visibility_class, status,
+        (select mime_type from media.media_objects where id = ${objectId}) as mime_type,
+        (select byte_size::text from media.media_objects where id = ${objectId}) as byte_size,
+        (select object_key from media.media_objects where id = ${objectId}) as object_key, alt_text
+    `.execute(transaction);
+    const row = result.rows[0];
+    if (!row) throw new Error('Media asset finalization did not return an asset.');
+    return asAsset(row);
+  });
+}
+
+/** Registers an external image URL as a ready media asset. */
+export async function registerUrlMedia(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    url: string;
+    title?: string | null | undefined;
+    altText?: string | null | undefined;
+    visibility?: MediaAsset['visibility'] | undefined;
+    widthPx?: number | null | undefined;
+    heightPx?: number | null | undefined;
+  },
+): Promise<MediaAsset> {
+  return withMediaTransaction(db, async (transaction) => {
+    const existing = await sql<{
+      id: string;
+      visibility_class: 'PUBLIC' | 'PRIVATE';
+      status: 'READY' | 'ARCHIVED';
+      mime_type: MediaAsset['mimeType'];
+      byte_size: string;
+      object_key: string;
+      alt_text: string | null;
+    }>`
+      select asset.id, asset.visibility_class, asset.status, object.mime_type, object.byte_size::text, object.object_key, asset.alt_text
+      from media.media_assets asset
+      join media.media_objects object on object.id = asset.current_object_id
+      where asset.organization_id = ${input.organizationId}
+        and object.storage_provider = 'url'
+        and object.object_key = ${input.url}
+        and asset.status = 'READY'
+      limit 1
+    `.execute(transaction);
+
+    if (existing.rows[0]) {
+      return asAsset(existing.rows[0]);
+    }
+
+    const checksumSha256 = createHash('sha256').update(input.url).digest('hex');
+    const visibility = input.visibility ?? 'PUBLIC';
+    const mimeType: MediaAsset['mimeType'] = input.url.toLowerCase().endsWith('.png')
+      ? 'image/png'
+      : input.url.toLowerCase().endsWith('.webp')
+        ? 'image/webp'
+        : 'image/jpeg';
+
+    const asset = await sql<{ id: string }>`
+      insert into media.media_assets (organization_id, asset_type, visibility_class, status, title, alt_text)
+      values (${input.organizationId}, 'IMAGE', ${visibility}, 'UPLOADING', ${input.title ?? null}, ${input.altText ?? null})
+      returning id
+    `.execute(transaction);
+    const assetId = asset.rows[0]?.id;
+    if (!assetId) throw new Error('Media asset registration did not return an id.');
+
+    const object = await sql<{ id: string }>`
+      insert into media.media_objects (
+        organization_id, asset_id, storage_provider, object_key, mime_type, byte_size, checksum_sha256, width_px, height_px
+      ) values (
+        ${input.organizationId}, ${assetId}, 'url', ${input.url}, ${mimeType}, 102400, ${checksumSha256}, ${input.widthPx ?? null}, ${input.heightPx ?? null}
+      ) returning id
+    `.execute(transaction);
+    const objectId = object.rows[0]?.id;
+    if (!objectId) throw new Error('Media object registration did not return an id.');
+
     const result = await sql<{
       id: string;
       visibility_class: 'PUBLIC' | 'PRIVATE';
@@ -298,7 +395,7 @@ export async function attachMediaToProduct(
         'Option value is not available for this Product.',
       );
   }
-  await db.transaction().execute(async (transaction) => {
+  await withMediaTransaction(db, async (transaction) => {
     if (input.isPrimary)
       await sql`update catalog.product_media set is_primary=false
         where organization_id=${input.organizationId} and product_id=${input.productId}::uuid

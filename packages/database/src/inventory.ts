@@ -88,6 +88,16 @@ function fingerprint(input: unknown): string {
   return JSON.stringify(input);
 }
 
+function withInventoryTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  callback: (trx: Transaction<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  if ('isTransaction' in db && (db as { isTransaction?: boolean }).isTransaction) {
+    return callback(db as unknown as Transaction<DatabaseSchema>);
+  }
+  return db.transaction().execute(callback);
+}
+
 function assertQuantity(value: string, name = 'Quantity'): void {
   if (!/^\d+(?:\.\d{1,6})?$/.test(value) || value === '0' || /^0\.0{1,6}$/.test(value))
     throw new InventoryDomainError(
@@ -232,9 +242,9 @@ export async function ensureInventoryItemForVariant(
   organizationId: string,
   variantId: string,
 ): Promise<string> {
-  return db
-    .transaction()
-    .execute((transaction) => ensureItem(transaction, organizationId, variantId));
+  return withInventoryTransaction(db, (transaction) =>
+    ensureItem(transaction, organizationId, variantId),
+  );
 }
 
 export async function ensureInventoryItemForVariantInTransaction(
@@ -588,7 +598,7 @@ export async function adjustInventory(
   assertQuantity(input.quantityDelta.replace(/^-/, ''), 'Adjustment quantity');
   if (!input.quantityDelta.startsWith('-') && input.quantityDelta === '0')
     throw new InventoryDomainError('VALIDATION_FAILED', 'Adjustment cannot be zero.');
-  return db.transaction().execute(async (transaction) => {
+  return withInventoryTransaction(db, async (transaction) => {
     const started = await beginIdempotent(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,

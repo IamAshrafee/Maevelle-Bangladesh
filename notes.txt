@@ -1,0 +1,32 @@
+# Storefront Pages (to work/implement),
+- work on customer orders confirmation page,
+- Cart Page,
+- Checkout page,
+- Track page, 
+- Track your order page,
+- Privacy Page,
+- Terms of Use Page,
+- About Us Page,
+- Contact Page,
+- Explore categories, sub categories page,
+
+# Storefront Components (to work/implement),
+- Navbar,
+- Footer,
+- ProductCard,
+- ProductsGrid, 
+- HomePageHero, 
+- FAQ,
+- Breadcrumb,
+- General Buttons (Different different types, like primary, secondary, etc. also with different different styles like solid, outline, ghost, etc. All maintaining same design pattern and consistent),
+- 
+- 
+
+# Storefront Layouts (to work/implement),
+- Default Layout (Navbar + Page Content + Footer),
+- Product Details page Layout (Navbar + Product Media section + Product Details section (product title, brand, price, etc.) + buttons section (size options, color options, size chart button to open popup, add to cart button, buy now, wishlist button, etc.) + Trust indication section (for example: Secure payment, Cash on delivery available, COD available, etc.) + Some toggle buttons to show more information (for example: Shipping information, Return policy, etc.) + Details section (includes description, Specifications, Care Instructions, etc) + Reviews Section +  Related Products + Footer),
+- 404 Layout (Navbar + 404 Content + Footer),
+- Large screen Navbar layout (Logo, Quick buttons(for example, categories, new arrival, any custom single category, or any custom link button), wishlist, cart, search button, login/signup, etc. And also with different different types, like transparent, sticky, shrink on scroll, etc. All maintaining same design pattern and consistent)(When hover to the categories, a large full width, large height, minimal categories listing with interective category to subcategory to subcategory browsing, also showing some best selling products related to that category, brand, etc. minimal info displayed like image, title, etc.),
+- Small screen Navbar layout (Logo, hamburger menu, search icon, wishlist icon, cart icon, login/signup icon, etc. And also with different different types, like transparent, sticky, shrink on scroll, etc. All maintaining same design pattern and consistent),
+- Small screen navbar overlay/page/sidebar full width opeining, which opens when click on the hamburger (this will show full screen, and on top of that there will be a white overlay with content like categories, new arrival, any custom single category, or any custom link button, wishlist, cart, search button, login/signup, etc. And also with different different types, like transparent, sticky, shrink on scroll, etc. All maintaining same design pattern and consistent)
+- 

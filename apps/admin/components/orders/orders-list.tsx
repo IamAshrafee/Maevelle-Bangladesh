@@ -23,6 +23,21 @@ import { fetchApiData } from '@/lib/api';
 
 const statuses = ['ALL', 'PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const;
 
+function formatDateTime(value?: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+function formatMoney(amount: number | string | undefined | null, currency = 'BDT'): string {
+  const num = Number(amount ?? 0);
+  return new Intl.NumberFormat('en-BD', {
+    style: 'currency',
+    currency: currency || 'BDT',
+  }).format(Number.isNaN(num) ? 0 : num);
+}
+
 export function OrdersList() {
   const router = useRouter();
   const searchParameters = useSearchParams();
@@ -174,7 +189,7 @@ export function OrdersList() {
                     {order.orderNumber}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(order.createdAt))}
+                    {formatDateTime(order.createdAt)}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">
@@ -183,7 +198,7 @@ export function OrdersList() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {new Intl.NumberFormat('en-BD', { style: 'currency', currency: order.currency }).format(Number(order.total))}
+                    {formatMoney(order.total, order.currency)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={order.status} />

@@ -33,7 +33,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       height_px integer,
       metadata_json jsonb,
       created_at timestamptz not null default now(),
-      unique (storage_provider, object_key),
+      unique (organization_id, storage_provider, object_key),
       check (metadata_json is null or jsonb_typeof(metadata_json) = 'object')
     );
     alter table media.media_assets add constraint media_assets_current_object_fk foreign key (current_object_id) references media.media_objects(id);
@@ -53,7 +53,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       processor_version text not null,
       created_at timestamptz not null default now(),
       unique (asset_id, rendition_key, processor_version),
-      unique (storage_provider, object_key)
+      unique (organization_id, storage_provider, object_key)
     );
     create table catalog.product_media (
       id uuid primary key default uuidv7(),

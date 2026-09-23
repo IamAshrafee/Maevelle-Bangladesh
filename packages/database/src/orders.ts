@@ -86,6 +86,11 @@ export interface OrderView {
   readonly orderNumber: string;
   readonly status: string;
   readonly currency: string;
+  readonly total: string;
+  readonly createdAt: string;
+  readonly customerName?: string;
+  readonly customerEmail?: string | null;
+  readonly customerId?: string | null;
   readonly paymentMethod: PaymentMethodCode;
   readonly payment: PaymentSummary;
   readonly merchandiseGross: string;
@@ -593,7 +598,9 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     discount_amount: string;
     total_amount: string;
     version: string;
+    created_at: Date;
     display_name: string;
+    customer_id: string | null;
     phone: string;
     email: string | null;
     recipient_name: string;
@@ -608,8 +615,8 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     country_code: string;
   }>`
     select order_row.id, order_row.organization_id, order_row.order_number, order_row.order_status, order_row.currency_code, order_row.payment_method, order_row.version::text,
-      order_row.subtotal_amount::text, order_row.discount_amount::text, order_row.total_amount::text,
-      customer.display_name, customer.phone, customer.email, address.recipient_name, address.phone as delivery_phone, address.address_line_1, address.address_line_2,
+      order_row.subtotal_amount::text, order_row.discount_amount::text, order_row.total_amount::text, order_row.created_at,
+      customer.customer_id::text as customer_id, customer.display_name, customer.phone, customer.email, address.recipient_name, address.phone as delivery_phone, address.address_line_1, address.address_line_2,
       address.geography_node_id, address.area, address.city, address.district, address.postal_code, address.country_code
     from orders.orders order_row
     join orders.order_customer_snapshots customer on customer.order_id = order_row.id
@@ -644,6 +651,11 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     orderNumber: row.order_number,
     status: row.order_status,
     currency: row.currency_code,
+    total: row.total_amount,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    customerName: row.display_name,
+    customerEmail: row.email,
+    customerId: row.customer_id ?? null,
     paymentMethod: row.payment_method,
     payment,
     merchandiseGross: row.subtotal_amount,

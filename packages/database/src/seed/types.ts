@@ -111,4 +111,67 @@ export interface FinancialAccountSeedItem {
   readonly previousAccountNumbers?: readonly string[];
 }
 
+export interface ProductSeedMedia {
+  readonly url: string;
+  readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+  readonly isPrimary?: boolean;
+  readonly position?: number;
+  readonly colorCode?: string;
+}
+
+export interface ProductSeedOptionValue {
+  readonly displayValue: string;
+  readonly code?: string;
+  readonly colorCode?: string;
+  readonly sizeCode?: string;
+  readonly position?: number;
+}
+
+export interface ProductSeedOptionAxis {
+  readonly name: string;
+  readonly code?: string;
+  readonly position?: number;
+  readonly values: readonly ProductSeedOptionValue[];
+}
+
+export interface ProductSeedStock {
+  readonly warehouseCode: string;
+  readonly quantity: string;
+}
+
+export interface ProductSeedVariantOptionSelection {
+  readonly axisName: string;
+  readonly valueDisplay: string;
+}
+
+export interface ProductSeedVariant {
+  readonly sku: string;
+  readonly title?: string;
+  readonly optionSelections: readonly ProductSeedVariantOptionSelection[];
+  readonly amount: string;
+  readonly compareAtAmount?: string;
+  readonly barcode?: string;
+  readonly primaryColorCode?: string;
+  readonly weightGrams?: number;
+  readonly stocks: readonly ProductSeedStock[];
+  readonly media?: readonly ProductSeedMedia[];
+}
+
+export interface ProductSeedItem {
+  readonly title: string;
+  readonly handle?: string;
+  readonly productTypeCode: string;
+  readonly primaryCategoryHandle: string;
+  readonly additionalCategoryHandles?: readonly string[];
+  readonly description?: string;
+  readonly tagNames?: readonly string[];
+  readonly occasionNames?: readonly string[];
+  readonly collectionNames?: readonly string[];
+  readonly sizeSystemCode?: string;
+  readonly options: readonly ProductSeedOptionAxis[];
+  readonly variants: readonly ProductSeedVariant[];
+  readonly media?: readonly ProductSeedMedia[];
+}
+
+
 

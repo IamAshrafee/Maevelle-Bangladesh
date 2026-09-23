@@ -9,6 +9,7 @@ import {
   listMediaLibrary,
   MediaDomainError,
   registerUploadedMedia,
+  registerUrlMedia,
   updateMediaAssetMetadata,
 } from '@maevelle/database/media';
 import { findActiveAdminContext } from '@maevelle/database/platform';
@@ -113,6 +114,48 @@ export function registerMediaRoutes(
   });
 
   app.post(
+    '/admin/media/urls',
+    {
+      schema: {
+        body: Type.Object({
+          url: Type.String({ minLength: 1 }),
+          title: Type.Optional(Type.String({ maxLength: 160 })),
+          altText: Type.Optional(Type.String({ maxLength: 500 })),
+          visibility: Type.Optional(Type.Union([Type.Literal('PUBLIC'), Type.Literal('PRIVATE')])),
+          widthPx: Type.Optional(Type.Integer({ minimum: 1 })),
+          heightPx: Type.Optional(Type.Integer({ minimum: 1 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'media.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          url: string;
+          title?: string;
+          altText?: string;
+          visibility?: 'PUBLIC' | 'PRIVATE';
+          widthPx?: number;
+          heightPx?: number;
+        };
+        const asset = await registerUrlMedia(database.db, {
+          organizationId: context.organizationId,
+          url: body.url,
+          title: body.title,
+          altText: body.altText,
+          visibility: body.visibility ?? 'PUBLIC',
+          widthPx: body.widthPx,
+          heightPx: body.heightPx,
+        });
+        return reply.code(201).send({ data: asset });
+      } catch (error) {
+        return mediaError(reply, error);
+      }
+    },
+  );
+
+  app.post(
     '/admin/catalog/products/:productId/media',
     {
       schema: {
@@ -209,6 +252,9 @@ export function registerMediaRoutes(
     );
     if (!asset || asset.visibility !== 'PUBLIC')
       return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (asset.objectKey.startsWith('http://') || asset.objectKey.startsWith('https://')) {
+      return reply.redirect(asset.objectKey, 302);
+    }
     const content = await storage.read(asset.objectKey);
     if (!content) return reply.code(404).send({ error: 'NOT_FOUND' });
     reply
@@ -226,6 +272,9 @@ export function registerMediaRoutes(
       context.organizationId,
     );
     if (!asset) return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (asset.objectKey.startsWith('http://') || asset.objectKey.startsWith('https://')) {
+      return reply.redirect(asset.objectKey, 302);
+    }
     const content = await storage.read(asset.objectKey);
     if (!content) return reply.code(404).send({ error: 'NOT_FOUND' });
     reply.header('content-type', asset.mimeType).header('cache-control', 'private, no-store');
