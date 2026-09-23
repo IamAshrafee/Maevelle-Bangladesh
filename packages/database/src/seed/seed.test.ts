@@ -25,12 +25,18 @@ import {
   colorsSeedModule,
   createColorsSeedModule,
 } from './modules/colors.seed.js';
+import {
+  accountsSeedModule,
+  createAccountsSeedModule,
+} from './modules/accounts.seed.js';
 import { warehouseSeedData, ALL_LOCATION_CAPABILITIES } from './data/warehouses.js';
 import { colorSeedData } from './data/colors.js';
+import { accountSeedData } from './data/accounts.js';
 import { runSeeds, sortSeedModules, DEFAULT_SEED_MODULES } from './runner.js';
 import type {
   CategorySeedItem,
   ColorSeedItem,
+  FinancialAccountSeedItem,
   SeedModule,
   VocabularySeedItem,
   WarehouseSeedItem,
@@ -989,6 +995,144 @@ describe('database seed system', () => {
     });
   });
 
+  describe('accounts seed module', () => {
+    it('seeds the 4 operational accounts with 0 initial balance idempotently', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // First run: all 4 accounts created
+      const firstRun = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['accounts'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(firstRun.results).toHaveLength(1);
+      const accResult = firstRun.results[0];
+      expect(accResult?.moduleId).toBe('accounts');
+      expect(accResult?.createdCount).toBe(4);
+      expect(accResult?.unchangedCount).toBe(0);
+      expect(accResult?.updatedCount).toBe(0);
+
+      // Verify accounts in database
+      const rows = (
+        await sql<{
+          account_number: string;
+          name: string;
+          account_type: string;
+          currency_code: string;
+          status: string;
+          reference_label: string | null;
+        }>`
+          select account_number, name, account_type, currency_code, status, reference_label
+          from finance.financial_accounts
+          where organization_id = ${organizationId}
+          order by account_number
+        `.execute(database.db)
+      ).rows;
+
+      expect(rows).toHaveLength(4);
+      expect(rows.map((r) => r.account_number)).toEqual([
+        'BKASH-ASHRAFEE',
+        'BKASH-MAISHA',
+        'CASH-MAISHA',
+        'NAGAD-ASHRAFEE',
+      ]);
+
+      const bkashMaisha = rows.find((r) => r.account_number === 'BKASH-MAISHA');
+      expect(bkashMaisha).toMatchObject({
+        name: 'Maisha Bkash',
+        account_type: 'MOBILE_WALLET',
+        currency_code: 'BDT',
+        status: 'ACTIVE',
+        reference_label: '01308706391',
+      });
+
+      const cashMaisha = rows.find((r) => r.account_number === 'CASH-MAISHA');
+      expect(cashMaisha).toMatchObject({
+        name: 'Maisha Cashdrawer',
+        account_type: 'CASH',
+        currency_code: 'BDT',
+        status: 'ACTIVE',
+        reference_label: 'Cashdrawer',
+      });
+
+      // Second run: 0 created, 4 unchanged
+      const secondRun = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['accounts'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(secondRun.results[0]?.createdCount).toBe(0);
+      expect(secondRun.results[0]?.updatedCount).toBe(0);
+      expect(secondRun.results[0]?.unchangedCount).toBe(4);
+    });
+
+    it('detects changes and updates account name and reference label', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      // Seed initial accounts
+      await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['accounts'], verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      // Custom module with updated name and label for CASH-MAISHA
+      const customModule = createAccountsSeedModule([
+        {
+          accountNumber: 'CASH-MAISHA',
+          name: 'Maisha Cash Drawer Updated',
+          accountType: 'CASH',
+          currencyCode: 'BDT',
+          referenceLabel: 'Updated Drawer Label',
+          openingBalance: '0',
+          status: 'ACTIVE',
+        },
+      ]);
+
+      const updateRun = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['accounts'], verbose: false },
+        [customModule],
+      );
+
+      expect(updateRun.results[0]?.updatedCount).toBe(1);
+      expect(updateRun.results[0]?.createdCount).toBe(0);
+
+      const updatedRow = (
+        await sql<{ name: string; reference_label: string | null }>`
+          select name, reference_label from finance.financial_accounts
+          where organization_id = ${organizationId} and account_number = 'CASH-MAISHA'
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(updatedRow?.name).toBe('Maisha Cash Drawer Updated');
+      expect(updatedRow?.reference_label).toBe('Updated Drawer Label');
+    });
+
+    it('supports dry-run mode without committing changes', async () => {
+      const { organizationCode, organizationId } = await createTestOrg();
+
+      const dryRunResult = await runSeeds(
+        database.db,
+        { organizationCode, targetModules: ['accounts'], dryRun: true, verbose: false },
+        DEFAULT_SEED_MODULES,
+      );
+
+      expect(dryRunResult.results[0]?.createdCount).toBe(4);
+
+      const count = (
+        await sql<{ count: string }>`
+          select count(*)::text from finance.financial_accounts
+          where organization_id = ${organizationId}
+        `.execute(database.db)
+      ).rows[0];
+
+      expect(Number(count?.count)).toBe(0);
+    });
+  });
+
   describe('multi-module comprehensive seed run', () => {
     it('includes category dependencies for a targeted Product Types run', async () => {
       const { organizationCode, organizationId } = await createTestOrg();
@@ -1009,7 +1153,7 @@ describe('database seed system', () => {
       expect(Number(types.rows[0]?.count)).toBe(23);
     });
 
-    it('seeds categories, product types, tags, occasions, collections, sizing, warehouses, and colors together in one transaction', async () => {
+    it('seeds categories, product types, tags, occasions, collections, sizing, warehouses, colors, and accounts together in one transaction', async () => {
       const { organizationCode, organizationId } = await createTestOrg();
 
       const outcome = await runSeeds(
@@ -1018,7 +1162,7 @@ describe('database seed system', () => {
         DEFAULT_SEED_MODULES,
       );
 
-      expect(outcome.results).toHaveLength(9);
+      expect(outcome.results).toHaveLength(10);
       expect(outcome.results.map((r) => r.moduleId)).toEqual([
         'categories',
         'product-types',
@@ -1029,9 +1173,10 @@ describe('database seed system', () => {
         'sizing',
         'warehouses',
         'colors',
+        'accounts',
       ]);
 
-      const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes, whRes, colorRes] = outcome.results;
+      const [catRes, typeRes, attributeRes, tagRes, occRes, colRes, sizRes, whRes, colorRes, accRes] = outcome.results;
       expect(catRes?.createdCount).toBe(44);
       expect(typeRes?.createdCount).toBe(23);
       expect(attributeRes?.totalCount).toBe(148);
@@ -1041,9 +1186,10 @@ describe('database seed system', () => {
       expect(sizRes?.createdCount).toBe(61);
       expect(whRes?.createdCount).toBe(2);
       expect(colorRes?.createdCount).toBe(colorSeedData.length);
+      expect(accRes?.createdCount).toBe(4);
 
       // Verify all counts in database
-      const [cats, types, fields, tags, occs, cols, sizDomains, whLocations, colorsCount] = await Promise.all([
+      const [cats, types, fields, tags, occs, cols, sizDomains, whLocations, colorsCount, accountsCount] = await Promise.all([
         sql<{
           count: string;
         }>`select count(*)::text from catalog.categories where organization_id=${organizationId}`.execute(
@@ -1088,6 +1234,11 @@ describe('database seed system', () => {
         }>`select count(*)::text from catalog.colors where organization_id=${organizationId}`.execute(
           database.db,
         ),
+        sql<{
+          count: string;
+        }>`select count(*)::text from finance.financial_accounts where organization_id=${organizationId}`.execute(
+          database.db,
+        ),
       ]);
 
       expect(Number(cats.rows[0]?.count)).toBe(44);
@@ -1099,8 +1250,10 @@ describe('database seed system', () => {
       expect(Number(sizDomains.rows[0]?.count)).toBe(3);
       expect(Number(whLocations.rows[0]?.count)).toBe(2);
       expect(Number(colorsCount.rows[0]?.count)).toBe(colorSeedData.length);
+      expect(Number(accountsCount.rows[0]?.count)).toBe(4);
     });
   });
 });
+
 
 

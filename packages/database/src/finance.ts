@@ -63,6 +63,16 @@ function signed(value: string): string {
 function fingerprint(value: unknown) {
   return JSON.stringify(value);
 }
+
+function withFinanceTransaction<T>(
+  db: Kysely<DatabaseSchema>,
+  callback: (trx: Kysely<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  if ('isTransaction' in db && (db as { isTransaction?: boolean }).isTransaction) {
+    return callback(db);
+  }
+  return db.transaction().execute(callback);
+}
 async function outbox(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
@@ -537,6 +547,7 @@ export async function getFinancialAccountDetail(
     total_inflow: string;
     total_outflow: string;
     version: string;
+    has_opening_balance: boolean;
   }>`select account.id,account.account_number,account.name,account.account_type,
       account.currency_code,account.status,account.reference_label,account.version::text,
       coalesce(sum(entry.amount_delta),0)::numeric(20,4)::text as ledger_balance,
@@ -546,7 +557,14 @@ export async function getFinancialAccountDetail(
       reconciliation.id::text as latest_reconciliation_id,
       reconciliation.status as latest_reconciliation_status,
       reconciliation.difference_amount::text as latest_reconciliation_difference,
-      reconciliation.observed_at::text as latest_reconciliation_observed_at
+      reconciliation.observed_at::text as latest_reconciliation_observed_at,
+      exists(
+        select 1 from finance.finance_transactions t
+        where t.organization_id = account.organization_id
+          and t.source_domain = 'finance.account'
+          and t.source_id = account.id
+          and t.transaction_type = 'OPENING_BALANCE'
+      ) as has_opening_balance
     from finance.financial_accounts account
     left join finance.financial_account_entries entry
       on entry.organization_id=account.organization_id and entry.financial_account_id=account.id
@@ -573,6 +591,11 @@ export async function getFinancialAccountDetail(
     version: account.version,
     ledger_balance: account.ledger_balance,
     last_movement_at: account.last_movement_at,
+    hasOpeningBalance: Boolean(account.has_opening_balance),
+    canSetOpeningBalance:
+      !account.has_opening_balance &&
+      moneyUnits(account.ledger_balance) === 0n &&
+      account.status === 'ACTIVE',
     summary: {
       totalInflow: account.total_inflow,
       totalOutflow: account.total_outflow,
@@ -700,7 +723,7 @@ export async function changeFinancialAccountStatus(
       'VALIDATION_FAILED',
       'Account status changes require a meaningful reason.',
     );
-  return db.transaction().execute(async (tx) => {
+  return withFinanceTransaction(db, async (tx) => {
     const current = await sql<{
       status: 'ACTIVE' | 'INACTIVE';
       version: string;
@@ -781,7 +804,7 @@ export async function createFinancialAccount(
     );
   }
 
-  return db.transaction().execute(async (tx) => {
+  return withFinanceTransaction(db, async (tx) => {
     const idempotency = await claim(tx, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -847,6 +870,147 @@ export async function createFinancialAccount(
     return { id };
   });
 }
+
+export interface SetFinancialAccountOpeningBalanceInput {
+  organizationId: string;
+  actorId: string;
+  accountId: string;
+  amount: string;
+  description?: string;
+  idempotencyKey: string;
+}
+
+export async function setFinancialAccountOpeningBalance(
+  db: Kysely<DatabaseSchema>,
+  input: SetFinancialAccountOpeningBalanceInput,
+) {
+  const rawAmount = input.amount?.replace(/,/g, '').trim();
+  if (!rawAmount) {
+    throw new FinanceDomainError('VALIDATION_FAILED', 'Opening balance amount is required.');
+  }
+  const units = moneyUnits(rawAmount);
+  if (units <= 0n) {
+    throw new FinanceDomainError(
+      'VALIDATION_FAILED',
+      'Opening balance amount must be greater than zero.',
+    );
+  }
+  const amount = signed(rawAmount);
+
+  return withFinanceTransaction(db, async (tx) => {
+    const idempotency = await claim(tx, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      operation: 'finance.account.set_opening_balance',
+      key: input.idempotencyKey,
+      body: {
+        organizationId: input.organizationId,
+        accountId: input.accountId,
+        amount: rawAmount,
+      },
+    });
+
+    if (!idempotency.created) {
+      const existing = await sql<{
+        id: string;
+      }>`select t.id
+        from finance.finance_transactions t
+        where t.organization_id = ${input.organizationId}
+          and t.source_domain = 'finance.account'
+          and t.source_id = ${input.accountId}
+          and t.transaction_type = 'OPENING_BALANCE'`.execute(tx);
+      if (existing.rows[0]) {
+        return {
+          id: input.accountId,
+          transactionId: existing.rows[0].id,
+        };
+      }
+    }
+
+    const accountResult = await sql<{
+      id: string;
+      status: string;
+      currency_code: string;
+      ledger_balance: string;
+      has_opening_balance: boolean;
+    }>`select account.id, account.status, account.currency_code,
+        coalesce((
+          select sum(entry.amount_delta)
+          from finance.financial_account_entries entry
+          where entry.organization_id = account.organization_id
+            and entry.financial_account_id = account.id
+        ), 0)::numeric(20,4)::text as ledger_balance,
+        exists(
+          select 1 from finance.finance_transactions t
+          where t.organization_id = account.organization_id
+            and t.source_domain = 'finance.account'
+            and t.source_id = account.id
+            and t.transaction_type = 'OPENING_BALANCE'
+        ) as has_opening_balance
+      from finance.financial_accounts account
+      where account.organization_id = ${input.organizationId}
+        and account.id = ${input.accountId}
+      for update`.execute(tx);
+
+    const account = accountResult.rows[0];
+    if (!account) {
+      throw new FinanceDomainError('NOT_FOUND', 'Financial account was not found.');
+    }
+    if (account.status !== 'ACTIVE') {
+      throw new FinanceDomainError(
+        'CONFLICT',
+        'Opening balance can only be set on an ACTIVE financial account.',
+      );
+    }
+    if (account.has_opening_balance) {
+      throw new FinanceDomainError(
+        'CONFLICT',
+        'An opening balance has already been set for this account.',
+      );
+    }
+    if (moneyUnits(account.ledger_balance) !== 0n) {
+      throw new FinanceDomainError(
+        'CONFLICT',
+        'Opening balance can only be set when current account balance is zero.',
+      );
+    }
+
+    const description = input.description?.trim() || 'Opening balance';
+    const openingTransactionId = await movement(tx, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      accountId: account.id,
+      amount,
+      currency: account.currency_code,
+      type: 'OPENING_BALANCE',
+      description,
+      sourceDomain: 'finance.account',
+      sourceId: account.id,
+    });
+
+    await outbox(tx, input.organizationId, 'finance.account.opened', openingTransactionId);
+
+    await appendAuditEvent(tx, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'finance.account.opening_balance_set',
+      targetType: 'finance.financial_account',
+      targetId: account.id,
+      afterDiff: {
+        amount,
+        currency: account.currency_code,
+        transactionId: openingTransactionId,
+      },
+    });
+
+    return {
+      id: account.id,
+      transactionId: openingTransactionId,
+    };
+  });
+}
+
 export async function createExpenseCategory(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; code: string; name: string; classification?: string },

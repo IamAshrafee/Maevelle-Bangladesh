@@ -1572,7 +1572,16 @@ export interface FinanceAccountDetailDto extends FinancialAccountDto {
     readonly differenceAmount: string;
     readonly observedAt: string;
   } | null;
+  readonly hasOpeningBalance?: boolean;
+  readonly canSetOpeningBalance?: boolean;
 }
+
+export interface SetFinancialAccountOpeningBalanceRequest {
+  readonly amount: string;
+  readonly description?: string;
+  readonly idempotencyKey?: string;
+}
+
 
 export interface FinanceExpenseDto {
   readonly id: string;

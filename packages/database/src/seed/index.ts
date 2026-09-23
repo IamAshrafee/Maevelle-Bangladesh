@@ -11,6 +11,7 @@ export * from './data/product-types.js';
 export * from './data/product-type-attributes.js';
 export * from './data/warehouses.js';
 export * from './data/colors.js';
+export * from './data/accounts.js';
 export * from './modules/categories.seed.js';
 export * from './modules/vocabulary.seed.js';
 export * from './modules/tags.seed.js';
@@ -21,6 +22,7 @@ export * from './modules/product-types.seed.js';
 export * from './modules/product-type-attributes.seed.js';
 export * from './modules/warehouses.seed.js';
 export * from './modules/colors.seed.js';
+export * from './modules/accounts.seed.js';
 export * from './runner.js';
 
 

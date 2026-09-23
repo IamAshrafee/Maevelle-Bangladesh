@@ -100,4 +100,15 @@ export interface ColorSeedItem {
   readonly previousCodes?: readonly string[];
 }
 
+export interface FinancialAccountSeedItem {
+  readonly accountNumber: string;
+  readonly name: string;
+  readonly accountType: 'CASH' | 'BANK' | 'MOBILE_WALLET' | 'OTHER';
+  readonly currencyCode: string;
+  readonly referenceLabel?: string | null;
+  readonly openingBalance?: string;
+  readonly status?: 'ACTIVE' | 'INACTIVE';
+  readonly previousAccountNumbers?: readonly string[];
+}
+
 

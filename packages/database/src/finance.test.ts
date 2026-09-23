@@ -738,4 +738,112 @@ describe('Finance operational cash ledger', () => {
       message: 'Transfer accounts must differ.',
     });
   });
+
+  it('supports setting initial opening balance and enforces invariants', async () => {
+    const org = await organization('opening-bal-test');
+
+    // Create an account with zero opening balance
+    const zeroAcc = await finance.createFinancialAccount(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountNumber: 'CASH-DRAWER-1',
+      name: 'Test Cash Drawer',
+      accountType: 'CASH',
+      currencyCode: 'BDT',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const initialDetail = await finance.getFinancialAccountDetail(database.db, org, zeroAcc.id);
+    expect(initialDetail.hasOpeningBalance).toBe(false);
+    expect(initialDetail.canSetOpeningBalance).toBe(true);
+    expect(decimal(initialDetail.ledger_balance)).toBe('0.0000');
+
+    // Invalid amount (0 or negative)
+    await expect(
+      finance.setFinancialAccountOpeningBalance(database.db, {
+        organizationId: org,
+        actorId: actor,
+        accountId: zeroAcc.id,
+        amount: '0',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+
+    // Successfully set opening balance
+    const idempotencyKey = crypto.randomUUID();
+    const setResult = await finance.setFinancialAccountOpeningBalance(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountId: zeroAcc.id,
+      amount: ' 10,500.00 ',
+      description: 'Initial drawer float',
+      idempotencyKey,
+    });
+    expect(setResult.id).toBe(zeroAcc.id);
+    expect(setResult.transactionId).toBeDefined();
+
+    // Idempotent retry returns the same transaction
+    const replayResult = await finance.setFinancialAccountOpeningBalance(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountId: zeroAcc.id,
+      amount: ' 10,500.00 ',
+      idempotencyKey,
+    });
+    expect(replayResult.transactionId).toBe(setResult.transactionId);
+
+    // Detail after opening balance
+    const updatedDetail = await finance.getFinancialAccountDetail(database.db, org, zeroAcc.id);
+    expect(updatedDetail.hasOpeningBalance).toBe(true);
+    expect(updatedDetail.canSetOpeningBalance).toBe(false);
+    expect(decimal(updatedDetail.ledger_balance)).toBe('10500.0000');
+
+    // Attempting to set opening balance again with a new key fails
+    await expect(
+      finance.setFinancialAccountOpeningBalance(database.db, {
+        organizationId: org,
+        actorId: actor,
+        accountId: zeroAcc.id,
+        amount: '5000',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'An opening balance has already been set for this account.',
+    });
+
+    // Inactive account cannot have opening balance set
+    const inactiveAcc = await finance.createFinancialAccount(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountNumber: 'INACTIVE-1',
+      name: 'Inactive Account',
+      accountType: 'OTHER',
+      currencyCode: 'BDT',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await finance.changeFinancialAccountStatus(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountId: inactiveAcc.id,
+      status: 'INACTIVE',
+      expectedVersion: 1,
+      reason: 'Deactivated immediately for testing',
+    });
+    await expect(
+      finance.setFinancialAccountOpeningBalance(database.db, {
+        organizationId: org,
+        actorId: actor,
+        accountId: inactiveAcc.id,
+        amount: '5000',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'Opening balance can only be set on an ACTIVE financial account.',
+    });
+  });
 });
+

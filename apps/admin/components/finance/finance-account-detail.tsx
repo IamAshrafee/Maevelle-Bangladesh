@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, CheckCircle2, Power, RefreshCw, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Coins, Power, RefreshCw, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 
@@ -11,6 +11,7 @@ import type {
 } from '@maevelle/contracts';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
+import { SetOpeningBalanceDialog } from '@/components/finance/set-opening-balance-dialog';
 import { ActivitySection } from '@/components/finance/finance-sections';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,7 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
   const [statusReason, setStatusReason] = useState('');
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState('');
+  const [openingBalanceDialogOpen, setOpeningBalanceDialogOpen] = useState(false);
 
   const canManage = useAdminCapability('finance.accounts.manage');
 
@@ -138,6 +140,15 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {canManage && account.canSetOpeningBalance ? (
+              <Button
+                variant="default"
+                onClick={() => setOpeningBalanceDialogOpen(true)}
+              >
+                <Coins className="mr-1.5 size-4" />
+                Set opening balance
+              </Button>
+            ) : null}
             {canManage ? (
               <Button
                 variant={isAccountActive ? 'outline' : 'default'}
@@ -156,6 +167,30 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
             </Button>
           </div>
         </header>
+
+        {account.canSetOpeningBalance ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">
+                Initial Opening Balance Available
+              </p>
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                This account currently has a zero balance and no opening float recorded. Operators can record a one-time starting balance.
+              </p>
+            </div>
+            {canManage ? (
+              <Button
+                size="sm"
+                onClick={() => setOpeningBalanceDialogOpen(true)}
+                className="w-full shrink-0 sm:w-auto"
+              >
+                <Coins className="mr-1.5 size-4" />
+                Set opening balance
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="grid gap-4 sm:grid-cols-3">
           <Card>
             <CardHeader>
@@ -290,6 +325,13 @@ export function FinanceAccountDetail({ accountId }: { readonly accountId: string
           </form>
         </DialogContent>
       </Dialog>
+
+      <SetOpeningBalanceDialog
+        open={openingBalanceDialogOpen}
+        onOpenChange={setOpeningBalanceDialogOpen}
+        account={account}
+        onSuccess={load}
+      />
     </main>
   );
 }

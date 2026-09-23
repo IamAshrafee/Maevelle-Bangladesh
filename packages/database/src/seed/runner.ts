@@ -10,6 +10,7 @@ import { sizingSeedModule } from './modules/sizing.seed.js';
 import { tagsSeedModule } from './modules/tags.seed.js';
 import { warehousesSeedModule } from './modules/warehouses.seed.js';
 import { colorsSeedModule } from './modules/colors.seed.js';
+import { accountsSeedModule } from './modules/accounts.seed.js';
 import type { SeedContext, SeedModule, SeedModuleResult, SeedRunnerOptions } from './types.js';
 
 export const DEFAULT_SEED_MODULES: readonly SeedModule[] = [
@@ -22,6 +23,7 @@ export const DEFAULT_SEED_MODULES: readonly SeedModule[] = [
   sizingSeedModule,
   warehousesSeedModule,
   colorsSeedModule,
+  accountsSeedModule,
 ];
 
 

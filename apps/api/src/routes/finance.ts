@@ -177,6 +177,41 @@ export function registerFinanceRoutes(
     },
   );
   app.post(
+    '/admin/finance/accounts/:id/opening-balance',
+    {
+      schema: {
+        body: Type.Object({
+          amount: Type.String({ minLength: 1, maxLength: 30 }),
+          description: Type.Optional(Type.String({ maxLength: 500 })),
+          idempotencyKey: Type.Optional(key),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'finance.accounts.manage');
+      if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const p = body<{
+          amount: string;
+          description?: string;
+          idempotencyKey?: string;
+        }>(req.body);
+        return reply.code(201).send({
+          data: await finance.setFinancialAccountOpeningBalance(database.db, {
+            organizationId: a.organizationId,
+            actorId: a.actorId,
+            accountId: (req.params as { id: string }).id,
+            amount: p.amount,
+            ...(p.description ? { description: p.description } : {}),
+            idempotencyKey: p.idempotencyKey ?? crypto.randomUUID(),
+          }),
+        });
+      } catch (e) {
+        return failure(reply, e);
+      }
+    },
+  );
+  app.post(
     '/admin/finance/accounts',
     {
       schema: {
