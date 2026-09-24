@@ -70,7 +70,9 @@ export async function rebuildSalesFacts(
         join orders.orders ord on ord.id=line.order_id and ord.organization_id=line.organization_id
         join platform.organizations organization on organization.id=ord.organization_id
         left join recognized_cost cost on cost.order_line_id=line.id
-        where line.organization_id=${organizationId} and ord.order_status <> 'CANCELLED'
+        where line.organization_id=${organizationId}
+          and line.line_status='ACTIVE'
+          and ord.order_status <> 'CANCELLED'
         returning 1
       `.execute(tx);
       await sql`update analytics.sales_facts fact set refund_attributed_amount=refund.amount * (fact.net_amount/nullif(summary.net_amount,0)),gross_margin_amount=case when fact.acquisition_cost_amount is null then null else fact.net_amount-(refund.amount * (fact.net_amount/nullif(summary.net_amount,0)))-fact.acquisition_cost_amount end from (select order_id,sum(net_amount) net_amount from analytics.sales_facts where organization_id=${organizationId} group by order_id) summary join (select order_id,sum(amount) amount from payments.refunds where organization_id=${organizationId} and status='COMPLETED' group by order_id) refund on refund.order_id=summary.order_id where fact.organization_id=${organizationId} and fact.order_id=summary.order_id`.execute(

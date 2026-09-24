@@ -1582,7 +1582,6 @@ export interface SetFinancialAccountOpeningBalanceRequest {
   readonly idempotencyKey?: string;
 }
 
-
 export interface FinanceExpenseDto {
   readonly id: string;
   readonly expense_number: string;
@@ -1779,16 +1778,55 @@ export interface FinanceOverviewDto {
   readonly recentActivity: readonly FinanceLedgerEntryDto[];
 }
 
+export type OrderStatusDto = 'PENDING' | 'CONFIRMED' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+export type OrderSourceDto = 'STOREFRONT' | 'MANUAL';
+export type OrderSalesChannelDto =
+  | 'STOREFRONT'
+  | 'ADMIN'
+  | 'FACEBOOK'
+  | 'INSTAGRAM'
+  | 'WHATSAPP'
+  | 'PHONE'
+  | 'EXTERNAL_API'
+  | 'IMPORT';
+export type OrderPaymentStatusDto =
+  | 'UNPAID'
+  | 'PAYMENT_PENDING'
+  | 'PARTIALLY_PAID'
+  | 'PAID'
+  | 'PARTIALLY_REFUNDED'
+  | 'REFUNDED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+export type OrderFulfillmentStatusDto =
+  'UNFULFILLED' | 'PARTIALLY_FULFILLED' | 'IN_PROGRESS' | 'FULFILLED' | 'CANCELLED';
+export type OrderDeliveryStatusDto =
+  | 'NOT_STARTED'
+  | 'PENDING'
+  | 'IN_TRANSIT'
+  | 'PARTIALLY_DELIVERED'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'CANCELLED';
+
 export interface OrderSummaryDto {
   readonly id: string;
   readonly orderNumber: string;
-  readonly status: string;
+  readonly status: OrderStatusDto;
+  readonly source: OrderSourceDto;
+  readonly salesChannel: OrderSalesChannelDto;
+  readonly paymentMethod: PaymentMethodCodeDto;
+  readonly paymentStatus: OrderPaymentStatusDto;
+  readonly fulfillmentStatus: OrderFulfillmentStatusDto;
+  readonly deliveryStatus: OrderDeliveryStatusDto;
   readonly total: string;
+  readonly deliveryAmount: string;
   readonly currency: string;
   readonly createdAt: string;
-  readonly customerId?: string;
+  readonly customerId?: string | null;
   readonly customerName?: string;
-  readonly customerEmail?: string;
+  readonly customerPhone?: string;
+  readonly customerEmail?: string | null;
 }
 
 export interface OrderDetailDto extends OrderSummaryDto {
@@ -1797,6 +1835,27 @@ export interface OrderDetailDto extends OrderSummaryDto {
   readonly notes: readonly OrderNoteDto[];
   readonly timeline: readonly OrderTimelineEventDto[];
   readonly payment: OrderPaymentSummaryDto;
+  readonly merchandiseGross: string;
+  readonly discountTotal: string;
+  readonly merchandiseNet: string;
+  readonly taxAmount: string;
+  readonly customer: {
+    readonly displayName: string;
+    readonly phone: string;
+    readonly email: string | null;
+  };
+  readonly address: {
+    readonly recipientName: string;
+    readonly phone: string;
+    readonly addressLine1: string;
+    readonly addressLine2?: string;
+    readonly geographyNodeId?: string;
+    readonly area?: string;
+    readonly city?: string;
+    readonly district?: string;
+    readonly postalCode?: string;
+    readonly countryCode: string;
+  };
   readonly fulfillments?: readonly {
     readonly id: string;
     readonly fulfillmentNumber: string;
@@ -1837,24 +1896,35 @@ export interface OrderDetailDto extends OrderSummaryDto {
 
 export interface OrderLineDto {
   readonly id: string;
-  readonly variantId: string;
+  readonly variantId: string | null;
   readonly sku: string;
   readonly productTitle: string;
-  readonly quantity: number;
+  readonly variantTitle: string | null;
+  readonly quantity: string;
   readonly unitPrice: string;
-  readonly total: string;
+  readonly gross: string;
+  readonly discount: string;
+  readonly net: string;
+  readonly status: 'ACTIVE' | 'CANCELLED';
+  readonly cancellationReasonCode: string | null;
+  readonly cancellationReasonText: string | null;
+  readonly cancelledAt: string | null;
+  readonly options: readonly { readonly name: string; readonly value: string }[];
 }
 
 export interface OrderNoteDto {
   readonly id: string;
+  readonly noteType: 'INTERNAL' | 'CUSTOMER_VISIBLE';
   readonly body: string;
   readonly createdAt: string;
-  readonly authorId: string;
+  readonly authorActorId: string;
 }
 
 export interface OrderTimelineEventDto {
   readonly id: string;
   readonly eventType: string;
+  readonly aggregateType: string;
+  readonly aggregateId: string;
   readonly occurredAt: string;
   readonly payload: Record<string, unknown>;
 }
@@ -1870,46 +1940,84 @@ export interface OrderPaymentSummaryDto {
 
 export interface CustomerSummaryDto {
   readonly id: string;
+  readonly customerNumber: string;
   readonly displayName: string;
-  readonly email?: string;
-  readonly phone?: string;
-  readonly status: string;
+  readonly status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'MERGED' | 'ANONYMIZED';
+  readonly version: number;
+  readonly firstSource: CustomerSourceDto;
+  readonly latestSource: CustomerSourceDto;
+  readonly primaryEmail?: string | null;
+  readonly primaryPhone?: string | null;
+  readonly orderCount?: number;
+  readonly totalSpend?: string;
+  readonly lastOrderAt?: string | null;
   readonly createdAt: string;
 }
 
+export type CustomerSourceDto =
+  | 'STOREFRONT'
+  | 'MANUAL_ORDER'
+  | 'FACEBOOK'
+  | 'INSTAGRAM'
+  | 'WHATSAPP'
+  | 'PHONE'
+  | 'IMPORT'
+  | 'ADMIN_CREATED'
+  | 'EXTERNAL_API';
+
 export interface CustomerDetailDto extends CustomerSummaryDto {
-  readonly version: number;
+  readonly canonicalCustomerId?: string;
   readonly addresses: readonly CustomerAddressDto[];
   readonly phones: readonly CustomerPhoneDto[];
   readonly emails: readonly CustomerEmailDto[];
   readonly tags: readonly CustomerTagDto[];
   readonly notes: readonly CustomerNoteDto[];
+  readonly commerceMetrics: {
+    readonly totalOrders: number;
+    readonly activeOrders: number;
+    readonly cancelledOrders: number;
+    readonly lifetimeOrderValue: string;
+    readonly collectedAmount: string;
+    readonly refundedAmount: string;
+    readonly lastOrderAt: string | null;
+  };
 }
 
 export interface CustomerPhoneDto {
   readonly id: string;
   readonly phone: string;
+  readonly normalizedPhone: string;
   readonly isPrimary: boolean;
+  readonly verificationStatus: string;
+  readonly createdAt: string;
 }
 
 export interface CustomerEmailDto {
   readonly id: string;
   readonly email: string;
+  readonly normalizedEmail: string;
   readonly isPrimary: boolean;
-  readonly isVerified: boolean;
+  readonly verificationStatus: string;
+  readonly createdAt: string;
 }
 
 export interface CustomerAddressDto {
   readonly id: string;
   readonly addressLine1: string;
-  readonly addressLine2?: string;
-  readonly city?: string;
+  readonly addressLine2: string | null;
+  readonly city: string | null;
   readonly isDefault: boolean;
   readonly version: number;
-  readonly label?: string;
-  readonly recipientName?: string;
-  readonly phone?: string;
+  readonly label: string | null;
+  readonly recipientName: string;
+  readonly phone: string | null;
+  readonly geographyNodeId: string | null;
+  readonly area: string | null;
+  readonly district: string | null;
+  readonly postalCode: string | null;
+  readonly countryCode: string;
   readonly status: string;
+  readonly createdAt: string;
 }
 
 export interface CustomerTagDto {
@@ -1922,5 +2030,33 @@ export interface CustomerNoteDto {
   readonly id: string;
   readonly body: string;
   readonly createdAt: string;
-  readonly authorId: string;
+  readonly authorActorId: string;
+}
+
+export interface CreateManualOrderInputDto {
+  readonly customerId: string;
+  readonly locationId: string;
+  readonly lines: readonly {
+    readonly variantId: string;
+    readonly quantity: string;
+    readonly unitPrice?: string;
+    readonly priceOverrideReason?: string;
+  }[];
+  readonly deliveryAddress: {
+    readonly recipientName: string;
+    readonly phone: string;
+    readonly addressLine1: string;
+    readonly addressLine2?: string;
+    readonly geographyNodeId?: string;
+    readonly area?: string;
+    readonly city?: string;
+    readonly district?: string;
+    readonly postalCode?: string;
+    readonly countryCode: string;
+    readonly saveToCustomer?: boolean;
+  };
+  readonly deliveryAmount: string;
+  readonly paymentMethod: PaymentMethodCodeDto;
+  readonly salesChannel: Exclude<OrderSalesChannelDto, 'STOREFRONT'>;
+  readonly currency?: string;
 }

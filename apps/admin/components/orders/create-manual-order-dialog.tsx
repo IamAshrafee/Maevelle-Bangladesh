@@ -1,79 +1,138 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Box, CircleAlert, Loader2 } from 'lucide-react';
+import { CircleAlert, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
+import type {
+  CatalogVariantChoiceDto,
+  CreateManualOrderInputDto,
+  CustomerSummaryDto,
+  OrderDetailDto,
+  PaginatedEnvelope,
+  PaymentMethodDto,
+  WarehouseLocationDto,
+} from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchApiData } from '@/lib/api';
-import type { OrderDetailDto, WarehouseLocationDto, CatalogVariantChoiceDto } from '@maevelle/contracts';
+
+interface EditableLine {
+  readonly key: string;
+  readonly variantId: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly priceOverrideReason: string;
+}
+
+function emptyLine(): EditableLine {
+  return {
+    key: crypto.randomUUID(),
+    variantId: '',
+    quantity: '1',
+    unitPrice: '',
+    priceOverrideReason: '',
+  };
+}
+
+const selectClassName =
+  'flex min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 export function CreateManualOrderDialog() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  
-  const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
-  const [variants, setVariants] = useState<CatalogVariantChoiceDto[]>([]);
+  const [customers, setCustomers] = useState<readonly CustomerSummaryDto[]>([]);
+  const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
+  const [variants, setVariants] = useState<readonly CatalogVariantChoiceDto[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<readonly PaymentMethodDto[]>([]);
+  const [lines, setLines] = useState<readonly EditableLine[]>(() => [emptyLine()]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
+    const controller = new AbortController();
     async function load() {
       try {
-        const [locsData, varsData] = await Promise.all([
-          fetchApiData<WarehouseLocationDto[]>('/admin/warehouse/locations'),
-          fetchApiData<CatalogVariantChoiceDto[]>('/admin/catalog/variants')
+        const [customerPage, locationChoices, variantChoices, methods] = await Promise.all([
+          fetchApiData<PaginatedEnvelope<CustomerSummaryDto>>(
+            '/admin/customers?page=1&pageSize=100&status=ACTIVE',
+            { signal: controller.signal },
+          ),
+          fetchApiData<WarehouseLocationDto[]>('/admin/warehouse/locations', {
+            signal: controller.signal,
+          }),
+          fetchApiData<CatalogVariantChoiceDto[]>('/admin/catalog/variants', {
+            signal: controller.signal,
+          }),
+          fetchApiData<PaymentMethodDto[]>('/admin/payments/methods', {
+            signal: controller.signal,
+          }),
         ]);
-        if (mounted) {
-          setLocations(locsData || []);
-          setVariants(varsData || []);
-          setIsLoading(false);
-        }
-      } catch (err) {
-        if (mounted) {
-          console.error(err);
-          setIsLoading(false);
-        }
+        setCustomers(customerPage.items);
+        setLocations(locationChoices);
+        setVariants(variantChoices.filter((variant) => variant.status === 'ACTIVE'));
+        setPaymentMethods(methods.filter((method) => method.status === 'ACTIVE'));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setMessage(error instanceof Error ? error.message : 'Order choices could not be loaded.');
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     }
-    load();
-    return () => { mounted = false; };
+    void load();
+    return () => controller.abort();
   }, []);
 
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function updateLine(key: string, changes: Partial<Omit<EditableLine, 'key'>>) {
+    setLines((current) =>
+      current.map((line) => (line.key === key ? { ...line, ...changes } : line)),
+    );
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     if (busy || isLoading) return;
     setBusy(true);
-    
-    const formData = new FormData(e.currentTarget);
-    const payload = {
-      locationId: formData.get('locationId') as string,
-      paymentMethod: formData.get('paymentMethod') as string,
+    setMessage('');
+
+    const formData = new FormData(event.currentTarget);
+    const payload: CreateManualOrderInputDto = {
+      customerId: String(formData.get('customerId')),
+      locationId: String(formData.get('locationId')),
+      paymentMethod: formData.get('paymentMethod') as CreateManualOrderInputDto['paymentMethod'],
+      salesChannel: formData.get('salesChannel') as CreateManualOrderInputDto['salesChannel'],
+      deliveryAmount: String(formData.get('deliveryAmount') || '0'),
+      lines: lines.map((line) => ({
+        variantId: line.variantId,
+        quantity: line.quantity,
+        ...(line.unitPrice ? { unitPrice: line.unitPrice } : {}),
+        ...(line.priceOverrideReason ? { priceOverrideReason: line.priceOverrideReason } : {}),
+      })),
       deliveryAddress: {
-        addressLine1: formData.get('addressLine1') as string,
-        city: formData.get('city') as string,
+        recipientName: String(formData.get('recipientName')),
+        phone: String(formData.get('phone')),
+        addressLine1: String(formData.get('addressLine1')),
+        ...(formData.get('addressLine2')
+          ? { addressLine2: String(formData.get('addressLine2')) }
+          : {}),
+        ...(formData.get('area') ? { area: String(formData.get('area')) } : {}),
+        ...(formData.get('city') ? { city: String(formData.get('city')) } : {}),
+        ...(formData.get('district') ? { district: String(formData.get('district')) } : {}),
+        ...(formData.get('postalCode') ? { postalCode: String(formData.get('postalCode')) } : {}),
         countryCode: 'BD',
+        saveToCustomer: formData.get('saveToCustomer') === 'on',
       },
-      lines: [
-        {
-          variantId: formData.get('variantId') as string,
-          quantity: Number(formData.get('quantity')),
-        }
-      ]
     };
 
     try {
-      const data = await fetchApiData<{ order: OrderDetailDto }>('/admin/orders', {
+      const order = await fetchApiData<OrderDetailDto>('/admin/orders', {
         method: 'POST',
         body: JSON.stringify(payload),
-        headers: {
-          'idempotency-key': crypto.randomUUID(),
-        },
+        headers: { 'idempotency-key': crypto.randomUUID() },
       });
-      router.push(`/orders/${data.order.id}`);
+      router.push(`/orders/${order.id}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Order could not be created.');
       setBusy(false);
@@ -81,99 +140,243 @@ export function CreateManualOrderDialog() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="border-b pb-4">
-        <h2 className="text-xl font-semibold tracking-tight">Create Manual Order</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Bypass the storefront checkout to place an order on behalf of a customer.
+        <h1 className="text-xl font-semibold tracking-tight">Create manual order</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Capture a phone or social order using the same inventory, payment, and order rules as
+          checkout.
         </p>
       </div>
 
-      {message && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          <CircleAlert className="mt-0.5 size-4 shrink-0" />
-          <p className="leading-tight">{message}</p>
+      {message ? (
+        <div
+          className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+          role="alert"
+        >
+          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <p>{message}</p>
         </div>
-      )}
+      ) : null}
 
-      <form onSubmit={submit} className="space-y-6">
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium">Order Items</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="variantId">Variant ID</Label>
-              <select
-                id="variantId"
-                name="variantId"
-                required
-                disabled={isLoading || busy}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">{isLoading ? 'Loading variants...' : 'Select a variant'}</option>
-                {variants.map(v => (
-                  <option key={v.id} value={v.id}>{v.productTitle} - {v.optionSummary} ({v.sku})</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="quantity">Quantity</Label>
-              <Input id="quantity" name="quantity" type="number" min="1" required defaultValue="1" />
-            </div>
+      <form onSubmit={submit} className="space-y-7">
+        <section className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="customerId">Customer</Label>
+            <select
+              id="customerId"
+              name="customerId"
+              required
+              disabled={isLoading || busy}
+              className={selectClassName}
+            >
+              <option value="">Select a customer</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.displayName} · {customer.primaryPhone ?? customer.customerNumber}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Create the customer first if this is a new buyer; the order keeps its own historical
+              snapshot.
+            </p>
           </div>
-        </div>
-
-        <div className="space-y-4 border-t pt-4">
-          <h3 className="text-sm font-medium">Fulfillment & Payment</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="locationId">Fulfillment Location ID</Label>
-              <select
-                id="locationId"
-                name="locationId"
-                required
-                disabled={isLoading || busy}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">{isLoading ? 'Loading locations...' : 'Select a location'}</option>
-                {locations.map(l => (
-                  <option key={l.id} value={l.id}>{l.name} ({l.code})</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="paymentMethod">Payment Method</Label>
-              <select 
-                id="paymentMethod" 
-                name="paymentMethod" 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                required
-              >
-                <option value="COD">Cash on Delivery (COD)</option>
-                <option value="BKASH">bKash</option>
-              </select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="salesChannel">Sales channel</Label>
+            <select
+              id="salesChannel"
+              name="salesChannel"
+              defaultValue="ADMIN"
+              className={selectClassName}
+            >
+              <option value="ADMIN">Admin entry</option>
+              <option value="FACEBOOK">Facebook</option>
+              <option value="INSTAGRAM">Instagram</option>
+              <option value="WHATSAPP">WhatsApp</option>
+              <option value="PHONE">Phone</option>
+              <option value="EXTERNAL_API">External API</option>
+              <option value="IMPORT">Import</option>
+            </select>
           </div>
-        </div>
-
-        <div className="space-y-4 border-t pt-4">
-          <h3 className="text-sm font-medium">Delivery Address</h3>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="addressLine1">Address Line 1</Label>
-              <Input id="addressLine1" name="addressLine1" required placeholder="123 Main St" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="city">City</Label>
-              <Input id="city" name="city" required placeholder="Dhaka" />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="locationId">Stock location</Label>
+            <select
+              id="locationId"
+              name="locationId"
+              required
+              disabled={isLoading || busy}
+              className={selectClassName}
+            >
+              <option value="">Select a location</option>
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name} ({location.code})
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
+        </section>
 
-        <div className="flex justify-end gap-3 border-t pt-4">
-          <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-          <Button type="submit" disabled={busy}>
-            {busy && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Create Order
+        <section className="space-y-4 border-t pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-medium">Order items</h2>
+              <p className="text-xs text-muted-foreground">
+                Leave price blank to use the active Catalog price.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setLines((current) => [...current, emptyLine()])}
+            >
+              <Plus aria-hidden="true" /> Add item
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {lines.map((line, index) => (
+              <div key={line.key} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-12">
+                <div className="space-y-2 sm:col-span-5">
+                  <Label htmlFor={`variant-${line.key}`}>Variant {index + 1}</Label>
+                  <select
+                    id={`variant-${line.key}`}
+                    required
+                    value={line.variantId}
+                    onChange={(event) => updateLine(line.key, { variantId: event.target.value })}
+                    className={selectClassName}
+                  >
+                    <option value="">Select a variant</option>
+                    {variants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.productTitle} · {variant.optionSummary || variant.sku}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor={`quantity-${line.key}`}>Quantity</Label>
+                  <Input
+                    id={`quantity-${line.key}`}
+                    inputMode="decimal"
+                    required
+                    value={line.quantity}
+                    onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor={`price-${line.key}`}>Override price</Label>
+                  <Input
+                    id={`price-${line.key}`}
+                    inputMode="decimal"
+                    placeholder="Catalog"
+                    value={line.unitPrice}
+                    onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })}
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor={`reason-${line.key}`}>Override reason</Label>
+                  <Input
+                    id={`reason-${line.key}`}
+                    disabled={!line.unitPrice}
+                    required={Boolean(line.unitPrice)}
+                    value={line.priceOverrideReason}
+                    onChange={(event) =>
+                      updateLine(line.key, { priceOverrideReason: event.target.value })
+                    }
+                  />
+                </div>
+                <div className="flex items-end sm:col-span-1">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Remove item ${index + 1}`}
+                    disabled={lines.length === 1}
+                    onClick={() =>
+                      setLines((current) => current.filter((item) => item.key !== line.key))
+                    }
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="grid gap-4 border-t pt-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="paymentMethod">Payment method</Label>
+            <select id="paymentMethod" name="paymentMethod" required className={selectClassName}>
+              <option value="">Select a payment method</option>
+              {paymentMethods.map((method) => (
+                <option key={method.id} value={method.code}>
+                  {method.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="deliveryAmount">Delivery charge</Label>
+            <Input
+              id="deliveryAmount"
+              name="deliveryAmount"
+              inputMode="decimal"
+              defaultValue="0"
+              required
+            />
+          </div>
+        </section>
+
+        <section className="grid gap-4 border-t pt-5 sm:grid-cols-2">
+          <h2 className="font-medium sm:col-span-2">Delivery address</h2>
+          <div className="space-y-2">
+            <Label htmlFor="recipientName">Recipient name</Label>
+            <Input id="recipientName" name="recipientName" required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Delivery phone</Label>
+            <Input id="phone" name="phone" type="tel" required />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="addressLine1">Address line 1</Label>
+            <Input id="addressLine1" name="addressLine1" required />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="addressLine2">Address line 2</Label>
+            <Input id="addressLine2" name="addressLine2" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="area">Area</Label>
+            <Input id="area" name="area" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="city">City</Label>
+            <Input id="city" name="city" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="district">District</Label>
+            <Input id="district" name="district" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="postalCode">Postal code</Label>
+            <Input id="postalCode" name="postalCode" />
+          </div>
+          <label className="flex min-h-11 items-center gap-3 sm:col-span-2">
+            <input type="checkbox" name="saveToCustomer" className="size-4" />
+            <span className="text-sm">Save this address to the customer profile</span>
+          </label>
+        </section>
+
+        <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={() => router.back()} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy || isLoading}>
+            {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+            Create order
           </Button>
         </div>
       </form>

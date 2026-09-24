@@ -1,16 +1,16 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "admin-payments-finance",
-  "active_substage": "FOUNDATION",
-  "active_status": "IN_PROGRESS",
+  "active_area": "admin-commerce-orders-customers",
+  "active_substage": "IMPLEMENTATION_COMPLETE",
+  "active_status": "VERIFICATION_PENDING",
   "baseline_commit": "a32c40d",
   "last_checkpoint_commit": "e799499",
   "last_verified_commit": "e799499",
-  "last_completed_action": "Completed the daily Expense workflow with scalable cross-module filters, optional account-backed payment at creation, payee/reference/notes context, responsive detail and payment history, safe versioned adjustments and unpaid cancellation, idempotent retries, audit, and outbox evidence. 31 focused tests plus targeted TypeScript, lint, production builds, and fresh migrations pass.",
-  "next_action": "Scale Financial Activity and account detail with paginated server filters and authoritative account summaries, then complete explicit account lifecycle controls and authenticated responsive review.",
+  "last_completed_action": "Completed Commerce Orders/Customers implementation: authoritative lifecycle projections and worklists, controlled line cancellation and address correction, Customer merge/anonymization, notes, filtering, evidence, capabilities, and responsive Admin controls. Fresh development/test baselines, 32 focused tests, targeted lint, and Database/API/Admin production builds pass.",
+  "next_action": "Perform authenticated owner review at mobile, tablet/iPad, and desktop widths and record any concrete UX defects.",
   "interrupted": false,
   "blocked_by": [],
-  "owner_review_status": "NOT_APPLICABLE",
+  "owner_review_status": "PENDING",
   "verified_complete_areas": []
 }

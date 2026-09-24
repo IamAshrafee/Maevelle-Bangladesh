@@ -11,8 +11,8 @@ means meaningful current implementation exists; it does not mean acceptance.
 | Sizing | `CODE_SUBSTANTIAL` | `sizing.*`, Admin sizing routes, PDP size guide |
 | Pricing and promotions | `CODE_SUBSTANTIAL` | `pricing.*`, `promotions.*`, Admin pages |
 | Warehouse and inventory | `ACTIVE_ASSESSMENT_COMPLETE` | Current-head report and roadmap in `areas/admin-inventory-operations`; `warehouse.*`, `inventory.*`, Admin Inventory, Orders, Supply, Fulfillment, Returns, Costing, Search and Analytics traces |
-| Customers and geography | `CODE_SUBSTANTIAL` | `customers.*`, `geography.*`, Admin customer routes |
-| Cart, checkout and orders | `CODE_SUBSTANTIAL` | `cart.*`, `orders.*`, Storefront and Admin order routes |
+| Customers and geography | `IMPLEMENTATION_COMPLETE / VERIFICATION_PENDING` | Completion evidence in `areas/admin-commerce-orders-customers`; `customers.*`, `geography.*`, Admin customer routes |
+| Cart, checkout and orders | `IMPLEMENTATION_COMPLETE / VERIFICATION_PENDING` | Completion evidence in `areas/admin-commerce-orders-customers`; `cart.*`, `orders.*`, Storefront and Admin order routes |
 | Payments and refunds | `ACTIVE_IMPLEMENTATION` | Assessment and foundation checkpoint in `areas/admin-payments-finance`; `payments.*`, payment/admin routes |
 | Supply, receiving and costing | `CODE_SUBSTANTIAL` | procurement, inbound shipment, receiving, landed-cost and costing modules |
 | Fulfillment and delivery | `CODE_SUBSTANTIAL` | fulfillment/delivery modules and Admin workspaces |

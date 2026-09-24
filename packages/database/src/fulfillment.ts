@@ -287,7 +287,10 @@ export async function createFulfillment(
         from orders.order_lines order_line
         join orders.order_inventory_reservations bridge on bridge.order_line_id = order_line.id
         join inventory.inventory_reservation_allocations allocation on allocation.reservation_id = bridge.reservation_id
-        where order_line.organization_id = ${input.organizationId} and order_line.order_id = ${input.orderId} and order_line.id = ${line.orderLineId}
+        where order_line.organization_id = ${input.organizationId}
+          and order_line.order_id = ${input.orderId}
+          and order_line.id = ${line.orderLineId}
+          and order_line.line_status = 'ACTIVE'
         for update of order_line, allocation
       `.execute(transaction);
       const sourceRow = source.rows[0];

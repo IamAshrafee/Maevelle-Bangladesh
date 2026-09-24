@@ -23,6 +23,8 @@ import {
   createTag,
   assignTagToCustomer,
   removeTagFromCustomer,
+  mergeCustomers,
+  anonymizeCustomer,
 } from '@maevelle/database/customers';
 import { searchGeography } from '@maevelle/database/geography';
 import { findActiveAdminContext } from '@maevelle/database/platform';
@@ -62,7 +64,7 @@ function sendError(
     .code(
       error.code === 'NOT_FOUND'
         ? 404
-        : error.code === 'CONFLICT' || error.code === 'STALE_VERSION'
+        : ['CONFLICT', 'STALE_VERSION', 'IDEMPOTENCY_CONFLICT'].includes(error.code)
           ? 409
           : 422,
     )
@@ -90,6 +92,30 @@ export function registerCustomerRoutes(
       schema: {
         querystring: Type.Object({
           q: Type.Optional(Type.String()),
+          status: Type.Optional(
+            Type.Union([
+              Type.Literal('ACTIVE'),
+              Type.Literal('INACTIVE'),
+              Type.Literal('BLOCKED'),
+              Type.Literal('MERGED'),
+              Type.Literal('ANONYMIZED'),
+            ]),
+          ),
+          source: Type.Optional(
+            Type.Union([
+              Type.Literal('STOREFRONT'),
+              Type.Literal('MANUAL_ORDER'),
+              Type.Literal('FACEBOOK'),
+              Type.Literal('INSTAGRAM'),
+              Type.Literal('WHATSAPP'),
+              Type.Literal('PHONE'),
+              Type.Literal('IMPORT'),
+              Type.Literal('ADMIN_CREATED'),
+              Type.Literal('EXTERNAL_API'),
+            ]),
+          ),
+          from: Type.Optional(Type.String({ format: 'date-time' })),
+          to: Type.Optional(Type.String({ format: 'date-time' })),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
@@ -98,28 +124,52 @@ export function registerCustomerRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'customers.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      const query = request.query as { q?: string; page?: number; pageSize?: number };
-      const filters: { q?: string; page?: number; pageSize?: number } = {};
-      if (query.q) filters.q = query.q;
-      if (query.page) filters.page = query.page;
-      if (query.pageSize) filters.pageSize = query.pageSize;
-      
-      const result = await listCustomers(database.db, active.organizationId, filters);
-      return { data: { items: result.data, totalCount: result.pagination.totalItems } };
+      const query = request.query as NonNullable<Parameters<typeof listCustomers>[2]>;
+      const result = await listCustomers(database.db, active.organizationId, query);
+      return {
+        data: {
+          items: result.data,
+          totalCount: result.pagination.totalItems,
+          pagination: result.pagination,
+        },
+      };
     },
   );
 
   app.post(
     '/admin/customers',
-    { schema: { body: Type.Object({ displayName: Type.String({ minLength: 1 }) }) } },
+    {
+      schema: {
+        body: Type.Object({
+          displayName: Type.String({ minLength: 1 }),
+          phone: Type.Optional(Type.String({ minLength: 7 })),
+          email: Type.Optional(Type.String({ minLength: 3 })),
+          source: Type.Optional(
+            Type.Union([
+              Type.Literal('ADMIN_CREATED'),
+              Type.Literal('FACEBOOK'),
+              Type.Literal('INSTAGRAM'),
+              Type.Literal('WHATSAPP'),
+              Type.Literal('PHONE'),
+              Type.Literal('IMPORT'),
+              Type.Literal('EXTERNAL_API'),
+            ]),
+          ),
+        }),
+      },
+    },
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'customers.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       try {
         return reply.code(201).send({
           data: await createCustomer(database.db, {
-            ...active,
-            ...(request.body as { displayName: string }),
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            ...(request.body as Omit<
+              Parameters<typeof createCustomer>[1],
+              'organizationId' | 'actorId' | 'actorType'
+            >),
           }),
         });
       } catch (error) {
@@ -249,6 +299,78 @@ export function registerCustomerRoutes(
     }
   });
 
+  app.get(
+    '/admin/customers/:customerId/orders',
+    {
+      schema: {
+        querystring: Type.Object({
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.view');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      return {
+        data: await listCustomerOrders(
+          database.db,
+          active.organizationId,
+          (request.params as { customerId: string }).customerId,
+          (request.query as { limit?: number }).limit,
+        ),
+      };
+    },
+  );
+
+  app.get(
+    '/admin/customers/:customerId/returns',
+    {
+      schema: {
+        querystring: Type.Object({
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.view');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      return {
+        data: await listCustomerReturns(
+          database.db,
+          active.organizationId,
+          (request.params as { customerId: string }).customerId,
+          (request.query as { limit?: number }).limit,
+        ),
+      };
+    },
+  );
+
+  app.get(
+    '/admin/customers/:customerId/refunds',
+    {
+      schema: {
+        querystring: Type.Object({
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.view');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      return {
+        data: await listCustomerRefunds(
+          database.db,
+          active.organizationId,
+          (request.params as { customerId: string }).customerId,
+          (request.query as { limit?: number }).limit,
+        ),
+      };
+    },
+  );
+
   app.put(
     '/admin/customers/:customerId',
     {
@@ -256,7 +378,9 @@ export function registerCustomerRoutes(
         body: Type.Object({
           expectedVersion: Type.Number(),
           displayName: Type.Optional(Type.String({ minLength: 1 })),
-          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('INACTIVE'), Type.Literal('BLOCKED')])),
+          status: Type.Optional(
+            Type.Union([Type.Literal('ACTIVE'), Type.Literal('INACTIVE'), Type.Literal('BLOCKED')]),
+          ),
         }),
       },
     },
@@ -268,7 +392,92 @@ export function registerCustomerRoutes(
           data: await updateCustomer(database.db, {
             ...active,
             customerId: (request.params as { customerId: string }).customerId,
-            ...(request.body as { expectedVersion: number; displayName?: string; status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' }),
+            ...(request.body as {
+              expectedVersion: number;
+              displayName?: string;
+              status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+            }),
+          }),
+        };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/customers/:customerId/merge',
+    {
+      schema: {
+        body: Type.Object({
+          sourceExpectedVersion: Type.Integer({ minimum: 1 }),
+          targetCustomerId: Type.String({ minLength: 1 }),
+          targetExpectedVersion: Type.Integer({ minimum: 1 }),
+          reason: Type.String({ minLength: 1, maxLength: 1000 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.merge');
+      const key = request.headers['idempotency-key'];
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      if (typeof key !== 'string' || !key.trim())
+        return reply
+          .code(422)
+          .send({ error: { code: 'VALIDATION_FAILED', message: 'Idempotency-Key is required.' } });
+      try {
+        const body = request.body as {
+          sourceExpectedVersion: number;
+          targetCustomerId: string;
+          targetExpectedVersion: number;
+          reason: string;
+        };
+        return {
+          data: await mergeCustomers(database.db, {
+            ...active,
+            sourceCustomerId: (request.params as { customerId: string }).customerId,
+            ...body,
+            idempotencyKey: key,
+          }),
+        };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/customers/:customerId/anonymize',
+    {
+      schema: {
+        body: Type.Object({
+          expectedVersion: Type.Integer({ minimum: 1 }),
+          reasonCode: Type.String({ minLength: 1, maxLength: 100 }),
+          reasonText: Type.Optional(Type.String({ maxLength: 1000 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.anonymize');
+      const key = request.headers['idempotency-key'];
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      if (typeof key !== 'string' || !key.trim())
+        return reply
+          .code(422)
+          .send({ error: { code: 'VALIDATION_FAILED', message: 'Idempotency-Key is required.' } });
+      try {
+        return {
+          data: await anonymizeCustomer(database.db, {
+            ...active,
+            customerId: (request.params as { customerId: string }).customerId,
+            ...(request.body as {
+              expectedVersion: number;
+              reasonCode: string;
+              reasonText?: string;
+            }),
+            idempotencyKey: key,
           }),
         };
       } catch (error) {
@@ -282,7 +491,11 @@ export function registerCustomerRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     const params = request.params as { customerId: string; phoneId: string };
     try {
-      await removeCustomerPhone(database.db, { ...active, customerId: params.customerId, phoneId: params.phoneId });
+      await removeCustomerPhone(database.db, {
+        ...active,
+        customerId: params.customerId,
+        phoneId: params.phoneId,
+      });
       return reply.code(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -294,7 +507,11 @@ export function registerCustomerRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     const params = request.params as { customerId: string; emailId: string };
     try {
-      await removeCustomerEmail(database.db, { ...active, customerId: params.customerId, emailId: params.emailId });
+      await removeCustomerEmail(database.db, {
+        ...active,
+        customerId: params.customerId,
+        emailId: params.emailId,
+      });
       return reply.code(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -306,7 +523,11 @@ export function registerCustomerRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     const params = request.params as { customerId: string; addressId: string };
     try {
-      await removeCustomerAddress(database.db, { ...active, customerId: params.customerId, addressId: params.addressId });
+      await removeCustomerAddress(database.db, {
+        ...active,
+        customerId: params.customerId,
+        addressId: params.addressId,
+      });
       return reply.code(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -341,7 +562,14 @@ export function registerCustomerRoutes(
 
   app.post(
     '/admin/tags',
-    { schema: { body: Type.Object({ label: Type.String({ minLength: 1 }), color: Type.Optional(Type.String()) }) } },
+    {
+      schema: {
+        body: Type.Object({
+          label: Type.String({ minLength: 1 }),
+          color: Type.Optional(Type.String()),
+        }),
+      },
+    },
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'customers.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -363,7 +591,11 @@ export function registerCustomerRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     const params = request.params as { customerId: string; tagId: string };
     try {
-      await assignTagToCustomer(database.db, { ...active, customerId: params.customerId, tagId: params.tagId });
+      await assignTagToCustomer(database.db, {
+        ...active,
+        customerId: params.customerId,
+        tagId: params.tagId,
+      });
       return reply.code(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -375,11 +607,14 @@ export function registerCustomerRoutes(
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     const params = request.params as { customerId: string; tagId: string };
     try {
-      await removeTagFromCustomer(database.db, { ...active, customerId: params.customerId, tagId: params.tagId });
+      await removeTagFromCustomer(database.db, {
+        ...active,
+        customerId: params.customerId,
+        tagId: params.tagId,
+      });
       return reply.code(204).send();
     } catch (error) {
       return sendError(reply, error);
     }
   });
-
 }

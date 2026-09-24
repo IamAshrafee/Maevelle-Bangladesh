@@ -1,8 +1,7 @@
 'use client';
 
-import { Mail, MapPin, Phone, RefreshCw, XCircle } from 'lucide-react';
+import { Mail, MapPin, Phone, RefreshCw, ShoppingBag, XCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import type { CustomerDetailDto } from '@maevelle/contracts';
@@ -14,18 +13,32 @@ import { fetchApiData } from '@/lib/api';
 import { EditCustomerDialog } from './edit-customer-dialog';
 import { AddAddressDialog } from './add-address-dialog';
 import { EditAddressDialog } from './edit-address-dialog';
+import { CustomerIdentityActions } from './customer-identity-actions';
 
 export function CustomerDetailConsole({ customerId }: { readonly customerId: string }) {
-  const router = useRouter();
   const [customer, setCustomer] = useState<CustomerDetailDto>();
+  const [orders, setOrders] = useState<
+    readonly {
+      id: string;
+      orderNumber: string;
+      status: string;
+      totalAmount: string;
+      currencyCode: string;
+      createdAt: string;
+    }[]
+  >([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
   async function load() {
     setState('loading');
     try {
-      const data = await fetchApiData<CustomerDetailDto>(`/admin/customers/${customerId}`);
+      const [data, recentOrders] = await Promise.all([
+        fetchApiData<CustomerDetailDto>(`/admin/customers/${customerId}`),
+        fetchApiData<typeof orders>(`/admin/customers/${customerId}/orders?limit=10`),
+      ]);
       setCustomer(data);
+      setOrders(recentOrders);
       setMessage('');
       setState('ready');
     } catch (error) {
@@ -57,7 +70,7 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
   return (
     <main className="min-w-0 space-y-6 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 border-b pb-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Breadcrumb
               items={[
@@ -71,22 +84,39 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
               <StatusBadge status={customer.status} />
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Customer since {new Intl.DateTimeFormat('en-BD', { dateStyle: 'long' }).format(new Date(customer.createdAt))}
+              Customer since{' '}
+              {new Intl.DateTimeFormat('en-BD', { dateStyle: 'long' }).format(
+                new Date(customer.createdAt),
+              )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => void load()}>
               <RefreshCw className="mr-2 size-4" aria-hidden="true" /> Refresh
             </Button>
-            <EditCustomerDialog customer={customer} />
+            {customer.status !== 'MERGED' && customer.status !== 'ANONYMIZED' ? (
+              <EditCustomerDialog customer={customer} onUpdated={() => void load()} />
+            ) : null}
+            <CustomerIdentityActions customer={customer} onCompleted={() => void load()} />
           </div>
         </div>
+        {customer.status === 'MERGED' && customer.canonicalCustomerId ? (
+          <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            This record is a historical alias.{' '}
+            <Link
+              className="font-medium underline"
+              href={`/customers/${customer.canonicalCustomerId}`}
+            >
+              Open the canonical customer
+            </Link>
+            .
+          </div>
+        ) : null}
       </header>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left Column - Addresses & History */}
         <div className="space-y-6 lg:col-span-2">
-          
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Addresses</h2>
@@ -108,8 +138,12 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                         </span>
                       )}
                       <p className="font-medium text-foreground">{address.addressLine1}</p>
-                      {address.addressLine2 && <p className="text-sm text-muted-foreground">{address.addressLine2}</p>}
-                      {address.city && <p className="text-sm text-muted-foreground">{address.city}</p>}
+                      {address.addressLine2 && (
+                        <p className="text-sm text-muted-foreground">{address.addressLine2}</p>
+                      )}
+                      {address.city && (
+                        <p className="text-sm text-muted-foreground">{address.city}</p>
+                      )}
                       <div className="mt-4 flex">
                         <EditAddressDialog customerId={customer.id} address={address} />
                       </div>
@@ -120,16 +154,107 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
             </div>
           </section>
 
-          {/* Other sections like Order History could go here */}
+          <section className="rounded-xl border bg-card shadow-sm">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <h2 className="text-lg font-medium text-foreground">Recent orders</h2>
+              <Button
+                render={<Link href={`/orders?customerId=${customer.id}`} />}
+                nativeButton={false}
+                variant="outline"
+                size="sm"
+              >
+                View all
+              </Button>
+            </div>
+            <div className="divide-y">
+              {orders.length === 0 ? (
+                <div className="flex flex-col items-center px-6 py-10 text-center text-muted-foreground">
+                  <ShoppingBag className="mb-2 size-8 opacity-20" aria-hidden="true" />
+                  <p className="text-sm">No orders yet.</p>
+                </div>
+              ) : (
+                orders.map((order) => (
+                  <Link
+                    key={order.id}
+                    href={`/orders/${order.id}`}
+                    className="flex min-h-14 items-center justify-between gap-4 px-6 py-3 hover:bg-muted/50"
+                  >
+                    <div>
+                      <p className="font-medium">{order.orderNumber}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
+                          new Date(order.createdAt),
+                        )}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">
+                        {new Intl.NumberFormat('en-BD', {
+                          style: 'currency',
+                          currency: order.currencyCode,
+                        }).format(Number(order.totalAmount))}
+                      </p>
+                      <StatusBadge status={order.status} />
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </section>
         </div>
 
         {/* Right Column - Contact & Meta */}
         <div className="space-y-6">
-          
+          <section className="rounded-xl border bg-card shadow-sm">
+            <div className="border-b px-6 py-4">
+              <h2 className="text-lg font-medium">Commerce summary</h2>
+            </div>
+            <dl className="grid grid-cols-2 gap-4 px-6 py-4 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Orders</dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {customer.commerceMetrics.totalOrders}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Cancelled</dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {customer.commerceMetrics.cancelledOrders}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Ordered value</dt>
+                <dd className="mt-1 font-semibold">
+                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
+                    Number(customer.commerceMetrics.lifetimeOrderValue),
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Collected</dt>
+                <dd className="mt-1 font-semibold text-emerald-700">
+                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
+                    Number(customer.commerceMetrics.collectedAmount),
+                  )}
+                </dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-muted-foreground">Refunded</dt>
+                <dd className="mt-1 font-semibold">
+                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
+                    Number(customer.commerceMetrics.refundedAmount),
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Contact</h2>
-              <Button variant="ghost" size="sm">Manage</Button>
+              <Button variant="ghost" size="sm">
+                Manage
+              </Button>
             </div>
             <div className="px-6 py-4 text-sm">
               <div className="space-y-4">
@@ -145,14 +270,16 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                         <li key={email.id} className="flex items-center justify-between">
                           <span>{email.email}</span>
                           {email.isPrimary && (
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Primary</span>
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Primary
+                            </span>
                           )}
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
-                
+
                 <div className="pt-2 border-t">
                   <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
                     <Phone className="size-4 text-muted-foreground" /> Phone Numbers
@@ -165,7 +292,9 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                         <li key={phone.id} className="flex items-center justify-between">
                           <span>{phone.phone}</span>
                           {phone.isPrimary && (
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Primary</span>
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Primary
+                            </span>
                           )}
                         </li>
                       ))}
@@ -212,7 +341,9 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                     <li key={note.id} className="text-sm">
                       <p className="text-foreground">{note.body}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(new Date(note.createdAt))}
+                        {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
+                          new Date(note.createdAt),
+                        )}
                       </p>
                     </li>
                   ))
@@ -220,7 +351,6 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
               </ul>
             </div>
           </section>
-          
         </div>
       </div>
     </main>

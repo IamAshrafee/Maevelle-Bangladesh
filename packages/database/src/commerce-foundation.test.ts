@@ -171,8 +171,14 @@ describe('commercial foundation invariants', () => {
       phone: '01700 000000',
       isPrimary: true,
     });
-    await addCustomerPhone(database.db, { ...fixture, customerId: two.id, phone: '+01700000000' });
-    await expect(listCustomers(database.db, fixture.organizationId, { q: 'First' })).resolves.toEqual(
+    await addCustomerPhone(database.db, {
+      ...fixture,
+      customerId: two.id,
+      phone: '+8801700000000',
+    });
+    await expect(
+      listCustomers(database.db, fixture.organizationId, { q: 'First' }),
+    ).resolves.toEqual(
       expect.objectContaining({
         data: [
           expect.objectContaining({
@@ -182,7 +188,7 @@ describe('commercial foundation invariants', () => {
             totalSpend: '0',
           }),
         ],
-      })
+      }),
     );
     expect(
       await findCustomerDuplicateCandidates(database.db, {
@@ -415,14 +421,18 @@ describe('Customers Domain Extensions (Phase 3)', () => {
   it('supports full customer detail and status updates', async () => {
     const fixtureData = await commerceFixture();
     const { createCustomer, getCustomerDetail, updateCustomer } = await import('./customers.js');
-    
+
     const customer = await createCustomer(database.db, {
       organizationId: fixtureData.organizationId,
       actorId: fixtureData.actorId,
       displayName: 'Detail Test',
     });
 
-    const initialDetail = await getCustomerDetail(database.db, fixtureData.organizationId, customer.id);
+    const initialDetail = await getCustomerDetail(
+      database.db,
+      fixtureData.organizationId,
+      customer.id,
+    );
     expect(initialDetail.displayName).toBe('Detail Test');
     expect(initialDetail.status).toBe('ACTIVE');
 
@@ -435,7 +445,11 @@ describe('Customers Domain Extensions (Phase 3)', () => {
       status: 'INACTIVE',
     });
 
-    const updatedDetail = await getCustomerDetail(database.db, fixtureData.organizationId, customer.id);
+    const updatedDetail = await getCustomerDetail(
+      database.db,
+      fixtureData.organizationId,
+      customer.id,
+    );
     expect(updatedDetail.displayName).toBe('Updated Test');
     expect(updatedDetail.status).toBe('INACTIVE');
     expect(updatedDetail.version).toBe(update.version);
@@ -443,9 +457,14 @@ describe('Customers Domain Extensions (Phase 3)', () => {
 
   it('supports notes, tags, and contact deletion', async () => {
     const fixtureData = await commerceFixture();
-    const { 
-      createCustomer, addCustomerPhone, removeCustomerPhone, 
-      addCustomerNote, createTag, assignTagToCustomer, getCustomerDetail 
+    const {
+      createCustomer,
+      addCustomerPhone,
+      removeCustomerPhone,
+      addCustomerNote,
+      createTag,
+      assignTagToCustomer,
+      getCustomerDetail,
     } = await import('./customers.js');
 
     const customer = await createCustomer(database.db, {
@@ -454,14 +473,14 @@ describe('Customers Domain Extensions (Phase 3)', () => {
       displayName: 'Features Test',
     });
 
-    const phone1 = await addCustomerPhone(database.db, {
+    await addCustomerPhone(database.db, {
       organizationId: fixtureData.organizationId,
       actorId: fixtureData.actorId,
       customerId: customer.id,
       phone: '01711223344',
       isPrimary: true,
     });
-    
+
     const phone2 = await addCustomerPhone(database.db, {
       organizationId: fixtureData.organizationId,
       actorId: fixtureData.actorId,

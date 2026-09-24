@@ -898,7 +898,10 @@ export interface ReservationReleaseInput {
    * transaction may release it; generic Inventory commands must not strand a
    * fulfillment that still relies on the allocation.
    */
-  authority?: { type: 'ORDER_CANCELLATION'; orderId: string } | { type: 'EXPIRY' };
+  authority?:
+    | { type: 'ORDER_CANCELLATION'; orderId: string }
+    | { type: 'ORDER_AMENDMENT'; orderId: string }
+    | { type: 'EXPIRY' };
   actorType?: 'USER' | 'SYSTEM';
 }
 
@@ -935,7 +938,8 @@ export async function releaseInventoryReservationInTransaction(
   `.execute(transaction);
   if (
     orderOwner.rows[0] &&
-    (input.authority?.type !== 'ORDER_CANCELLATION' ||
+    (input.authority?.type === 'EXPIRY' ||
+      !input.authority ||
       input.authority.orderId !== orderOwner.rows[0].order_id)
   )
     throw new InventoryDomainError(
@@ -1448,7 +1452,9 @@ export async function listInventoryItemChoices(
     : sql`true`;
   const productFilter = input.productId ? sql`product.id = ${input.productId}::uuid` : sql`true`;
   const variantFilter = input.variantId ? sql`variant.id = ${input.variantId}::uuid` : sql`true`;
-  const skuFilter = input.sku ? sql`variant.sku_normalized = upper(${input.sku.trim()})` : sql`true`;
+  const skuFilter = input.sku
+    ? sql`variant.sku_normalized = upper(${input.sku.trim()})`
+    : sql`true`;
   const statusFilter =
     input.catalogStatus === 'ARCHIVED'
       ? sql`(item.status = 'ARCHIVED' or variant.status = 'ARCHIVED' or product.status = 'ARCHIVED')`

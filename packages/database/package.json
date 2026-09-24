@@ -135,6 +135,7 @@
   "dependencies": {
     "@maevelle/security": "workspace:*",
     "kysely": "0.29.5",
+    "libphonenumber-js": "1.13.12",
     "pg": "8.23.0"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { sql } from 'kysely';
 
 import { addGuestCartLine, applyGuestCartCoupon, createGuestCart } from './cart.js';
@@ -6,12 +6,14 @@ import { createDatabase } from './index.js';
 import { adjustInventory } from './inventory.js';
 import {
   cancelOrder,
+  cancelOrderLine,
   createCheckout,
   getOrderForCheckout,
   placeOrder,
   updateCheckoutAddress,
   updateCheckoutContact,
   updateOrderStatus,
+  updateOrderDeliveryAddress,
 } from './orders.js';
 import type { OrderDomainError } from './orders.js';
 import { createOrganization } from './platform.js';
@@ -493,6 +495,7 @@ describe('atomic guest checkout and COD Orders', () => {
             variantId: input.variantId,
             quantity: '2',
             unitPrice: '100.00',
+            priceOverrideReason: 'Focused domain test price',
           },
         ],
         deliveryAddress: {
@@ -531,10 +534,17 @@ describe('atomic guest checkout and COD Orders', () => {
             database.db,
           )
         ).rows[0]!.id,
-        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused domain test price',
+          },
+        ],
         deliveryAddress: {
           recipientName: 'Recip',
-          phone: '01700',
+          phone: '01712345678',
           addressLine1: 'Add',
           countryCode: 'BD',
         },
@@ -584,8 +594,20 @@ describe('atomic guest checkout and COD Orders', () => {
         actorId: input.actorId,
         customerId: customer.rows[0]!.id,
         locationId,
-        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
-        deliveryAddress: { recipientName: 'R', phone: '017', addressLine1: 'A', countryCode: 'BD' },
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused domain test price',
+          },
+        ],
+        deliveryAddress: {
+          recipientName: 'R',
+          phone: '01712345678',
+          addressLine1: 'A',
+          countryCode: 'BD',
+        },
         deliveryAmount: '0',
         paymentMethod: 'COD',
         idempotencyKey: crypto.randomUUID(),
@@ -673,8 +695,20 @@ describe('atomic guest checkout and COD Orders', () => {
             database.db,
           )
         ).rows[0]!.id,
-        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
-        deliveryAddress: { recipientName: 'R', phone: '017', addressLine1: 'A', countryCode: 'BD' },
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused domain test price',
+          },
+        ],
+        deliveryAddress: {
+          recipientName: 'R',
+          phone: '01712345678',
+          addressLine1: 'A',
+          countryCode: 'BD',
+        },
         deliveryAmount: '0',
         paymentMethod: 'COD',
         idempotencyKey: crypto.randomUUID(),
@@ -739,10 +773,17 @@ describe('atomic guest checkout and COD Orders', () => {
         actorId: input.actorId,
         customerId: customer.rows[0]!.id,
         locationId,
-        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused domain test price',
+          },
+        ],
         deliveryAddress: {
           recipientName: 'R1',
-          phone: '017',
+          phone: '01712345678',
           addressLine1: 'A1',
           countryCode: 'BD',
         },
@@ -756,10 +797,17 @@ describe('atomic guest checkout and COD Orders', () => {
         actorId: input.actorId,
         customerId: customer.rows[0]!.id,
         locationId,
-        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused domain test price',
+          },
+        ],
         deliveryAddress: {
           recipientName: 'R2',
-          phone: '017',
+          phone: '01712345678',
           addressLine1: 'A2',
           countryCode: 'BD',
         },
@@ -816,10 +864,17 @@ describe('atomic guest checkout and COD Orders', () => {
         actorId: input.actorId,
         customerId: canonicalCustomer.rows[0]!.id,
         locationId,
-        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused domain test price',
+          },
+        ],
         deliveryAddress: {
           recipientName: 'R1',
-          phone: '017',
+          phone: '01712345678',
           addressLine1: 'A1',
           countryCode: 'BD',
         },
@@ -834,10 +889,17 @@ describe('atomic guest checkout and COD Orders', () => {
         actorId: input.actorId,
         customerId: aliasCustomer.rows[0]!.id,
         locationId,
-        lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '10.00' }],
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused domain test price',
+          },
+        ],
         deliveryAddress: {
           recipientName: 'R2',
-          phone: '017',
+          phone: '01712345678',
           addressLine1: 'A2',
           countryCode: 'BD',
         },
@@ -852,6 +914,231 @@ describe('atomic guest checkout and COD Orders', () => {
       });
 
       expect(listResult.data).toHaveLength(2);
+    });
+
+    it('cancels one unpaid unfulfilled line and reconciles totals, payment, and stock', async () => {
+      const input = await fixture('10');
+      const { createManualOrder } = await import('./orders.js');
+      const customer = await sql<{ id: string }>`
+        insert into customers.customers (organization_id, customer_number, display_name, status)
+        values (${input.organizationId}, ${`C-${crypto.randomUUID().slice(0, 8)}`}, 'Line Cancel Customer', 'ACTIVE')
+        returning id
+      `.execute(database.db);
+      const location = await sql<{ id: string }>`
+        select id from warehouse.locations where organization_id = ${input.organizationId} limit 1
+      `.execute(database.db);
+      const order = await createManualOrder(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        customerId: customer.rows[0]!.id,
+        locationId: location.rows[0]!.id,
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused line-cancellation test price',
+          },
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '15.00',
+            priceOverrideReason: 'Focused line-cancellation test price',
+          },
+        ],
+        deliveryAddress: {
+          recipientName: 'Recipient',
+          phone: '01712345678',
+          addressLine1: 'Dhaka',
+          countryCode: 'BD',
+        },
+        deliveryAmount: '5.00',
+        paymentMethod: 'COD',
+        idempotencyKey: crypto.randomUUID(),
+      });
+      const lineToCancel = order.lines[0]!;
+      const key = crypto.randomUUID();
+
+      const amended = await cancelOrderLine(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        orderId: order.id,
+        orderLineId: lineToCancel.id,
+        expectedVersion: order.version,
+        reasonCode: 'CUSTOMER_REQUEST',
+        reasonText: 'Customer removed one item.',
+        idempotencyKey: key,
+      });
+
+      expect(amended.total).toBe('20.0000');
+      expect(amended.lines.find((line) => line.id === lineToCancel.id)).toMatchObject({
+        status: 'CANCELLED',
+        cancellationReasonCode: 'CUSTOMER_REQUEST',
+      });
+      const intent = await sql<{ expected_amount: string }>`
+        select expected_amount::text from payments.payment_intents
+        where organization_id = ${input.organizationId} and order_id = ${order.id}
+      `.execute(database.db);
+      expect(intent.rows[0]?.expected_amount).toBe('20.0000');
+      expect(await balances(input)).toEqual({ sellable: '10.000000', reserved: '1.000000' });
+
+      const replay = await cancelOrderLine(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        orderId: order.id,
+        orderLineId: lineToCancel.id,
+        expectedVersion: order.version,
+        reasonCode: 'CUSTOMER_REQUEST',
+        reasonText: 'Customer removed one item.',
+        idempotencyKey: key,
+      });
+      expect(replay.total).toBe('20.0000');
+
+      const remaining = replay.lines.find((line) => line.status === 'ACTIVE')!;
+      await expect(
+        cancelOrderLine(database.db, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          orderId: order.id,
+          orderLineId: remaining.id,
+          expectedVersion: replay.version,
+          reasonCode: 'CUSTOMER_REQUEST',
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).rejects.toThrow('Cancel the entire Order');
+    });
+
+    it('corrects a pre-fulfillment delivery snapshot with immutable before/after evidence', async () => {
+      const input = await fixture('3');
+      const { createManualOrder } = await import('./orders.js');
+      const customer = await sql<{ id: string }>`
+        insert into customers.customers (organization_id, customer_number, display_name, status)
+        values (${input.organizationId}, ${`C-${crypto.randomUUID().slice(0, 8)}`}, 'Address Customer', 'ACTIVE')
+        returning id
+      `.execute(database.db);
+      const location = await sql<{ id: string }>`
+        select id from warehouse.locations where organization_id = ${input.organizationId} limit 1
+      `.execute(database.db);
+      const order = await createManualOrder(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        customerId: customer.rows[0]!.id,
+        locationId: location.rows[0]!.id,
+        lines: [
+          {
+            variantId: input.variantId,
+            quantity: '1',
+            unitPrice: '10.00',
+            priceOverrideReason: 'Focused address-correction test price',
+          },
+        ],
+        deliveryAddress: {
+          recipientName: 'Original Recipient',
+          phone: '01712345678',
+          addressLine1: 'Old address',
+          countryCode: 'BD',
+        },
+        deliveryAmount: '0',
+        paymentMethod: 'COD',
+        idempotencyKey: crypto.randomUUID(),
+      });
+      const key = crypto.randomUUID();
+      const corrected = await updateOrderDeliveryAddress(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        orderId: order.id,
+        expectedVersion: order.version,
+        address: {
+          recipientName: 'Corrected Recipient',
+          phone: '01812345678',
+          addressLine1: 'New address',
+          city: 'Dhaka',
+          countryCode: 'BD',
+        },
+        reason: 'Customer confirmed a correction by phone.',
+        idempotencyKey: key,
+      });
+      expect(corrected.address).toMatchObject({
+        recipientName: 'Corrected Recipient',
+        phone: '01812345678',
+        addressLine1: 'New address',
+        city: 'Dhaka',
+      });
+      const evidence = await sql<{
+        before_name: string;
+        after_name: string;
+      }>`
+        select before_snapshot->>'recipientName' as before_name,
+          after_snapshot->>'recipientName' as after_name
+        from orders.order_address_corrections
+        where organization_id = ${input.organizationId} and order_id = ${order.id}
+      `.execute(database.db);
+      expect(evidence.rows[0]).toEqual({
+        before_name: 'Original Recipient',
+        after_name: 'Corrected Recipient',
+      });
+
+      const replay = await updateOrderDeliveryAddress(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        orderId: order.id,
+        expectedVersion: order.version,
+        address: {
+          recipientName: 'Corrected Recipient',
+          phone: '01812345678',
+          addressLine1: 'New address',
+          city: 'Dhaka',
+          countryCode: 'BD',
+        },
+        reason: 'Customer confirmed a correction by phone.',
+        idempotencyKey: key,
+      });
+      expect(replay.address.recipientName).toBe('Corrected Recipient');
+    });
+
+    it('retries an auto-completion event when order completion fails', async () => {
+      const input = await fixture('1');
+      const missingOrderId = crypto.randomUUID();
+      const event = await sql<{ id: string }>`
+        insert into platform.outbox_events (
+          organization_id, event_type, event_version, aggregate_type,
+          aggregate_id, aggregate_version, payload, occurred_at
+        ) values (
+          ${input.organizationId}, 'delivery.all_lines_delivered', 1, 'orders.order',
+          ${missingOrderId}, 1, ${JSON.stringify({ orderId: missingOrderId })}::jsonb, now()
+        )
+        returning id::text
+      `.execute(database.db);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      try {
+        const { processOrderOutbox } = await import('./orders.js');
+        await expect(processOrderOutbox(database.db)).resolves.toBe(0);
+      } finally {
+        errorSpy.mockRestore();
+      }
+
+      const receipt = await sql<{
+        status: string;
+        attempt_count: number;
+        processed_at: Date | null;
+        last_error_code: string | null;
+        retry_scheduled: boolean;
+      }>`
+        select status, attempt_count, processed_at, last_error_code,
+          next_retry_at > now() as retry_scheduled
+        from platform.event_consumer_receipts
+        where outbox_event_id = ${event.rows[0]!.id}::bigint
+          and consumer_name = 'orders.autocomplete.v1'
+      `.execute(database.db);
+
+      expect(receipt.rows[0]).toMatchObject({
+        status: 'RETRY_WAIT',
+        attempt_count: 1,
+        processed_at: null,
+        last_error_code: 'NOT_FOUND',
+        retry_scheduled: true,
+      });
     });
   });
 });

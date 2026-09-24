@@ -13,6 +13,10 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       customer_number text not null,
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE', 'BLOCKED', 'MERGED', 'ANONYMIZED')),
       display_name text not null check (length(trim(display_name)) > 0),
+      first_source text not null default 'ADMIN_CREATED'
+        check (first_source in ('STOREFRONT', 'MANUAL_ORDER', 'FACEBOOK', 'INSTAGRAM', 'WHATSAPP', 'PHONE', 'IMPORT', 'ADMIN_CREATED', 'EXTERNAL_API')),
+      latest_source text not null default 'ADMIN_CREATED'
+        check (latest_source in ('STOREFRONT', 'MANUAL_ORDER', 'FACEBOOK', 'INSTAGRAM', 'WHATSAPP', 'PHONE', 'IMPORT', 'ADMIN_CREATED', 'EXTERNAL_API')),
       canonical_customer_id uuid references customers.customers(id),
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
@@ -24,6 +28,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create index customers_customers_organization_name_index
       on customers.customers (organization_id, lower(display_name), id);
+    create index customers_customers_organization_source_index
+      on customers.customers (organization_id, first_source, created_at desc);
 
     create table customers.customer_phones (
       id uuid primary key default uuidv7(),
@@ -115,6 +121,19 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create unique index customers_customer_merges_source_unique on customers.customer_merges (source_customer_id);
 
+    create table customers.customer_anonymizations (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      customer_id uuid not null,
+      reason_code text not null check (length(trim(reason_code)) > 0),
+      reason_text text,
+      affected_alias_count integer not null default 0 check (affected_alias_count >= 0),
+      created_by uuid not null,
+      created_at timestamptz not null default now(),
+      unique (organization_id, customer_id),
+      foreign key (organization_id, customer_id) references customers.customers(organization_id, id)
+    );
+
     create table customers.customer_aliases (
       organization_id uuid not null references platform.organizations(id),
       alias_customer_id uuid not null,
@@ -145,7 +164,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       organization_id uuid not null references platform.organizations(id),
       label           text not null check (length(trim(label)) > 0),
       color           text,
-      created_at      timestamptz not null default now()
+      created_at      timestamptz not null default now(),
+      unique (organization_id, id)
     );
     create unique index customer_tags_label_unique_idx on customers.customer_tags (organization_id, lower(label));
 
@@ -153,21 +173,24 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table customers.customer_tag_assignments (
       organization_id uuid not null references platform.organizations(id),
       customer_id     uuid not null,
-      tag_id          uuid not null references customers.customer_tags(id),
+      tag_id          uuid not null,
       created_at      timestamptz not null default now(),
       primary key (organization_id, customer_id, tag_id),
-      foreign key (organization_id, customer_id) references customers.customers(organization_id, id)
+      foreign key (organization_id, customer_id) references customers.customers(organization_id, id),
+      foreign key (organization_id, tag_id) references customers.customer_tags(organization_id, id)
     );
     create index customer_tag_customer_idx on customers.customer_tag_assignments (customer_id);
 
     insert into iam.capability_definitions (capability_code, domain, description, sensitivity) values
       ('customers.view',   'customers', 'View customer administration data.', 'HIGH'),
-      ('customers.manage', 'customers', 'Create and manage commercial customers, contacts, addresses, notes, and tags.', 'HIGH')
+      ('customers.manage', 'customers', 'Create and manage commercial customers, contacts, addresses, notes, and tags.', 'HIGH'),
+      ('customers.merge', 'customers', 'Merge duplicate customer identities while preserving historical commerce evidence.', 'HIGH'),
+      ('customers.anonymize', 'customers', 'Anonymize customer profile data after operational eligibility checks.', 'RESTRICTED')
     on conflict (capability_code) do nothing;
     insert into iam.membership_capability_grants (membership_id, capability_code)
       select membership.id, capability.capability_code
       from iam.organization_memberships membership
-      cross join (values ('customers.view'), ('customers.manage')) as capability(capability_code)
+      cross join (values ('customers.view'), ('customers.manage'), ('customers.merge'), ('customers.anonymize')) as capability(capability_code)
       where membership.membership_type = 'OWNER' and membership.status = 'ACTIVE'
     on conflict do nothing;
   `.execute(db);

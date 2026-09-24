@@ -19,10 +19,13 @@ export function CreateCustomerForm() {
     if (busy) return;
     setBusy(true);
     setMessage('');
-    
+
     const formData = new FormData(e.currentTarget);
     const payload = {
       displayName: formData.get('displayName') as string,
+      phone: (formData.get('phone') as string) || undefined,
+      email: (formData.get('email') as string) || undefined,
+      source: formData.get('source') as string,
     };
 
     try {
@@ -42,7 +45,47 @@ export function CreateCustomerForm() {
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="displayName">Display Name</Label>
-          <Input id="displayName" name="displayName" required disabled={busy} placeholder="e.g. Jane Doe" />
+          <Input
+            id="displayName"
+            name="displayName"
+            required
+            disabled={busy}
+            placeholder="e.g. Jane Doe"
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone</Label>
+            <Input id="phone" name="phone" type="tel" disabled={busy} placeholder="01712 345678" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              disabled={busy}
+              placeholder="customer@example.com"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="source">Acquisition source</Label>
+          <select
+            id="source"
+            name="source"
+            defaultValue="ADMIN_CREATED"
+            disabled={busy}
+            className="flex min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="ADMIN_CREATED">Admin created</option>
+            <option value="FACEBOOK">Facebook</option>
+            <option value="INSTAGRAM">Instagram</option>
+            <option value="WHATSAPP">WhatsApp</option>
+            <option value="PHONE">Phone</option>
+            <option value="IMPORT">Import</option>
+            <option value="EXTERNAL_API">External API</option>
+          </select>
         </div>
       </div>
 

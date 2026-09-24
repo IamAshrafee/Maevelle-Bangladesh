@@ -9,7 +9,6 @@ import {
   XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import type { OrderDetailDto } from '@maevelle/contracts';
@@ -17,6 +16,9 @@ import type { OrderDetailDto } from '@maevelle/contracts';
 import { CancelOrderDialog } from './cancel-order-dialog';
 import { CreateFulfillmentDialog } from './create-fulfillment-dialog';
 import { HoldOrderDialog } from './hold-order-dialog';
+import { CancelOrderLineDialog } from './cancel-order-line-dialog';
+import { AddOrderNoteDialog } from './add-order-note-dialog';
+import { CorrectDeliveryAddressDialog } from './correct-delivery-address-dialog';
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
@@ -53,7 +55,6 @@ function formatMoney(amount: number | string | undefined | null, currency = 'BDT
 }
 
 export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
-  const router = useRouter();
   const [order, setOrder] = useState<OrderDetailDto>();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
@@ -64,7 +65,7 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
         method: 'POST',
         body: JSON.stringify({ version: order!.version, status: 'CONFIRMED' }),
       });
-      router.refresh();
+      await load();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to confirm order');
     }
@@ -76,7 +77,7 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
         method: 'POST',
         body: JSON.stringify({ version: order!.version }),
       });
-      router.refresh();
+      await load();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to resume order');
     }
@@ -115,10 +116,17 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
     );
   }
 
+  const activeLineCount = order.lines.filter((line) => line.status === 'ACTIVE').length;
+  const canCancelLine =
+    ['PENDING', 'CONFIRMED', 'ON_HOLD'].includes(order.status) &&
+    order.fulfillmentStatus === 'UNFULFILLED' &&
+    order.paymentStatus === 'UNPAID' &&
+    activeLineCount > 1;
+
   return (
     <main className="min-w-0 space-y-6 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 border-b pb-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Breadcrumb
               items={[
@@ -132,10 +140,11 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               <StatusBadge status={order.status} />
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Placed on {formatDateTime(order.createdAt)}
+              Placed on {formatDateTime(order.createdAt)} ·{' '}
+              {order.salesChannel.replaceAll('_', ' ')}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => void load()}>
               <RefreshCw className="mr-2 size-4" aria-hidden="true" /> Refresh
             </Button>
@@ -166,40 +175,79 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
             <div className="border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Items</h2>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
-                  <TableHead className="text-right">Quantity</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {order.lines.map((line) => (
-                  <TableRow key={line.id}>
-                    <TableCell>
-                      <div className="font-medium text-foreground">{line.productTitle}</div>
-                      <div className="text-xs text-muted-foreground">SKU: {line.sku}</div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatMoney(line.unitPrice, order.currency)}
-                    </TableCell>
-                    <TableCell className="text-right">{line.quantity}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatMoney(line.total, order.currency)}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                    <TableHead className="text-right">Quantity</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {order.lines.map((line) => (
+                    <TableRow
+                      key={line.id}
+                      className={line.status === 'CANCELLED' ? 'opacity-60' : undefined}
+                    >
+                      <TableCell>
+                        <div className="font-medium text-foreground">{line.productTitle}</div>
+                        <div className="text-xs text-muted-foreground">SKU: {line.sku}</div>
+                        {line.status === 'CANCELLED' ? (
+                          <div className="mt-1 text-xs font-medium text-destructive">
+                            Cancelled
+                            {line.cancellationReasonCode
+                              ? ` · ${line.cancellationReasonCode.replaceAll('_', ' ')}`
+                              : ''}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatMoney(line.unitPrice, order.currency)}
+                      </TableCell>
+                      <TableCell className="text-right">{line.quantity}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatMoney(line.net, order.currency)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {line.status === 'ACTIVE' && canCancelLine ? (
+                          <CancelOrderLineDialog
+                            orderId={order.id}
+                            orderVersion={order.version}
+                            line={line}
+                            onCompleted={() => void load()}
+                          />
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
             <div className="flex justify-end border-t bg-muted/50 px-6 py-4">
               <div className="w-full max-w-sm space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>{formatMoney(order.total, order.currency)}</span>
+                  <span>{formatMoney(order.merchandiseGross, order.currency)}</span>
                 </div>
-                {/* Note: In a full app, you'd show discounts/taxes here */}
+                {Number(order.discountTotal) > 0 ? (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Discounts</span>
+                    <span>−{formatMoney(order.discountTotal, order.currency)}</span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Delivery</span>
+                  <span>{formatMoney(order.deliveryAmount, order.currency)}</span>
+                </div>
+                {Number(order.taxAmount) > 0 ? (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tax</span>
+                    <span>{formatMoney(order.taxAmount, order.currency)}</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between border-t pt-2 text-base font-medium">
                   <span>Total</span>
                   <span>{formatMoney(order.total, order.currency)}</span>
@@ -259,7 +307,7 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                 <CreateFulfillmentDialog
                   orderId={order.id}
                   currentVersion={order.version}
-                  lines={order.lines}
+                  lines={order.lines.filter((line) => line.status === 'ACTIVE')}
                 />
               )}
             </div>
@@ -351,6 +399,60 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
 
         {/* Right Column - Customer & Timeline */}
         <div className="space-y-6">
+          <section className="rounded-xl border bg-card shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
+              <h2 className="text-lg font-medium text-foreground">Notes</h2>
+              <AddOrderNoteDialog orderId={order.id} onCompleted={() => void load()} />
+            </div>
+            <div className="px-6 py-4">
+              {order.notes.length ? (
+                <ul className="space-y-4">
+                  {order.notes.map((note) => (
+                    <li key={note.id} className="text-sm">
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {note.noteType === 'INTERNAL' ? 'Internal' : 'Customer visible'}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(note.createdAt)}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-foreground">{note.body}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm italic text-muted-foreground">No notes recorded.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-xl border bg-card shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
+              <h2 className="text-lg font-medium text-foreground">Delivery address</h2>
+              {['PENDING', 'CONFIRMED', 'ON_HOLD'].includes(order.status) &&
+              order.fulfillmentStatus === 'UNFULFILLED' ? (
+                <CorrectDeliveryAddressDialog order={order} onCompleted={() => void load()} />
+              ) : null}
+            </div>
+            <address className="space-y-1 px-6 py-4 text-sm not-italic">
+              <p className="font-medium text-foreground">{order.address.recipientName}</p>
+              <p>{order.address.phone}</p>
+              <p>{order.address.addressLine1}</p>
+              {order.address.addressLine2 ? <p>{order.address.addressLine2}</p> : null}
+              <p className="text-muted-foreground">
+                {[
+                  order.address.area,
+                  order.address.city,
+                  order.address.district,
+                  order.address.postalCode,
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
+              </p>
+            </address>
+          </section>
+
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Customer</h2>

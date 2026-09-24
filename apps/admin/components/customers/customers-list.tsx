@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleAlert, RefreshCw, Search, UserPlus, Users } from 'lucide-react';
+import { CircleAlert, RefreshCw, Search, UserPlus, Users, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDeferredValue, useEffect, useState } from 'react';
@@ -10,6 +10,8 @@ import type { CustomerSummaryDto, PaginatedEnvelope } from '@maevelle/contracts'
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -31,6 +33,11 @@ export function CustomersList() {
   const [message, setMessage] = useState('');
 
   const page = Math.max(1, Number(searchParameters.get('page') ?? 1) || 1);
+  const status = searchParameters.get('status') ?? 'ALL';
+  const source = searchParameters.get('source') ?? 'ALL';
+  const from = searchParameters.get('from') ?? '';
+  const to = searchParameters.get('to') ?? '';
+  const hasFilters = Boolean(deferredQuery || status !== 'ALL' || source !== 'ALL' || from || to);
 
   function replaceQuery(changes: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParameters.toString());
@@ -53,7 +60,11 @@ export function CustomersList() {
       pageSize: '25',
     });
     if (deferredQuery) parameters.set('q', deferredQuery);
-    
+    if (status !== 'ALL') parameters.set('status', status);
+    if (source !== 'ALL') parameters.set('source', source);
+    if (from) parameters.set('from', new Date(`${from}T00:00:00`).toISOString());
+    if (to) parameters.set('to', new Date(`${to}T23:59:59.999`).toISOString());
+
     try {
       const data = await fetchApiData<PaginatedEnvelope<CustomerSummaryDto>>(
         `/admin/customers?${parameters.toString()}`,
@@ -73,7 +84,7 @@ export function CustomersList() {
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, [deferredQuery, page]);
+  }, [deferredQuery, page, status, source, from, to]);
 
   return (
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -106,25 +117,97 @@ export function CustomersList() {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex max-w-sm flex-1 items-center gap-2">
-          <div className="relative flex-1">
-            <Search
-              className="absolute left-2.5 top-2.5 size-4 text-muted-foreground"
-              aria-hidden="true"
-            />
+      <section className="space-y-4 border-b pb-4" aria-label="Customer filters">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex max-w-md flex-1 items-center gap-2">
+            <div className="relative flex-1">
+              <Search
+                className="absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                placeholder="Search by name, email, or phone..."
+                className="pl-9"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+          {hasFilters ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setQuery('');
+                router.replace('/customers');
+              }}
+            >
+              <X aria-hidden="true" /> Clear filters
+            </Button>
+          ) : null}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="customer-status">Status</Label>
+            <NativeSelect
+              id="customer-status"
+              value={status}
+              onChange={(event) => replaceQuery({ status: event.target.value, page: '1' })}
+            >
+              {['ALL', 'ACTIVE', 'INACTIVE', 'BLOCKED', 'MERGED', 'ANONYMIZED'].map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {value === 'ALL' ? 'All statuses' : value.replaceAll('_', ' ')}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="customer-source">First source</Label>
+            <NativeSelect
+              id="customer-source"
+              value={source}
+              onChange={(event) => replaceQuery({ source: event.target.value, page: '1' })}
+            >
+              {[
+                'ALL',
+                'STOREFRONT',
+                'MANUAL_ORDER',
+                'FACEBOOK',
+                'INSTAGRAM',
+                'WHATSAPP',
+                'PHONE',
+                'IMPORT',
+                'ADMIN_CREATED',
+                'EXTERNAL_API',
+              ].map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {value === 'ALL' ? 'All sources' : value.replaceAll('_', ' ')}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="customer-from">Created from</Label>
             <Input
-              type="search"
-              placeholder="Search by name, email, or phone..."
-              className="pl-9"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              id="customer-from"
+              type="date"
+              value={from}
+              onChange={(event) => replaceQuery({ from: event.target.value, page: '1' })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="customer-to">Created through</Label>
+            <Input
+              id="customer-to"
+              type="date"
+              value={to}
+              onChange={(event) => replaceQuery({ to: event.target.value, page: '1' })}
             />
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="rounded-md border bg-card">
+      <div className="overflow-x-auto rounded-md border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -149,24 +232,28 @@ export function CustomersList() {
                   className="group cursor-pointer"
                   onClick={() => router.push(`/customers/${customer.id}`)}
                 >
-                  <TableCell className="font-medium">
-                    {customer.displayName}
-                  </TableCell>
+                  <TableCell className="font-medium">{customer.displayName}</TableCell>
                   <TableCell>
                     <div className="flex flex-col">
-                      {customer.email ? (
-                        <span className="text-sm">{customer.email}</span>
+                      {customer.primaryEmail ? (
+                        <span className="text-sm">{customer.primaryEmail}</span>
                       ) : null}
-                      {customer.phone ? (
-                        <span className="text-xs text-muted-foreground">{customer.phone}</span>
+                      {customer.primaryPhone ? (
+                        <span className="text-xs text-muted-foreground">
+                          {customer.primaryPhone}
+                        </span>
                       ) : null}
-                      {!customer.email && !customer.phone ? (
-                        <span className="text-xs italic text-muted-foreground">No contact info</span>
+                      {!customer.primaryEmail && !customer.primaryPhone ? (
+                        <span className="text-xs italic text-muted-foreground">
+                          No contact info
+                        </span>
                       ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(new Date(customer.createdAt))}
+                    {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
+                      new Date(customer.createdAt),
+                    )}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={customer.status} />
@@ -177,15 +264,13 @@ export function CustomersList() {
           </TableBody>
         </Table>
       </div>
-      
+
       {customers && customers.totalCount > 25 && (
         <div className="flex items-center justify-between py-4">
           <p className="text-sm text-muted-foreground">
             Showing <span className="font-medium">{(page - 1) * 25 + 1}</span> to{' '}
-            <span className="font-medium">
-              {Math.min(page * 25, customers.totalCount)}
-            </span>{' '}
-            of <span className="font-medium">{customers.totalCount}</span> results
+            <span className="font-medium">{Math.min(page * 25, customers.totalCount)}</span> of{' '}
+            <span className="font-medium">{customers.totalCount}</span> results
           </p>
           <div className="flex gap-2">
             <Button

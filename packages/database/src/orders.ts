@@ -4,6 +4,12 @@ import { generateOpaqueToken, hashToken } from '@maevelle/security';
 
 import type { DatabaseSchema } from './index.js';
 import {
+  CustomerDomainError,
+  resolveOrCreateOrderCustomerInTransaction,
+  type CustomerSource,
+} from './customers.js';
+import { normalizeCustomerPhone } from './customer-identities.js';
+import {
   createInventoryReservationInTransaction,
   InventoryDomainError,
   releaseInventoryReservationInTransaction,
@@ -16,7 +22,9 @@ import {
   cancelPendingPaymentIntentsForOrder,
   getOrderPaymentSummary,
   listPaymentMethods,
+  PaymentDomainError,
   requireActivePaymentMethod,
+  reviseOpenPaymentIntentForOrder,
   type PaymentMethodCode,
   type PaymentSummary,
 } from './payments.js';
@@ -84,29 +92,49 @@ export interface OrderView {
   readonly id: string;
   readonly version: number;
   readonly orderNumber: string;
-  readonly status: string;
+  readonly status: 'PENDING' | 'CONFIRMED' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+  readonly source: 'STOREFRONT' | 'MANUAL';
+  readonly salesChannel:
+    | 'STOREFRONT'
+    | 'ADMIN'
+    | 'FACEBOOK'
+    | 'INSTAGRAM'
+    | 'WHATSAPP'
+    | 'PHONE'
+    | 'EXTERNAL_API'
+    | 'IMPORT';
   readonly currency: string;
   readonly total: string;
   readonly createdAt: string;
   readonly customerName?: string;
+  readonly customerPhone?: string;
   readonly customerEmail?: string | null;
   readonly customerId?: string | null;
   readonly paymentMethod: PaymentMethodCode;
+  readonly paymentStatus: string;
   readonly payment: PaymentSummary;
   readonly merchandiseGross: string;
   readonly discountTotal: string;
   readonly merchandiseNet: string;
+  readonly deliveryAmount: string;
+  readonly taxAmount: string;
   readonly customer: { displayName: string; phone: string; email: string | null };
   readonly address: CheckoutAddressInput;
   readonly lines: readonly {
     id: string;
+    variantId: string | null;
     sku: string;
     productTitle: string;
+    variantTitle: string | null;
     quantity: string;
     unitPrice: string;
     gross: string;
     discount: string;
     net: string;
+    status: 'ACTIVE' | 'CANCELLED';
+    cancellationReasonCode: string | null;
+    cancellationReasonText: string | null;
+    cancelledAt: string | null;
     options: readonly { name: string; value: string }[];
   }[];
 }
@@ -137,6 +165,11 @@ function ensureAddress(input: CheckoutAddressInput): void {
     !/^[A-Z]{2}$/.test(input.countryCode)
   )
     throw new OrderDomainError('VALIDATION_FAILED', 'A complete delivery address is required.');
+  try {
+    normalizeCustomerPhone(input.phone);
+  } catch {
+    throw new OrderDomainError('VALIDATION_FAILED', 'A valid delivery phone number is required.');
+  }
 }
 
 function cartFingerprint(cart: CartView): string {
@@ -513,36 +546,6 @@ async function cartOrderLines(db: Kysely<DatabaseSchema>, cart: CartView) {
   return detail.rows;
 }
 
-async function resolveCustomer(
-  db: Kysely<DatabaseSchema>,
-  organizationId: string,
-  actorId: string,
-  contact: CheckoutContactInput,
-): Promise<string> {
-  const normalizedPhone = contact.phone.replace(/[\s()-]/g, '').replace(/^([^+])/, '+$1');
-  const matches = await sql<{ customer_id: string }>`
-    select customer_id from customers.customer_phones where organization_id = ${organizationId} and normalized_value = ${normalizedPhone}
-  `.execute(db);
-  if (matches.rows.length === 1) return matches.rows[0]!.customer_id;
-  const customer = await sql<{ id: string }>`
-    insert into customers.customers (organization_id, customer_number, display_name)
-    values (${organizationId}, 'CUS-' || upper(replace(uuidv7()::text, '-', '')), ${contact.name.trim()}) returning id
-  `.execute(db);
-  const customerId = customer.rows[0]?.id;
-  if (!customerId) throw new Error('Customer creation did not return an id.');
-  await sql`
-    insert into customers.customer_phones (organization_id, customer_id, raw_value, normalized_value, is_primary)
-    values (${organizationId}, ${customerId}, ${contact.phone.trim()}, ${normalizedPhone}, true)
-  `.execute(db);
-  if (contact.email) {
-    await sql`
-      insert into customers.customer_emails (organization_id, customer_id, raw_value, normalized_value, is_primary)
-      values (${organizationId}, ${customerId}, ${contact.email.trim()}, ${contact.email.trim().toLocaleLowerCase()}, true)
-    `.execute(db);
-  }
-  return customerId;
-}
-
 async function promoteUsage(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -591,12 +594,17 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     id: string;
     organization_id: string;
     order_number: string;
-    order_status: string;
+    order_status: OrderView['status'];
+    source: OrderView['source'];
+    sales_channel: OrderView['salesChannel'];
     currency_code: string;
     payment_method: PaymentMethodCode;
     subtotal_amount: string;
     discount_amount: string;
+    merchandise_net: string;
     total_amount: string;
+    delivery_amount: string;
+    tax_amount: string;
     version: string;
     created_at: Date;
     display_name: string;
@@ -614,8 +622,11 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     postal_code: string | null;
     country_code: string;
   }>`
-    select order_row.id, order_row.organization_id, order_row.order_number, order_row.order_status, order_row.currency_code, order_row.payment_method, order_row.version::text,
-      order_row.subtotal_amount::text, order_row.discount_amount::text, order_row.total_amount::text, order_row.created_at,
+    select order_row.id, order_row.organization_id, order_row.order_number, order_row.order_status,
+      order_row.source, order_row.sales_channel, order_row.currency_code, order_row.payment_method, order_row.version::text,
+      order_row.subtotal_amount::text, order_row.discount_amount::text, order_row.delivery_amount::text,
+      (order_row.subtotal_amount - order_row.discount_amount)::text as merchandise_net,
+      order_row.tax_amount::text, order_row.total_amount::text, order_row.created_at,
       customer.customer_id::text as customer_id, customer.display_name, customer.phone, customer.email, address.recipient_name, address.phone as delivery_phone, address.address_line_1, address.address_line_2,
       address.geography_node_id, address.area, address.city, address.district, address.postal_code, address.country_code
     from orders.orders order_row
@@ -627,16 +638,24 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
   if (!row) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
   const lines = await sql<{
     id: string;
+    variant_id: string | null;
     sku_snapshot: string;
     product_title_snapshot: string;
+    variant_title_snapshot: string | null;
     quantity: string;
     unit_price: string;
     gross_amount: string;
     discount_amount: string;
     net_amount: string;
+    line_status: 'ACTIVE' | 'CANCELLED';
+    cancellation_reason_code: string | null;
+    cancellation_reason_text: string | null;
+    cancelled_at: Date | null;
     option_snapshot: readonly { name: string; value: string }[];
   }>`
-    select id, sku_snapshot, product_title_snapshot, quantity::text, unit_price::text, gross_amount::text, discount_amount::text, net_amount::text, option_snapshot
+    select id, variant_id, sku_snapshot, product_title_snapshot, variant_title_snapshot,
+      quantity::text, unit_price::text, gross_amount::text, discount_amount::text, net_amount::text,
+      line_status, cancellation_reason_code, cancellation_reason_text, cancelled_at, option_snapshot
     from orders.order_lines where order_id = ${orderId} order by id
   `.execute(db);
   const payment = await getOrderPaymentSummary(db, {
@@ -650,17 +669,23 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     version: Number(row.version),
     orderNumber: row.order_number,
     status: row.order_status,
+    source: row.source,
+    salesChannel: row.sales_channel,
     currency: row.currency_code,
     total: row.total_amount,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     customerName: row.display_name,
+    customerPhone: row.phone,
     customerEmail: row.email,
     customerId: row.customer_id ?? null,
     paymentMethod: row.payment_method,
+    paymentStatus: payment.status,
     payment,
     merchandiseGross: row.subtotal_amount,
     discountTotal: row.discount_amount,
-    merchandiseNet: row.total_amount,
+    merchandiseNet: row.merchandise_net,
+    deliveryAmount: row.delivery_amount,
+    taxAmount: row.tax_amount,
     customer: { displayName: row.display_name, phone: row.phone, email: row.email },
     address: {
       recipientName: row.recipient_name,
@@ -676,13 +701,19 @@ async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<O
     },
     lines: lines.rows.map((line) => ({
       id: line.id,
+      variantId: line.variant_id,
       sku: line.sku_snapshot,
       productTitle: line.product_title_snapshot,
+      variantTitle: line.variant_title_snapshot,
       quantity: line.quantity,
       unitPrice: line.unit_price,
       gross: line.gross_amount,
       discount: line.discount_amount,
       net: line.net_amount,
+      status: line.line_status,
+      cancellationReasonCode: line.cancellation_reason_code,
+      cancellationReasonText: line.cancellation_reason_text,
+      cancelledAt: line.cancelled_at?.toISOString() ?? null,
       options: line.option_snapshot,
     })),
   };
@@ -812,12 +843,27 @@ export async function placeOrder(
     const details = await cartOrderLines(transaction, cart);
     if (cart.lines.some((line) => line.availability !== 'AVAILABLE' || !line.unitPrice))
       throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
-    const customerId = await resolveCustomer(
-      transaction,
-      checkout.organization_id,
-      checkout.id,
-      contact,
-    );
+    let customerId: string;
+    try {
+      customerId = (
+        await resolveOrCreateOrderCustomerInTransaction(transaction, {
+          organizationId: checkout.organization_id,
+          actorId: checkout.id,
+          actorType: 'GUEST_CHECKOUT',
+          displayName: contact.name,
+          phone: contact.phone,
+          ...(contact.email ? { email: contact.email } : {}),
+          source: 'STOREFRONT',
+        })
+      ).customerId;
+    } catch (error) {
+      if (error instanceof CustomerDomainError)
+        throw new OrderDomainError(
+          error.code === 'CUSTOMER_BLOCKED' ? 'VALIDATION_FAILED' : 'VALIDATION_FAILED',
+          error.message,
+        );
+      throw error;
+    }
     const number = await nextOrderNumber(transaction, checkout.organization_id);
     const orderCreated = await sql<{ id: string }>`
       insert into orders.orders (organization_id, order_number, checkout_session_id, customer_id, source, currency_code, order_status, payment_method, subtotal_amount, discount_amount, total_amount)
@@ -826,7 +872,7 @@ export async function placeOrder(
     const orderId = orderCreated.rows[0]?.id;
     if (!orderId) throw new Error('Order creation did not return an id.');
     input.fault?.('after-order-header');
-    await sql`insert into orders.order_customer_snapshots (order_id, organization_id, customer_id, display_name, phone, email) values (${orderId}, ${checkout.organization_id}, ${customerId}, ${contact.name}, ${contact.phone}, ${contact.email ?? null})`.execute(
+    await sql`insert into orders.order_customer_snapshots (order_id, organization_id, customer_id, display_name, phone, normalized_phone, email) values (${orderId}, ${checkout.organization_id}, ${customerId}, ${contact.name}, ${contact.phone}, ${normalizeCustomerPhone(contact.phone)}, ${contact.email ?? null})`.execute(
       transaction,
     );
     await sql`insert into orders.order_addresses (organization_id, order_id, address_type, geography_node_id, recipient_name, phone, address_line_1, address_line_2, area, city, district, postal_code, country_code) values (${checkout.organization_id}, ${orderId}, 'DELIVERY', ${address.geographyNodeId ?? null}, ${address.recipientName}, ${address.phone}, ${address.addressLine1}, ${address.addressLine2 ?? null}, ${address.area ?? null}, ${address.city ?? null}, ${address.district ?? null}, ${address.postalCode ?? null}, ${address.countryCode})`.execute(
@@ -863,6 +909,9 @@ export async function placeOrder(
           idempotencyKey: `order:${orderId}:${created.rows[0]!.id}`,
         });
         await sql`insert into orders.order_inventory_reservations (organization_id, order_id, order_line_id, reservation_id) values (${checkout.organization_id}, ${orderId}, ${created.rows[0]!.id}, ${reservation.reservationId})`.execute(
+          transaction,
+        );
+        await sql`update orders.order_lines set inventory_item_id = ${reservation.inventoryItemId} where organization_id = ${checkout.organization_id} and id = ${created.rows[0]!.id}`.execute(
           transaction,
         );
         await sql`insert into inventory.inventory_reservation_allocations (organization_id, reservation_id, order_line_id, inventory_item_id, location_id, reserved_quantity) values (${checkout.organization_id}, ${reservation.reservationId}, ${created.rows[0]!.id}, ${reservation.inventoryItemId}, ${location.rows[0].location_id}, ${detail.quantity}::numeric)`.execute(
@@ -972,6 +1021,8 @@ export async function getOrderForCheckoutContext(
 }
 
 export interface AdminOrderDetailView extends OrderView {
+  readonly fulfillmentStatus: OrderFulfillmentStatus;
+  readonly deliveryStatus: OrderDeliveryStatus;
   readonly deliveryAmount: string;
   readonly notes: readonly {
     id: string;
@@ -1083,11 +1134,16 @@ export async function getOrderForAdmin(
       status: string;
       location_id: string;
       dispatched_at: Date | null;
+      allocated_quantity: string;
     }>`
-      select id, fulfillment_number, status, location_id, dispatched_at
-      from fulfillment.fulfillments
-      where order_id = ${input.orderId}
-      order by created_at desc
+      select record.id, record.fulfillment_number, record.status, record.location_id,
+        record.dispatched_at, coalesce(sum(line.quantity), 0)::text as allocated_quantity
+      from fulfillment.fulfillments record
+      left join fulfillment.fulfillment_lines line
+        on line.organization_id = record.organization_id and line.fulfillment_id = record.id
+      where record.organization_id = ${input.organizationId} and record.order_id = ${input.orderId}
+      group by record.id
+      order by record.created_at desc
     `.execute(db),
     sql<{
       id: string;
@@ -1098,7 +1154,8 @@ export async function getOrderForAdmin(
       dispatched_at: Date | null;
       delivered_at: Date | null;
     }>`
-      select d.id, d.delivery_number, d.operational_status, d.outcome_status, d.tracking_reference, f.dispatched_at, null as delivered_at
+      select d.id, d.delivery_number, d.operational_status, d.outcome_status, d.tracking_reference,
+        f.dispatched_at, d.delivered_at
       from delivery.deliveries d
       join fulfillment.fulfillments f on f.id = d.fulfillment_id
       where d.order_id = ${input.orderId}
@@ -1143,8 +1200,52 @@ export async function getOrderForAdmin(
     `.execute(db),
   ]);
 
+  const orderedQuantity = baseOrder.lines.reduce(
+    (total, line) => (line.status === 'ACTIVE' ? total + decimal6Minor(line.quantity) : total),
+    0n,
+  );
+  const activeFulfillments = fulfillmentsQuery.rows.filter((row) => row.status !== 'CANCELLED');
+  const allocatedQuantity = activeFulfillments.reduce(
+    (total, row) => total + decimal6Minor(row.allocated_quantity),
+    0n,
+  );
+  const fulfillmentStatus: OrderFulfillmentStatus =
+    baseOrder.status === 'CANCELLED'
+      ? 'CANCELLED'
+      : activeFulfillments.length === 0
+        ? 'UNFULFILLED'
+        : allocatedQuantity < orderedQuantity
+          ? 'PARTIALLY_FULFILLED'
+          : activeFulfillments.some((row) => row.status !== 'DISPATCHED')
+            ? 'IN_PROGRESS'
+            : 'FULFILLED';
+  const deliveryStatus: OrderDeliveryStatus =
+    baseOrder.status === 'CANCELLED'
+      ? 'CANCELLED'
+      : deliveriesQuery.rows.length === 0
+        ? 'NOT_STARTED'
+        : deliveriesQuery.rows.some((row) =>
+              ['FAILED', 'LOST', 'DAMAGED'].includes(row.outcome_status ?? ''),
+            )
+          ? 'FAILED'
+          : deliveriesQuery.rows.every((row) => row.outcome_status === 'DELIVERED')
+            ? 'DELIVERED'
+            : deliveriesQuery.rows.some((row) => row.outcome_status === 'DELIVERED')
+              ? 'PARTIALLY_DELIVERED'
+              : deliveriesQuery.rows.some((row) =>
+                    ['BOOKED', 'HANDED_OVER', 'IN_TRANSIT'].includes(row.operational_status),
+                  )
+                ? 'IN_TRANSIT'
+                : deliveriesQuery.rows.every(
+                      (row) => row.outcome_status === 'CANCELLED_BEFORE_HANDOVER',
+                    )
+                  ? 'CANCELLED'
+                  : 'PENDING';
+
   return {
     ...baseOrder,
+    fulfillmentStatus,
+    deliveryStatus,
     deliveryAmount: exists.rows[0].delivery_amount,
     notes: notesQuery.rows.map((row) => ({
       id: row.id,
@@ -1210,8 +1311,14 @@ export async function getOrderForAdmin(
 export interface OrderListFilters {
   readonly page?: number;
   readonly pageSize?: number;
-  readonly status?: string;
-  /** Searched against order_number prefix, snapshot display_name ILIKE, and normalized phone. */
+  readonly status?: OrderView['status'];
+  readonly paymentStatus?: OrderPaymentStatus;
+  readonly fulfillmentStatus?: OrderFulfillmentStatus;
+  readonly deliveryStatus?: OrderDeliveryStatus;
+  readonly paymentMethod?: PaymentMethodCode;
+  readonly salesChannel?: OrderView['salesChannel'];
+  readonly source?: OrderView['source'];
+  /** Searched against historical order number, customer name, phone, and email snapshots. */
   readonly q?: string;
   readonly from?: string;
   readonly to?: string;
@@ -1219,18 +1326,43 @@ export interface OrderListFilters {
   readonly customerId?: string;
 }
 
+export type OrderPaymentStatus =
+  | 'UNPAID'
+  | 'PAYMENT_PENDING'
+  | 'PARTIALLY_PAID'
+  | 'PAID'
+  | 'PARTIALLY_REFUNDED'
+  | 'REFUNDED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+export type OrderFulfillmentStatus =
+  'UNFULFILLED' | 'PARTIALLY_FULFILLED' | 'IN_PROGRESS' | 'FULFILLED' | 'CANCELLED';
+export type OrderDeliveryStatus =
+  | 'NOT_STARTED'
+  | 'PENDING'
+  | 'IN_TRANSIT'
+  | 'PARTIALLY_DELIVERED'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'CANCELLED';
+
 export interface OrderListItem {
   readonly id: string;
   readonly orderNumber: string;
   readonly source: string;
+  readonly salesChannel: OrderView['salesChannel'];
   readonly status: string;
   readonly paymentMethod: PaymentMethodCode;
-  readonly paymentStatus: string;
+  readonly paymentStatus: OrderPaymentStatus;
+  readonly fulfillmentStatus: OrderFulfillmentStatus;
+  readonly deliveryStatus: OrderDeliveryStatus;
   readonly total: string;
   readonly deliveryAmount: string;
   readonly currency: string;
   readonly customerName: string;
   readonly customerId: string | null;
+  readonly customerPhone: string;
+  readonly customerEmail: string | null;
   readonly createdAt: string;
 }
 
@@ -1259,18 +1391,28 @@ export async function listOrders(
       union all
       select alias_customer_id as customer_id
       from customers.customer_aliases
-      where canonical_customer_id = ${filters.customerId}
-        or alias_customer_id = ${filters.customerId}
+      where organization_id = ${organizationId}
+        and (canonical_customer_id = ${filters.customerId}
+          or alias_customer_id = ${filters.customerId})
     `.execute(db);
     customerIds = aliasResult.rows.map((r) => r.customer_id);
   }
 
   const searchTerm = filters?.q?.trim() ?? null;
+  let normalizedSearchPhone: string | null = null;
+  if (searchTerm) {
+    try {
+      normalizedSearchPhone = normalizeCustomerPhone(searchTerm);
+    } catch {
+      normalizedSearchPhone = null;
+    }
+  }
 
   const result = await sql<{
     id: string;
     order_number: string;
     source: string;
+    sales_channel: OrderView['salesChannel'];
     order_status: string;
     payment_method: PaymentMethodCode;
     total_amount: string;
@@ -1278,94 +1420,148 @@ export async function listOrders(
     currency_code: string;
     display_name: string;
     customer_id: string | null;
+    phone: string;
+    normalized_phone: string;
+    email: string | null;
     created_at: Date;
-    // Inline payment summary from LEFT JOIN LATERAL — no per-row async call.
-    payment_intent_status: string | null;
-    collected: string | null;
-    refunded: string | null;
+    payment_status: OrderPaymentStatus;
+    fulfillment_status: OrderFulfillmentStatus;
+    delivery_status: OrderDeliveryStatus;
     total_count: string;
   }>`
-    select
-      o.id, o.order_number, o.source, o.order_status, o.payment_method,
-      o.total_amount::text, o.delivery_amount::text, o.currency_code,
-      snap.display_name, snap.customer_id,
-      o.created_at,
-      pay.status           as payment_intent_status,
-      pay.collected        as collected,
-      pay.refunded         as refunded,
-      count(*) over ()::text as total_count
-    from orders.orders o
-    join orders.order_customer_snapshots snap on snap.order_id = o.id
-    left join lateral (
+    with projected as (
       select
-        pi.status,
-        coalesce((select sum(allocation.amount)
-          from payments.payment_allocations allocation
-          join payments.payments payment on payment.id = allocation.payment_id
-          where allocation.organization_id = o.organization_id
-            and allocation.order_id = o.id
-            and payment.status = 'CONFIRMED'), 0)::text as collected,
-        coalesce((select sum(refund.amount)
-          from payments.refunds refund
-          where refund.organization_id = o.organization_id
-            and refund.order_id = o.id
-            and refund.status = 'COMPLETED'), 0)::text as refunded
-      from payments.payment_intents pi
-      where pi.order_id = o.id
-      order by pi.created_at desc
-      limit 1
-    ) pay on true
-    where o.organization_id = ${organizationId}
-      and (${filters?.status ?? null}::text is null or o.order_status = ${filters?.status ?? null})
-      and (${filters?.from ?? null}::text is null or o.created_at >= (${filters?.from ?? null})::timestamptz)
-      and (${filters?.to ?? null}::text is null or o.created_at <= (${filters?.to ?? null})::timestamptz)
+        o.id, o.order_number, o.source, o.sales_channel, o.order_status, o.payment_method,
+        o.total_amount::text, o.delivery_amount::text, o.currency_code,
+        snap.display_name, snap.customer_id, snap.phone, snap.normalized_phone, snap.email,
+        o.created_at,
+        case
+          when pay.refunded > 0 and pay.collected - pay.refunded <= 0 then 'REFUNDED'
+          when pay.refunded > 0 then 'PARTIALLY_REFUNDED'
+          when pay.collected >= o.total_amount and o.total_amount > 0 then 'PAID'
+          when pay.collected > 0 then 'PARTIALLY_PAID'
+          when pay.pending_attempt_count > 0 then 'PAYMENT_PENDING'
+          when pay.intent_status = 'EXPIRED' then 'EXPIRED'
+          when pay.intent_status = 'CANCELLED' then 'CANCELLED'
+          else 'UNPAID'
+        end as payment_status,
+        case
+          when o.order_status = 'CANCELLED' then 'CANCELLED'
+          when fulfillment.allocated_quantity = 0 then 'UNFULFILLED'
+          when fulfillment.allocated_quantity < lines.ordered_quantity then 'PARTIALLY_FULFILLED'
+          when fulfillment.open_count > 0 then 'IN_PROGRESS'
+          else 'FULFILLED'
+        end as fulfillment_status,
+        case
+          when o.order_status = 'CANCELLED' then 'CANCELLED'
+          when shipment.delivery_count = 0 then 'NOT_STARTED'
+          when shipment.failed_count > 0 then 'FAILED'
+          when shipment.delivered_count = shipment.delivery_count then 'DELIVERED'
+          when shipment.delivered_count > 0 then 'PARTIALLY_DELIVERED'
+          when shipment.in_transit_count > 0 then 'IN_TRANSIT'
+          when shipment.cancelled_count = shipment.delivery_count then 'CANCELLED'
+          else 'PENDING'
+        end as delivery_status
+      from orders.orders o
+      join orders.order_customer_snapshots snap
+        on snap.organization_id = o.organization_id and snap.order_id = o.id
+      left join lateral (
+        select
+          (select intent.status from payments.payment_intents intent
+            where intent.organization_id = o.organization_id and intent.order_id = o.id
+            order by intent.created_at desc, intent.id desc limit 1) as intent_status,
+          coalesce((select sum(allocation.amount)
+            from payments.payment_allocations allocation
+            join payments.payments payment
+              on payment.organization_id = allocation.organization_id
+              and payment.id = allocation.payment_id
+            where allocation.organization_id = o.organization_id
+              and allocation.order_id = o.id and payment.status = 'CONFIRMED'), 0) as collected,
+          coalesce((select sum(refund.amount)
+            from payments.refunds refund
+            where refund.organization_id = o.organization_id
+              and refund.order_id = o.id and refund.status = 'COMPLETED'), 0) as refunded,
+          (select count(*) from payments.payment_attempts attempt
+            join payments.payment_intents intent
+              on intent.organization_id = attempt.organization_id
+              and intent.id = attempt.payment_intent_id
+            where intent.organization_id = o.organization_id and intent.order_id = o.id
+              and attempt.status = 'PENDING_VERIFICATION') as pending_attempt_count
+      ) pay on true
+      left join lateral (
+        select coalesce(sum(line.quantity), 0) as ordered_quantity
+        from orders.order_lines line
+        where line.organization_id = o.organization_id and line.order_id = o.id
+          and line.line_status = 'ACTIVE'
+      ) lines on true
+      left join lateral (
+        select
+          coalesce(sum(line.quantity) filter (where record.status <> 'CANCELLED'), 0) as allocated_quantity,
+          count(*) filter (where record.status not in ('DISPATCHED', 'CANCELLED')) as open_count
+        from fulfillment.fulfillments record
+        join fulfillment.fulfillment_lines line
+          on line.organization_id = record.organization_id and line.fulfillment_id = record.id
+        where record.organization_id = o.organization_id and record.order_id = o.id
+      ) fulfillment on true
+      left join lateral (
+        select count(*) as delivery_count,
+          count(*) filter (where delivery.outcome_status = 'DELIVERED') as delivered_count,
+          count(*) filter (where delivery.outcome_status in ('FAILED', 'LOST', 'DAMAGED')) as failed_count,
+          count(*) filter (where delivery.outcome_status = 'CANCELLED_BEFORE_HANDOVER') as cancelled_count,
+          count(*) filter (where delivery.operational_status in ('BOOKED', 'HANDED_OVER', 'IN_TRANSIT')) as in_transit_count
+        from delivery.deliveries delivery
+        where delivery.organization_id = o.organization_id and delivery.order_id = o.id
+      ) shipment on true
+      where o.organization_id = ${organizationId}
+    )
+    select projected.*,
+      count(*) over ()::text as total_count
+    from projected
+    where (${filters?.status ?? null}::text is null or order_status = ${filters?.status ?? null})
+      and (${filters?.paymentStatus ?? null}::text is null or payment_status = ${filters?.paymentStatus ?? null})
+      and (${filters?.fulfillmentStatus ?? null}::text is null or fulfillment_status = ${filters?.fulfillmentStatus ?? null})
+      and (${filters?.deliveryStatus ?? null}::text is null or delivery_status = ${filters?.deliveryStatus ?? null})
+      and (${filters?.paymentMethod ?? null}::text is null or payment_method = ${filters?.paymentMethod ?? null})
+      and (${filters?.salesChannel ?? null}::text is null or sales_channel = ${filters?.salesChannel ?? null})
+      and (${filters?.source ?? null}::text is null or source = ${filters?.source ?? null})
+      and (${filters?.from ?? null}::text is null or created_at >= (${filters?.from ?? null})::timestamptz)
+      and (${filters?.to ?? null}::text is null or created_at <= (${filters?.to ?? null})::timestamptz)
       and (
         ${customerIds ?? null}::uuid[] is null
-        or snap.customer_id = any(${customerIds ?? null}::uuid[])
+        or customer_id = any(${customerIds ?? null}::uuid[])
       )
       and (
         ${searchTerm ?? null}::text is null
-        or o.order_number ilike ${searchTerm ? `${searchTerm}%` : ''}
-        or lower(snap.display_name) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
-        or snap.phone = (select normalized_value from customers.customer_phones
-          where normalized_value = ${searchTerm ?? ''} limit 1)
+        or order_number ilike ${searchTerm ? `${searchTerm}%` : ''}
+        or lower(display_name) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
+        or lower(coalesce(email, '')) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
+        or normalized_phone = ${normalizedSearchPhone ?? ''}
       )
-    order by o.created_at desc, o.id desc
+    order by created_at desc, id desc
     limit ${pageSize} offset ${offset}
   `.execute(db);
 
   const totalItems = Number(result.rows[0]?.total_count ?? 0);
 
-  const data: OrderListItem[] = result.rows.map((row) => {
-    // Derive a human-readable payment status from the intent status and collected amounts.
-    const collected = Number(row.collected ?? 0);
-    const refunded = Number(row.refunded ?? 0);
-    const expected = Number(row.total_amount);
-    let paymentStatus = row.payment_intent_status ?? 'UNPAID';
-    if (paymentStatus === 'ACTIVE') {
-      if (collected === 0) paymentStatus = 'UNPAID';
-      else if (collected - refunded >= expected) paymentStatus = 'PAID';
-      else paymentStatus = 'PARTIALLY_PAID';
-    } else if (paymentStatus === 'CAPTURED' || paymentStatus === 'COLLECTED') {
-      if (refunded > 0 && refunded >= expected) paymentStatus = 'REFUNDED';
-      else if (refunded > 0) paymentStatus = 'PARTIALLY_REFUNDED';
-      else paymentStatus = 'PAID';
-    }
-    return {
-      id: row.id,
-      orderNumber: row.order_number,
-      source: row.source,
-      status: row.order_status,
-      paymentMethod: row.payment_method,
-      paymentStatus,
-      total: row.total_amount,
-      deliveryAmount: row.delivery_amount,
-      currency: row.currency_code,
-      customerName: row.display_name,
-      customerId: row.customer_id ?? null,
-      createdAt: row.created_at.toISOString(),
-    };
-  });
+  const data: OrderListItem[] = result.rows.map((row) => ({
+    id: row.id,
+    orderNumber: row.order_number,
+    source: row.source,
+    salesChannel: row.sales_channel,
+    status: row.order_status,
+    paymentMethod: row.payment_method,
+    paymentStatus: row.payment_status,
+    fulfillmentStatus: row.fulfillment_status,
+    deliveryStatus: row.delivery_status,
+    total: row.total_amount,
+    deliveryAmount: row.delivery_amount,
+    currency: row.currency_code,
+    customerName: row.display_name,
+    customerId: row.customer_id ?? null,
+    customerPhone: row.phone,
+    customerEmail: row.email,
+    createdAt: row.created_at.toISOString(),
+  }));
 
   return {
     data,
@@ -1417,6 +1613,419 @@ export async function updateOrderStatus(
       targetId: input.orderId,
       ...(input.reason ? { reason: input.reason } : {}),
     });
+    return orderView(transaction, input.orderId);
+  });
+}
+
+/**
+ * Cancels one complete line before fulfillment/payment activity begins. The
+ * original line remains immutable evidence; active totals and obligations are
+ * reduced atomically and the line's reservation is released through Inventory.
+ */
+export async function cancelOrderLine(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    orderId: string;
+    orderLineId: string;
+    expectedVersion: number;
+    reasonCode: string;
+    reasonText?: string;
+    idempotencyKey: string;
+  },
+): Promise<OrderView> {
+  const reasonCode = input.reasonCode.trim();
+  const reasonText = input.reasonText?.trim() || null;
+  if (!reasonCode)
+    throw new OrderDomainError('VALIDATION_FAILED', 'A line cancellation reason is required.');
+
+  return db.transaction().execute(async (transaction) => {
+    let idempotencyRecordId: string;
+    try {
+      const record = await claimIdempotencyRecord(transaction, {
+        organizationId: input.organizationId,
+        principalType: 'USER',
+        principalId: input.actorId,
+        operationType: 'orders.cancel-line',
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint: JSON.stringify({
+          orderId: input.orderId,
+          orderLineId: input.orderLineId,
+          expectedVersion: input.expectedVersion,
+          reasonCode,
+          reasonText,
+        }),
+      });
+      if (!record.created) {
+        if (record.status === 'SUCCEEDED') return orderView(transaction, input.orderId);
+        throw new OrderDomainError(
+          'IDEMPOTENCY_CONFLICT',
+          'This line cancellation is already in progress.',
+        );
+      }
+      idempotencyRecordId = record.id;
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError)
+        throw new OrderDomainError('IDEMPOTENCY_CONFLICT', error.message);
+      throw error;
+    }
+
+    const orderResult = await sql<{
+      order_status: OrderView['status'];
+      version: string;
+      total_amount: string;
+    }>`
+      select order_status, version::text, total_amount::text
+      from orders.orders
+      where organization_id = ${input.organizationId} and id = ${input.orderId}
+      for update
+    `.execute(transaction);
+    const order = orderResult.rows[0];
+    if (!order) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
+    if (Number(order.version) !== input.expectedVersion)
+      throw new OrderDomainError(
+        'STALE_VERSION',
+        'Order has changed; reload before cancelling an item.',
+      );
+    if (!['PENDING', 'CONFIRMED', 'ON_HOLD'].includes(order.order_status))
+      throw new OrderDomainError(
+        'INVALID_TRANSITION',
+        'Items can only be cancelled before an Order is completed or cancelled.',
+      );
+
+    const lineResult = await sql<{
+      id: string;
+      sku_snapshot: string;
+      line_status: 'ACTIVE' | 'CANCELLED';
+      gross_amount: string;
+      discount_amount: string;
+      net_amount: string;
+      reservation_id: string | null;
+    }>`
+      select line.id, line.sku_snapshot, line.line_status,
+        line.gross_amount::text, line.discount_amount::text, line.net_amount::text,
+        bridge.reservation_id
+      from orders.order_lines line
+      left join orders.order_inventory_reservations bridge
+        on bridge.organization_id = line.organization_id and bridge.order_line_id = line.id
+      where line.organization_id = ${input.organizationId}
+        and line.order_id = ${input.orderId}
+        and line.id = ${input.orderLineId}
+      for update of line
+    `.execute(transaction);
+    const line = lineResult.rows[0];
+    if (!line) throw new OrderDomainError('NOT_FOUND', 'Order line was not found.');
+    if (line.line_status === 'CANCELLED') {
+      await sql`
+        update platform.idempotency_records
+        set status = 'SUCCEEDED', result_entity_type = 'orders.order_line',
+            result_entity_id = ${input.orderLineId}::uuid,
+            safe_response = ${JSON.stringify({ orderId: input.orderId, orderLineId: input.orderLineId })}::jsonb,
+            completed_at = now()
+        where id = ${idempotencyRecordId}
+      `.execute(transaction);
+      return orderView(transaction, input.orderId);
+    }
+
+    const eligibility = await sql<{
+      active_line_count: number;
+      fulfillment_count: number;
+    }>`
+      select
+        (select count(*)::int from orders.order_lines candidate
+          where candidate.organization_id = ${input.organizationId}
+            and candidate.order_id = ${input.orderId}
+            and candidate.line_status = 'ACTIVE') as active_line_count,
+        (select count(*)::int from fulfillment.fulfillment_lines fulfillment_line
+          join fulfillment.fulfillments fulfillment
+            on fulfillment.organization_id = fulfillment_line.organization_id
+            and fulfillment.id = fulfillment_line.fulfillment_id
+          where fulfillment.organization_id = ${input.organizationId}
+            and fulfillment.order_id = ${input.orderId}) as fulfillment_count
+    `.execute(transaction);
+    const policy = eligibility.rows[0]!;
+    if (policy.active_line_count <= 1)
+      throw new OrderDomainError(
+        'VALIDATION_FAILED',
+        'Cancel the entire Order instead of cancelling its final active item.',
+      );
+    if (policy.fulfillment_count > 0)
+      throw new OrderDomainError(
+        'INVALID_TRANSITION',
+        'Order items cannot be cancelled after fulfillment allocation has started.',
+      );
+
+    const nextTotal = await sql<{ amount: string }>`
+      select (${order.total_amount}::numeric - ${line.net_amount}::numeric)::numeric(20,4)::text as amount
+    `.execute(transaction);
+    try {
+      await reviseOpenPaymentIntentForOrder(transaction, {
+        organizationId: input.organizationId,
+        orderId: input.orderId,
+        expectedAmount: nextTotal.rows[0]!.amount,
+      });
+    } catch (error) {
+      if (error instanceof PaymentDomainError)
+        throw new OrderDomainError('INVALID_TRANSITION', error.message);
+      throw error;
+    }
+
+    if (line.reservation_id)
+      await releaseInventoryReservationInTransaction(transaction, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        reservationId: line.reservation_id,
+        idempotencyKey: `order-line-cancel:${input.orderLineId}:${line.reservation_id}`,
+        authority: { type: 'ORDER_AMENDMENT', orderId: input.orderId },
+      });
+
+    await sql`
+      update orders.order_lines
+      set line_status = 'CANCELLED', cancelled_at = now(),
+          cancelled_by_actor_id = ${input.actorId},
+          cancellation_reason_code = ${reasonCode},
+          cancellation_reason_text = ${reasonText}
+      where organization_id = ${input.organizationId} and id = ${input.orderLineId}
+    `.execute(transaction);
+    const updated = await sql<{ version: string }>`
+      update orders.orders
+      set subtotal_amount = subtotal_amount - ${line.gross_amount}::numeric,
+          discount_amount = discount_amount - ${line.discount_amount}::numeric,
+          total_amount = total_amount - ${line.net_amount}::numeric,
+          version = version + 1,
+          updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.orderId}
+      returning version::text
+    `.execute(transaction);
+    await sql`
+      insert into orders.order_line_cancellations (
+        organization_id, order_id, order_line_id, reason_code, reason_text,
+        amount_removed, reservation_id, created_by_actor_id
+      ) values (
+        ${input.organizationId}, ${input.orderId}, ${input.orderLineId}, ${reasonCode},
+        ${reasonText}, ${line.net_amount}::numeric, ${line.reservation_id}, ${input.actorId}
+      )
+    `.execute(transaction);
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'orders.order.line_cancelled',
+      targetType: 'orders.order_line',
+      targetId: input.orderLineId,
+      ...(reasonText ? { reason: reasonText } : {}),
+      metadata: {
+        orderId: input.orderId,
+        sku: line.sku_snapshot,
+        reasonCode,
+        amountRemoved: line.net_amount,
+        reservationId: line.reservation_id,
+      },
+    });
+    await sql`
+      insert into platform.outbox_events (
+        organization_id, event_type, event_version, aggregate_type, aggregate_id,
+        aggregate_version, payload, occurred_at
+      ) values (
+        ${input.organizationId}, 'orders.order.line_cancelled', 1, 'orders.order',
+        ${input.orderId}, ${Number(updated.rows[0]!.version)},
+        ${JSON.stringify({ orderId: input.orderId, orderLineId: input.orderLineId, reasonCode, amountRemoved: line.net_amount })}::jsonb,
+        now()
+      )
+    `.execute(transaction);
+    await sql`
+      update platform.idempotency_records
+      set status = 'SUCCEEDED', result_entity_type = 'orders.order_line',
+          result_entity_id = ${input.orderLineId}::uuid,
+          safe_response = ${JSON.stringify({ orderId: input.orderId, orderLineId: input.orderLineId })}::jsonb,
+          completed_at = now()
+      where id = ${idempotencyRecordId}
+    `.execute(transaction);
+    return orderView(transaction, input.orderId);
+  });
+}
+
+/** Corrects the immutable delivery snapshot before fulfillment starts and keeps both versions as evidence. */
+export async function updateOrderDeliveryAddress(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    orderId: string;
+    expectedVersion: number;
+    address: CheckoutAddressInput;
+    reason: string;
+    idempotencyKey: string;
+  },
+): Promise<OrderView> {
+  ensureAddress(input.address);
+  const reason = input.reason.trim();
+  if (!reason)
+    throw new OrderDomainError('VALIDATION_FAILED', 'An address correction reason is required.');
+  return db.transaction().execute(async (transaction) => {
+    let idempotencyRecordId: string;
+    try {
+      const record = await claimIdempotencyRecord(transaction, {
+        organizationId: input.organizationId,
+        principalType: 'USER',
+        principalId: input.actorId,
+        operationType: 'orders.correct-delivery-address',
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint: JSON.stringify({
+          orderId: input.orderId,
+          expectedVersion: input.expectedVersion,
+          address: input.address,
+          reason,
+        }),
+      });
+      if (!record.created) {
+        if (record.status === 'SUCCEEDED') return orderView(transaction, input.orderId);
+        throw new OrderDomainError(
+          'IDEMPOTENCY_CONFLICT',
+          'This address correction is already in progress.',
+        );
+      }
+      idempotencyRecordId = record.id;
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError)
+        throw new OrderDomainError('IDEMPOTENCY_CONFLICT', error.message);
+      throw error;
+    }
+
+    const orderResult = await sql<{ order_status: OrderView['status']; version: string }>`
+      select order_status, version::text from orders.orders
+      where organization_id = ${input.organizationId} and id = ${input.orderId}
+      for update
+    `.execute(transaction);
+    const order = orderResult.rows[0];
+    if (!order) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
+    if (Number(order.version) !== input.expectedVersion)
+      throw new OrderDomainError(
+        'STALE_VERSION',
+        'Order has changed; reload before correcting its address.',
+      );
+    if (!['PENDING', 'CONFIRMED', 'ON_HOLD'].includes(order.order_status))
+      throw new OrderDomainError(
+        'INVALID_TRANSITION',
+        'The delivery address can only be corrected before the Order is completed or cancelled.',
+      );
+    const allocated = await sql<{ exists: boolean }>`
+      select exists (
+        select 1 from fulfillment.fulfillments fulfillment
+        join fulfillment.fulfillment_lines line
+          on line.organization_id = fulfillment.organization_id
+          and line.fulfillment_id = fulfillment.id
+        where fulfillment.organization_id = ${input.organizationId}
+          and fulfillment.order_id = ${input.orderId}
+      ) as exists
+    `.execute(transaction);
+    if (allocated.rows[0]?.exists)
+      throw new OrderDomainError(
+        'INVALID_TRANSITION',
+        'The delivery address cannot be changed after fulfillment allocation has started.',
+      );
+
+    const currentResult = await sql<{
+      id: string;
+      source_customer_address_id: string | null;
+      geography_node_id: string | null;
+      recipient_name: string;
+      phone: string;
+      address_line_1: string;
+      address_line_2: string | null;
+      area: string | null;
+      city: string | null;
+      district: string | null;
+      postal_code: string | null;
+      country_code: string;
+    }>`
+      select id, source_customer_address_id, geography_node_id, recipient_name, phone,
+        address_line_1, address_line_2, area, city, district, postal_code, country_code
+      from orders.order_addresses
+      where organization_id = ${input.organizationId} and order_id = ${input.orderId}
+        and address_type = 'DELIVERY'
+      for update
+    `.execute(transaction);
+    const current = currentResult.rows[0];
+    if (!current) throw new OrderDomainError('NOT_FOUND', 'Delivery address was not found.');
+    const beforeSnapshot = {
+      recipientName: current.recipient_name,
+      phone: current.phone,
+      addressLine1: current.address_line_1,
+      addressLine2: current.address_line_2,
+      geographyNodeId: current.geography_node_id,
+      area: current.area,
+      city: current.city,
+      district: current.district,
+      postalCode: current.postal_code,
+      countryCode: current.country_code,
+    };
+    const afterSnapshot = {
+      recipientName: input.address.recipientName.trim(),
+      phone: input.address.phone.trim(),
+      addressLine1: input.address.addressLine1.trim(),
+      addressLine2: input.address.addressLine2?.trim() || null,
+      geographyNodeId: input.address.geographyNodeId ?? null,
+      area: input.address.area?.trim() || null,
+      city: input.address.city?.trim() || null,
+      district: input.address.district?.trim() || null,
+      postalCode: input.address.postalCode?.trim() || null,
+      countryCode: input.address.countryCode.trim().toLocaleUpperCase(),
+    };
+    await sql`
+      update orders.order_addresses
+      set source_customer_address_id = null,
+          geography_node_id = ${afterSnapshot.geographyNodeId},
+          recipient_name = ${afterSnapshot.recipientName}, phone = ${afterSnapshot.phone},
+          address_line_1 = ${afterSnapshot.addressLine1}, address_line_2 = ${afterSnapshot.addressLine2},
+          area = ${afterSnapshot.area}, city = ${afterSnapshot.city}, district = ${afterSnapshot.district},
+          postal_code = ${afterSnapshot.postalCode}, country_code = ${afterSnapshot.countryCode}
+      where organization_id = ${input.organizationId} and id = ${current.id}
+    `.execute(transaction);
+    const updated = await sql<{ version: string }>`
+      update orders.orders set version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.orderId}
+      returning version::text
+    `.execute(transaction);
+    await sql`
+      insert into orders.order_address_corrections (
+        organization_id, order_id, order_address_id, before_snapshot, after_snapshot,
+        reason, created_by_actor_id
+      ) values (
+        ${input.organizationId}, ${input.orderId}, ${current.id},
+        ${JSON.stringify(beforeSnapshot)}::jsonb, ${JSON.stringify(afterSnapshot)}::jsonb,
+        ${reason}, ${input.actorId}
+      )
+    `.execute(transaction);
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'orders.order.delivery_address_corrected',
+      targetType: 'orders.order',
+      targetId: input.orderId,
+      reason,
+      metadata: { before: beforeSnapshot, after: afterSnapshot },
+    });
+    await sql`
+      insert into platform.outbox_events (
+        organization_id, event_type, event_version, aggregate_type, aggregate_id,
+        aggregate_version, payload, occurred_at
+      ) values (
+        ${input.organizationId}, 'orders.order.delivery_address_corrected', 1,
+        'orders.order', ${input.orderId}, ${Number(updated.rows[0]!.version)},
+        ${JSON.stringify({ orderId: input.orderId })}::jsonb, now()
+      )
+    `.execute(transaction);
+    await sql`
+      update platform.idempotency_records
+      set status = 'SUCCEEDED', result_entity_type = 'orders.order',
+          result_entity_id = ${input.orderId}::uuid,
+          safe_response = ${JSON.stringify({ orderId: input.orderId })}::jsonb,
+          completed_at = now()
+      where id = ${idempotencyRecordId}
+    `.execute(transaction);
     return orderView(transaction, input.orderId);
   });
 }
@@ -1816,6 +2425,7 @@ export async function completeOrder(
       select count(*)::text as count
       from orders.order_lines ol
       where ol.order_id = ${input.orderId}
+        and ol.line_status = 'ACTIVE'
         and (
           select coalesce(sum(dl.delivered_quantity), 0)
           from delivery.delivery_lines dl
@@ -1898,8 +2508,10 @@ export interface ManualOrderLine {
   readonly variantId: string;
   /** Must be > 0. Decimal string, e.g. "2" or "1.5". */
   readonly quantity: string;
-  /** Admin-set price. Must be >= 0. Decimal string, e.g. "1200.00". */
-  readonly unitPrice: string;
+  /** Omit to use the current authoritative Catalog price. */
+  readonly unitPrice?: string;
+  /** Required when unitPrice differs from the current Catalog price. */
+  readonly priceOverrideReason?: string;
 }
 
 export interface ManualOrderDeliveryAddress {
@@ -1931,6 +2543,7 @@ export interface CreateManualOrderInput {
   /** Shipping charge in the order currency. Must be >= 0. */
   readonly deliveryAmount: string;
   readonly paymentMethod: PaymentMethodCode;
+  readonly salesChannel?: Exclude<OrderView['salesChannel'], 'STOREFRONT'>;
   /**
    * Client-generated UUID. Required. The same key returns the same order
    * if the request is replayed after a network failure.
@@ -1942,11 +2555,32 @@ export interface CreateManualOrderInput {
 const decimalPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/;
 const positiveDecimalPattern = /^(?:(?:[1-9]\d*)(?:\.\d{1,4})?|(?:0\.\d*[1-9]\d*))$/;
 
+function decimal6Minor(value: string): bigint {
+  const [whole = '0', fraction = ''] = value.split('.');
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'));
+}
+
+function decimal4Minor(value: string): bigint {
+  const [whole = '0', fraction = ''] = value.split('.');
+  return BigInt(whole) * 10_000n + BigInt(fraction.padEnd(4, '0'));
+}
+
+function decimal4Text(value: bigint): string {
+  const whole = value / 10_000n;
+  const fraction = (value % 10_000n).toString().padStart(4, '0');
+  return `${whole}.${fraction}`;
+}
+
+function multiplyDecimal4(left: string, right: string): string {
+  const scaledProduct = decimal4Minor(left) * decimal4Minor(right);
+  return decimal4Text((scaledProduct + 5_000n) / 10_000n);
+}
+
 /**
  * Creates an order initiated by an admin operator, bypassing the storefront
  * checkout flow. Unlike placeOrder:
  *
- * - Prices are admin-set (no promotion evaluation).
+ * - Catalog prices are authoritative unless an operator supplies a reasoned override.
  * - Customer must be ACTIVE (not INACTIVE, BLOCKED, MERGED, or ANONYMIZED).
  * - Admin selects the warehouse location explicitly.
  * - A delivery charge can be specified.
@@ -1975,10 +2609,10 @@ export async function createManualOrder(
 
   for (const line of input.lines) {
     const qty = line.quantity.trim();
-    const price = line.unitPrice.trim();
+    const price = line.unitPrice?.trim();
     if (!positiveDecimalPattern.test(qty))
       throw new OrderDomainError('VALIDATION_FAILED', 'Line quantity must be a positive decimal.');
-    if (!decimalPattern.test(price))
+    if (price !== undefined && !decimalPattern.test(price))
       throw new OrderDomainError(
         'VALIDATION_FAILED',
         'Line unit price must be a non-negative decimal.',
@@ -1986,6 +2620,7 @@ export async function createManualOrder(
   }
 
   const currency = input.currency ?? 'BDT';
+  const salesChannel = input.salesChannel ?? 'ADMIN';
 
   return db.transaction().execute(async (transaction) => {
     // ---- Idempotency -------------------------------------------------------
@@ -2002,8 +2637,11 @@ export async function createManualOrder(
             customerId: input.customerId,
             locationId: input.locationId,
             lines: input.lines,
+            deliveryAddress: input.deliveryAddress,
             deliveryAmount: deliveryAmountRaw,
             paymentMethod: input.paymentMethod,
+            salesChannel,
+            currency,
           }),
         ),
       });
@@ -2038,7 +2676,7 @@ export async function createManualOrder(
       select id, status, display_name
       from customers.customers
       where id = ${input.customerId} and organization_id = ${input.organizationId}
-      for share
+      for update
     `.execute(transaction);
     const customer = customerRow.rows[0];
     if (!customer) throw new OrderDomainError('NOT_FOUND', 'Customer was not found.');
@@ -2081,6 +2719,8 @@ export async function createManualOrder(
       quantity: string;
       unitPrice: string;
       gross: string;
+      priceSource: 'CATALOG' | 'MANUAL_OVERRIDE';
+      priceOverrideReason: string | null;
     }[] = [];
 
     for (const line of sortedLines) {
@@ -2092,10 +2732,12 @@ export async function createManualOrder(
         product_title: string;
         variant_title: string | null;
         option_snapshot: readonly { name: string; value: string }[];
+        catalog_unit_price: string | null;
       }>`
         select
           v.id as variant_id, p.id as product_id, item.id as inventory_item_id,
           v.sku, p.title as product_title, v.title as variant_title,
+          current_price.amount::text as catalog_unit_price,
           coalesce(
             (select jsonb_agg(jsonb_build_object('name', opt.name, 'value', val.display_value) order by opt.position)
              from catalog.variant_option_values assignment
@@ -2106,6 +2748,16 @@ export async function createManualOrder(
         from catalog.product_variants v
         join catalog.products p on p.id = v.product_id
         join inventory.inventory_items item on item.variant_id = v.id and item.organization_id = ${input.organizationId}
+        left join lateral (
+          select price.amount
+          from pricing.price_definitions price
+          where price.organization_id = ${input.organizationId}
+            and price.variant_id = v.id and price.currency_code = ${currency}
+            and price.status = 'ACTIVE' and price.effective_from <= now()
+            and (price.effective_to is null or price.effective_to > now())
+          order by price.effective_from desc, price.id desc
+          limit 1
+        ) current_price on true
         where v.id = ${line.variantId}
           and v.status = 'ACTIVE'
           and p.status = 'ACTIVE'
@@ -2117,7 +2769,22 @@ export async function createManualOrder(
           'VALIDATION_FAILED',
           `Variant ${line.variantId} was not found or is not active.`,
         );
-      const gross = (Number(line.quantity) * Number(line.unitPrice)).toFixed(4);
+      const unitPrice = line.unitPrice?.trim() ?? variant.catalog_unit_price;
+      if (!unitPrice)
+        throw new OrderDomainError(
+          'VALIDATION_FAILED',
+          `Variant ${variant.sku} does not have an active ${currency} price.`,
+        );
+      const isOverride =
+        variant.catalog_unit_price === null ||
+        decimal4Minor(unitPrice) !== decimal4Minor(variant.catalog_unit_price);
+      const overrideReason = line.priceOverrideReason?.trim() || null;
+      if (isOverride && !overrideReason)
+        throw new OrderDomainError(
+          'VALIDATION_FAILED',
+          `A price override reason is required for variant ${variant.sku}.`,
+        );
+      const gross = multiplyDecimal4(line.quantity.trim(), unitPrice);
       resolvedLines.push({
         variantId: variant.variant_id,
         productId: variant.product_id,
@@ -2127,24 +2794,30 @@ export async function createManualOrder(
         variantTitle: variant.variant_title,
         optionSnapshot: variant.option_snapshot,
         quantity: line.quantity.trim(),
-        unitPrice: line.unitPrice.trim(),
+        unitPrice,
         gross,
+        priceSource: isOverride ? 'MANUAL_OVERRIDE' : 'CATALOG',
+        priceOverrideReason: isOverride ? overrideReason : null,
       });
     }
 
     // ---- Compute totals ---------------------------------------------------
-    const subtotalAmount = resolvedLines.reduce((sum, l) => sum + Number(l.gross), 0).toFixed(4);
-    const totalAmount = (Number(subtotalAmount) + Number(deliveryAmountRaw)).toFixed(4);
+    const subtotalAmount = decimal4Text(
+      resolvedLines.reduce((sum, line) => sum + decimal4Minor(line.gross), 0n),
+    );
+    const totalAmount = decimal4Text(
+      decimal4Minor(subtotalAmount) + decimal4Minor(deliveryAmountRaw),
+    );
 
     // ---- Insert order header -----------------------------------------------
     const orderNumber = await nextOrderNumber(transaction, input.organizationId);
     const orderCreated = await sql<{ id: string }>`
       insert into orders.orders (
-        organization_id, order_number, customer_id, source, currency_code,
+        organization_id, order_number, customer_id, source, sales_channel, currency_code,
         order_status, payment_method,
         subtotal_amount, discount_amount, delivery_amount, tax_amount, total_amount
       ) values (
-        ${input.organizationId}, ${orderNumber}, ${input.customerId}, 'MANUAL',
+        ${input.organizationId}, ${orderNumber}, ${input.customerId}, 'MANUAL', ${salesChannel},
         ${currency}, 'PENDING', ${input.paymentMethod},
         ${subtotalAmount}::numeric, 0::numeric,
         ${deliveryAmountRaw}::numeric, 0::numeric,
@@ -2153,6 +2826,23 @@ export async function createManualOrder(
     `.execute(transaction);
     const orderId = orderCreated.rows[0]?.id;
     if (!orderId) throw new Error('Manual order creation did not return an id.');
+    const customerSourceByChannel: Record<
+      Exclude<OrderView['salesChannel'], 'STOREFRONT'>,
+      CustomerSource
+    > = {
+      ADMIN: 'MANUAL_ORDER',
+      FACEBOOK: 'FACEBOOK',
+      INSTAGRAM: 'INSTAGRAM',
+      WHATSAPP: 'WHATSAPP',
+      PHONE: 'PHONE',
+      EXTERNAL_API: 'EXTERNAL_API',
+      IMPORT: 'IMPORT',
+    };
+    await sql`
+      update customers.customers
+      set latest_source = ${customerSourceByChannel[salesChannel]}, updated_at = now(), version = version + 1
+      where organization_id = ${input.organizationId} and id = ${input.customerId}
+    `.execute(transaction);
 
     // ---- Customer and address snapshots -----------------------------------
     // Fetch primary contact details from the customer's profile.
@@ -2166,9 +2856,9 @@ export async function createManualOrder(
 
     await sql`
       insert into orders.order_customer_snapshots
-        (order_id, organization_id, customer_id, display_name, phone, email)
+        (order_id, organization_id, customer_id, display_name, phone, normalized_phone, email)
       values (${orderId}, ${input.organizationId}, ${input.customerId},
-        ${customer.display_name}, ${phone}, ${email})
+        ${customer.display_name}, ${phone}, ${normalizeCustomerPhone(phone)}, ${email})
     `.execute(transaction);
     await sql`
       insert into orders.order_addresses (
@@ -2221,13 +2911,13 @@ export async function createManualOrder(
         insert into orders.order_lines (
           organization_id, order_id, product_id, variant_id, inventory_item_id,
           quantity, sku_snapshot, product_title_snapshot, variant_title_snapshot, option_snapshot,
-          unit_price, gross_amount, discount_amount, net_amount
+          unit_price, price_source, price_override_reason, gross_amount, discount_amount, net_amount
         ) values (
           ${input.organizationId}, ${orderId}, ${line.productId}, ${line.variantId},
           ${line.inventoryItemId},
           ${line.quantity}::numeric, ${line.sku}, ${line.productTitle},
           ${line.variantTitle}, ${JSON.stringify(line.optionSnapshot)}::jsonb,
-          ${line.unitPrice}::numeric, ${line.gross}::numeric,
+          ${line.unitPrice}::numeric, ${line.priceSource}, ${line.priceOverrideReason}, ${line.gross}::numeric,
           0::numeric, ${line.gross}::numeric
         ) returning id
       `.execute(transaction);
@@ -2294,14 +2984,21 @@ export async function createManualOrder(
       action: 'orders.order.placed',
       targetType: 'orders.order',
       targetId: orderId,
-      metadata: { orderNumber, source: 'MANUAL', paymentMethod: input.paymentMethod },
+      metadata: {
+        orderNumber,
+        source: 'MANUAL',
+        salesChannel,
+        paymentMethod: input.paymentMethod,
+        priceOverrides: resolvedLines.filter((line) => line.priceSource === 'MANUAL_OVERRIDE')
+          .length,
+      },
     });
     await sql`
       insert into platform.outbox_events (
         organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at
       ) values (
         ${input.organizationId}, 'orders.order.placed', 1, 'orders.order', ${orderId}, 1,
-        ${JSON.stringify({ orderId, orderNumber, source: 'MANUAL' })}::jsonb, now()
+        ${JSON.stringify({ orderId, orderNumber, source: 'MANUAL', salesChannel })}::jsonb, now()
       )
     `.execute(transaction);
 
@@ -2310,33 +3007,52 @@ export async function createManualOrder(
 }
 
 export async function processOrderOutbox(db: Kysely<DatabaseSchema>): Promise<number> {
-  const result = await sql<{
+  const candidates = await sql<{
     event_id: string;
     organization_id: string;
     aggregate_id: string;
   }>`
-    with next_batch as (
-      select event.id, event.organization_id, event.aggregate_id
-      from platform.outbox_events event
-      left join platform.event_consumer_receipts receipt 
-        on receipt.outbox_event_id = event.id 
-        and receipt.consumer_name = 'orders.autocomplete.v1'
-      where event.event_type = 'delivery.all_lines_delivered'
-        and receipt.id is null
-      order by event.occurred_at asc
-      limit 100
-      for update of event skip locked
-    ),
-    marked as (
-      insert into platform.event_consumer_receipts (outbox_event_id, consumer_name, status, processed_at)
-      select id, 'orders.autocomplete.v1', 'COMPLETED', now()
-      from next_batch
-    )
-    select id as event_id, organization_id, aggregate_id from next_batch
+    select event.id::text as event_id, event.organization_id::text, event.aggregate_id::text
+    from platform.outbox_events event
+    left join platform.event_consumer_receipts receipt
+      on receipt.outbox_event_id = event.id
+      and receipt.consumer_name = 'orders.autocomplete.v1'
+    where event.event_type = 'delivery.all_lines_delivered'
+      and (
+        receipt.id is null
+        or (receipt.status = 'RETRY_WAIT' and receipt.next_retry_at <= now())
+        or (receipt.status = 'PROCESSING' and receipt.last_attempt_at < now() - interval '5 minutes')
+      )
+    order by event.occurred_at asc
+    limit 100
   `.execute(db);
 
   let processed = 0;
-  for (const row of result.rows) {
+  for (const row of candidates.rows) {
+    const claim = await sql<{ id: string; attempt_count: number }>`
+      insert into platform.event_consumer_receipts (
+        outbox_event_id, consumer_name, status, attempt_count, last_attempt_at
+      ) values (
+        ${row.event_id}::bigint, 'orders.autocomplete.v1', 'PROCESSING', 1, now()
+      )
+      on conflict (outbox_event_id, consumer_name) do update
+      set status = 'PROCESSING',
+          attempt_count = platform.event_consumer_receipts.attempt_count + 1,
+          last_attempt_at = now(),
+          next_retry_at = null,
+          last_error_code = null
+      where (
+        platform.event_consumer_receipts.status = 'RETRY_WAIT'
+        and platform.event_consumer_receipts.next_retry_at <= now()
+      ) or (
+        platform.event_consumer_receipts.status = 'PROCESSING'
+        and platform.event_consumer_receipts.last_attempt_at < now() - interval '5 minutes'
+      )
+      returning id::text, attempt_count
+    `.execute(db);
+    const receipt = claim.rows[0];
+    if (!receipt) continue;
+
     try {
       await completeOrder(db, {
         organizationId: row.organization_id,
@@ -2345,15 +3061,31 @@ export async function processOrderOutbox(db: Kysely<DatabaseSchema>): Promise<nu
         idempotencyKey: `auto-complete:${row.event_id}`,
         triggerOutboxEventId: row.event_id,
       });
+      await sql`
+        update platform.event_consumer_receipts
+        set status = 'COMPLETED', processed_at = now(), next_retry_at = null, last_error_code = null
+        where id = ${receipt.id}::bigint and status = 'PROCESSING'
+      `.execute(db);
       processed++;
     } catch (error) {
-      if (error instanceof OrderDomainError) {
-        // Skip invalid transition errors (already completed or changed)
-        processed++;
-      } else {
-        // We log and let the lease expire if it was an infrastructure error, or just continue
-        console.error('Failed to auto-complete order', row.aggregate_id, error);
-      }
+      const errorCode =
+        error instanceof OrderDomainError
+          ? error.code
+          : typeof error === 'object' && error !== null && 'code' in error
+            ? String(error.code)
+            : 'UNEXPECTED';
+      await sql`
+        update platform.event_consumer_receipts
+        set status = case when attempt_count >= 10 then 'DEAD_LETTER' else 'RETRY_WAIT' end,
+            next_retry_at = case
+              when attempt_count >= 10 then null
+              else now() + make_interval(secs => least(3600, power(2, attempt_count)::integer))
+            end,
+            last_error_code = ${errorCode},
+            processed_at = null
+        where id = ${receipt.id}::bigint and status = 'PROCESSING'
+      `.execute(db);
+      console.error('Failed to auto-complete order', row.aggregate_id, error);
     }
   }
 

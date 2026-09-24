@@ -71,6 +71,8 @@ describe('clean PostgreSQL migration path', () => {
         select table_name from information_schema.tables where table_schema = 'finance' order by table_name
       `.execute(database.db);
       expect(financeTables.rows.map((row) => row.table_name)).toEqual([
+        'cod_settlement_allocations',
+        'cod_settlements',
         'expense_adjustments',
         'expense_categories',
         'expense_links',

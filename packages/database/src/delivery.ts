@@ -651,6 +651,7 @@ async function recordOutcome(
         select count(*)::text as count
         from orders.order_lines ol
         where ol.order_id = ${deliveryInfo.rows[0]!.order_id}
+          and ol.line_status = 'ACTIVE'
           and (
             select coalesce(sum(dl.delivered_quantity), 0)
             from delivery.delivery_lines dl

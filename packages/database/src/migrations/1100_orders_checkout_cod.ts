@@ -51,6 +51,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       checkout_session_id uuid unique references orders.checkout_sessions(id),
       customer_id uuid references customers.customers(id),
       source text not null default 'STOREFRONT' check (source in ('STOREFRONT', 'MANUAL')),
+      sales_channel text not null default 'STOREFRONT'
+        check (sales_channel in ('STOREFRONT', 'ADMIN', 'FACEBOOK', 'INSTAGRAM', 'WHATSAPP', 'PHONE', 'EXTERNAL_API', 'IMPORT')),
       currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
       order_status text not null default 'PENDING' check (order_status in ('PENDING', 'CONFIRMED', 'ON_HOLD', 'COMPLETED', 'CANCELLED')),
       payment_method text not null check (payment_method in ('COD', 'BKASH_MANUAL', 'NAGAD_MANUAL')),
@@ -73,6 +75,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       add column resulting_order_id uuid unique references orders.orders(id);
     create index orders_orders_list on orders.orders (organization_id, created_at desc, id desc);
     create index orders_orders_customer on orders.orders (organization_id, customer_id, created_at desc);
+    create index orders_orders_channel on orders.orders (organization_id, sales_channel, created_at desc, id desc);
 
     create table orders.order_customer_snapshots (
       order_id uuid primary key references orders.orders(id),
@@ -80,10 +83,15 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       customer_id uuid references customers.customers(id),
       display_name text not null,
       phone text not null,
+      normalized_phone text not null,
       email text,
       created_at timestamptz not null default now(),
       foreign key (organization_id, order_id) references orders.orders(organization_id, id)
     );
+    create index order_customer_snapshots_phone_lookup
+      on orders.order_customer_snapshots (organization_id, normalized_phone, order_id);
+    create index orders_orders_status_list
+      on orders.orders (organization_id, order_status, created_at desc, id desc);
 
     create table orders.order_addresses (
       id uuid primary key default uuidv7(),
@@ -119,14 +127,55 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       variant_title_snapshot text,
       option_snapshot jsonb not null default '[]'::jsonb check (jsonb_typeof(option_snapshot) = 'array'),
       unit_price numeric(20,4) not null check (unit_price >= 0),
+      price_source text not null default 'CATALOG' check (price_source in ('CATALOG', 'MANUAL_OVERRIDE')),
+      price_override_reason text,
       gross_amount numeric(20,4) not null check (gross_amount >= 0),
       discount_amount numeric(20,4) not null check (discount_amount >= 0),
       net_amount numeric(20,4) not null check (net_amount >= 0),
+      line_status text not null default 'ACTIVE' check (line_status in ('ACTIVE', 'CANCELLED')),
+      cancelled_at timestamptz,
+      cancelled_by_actor_id uuid,
+      cancellation_reason_code text,
+      cancellation_reason_text text,
       created_at timestamptz not null default now(),
       check (net_amount = gross_amount - discount_amount),
+      check ((price_source = 'MANUAL_OVERRIDE') = (price_override_reason is not null)),
+      check ((line_status = 'CANCELLED') = (cancelled_at is not null)),
+      check ((line_status = 'CANCELLED') = (cancellation_reason_code is not null)),
       foreign key (organization_id, order_id) references orders.orders(organization_id, id)
     );
     create index order_lines_order on orders.order_lines (order_id, id);
+
+    create table orders.order_line_cancellations (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      order_id uuid not null references orders.orders(id),
+      order_line_id uuid not null unique references orders.order_lines(id),
+      reason_code text not null check (length(trim(reason_code)) > 0),
+      reason_text text,
+      amount_removed numeric(20,4) not null check (amount_removed >= 0),
+      reservation_id uuid references inventory.inventory_reservations(id),
+      created_by_actor_id uuid not null,
+      created_at timestamptz not null default now(),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id)
+    );
+    create index order_line_cancellations_order
+      on orders.order_line_cancellations (organization_id, order_id, created_at desc);
+
+    create table orders.order_address_corrections (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      order_id uuid not null references orders.orders(id),
+      order_address_id uuid not null references orders.order_addresses(id),
+      before_snapshot jsonb not null check (jsonb_typeof(before_snapshot) = 'object'),
+      after_snapshot jsonb not null check (jsonb_typeof(after_snapshot) = 'object'),
+      reason text not null check (length(trim(reason)) > 0),
+      created_by_actor_id uuid not null,
+      created_at timestamptz not null default now(),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id)
+    );
+    create index order_address_corrections_order
+      on orders.order_address_corrections (organization_id, order_id, created_at desc);
 
     create table orders.order_discount_applications (
       id uuid primary key default uuidv7(),

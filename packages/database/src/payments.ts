@@ -41,7 +41,14 @@ export interface PaymentMethodView {
 export interface PaymentSummary {
   readonly method: PaymentMethodCode;
   readonly status:
-    'UNPAID' | 'PAYMENT_PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
+    | 'UNPAID'
+    | 'PAYMENT_PENDING'
+    | 'PARTIALLY_PAID'
+    | 'PAID'
+    | 'PARTIALLY_REFUNDED'
+    | 'REFUNDED'
+    | 'EXPIRED'
+    | 'CANCELLED';
   readonly expected: string;
   readonly collected: string;
   readonly refunded: string;
@@ -546,6 +553,8 @@ export async function getOrderPaymentSummary(
       when ${row.collected}::numeric > 0 then 'PARTIALLY_PAID'
       when exists (select 1 from payments.payment_attempts attempt join payments.payment_intents intent on intent.id = attempt.payment_intent_id
         where intent.organization_id = ${input.organizationId} and intent.order_id = ${input.orderId} and attempt.status = 'PENDING_VERIFICATION') then 'PAYMENT_PENDING'
+      when ${row.intent_status}::text = 'EXPIRED' then 'EXPIRED'
+      when ${row.intent_status}::text = 'CANCELLED' then 'CANCELLED'
       else 'UNPAID'
     end as status
   `.execute(db);
@@ -632,6 +641,62 @@ export async function cancelPendingPaymentIntentsForOrder(
   await sql`
     update payments.payment_intents set status = 'CANCELLED', version = version + 1, updated_at = now()
     where organization_id = ${input.organizationId} and order_id = ${input.orderId} and status = 'READY'
+  `.execute(db);
+}
+
+/**
+ * Orders may reduce an unpaid, pre-fulfillment commercial obligation. Payments
+ * owns the intent and therefore validates that no collection workflow has
+ * started before accepting the revised authoritative Order total.
+ */
+export async function reviseOpenPaymentIntentForOrder(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; orderId: string; expectedAmount: string },
+): Promise<void> {
+  const intent = await sql<{ id: string }>`
+    select id
+    from payments.payment_intents
+    where organization_id = ${input.organizationId}
+      and order_id = ${input.orderId}
+      and status = 'READY'
+    order by created_at desc, id desc
+    limit 1
+    for update
+  `.execute(db);
+  const row = intent.rows[0];
+  if (!row)
+    throw new PaymentDomainError(
+      'VALIDATION_FAILED',
+      'The payment obligation is no longer open for an Order amendment.',
+    );
+  const activity = await sql<{ blocked: boolean }>`
+    select exists (
+      select 1 from payments.payment_attempts attempt
+      where attempt.organization_id = ${input.organizationId}
+        and attempt.payment_intent_id = ${row.id}
+        and attempt.status = 'PENDING_VERIFICATION'
+    ) or exists (
+      select 1
+      from payments.payment_allocations allocation
+      join payments.payments payment
+        on payment.organization_id = allocation.organization_id
+        and payment.id = allocation.payment_id
+      where allocation.organization_id = ${input.organizationId}
+        and allocation.order_id = ${input.orderId}
+        and payment.status = 'CONFIRMED'
+    ) as blocked
+  `.execute(db);
+  if (activity.rows[0]?.blocked)
+    throw new PaymentDomainError(
+      'VALIDATION_FAILED',
+      'The Order cannot be amended after payment collection or verification has started.',
+    );
+  await sql`
+    update payments.payment_intents
+    set expected_amount = ${input.expectedAmount}::numeric,
+        version = version + 1,
+        updated_at = now()
+    where organization_id = ${input.organizationId} and id = ${row.id}
   `.execute(db);
 }
 

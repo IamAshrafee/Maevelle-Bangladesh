@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleAlert, FilePlus2, PackageSearch, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { CircleAlert, FilePlus2, PackageSearch, RefreshCw, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDeferredValue, useEffect, useState } from 'react';
@@ -8,9 +8,10 @@ import { useDeferredValue, useEffect, useState } from 'react';
 import type { OrderSummaryDto, PaginatedEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -21,7 +22,59 @@ import {
 } from '@/components/ui/table';
 import { fetchApiData } from '@/lib/api';
 
-const statuses = ['ALL', 'PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const;
+const statuses = ['ALL', 'PENDING', 'CONFIRMED', 'ON_HOLD', 'COMPLETED', 'CANCELLED'] as const;
+const paymentStatuses = [
+  'ALL',
+  'UNPAID',
+  'PAYMENT_PENDING',
+  'PARTIALLY_PAID',
+  'PAID',
+  'PARTIALLY_REFUNDED',
+  'REFUNDED',
+  'EXPIRED',
+  'CANCELLED',
+] as const;
+const fulfillmentStatuses = [
+  'ALL',
+  'UNFULFILLED',
+  'PARTIALLY_FULFILLED',
+  'IN_PROGRESS',
+  'FULFILLED',
+  'CANCELLED',
+] as const;
+const deliveryStatuses = [
+  'ALL',
+  'NOT_STARTED',
+  'PENDING',
+  'IN_TRANSIT',
+  'PARTIALLY_DELIVERED',
+  'DELIVERED',
+  'FAILED',
+  'CANCELLED',
+] as const;
+const salesChannels = [
+  'ALL',
+  'STOREFRONT',
+  'ADMIN',
+  'FACEBOOK',
+  'INSTAGRAM',
+  'WHATSAPP',
+  'PHONE',
+  'EXTERNAL_API',
+  'IMPORT',
+] as const;
+const paymentMethods = ['ALL', 'COD', 'BKASH_MANUAL', 'NAGAD_MANUAL'] as const;
+
+function allowedValue<const T extends readonly string[]>(
+  values: T,
+  candidate: string | null,
+): T[number] {
+  return values.includes(candidate as T[number]) ? (candidate as T[number]) : values[0]!;
+}
+
+function label(value: string): string {
+  return value === 'ALL' ? 'All' : value.replaceAll('_', ' ');
+}
 
 function formatDateTime(value?: string | null): string {
   if (!value) return '—';
@@ -48,10 +101,31 @@ export function OrdersList() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
-  const status = statuses.includes(searchParameters.get('status') as (typeof statuses)[number])
-    ? (searchParameters.get('status') as (typeof statuses)[number])
-    : 'ALL';
+  const status = allowedValue(statuses, searchParameters.get('status'));
+  const paymentStatus = allowedValue(paymentStatuses, searchParameters.get('paymentStatus'));
+  const fulfillmentStatus = allowedValue(
+    fulfillmentStatuses,
+    searchParameters.get('fulfillmentStatus'),
+  );
+  const deliveryStatus = allowedValue(deliveryStatuses, searchParameters.get('deliveryStatus'));
+  const salesChannel = allowedValue(salesChannels, searchParameters.get('salesChannel'));
+  const paymentMethod = allowedValue(paymentMethods, searchParameters.get('paymentMethod'));
+  const from = searchParameters.get('from') ?? '';
+  const to = searchParameters.get('to') ?? '';
   const page = Math.max(1, Number(searchParameters.get('page') ?? 1) || 1);
+  const customerId = searchParameters.get('customerId') ?? '';
+  const hasFilters = Boolean(
+    deferredQuery ||
+    status !== 'ALL' ||
+    paymentStatus !== 'ALL' ||
+    fulfillmentStatus !== 'ALL' ||
+    deliveryStatus !== 'ALL' ||
+    salesChannel !== 'ALL' ||
+    paymentMethod !== 'ALL' ||
+    from ||
+    to ||
+    customerId,
+  );
 
   function replaceQuery(changes: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParameters.toString());
@@ -74,8 +148,16 @@ export function OrdersList() {
       pageSize: '25',
     });
     if (status !== 'ALL') parameters.set('status', status);
+    if (paymentStatus !== 'ALL') parameters.set('paymentStatus', paymentStatus);
+    if (fulfillmentStatus !== 'ALL') parameters.set('fulfillmentStatus', fulfillmentStatus);
+    if (deliveryStatus !== 'ALL') parameters.set('deliveryStatus', deliveryStatus);
+    if (salesChannel !== 'ALL') parameters.set('salesChannel', salesChannel);
+    if (paymentMethod !== 'ALL') parameters.set('paymentMethod', paymentMethod);
+    if (from) parameters.set('from', new Date(`${from}T00:00:00`).toISOString());
+    if (to) parameters.set('to', new Date(`${to}T23:59:59.999`).toISOString());
     if (deferredQuery) parameters.set('q', deferredQuery);
-    
+    if (customerId) parameters.set('customerId', customerId);
+
     try {
       const data = await fetchApiData<PaginatedEnvelope<OrderSummaryDto>>(
         `/admin/orders?${parameters.toString()}`,
@@ -95,7 +177,19 @@ export function OrdersList() {
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, [deferredQuery, status, page]);
+  }, [
+    deferredQuery,
+    status,
+    paymentStatus,
+    fulfillmentStatus,
+    deliveryStatus,
+    salesChannel,
+    paymentMethod,
+    from,
+    to,
+    page,
+    customerId,
+  ]);
 
   return (
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -128,36 +222,107 @@ export function OrdersList() {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex max-w-sm flex-1 items-center gap-2">
-          <div className="relative flex-1">
-            <Search
-              className="absolute left-2.5 top-2.5 size-4 text-muted-foreground"
-              aria-hidden="true"
-            />
+      <section className="space-y-4 border-b pb-4" aria-label="Order filters">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex max-w-lg flex-1 items-center gap-2">
+            <div className="relative flex-1">
+              <Search
+                className="absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                placeholder="Order number, customer, phone, or email…"
+                className="pl-9"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+          {hasFilters ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setQuery('');
+                router.replace('/orders');
+              }}
+            >
+              <X aria-hidden="true" /> Clear filters
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+          {[
+            { key: 'status', title: 'Order', value: status, values: statuses },
+            {
+              key: 'paymentStatus',
+              title: 'Payment',
+              value: paymentStatus,
+              values: paymentStatuses,
+            },
+            {
+              key: 'fulfillmentStatus',
+              title: 'Fulfillment',
+              value: fulfillmentStatus,
+              values: fulfillmentStatuses,
+            },
+            {
+              key: 'deliveryStatus',
+              title: 'Delivery',
+              value: deliveryStatus,
+              values: deliveryStatuses,
+            },
+            {
+              key: 'salesChannel',
+              title: 'Channel',
+              value: salesChannel,
+              values: salesChannels,
+            },
+            {
+              key: 'paymentMethod',
+              title: 'Method',
+              value: paymentMethod,
+              values: paymentMethods,
+            },
+          ].map((filter) => (
+            <div key={filter.key} className="space-y-1.5">
+              <Label htmlFor={`orders-${filter.key}`}>{filter.title}</Label>
+              <NativeSelect
+                id={`orders-${filter.key}`}
+                className="w-full"
+                value={filter.value}
+                onChange={(event) => replaceQuery({ [filter.key]: event.target.value, page: '1' })}
+              >
+                {filter.values.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {label(value)}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+          ))}
+          <div className="space-y-1.5">
+            <Label htmlFor="orders-from">From</Label>
             <Input
-              type="search"
-              placeholder="Search by ID, email, or name..."
-              className="pl-9"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              id="orders-from"
+              type="date"
+              value={from}
+              onChange={(event) => replaceQuery({ from: event.target.value, page: '1' })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="orders-to">To</Label>
+            <Input
+              id="orders-to"
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(event) => replaceQuery({ to: event.target.value, page: '1' })}
             />
           </div>
         </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
-          <SlidersHorizontal className="mr-2 size-4 text-muted-foreground" aria-hidden="true" />
-          {statuses.map((s) => (
-            <Badge
-              key={s}
-              variant={status === s ? 'default' : 'secondary'}
-              className="cursor-pointer"
-              onClick={() => replaceQuery({ status: s, page: '1' })}
-            >
-              {s === 'ALL' ? 'All orders' : s}
-            </Badge>
-          ))}
-        </div>
-      </div>
+      </section>
 
       <div className="rounded-md border bg-card">
         <Table>
@@ -167,7 +332,7 @@ export function OrdersList() {
               <TableHead>Date</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Total</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Lifecycle</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -186,22 +351,33 @@ export function OrdersList() {
                   onClick={() => router.push(`/orders/${order.id}`)}
                 >
                   <TableCell className="font-medium">
-                    {order.orderNumber}
+                    <div>{order.orderNumber}</div>
+                    <div className="text-xs font-normal text-muted-foreground">
+                      {order.salesChannel.replaceAll('_', ' ')}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatDateTime(order.createdAt)}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col">
-                      <span className="font-medium text-foreground">{order.customerName ?? 'Guest'}</span>
-                      <span className="text-xs text-muted-foreground">{order.customerEmail ?? 'No email'}</span>
+                      <span className="font-medium text-foreground">
+                        {order.customerName ?? 'Guest'}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{order.customerPhone}</span>
+                      {order.customerEmail ? (
+                        <span className="text-xs text-muted-foreground">{order.customerEmail}</span>
+                      ) : null}
                     </div>
                   </TableCell>
+                  <TableCell>{formatMoney(order.total, order.currency)}</TableCell>
                   <TableCell>
-                    {formatMoney(order.total, order.currency)}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={order.status} />
+                    <div className="flex min-w-40 flex-wrap gap-1.5">
+                      <StatusBadge status={order.status} />
+                      <StatusBadge status={order.paymentStatus} />
+                      <StatusBadge status={order.fulfillmentStatus} />
+                      <StatusBadge status={order.deliveryStatus} />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -209,15 +385,13 @@ export function OrdersList() {
           </TableBody>
         </Table>
       </div>
-      
+
       {orders && orders.totalCount > 25 && (
         <div className="flex items-center justify-between py-4">
           <p className="text-sm text-muted-foreground">
             Showing <span className="font-medium">{(page - 1) * 25 + 1}</span> to{' '}
-            <span className="font-medium">
-              {Math.min(page * 25, orders.totalCount)}
-            </span>{' '}
-            of <span className="font-medium">{orders.totalCount}</span> results
+            <span className="font-medium">{Math.min(page * 25, orders.totalCount)}</span> of{' '}
+            <span className="font-medium">{orders.totalCount}</span> results
           </p>
           <div className="flex gap-2">
             <Button
