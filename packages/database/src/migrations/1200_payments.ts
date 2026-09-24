@@ -163,6 +163,21 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index refunds_payment on payments.refunds (organization_id, payment_id, requested_at desc);
     create index refunds_order on payments.refunds (organization_id, order_id, requested_at desc);
 
+    -- A cancelled Order with collected money carries explicit refund work;
+    -- settlement is derived from these immutable financial links.
+    create table orders.order_cancellation_refunds (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      order_id uuid not null references orders.orders(id),
+      cancellation_id uuid not null references orders.order_cancellations(id),
+      refund_id uuid not null unique references payments.refunds(id),
+      created_at timestamptz not null default now(),
+      unique (organization_id, refund_id),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id),
+      foreign key (organization_id, cancellation_id) references orders.order_cancellations(organization_id, id)
+    );
+    create index order_cancellation_refunds_order on orders.order_cancellation_refunds (organization_id, order_id, created_at desc);
+
     alter table orders.checkout_sessions drop constraint checkout_sessions_payment_method_check;
     alter table orders.checkout_sessions alter column payment_method drop default;
     alter table orders.checkout_sessions add constraint checkout_sessions_payment_method_check

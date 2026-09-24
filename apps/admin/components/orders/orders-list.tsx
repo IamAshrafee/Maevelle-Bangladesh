@@ -202,6 +202,9 @@ export function OrdersList() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button render={<Link href="/orders/delivery-pricing" />} nativeButton={false} variant="outline">
+            Delivery pricing
+          </Button>
           <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
             <RefreshCw aria-hidden="true" /> Refresh
           </Button>

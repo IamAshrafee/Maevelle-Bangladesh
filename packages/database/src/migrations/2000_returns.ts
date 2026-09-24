@@ -30,12 +30,14 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index return_cases_queue on returns.return_cases (organization_id, case_type, case_status, created_at desc);
     create table returns.return_lines (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_case_id uuid not null references returns.return_cases(id),
-      order_line_id uuid not null references orders.order_lines(id), fulfillment_line_id uuid references fulfillment.fulfillment_lines(id), delivery_line_id uuid references delivery.delivery_lines(id),
+      order_id uuid not null references orders.orders(id), order_line_id uuid not null references orders.order_lines(id), fulfillment_line_id uuid references fulfillment.fulfillment_lines(id), delivery_line_id uuid references delivery.delivery_lines(id),
       requested_quantity numeric(20,6) not null check (requested_quantity > 0), authorized_quantity numeric(20,6) not null default 0 check (authorized_quantity >= 0), received_quantity numeric(20,6) not null default 0 check (received_quantity >= 0), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
       unique (organization_id, id), unique (return_case_id, order_line_id, fulfillment_line_id), check (authorized_quantity <= requested_quantity), check (received_quantity <= authorized_quantity),
-      foreign key (organization_id, return_case_id) references returns.return_cases(organization_id, id)
+      foreign key (organization_id, return_case_id) references returns.return_cases(organization_id, id),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id),
+      foreign key (organization_id, order_id, order_line_id) references orders.order_lines(organization_id, order_id, id)
     );
-    create index return_lines_order on returns.return_lines (organization_id, order_line_id);
+    create index return_lines_order on returns.return_lines (organization_id, order_id, order_line_id);
     create table returns.return_receipts (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_case_id uuid not null references returns.return_cases(id), receipt_number text not null, receiving_location_id uuid not null references warehouse.locations(id), status text not null default 'POSTED' check (status = 'POSTED'), posted_inventory_transaction_id uuid unique references inventory.inventory_transactions(id), created_by_actor_id uuid, posted_at timestamptz not null default now(), created_at timestamptz not null default now(), unique (organization_id, receipt_number), unique (organization_id, id), foreign key (organization_id, return_case_id) references returns.return_cases(organization_id, id), foreign key (organization_id, receiving_location_id) references warehouse.locations(organization_id, id)
     );

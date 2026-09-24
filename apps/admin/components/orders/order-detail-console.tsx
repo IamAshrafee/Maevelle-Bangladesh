@@ -297,6 +297,28 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                 </p>
               </div>
             </div>
+            {order.cancellation?.refundSettlement &&
+            order.cancellation.refundSettlement !== 'NOT_REQUIRED' ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-amber-50/60 px-6 py-4 text-sm">
+                <div>
+                  <p className="font-medium text-amber-950">
+                    Cancellation refund: {order.cancellation.refundSettlement.replaceAll('_', ' ')}
+                  </p>
+                  <p className="mt-1 text-amber-900/80">
+                    {order.cancellation.refundObligations.length} linked refund request
+                    {order.cancellation.refundObligations.length === 1 ? '' : 's'} must be settled through
+                    Payment operations.
+                  </p>
+                </div>
+                <Button
+                  render={<Link href={`/payments?tab=refunds&q=${encodeURIComponent(order.orderNumber)}`} />}
+                  size="sm"
+                  variant="outline"
+                >
+                  Review refunds
+                </Button>
+              </div>
+            ) : null}
           </section>
 
           {/* Fulfillments Section */}

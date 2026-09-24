@@ -102,7 +102,7 @@ export async function linkRefundToReturn(
   return db.transaction().execute(async (tx) => {
     const valid = await sql<{
       id: string;
-    }>`select refund.id from payments.refunds refund join returns.return_cases return_case on return_case.order_id=refund.order_id where refund.organization_id=${input.organizationId} and refund.id=${input.refundId} and return_case.id=${input.returnCaseId}`.execute(
+    }>`select refund.id from payments.refunds refund join returns.return_cases return_case on return_case.organization_id=refund.organization_id and return_case.order_id=refund.order_id where refund.organization_id=${input.organizationId} and refund.id=${input.refundId} and return_case.id=${input.returnCaseId} and return_case.case_status <> 'CANCELLED'`.execute(
       tx,
     );
     if (!valid.rows[0])
@@ -113,7 +113,7 @@ export async function linkRefundToReturn(
     await sql`insert into returns.return_refund_links (organization_id,return_case_id,refund_id) values (${input.organizationId},${input.returnCaseId},${input.refundId}) on conflict do nothing`.execute(
       tx,
     );
-    await sql`update returns.return_cases set commercial_resolution_status='REFUND_PENDING',updated_at=now(),version=version+1 where id=${input.returnCaseId}`.execute(
+    await sql`update returns.return_cases return_case set commercial_resolution_status=case when not exists (select 1 from returns.return_refund_links link join payments.refunds refund on refund.id=link.refund_id where link.organization_id=return_case.organization_id and link.return_case_id=return_case.id and refund.status <> 'COMPLETED') then 'REFUND_COMPLETED' else 'REFUND_PENDING' end,updated_at=now(),version=version+1 where return_case.organization_id=${input.organizationId} and return_case.id=${input.returnCaseId}`.execute(
       tx,
     );
     await evidence(
@@ -257,12 +257,12 @@ export async function createReturnCase(
     for (const line of input.lines) {
       const eligible = await sql<{
         quantity: string;
-      }>`select coalesce(sum(delivery_line.delivered_quantity),0)::text as quantity from delivery.delivery_lines delivery_line where delivery_line.organization_id=${input.organizationId} and delivery_line.order_line_id=${line.orderLineId}`.execute(
+      }>`select coalesce(sum(delivery_line.delivered_quantity),0)::text as quantity from delivery.delivery_lines delivery_line join delivery.deliveries delivery on delivery.organization_id=delivery_line.organization_id and delivery.id=delivery_line.delivery_id where delivery_line.organization_id=${input.organizationId} and delivery.order_id=${input.orderId} and delivery.outcome_status='DELIVERED' and delivery_line.order_line_id=${line.orderLineId}`.execute(
         tx,
       );
       const used = await sql<{
         quantity: string;
-      }>`select coalesce(sum(return_line.authorized_quantity),0)::text as quantity from returns.return_lines return_line join returns.return_cases return_case on return_case.id=return_line.return_case_id where return_line.organization_id=${input.organizationId} and return_line.order_line_id=${line.orderLineId} and return_case.case_status <> 'CANCELLED'`.execute(
+      }>`select coalesce(sum(return_line.authorized_quantity),0)::text as quantity from returns.return_lines return_line join returns.return_cases return_case on return_case.organization_id=return_line.organization_id and return_case.id=return_line.return_case_id where return_line.organization_id=${input.organizationId} and return_case.order_id=${input.orderId} and return_line.order_line_id=${line.orderLineId} and return_case.case_status <> 'CANCELLED'`.execute(
         tx,
       );
       if (
@@ -278,6 +278,8 @@ export async function createReturnCase(
         from delivery.delivery_lines delivery_line
         join delivery.deliveries delivery on delivery.id=delivery_line.delivery_id
         where delivery_line.organization_id=${input.organizationId}
+          and delivery.organization_id=delivery_line.organization_id
+          and delivery.order_id=${input.orderId}
           and delivery_line.order_line_id=${line.orderLineId}
           and delivery.outcome_status='DELIVERED'
           and (${line.deliveryLineId ?? null}::uuid is null or delivery_line.id=${line.deliveryLineId ?? null}::uuid)
@@ -303,7 +305,7 @@ export async function createReturnCase(
     );
     const id = created.rows[0]!.id;
     for (const line of resolvedLines)
-      await sql`insert into returns.return_lines (organization_id,return_case_id,order_line_id,fulfillment_line_id,delivery_line_id,requested_quantity) values (${input.organizationId},${id},${line.orderLineId},${line.fulfillmentLineId ?? null},${line.deliveryLineId ?? null},${line.quantity}::numeric)`.execute(
+      await sql`insert into returns.return_lines (organization_id,return_case_id,order_id,order_line_id,fulfillment_line_id,delivery_line_id,requested_quantity) values (${input.organizationId},${id},${input.orderId},${line.orderLineId},${line.fulfillmentLineId ?? null},${line.deliveryLineId ?? null},${line.quantity}::numeric)`.execute(
         tx,
       );
     await finish(tx, recordId, 'returns.return_case', id);
@@ -398,7 +400,7 @@ export async function initiateRto(
       tx,
     );
     const id = created.rows[0]!.id;
-    await sql`insert into returns.return_lines (organization_id,return_case_id,order_line_id,fulfillment_line_id,delivery_line_id,requested_quantity,authorized_quantity) select ${input.organizationId},${id},delivery_line.order_line_id,delivery_line.fulfillment_line_id,delivery_line.id,delivery_line.quantity,delivery_line.quantity from delivery.delivery_lines delivery_line where delivery_line.organization_id=${input.organizationId} and delivery_line.delivery_id=${input.deliveryId}`.execute(
+    await sql`insert into returns.return_lines (organization_id,return_case_id,order_id,order_line_id,fulfillment_line_id,delivery_line_id,requested_quantity,authorized_quantity) select ${input.organizationId},${id},${row.order_id},delivery_line.order_line_id,delivery_line.fulfillment_line_id,delivery_line.id,delivery_line.quantity,delivery_line.quantity from delivery.delivery_lines delivery_line where delivery_line.organization_id=${input.organizationId} and delivery_line.delivery_id=${input.deliveryId}`.execute(
       tx,
     );
     await finish(tx, recordId, 'returns.return_case', id);

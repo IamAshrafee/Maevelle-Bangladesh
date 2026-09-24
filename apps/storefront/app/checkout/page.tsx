@@ -12,6 +12,8 @@ interface Checkout {
   paymentMethod: 'COD' | 'BKASH_MANUAL' | 'NAGAD_MANUAL';
   calculationVersion: number;
   calculationFingerprint: string;
+  deliveryAmount: string;
+  total: string;
   cart: {
     currency?: string;
     merchandiseGross: string;
@@ -491,11 +493,11 @@ export default function CheckoutPage() {
               ) : null}
               <div>
                 <dt>Delivery</dt>
-                <dd>Confirmed after order</dd>
+                <dd>{money(checkout.deliveryAmount)}</dd>
               </div>
               <div className="summary-total">
                 <dt>Total</dt>
-                <dd>{money(checkout.cart.merchandiseNet)}</dd>
+                <dd>{money(checkout.total)}</dd>
               </div>
             </dl>
             {checkout.cart.appliedCoupons.length ? (
@@ -513,7 +515,7 @@ export default function CheckoutPage() {
             >
               {saving === 'order'
                 ? 'Placing your order…'
-                : `Place order · ${money(checkout.cart.merchandiseNet)}`}
+                : `Place order · ${money(checkout.total)}`}
             </button>
             <p className="checkout-terms">
               By placing your order, you agree to Maevelle’s{' '}

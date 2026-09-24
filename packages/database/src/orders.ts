@@ -20,6 +20,7 @@ import { getGuestCart, type CartView } from './cart.js';
 import {
   createPaymentIntentForOrder,
   cancelPendingPaymentIntentsForOrder,
+  createCancellationRefundObligationsInTransaction,
   getOrderPaymentSummary,
   listPaymentMethods,
   PaymentDomainError,
@@ -82,6 +83,8 @@ export interface CheckoutView {
   readonly paymentMethod: PaymentMethodCode;
   readonly calculationVersion: number;
   readonly calculationFingerprint: string;
+  readonly deliveryAmount: string;
+  readonly total: string;
   readonly cart: CartView;
   readonly contact: CheckoutContactInput | null;
   readonly address: CheckoutAddressInput | null;
@@ -139,12 +142,32 @@ export interface OrderView {
   }[];
 }
 
-function checkoutTotals(cart: CartView) {
+interface DeliveryQuote {
+  readonly ruleId: string | null;
+  readonly ruleName: string;
+  readonly amount: string;
+  readonly currency: string;
+}
+
+function checkoutTotals(cart: CartView, quote: DeliveryQuote | null = null) {
+  const deliveryAmount = quote?.amount ?? '0';
   return {
     merchandiseGross: cart.merchandiseGross,
     discountTotal: cart.discountTotal,
     merchandiseNet: cart.merchandiseNet,
+    deliveryAmount,
+    total: decimal4Text(decimal4Minor(cart.merchandiseNet) + decimal4Minor(deliveryAmount)),
   };
+}
+
+function checkoutFingerprint(cart: CartView, quote: DeliveryQuote | null): string {
+  return hashToken(
+    JSON.stringify({
+      cart: cart.calculationFingerprint,
+      deliveryRuleId: quote?.ruleId ?? null,
+      deliveryAmount: quote?.amount ?? '0',
+    }),
+  );
 }
 
 function ensureContact(input: CheckoutContactInput): void {
@@ -172,8 +195,56 @@ function ensureAddress(input: CheckoutAddressInput): void {
   }
 }
 
-function cartFingerprint(cart: CartView): string {
-  return cart.calculationFingerprint;
+async function resolveDeliveryQuote(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; currency: string; countryCode: string; geographyNodeId?: string },
+): Promise<DeliveryQuote> {
+  const result = await sql<{
+    id: string;
+    name: string;
+    flat_amount: string;
+    currency_code: string;
+  }>`
+    with recursive ancestry(id, depth) as (
+      select ${input.geographyNodeId ?? null}::uuid, 0 where ${input.geographyNodeId ?? null}::uuid is not null
+      union all
+      select node.parent_id, ancestry.depth + 1
+      from geography.nodes node join ancestry on ancestry.id = node.id
+      where node.parent_id is not null
+    )
+    select rule.id, rule.name, rule.flat_amount::text, rule.currency_code
+    from orders.delivery_pricing_rules rule
+    where rule.organization_id = ${input.organizationId}
+      and rule.status = 'ACTIVE'
+      and rule.country_code = ${input.countryCode.toUpperCase()}
+      and rule.currency_code = ${input.currency}
+      and (rule.geography_node_id is null or rule.geography_node_id in (select id from ancestry))
+    order by rule.priority desc,
+      case when rule.geography_node_id is null then 1000000 else coalesce((select depth from ancestry where id = rule.geography_node_id), 1000000) end,
+      rule.id
+    limit 1
+  `.execute(db);
+  const row = result.rows[0];
+  if (!row)
+    throw new OrderDomainError(
+      'VALIDATION_FAILED',
+      'Delivery is not configured for this address and currency.',
+    );
+  return { ruleId: row.id, ruleName: row.name, amount: row.flat_amount, currency: row.currency_code };
+}
+
+async function quoteForCheckout(
+  db: Kysely<DatabaseSchema>,
+  checkout: Awaited<ReturnType<typeof checkoutRow>>,
+  cart: CartView,
+): Promise<DeliveryQuote | null> {
+  if (!checkout.country_code) return null;
+  return resolveDeliveryQuote(db, {
+    organizationId: checkout.organization_id,
+    currency: cart.currency,
+    countryCode: checkout.country_code,
+    ...(checkout.geography_node_id ? { geographyNodeId: checkout.geography_node_id } : {}),
+  });
 }
 
 async function checkoutRow(db: Kysely<DatabaseSchema>, token: string, lock = false) {
@@ -202,6 +273,8 @@ async function checkoutRow(db: Kysely<DatabaseSchema>, token: string, lock = fal
     calculation_version: string;
     calculation_fingerprint: string;
     payment_method: PaymentMethodCode;
+    delivery_pricing_rule_id: string | null;
+    delivery_amount: string;
     resulting_order_id: string | null;
   }>`select * from orders.checkout_sessions where public_token_hash = ${hashToken(token)} ${lock ? sql`for update` : sql``}`.execute(
     db,
@@ -237,6 +310,8 @@ export async function getCheckout(
     paymentMethod: row.payment_method,
     calculationVersion: Number(row.calculation_version),
     calculationFingerprint: row.calculation_fingerprint,
+    deliveryAmount: row.delivery_amount,
+    total: decimal4Text(decimal4Minor(cart.merchandiseNet) + decimal4Minor(row.delivery_amount)),
     cart,
     contact:
       row.customer_name && row.customer_phone
@@ -279,7 +354,7 @@ export async function createCheckout(
   const expiresAt = new Date(Date.now() + checkoutLifetimeMs);
   const created = await sql<{ id: string }>`
     insert into orders.checkout_sessions (organization_id, cart_id, public_token_hash, cart_version, calculation_version, calculation_fingerprint, calculated_totals, expires_at)
-    values (${organizationId}, ${cart.id}, ${hashToken(token)}, ${cart.version}, ${cart.calculationVersion}, ${cartFingerprint(cart)}, ${JSON.stringify(checkoutTotals(cart))}::jsonb, ${expiresAt}) returning id
+    values (${organizationId}, ${cart.id}, ${hashToken(token)}, ${cart.version}, ${cart.calculationVersion}, ${checkoutFingerprint(cart, null)}, ${JSON.stringify(checkoutTotals(cart))}::jsonb, ${expiresAt}) returning id
   `.execute(db);
   // The organization is not part of CartView; derive it safely from the cart row for this response.
   const checkoutId = created.rows[0]?.id;
@@ -293,7 +368,9 @@ export async function createCheckout(
       expiresAt: expiresAt.toISOString(),
       paymentMethod: 'COD',
       calculationVersion: cart.calculationVersion,
-      calculationFingerprint: cartFingerprint(cart),
+      calculationFingerprint: checkoutFingerprint(cart, null),
+      deliveryAmount: '0',
+      total: cart.merchandiseNet,
       cart,
       contact: null,
       address: null,
@@ -334,6 +411,8 @@ function checkoutInputView(
     paymentMethod: row.payment_method,
     calculationVersion: Number(row.calculation_version),
     calculationFingerprint: row.calculation_fingerprint,
+    deliveryAmount: row.delivery_amount,
+    total: decimal4Text(decimal4Minor(cart.merchandiseNet) + decimal4Minor(row.delivery_amount)),
     cart,
     contact:
       row.customer_name && row.customer_phone
@@ -409,16 +488,31 @@ export async function updateCheckoutAddress(
       if (!geography.rows[0])
         throw new OrderDomainError('VALIDATION_FAILED', 'Delivery geography was not found.');
     }
+    const quote = await resolveDeliveryQuote(transaction, {
+      organizationId: checkout.organization_id,
+      currency: cart.currency,
+      countryCode: input.address.countryCode,
+      ...(input.address.geographyNodeId ? { geographyNodeId: input.address.geographyNodeId } : {}),
+    });
     const updated = await sql<{ version: string }>`
       update orders.checkout_sessions set recipient_name = ${input.address.recipientName.trim()}, delivery_phone = ${input.address.phone.trim()},
         address_line_1 = ${input.address.addressLine1.trim()}, address_line_2 = ${input.address.addressLine2?.trim() ?? null},
         geography_node_id = ${input.address.geographyNodeId ?? null}, area = ${input.address.area?.trim() ?? null}, city = ${input.address.city?.trim() ?? null},
         district = ${input.address.district?.trim() ?? null}, postal_code = ${input.address.postalCode?.trim() ?? null}, country_code = ${input.address.countryCode},
+        delivery_pricing_rule_id = ${quote.ruleId}, delivery_amount = ${quote.amount}::numeric,
+        calculation_fingerprint = ${checkoutFingerprint(cart, quote)}, calculated_totals = ${JSON.stringify(checkoutTotals(cart, quote))}::jsonb,
         status = 'ACTIVE', version = version + 1, updated_at = now() where id = ${checkout.id} returning version::text
     `.execute(transaction);
     return {
       ...checkoutInputView(
-        { ...checkout, version: updated.rows[0]!.version, status: 'ACTIVE' },
+        {
+          ...checkout,
+          version: updated.rows[0]!.version,
+          status: 'ACTIVE',
+          delivery_pricing_rule_id: quote.ruleId,
+          delivery_amount: quote.amount,
+          calculation_fingerprint: checkoutFingerprint(cart, quote),
+        },
         cart,
       ),
       address: input.address,
@@ -469,15 +563,169 @@ export async function getAvailableCheckoutPaymentMethods(
   return listPaymentMethods(db, checkout.organization_id, true);
 }
 
+export async function listDeliveryPricingRules(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+) {
+  return (
+    await sql<{
+      id: string;
+      name: string;
+      country_code: string;
+      geography_node_id: string | null;
+      flat_amount: string;
+      currency_code: string;
+      priority: number;
+      status: 'ACTIVE' | 'INACTIVE';
+      version: string;
+    }>`select id,name,country_code,geography_node_id,flat_amount::text,currency_code,priority,status,version::text from orders.delivery_pricing_rules where organization_id=${organizationId} order by status,priority desc,name,id`.execute(
+      db,
+    )
+  ).rows.map((row) => ({ ...row, version: Number(row.version) }));
+}
+
+export async function createDeliveryPricingRule(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    name: string;
+    countryCode: string;
+    geographyNodeId?: string;
+    flatAmount: string;
+    currency: string;
+    priority?: number;
+  },
+) {
+  if (!input.name.trim() || !/^[A-Z]{2}$/.test(input.countryCode) || !/^[A-Z]{3}$/.test(input.currency))
+    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery pricing rule details are invalid.');
+  if (!decimalPattern.test(input.flatAmount) || decimal4Minor(input.flatAmount) < 0n)
+    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery amount is invalid.');
+  if (!Number.isInteger(input.priority ?? 0))
+    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery pricing priority must be an integer.');
+  return db.transaction().execute(async (transaction) => {
+    if (input.geographyNodeId) {
+      const geography = await sql<{ id: string }>`select id from geography.nodes where id=${input.geographyNodeId} and status='ACTIVE'`.execute(
+        transaction,
+      );
+      if (!geography.rows[0])
+        throw new OrderDomainError('VALIDATION_FAILED', 'Delivery geography was not found.');
+    }
+    const conflicting = await sql<{ id: string }>`
+      select id from orders.delivery_pricing_rules
+      where organization_id=${input.organizationId} and status='ACTIVE'
+        and country_code=${input.countryCode}
+        and currency_code=${input.currency}
+        and coalesce(geography_node_id, '00000000-0000-0000-0000-000000000000'::uuid) = coalesce(${input.geographyNodeId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+        and priority=${input.priority ?? 0}
+      limit 1
+    `.execute(transaction);
+    if (conflicting.rows[0])
+      throw new OrderDomainError(
+        'VALIDATION_FAILED',
+        'An active delivery pricing rule already has this country, geography, and priority.',
+      );
+    const result = await sql<{ id: string; version: string }>`
+      insert into orders.delivery_pricing_rules (organization_id,name,country_code,geography_node_id,flat_amount,currency_code,priority)
+      values (${input.organizationId},${input.name.trim()},${input.countryCode},${input.geographyNodeId ?? null},${input.flatAmount}::numeric,${input.currency},${input.priority ?? 0})
+      returning id,version::text
+    `.execute(transaction);
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'orders.delivery_pricing_rule.created',
+      targetType: 'orders.delivery_pricing_rule',
+      targetId: result.rows[0]!.id,
+      metadata: { countryCode: input.countryCode, flatAmount: input.flatAmount, priority: input.priority ?? 0 },
+    });
+    return { id: result.rows[0]!.id, version: Number(result.rows[0]!.version) };
+  });
+}
+
+export async function updateDeliveryPricingRule(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    ruleId: string;
+    expectedVersion: number;
+    name: string;
+    countryCode: string;
+    geographyNodeId?: string;
+    flatAmount: string;
+    currency: string;
+    priority: number;
+    status: 'ACTIVE' | 'INACTIVE';
+  },
+) {
+  if (!input.name.trim() || !/^[A-Z]{2}$/.test(input.countryCode) || !/^[A-Z]{3}$/.test(input.currency))
+    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery pricing rule details are invalid.');
+  if (!decimalPattern.test(input.flatAmount) || decimal4Minor(input.flatAmount) < 0n)
+    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery amount is invalid.');
+  if (!Number.isInteger(input.priority))
+    throw new OrderDomainError('VALIDATION_FAILED', 'Delivery pricing priority must be an integer.');
+  return db.transaction().execute(async (transaction) => {
+    if (input.geographyNodeId) {
+      const geography = await sql<{ id: string }>`select id from geography.nodes where id=${input.geographyNodeId} and status='ACTIVE'`.execute(
+        transaction,
+      );
+      if (!geography.rows[0])
+        throw new OrderDomainError('VALIDATION_FAILED', 'Delivery geography was not found.');
+    }
+    if (input.status === 'ACTIVE') {
+      const conflicting = await sql<{ id: string }>`
+        select id from orders.delivery_pricing_rules
+        where organization_id=${input.organizationId} and status='ACTIVE' and id<>${input.ruleId}
+          and country_code=${input.countryCode}
+          and currency_code=${input.currency}
+          and coalesce(geography_node_id, '00000000-0000-0000-0000-000000000000'::uuid) = coalesce(${input.geographyNodeId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+          and priority=${input.priority}
+        limit 1
+      `.execute(transaction);
+      if (conflicting.rows[0])
+        throw new OrderDomainError(
+          'VALIDATION_FAILED',
+          'An active delivery pricing rule already has this country, geography, and priority.',
+        );
+    }
+    const updated = await sql<{ version: string }>`
+      update orders.delivery_pricing_rules
+      set name=${input.name.trim()},country_code=${input.countryCode},geography_node_id=${input.geographyNodeId ?? null},
+          flat_amount=${input.flatAmount}::numeric,currency_code=${input.currency},priority=${input.priority},status=${input.status},
+          version=version+1,updated_at=now()
+      where organization_id=${input.organizationId} and id=${input.ruleId} and version=${input.expectedVersion}
+      returning version::text
+    `.execute(transaction);
+    if (updated.rows[0]) {
+      await appendAuditEvent(transaction, {
+        organizationId: input.organizationId,
+        actorType: 'USER',
+        actorId: input.actorId,
+        action: 'orders.delivery_pricing_rule.updated',
+        targetType: 'orders.delivery_pricing_rule',
+        targetId: input.ruleId,
+        metadata: { countryCode: input.countryCode, flatAmount: input.flatAmount, priority: input.priority, status: input.status },
+      });
+      return { id: input.ruleId, version: Number(updated.rows[0].version) };
+    }
+    const exists = await sql<{ id: string }>`select id from orders.delivery_pricing_rules where organization_id=${input.organizationId} and id=${input.ruleId}`.execute(transaction);
+    if (!exists.rows[0]) throw new OrderDomainError('NOT_FOUND', 'Delivery pricing rule was not found.');
+    throw new OrderDomainError('STALE_VERSION', 'Delivery pricing rule changed; reload before saving.');
+  });
+}
+
 export async function refreshCheckout(
   db: Kysely<DatabaseSchema>,
   input: { checkoutToken: string; cartToken: string; expectedVersion: number },
 ): Promise<CheckoutView> {
   return db.transaction().execute(async (transaction) => {
     const { checkout, cart } = await activeCheckout(transaction, input);
+    const quote = await quoteForCheckout(transaction, checkout, cart);
     const updated = await sql<{ version: string }>`
       update orders.checkout_sessions set cart_version = ${cart.version}, calculation_version = ${cart.calculationVersion},
-        calculation_fingerprint = ${cartFingerprint(cart)}, calculated_totals = ${JSON.stringify(checkoutTotals(cart))}::jsonb,
+        delivery_pricing_rule_id = ${quote?.ruleId ?? null}, delivery_amount = ${quote?.amount ?? '0'}::numeric,
+        calculation_fingerprint = ${checkoutFingerprint(cart, quote)}, calculated_totals = ${JSON.stringify(checkoutTotals(cart, quote))}::jsonb,
         status = 'ACTIVE', version = version + 1, updated_at = now() where id = ${checkout.id} returning version::text
     `.execute(transaction);
     return checkoutInputView(
@@ -486,7 +734,9 @@ export async function refreshCheckout(
         version: updated.rows[0]!.version,
         status: 'ACTIVE',
         calculation_version: String(cart.calculationVersion),
-        calculation_fingerprint: cartFingerprint(cart),
+        delivery_pricing_rule_id: quote?.ruleId ?? null,
+        delivery_amount: quote?.amount ?? '0',
+        calculation_fingerprint: checkoutFingerprint(cart, quote),
       },
       cart,
     );
@@ -784,31 +1034,6 @@ export async function placeOrder(
       throw new OrderDomainError('NOT_FOUND', 'Checkout was not found.');
     if (cart.lines.some((line) => line.availability !== 'AVAILABLE' || !line.unitPrice))
       throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
-    const changed =
-      cart.version !== Number(checkout.cart_version) ||
-      cartFingerprint(cart) !== checkout.calculation_fingerprint ||
-      input.acceptedCalculationVersion !== Number(checkout.calculation_version) ||
-      input.acceptedCalculationFingerprint !== checkout.calculation_fingerprint;
-    if (changed) {
-      const updated = await sql<{ version: string }>`
-        update orders.checkout_sessions set cart_version = ${cart.version}, calculation_version = ${cart.calculationVersion}, calculation_fingerprint = ${cartFingerprint(cart)},
-          calculated_totals = ${JSON.stringify(checkoutTotals(cart))}::jsonb, status = 'CHANGED', version = version + 1, updated_at = now()
-        where id = ${checkout.id} returning version::text
-      `.execute(transaction);
-      return {
-        kind: 'CHANGED',
-        checkout: checkoutInputView(
-          {
-            ...checkout,
-            version: updated.rows[0]!.version,
-            status: 'CHANGED',
-            calculation_version: String(cart.calculationVersion),
-            calculation_fingerprint: cartFingerprint(cart),
-          },
-          cart,
-        ),
-      };
-    }
     const contact =
       checkout.customer_name && checkout.customer_phone
         ? {
@@ -840,6 +1065,43 @@ export async function placeOrder(
         'VALIDATION_FAILED',
         'Checkout contact and delivery address are required.',
       );
+    const quote = await resolveDeliveryQuote(transaction, {
+      organizationId: checkout.organization_id,
+      currency: cart.currency,
+      countryCode: address.countryCode,
+      ...(address.geographyNodeId ? { geographyNodeId: address.geographyNodeId } : {}),
+    });
+    const calculationFingerprint = checkoutFingerprint(cart, quote);
+    const changed =
+      cart.version !== Number(checkout.cart_version) ||
+      checkout.delivery_pricing_rule_id !== quote.ruleId ||
+      decimal4Minor(checkout.delivery_amount) !== decimal4Minor(quote.amount) ||
+      input.acceptedCalculationVersion !== Number(checkout.calculation_version) ||
+      input.acceptedCalculationFingerprint !== calculationFingerprint;
+    if (changed) {
+      const updated = await sql<{ version: string }>`
+        update orders.checkout_sessions set cart_version = ${cart.version}, calculation_version = ${cart.calculationVersion},
+          delivery_pricing_rule_id = ${quote.ruleId}, delivery_amount = ${quote.amount}::numeric,
+          calculation_fingerprint = ${calculationFingerprint}, calculated_totals = ${JSON.stringify(checkoutTotals(cart, quote))}::jsonb,
+          status = 'CHANGED', version = version + 1, updated_at = now()
+        where id = ${checkout.id} returning version::text
+      `.execute(transaction);
+      return {
+        kind: 'CHANGED',
+        checkout: checkoutInputView(
+          {
+            ...checkout,
+            version: updated.rows[0]!.version,
+            status: 'CHANGED',
+            calculation_version: String(cart.calculationVersion),
+            delivery_pricing_rule_id: quote.ruleId,
+            delivery_amount: quote.amount,
+            calculation_fingerprint: calculationFingerprint,
+          },
+          cart,
+        ),
+      };
+    }
     const details = await cartOrderLines(transaction, cart);
     if (cart.lines.some((line) => line.availability !== 'AVAILABLE' || !line.unitPrice))
       throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
@@ -866,8 +1128,8 @@ export async function placeOrder(
     }
     const number = await nextOrderNumber(transaction, checkout.organization_id);
     const orderCreated = await sql<{ id: string }>`
-      insert into orders.orders (organization_id, order_number, checkout_session_id, customer_id, source, currency_code, order_status, payment_method, subtotal_amount, discount_amount, total_amount)
-      values (${checkout.organization_id}, ${number}, ${checkout.id}, ${customerId}, 'STOREFRONT', ${cart.currency}, 'PENDING', ${checkout.payment_method}, ${cart.merchandiseGross}::numeric, ${cart.discountTotal}::numeric, ${cart.merchandiseNet}::numeric) returning id
+      insert into orders.orders (organization_id, order_number, checkout_session_id, customer_id, source, currency_code, order_status, payment_method, subtotal_amount, discount_amount, delivery_amount, total_amount)
+      values (${checkout.organization_id}, ${number}, ${checkout.id}, ${customerId}, 'STOREFRONT', ${cart.currency}, 'PENDING', ${checkout.payment_method}, ${cart.merchandiseGross}::numeric, ${cart.discountTotal}::numeric, ${quote.amount}::numeric, ${decimal4Text(decimal4Minor(cart.merchandiseNet) + decimal4Minor(quote.amount))}::numeric) returning id
     `.execute(transaction);
     const orderId = orderCreated.rows[0]?.id;
     if (!orderId) throw new Error('Order creation did not return an id.');
@@ -876,6 +1138,9 @@ export async function placeOrder(
       transaction,
     );
     await sql`insert into orders.order_addresses (organization_id, order_id, address_type, geography_node_id, recipient_name, phone, address_line_1, address_line_2, area, city, district, postal_code, country_code) values (${checkout.organization_id}, ${orderId}, 'DELIVERY', ${address.geographyNodeId ?? null}, ${address.recipientName}, ${address.phone}, ${address.addressLine1}, ${address.addressLine2 ?? null}, ${address.area ?? null}, ${address.city ?? null}, ${address.district ?? null}, ${address.postalCode ?? null}, ${address.countryCode})`.execute(
+      transaction,
+    );
+    await sql`insert into orders.order_delivery_pricing_snapshots (order_id, organization_id, delivery_pricing_rule_id, rule_name_snapshot, country_code_snapshot, geography_node_id, amount, currency_code) values (${orderId}, ${checkout.organization_id}, ${quote.ruleId}, ${quote.ruleName}, ${address.countryCode}, ${address.geographyNodeId ?? null}, ${quote.amount}::numeric, ${quote.currency})`.execute(
       transaction,
     );
     const lineByCartId = new Map<string, string>();
@@ -947,7 +1212,7 @@ export async function placeOrder(
       orderNumber: number,
       paymentMethod: checkout.payment_method,
       currency: cart.currency,
-      expectedAmount: cart.merchandiseNet,
+      expectedAmount: decimal4Text(decimal4Minor(cart.merchandiseNet) + decimal4Minor(quote.amount)),
     });
     input.fault?.('after-promotion-usage');
     for (const calculation of calculations) {
@@ -1079,6 +1344,8 @@ export interface AdminOrderDetailView extends OrderView {
     reasonCode: string;
     reasonText: string | null;
     createdAt: string;
+    refundSettlement: 'NOT_REQUIRED' | 'REFUND_PENDING' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
+    refundObligations: readonly { id: string; amount: string; status: string }[];
   } | null;
 }
 
@@ -1106,6 +1373,7 @@ export async function getOrderForAdmin(
     refundsQuery,
     discountsQuery,
     cancellationQuery,
+    cancellationRefundsQuery,
   ] = await Promise.all([
     baseOrderPromise,
     sql<{ id: string; author_actor_id: string; note_type: string; body: string; created_at: Date }>`
@@ -1197,6 +1465,14 @@ export async function getOrderForAdmin(
       select reason_code, reason_text, created_at
       from orders.order_cancellations
       where order_id = ${input.orderId}
+    `.execute(db),
+    sql<{ id: string; amount: string; status: string }>`
+      select refund.id, refund.amount::text, refund.status
+      from orders.order_cancellation_refunds link
+      join payments.refunds refund
+        on refund.organization_id = link.organization_id and refund.id = link.refund_id
+      where link.organization_id = ${input.organizationId} and link.order_id = ${input.orderId}
+      order by refund.created_at, refund.id
     `.execute(db),
   ]);
 
@@ -1303,6 +1579,19 @@ export async function getOrderForAdmin(
           reasonCode: cancellationQuery.rows[0].reason_code,
           reasonText: cancellationQuery.rows[0].reason_text,
           createdAt: cancellationQuery.rows[0].created_at.toISOString(),
+          refundSettlement:
+            cancellationRefundsQuery.rows.length === 0
+              ? 'NOT_REQUIRED'
+              : cancellationRefundsQuery.rows.every((refund) => refund.status === 'COMPLETED')
+                ? 'REFUNDED'
+                : cancellationRefundsQuery.rows.some((refund) => refund.status === 'COMPLETED')
+                  ? 'PARTIALLY_REFUNDED'
+                  : 'REFUND_PENDING',
+          refundObligations: cancellationRefundsQuery.rows.map((refund) => ({
+            id: refund.id,
+            amount: refund.amount,
+            status: refund.status,
+          })),
         }
       : null,
   };
@@ -2189,9 +2478,16 @@ export async function cancelOrder(
     await sql`update orders.orders set order_status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now() where id = ${input.orderId}`.execute(
       transaction,
     );
-    await sql`insert into orders.order_cancellations (organization_id, order_id, reason_code, reason_text, created_by_actor_id) values (${input.organizationId}, ${input.orderId}, ${input.reasonCode.trim()}, ${input.reasonText?.trim() ?? null}, ${input.actorType === 'SYSTEM' ? null : input.actorId})`.execute(
+    const cancellation = await sql<{ id: string }>`insert into orders.order_cancellations (organization_id, order_id, reason_code, reason_text, created_by_actor_id) values (${input.organizationId}, ${input.orderId}, ${input.reasonCode.trim()}, ${input.reasonText?.trim() ?? null}, ${input.actorType === 'SYSTEM' ? null : input.actorId}) returning id`.execute(
       transaction,
     );
+    const cancellationRefunds = await createCancellationRefundObligationsInTransaction(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      orderId: input.orderId,
+      cancellationId: cancellation.rows[0]!.id,
+      ...(input.reasonText ? { reasonText: input.reasonText } : {}),
+    });
     await appendAuditEvent(transaction, {
       organizationId: input.organizationId,
       actorType: input.actorType ?? 'USER',
@@ -2200,9 +2496,14 @@ export async function cancelOrder(
       targetType: 'orders.order',
       targetId: input.orderId,
       ...(input.reasonText ? { reason: input.reasonText } : {}),
-      metadata: { reasonCode: input.reasonCode, releasedReservations, cancelledFulfillments },
+      metadata: {
+        reasonCode: input.reasonCode,
+        releasedReservations,
+        cancelledFulfillments,
+        refundObligationCount: cancellationRefunds.length,
+      },
     });
-    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'orders.order.cancelled', 1, 'orders.order', ${input.orderId}, 1, ${JSON.stringify({ orderId: input.orderId, releasedReservations, cancelledFulfillments })}::jsonb, now())`.execute(
+    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'orders.order.cancelled', 1, 'orders.order', ${input.orderId}, 1, ${JSON.stringify({ orderId: input.orderId, releasedReservations, cancelledFulfillments, refundObligationCount: cancellationRefunds.length })}::jsonb, now())`.execute(
       transaction,
     );
     const response = { releasedReservations, cancelledFulfillments };
@@ -2540,8 +2841,10 @@ export interface CreateManualOrderInput {
   readonly locationId: string;
   readonly lines: readonly ManualOrderLine[];
   readonly deliveryAddress: ManualOrderDeliveryAddress;
-  /** Shipping charge in the order currency. Must be >= 0. */
-  readonly deliveryAmount: string;
+  /** Admin-only exception to the configured delivery rule. */
+  readonly deliveryAmount?: string;
+  /** Required whenever deliveryAmount is intentionally overridden. */
+  readonly deliveryOverrideReason?: string;
   readonly paymentMethod: PaymentMethodCode;
   readonly salesChannel?: Exclude<OrderView['salesChannel'], 'STOREFRONT'>;
   /**
@@ -2583,7 +2886,8 @@ function multiplyDecimal4(left: string, right: string): string {
  * - Catalog prices are authoritative unless an operator supplies a reasoned override.
  * - Customer must be ACTIVE (not INACTIVE, BLOCKED, MERGED, or ANONYMIZED).
  * - Admin selects the warehouse location explicitly.
- * - A delivery charge can be specified.
+ * - Delivery is calculated from the same configured rule as Storefront;
+ *   deliberate exceptions require a recorded operator reason.
  * - No promotion discounts are applied (discount_amount = 0 on all lines).
  *
  * All inventory reservation logic uses the same primitive as placeOrder so
@@ -2598,11 +2902,12 @@ export async function createManualOrder(
   if (!input.lines.length)
     throw new OrderDomainError('VALIDATION_FAILED', 'At least one line item is required.');
 
-  const deliveryAmountRaw = input.deliveryAmount.trim();
-  if (!decimalPattern.test(deliveryAmountRaw))
+  const deliveryAmountRaw = input.deliveryAmount?.trim();
+  const deliveryOverrideReason = input.deliveryOverrideReason?.trim();
+  if (deliveryOverrideReason && (!deliveryAmountRaw || !decimalPattern.test(deliveryAmountRaw)))
     throw new OrderDomainError(
       'VALIDATION_FAILED',
-      'Delivery amount must be a non-negative decimal.',
+      'A delivery override requires a non-negative delivery amount.',
     );
 
   ensureAddress(input.deliveryAddress);
@@ -2638,7 +2943,8 @@ export async function createManualOrder(
             locationId: input.locationId,
             lines: input.lines,
             deliveryAddress: input.deliveryAddress,
-            deliveryAmount: deliveryAmountRaw,
+            deliveryAmount: deliveryAmountRaw ?? null,
+            deliveryOverrideReason: deliveryOverrideReason ?? null,
             paymentMethod: input.paymentMethod,
             salesChannel,
             currency,
@@ -2702,6 +3008,18 @@ export async function createManualOrder(
         'VALIDATION_FAILED',
         'Location was not found or is not a STOCK_HOLDING location.',
       );
+
+    const configuredDeliveryQuote = await resolveDeliveryQuote(transaction, {
+      organizationId: input.organizationId,
+      currency,
+      countryCode: input.deliveryAddress.countryCode,
+      ...(input.deliveryAddress.geographyNodeId
+        ? { geographyNodeId: input.deliveryAddress.geographyNodeId }
+        : {}),
+    });
+    const effectiveDeliveryAmount = deliveryOverrideReason
+      ? deliveryAmountRaw!
+      : configuredDeliveryQuote.amount;
 
     // ---- Variant resolution ------------------------------------------------
     // Resolve each variant to its inventory item. Sort by variantId to ensure
@@ -2806,7 +3124,7 @@ export async function createManualOrder(
       resolvedLines.reduce((sum, line) => sum + decimal4Minor(line.gross), 0n),
     );
     const totalAmount = decimal4Text(
-      decimal4Minor(subtotalAmount) + decimal4Minor(deliveryAmountRaw),
+      decimal4Minor(subtotalAmount) + decimal4Minor(effectiveDeliveryAmount),
     );
 
     // ---- Insert order header -----------------------------------------------
@@ -2820,7 +3138,7 @@ export async function createManualOrder(
         ${input.organizationId}, ${orderNumber}, ${input.customerId}, 'MANUAL', ${salesChannel},
         ${currency}, 'PENDING', ${input.paymentMethod},
         ${subtotalAmount}::numeric, 0::numeric,
-        ${deliveryAmountRaw}::numeric, 0::numeric,
+        ${effectiveDeliveryAmount}::numeric, 0::numeric,
         ${totalAmount}::numeric
       ) returning id
     `.execute(transaction);
@@ -2877,6 +3195,19 @@ export async function createManualOrder(
         ${input.deliveryAddress.district?.trim() ?? null},
         ${input.deliveryAddress.postalCode?.trim() ?? null},
         ${input.deliveryAddress.countryCode}
+      )
+    `.execute(transaction);
+    await sql`
+      insert into orders.order_delivery_pricing_snapshots (
+        order_id, organization_id, delivery_pricing_rule_id, rule_name_snapshot,
+        country_code_snapshot, geography_node_id, amount, currency_code, pricing_source, override_reason
+      ) values (
+        ${orderId}, ${input.organizationId},
+        ${deliveryOverrideReason ? null : configuredDeliveryQuote.ruleId},
+        ${deliveryOverrideReason ? 'Manual delivery override' : configuredDeliveryQuote.ruleName},
+        ${input.deliveryAddress.countryCode}, ${input.deliveryAddress.geographyNodeId ?? null},
+        ${effectiveDeliveryAmount}::numeric, ${currency},
+        ${deliveryOverrideReason ? 'MANUAL_OVERRIDE' : 'RULE'}, ${deliveryOverrideReason ?? null}
       )
     `.execute(transaction);
 
@@ -2989,6 +3320,9 @@ export async function createManualOrder(
         source: 'MANUAL',
         salesChannel,
         paymentMethod: input.paymentMethod,
+        deliveryAmount: effectiveDeliveryAmount,
+        deliveryPricingSource: deliveryOverrideReason ? 'MANUAL_OVERRIDE' : 'RULE',
+        ...(deliveryOverrideReason ? { deliveryOverrideReason } : {}),
         priceOverrides: resolvedLines.filter((line) => line.priceSource === 'MANUAL_OVERRIDE')
           .length,
       },

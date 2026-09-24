@@ -71,6 +71,13 @@ export async function createOrganization(
   `.execute(db);
   const id = result.rows[0]?.id;
   if (!id) throw new Error('Organization creation did not return an id.');
+  // Commerce must always have an explicit server-owned baseline quote. New
+  // tenants can replace it through the delivery-pricing API before checkout.
+  await sql`
+    insert into orders.delivery_pricing_rules (organization_id,name,country_code,flat_amount,currency_code)
+    values (${id}, 'Standard Bangladesh delivery', 'BD', 0, ${input.defaultCurrency})
+    on conflict (organization_id,name) do nothing
+  `.execute(db);
   return { id };
 }
 

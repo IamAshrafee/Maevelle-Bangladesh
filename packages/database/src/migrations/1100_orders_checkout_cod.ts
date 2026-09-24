@@ -10,6 +10,34 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
   await sql`
     create schema if not exists orders;
 
+    -- Checkout selects one server-owned rule; the eventual Order records an
+    -- immutable quote snapshot so later rate changes never rewrite history.
+    create table orders.delivery_pricing_rules (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      name text not null check (length(trim(name)) > 0),
+      country_code text not null check (country_code ~ '^[A-Z]{2}$'),
+      geography_node_id uuid references geography.nodes(id),
+      flat_amount numeric(20,4) not null check (flat_amount >= 0),
+      currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
+      priority integer not null default 0,
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'INACTIVE')),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1,
+      unique (organization_id, id),
+      unique (organization_id, name)
+    );
+    create index delivery_pricing_rules_resolution
+      on orders.delivery_pricing_rules (organization_id, country_code, priority desc, id)
+      where status = 'ACTIVE';
+    create unique index delivery_pricing_rules_active_precedence
+      on orders.delivery_pricing_rules (organization_id, country_code, currency_code, coalesce(geography_node_id, '00000000-0000-0000-0000-000000000000'::uuid), priority)
+      where status = 'ACTIVE';
+    insert into orders.delivery_pricing_rules (organization_id, name, country_code, flat_amount, currency_code)
+      select id, 'Standard Bangladesh delivery', 'BD', 0, 'BDT' from platform.organizations
+    on conflict (organization_id, name) do nothing;
+
     create table orders.checkout_sessions (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
@@ -29,6 +57,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       district text,
       postal_code text,
       country_code text,
+      delivery_pricing_rule_id uuid references orders.delivery_pricing_rules(id),
+      delivery_amount numeric(20,4) not null default 0 check (delivery_amount >= 0),
       payment_method text not null default 'COD' check (payment_method = 'COD'),
       cart_version bigint not null,
       calculation_version bigint not null,
@@ -114,6 +144,22 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       foreign key (organization_id, order_id) references orders.orders(organization_id, id)
     );
 
+    create table orders.order_delivery_pricing_snapshots (
+      order_id uuid primary key references orders.orders(id),
+      organization_id uuid not null references platform.organizations(id),
+      delivery_pricing_rule_id uuid references orders.delivery_pricing_rules(id),
+      rule_name_snapshot text not null,
+      country_code_snapshot text not null check (country_code_snapshot ~ '^[A-Z]{2}$'),
+      geography_node_id uuid references geography.nodes(id),
+      amount numeric(20,4) not null check (amount >= 0),
+      currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
+      pricing_source text not null default 'RULE' check (pricing_source in ('RULE', 'MANUAL_OVERRIDE')),
+      override_reason text,
+      created_at timestamptz not null default now(),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id),
+      check ((pricing_source = 'RULE') = (override_reason is null))
+    );
+
     create table orders.order_lines (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
@@ -145,6 +191,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       foreign key (organization_id, order_id) references orders.orders(organization_id, id)
     );
     create index order_lines_order on orders.order_lines (order_id, id);
+    -- Allows reverse-logistics records to prove that an Order line belongs to
+    -- their parent Order without trusting an application-side ID pairing.
+    create unique index order_lines_organization_order_id on orders.order_lines (organization_id, order_id, id);
 
     create table orders.order_line_cancellations (
       id uuid primary key default uuidv7(),
@@ -217,6 +266,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       reason_text text,
       created_by_actor_id uuid,
       created_at timestamptz not null default now(),
+      unique (organization_id, id),
       foreign key (organization_id, order_id) references orders.orders(organization_id, id)
     );
 

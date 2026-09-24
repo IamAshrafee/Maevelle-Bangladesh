@@ -28,8 +28,8 @@ const supportedEvents: Record<string, { type: string; required: boolean }> = {
   'orders.order.placed': { type: 'ORDER_PLACED', required: true },
   'orders.order.cancelled': { type: 'ORDER_CANCELLED', required: false },
   'payments.payment.verified': { type: 'PAYMENT_VERIFIED', required: true },
-  'fulfillment.fulfillment.dispatched': { type: 'ORDER_DISPATCHED', required: true },
-  'delivery.delivery.delivered': { type: 'DELIVERY_COMPLETED', required: true },
+  'fulfillment.dispatched': { type: 'ORDER_DISPATCHED', required: true },
+  'delivery.delivered': { type: 'DELIVERY_COMPLETED', required: true },
   'payments.refund.completed': { type: 'REFUND_COMPLETED', required: true },
   'reviews.review.visible': { type: 'REVIEW_VISIBLE', required: false },
 };
@@ -368,14 +368,36 @@ export async function createNotificationFromOutbox(
       );
       return { created: false };
     }
-    const customer =
-      event.event_type.startsWith('orders.') || event.event_type.startsWith('payments.')
-        ? await sql<{
-            customer_id: string;
-          }>`select customer_id from orders.orders where id=coalesce((${JSON.stringify(event.payload)}::jsonb->>'orderId')::uuid,${event.aggregate_id}::uuid) and organization_id=${event.organization_id}`.execute(
-            tx,
-          )
-        : undefined;
+    // Commerce events own different aggregate IDs. Resolve the Order through
+    // the owning record instead of assuming every aggregate ID is an Order ID.
+    const customer = await sql<{
+      customer_id: string;
+    }>`
+      with candidate_orders(order_id) as (
+        select (${JSON.stringify(event.payload)}::jsonb->>'orderId')::uuid
+          where ${JSON.stringify(event.payload)}::jsonb ? 'orderId'
+        union all
+        select ${event.aggregate_id}::uuid where ${event.event_type} like 'orders.%'
+        union all
+        select refund.order_id from payments.refunds refund
+          where ${event.event_type} = 'payments.refund.completed'
+            and refund.organization_id = ${event.organization_id} and refund.id = ${event.aggregate_id}::uuid
+        union all
+        select fulfillment.order_id from fulfillment.fulfillments fulfillment
+          where ${event.event_type} = 'fulfillment.dispatched'
+            and fulfillment.organization_id = ${event.organization_id} and fulfillment.id = ${event.aggregate_id}::uuid
+        union all
+        select delivery.order_id from delivery.deliveries delivery
+          where ${event.event_type} = 'delivery.delivered'
+            and delivery.organization_id = ${event.organization_id} and delivery.id = ${event.aggregate_id}::uuid
+      )
+      select orders.customer_id
+      from candidate_orders candidate
+      join orders.orders orders
+        on orders.id = candidate.order_id and orders.organization_id = ${event.organization_id}
+      where orders.customer_id is not null
+      limit 1
+    `.execute(tx);
     const customerId = customer?.rows[0]?.customer_id;
     if (!customerId) {
       await sql`update platform.event_consumer_receipts set status='COMPLETED',processed_at=now() where id=${receipt.rows[0].id}::bigint`.execute(

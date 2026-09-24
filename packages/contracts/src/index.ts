@@ -1892,6 +1892,17 @@ export interface OrderDetailDto extends OrderSummaryDto {
     readonly benefitValue: string;
     readonly discountAmount: string;
   }[];
+  readonly cancellation?: {
+    readonly reasonCode: string;
+    readonly reasonText: string | null;
+    readonly createdAt: string;
+    readonly refundSettlement: 'NOT_REQUIRED' | 'REFUND_PENDING' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
+    readonly refundObligations: readonly {
+      readonly id: string;
+      readonly amount: string;
+      readonly status: string;
+    }[];
+  } | null;
 }
 
 export interface OrderLineDto {
@@ -2055,7 +2066,8 @@ export interface CreateManualOrderInputDto {
     readonly countryCode: string;
     readonly saveToCustomer?: boolean;
   };
-  readonly deliveryAmount: string;
+  readonly deliveryAmount?: string;
+  readonly deliveryOverrideReason?: string;
   readonly paymentMethod: PaymentMethodCodeDto;
   readonly salesChannel: Exclude<OrderSalesChannelDto, 'STOREFRONT'>;
   readonly currency?: string;

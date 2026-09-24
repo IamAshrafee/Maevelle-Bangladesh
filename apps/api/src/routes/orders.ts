@@ -6,11 +6,13 @@ import {
   cancelOrder,
   cancelOrderLine,
   createCheckout,
+  createDeliveryPricingRule,
   getCheckout,
   getAvailableCheckoutPaymentMethods,
   getOrderForAdmin,
   getOrderForCheckout,
   getOrderForCheckoutContext,
+  listDeliveryPricingRules,
   listOrders,
   OrderDomainError,
   placeOrder,
@@ -18,6 +20,7 @@ import {
   updateCheckoutAddress,
   updateCheckoutContact,
   updateCheckoutPaymentMethod,
+  updateDeliveryPricingRule,
   updateOrderStatus,
   updateOrderDeliveryAddress,
   createManualOrder,
@@ -317,6 +320,56 @@ export function registerOrderRoutes(
       }
     },
   );
+  app.patch(
+    '/admin/orders/delivery-pricing-rules/:ruleId',
+    {
+      schema: {
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          name: Type.String({ minLength: 1, maxLength: 160 }),
+          countryCode: Type.String({ pattern: '^[A-Z]{2}$' }),
+          geographyNodeId: Type.Optional(Type.String()),
+          flatAmount: Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),
+          currency: Type.String({ pattern: '^[A-Z]{3}$' }),
+          priority: Type.Integer(),
+          status: Type.Union([Type.Literal('ACTIVE'), Type.Literal('INACTIVE')]),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'orders.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          version: number;
+          name: string;
+          countryCode: string;
+          geographyNodeId?: string;
+          flatAmount: string;
+          currency: string;
+          priority: number;
+          status: 'ACTIVE' | 'INACTIVE';
+        };
+        return {
+          data: await updateDeliveryPricingRule(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            ruleId: (request.params as { ruleId: string }).ruleId,
+            expectedVersion: body.version,
+            name: body.name,
+            countryCode: body.countryCode,
+            ...(body.geographyNodeId ? { geographyNodeId: body.geographyNodeId } : {}),
+            flatAmount: body.flatAmount,
+            currency: body.currency,
+            priority: body.priority,
+            status: body.status,
+          }),
+        };
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
   app.post(
     '/storefront/v1/checkouts/current/place-order',
     {
@@ -457,6 +510,41 @@ export function registerOrderRoutes(
             ...(body.payerReference ? { payerReference: body.payerReference } : {}),
             ...(body.claimedAmount ? { claimedAmount: body.claimedAmount } : {}),
             idempotencyKey: key,
+          }),
+        });
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
+  app.get('/admin/orders/delivery-pricing-rules', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listDeliveryPricingRules(database.db, active.organizationId) };
+  });
+  app.post(
+    '/admin/orders/delivery-pricing-rules',
+    {
+      schema: {
+        body: Type.Object({
+          name: Type.String({ minLength: 1, maxLength: 160 }),
+          countryCode: Type.String({ pattern: '^[A-Z]{2}$' }),
+          geographyNodeId: Type.Optional(Type.String()),
+          flatAmount: Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),
+          currency: Type.String({ pattern: '^[A-Z]{3}$' }),
+          priority: Type.Optional(Type.Integer()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'orders.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await createDeliveryPricingRule(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            ...(request.body as Omit<Parameters<typeof createDeliveryPricingRule>[1], 'organizationId' | 'actorId'>),
           }),
         });
       } catch (caught) {
@@ -1153,7 +1241,8 @@ export function registerOrderRoutes(
             countryCode: Type.String({ pattern: '^[A-Z]{2}$' }),
             saveToCustomer: Type.Optional(Type.Boolean()),
           }),
-          deliveryAmount: Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),
+          deliveryAmount: Type.Optional(Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' })),
+          deliveryOverrideReason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
           paymentMethod: Type.Union([
             Type.Literal('COD'),
             Type.Literal('BKASH_MANUAL'),

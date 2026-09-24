@@ -33,8 +33,11 @@ RUN groupadd --system --gid 1001 maevelle && useradd --system --uid 1001 --gid m
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Next's standalone output mirrors the monorepo root. Keep that root intact;
+# pnpm-linked Next output also needs the workspace dependency tree for helpers
+# omitted by standalone tracing.
+COPY --from=build --chown=maevelle:maevelle /workspace/apps/admin/.next/standalone ./
 COPY --from=build --chown=maevelle:maevelle /workspace/node_modules ./node_modules
-COPY --from=build --chown=maevelle:maevelle /workspace/apps/admin ./apps/admin
-WORKDIR /app/apps/admin
+COPY --from=build --chown=maevelle:maevelle /workspace/apps/admin/.next/static ./apps/admin/.next/static
 USER maevelle
-CMD ["node", "node_modules/next/dist/bin/next", "start", "--port", "3000"]
+CMD ["node", "apps/admin/server.js"]

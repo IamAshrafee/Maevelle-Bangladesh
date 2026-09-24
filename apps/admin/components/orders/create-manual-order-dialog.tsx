@@ -103,7 +103,12 @@ export function CreateManualOrderDialog() {
       locationId: String(formData.get('locationId')),
       paymentMethod: formData.get('paymentMethod') as CreateManualOrderInputDto['paymentMethod'],
       salesChannel: formData.get('salesChannel') as CreateManualOrderInputDto['salesChannel'],
-      deliveryAmount: String(formData.get('deliveryAmount') || '0'),
+      ...(formData.get('deliveryOverrideReason')
+        ? {
+            deliveryAmount: String(formData.get('deliveryAmount') || '0'),
+            deliveryOverrideReason: String(formData.get('deliveryOverrideReason')),
+          }
+        : {}),
       lines: lines.map((line) => ({
         variantId: line.variantId,
         quantity: line.quantity,
@@ -319,14 +324,18 @@ export function CreateManualOrderDialog() {
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="deliveryAmount">Delivery charge</Label>
+            <Label htmlFor="deliveryAmount">Delivery override amount</Label>
             <Input
               id="deliveryAmount"
               name="deliveryAmount"
               inputMode="decimal"
               defaultValue="0"
-              required
             />
+            <p className="text-xs text-muted-foreground">Leave the reason blank to use the configured delivery rate.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="deliveryOverrideReason">Override reason</Label>
+            <Input id="deliveryOverrideReason" name="deliveryOverrideReason" placeholder="Required to override the configured rate" />
           </div>
         </section>
 

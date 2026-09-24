@@ -63,7 +63,9 @@ export function CancelOrderDialog({ orderId, currentVersion }: { orderId: string
         <DialogHeader>
           <DialogTitle>Cancel Order</DialogTitle>
           <DialogDescription>
-            This action will release any reserved inventory and cancel pending payment intents. It cannot be undone.
+            This action will release any reserved inventory and cancel pending payment intents. If money has
+            already been collected, a linked refund request will be created for Finance to complete. It cannot
+            be undone.
           </DialogDescription>
         </DialogHeader>
 

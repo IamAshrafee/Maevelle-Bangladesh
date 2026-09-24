@@ -1519,6 +1519,93 @@ export async function createRefund(
   });
 }
 
+/**
+ * Creates the refund work that is inseparable from cancelling an Order which
+ * has already collected money.  It deliberately works inside the caller's
+ * transaction: Order cancellation, the refund obligation, and inventory
+ * release must either all commit or all roll back together.
+ */
+export async function createCancellationRefundObligationsInTransaction(
+  transaction: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    orderId: string;
+    cancellationId: string;
+    reasonText?: string;
+  },
+): Promise<readonly { refundId: string; amount: string }[]> {
+  const payments = await sql<{
+    id: string;
+    currency_code: string;
+    payment_method_id: string;
+    allocated_amount: string;
+  }>`
+    select payment.id, payment.currency_code, payment.payment_method_id,
+           allocation.amount::text as allocated_amount
+    from payments.payment_allocations allocation
+    join payments.payments payment
+      on payment.organization_id = allocation.organization_id and payment.id = allocation.payment_id
+    where allocation.organization_id = ${input.organizationId}
+      and allocation.order_id = ${input.orderId}
+      and payment.status = 'CONFIRMED'
+    order by payment.id
+    for update of payment
+  `.execute(transaction);
+
+  const obligations: { refundId: string; amount: string }[] = [];
+  for (const payment of payments.rows) {
+    // Locking the Payment above serializes this against normal refund creation.
+    const committed = await sql<{ amount: string }>`
+      select coalesce(sum(amount), 0)::text as amount
+      from payments.refunds
+      where organization_id = ${input.organizationId}
+        and payment_id = ${payment.id}
+        and status in ('REQUESTED', 'PROCESSING', 'UNKNOWN_EXTERNAL_OUTCOME', 'COMPLETED')
+    `.execute(transaction);
+    const remaining = await sql<{ amount: string }>`
+      select greatest(${payment.allocated_amount}::numeric - ${committed.rows[0]?.amount ?? '0'}::numeric, 0)::text as amount
+    `.execute(transaction);
+    if (Number(remaining.rows[0]?.amount ?? 0) <= 0) continue;
+
+    const created = await sql<{ id: string }>`
+      insert into payments.refunds (
+        organization_id, refund_number, order_id, payment_id, payment_method_id,
+        currency_code, amount, reason_code, reason_text, requested_by_actor_id
+      ) values (
+        ${input.organizationId}, 'RFD-' || upper(replace(uuidv7()::text, '-', '')),
+        ${input.orderId}, ${payment.id}, ${payment.payment_method_id}, ${payment.currency_code},
+        ${remaining.rows[0]!.amount}::numeric, 'ORDER_CANCELLED', ${input.reasonText?.trim() ?? null},
+        ${input.actorId}
+      ) returning id
+    `.execute(transaction);
+    const refundId = created.rows[0]?.id;
+    if (!refundId) throw new Error('Cancellation refund creation did not return an id.');
+    await sql`
+      insert into payments.refund_allocations (organization_id, refund_id, component_type, amount)
+      values (${input.organizationId}, ${refundId}::uuid, 'ORDER_TOTAL', ${remaining.rows[0]!.amount}::numeric)
+    `.execute(transaction);
+    await sql`
+      insert into orders.order_cancellation_refunds (organization_id, order_id, cancellation_id, refund_id)
+      values (${input.organizationId}, ${input.orderId}, ${input.cancellationId}::uuid, ${refundId}::uuid)
+    `.execute(transaction);
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'payments.refund.created_for_order_cancellation',
+      targetType: 'payments.refund',
+      targetId: refundId,
+      metadata: { orderId: input.orderId, paymentId: payment.id, amount: remaining.rows[0]!.amount },
+    });
+    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'payments.refund.created', 1, 'payments.refund', ${refundId}, 1, ${JSON.stringify({ refundId, paymentId: payment.id, orderId: input.orderId, source: 'ORDER_CANCELLATION' })}::jsonb, now())`.execute(
+      transaction,
+    );
+    obligations.push({ refundId, amount: remaining.rows[0]!.amount });
+  }
+  return obligations;
+}
+
 export async function completeManualRefund(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -1580,6 +1667,30 @@ export async function completeManualRefund(
     await sql`update payments.refunds set status = 'COMPLETED', external_reference = ${input.externalReference.trim()}, normalized_external_reference = ${normalizedReference}, completed_at = now(), completed_by_actor_id = ${input.actorId}, version = version + 1, updated_at = now() where id = ${row.id}`.execute(
       transaction,
     );
+    // A return's commercial state is a projection of linked financial records,
+    // never an independently editable copy of refund truth.
+    await sql`
+      update returns.return_cases return_case
+      set commercial_resolution_status = case
+            when not exists (
+              select 1
+              from returns.return_refund_links link
+              join payments.refunds linked_refund on linked_refund.id = link.refund_id
+              where link.organization_id = return_case.organization_id
+                and link.return_case_id = return_case.id
+                and linked_refund.status <> 'COMPLETED'
+            ) then 'REFUND_COMPLETED'
+            else 'REFUND_PENDING'
+          end,
+          updated_at = now(), version = version + 1
+      where return_case.organization_id = ${input.organizationId}
+        and exists (
+          select 1 from returns.return_refund_links link
+          where link.organization_id = return_case.organization_id
+            and link.return_case_id = return_case.id
+            and link.refund_id = ${row.id}
+        )
+    `.execute(transaction);
     input.fault?.();
     await sql`update platform.idempotency_records set status = 'SUCCEEDED', result_entity_type = 'payments.refund', result_entity_id = ${row.id}::uuid, safe_response = ${JSON.stringify({ refundId: row.id })}::jsonb, completed_at = now() where id = ${recordId}`.execute(
       transaction,
