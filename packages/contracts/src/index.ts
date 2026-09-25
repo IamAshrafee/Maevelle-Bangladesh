@@ -1594,6 +1594,8 @@ export interface FinancialAccountDto {
   readonly version: string;
   readonly ledger_balance: string;
   readonly last_movement_at: string | null;
+  readonly created_at?: string;
+  readonly updated_at?: string;
 }
 
 export interface FinanceAccountDetailDto extends FinancialAccountDto {
@@ -1610,6 +1612,12 @@ export interface FinanceAccountDetailDto extends FinancialAccountDto {
   } | null;
   readonly hasOpeningBalance?: boolean;
   readonly canSetOpeningBalance?: boolean;
+}
+
+export interface UpdateFinancialAccountRequest {
+  readonly name?: string;
+  readonly referenceLabel?: string | null;
+  readonly expectedVersion: number;
 }
 
 export interface SetFinancialAccountOpeningBalanceRequest {

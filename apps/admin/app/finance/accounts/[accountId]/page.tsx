@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import { FinanceAccountDetail } from '@/components/finance/finance-account-detail';
+
+export const metadata: Metadata = {
+  title: 'Financial Account | Maevelle Admin',
+  description: 'Audited cash ledger balances, transaction movements, and reconciliation audits.',
+};
 
 export default async function FinanceAccountPage({
   params,
@@ -8,3 +14,4 @@ export default async function FinanceAccountPage({
   const { accountId } = await params;
   return <FinanceAccountDetail accountId={accountId} />;
 }
+

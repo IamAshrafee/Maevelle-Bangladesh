@@ -548,8 +548,11 @@ export async function getFinancialAccountDetail(
     total_outflow: string;
     version: string;
     has_opening_balance: boolean;
+    created_at: string;
+    updated_at: string;
   }>`select account.id,account.account_number,account.name,account.account_type,
       account.currency_code,account.status,account.reference_label,account.version::text,
+      account.created_at::text as created_at,account.updated_at::text as updated_at,
       coalesce(sum(entry.amount_delta),0)::numeric(20,4)::text as ledger_balance,
       coalesce(sum(entry.amount_delta) filter (where entry.amount_delta>0),0)::numeric(20,4)::text as total_inflow,
       coalesce(abs(sum(entry.amount_delta) filter (where entry.amount_delta<0)),0)::numeric(20,4)::text as total_outflow,
@@ -591,6 +594,8 @@ export async function getFinancialAccountDetail(
     version: account.version,
     ledger_balance: account.ledger_balance,
     last_movement_at: account.last_movement_at,
+    created_at: account.created_at,
+    updated_at: account.updated_at,
     hasOpeningBalance: Boolean(account.has_opening_balance),
     canSetOpeningBalance:
       !account.has_opening_balance &&
@@ -769,6 +774,93 @@ export async function changeFinancialAccountStatus(
       tx,
     );
     return { id: input.accountId, status: input.status, version };
+  });
+}
+
+export async function updateFinancialAccount(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    accountId: string;
+    name?: string;
+    referenceLabel?: string | null;
+    expectedVersion: number;
+  },
+) {
+  const name = input.name?.trim();
+  const referenceLabel =
+    input.referenceLabel !== undefined ? (input.referenceLabel?.trim() || null) : undefined;
+
+  if (input.name !== undefined && !name) {
+    throw new FinanceDomainError('VALIDATION_FAILED', 'Account name cannot be empty.');
+  }
+
+  return withFinanceTransaction(db, async (tx) => {
+    const current = await sql<{
+      id: string;
+      name: string;
+      reference_label: string | null;
+      version: string;
+    }>`select id, name, reference_label, version::text
+       from finance.financial_accounts
+       where organization_id = ${input.organizationId} and id = ${input.accountId}
+       for update`.execute(tx);
+
+    const account = current.rows[0];
+    if (!account) {
+      throw new FinanceDomainError('NOT_FOUND', 'Financial account was not found.');
+    }
+    if (Number(account.version) !== input.expectedVersion) {
+      throw new FinanceDomainError(
+        'CONFLICT',
+        'Financial account changed since it was opened. Refresh before editing.',
+      );
+    }
+
+    const newName = name ?? account.name;
+    const newRef = referenceLabel !== undefined ? referenceLabel : account.reference_label;
+
+    const updated = await sql<{ version: string }>`
+      update finance.financial_accounts
+      set name = ${newName},
+          reference_label = ${newRef},
+          version = version + 1,
+          updated_at = now()
+      where organization_id = ${input.organizationId}
+        and id = ${input.accountId}
+        and version = ${input.expectedVersion}
+      returning version::text
+    `.execute(tx);
+
+    const version = Number(updated.rows[0]?.version);
+    if (!version) {
+      throw new FinanceDomainError(
+        'CONFLICT',
+        'Financial account changed before update completed.',
+      );
+    }
+
+    await appendAuditEvent(tx, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'finance.account.updated',
+      targetType: 'finance.financial_account',
+      targetId: input.accountId,
+      beforeDiff: { name: account.name, referenceLabel: account.reference_label },
+      afterDiff: { name: newName, referenceLabel: newRef },
+    });
+
+    await sql`insert into platform.outbox_events
+      (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
+      values (${input.organizationId},'finance.account.updated',1,
+        'finance.financial_account',${input.accountId}::uuid,${version},
+        ${JSON.stringify({ accountId: input.accountId, name: newName, referenceLabel: newRef })}::jsonb,now())`.execute(
+      tx,
+    );
+
+    return { id: input.accountId, name: newName, referenceLabel: newRef, version };
   });
 }
 export async function createFinancialAccount(
@@ -2593,7 +2685,12 @@ export async function reopenReconciliation(
     return { id: session.id, status: 'OPEN' as const };
   });
 }
-export async function listReconciliations(db: Kysely<DatabaseSchema>, org: string) {
+export async function listReconciliations(
+  db: Kysely<DatabaseSchema>,
+  org: string,
+  filters: { accountId?: string | undefined } = {},
+) {
+  const accountId = filters.accountId?.trim() || null;
   const result = await sql<{
     id: string;
     account_id: string;
@@ -2625,6 +2722,7 @@ export async function listReconciliations(db: Kysely<DatabaseSchema>, org: strin
       order by event.created_at desc,event.id desc limit 1
     ) resolution on true
     where s.organization_id=${org}
+      and (${accountId}::uuid is null or s.financial_account_id=${accountId}::uuid)
     order by s.created_at desc,s.id desc
   `.execute(db);
   return result.rows.map((row) => ({

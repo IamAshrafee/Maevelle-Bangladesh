@@ -176,6 +176,39 @@ export function registerFinanceRoutes(
       }
     },
   );
+  app.patch(
+    '/admin/finance/accounts/:id',
+    {
+      schema: {
+        body: Type.Object({
+          name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+          referenceLabel: Type.Optional(Type.Union([Type.String({ maxLength: 200 }), Type.Null()])),
+          expectedVersion: Type.Integer({ minimum: 1 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'finance.accounts.manage');
+      if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const p = body<{
+          name?: string;
+          referenceLabel?: string | null;
+          expectedVersion: number;
+        }>(req.body);
+        return {
+          data: await finance.updateFinancialAccount(database.db, {
+            ...p,
+            organizationId: a.organizationId,
+            actorId: a.actorId,
+            accountId: (req.params as { id: string }).id,
+          }),
+        };
+      } catch (e) {
+        return failure(reply, e);
+      }
+    },
+  );
   app.post(
     '/admin/finance/accounts/:id/opening-balance',
     {
@@ -615,11 +648,26 @@ export function registerFinanceRoutes(
       }
     },
   );
-  app.get('/admin/finance/reconciliations', async (req, reply) => {
-    const a = await admin(database, auth, req.headers, 'finance.reconciliation.view');
-    if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await finance.listReconciliations(database.db, a.organizationId) };
-  });
+  app.get(
+    '/admin/finance/reconciliations',
+    {
+      schema: {
+        querystring: Type.Object({
+          accountId: Type.Optional(Type.String({ format: 'uuid' })),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'finance.reconciliation.view');
+      if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = req.query as { accountId?: string };
+      return {
+        data: await finance.listReconciliations(database.db, a.organizationId, {
+          ...(query.accountId ? { accountId: query.accountId } : {}),
+        }),
+      };
+    },
+  );
   app.post(
     '/admin/finance/reconciliations',
     {
