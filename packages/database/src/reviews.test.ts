@@ -80,9 +80,13 @@ describe('Reviews', () => {
     const data = await fixture('revision');
     const privateAsset = await sql<{
       id: string;
-    }>`insert into media.media_assets(organization_id,asset_type,visibility_class,status) values(${data.organizationId},'IMAGE','PRIVATE','PROCESSING') returning id`.execute(
-      database.db,
-    );
+    }>`insert into media.media_assets(
+      organization_id,asset_type,visibility_class,status,original_filename,normalized_extension,
+      upload_source,guest_owner_hash
+    ) values (
+      ${data.organizationId},'IMAGE','PRIVATE','READY','review-photo.jpg','jpg',
+      'CUSTOMER_REVIEW',${tokenHash(data.token)}
+    ) returning id`.execute(database.db);
     const submitted = await submitReview(database.db, {
       organizationId: data.organizationId,
       accessToken: data.token,
@@ -122,7 +126,7 @@ describe('Reviews', () => {
     const publicReviews = await listPublicReviews(database.db, data.organizationId, data.productId);
     expect(publicReviews).toHaveLength(1);
     expect(publicReviews[0]?.rating).toBe(1);
-    expect(publicReviews[0]?.media_asset_ids).toEqual([]);
+    expect(publicReviews[0]?.media_asset_ids).toEqual([privateAsset.rows[0]!.id]);
     const adminReviews = await listAdminReviews(database.db, data.organizationId);
     expect(adminReviews).toHaveLength(1);
     expect(adminReviews[0]).toMatchObject({
@@ -133,6 +137,26 @@ describe('Reviews', () => {
     });
     await rebuildRatingSummary(database.db, data.organizationId, data.productId);
     expect(await verifyReviewIntegrity(database.db, data.organizationId)).toEqual([]);
+  });
+
+  it('only attaches ready customer uploads owned by the secure Review credential', async () => {
+    const data = await fixture('media-ownership');
+    const adminAsset = await sql<{ id: string }>`insert into media.media_assets(
+      organization_id,asset_type,visibility_class,status,original_filename,normalized_extension,
+      upload_source
+    ) values (
+      ${data.organizationId},'IMAGE','PUBLIC','READY','catalog.jpg','jpg','ADMIN_UPLOAD'
+    ) returning id::text`.execute(database.db);
+
+    await expect(
+      submitReview(database.db, {
+        organizationId: data.organizationId,
+        accessToken: data.token,
+        rating: 5,
+        mediaAssetIds: [adminAsset.rows[0]!.id],
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('keeps review records and public aggregates tenant scoped', async () => {

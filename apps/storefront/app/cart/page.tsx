@@ -189,7 +189,7 @@ export default function CartPage() {
                 <Link className="cart-line-media" href={`/products/${line.productHandle}`}>
                   {line.mediaAssetId ? (
                     <img
-                      src={`/api/media/public/${line.mediaAssetId}`}
+                      src={`/api/media/public/${line.mediaAssetId}?rendition=thumbnail`}
                       alt=""
                       width="180"
                       height="240"

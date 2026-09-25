@@ -4,6 +4,7 @@ import { loadConfig, type RuntimeConfig } from '@maevelle/config';
 import { createDatabase } from '@maevelle/database';
 import { createLogger } from '@maevelle/observability';
 import { pathaoProviderResolver } from '@maevelle/database/pathao';
+import { createObjectStorage } from '@maevelle/media';
 
 import { createWorker, type WorkerRuntime } from './worker.js';
 
@@ -32,6 +33,20 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
           providerCode: input.providerCode,
         },
       ),
+    mediaStorage: createObjectStorage(
+      config.mediaStorageProvider === 'local'
+        ? { provider: 'local', rootDirectory: config.mediaStoragePath }
+        : {
+            provider: 's3',
+            endpoint: config.mediaStorageEndpoint!,
+            region: config.mediaStorageRegion,
+            accessKeyId: config.mediaStorageAccessKeyId!,
+            secretAccessKey: config.mediaStorageSecretAccessKey!,
+            privateBucket: config.mediaPrivateBucket,
+            publicBucket: config.mediaPublicBucket,
+            forcePathStyle: config.mediaStorageForcePathStyle,
+          },
+    ),
   });
 
   try {

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
+import { createObjectStorage } from '@maevelle/media';
 
 import { createAuth } from '../auth/auth.js';
 import { registerAdminContextRoute } from './admin-context.js';
@@ -26,7 +27,6 @@ import { registerNotificationRoutes } from './notifications.js';
 import { registerAnalyticsRoutes } from './analytics.js';
 import { registerAdminOperationsRoutes } from './admin-operations.js';
 import { registerPathaoRoutes } from './pathao.js';
-import { LocalMediaStorage } from '../media/local-media-storage.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -65,8 +65,24 @@ export function registerAuthRoutes(
     app,
     database,
     auth,
-    new LocalMediaStorage(config.mediaStoragePath),
-    config.mediaMaxUploadBytes,
+    createObjectStorage(
+      config.mediaStorageProvider === 'local'
+        ? { provider: 'local', rootDirectory: config.mediaStoragePath }
+        : {
+            provider: 's3',
+            endpoint: config.mediaStorageEndpoint!,
+            region: config.mediaStorageRegion,
+            accessKeyId: config.mediaStorageAccessKeyId!,
+            secretAccessKey: config.mediaStorageSecretAccessKey!,
+            privateBucket: config.mediaPrivateBucket,
+            publicBucket: config.mediaPublicBucket,
+            forcePathStyle: config.mediaStorageForcePathStyle,
+          },
+    ),
+    {
+      maxUploadBytes: config.mediaMaxUploadBytes,
+      uploadExpirySeconds: config.mediaUploadExpirySeconds,
+    },
   );
   registerSizingRoutes(app, database, auth);
   registerInventoryRoutes(app, database, auth);

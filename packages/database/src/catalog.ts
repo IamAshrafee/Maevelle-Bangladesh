@@ -340,7 +340,9 @@ export async function createCatalogColor(
     updated_at: string;
   }>`insert into catalog.colors (organization_id,code,name,hex_value)
     values (${input.organizationId},${code},${name},${hexValue})
-    returning id::text,code,name,hex_value,status,version::text,created_at::text,updated_at::text`.execute(db);
+    returning id::text,code,name,hex_value,status,version::text,created_at::text,updated_at::text`.execute(
+    db,
+  );
   const color = result.rows[0];
   if (!color) throw new Error('Color creation did not return a Color.');
   return {
@@ -397,7 +399,9 @@ export async function updateCatalogColor(
       status=coalesce(${input.status ?? null},status),version=version+1,updated_at=now()
     where organization_id=${input.organizationId} and id=${input.colorId}::uuid
       and version=${input.expectedVersion}
-    returning id::text,code,name,hex_value,status,version::text,created_at::text,updated_at::text`.execute(db);
+    returning id::text,code,name,hex_value,status,version::text,created_at::text,updated_at::text`.execute(
+    db,
+  );
   const color = result.rows[0];
   if (!color)
     throw new CatalogDomainError('STALE_VERSION', 'Color changed while you were editing it.');
@@ -970,7 +974,7 @@ async function getCatalogProductFacts(
           and asset.organization_id=product_media.organization_id
         where product_media.organization_id=product.organization_id
           and product_media.product_id=product.id
-          and asset.status='READY' and asset.visibility_class='PUBLIC'
+          and asset.status in ('READY','ARCHIVED') and asset.visibility_class='PUBLIC'
       ) as public_media_count,
       (select count(*)::text
         from catalog.product_variants variant
@@ -1200,7 +1204,12 @@ export async function createCatalogProduct(
       compareAtAmount?: string | null;
       currency?: string;
       weight?: { value: string; unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
-      dimensions?: { length: string; width: string; height: string; unit: 'MM' | 'CM' | 'IN' } | null;
+      dimensions?: {
+        length: string;
+        width: string;
+        height: string;
+        unit: 'MM' | 'CM' | 'IN';
+      } | null;
       primaryColorId?: string | null;
       associatedColorIds?: readonly string[];
       optionSelections?: readonly {
@@ -2755,7 +2764,7 @@ export async function listCatalogProductWorkItems(
           organization.default_currency,
           (select placement.asset_id::text from catalog.product_media placement
             join media.media_assets asset on asset.organization_id=placement.organization_id
-              and asset.id=placement.asset_id and asset.status='READY'
+              and asset.id=placement.asset_id and asset.status in ('READY','ARCHIVED')
             where placement.organization_id=product.organization_id
               and placement.product_id=product.id
             order by placement.is_primary desc,placement.position,placement.id limit 1
@@ -2831,7 +2840,7 @@ export async function listCatalogProductWorkItems(
               and asset.organization_id=product_media.organization_id
             where product_media.organization_id=product.organization_id
               and product_media.product_id=product.id
-              and asset.status='READY' and asset.visibility_class='PUBLIC'
+              and asset.status in ('READY','ARCHIVED') and asset.visibility_class='PUBLIC'
           ) as public_media_count,
           (select count(*)::integer from catalog.product_variants variant
             where variant.organization_id=product.organization_id
@@ -3308,13 +3317,14 @@ export async function getCatalogProductWorkspace(
       height_px: number | null;
     }>`select placement.id::text,placement.asset_id::text,placement.variant_id::text,
         placement.option_value_id::text,placement.role,placement.is_primary,placement.position,
-        asset.title,asset.alt_text,asset.visibility_class,object.width_px,object.height_px
+        asset.title,coalesce(placement.alt_text_override,asset.alt_text) alt_text,
+        asset.visibility_class,object.width_px,object.height_px
       from catalog.product_media placement join media.media_assets asset
         on asset.organization_id=placement.organization_id and asset.id=placement.asset_id
       join media.media_objects object on object.organization_id=asset.organization_id
         and object.id=asset.current_object_id
       where placement.organization_id=${organizationId} and placement.product_id=${productId}::uuid
-        and asset.status='READY'
+        and asset.status in ('READY','ARCHIVED')
       order by placement.is_primary desc,placement.position,placement.id`.execute(db),
   ]);
   if (!validation) return undefined;
@@ -3614,14 +3624,19 @@ export async function getStorefrontCatalogProduct(
     role: string;
     alt_text: string | null;
     is_primary: boolean;
+    width_px: number | null;
+    height_px: number | null;
   }>`
     select link.asset_id::text as id,link.variant_id::text,link.option_value_id::text,
-      link.role,asset.alt_text,link.is_primary
+      link.role,coalesce(link.alt_text_override,asset.alt_text) alt_text,link.is_primary,
+      object.width_px,object.height_px
     from catalog.product_media link
     join media.media_assets asset
       on asset.id=link.asset_id and asset.organization_id=link.organization_id
+    join media.media_objects object
+      on object.id=asset.current_object_id and object.organization_id=asset.organization_id
     where link.organization_id=${organizationId} and link.product_id=${row.id}
-      and asset.status='READY' and asset.visibility_class='PUBLIC'
+      and asset.status in ('READY','ARCHIVED') and asset.visibility_class='PUBLIC'
     order by link.is_primary desc,link.position,link.id
   `.execute(db);
   const details = await sql<{ group_title: string; label: string; value_text: string }>`
@@ -3658,6 +3673,8 @@ export async function getStorefrontCatalogProduct(
       role: asset.role,
       altText: asset.alt_text,
       isPrimary: asset.is_primary,
+      width: asset.width_px,
+      height: asset.height_px,
     })),
     details: details.rows.map((detail) => ({
       group: detail.group_title,

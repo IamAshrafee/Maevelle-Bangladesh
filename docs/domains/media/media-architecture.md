@@ -1,9 +1,34 @@
 # Maevelle Ecommerce — Media & Digital Asset Architecture
 
 **Document:** `docs/domains/media/media-architecture.md`
-**Status:** Initial Domain Design / Living Document
-**Version:** 0.1
+**Status:** Implemented Domain Architecture / Living Document
+**Version:** 1.0
 **Related:** `catalog-architecture.md`, `sizing-architecture.md`, `procurement-architecture.md`, `inbound-shipment-architecture.md`, `payment-architecture.md`, `customer-architecture.md`, `requirements.md`, `scope.md`
+
+## Current implementation (September 2026)
+
+The production implementation follows this document's separation of stored
+objects, stable assets, and domain-owned usages. `@maevelle/media` provides the
+local and S3-compatible (including Cloudflare R2) storage adapters, safe object
+keys, signed operations, checksum helpers, and Sharp image processing. The
+database owns upload sessions, originals, renditions, processing attempts,
+logical folders/tags, lifecycle state, usage projections/history, and cleanup
+state. The worker validates signatures, applies EXIF orientation, strips public
+derivative metadata, generates four WebP delivery renditions, recovers stale
+processing, expires abandoned uploads, and purges retained trash.
+
+Admin uploads and customer Review uploads both use the session/confirmation
+pipeline. Review uploads are bound to a hashed verified-purchase credential,
+remain private during moderation, and become publicly addressable only after
+approval. Catalog remains authoritative for Product, option-value, and exact
+Variant placement; Storefront resolution is exact Variant, then selected
+option, then Product-level media. Archived assets remain available to existing
+usages but cannot receive new placements.
+
+Operational domains that do not yet define attachment fields must introduce a
+domain-owned relationship and semantic command when they add that workflow;
+they should reuse Media upload/storage rather than introduce a polymorphic
+unvalidated attachment table or a second upload stack.
 
 ---
 

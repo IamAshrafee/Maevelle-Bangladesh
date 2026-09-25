@@ -11,6 +11,73 @@ export class ReviewDomainError extends Error {
   }
 }
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
+
+export async function authorizeReviewMediaUpload(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; accessToken: string; enforceUploadLimit?: boolean },
+): Promise<{ guestOwnerHash: string; productId: string }> {
+  const guestOwnerHash = hash(input.accessToken);
+  const access = await sql<{ product_id: string }>`
+    select product_id::text from reviews.review_access_tokens
+    where organization_id=${input.organizationId} and token_hash=${guestOwnerHash}
+      and revoked_at is null and (expires_at is null or expires_at>now())
+  `.execute(db);
+  const row = access.rows[0];
+  if (!row)
+    throw new ReviewDomainError('FORBIDDEN', 'Review access credential is invalid or expired.');
+  if (input.enforceUploadLimit) {
+    const uploads = await sql<{ count: number }>`
+      select count(*)::int count from media.media_assets
+      where organization_id=${input.organizationId} and guest_owner_hash=${guestOwnerHash}
+        and upload_source='CUSTOMER_REVIEW' and status <> 'TRASHED'
+    `.execute(db);
+    if ((uploads.rows[0]?.count ?? 0) >= 5)
+      throw new ReviewDomainError('VALIDATION_FAILED', 'A Review can include at most 5 images.');
+  }
+  return { guestOwnerHash, productId: row.product_id };
+}
+
+async function attachOwnedReviewMedia(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    accessToken: string;
+    revisionId: string;
+    mediaAssetIds?: string[];
+  },
+): Promise<void> {
+  const assetIds = input.mediaAssetIds ?? [];
+  if (assetIds.length > 5 || new Set(assetIds).size !== assetIds.length)
+    throw new ReviewDomainError(
+      'VALIDATION_FAILED',
+      'A Review can include up to 5 distinct images.',
+    );
+  const guestOwnerHash = hash(input.accessToken);
+  for (const assetId of assetIds) {
+    const inserted = await sql<{ id: string }>`
+      insert into reviews.review_media(organization_id,review_revision_id,media_asset_id)
+      select ${input.organizationId},${input.revisionId}::uuid,asset.id
+      from media.media_assets asset
+      where asset.organization_id=${input.organizationId} and asset.id=${assetId}::uuid
+        and asset.asset_type='IMAGE' and asset.status='READY'
+        and asset.upload_source='CUSTOMER_REVIEW' and asset.guest_owner_hash=${guestOwnerHash}
+      returning id::text
+    `.execute(db);
+    if (!inserted.rows[0])
+      throw new ReviewDomainError(
+        'FORBIDDEN',
+        'Review media is unavailable, unfinished, or belongs to another Review link.',
+      );
+    await sql`insert into media.media_usage_projection(
+      organization_id,asset_id,domain,usage_type,entity_id,relationship_id,label
+    ) values (${input.organizationId},${assetId},'reviews','REVIEW_MEDIA',${input.revisionId},
+      ${inserted.rows[0].id},'Customer Review image') on conflict do nothing`.execute(db);
+    await sql`insert into media.media_usage_history(
+      organization_id,asset_id,action,domain,usage_type,entity_id,relationship_id
+    ) values (${input.organizationId},${assetId},'ATTACHED','reviews','REVIEW_MEDIA',
+      ${input.revisionId},${inserted.rows[0].id})`.execute(db);
+  }
+}
 async function claim(db: Kysely<DatabaseSchema>, org: string, key: string, body: unknown) {
   try {
     return await claimIdempotencyRecord(db, {
@@ -26,7 +93,7 @@ async function claim(db: Kysely<DatabaseSchema>, org: string, key: string, body:
   }
 }
 async function rebuild(db: Kysely<DatabaseSchema>, org: string, productId: string) {
-  await sql`insert into reviews.product_rating_summary(organization_id,product_id,rating_count,rating_sum,rating_1_count,rating_2_count,rating_3_count,rating_4_count,rating_5_count,text_review_count,media_review_count,updated_at) select ${org},${productId}::uuid,count(*)::int,coalesce(sum(rating),0)::int,count(*)filter(where rating=1)::int,count(*)filter(where rating=2)::int,count(*)filter(where rating=3)::int,count(*)filter(where rating=4)::int,count(*)filter(where rating=5)::int,count(*)filter(where body is not null and length(trim(body))>0)::int,count(*)filter(where exists(select 1 from reviews.review_media rm join media.media_assets a on a.id=rm.media_asset_id where rm.review_revision_id=revision.id and a.status='READY' and a.visibility_class='PUBLIC'))::int,now() from reviews.reviews review join reviews.review_revisions revision on revision.id=review.published_revision_id where review.organization_id=${org} and review.product_id=${productId}::uuid and review.lifecycle_status='ACTIVE' and review.visibility_status='VISIBLE' and revision.moderation_status='APPROVED' on conflict(organization_id,product_id) do update set rating_count=excluded.rating_count,rating_sum=excluded.rating_sum,rating_1_count=excluded.rating_1_count,rating_2_count=excluded.rating_2_count,rating_3_count=excluded.rating_3_count,rating_4_count=excluded.rating_4_count,rating_5_count=excluded.rating_5_count,text_review_count=excluded.text_review_count,media_review_count=excluded.media_review_count,updated_at=now()`.execute(
+  await sql`insert into reviews.product_rating_summary(organization_id,product_id,rating_count,rating_sum,rating_1_count,rating_2_count,rating_3_count,rating_4_count,rating_5_count,text_review_count,media_review_count,updated_at) select ${org},${productId}::uuid,count(*)::int,coalesce(sum(rating),0)::int,count(*)filter(where rating=1)::int,count(*)filter(where rating=2)::int,count(*)filter(where rating=3)::int,count(*)filter(where rating=4)::int,count(*)filter(where rating=5)::int,count(*)filter(where body is not null and length(trim(body))>0)::int,count(*)filter(where exists(select 1 from reviews.review_media rm join media.media_assets a on a.id=rm.media_asset_id where rm.review_revision_id=revision.id and a.status in ('READY','ARCHIVED') and a.visibility_class='PUBLIC'))::int,now() from reviews.reviews review join reviews.review_revisions revision on revision.id=review.published_revision_id where review.organization_id=${org} and review.product_id=${productId}::uuid and review.lifecycle_status='ACTIVE' and review.visibility_status='VISIBLE' and revision.moderation_status='APPROVED' on conflict(organization_id,product_id) do update set rating_count=excluded.rating_count,rating_sum=excluded.rating_sum,rating_1_count=excluded.rating_1_count,rating_2_count=excluded.rating_2_count,rating_3_count=excluded.rating_3_count,rating_4_count=excluded.rating_4_count,rating_5_count=excluded.rating_5_count,text_review_count=excluded.text_review_count,media_review_count=excluded.media_review_count,updated_at=now()`.execute(
     db,
   );
 }
@@ -100,10 +167,12 @@ export async function submitReview(
     }>`insert into reviews.review_revisions(organization_id,review_id,revision_number,rating,title,body,public_display_name) values(${input.organizationId},${id}::uuid,1,${input.rating},${input.title ?? null},${input.body ?? null},'Verified customer') returning id`.execute(
       tx,
     );
-    for (const assetId of input.mediaAssetIds ?? [])
-      await sql`insert into reviews.review_media(organization_id,review_revision_id,media_asset_id) select ${input.organizationId},${revision.rows[0]?.id}::uuid,asset.id from media.media_assets asset where asset.organization_id=${input.organizationId} and asset.id=${assetId}::uuid`.execute(
-        tx,
-      );
+    await attachOwnedReviewMedia(tx, {
+      organizationId: input.organizationId,
+      accessToken: input.accessToken,
+      revisionId: revision.rows[0]!.id,
+      ...(input.mediaAssetIds ? { mediaAssetIds: input.mediaAssetIds } : {}),
+    });
     await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)values(${input.organizationId},'reviews.review.submitted',1,'reviews.review',${id}::uuid,1,${JSON.stringify({ reviewId: id })}::jsonb,now())`.execute(
       tx,
     );
@@ -156,10 +225,12 @@ export async function submitReviewRevision(
     );
     const revisionId = revision.rows[0]?.id;
     if (!revisionId) throw new Error('Review revision was not created.');
-    for (const assetId of input.mediaAssetIds ?? [])
-      await sql`insert into reviews.review_media(organization_id,review_revision_id,media_asset_id) select ${input.organizationId},${revisionId}::uuid,asset.id from media.media_assets asset where asset.organization_id=${input.organizationId} and asset.id=${assetId}::uuid`.execute(
-        tx,
-      );
+    await attachOwnedReviewMedia(tx, {
+      organizationId: input.organizationId,
+      accessToken: input.accessToken,
+      revisionId,
+      ...(input.mediaAssetIds ? { mediaAssetIds: input.mediaAssetIds } : {}),
+    });
     await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values(${input.organizationId},'reviews.review.revision_submitted',1,'reviews.review',${current.id}::uuid,${nextRevisionNumber},${JSON.stringify({ reviewId: current.id, revisionId })}::jsonb,now())`.execute(
       tx,
     );
@@ -197,6 +268,12 @@ export async function moderateReview(
       );
       if (!changed.rows[0])
         throw new ReviewDomainError('NOT_FOUND', 'Review revision was not found.');
+      await sql`update media.media_assets asset set visibility_class='PUBLIC',updated_at=now(),
+        version=version+1 from reviews.review_media media
+        where media.review_revision_id=${input.revisionId}::uuid
+          and media.organization_id=${input.organizationId}
+          and asset.organization_id=media.organization_id and asset.id=media.media_asset_id
+          and asset.visibility_class <> 'PUBLIC'`.execute(tx);
       await sql`update reviews.reviews set published_revision_id=${input.revisionId}::uuid,visibility_status='VISIBLE',version=version+1,updated_at=now() where id=${input.reviewId}::uuid`.execute(
         tx,
       );
@@ -270,7 +347,7 @@ export async function listPublicReviews(
       submitted_at: string;
       media_asset_ids: string[];
       merchant_response: string | null;
-    }>`select review.id,revision.rating,revision.title,revision.body,revision.public_display_name,revision.submitted_at::text,coalesce(array_agg(asset.id) filter(where asset.id is not null),'{}') as media_asset_ids,max(response.body) filter(where response.status='VISIBLE') as merchant_response from reviews.reviews review join reviews.review_revisions revision on revision.id=review.published_revision_id left join reviews.review_media media on media.review_revision_id=revision.id left join media.media_assets asset on asset.id=media.media_asset_id and asset.organization_id=review.organization_id and asset.status='READY' and asset.visibility_class='PUBLIC' left join reviews.merchant_responses response on response.review_id=review.id and response.organization_id=review.organization_id and response.status='VISIBLE' where review.organization_id=${org} and review.product_id=${productId}::uuid and review.lifecycle_status='ACTIVE' and review.visibility_status='VISIBLE' and revision.moderation_status='APPROVED' group by review.id,revision.id order by review.created_at desc`.execute(
+    }>`select review.id,revision.rating,revision.title,revision.body,revision.public_display_name,revision.submitted_at::text,coalesce(array_agg(asset.id) filter(where asset.id is not null),'{}') as media_asset_ids,max(response.body) filter(where response.status='VISIBLE') as merchant_response from reviews.reviews review join reviews.review_revisions revision on revision.id=review.published_revision_id left join reviews.review_media media on media.review_revision_id=revision.id left join media.media_assets asset on asset.id=media.media_asset_id and asset.organization_id=review.organization_id and asset.status in ('READY','ARCHIVED') and asset.visibility_class='PUBLIC' left join reviews.merchant_responses response on response.review_id=review.id and response.organization_id=review.organization_id and response.status='VISIBLE' where review.organization_id=${org} and review.product_id=${productId}::uuid and review.lifecycle_status='ACTIVE' and review.visibility_status='VISIBLE' and revision.moderation_status='APPROVED' group by review.id,revision.id order by review.created_at desc`.execute(
       db,
     )
   ).rows;

@@ -201,9 +201,17 @@ export async function getGuestCart(db: Kysely<DatabaseSchema>, token: string): P
       (select media_link.asset_id::text from catalog.product_media media_link
         join media.media_assets asset on asset.id=media_link.asset_id
         where media_link.organization_id=cart_row.organization_id and media_link.product_id=product.id
-          and (media_link.variant_id=variant.id or media_link.variant_id is null)
-          and asset.status='READY' and asset.visibility_class='PUBLIC'
-        order by (media_link.variant_id=variant.id) desc,media_link.position,media_link.id limit 1) as media_asset_id,
+          and (media_link.variant_id=variant.id
+            or (media_link.variant_id is null and media_link.option_value_id is null)
+            or (media_link.variant_id is null and exists(
+              select 1 from catalog.variant_option_values selected_option
+              where selected_option.organization_id=cart_row.organization_id
+                and selected_option.variant_id=variant.id
+                and selected_option.option_value_id=media_link.option_value_id)))
+          and asset.status in ('READY','ARCHIVED') and asset.visibility_class='PUBLIC'
+        order by case when media_link.variant_id=variant.id then 0
+          when media_link.option_value_id is not null then 1 else 2 end,
+          media_link.is_primary desc,media_link.position,media_link.id limit 1) as media_asset_id,
       (select coalesce(jsonb_agg(jsonb_build_object('name',axis.name,'value',option_value.display_value) order by axis.position),'[]'::jsonb)
         from catalog.variant_option_values option_link
         join catalog.product_option_axes axis on axis.id=option_link.option_axis_id

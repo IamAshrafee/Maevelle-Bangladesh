@@ -15,9 +15,17 @@ export interface RuntimeConfig {
   readonly authEncryptionKey: string;
   readonly authBaseUrl: string;
   readonly authTrustedOrigins: readonly string[];
-  /** Local development media root. Production storage is configured in a later milestone. */
+  readonly mediaStorageProvider: 'local' | 's3';
   readonly mediaStoragePath: string;
+  readonly mediaStorageEndpoint?: string;
+  readonly mediaStorageRegion: string;
+  readonly mediaStorageAccessKeyId?: string;
+  readonly mediaStorageSecretAccessKey?: string;
+  readonly mediaPrivateBucket: string;
+  readonly mediaPublicBucket: string;
+  readonly mediaStorageForcePathStyle: boolean;
   readonly mediaMaxUploadBytes: number;
+  readonly mediaUploadExpirySeconds: number;
   /** Public Storefront tenant resolved by the API; customers never enter an organization UUID. */
   readonly storefrontOrganizationCode: string;
 }
@@ -111,6 +119,14 @@ function requiredBase64Key(environment: Environment, variableName: string): stri
   return value;
 }
 
+function boolean(environment: Environment, variableName: string, defaultValue: boolean): boolean {
+  const value = environment[variableName];
+  if (!value) return defaultValue;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new ConfigurationError(`${variableName} must be true or false.`);
+}
+
 /**
  * Parses only runtime configuration needed by the current foundation. Error
  * messages deliberately name variables without echoing their values.
@@ -148,6 +164,20 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     throw new ConfigurationError('API_HOST must not be empty.');
   }
 
+  const mediaStorageProvider = environment.MEDIA_STORAGE_PROVIDER ?? 'local';
+  if (mediaStorageProvider !== 'local' && mediaStorageProvider !== 's3')
+    throw new ConfigurationError('MEDIA_STORAGE_PROVIDER must be local or s3.');
+  const mediaStorageEndpoint = environment.MEDIA_STORAGE_ENDPOINT?.trim();
+  const mediaStorageAccessKeyId = environment.MEDIA_STORAGE_ACCESS_KEY_ID?.trim();
+  const mediaStorageSecretAccessKey = environment.MEDIA_STORAGE_SECRET_ACCESS_KEY?.trim();
+  if (
+    mediaStorageProvider === 's3' &&
+    (!mediaStorageEndpoint || !mediaStorageAccessKeyId || !mediaStorageSecretAccessKey)
+  )
+    throw new ConfigurationError(
+      'S3 media storage requires MEDIA_STORAGE_ENDPOINT, MEDIA_STORAGE_ACCESS_KEY_ID, and MEDIA_STORAGE_SECRET_ACCESS_KEY.',
+    );
+
   return Object.freeze({
     nodeEnv,
     databaseUrl,
@@ -171,7 +201,19 @@ export function parseConfig(environment: Environment): RuntimeConfig {
           .map((s) => s.trim())
           .filter(Boolean)
       : ['http://localhost:3000', 'http://localhost:3001'],
+    mediaStorageProvider,
     mediaStoragePath: environment.MEDIA_STORAGE_PATH ?? 'var/media',
+    ...(mediaStorageEndpoint ? { mediaStorageEndpoint } : {}),
+    mediaStorageRegion: environment.MEDIA_STORAGE_REGION?.trim() || 'auto',
+    ...(mediaStorageAccessKeyId ? { mediaStorageAccessKeyId } : {}),
+    ...(mediaStorageSecretAccessKey ? { mediaStorageSecretAccessKey } : {}),
+    mediaPrivateBucket: environment.MEDIA_PRIVATE_BUCKET?.trim() || 'maevelle-media-private',
+    mediaPublicBucket: environment.MEDIA_PUBLIC_BUCKET?.trim() || 'maevelle-media-public',
+    mediaStorageForcePathStyle: boolean(
+      environment,
+      'MEDIA_STORAGE_FORCE_PATH_STYLE',
+      mediaStorageProvider === 'local',
+    ),
     mediaMaxUploadBytes: integer(
       environment,
       'MEDIA_MAX_UPLOAD_BYTES',
@@ -179,6 +221,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
       1,
       50 * 1024 * 1024,
     ),
+    mediaUploadExpirySeconds: integer(environment, 'MEDIA_UPLOAD_EXPIRY_SECONDS', 900, 60, 3_600),
     storefrontOrganizationCode: environment.STOREFRONT_ORGANIZATION_CODE?.trim() || 'maevelle',
   });
 }

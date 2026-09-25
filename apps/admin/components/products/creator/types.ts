@@ -52,6 +52,8 @@ export interface StagedMediaItem {
   isPrimary: boolean;
   altText: string;
   isUploading: boolean;
+  uploadProgress?: number;
+  processingStage?: 'UPLOADING' | 'PROCESSING';
   error?: string;
 }
 

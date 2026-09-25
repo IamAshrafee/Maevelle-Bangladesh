@@ -12,7 +12,6 @@ import {
 import { useRouter } from 'next/navigation';
 
 import type {
-  ApiEnvelope,
   CatalogCategoryChoiceDto,
   CatalogColorDto,
   CatalogProductContentUpdateDto,
@@ -31,6 +30,7 @@ import {
   CatalogRequestError,
   productMediaUrl,
 } from '@/lib/catalog/api';
+import { uploadMediaFile, waitForMediaReady } from '@/lib/media/api';
 
 import type {
   FaqEntry,
@@ -129,9 +129,9 @@ export function useProductCreatorState({
   const isEditMode = Boolean(productId && productId !== 'new');
   const [productVersion, setProductVersion] = useState<number>(1);
   const [productStatus, setProductStatus] = useState<string>('DRAFT');
-  const [publicationStatus, setPublicationStatus] = useState<
-    'UNPUBLISHED' | 'PUBLISHED'
-  >('UNPUBLISHED');
+  const [publicationStatus, setPublicationStatus] = useState<'UNPUBLISHED' | 'PUBLISHED'>(
+    'UNPUBLISHED',
+  );
   const [workspaceData, setWorkspaceData] = useState<CatalogProductWorkspaceDto | null>(null);
   const [removedMediaPlacementIds, setRemovedMediaPlacementIds] = useState<string[]>([]);
 
@@ -253,18 +253,19 @@ export function useProductCreatorState({
         '/admin/catalog/vocabulary/COLLECTION?status=ACTIVE&page=1&pageSize=100',
         { signal: controller.signal },
       ),
-      catalogData<SizingReferenceData>('/admin/sizing', { signal: controller.signal }).catch(() => ({
-        systems: [],
-        sizeDefinitions: [],
-      })),
+      catalogData<SizingReferenceData>('/admin/sizing', { signal: controller.signal }).catch(
+        () => ({
+          systems: [],
+          sizeDefinitions: [],
+        }),
+      ),
       catalogData<readonly SizeGuideSummaryDto[]>('/admin/sizing/guides', {
         signal: controller.signal,
       }).catch(() => []),
       isEditMode && productId
-        ? catalogData<CatalogProductWorkspaceDto>(
-            `/admin/catalog/products/${productId}`,
-            { signal: controller.signal },
-          ).catch(() => null)
+        ? catalogData<CatalogProductWorkspaceDto>(`/admin/catalog/products/${productId}`, {
+            signal: controller.signal,
+          }).catch(() => null)
         : Promise.resolve(null),
     ])
       .then(
@@ -349,7 +350,9 @@ export function useProductCreatorState({
                   title: v.title || v.sku,
                   optionSelections: (v.optionValueIds || [])
                     .map((valId) => valToSelection.get(valId))
-                    .filter((sel): sel is { axisName: string; valueDisplay: string } => Boolean(sel)),
+                    .filter((sel): sel is { axisName: string; valueDisplay: string } =>
+                      Boolean(sel),
+                    ),
                   sku: v.sku,
                   barcode: v.barcode || '',
                   priceAmount: v.currentPrice?.amount || '',
@@ -566,7 +569,8 @@ export function useProductCreatorState({
       setSku(d.sku || '');
       setBarcode(d.barcode || '');
       if (d.optionAxes && d.optionAxes.length > 0) setOptionAxes(d.optionAxes as OptionAxisState[]);
-      if (d.matrixRows && d.matrixRows.length > 0) setMatrixRows(d.matrixRows as VariantMatrixRow[]);
+      if (d.matrixRows && d.matrixRows.length > 0)
+        setMatrixRows(d.matrixRows as VariantMatrixRow[]);
       setWeightValue(d.weightValue || '400');
       setWeightUnit(d.weightUnit || 'G');
       setLengthValue(d.lengthValue || '30');
@@ -660,6 +664,8 @@ export function useProductCreatorState({
       isPrimary: mediaItems.length === 0 && idx === 0,
       altText: title || file.name.replace(/\.[^/.]+$/, ''),
       isUploading: true,
+      uploadProgress: 0,
+      processingStage: 'UPLOADING',
     }));
 
     setMediaItems((prev) => [...prev, ...newItems]);
@@ -669,38 +675,32 @@ export function useProductCreatorState({
       if (!item.file) continue;
 
       try {
-        const response = await catalogRequest<ApiEnvelope<{ id: string }>>(
-          '/admin/media/images',
-          {
-            method: 'POST',
-            headers: {
-              'content-type': item.file.type || 'image/jpeg',
-              'x-media-visibility': 'public',
-            },
-            body: item.file,
-          },
+        const uploaded = await uploadMediaFile(item.file, {
+          visibility: 'PUBLIC',
+          title: item.file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
+          altText: item.altText || title || 'Product Image',
+          onProgress: (uploadProgress) =>
+            setMediaItems((current) =>
+              current.map((media) => (media.id === item.id ? { ...media, uploadProgress } : media)),
+            ),
+        });
+        const assetId = uploaded.assetId;
+        setMediaItems((current) =>
+          current.map((media) =>
+            media.id === item.id ? { ...media, assetId, processingStage: 'PROCESSING' } : media,
+          ),
         );
-
-        const assetId = response.data?.id;
-        if (!assetId) throw new Error('No asset ID returned');
-
-        // Patch initial metadata
-        try {
-          await catalogData(`/admin/media/${assetId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              title: item.file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
-              altText: item.altText || title || 'Product Image',
-              visibility: 'PUBLIC',
-            }),
-          });
-        } catch {
-          // non-fatal
-        }
+        const status = await waitForMediaReady(assetId);
+        if (status !== 'READY')
+          throw new Error(
+            status === 'FAILED' || status === 'QUARANTINED'
+              ? 'Media processing rejected this image.'
+              : 'Image is still processing. Open the Media library to retry or check status.',
+          );
 
         setMediaItems((prev) =>
           prev.map((m) =>
-            m.id === item.id ? { ...m, assetId, isUploading: false } : m,
+            m.id === item.id ? { ...m, assetId, isUploading: false, uploadProgress: 100 } : m,
           ),
         );
       } catch (err) {
@@ -745,9 +745,7 @@ export function useProductCreatorState({
   };
 
   const handleUpdateMediaAlt = (id: string, altText: string) => {
-    setMediaItems((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, altText } : m)),
-    );
+    setMediaItems((prev) => prev.map((m) => (m.id === id ? { ...m, altText } : m)));
     setIsDirty(true);
   };
 
@@ -784,10 +782,7 @@ export function useProductCreatorState({
   // --------------------------------------------------------------------------
   // Option Axes & Matrix Generation
   // --------------------------------------------------------------------------
-  const activeAxes = useMemo(
-    () => optionAxes.filter((a) => a.values.length > 0),
-    [optionAxes],
-  );
+  const activeAxes = useMemo(() => optionAxes.filter((a) => a.values.length > 0), [optionAxes]);
 
   const regenerateMatrix = useCallback(() => {
     const validAxes = optionAxes.filter((a) => a.values.length > 0);
@@ -810,10 +805,7 @@ export function useProductCreatorState({
       const axis = validAxes[axisIndex];
       if (!axis) return;
       for (const val of axis.values) {
-        generateCombos(
-          [...current, { axisName: axis.name, valueDisplay: val }],
-          axisIndex + 1,
-        );
+        generateCombos([...current, { axisName: axis.name, valueDisplay: val }], axisIndex + 1);
       }
     }
 
@@ -823,14 +815,11 @@ export function useProductCreatorState({
 
     setMatrixRows((existingRows) => {
       return combinations.map((selections) => {
-        const signature = selections
-          .map((s) => `${s.axisName}:${s.valueDisplay}`)
-          .join('|');
+        const signature = selections.map((s) => `${s.axisName}:${s.valueDisplay}`).join('|');
         const existing = existingRows.find(
           (r) =>
-            r.optionSelections
-              .map((s) => `${s.axisName}:${s.valueDisplay}`)
-              .join('|') === signature,
+            r.optionSelections.map((s) => `${s.axisName}:${s.valueDisplay}`).join('|') ===
+            signature,
         );
 
         if (existing) return existing;
@@ -838,14 +827,10 @@ export function useProductCreatorState({
         const rowTitle = selections.map((s) => s.valueDisplay).join(' / ');
         const rowSku = generateVariantSku(prefix, selections);
 
-        const colorSelection = selections.find(
-          (s) => s.axisName.toLowerCase() === 'color',
-        );
+        const colorSelection = selections.find((s) => s.axisName.toLowerCase() === 'color');
         const matchedColor = colorSelection
           ? references.colors.find(
-              (c) =>
-                c.name.toLowerCase() ===
-                colorSelection.valueDisplay.toLowerCase(),
+              (c) => c.name.toLowerCase() === colorSelection.valueDisplay.toLowerCase(),
             )
           : null;
 
@@ -897,9 +882,7 @@ export function useProductCreatorState({
     setOptionAxes((prev) =>
       prev.map((axis) => {
         if (axis.name.toLowerCase() === axisName.toLowerCase()) {
-          if (
-            axis.values.some((v) => v.toLowerCase() === trimmed.toLowerCase())
-          ) {
+          if (axis.values.some((v) => v.toLowerCase() === trimmed.toLowerCase())) {
             return axis;
           }
           return { ...axis, values: [...axis.values, trimmed] };
@@ -989,24 +972,14 @@ export function useProductCreatorState({
     setIsDirty(true);
   };
 
-  const handleUpdateMatrixRow = (
-    id: string,
-    updates: Partial<VariantMatrixRow>,
-  ) => {
-    setMatrixRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...updates } : r)),
-    );
+  const handleUpdateMatrixRow = (id: string, updates: Partial<VariantMatrixRow>) => {
+    setMatrixRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
     setIsDirty(true);
   };
 
-  const handleBulkUpdateMatrix = (
-    updates: Partial<VariantMatrixRow>,
-    onlyEnabled = true,
-  ) => {
+  const handleBulkUpdateMatrix = (updates: Partial<VariantMatrixRow>, onlyEnabled = true) => {
     setMatrixRows((prev) =>
-      prev.map((r) =>
-        !onlyEnabled || r.enabled ? { ...r, ...updates } : r,
-      ),
+      prev.map((r) => (!onlyEnabled || r.enabled ? { ...r, ...updates } : r)),
     );
     setIsDirty(true);
   };
@@ -1035,14 +1008,8 @@ export function useProductCreatorState({
     setIsDirty(true);
   };
 
-  const updateHighlight = (
-    id: string,
-    field: 'label' | 'value',
-    val: string,
-  ) => {
-    setHighlights((prev) =>
-      prev.map((h) => (h.id === id ? { ...h, [field]: val } : h)),
-    );
+  const updateHighlight = (id: string, field: 'label' | 'value', val: string) => {
+    setHighlights((prev) => prev.map((h) => (h.id === id ? { ...h, [field]: val } : h)));
     setIsDirty(true);
   };
 
@@ -1059,14 +1026,8 @@ export function useProductCreatorState({
     setIsDirty(true);
   };
 
-  const updateFaq = (
-    id: string,
-    field: 'question' | 'answer',
-    val: string,
-  ) => {
-    setFaqs((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, [field]: val } : f)),
-    );
+  const updateFaq = (id: string, field: 'question' | 'answer', val: string) => {
+    setFaqs((prev) => prev.map((f) => (f.id === id ? { ...f, [field]: val } : f)));
     setIsDirty(true);
   };
 
@@ -1081,9 +1042,7 @@ export function useProductCreatorState({
   const readinessChecklist = useMemo(() => {
     const hasTitle = Boolean(title.trim().length >= 3);
     const hasType = Boolean(productTypeId);
-    const hasCategory = Boolean(
-      primaryCategoryId || selectedCategoryIds.length > 0,
-    );
+    const hasCategory = Boolean(primaryCategoryId || selectedCategoryIds.length > 0);
     const hasPricing =
       variantMode === 'simple'
         ? Boolean(Number(priceAmount) > 0)
@@ -1103,9 +1062,7 @@ export function useProductCreatorState({
       {
         id: 'variants',
         label:
-          variantMode === 'simple'
-            ? 'SKU code assigned'
-            : 'At least 1 variant active with SKU',
+          variantMode === 'simple' ? 'SKU code assigned' : 'At least 1 variant active with SKU',
         isComplete: hasSkuOrVariants,
       },
       { id: 'media', label: 'At least 1 product image uploaded', isComplete: hasMedia },
@@ -1136,10 +1093,7 @@ export function useProductCreatorState({
   // --------------------------------------------------------------------------
   // Form Submission
   // --------------------------------------------------------------------------
-  const handleSubmit = async (
-    e?: FormEvent,
-    targetStatus: 'DRAFT' | 'ACTIVE' = 'DRAFT',
-  ) => {
+  const handleSubmit = async (e?: FormEvent, targetStatus: 'DRAFT' | 'ACTIVE' = 'DRAFT') => {
     if (e) e.preventDefault();
     setGeneralError('');
     setSuccessMessage('');
@@ -1150,8 +1104,7 @@ export function useProductCreatorState({
     if (!handle.trim()) {
       errors.handle = 'Storefront handle is required.';
     } else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle.trim())) {
-      errors.handle =
-        'Handle must contain only lowercase letters, numbers, and hyphens.';
+      errors.handle = 'Handle must contain only lowercase letters, numbers, and hyphens.';
     }
     if (!productTypeId) errors.productTypeId = 'Please select a product type.';
 
@@ -1249,7 +1202,8 @@ export function useProductCreatorState({
         const attrChanged =
           !workspaceData ||
           activeAttributes.some((attr) => {
-            const oldVal = workspaceData.organization.attributes.find((a) => a.id === attr.id)?.value ?? null;
+            const oldVal =
+              workspaceData.organization.attributes.find((a) => a.id === attr.id)?.value ?? null;
             const newVal = attributeValues[attr.id] ?? null;
             return oldVal !== newVal;
           });
@@ -1335,7 +1289,8 @@ export function useProductCreatorState({
         );
         if (newMediaToAttach.length > 0) {
           setSavingStatusText('Attaching newly uploaded images…');
-          const existingCount = (workspaceData?.media.length || 0) - removedMediaPlacementIds.length;
+          const existingCount =
+            (workspaceData?.media.length || 0) - removedMediaPlacementIds.length;
           for (const [idx, m] of newMediaToAttach.entries()) {
             await catalogData(`/admin/catalog/products/${productId}/media`, {
               method: 'POST',
@@ -1485,7 +1440,8 @@ export function useProductCreatorState({
               }
 
               const priceChanged =
-                (row.priceAmount.trim() || null) !== (existingVariant.currentPrice?.amount || null) ||
+                (row.priceAmount.trim() || null) !==
+                  (existingVariant.currentPrice?.amount || null) ||
                 (row.compareAtAmount.trim() || null) !==
                   (existingVariant.currentPrice?.compareAtAmount || null);
 
@@ -1554,9 +1510,7 @@ export function useProductCreatorState({
               values: axis.values.map((v, vIdx) => {
                 const matchedColor =
                   axis.name.toLowerCase() === 'color'
-                    ? references.colors.find(
-                        (c) => c.name.toLowerCase() === v.toLowerCase(),
-                      )
+                    ? references.colors.find((c) => c.name.toLowerCase() === v.toLowerCase())
                     : null;
                 const matchedSize =
                   axis.name.toLowerCase() === 'size'
@@ -1578,10 +1532,7 @@ export function useProductCreatorState({
             }))
           : undefined;
 
-      const enabledVariants =
-        variantMode === 'variants'
-          ? matrixRows.filter((r) => r.enabled)
-          : [];
+      const enabledVariants = variantMode === 'variants' ? matrixRows.filter((r) => r.enabled) : [];
 
       const variantsPayload =
         enabledVariants.length > 0
@@ -1627,22 +1578,14 @@ export function useProductCreatorState({
         handle: handle.trim(),
         productTypeId,
         ...(description.trim() ? { description: description.trim() } : {}),
-        ...(selectedCategoryIds.length > 0
-          ? { categoryIds: selectedCategoryIds }
-          : {}),
+        ...(selectedCategoryIds.length > 0 ? { categoryIds: selectedCategoryIds } : {}),
         ...(primaryCategoryId ? { primaryCategoryId } : {}),
         ...(selectedTagIds.length > 0 ? { tagIds: selectedTagIds } : {}),
-        ...(selectedOccasionIds.length > 0
-          ? { occasionIds: selectedOccasionIds }
-          : {}),
-        ...(selectedCollectionIds.length > 0
-          ? { collectionIds: selectedCollectionIds }
-          : {}),
+        ...(selectedOccasionIds.length > 0 ? { occasionIds: selectedOccasionIds } : {}),
+        ...(selectedCollectionIds.length > 0 ? { collectionIds: selectedCollectionIds } : {}),
         ...(sizeSystemId ? { sizeSystemId } : {}),
         ...(sizeGuideId ? { sizeGuideId } : {}),
-        ...(attributesPayload.length > 0
-          ? { attributes: attributesPayload }
-          : {}),
+        ...(attributesPayload.length > 0 ? { attributes: attributesPayload } : {}),
         ...(variantMode === 'simple' && sku.trim()
           ? {
               initialVariant: {
@@ -1650,9 +1593,7 @@ export function useProductCreatorState({
                 barcode: barcode.trim() || null,
                 compareAtAmount: compareAtAmount.trim() || null,
                 currency: 'BDT',
-                ...(priceAmount.trim()
-                  ? { priceAmount: priceAmount.trim() }
-                  : {}),
+                ...(priceAmount.trim() ? { priceAmount: priceAmount.trim() } : {}),
               },
             }
           : {}),
@@ -1662,13 +1603,10 @@ export function useProductCreatorState({
         ...(seoDescription.trim() ? { seoDescription: seoDescription.trim() } : {}),
       };
 
-      const created = await catalogData<CatalogProductSummaryDto>(
-        '/admin/catalog/products',
-        {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        },
-      );
+      const created = await catalogData<CatalogProductSummaryDto>('/admin/catalog/products', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
 
       // 4. Attach uploaded media items
       const validMedia = mediaItems.filter((m) => m.assetId);
@@ -1692,12 +1630,8 @@ export function useProductCreatorState({
       }
 
       // 5. Save Customer Content (FAQs and Highlights)
-      const validFaqs = faqs.filter(
-        (f) => f.question.trim() && f.answer.trim(),
-      );
-      const validHighlights = highlights.filter(
-        (h) => h.label.trim() && h.value.trim(),
-      );
+      const validFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
+      const validHighlights = highlights.filter((h) => h.label.trim() && h.value.trim());
 
       if (
         validFaqs.length > 0 ||
@@ -1763,9 +1697,7 @@ export function useProductCreatorState({
         setGeneralError(err.message);
       } else {
         setGeneralError(
-          err instanceof Error
-            ? err.message
-            : 'An error occurred while creating the product.',
+          err instanceof Error ? err.message : 'An error occurred while creating the product.',
         );
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });

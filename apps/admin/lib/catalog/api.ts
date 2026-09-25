@@ -50,7 +50,7 @@ export async function catalogData<T>(path: string, init?: RequestInit): Promise<
 export function productMediaUrl(assetId: string, visibility: 'PUBLIC' | 'PRIVATE'): string {
   return visibility === 'PUBLIC'
     ? `/api/media/public/${encodeURIComponent(assetId)}`
-    : `/api/admin/media/${encodeURIComponent(assetId)}`;
+    : `/api/admin/media/${encodeURIComponent(assetId)}/content`;
 }
 
 export function formatCatalogMoney(amount: string, currency: string): string {

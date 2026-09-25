@@ -92,21 +92,22 @@ export function ProductPageClient() {
   );
   const shownMedia = useMemo(() => {
     if (!product) return [];
-    const matched = selectedVariant
+    const exact = selectedVariant
+      ? product.media.filter((asset) => asset.variantId === selectedVariant.id)
+      : [];
+    const option = selectedVariant
       ? product.media.filter(
           (asset) =>
-            asset.variantId === selectedVariant.id ||
-            (asset.optionValueId !== null &&
-              selectedVariant.optionValueIds.includes(asset.optionValueId)),
+            asset.variantId === null &&
+            asset.optionValueId !== null &&
+            selectedVariant.optionValueIds.includes(asset.optionValueId),
         )
       : [];
-    const general = product.media.filter((asset) => asset.variantId === null);
-    return [
-      ...matched.toSorted(
-        (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
-      ),
-      ...general.filter((asset) => !matched.some((candidate) => candidate.id === asset.id)),
-    ];
+    const general = product.media.filter(
+      (asset) => asset.variantId === null && asset.optionValueId === null,
+    );
+    const resolved = exact.length > 0 ? exact : option.length > 0 ? option : general;
+    return resolved.toSorted((left, right) => Number(right.isPrimary) - Number(left.isPrimary));
   }, [product, selectedVariant]);
   useEffect(() => setActiveMedia(0), [selectedVariant?.id]);
 
@@ -243,7 +244,7 @@ export function ProductPageClient() {
             >
               {currentMedia ? (
                 <img
-                  src={`/api/media/public/${currentMedia.id}`}
+                  src={`/api/media/public/${currentMedia.id}?rendition=pdp`}
                   alt={currentMedia.altText ?? product.title}
                   width="960"
                   height="1280"
@@ -265,7 +266,12 @@ export function ProductPageClient() {
                     aria-pressed={activeMedia === index}
                     onClick={() => setActiveMedia(index)}
                   >
-                    <img alt="" src={`/api/media/public/${asset.id}`} width="96" height="128" />
+                    <img
+                      alt=""
+                      src={`/api/media/public/${asset.id}?rendition=thumbnail`}
+                      width="96"
+                      height="128"
+                    />
                   </button>
                 ))}
               </div>
@@ -426,13 +432,17 @@ export function ProductPageClient() {
         productTitle={product.title}
         selectedSizeLabel={
           product.options
-            .find((a) => a.code.toLowerCase().includes('size') || a.name.toLowerCase().includes('size'))
+            .find(
+              (a) => a.code.toLowerCase().includes('size') || a.name.toLowerCase().includes('size'),
+            )
             ?.values.find(
               (v) =>
                 v.id ===
                 selected[
                   product.options.find(
-                    (a) => a.code.toLowerCase().includes('size') || a.name.toLowerCase().includes('size'),
+                    (a) =>
+                      a.code.toLowerCase().includes('size') ||
+                      a.name.toLowerCase().includes('size'),
                   )?.id ?? ''
                 ],
             )?.label
@@ -462,7 +472,7 @@ export function ProductPageClient() {
         </button>
         {currentMedia ? (
           <img
-            src={`/api/media/public/${currentMedia.id}`}
+            src={`/api/media/public/${currentMedia.id}?rendition=zoom`}
             alt={currentMedia.altText ?? product.title}
             width="1200"
             height="1600"

@@ -543,6 +543,8 @@ export interface StorefrontProductDto {
     role: string;
     altText: string | null;
     isPrimary: boolean;
+    width?: number | null;
+    height?: number | null;
   }[];
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
@@ -1940,7 +1942,8 @@ export interface OrderDetailDto extends OrderSummaryDto {
     readonly reasonCode: string;
     readonly reasonText: string | null;
     readonly createdAt: string;
-    readonly refundSettlement: 'NOT_REQUIRED' | 'REFUND_PENDING' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
+    readonly refundSettlement:
+      'NOT_REQUIRED' | 'REFUND_PENDING' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
     readonly refundObligations: readonly {
       readonly id: string;
       readonly amount: string;

@@ -9,6 +9,7 @@
     "@maevelle/config": "workspace:*",
     "@maevelle/contracts": "workspace:*",
     "@maevelle/database": "workspace:*",
+    "@maevelle/media": "workspace:*",
     "@maevelle/observability": "workspace:*",
     "@maevelle/security": "workspace:*",
     "better-auth": "1.6.25",

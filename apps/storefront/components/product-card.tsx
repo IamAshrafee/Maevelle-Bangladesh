@@ -38,7 +38,7 @@ export function ProductCard({ item }: { readonly item: StorefrontCardItem }) {
               decoding="async"
               height="640"
               loading="lazy"
-              src={`/api/media/public/${item.primaryMediaAssetId}`}
+              src={`/api/media/public/${item.primaryMediaAssetId}?rendition=card`}
               width="480"
             />
             {item.secondaryMediaAssetId ? (
@@ -48,7 +48,7 @@ export function ProductCard({ item }: { readonly item: StorefrontCardItem }) {
                 decoding="async"
                 height="640"
                 loading="lazy"
-                src={`/api/media/public/${item.secondaryMediaAssetId}`}
+                src={`/api/media/public/${item.secondaryMediaAssetId}?rendition=card`}
                 width="480"
               />
             ) : null}

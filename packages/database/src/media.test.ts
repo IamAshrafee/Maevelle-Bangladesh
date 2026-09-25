@@ -10,11 +10,18 @@ import {
   createProductOptionValue,
 } from './catalog.js';
 import {
+  archiveMediaAsset,
   attachMediaToProduct,
+  createMediaFolder,
+  createMediaTag,
   detachMediaFromProduct,
   findMediaAsset,
+  listMediaHealthIssues,
   listMediaLibrary,
+  organizeMediaAsset,
   registerUploadedMedia,
+  restoreTrashedMediaAsset,
+  trashUnusedMediaAsset,
   updateMediaAssetMetadata,
 } from './media.js';
 import { createOrganization } from './platform.js';
@@ -305,5 +312,97 @@ describe('media tenant ownership', () => {
     expect(placements.filter((usage) => usage.isPrimary)).toEqual([
       expect.objectContaining({ assetId: assets[1]!.id, optionValueId: red.id }),
     ]);
+  });
+
+  it('organizes, diagnoses, archives, trashes, and restores an unused asset safely', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `media-lifecycle-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Media lifecycle owner',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const asset = await registerUploadedMedia(database.db, {
+      organizationId: owner.id,
+      objectKey: `images/${crypto.randomUUID()}.webp`,
+      mimeType: 'image/webp',
+      byteSize: 100,
+      checksumSha256: '9'.repeat(64),
+      visibility: 'PUBLIC',
+      widthPx: 800,
+      heightPx: 1000,
+    });
+    const initial = (await listMediaLibrary(database.db, owner.id)).find(
+      (candidate) => candidate.id === asset.id,
+    )!;
+    const folder = await createMediaFolder(database.db, {
+      organizationId: owner.id,
+      name: 'Campaign imagery',
+    });
+    const tag = await createMediaTag(database.db, {
+      organizationId: owner.id,
+      name: 'Editorial',
+    });
+
+    await organizeMediaAsset(database.db, {
+      organizationId: owner.id,
+      assetId: asset.id,
+      expectedVersion: initial.version,
+      folderId: folder.id,
+      tagIds: [tag.id],
+    });
+    const filtered = await listMediaLibrary(database.db, {
+      organizationId: owner.id,
+      page: 1,
+      pageSize: 1,
+      folderId: folder.id,
+      tagId: tag.id,
+      unused: true,
+    });
+    expect(filtered.pagination).toMatchObject({ totalItems: 1, totalPages: 1 });
+    expect(filtered.items[0]).toMatchObject({
+      id: asset.id,
+      folderId: folder.id,
+      tags: [{ id: tag.id, name: 'Editorial' }],
+    });
+    expect(await listMediaHealthIssues(database.db, owner.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'MISSING_IMAGE_RENDITIONS', assetId: asset.id }),
+        expect.objectContaining({ code: 'MISSING_PUBLIC_ALT_TEXT', assetId: asset.id }),
+      ]),
+    );
+    await expect(
+      updateMediaAssetMetadata(database.db, {
+        organizationId: owner.id,
+        assetId: asset.id,
+        visibility: 'PRIVATE',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    await archiveMediaAsset(database.db, { organizationId: owner.id, assetId: asset.id });
+    expect(await findMediaAsset(database.db, asset.id, owner.id)).toMatchObject({
+      status: 'ARCHIVED',
+    });
+    await trashUnusedMediaAsset(database.db, {
+      organizationId: owner.id,
+      assetId: asset.id,
+      retentionDays: 7,
+    });
+    expect(await findMediaAsset(database.db, asset.id, owner.id)).toBeUndefined();
+    expect(
+      (
+        await listMediaLibrary(database.db, {
+          organizationId: owner.id,
+          page: 1,
+          pageSize: 10,
+          status: 'TRASHED',
+        })
+      ).items,
+    ).toEqual([expect.objectContaining({ id: asset.id, status: 'TRASHED' })]);
+
+    await restoreTrashedMediaAsset(database.db, { organizationId: owner.id, assetId: asset.id });
+    expect(await findMediaAsset(database.db, asset.id, owner.id)).toMatchObject({
+      status: 'ARCHIVED',
+    });
   });
 });

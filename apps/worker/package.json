@@ -7,9 +7,10 @@
     "dev": "tsx watch --env-file=../../.env src/server.ts"
   },
   "dependencies": {
-    "@maevelle/core": "workspace:*",
     "@maevelle/config": "workspace:*",
+    "@maevelle/core": "workspace:*",
     "@maevelle/database": "workspace:*",
+    "@maevelle/media": "workspace:*",
     "@maevelle/observability": "workspace:*",
     "@maevelle/security": "workspace:*"
   }

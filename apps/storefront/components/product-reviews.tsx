@@ -96,7 +96,7 @@ export function ProductReviews({
             {review.media_asset_ids.map((assetId) => (
               <img
                 key={assetId}
-                src={`/api/media/public/${assetId}`}
+                src={`/api/media/public/${assetId}?rendition=card`}
                 alt="Customer review media"
                 width="320"
                 height="320"

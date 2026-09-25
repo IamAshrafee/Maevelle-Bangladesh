@@ -2,21 +2,9 @@
 
 import { type DragEvent, type RefObject } from 'react';
 import Image from 'next/image';
-import {
-  ImageIcon,
-  LoaderCircle,
-  Star,
-  Trash2,
-  UploadCloud,
-} from 'lucide-react';
+import { ImageIcon, LoaderCircle, Star, Trash2, UploadCloud } from 'lucide-react';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { StagedMediaItem } from './types';
 
 interface MediaCardProps {
@@ -61,9 +49,7 @@ export function MediaCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ImageIcon className="size-4 text-primary" aria-hidden="true" />
-            <CardTitle className="text-base font-semibold">
-              Product Media
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Product Media</CardTitle>
           </div>
           <span className="text-xs text-muted-foreground">
             {mediaItems.length} image{mediaItems.length === 1 ? '' : 's'}
@@ -89,7 +75,7 @@ export function MediaCard({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             multiple
             className="hidden"
             onChange={(e) => onFilesSelected(e.target.files)}
@@ -112,9 +98,7 @@ export function MediaCard({
               <div
                 key={media.id}
                 className={`group relative overflow-hidden rounded-lg border bg-muted/30 transition-all ${
-                  media.isPrimary
-                    ? 'ring-2 ring-primary ring-offset-2'
-                    : 'hover:border-primary/50'
+                  media.isPrimary ? 'ring-2 ring-primary ring-offset-2' : 'hover:border-primary/50'
                 }`}
               >
                 <div className="aspect-3/4 relative w-full overflow-hidden bg-muted">
@@ -127,8 +111,13 @@ export function MediaCard({
                   />
 
                   {media.isUploading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-xs">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70 backdrop-blur-xs">
                       <LoaderCircle className="size-5 animate-spin text-primary" />
+                      <span className="text-[10px] font-medium text-foreground">
+                        {media.processingStage === 'PROCESSING'
+                          ? 'Processing image…'
+                          : `Uploading ${media.uploadProgress ?? 0}%`}
+                      </span>
                     </div>
                   )}
 
@@ -146,12 +135,13 @@ export function MediaCard({
                   )}
 
                   {/* Quick Action Overlay */}
-                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent p-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                     {!media.isPrimary && (
                       <button
                         type="button"
                         title="Set as primary cover"
-                        className="rounded-md bg-white/20 p-1 text-white hover:bg-white/40"
+                        aria-label="Set as primary cover"
+                        className="flex size-11 items-center justify-center rounded-md bg-white/20 text-white hover:bg-white/40"
                         onClick={(e) => {
                           e.stopPropagation();
                           onSetPrimaryMedia(media.id);
@@ -164,7 +154,8 @@ export function MediaCard({
                     <button
                       type="button"
                       title="Remove image"
-                      className="ml-auto rounded-md bg-destructive/80 p-1 text-white hover:bg-destructive"
+                      aria-label="Remove image"
+                      className="ml-auto flex size-11 items-center justify-center rounded-md bg-destructive/80 text-white hover:bg-destructive"
                       onClick={(e) => {
                         e.stopPropagation();
                         onRemoveMedia(media.id);

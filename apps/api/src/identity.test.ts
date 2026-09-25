@@ -23,8 +23,14 @@ const config: RuntimeConfig = {
   authEncryptionKey: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   authBaseUrl: 'http://localhost:3000',
   authTrustedOrigins: ['http://localhost:3000'],
+  mediaStorageProvider: 'local',
   mediaStoragePath: 'var/test-media',
+  mediaStorageRegion: 'auto',
+  mediaPrivateBucket: 'private',
+  mediaPublicBucket: 'public',
+  mediaStorageForcePathStyle: true,
   mediaMaxUploadBytes: 10 * 1024 * 1024,
+  mediaUploadExpirySeconds: 900,
   storefrontOrganizationCode: 'maevelle',
 };
 
