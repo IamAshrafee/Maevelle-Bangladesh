@@ -174,7 +174,7 @@ export function PurchaseDetailItemsTable({
                           <TooltipTrigger
                             render={
                               <Link
-                                href={`/inventory/adjustments?variantId=${encodeURIComponent(line.variantId)}`}
+                                href={`/inventory/stock?q=${encodeURIComponent(line.sku)}`}
                                 className="inline-flex items-center gap-0.5 text-[11px] text-primary hover:underline"
                               />
                             }
@@ -183,7 +183,7 @@ export function PurchaseDetailItemsTable({
                             <ExternalLink className="size-2.5" />
                           </TooltipTrigger>
                           <TooltipContent side="top">
-                            Inspect stock on hand and adjustments for {line.sku}
+                            Inspect stock positions and availability for {line.sku}
                           </TooltipContent>
                         </Tooltip>
                       </div>

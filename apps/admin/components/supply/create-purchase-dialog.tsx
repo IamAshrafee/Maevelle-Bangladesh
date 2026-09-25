@@ -58,11 +58,11 @@ export interface DraftPurchaseLine {
 export interface CreatePurchaseDialogProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly suppliers: readonly SupplierDto[];
-  readonly locations: readonly WarehouseLocationDto[];
-  readonly variants?: readonly CatalogVariantChoiceDto[];
-  readonly defaultSupplierId?: string;
-  readonly onSuccess?: (created: PurchaseDto) => void;
+  readonly suppliers?: readonly SupplierDto[] | undefined;
+  readonly locations?: readonly WarehouseLocationDto[] | undefined;
+  readonly variants?: readonly CatalogVariantChoiceDto[] | undefined;
+  readonly defaultSupplierId?: string | undefined;
+  readonly onSuccess?: ((created: PurchaseDto) => void) | undefined;
 }
 
 function removeUrlParams(...keys: string[]) {
@@ -83,13 +83,52 @@ function removeUrlParams(...keys: string[]) {
 export function CreatePurchaseDialog({
   open,
   onOpenChange,
-  suppliers,
-  locations,
-  variants = [],
+  suppliers: propSuppliers,
+  locations: propLocations,
+  variants: propVariants,
   defaultSupplierId = '',
   onSuccess,
 }: CreatePurchaseDialogProps) {
   const router = useRouter();
+
+  const [loadedSuppliers, setLoadedSuppliers] = useState<readonly SupplierDto[]>(propSuppliers ?? []);
+  const [loadedLocations, setLoadedLocations] = useState<readonly WarehouseLocationDto[]>(propLocations ?? []);
+  const [loadedVariants, setLoadedVariants] = useState<readonly CatalogVariantChoiceDto[]>(propVariants ?? []);
+
+  useEffect(() => {
+    if (propSuppliers) setLoadedSuppliers(propSuppliers);
+  }, [propSuppliers]);
+
+  useEffect(() => {
+    if (propLocations) setLoadedLocations(propLocations);
+  }, [propLocations]);
+
+  useEffect(() => {
+    if (propVariants) setLoadedVariants(propVariants);
+  }, [propVariants]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!propSuppliers || propSuppliers.length === 0) {
+      supplyRequest<{ data: readonly SupplierDto[] }>('/admin/suppliers?pageSize=100')
+        .then((res) => setLoadedSuppliers(res.data))
+        .catch(() => {});
+    }
+    if (!propLocations || propLocations.length === 0) {
+      supplyRequest<{ data: readonly WarehouseLocationDto[] }>('/admin/warehouse/locations')
+        .then((res) => setLoadedLocations(res.data))
+        .catch(() => {});
+    }
+    if (!propVariants || propVariants.length === 0) {
+      supplyRequest<{ data: readonly CatalogVariantChoiceDto[] }>('/admin/catalog/variants')
+        .then((res) => setLoadedVariants(res.data))
+        .catch(() => {});
+    }
+  }, [open, propSuppliers, propLocations, propVariants]);
+
+  const suppliers = loadedSuppliers;
+  const locations = loadedLocations;
+  const variants = loadedVariants;
 
   // Commercial & Header state
   const [supplierId, setSupplierId] = useState(defaultSupplierId);

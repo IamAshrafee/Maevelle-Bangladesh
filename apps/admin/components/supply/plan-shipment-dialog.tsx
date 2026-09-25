@@ -64,10 +64,10 @@ export interface PlanShipmentDraftLine {
 export interface PlanShipmentDialogProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly locations: readonly WarehouseLocationDto[];
-  readonly shippableLines: readonly ShippableLineItem[];
+  readonly locations?: readonly WarehouseLocationDto[] | undefined;
+  readonly shippableLines?: readonly ShippableLineItem[] | undefined;
   readonly defaultPurchaseId?: string | undefined;
-  readonly onSuccess?: (shipment?: InboundShipmentDto) => void;
+  readonly onSuccess?: ((shipment?: InboundShipmentDto) => void) | undefined;
 }
 
 function cleanUrlParams(...keys: string[]) {
@@ -88,11 +88,46 @@ function cleanUrlParams(...keys: string[]) {
 export function PlanShipmentDialog({
   open,
   onOpenChange,
-  locations,
-  shippableLines,
+  locations: propLocations,
+  shippableLines: propShippableLines,
   defaultPurchaseId,
   onSuccess,
 }: PlanShipmentDialogProps) {
+  const [loadedLocations, setLoadedLocations] = useState<readonly WarehouseLocationDto[]>(propLocations ?? []);
+  const [loadedShippableLines, setLoadedShippableLines] = useState<readonly ShippableLineItem[]>(propShippableLines ?? []);
+
+  useEffect(() => {
+    if (propLocations) setLoadedLocations(propLocations);
+  }, [propLocations]);
+
+  useEffect(() => {
+    if (propShippableLines) setLoadedShippableLines(propShippableLines);
+  }, [propShippableLines]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!propLocations || propLocations.length === 0) {
+      supplyRequest<{ data: readonly WarehouseLocationDto[] }>('/admin/warehouse/locations')
+        .then((res) => setLoadedLocations(res.data))
+        .catch(() => {});
+    }
+    if (!propShippableLines || propShippableLines.length === 0) {
+      supplyRequest<{ data: readonly PurchaseDto[] }>('/admin/purchases?status=PLACED&pageSize=100')
+        .then((res) => {
+          const lines = res.data.flatMap((purchase) =>
+            purchase.lines
+              .filter((line) => Number(line.allocatedQuantity) < Number(line.quantity))
+              .map((line) => ({ ...line, purchase })),
+          );
+          setLoadedShippableLines(lines);
+        })
+        .catch(() => {});
+    }
+  }, [open, propLocations, propShippableLines]);
+
+  const locations = loadedLocations;
+  const shippableLines = loadedShippableLines;
+
   // Form fields
   const [receivingLocationId, setReceivingLocationId] = useState('');
   const [transportMode, setTransportMode] = useState<'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER'>('SEA');

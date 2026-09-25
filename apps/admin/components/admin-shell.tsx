@@ -174,6 +174,12 @@ const navigation: readonly NavGroup[] = [
         icon: PackageOpen,
         capability: 'inbound_shipment.view',
       },
+      {
+        label: 'Receiving',
+        href: '/receiving',
+        icon: PackageCheck,
+        capability: 'receiving.view',
+      },
       { label: 'Suppliers', href: '/suppliers', icon: Building2, capability: 'procurement.view' },
     ],
   },

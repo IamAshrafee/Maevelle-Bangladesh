@@ -45,7 +45,7 @@ const journey = [
   ['Suppliers', 'Buying terms and contacts', Building2, '/suppliers'],
   ['Purchases', 'What you ordered', ClipboardCheck, '/purchases'],
   ['Shipments', 'What is on the way', Ship, '/inbound-shipments'],
-  ['Receiving', 'What physically arrived', PackageCheck, '/supply#receiving'],
+  ['Receiving', 'What physically arrived', PackageCheck, '/receiving'],
   ['Final cost', 'True cost per received unit', CircleDollarSign, '/costing'],
 ] as const;
 
@@ -262,9 +262,9 @@ export function SupplyOverview() {
             <Button
               variant="ghost"
               size="sm"
-              render={<Link href="/inbound-shipments?status=ARRIVED" />}
+              render={<Link href="/receiving" />}
             >
-              Shipments
+              View queue
             </Button>
           </CardHeader>
           <CardContent className="grid gap-2">

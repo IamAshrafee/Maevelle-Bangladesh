@@ -105,7 +105,7 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
         <OperationalFeedback tone="danger">
           {message || 'Receipt was not found.'}
         </OperationalFeedback>
-        <Button variant="outline" render={<Link href="/supply#receiving" />}>
+        <Button variant="outline" render={<Link href="/receiving" />}>
           <ArrowLeft /> Back to receiving
         </Button>
       </main>
@@ -124,6 +124,7 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
         mobileMode="back"
         items={[
           { label: 'Supply', href: '/supply' },
+          { label: 'Receiving', href: '/receiving' },
           { label: receipt.shipmentNumber, href: `/inbound-shipments/${receipt.shipmentId}` },
           { label: receipt.receiptNumber, current: true },
         ]}

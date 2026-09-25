@@ -132,7 +132,7 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
                         <span className="font-mono">{allocation.sku}</span>
                         <span>·</span>
                         <Link
-                          href={`/inventory/adjustments?variantId=${encodeURIComponent(allocation.variantId)}`}
+                          href={`/inventory/stock?q=${encodeURIComponent(allocation.sku)}`}
                           className="inline-flex items-center gap-0.5 text-primary hover:underline"
                         >
                           <span>Check stock</span>

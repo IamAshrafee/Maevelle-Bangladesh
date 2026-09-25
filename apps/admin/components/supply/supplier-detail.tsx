@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink, Mail, MapPin, Phone, Plus } from 'lucide-react';
+import { ArrowLeft, Edit3, ExternalLink, Mail, MapPin, Phone, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type {
@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { formatSupplyDate, formatSupplyMoney, supplyRequest } from '@/lib/supply/api';
 import { nextPurchaseAction, purchaseWorkflowStatus } from '@/lib/supply/status';
 import type { PagedEnvelope } from '@/lib/supply/types';
+import { SupplierDialog } from './supplier-dialog';
 
 type SupplierInvoice = {
   currency_code: string;
@@ -36,6 +37,7 @@ export function SupplierDetail({ supplierId }: { supplierId: string }) {
   const [invoices, setInvoices] = useState<readonly SupplierInvoice[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -130,11 +132,18 @@ export function SupplierDetail({ supplierId }: { supplierId: string }) {
             {supplier.code} · {supplier.supplierType.replaceAll('_', ' ').toLowerCase()}
           </p>
         </div>
-        {canManage && supplier.status === 'ACTIVE' ? (
-          <Button render={<Link href={`/purchases?create=purchase&supplier=${supplier.id}`} />}>
-            <Plus /> New purchase
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Button variant="outline" onClick={() => setEditDialogOpen(true)}>
+              <Edit3 /> Edit profile
+            </Button>
+          ) : null}
+          {canManage && supplier.status === 'ACTIVE' ? (
+            <Button render={<Link href={`/purchases?create=purchase&supplier=${supplier.id}`} />}>
+              <Plus /> New purchase
+            </Button>
+          ) : null}
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -305,6 +314,12 @@ export function SupplierDetail({ supplierId }: { supplierId: string }) {
           )}
         </DetailSection>
       </div>
+      <SupplierDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        supplier={supplier}
+        onSuccess={(updated) => setSupplier(updated)}
+      />
     </main>
   );
 }
