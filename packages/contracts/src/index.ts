@@ -1298,13 +1298,17 @@ export interface PurchaseDto {
   readonly supplierId: string;
   readonly supplierName: string;
   readonly currencyCode: 'BDT' | 'CNY' | 'USD';
-  readonly status: 'DRAFT' | 'PLACED' | 'CANCELLED';
+  readonly status: 'DRAFT' | 'PLACED' | 'CANCELLED' | 'CLOSED';
   readonly supplierReference?: string;
   readonly orderDate: string;
   readonly expectedDate?: string;
   readonly destinationLocationId?: string;
   readonly destinationLocationName?: string;
   readonly notes?: string;
+  readonly closeReason?: string;
+  readonly closedAt?: string;
+  readonly closedByActorId?: string;
+  readonly cancelledAt?: string;
   readonly createdAt: string;
   readonly placedAt?: string;
   readonly totalAmount: string;
@@ -1350,6 +1354,7 @@ export interface InboundShipmentDto {
   readonly originText?: string;
   readonly trackingReference?: string;
   readonly expectedArrivalDate?: string;
+  readonly departedAt?: string;
   readonly arrivedAt?: string;
   readonly createdAt: string;
   readonly status: 'PLANNED' | 'IN_TRANSIT' | 'ARRIVED' | 'CANCELLED';
@@ -1380,6 +1385,18 @@ export interface UpdateInboundShipmentInputDto {
   readonly transportMode?: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER';
 }
 
+export interface InboundReceiptLineDto {
+  readonly id: string;
+  readonly shipmentAllocationId: string;
+  readonly variantId: string;
+  readonly productId: string;
+  readonly inventoryItemId?: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+  readonly quantity: string;
+}
+
 export interface InboundReceiptDto {
   readonly id: string;
   readonly receiptNumber: string;
@@ -1388,21 +1405,40 @@ export interface InboundReceiptDto {
   readonly locationId: string;
   readonly locationName: string;
   readonly inventoryTransactionId: string;
-  readonly status: 'POSTED';
+  readonly status: 'POSTED' | 'REVERSED';
   readonly packingSlipReference?: string;
   readonly notes?: string;
+  readonly reversedAt?: string;
+  readonly reversedByActorId?: string;
+  readonly reversalReason?: string;
   readonly postedAt: string;
-  readonly lines: readonly {
-    readonly id: string;
-    readonly shipmentAllocationId: string;
-    readonly variantId: string;
-    readonly productId: string;
-    readonly inventoryItemId?: string;
-    readonly sku: string;
-    readonly productTitle: string;
-    readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
-    readonly quantity: string;
-  }[];
+  readonly lines: readonly InboundReceiptLineDto[];
+}
+
+export interface SupplyListQueryDto {
+  readonly page?: number;
+  readonly pageSize?: number;
+  readonly q?: string;
+  readonly status?: string;
+  readonly sortBy?: string;
+  readonly sortDirection?: 'asc' | 'desc';
+}
+
+export interface SupplierListQueryDto extends SupplyListQueryDto {
+  readonly supplierType?: string;
+}
+
+export interface PurchaseListQueryDto extends SupplyListQueryDto {
+  readonly supplierId?: string;
+}
+
+export interface ShipmentListQueryDto extends SupplyListQueryDto {
+  readonly receivingStatus?: string;
+  readonly purchaseId?: string;
+}
+
+export interface ReceiptListQueryDto extends SupplyListQueryDto {
+  readonly shipmentId?: string;
 }
 
 export interface SupplyOverviewDto {

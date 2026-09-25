@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Check,
   CheckCheck,
+  CheckCircle2,
   Copy,
   Edit3,
   ExternalLink,
@@ -39,6 +40,7 @@ export interface PurchaseDetailHeaderProps {
   readonly onAddLineClick: () => void;
   readonly onPlaceOrderClick: () => void;
   readonly onCancelClick: () => void;
+  readonly onCloseClick?: (() => void) | undefined;
   readonly onPlanShipmentClick?: (() => void) | undefined;
 }
 
@@ -49,6 +51,7 @@ const statusDescriptions: Record<string, string> = {
   SHIPPED: 'Fully shipped: All ordered quantities have been allocated to inbound shipments.',
   PARTIALLY_RECEIVED: 'Partially received: Arrived goods are being received and posted into warehouse inventory.',
   RECEIVED: 'Fully received: All items have been safely verified and accepted into inventory.',
+  CLOSED: 'Closed purchase order: All receiving is finalized and PO is closed for further operations.',
   CANCELLED: 'Cancelled purchase order: Kept for historical audit. No further actions allowed.',
 };
 
@@ -61,6 +64,7 @@ export function PurchaseDetailHeader({
   onAddLineClick,
   onPlaceOrderClick,
   onCancelClick,
+  onCloseClick,
   onPlanShipmentClick,
 }: PurchaseDetailHeaderProps) {
   const [copied, setCopied] = useState(false);
@@ -275,8 +279,36 @@ export function PurchaseDetailHeader({
                   </TooltipContent>
                 </Tooltip>
               ) : null}
+
+              {canManage && onCloseClick ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={onCloseClick}
+                        className="gap-1.5"
+                      />
+                    }
+                  >
+                    <CheckCircle2 className="size-3.5" />
+                    <span>Close PO</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    Close this purchase order (finalizes receiving and seals the PO)
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
             </>
           )}
+
+          {purchase.status === 'CLOSED' ? (
+            <Badge variant="secondary" className="px-2.5 py-1 text-xs">
+              Order Closed
+            </Badge>
+          ) : null}
 
           {purchase.status === 'CANCELLED' ? (
             <Badge variant="destructive" className="px-2.5 py-1 text-xs">

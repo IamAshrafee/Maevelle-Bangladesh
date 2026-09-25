@@ -4698,4 +4698,75 @@ across products from multiple suppliers and Purchases inside one consolidated Sh
 
 ---
 
-**End of Procurement & Supplier Purchasing Architecture v0.1**
+# 22. Production Operational Workflows & Complete System Capabilities
+
+The Maevelle Supply and Procurement subsystem is implemented as an authoritative, multi-tenant, production-grade system with strict transaction isolation, audit logging, and outbox event publishing.
+
+### 22.1 Sequential Human-Readable Identifiers
+All major procurement entities utilize gap-safe, atomic sequence generators via `platform.number_sequences`:
+- **Suppliers**: `SUP-NNNNNN` (e.g., `SUP-000001`)
+- **Purchase Orders**: `PO-YYYY-NNNNNN` (e.g., `PO-2026-000001`)
+- **Inbound Shipments**: `SHP-YYYY-NNNNNN` (e.g., `SHP-2026-000001`)
+- **Inbound Receipts**: `RCV-YYYY-NNNNNN` (e.g., `RCV-2026-000001`)
+
+### 22.2 Authoritative Purchase Order Lifecycle
+```text
+  [ DRAFT ] ───────────► [ CANCELLED ] (no active allocations)
+      │
+      ▼ (placePurchase)
+  [ PLACED ] ──────────► [ CLOSED ] (closePurchase: audit, reason, terminal)
+      │
+      ├── Allocate to Inbound Shipments (requires status = PLACED)
+      └── Received via Inbound Receipts
+```
+- **Draft Creation**: Multi-currency purchase order definition with line items, quantity, unit cost, and tax.
+- **Placement**: Transitions status to `PLACED`, locking lines for shipment allocation.
+- **Closure**: Operators can transition a placed order to `CLOSED` via `closePurchase`, capturing `closed_at`, `closed_by_actor_id`, and `close_reason`. Closed orders retain all historical allocations and receipts but prevent any subsequent shipment allocations.
+- **Cancellation**: Permitted only when no active shipment allocations exist.
+
+### 22.3 Inbound Shipment & Allocation Mechanics
+- **Carrier & Departure Tracking**: Captures `tracking_number`, `carrier_name`, `carrier_code`, `estimated_departure_at`, `departed_at`, `estimated_arrival_at`, and `arrived_at`.
+- **Allocation Integrity**: Purchase lines can be allocated across multiple shipments up to the remaining unallocated quantity (`ordered_quantity - allocated_quantity`).
+- **Cancelled Shipment Allocation Release**: Allocations belonging to shipments in `CANCELLED` status are excluded from quantity calculations (`s.status <> 'CANCELLED'`), immediately freeing allocated quantities back to the purchase order.
+- **Editable Allocations**: While a shipment is in `PLANNED` status, line allocations can be modified via `updateShipmentAllocations`.
+
+### 22.4 Canonical Inbound Receiving & Condition Resolution
+- **Multi-Condition Receiving**: Units can be received into destination warehouses across four canonical conditions:
+  - `SELLABLE`: Immediately available for fulfillment.
+  - `DAMAGED`: Quarantined unusable stock.
+  - `INSPECTION`: Awaiting QA / physical inspection.
+  - `QUARANTINE`: Held pending documentation or regulatory clearance.
+- **Atomic Inventory & Costing Integration**:
+  - Automatically posts inventory movements via `receiveInboundInventoryInTransaction`.
+  - Generates provisional FIFO/cost layers via `createProvisionalCostLayersForInboundReceiptInTransaction`.
+  - Recalculates shipment receiving status (`PARTIALLY_RECEIVED` or `RECEIVED`).
+- **Inbound Receipt Reversal (`reverseInboundReceipt`)**:
+  - Reverses posted receipt to `REVERSED` status with `reversed_at`, `reversed_by_actor_id`, and `reversal_reason`.
+  - Rolls back inventory balances via `reverseInboundInventoryInTransaction`.
+  - Cancels provisional cost layers via `reverseProvisionalCostLayersForInboundReceiptInTransaction`.
+  - Automatically updates shipment receiving status.
+  - Invariant: Reversal is strictly blocked if landed costs have already been finalized or if stock was already moved/reclassified.
+- **Condition Resolution (`resolveReceiptLineCondition`)**:
+  - Moves units from `INSPECTION` or `QUARANTINE` to `SELLABLE` or `DAMAGED` using `moveInventoryCondition`.
+  - Updates receipt line condition counters (`resolved_sellable_quantity`, `resolved_damaged_quantity`) preserving full audit history.
+
+### 22.5 Database-Level Pagination & Filtering
+All supply listings execute native PostgreSQL queries using `ilike` substring search, indexed status filters, and `LIMIT`/`OFFSET` pagination returning standardized envelopes (`{ items, total, page, pageSize, totalPages }`):
+- `GET /api/v1/procurement/suppliers`
+- `GET /api/v1/procurement/purchases`
+- `GET /api/v1/procurement/shipments`
+- `GET /api/v1/procurement/receipts`
+
+### 22.6 Capability & Security Model
+Access is guarded by organization boundary isolation and fine-grained capabilities:
+- `procurement.view`: Read suppliers and purchase orders.
+- `procurement.manage`: Create/edit suppliers, draft purchases, place purchases, and close purchases.
+- `inbound_shipment.view`: Read shipments and allocations.
+- `inbound_shipment.manage`: Create shipments, manage allocations, mark in-transit, and mark arrived.
+- `receiving.view`: Read inbound receipts.
+- `receiving.post`: Post new inbound receipts against arrived shipments.
+- `receiving.adjust`: Perform administrative corrections, receipt reversals, and condition resolutions.
+
+---
+
+**End of Procurement & Supplier Purchasing Architecture v1.0**

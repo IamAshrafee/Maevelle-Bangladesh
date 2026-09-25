@@ -33,6 +33,7 @@ import { PurchaseAddLineDialog } from './purchase-detail/dialogs/purchase-add-li
 import { PurchaseAdjustInvoiceDialog } from './purchase-detail/dialogs/purchase-adjust-invoice-dialog';
 import { PurchaseCancelDialog } from './purchase-detail/dialogs/purchase-cancel-dialog';
 import { PurchaseCancelInvoiceDialog } from './purchase-detail/dialogs/purchase-cancel-invoice-dialog';
+import { PurchaseCloseDialog } from './purchase-detail/dialogs/purchase-close-dialog';
 import { PurchaseEditDialog } from './purchase-detail/dialogs/purchase-edit-dialog';
 import { PurchaseEditLineDialog } from './purchase-detail/dialogs/purchase-edit-line-dialog';
 import { PurchaseInvoiceDialog } from './purchase-detail/dialogs/purchase-invoice-dialog';
@@ -69,6 +70,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
   const [addLineOpen, setAddLineOpen] = useState(false);
   const [editingLine, setEditingLine] = useState<PurchaseLine>();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [payingInvoice, setPayingInvoice] = useState<SupplierInvoice>();
   const [cancellingInvoice, setCancellingInvoice] = useState<SupplierInvoice>();
@@ -266,6 +268,22 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
     );
   }
 
+  function handleCloseOrder(reason?: string) {
+    if (!purchase) return;
+    void run(
+      () =>
+        supplyRequest(`/admin/purchases/${purchase.id}/close`, {
+          method: 'POST',
+          body: JSON.stringify({
+            version: purchase.version,
+            ...(reason ? { reason } : {}),
+          }),
+        }),
+      'Purchase order closed.',
+      () => setCloseOpen(false),
+    );
+  }
+
   function handleCreateInvoice(data: {
     categoryId: string;
     description: string;
@@ -395,6 +413,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           onAddLineClick={() => setAddLineOpen(true)}
           onPlaceOrderClick={handlePlaceOrder}
           onCancelClick={() => setCancelOpen(true)}
+          onCloseClick={() => setCloseOpen(true)}
           onPlanShipmentClick={() => setPlanShipmentOpen(true)}
         />
 
@@ -533,6 +552,14 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           purchase={purchase}
           busy={busy}
           onConfirmCancel={handleCancelOrder}
+        />
+
+        <PurchaseCloseDialog
+          open={closeOpen}
+          onOpenChange={setCloseOpen}
+          purchase={purchase}
+          busy={busy}
+          onConfirmClose={handleCloseOrder}
         />
 
         <PurchaseInvoiceDialog

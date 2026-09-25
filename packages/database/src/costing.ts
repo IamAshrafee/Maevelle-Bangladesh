@@ -558,6 +558,26 @@ export async function createProvisionalCostLayersForInboundReceiptInTransaction(
   }
 }
 
+export async function reverseProvisionalCostLayersForInboundReceiptInTransaction(
+  tx: Transaction<DatabaseSchema>,
+  input: { organizationId: string; receiptId: string },
+): Promise<void> {
+  const layerIds = await sql<{ id: string }>`
+    select layer.id
+    from costing.cost_layers layer
+    join receiving.inbound_receipt_lines line on line.id = layer.inbound_receipt_line_id
+    where layer.organization_id = ${input.organizationId}
+      and line.inbound_receipt_id = ${input.receiptId}
+  `.execute(tx);
+  for (const row of layerIds.rows) {
+    await sql`
+      update costing.cost_layer_positions
+      set remaining_quantity = 0, updated_at = now()
+      where organization_id = ${input.organizationId} and cost_layer_id = ${row.id}
+    `.execute(tx);
+  }
+}
+
 type CurrentCostPosition = {
   source_kind: 'ACQUISITION' | 'RETURN';
   position_id: string;

@@ -26,6 +26,16 @@ import {
   setCategoryDefaultSizeGuide,
 } from './sizing.js';
 import { createManagedCategory } from './catalog-classification.js';
+import {
+  createSupplier,
+  createPurchase,
+  placePurchase,
+  createShipment,
+  markShipmentInTransit,
+  markShipmentArrived,
+  postInboundReceipt,
+  closePurchase,
+} from './procurement.js';
 
 async function main() {
   if (process.env.ALLOW_STAGING_SEED !== '1') throw new Error('ALLOW_STAGING_SEED=1 is required.');
@@ -458,6 +468,261 @@ async function main() {
         await sql`update catalog.products set status = 'ACTIVE', publication_status = 'PUBLISHED', published_at = now() where id = ${kurti.id}::uuid`.execute(database.db);
       }
     }
+
+    // Seed Procurement & Inbound Supply Chain
+    const existingSuppliers = await sql<{ id: string; name: string }>`
+      select id, name from procurement.suppliers where organization_id = ${active.organization_id}
+    `.execute(database.db);
+    const supplierByName = new Map(existingSuppliers.rows.map((s) => [s.name, s.id]));
+
+    let shurjomukhiId = supplierByName.get('Shurjomukhi Weaving Mills');
+    if (!shurjomukhiId) {
+      const s = await createSupplier(database.db, {
+        organizationId: active.organization_id,
+        actorId: active.actor_id,
+        name: 'Shurjomukhi Weaving Mills',
+        contactName: 'Anisur Rahman',
+        contactEmail: 'orders@shurjomukhi-textiles.bd',
+        contactPhone: '+8801711002233',
+        supplierType: 'MANUFACTURER',
+        countryCode: 'BD',
+        preferredCurrencyCode: 'BDT',
+        paymentTerms: 'Net 30 Days',
+        leadTimeDays: 14,
+        notes: 'Primary artisanal mulberry silk and organic cotton handloom weaver based in Tangail.',
+      });
+      shurjomukhiId = s.id;
+    }
+
+    let jamunaSilkId = supplierByName.get('Jamuna Silk Mills');
+    if (!jamunaSilkId) {
+      const s = await createSupplier(database.db, {
+        organizationId: active.organization_id,
+        actorId: active.actor_id,
+        name: 'Jamuna Silk Mills',
+        contactName: 'Farhana Yasmin',
+        contactEmail: 'contact@jamunasilk.com.bd',
+        contactPhone: '+8801819887766',
+        supplierType: 'MANUFACTURER',
+        countryCode: 'BD',
+        preferredCurrencyCode: 'BDT',
+        paymentTerms: '50% advance, 50% upon dock delivery',
+        leadTimeDays: 21,
+        notes: 'Premium Rajshahi silk and jacquard weaves for premium festive collections.',
+      });
+      jamunaSilkId = s.id;
+    }
+
+    let zhejiangId = supplierByName.get('Zhejiang Textile Export Ltd');
+    if (!zhejiangId) {
+      const s = await createSupplier(database.db, {
+        organizationId: active.organization_id,
+        actorId: active.actor_id,
+        name: 'Zhejiang Textile Export Ltd',
+        contactName: 'Li Wei',
+        contactEmail: 'export@zhejiang-fabrics.cn',
+        contactPhone: '+8657188990011',
+        supplierType: 'WHOLESALER',
+        countryCode: 'CN',
+        preferredCurrencyCode: 'CNY',
+        paymentTerms: 'Letter of Credit (LC) at sight',
+        leadTimeDays: 35,
+        notes: 'International supplier for blended lining fabrics and specialty fasteners.',
+      });
+      zhejiangId = s.id;
+    }
+
+    const seedVariants = (
+      await sql<{ id: string; sku: string }>`
+        select id::text, sku from catalog.product_variants
+        where organization_id = ${active.organization_id} and status = 'ACTIVE'
+        order by created_at asc limit 5
+      `.execute(database.db)
+    ).rows;
+
+    if (seedVariants.length > 0) {
+      const v0 = seedVariants[0]!;
+      const v1 = seedVariants[1] ?? v0;
+
+      const existingPOs = await sql<{ count: string }>`
+        select count(*)::text as count from procurement.purchases where organization_id = ${active.organization_id}
+      `.execute(database.db);
+
+      if (Number(existingPOs.rows[0]?.count ?? 0) === 0) {
+        // 1. Draft PO for Zhejiang
+        await createPurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          supplierId: zhejiangId,
+          currencyCode: 'CNY',
+          orderDate: '2026-09-15',
+          expectedDate: '2026-10-25',
+          destinationLocationId: location.id,
+          supplierReference: 'PI-ZJ-2026-881',
+          notes: 'Specialty fabric roll order. Commercial invoice required prior to sea freight dispatch.',
+          lines: [
+            { variantId: v0.id, quantity: '100', unitPrice: '18.50' },
+          ],
+        });
+
+        // 2. Placed PO for Shurjomukhi
+        const placedPO = await createPurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          supplierId: shurjomukhiId,
+          currencyCode: 'BDT',
+          orderDate: '2026-09-10',
+          expectedDate: '2026-09-30',
+          destinationLocationId: location.id,
+          supplierReference: 'PO-SHURJO-402',
+          notes: 'Pre-Eid festival inventory production batch.',
+          lines: [
+            { variantId: v0.id, quantity: '50', unitPrice: '1200.00' },
+            { variantId: v1.id, quantity: '30', unitPrice: '1250.00' },
+          ],
+        });
+        await placePurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          purchaseId: placedPO.id,
+          expectedVersion: placedPO.version,
+        });
+
+        // 3. In-Transit Shipment for Jamuna Silk
+        const inTransitPO = await createPurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          supplierId: jamunaSilkId,
+          currencyCode: 'BDT',
+          orderDate: '2026-09-01',
+          expectedDate: '2026-09-24',
+          destinationLocationId: location.id,
+          supplierReference: 'JAMUNA-EXP-11',
+          lines: [
+            { variantId: v0.id, quantity: '40', unitPrice: '1450.00' },
+          ],
+        });
+        const placedInTransitPO = await placePurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          purchaseId: inTransitPO.id,
+          expectedVersion: inTransitPO.version,
+        });
+
+        const transitShipment = await createShipment(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          receivingLocationId: location.id,
+          transportMode: 'ROAD',
+          originText: 'Jamuna Silk Complex, Rajshahi',
+          trackingReference: 'SA-PARCEL-882910',
+          expectedArrivalDate: '2026-09-25',
+          allocations: [
+            { purchaseLineId: placedInTransitPO.lines[0]!.id, quantity: '40' },
+          ],
+        });
+        await markShipmentInTransit(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          shipmentId: transitShipment.id,
+          expectedVersion: transitShipment.version,
+          idempotencyKey: crypto.randomUUID(),
+        });
+
+        // 4. Arrived & Received PO + Receipt
+        const arrivedPO = await createPurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          supplierId: shurjomukhiId,
+          currencyCode: 'BDT',
+          orderDate: '2026-08-20',
+          expectedDate: '2026-09-05',
+          destinationLocationId: location.id,
+          supplierReference: 'SHURJO-REC-01',
+          lines: [
+            { variantId: v1.id, quantity: '25', unitPrice: '1100.00' },
+          ],
+        });
+        const placedArrivedPO = await placePurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          purchaseId: arrivedPO.id,
+          expectedVersion: arrivedPO.version,
+        });
+
+        const arrivedShipment = await createShipment(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          receivingLocationId: location.id,
+          transportMode: 'ROAD',
+          originText: 'Tangail Weaving Cluster',
+          trackingReference: 'TG-TRUCK-5541',
+          expectedArrivalDate: '2026-09-05',
+          allocations: [
+            { purchaseLineId: placedArrivedPO.lines[0]!.id, quantity: '25' },
+          ],
+        });
+        const inTransit2 = await markShipmentInTransit(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          shipmentId: arrivedShipment.id,
+          expectedVersion: arrivedShipment.version,
+          idempotencyKey: crypto.randomUUID(),
+        });
+        const arrived2 = await markShipmentArrived(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          shipmentId: arrivedShipment.id,
+          expectedVersion: inTransit2.version,
+          idempotencyKey: crypto.randomUUID(),
+        });
+
+        await postInboundReceipt(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          shipmentId: arrived2.id,
+          packingSlipReference: 'PS-TG-9901',
+          notes: 'Received in good condition. All 25 units passed fabric weave check.',
+          lines: [
+            {
+              shipmentAllocationId: arrived2.allocations[0]!.id,
+              condition: 'SELLABLE',
+              quantity: '25',
+            },
+          ],
+          idempotencyKey: crypto.randomUUID(),
+        });
+
+        // 5. Closed PO
+        const closedPO = await createPurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          supplierId: jamunaSilkId,
+          currencyCode: 'BDT',
+          orderDate: '2026-08-01',
+          expectedDate: '2026-08-15',
+          destinationLocationId: location.id,
+          supplierReference: 'JAMUNA-HIST-09',
+          lines: [
+            { variantId: v0.id, quantity: '10', unitPrice: '1300.00' },
+          ],
+        });
+        const placedClosedPO = await placePurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          purchaseId: closedPO.id,
+          expectedVersion: closedPO.version,
+        });
+        await closePurchase(database.db, {
+          organizationId: active.organization_id,
+          actorId: active.actor_id,
+          purchaseId: closedPO.id,
+          expectedVersion: placedClosedPO.version,
+          reason: 'Initial seasonal batch closed and reconciled.',
+        });
+      }
+    }
+
     console.log(
       JSON.stringify({
         status: 'PASS',

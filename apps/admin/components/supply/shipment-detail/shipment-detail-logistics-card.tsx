@@ -164,6 +164,19 @@ export function ShipmentDetailLogisticsCard({
           </div>
 
           <div className="grid gap-1">
+            <span className="text-muted-foreground">Freight Departure:</span>
+            <span className="font-medium text-foreground">
+              {shipment.departedAt ? (
+                <span className="text-sky-600 dark:text-sky-400 font-semibold">
+                  Departed on {formatSupplyDate(shipment.departedAt)}
+                </span>
+              ) : (
+                <span className="italic text-muted-foreground">Pending departure</span>
+              )}
+            </span>
+          </div>
+
+          <div className="grid gap-1">
             <span className="text-muted-foreground">Actual Dock Arrival:</span>
             <span className="font-medium text-foreground">
               {shipment.arrivedAt ? (

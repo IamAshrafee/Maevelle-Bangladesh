@@ -17,9 +17,13 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       receipt_number text not null,
       shipment_id uuid not null references inbound_shipment.shipments(id),
       receiving_location_id uuid not null,
-      status text not null default 'POSTED' check (status = 'POSTED'),
+      status text not null default 'POSTED' check (status in ('POSTED', 'REVERSED')),
       posted_inventory_transaction_id uuid unique references inventory.inventory_transactions(id),
+      reversed_inventory_transaction_id uuid references inventory.inventory_transactions(id),
       created_by_actor_id uuid,
+      reversed_by_actor_id uuid,
+      reversal_reason text,
+      reversed_at timestamptz,
       posted_at timestamptz not null default now(),
       created_at timestamptz not null default now(),
       unique (organization_id, receipt_number),
@@ -47,12 +51,13 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
 
     insert into iam.capability_definitions (capability_code, domain, description, sensitivity) values
       ('receiving.view', 'receiving', 'View inbound receipt history.', 'INTERNAL'),
-      ('receiving.post', 'receiving', 'Post inspected physical inbound receipts.', 'HIGH')
+      ('receiving.post', 'receiving', 'Post inspected physical inbound receipts.', 'HIGH'),
+      ('receiving.adjust', 'receiving', 'Reverse posted inbound receipts and resolve receiving conditions.', 'HIGH')
     on conflict (capability_code) do nothing;
     insert into iam.membership_capability_grants (membership_id, capability_code)
       select membership.id, capability.capability_code
       from iam.organization_memberships membership
-      cross join (values ('receiving.view'), ('receiving.post')) as capability(capability_code)
+      cross join (values ('receiving.view'), ('receiving.post'), ('receiving.adjust')) as capability(capability_code)
       where membership.membership_type = 'OWNER' and membership.status = 'ACTIVE'
     on conflict do nothing;
   `.execute(db);

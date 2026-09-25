@@ -459,6 +459,55 @@ export async function receiveInboundInventoryInTransaction(
   return { transactionId, inventoryItemIds: itemIds };
 }
 
+export async function reverseInboundInventoryInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    receiptId: string;
+    locationId: string;
+    idempotencyRecordId?: string;
+    lines: readonly {
+      variantId: string;
+      condition: InventoryCondition;
+      quantity: string;
+    }[];
+  },
+): Promise<{ transactionId: string }> {
+  await requireActiveLocationCapability(
+    transaction,
+    input.organizationId,
+    input.locationId,
+    'STOCK_HOLDING',
+  );
+  const itemIds = new Map<string, string>();
+  for (const line of input.lines) {
+    assertQuantity(line.quantity, 'Reversed quantity');
+    if (!itemIds.has(line.variantId))
+      itemIds.set(
+        line.variantId,
+        await ensureItem(transaction, input.organizationId, line.variantId, false),
+      );
+  }
+  const transactionId = await postTransaction(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    transactionType: 'ADJUSTMENT',
+    reasonCode: 'CORRECTION',
+    reasonText: 'Reversal of inbound receipt',
+    referenceType: 'receiving.inbound_receipt_reversal',
+    referenceId: input.receiptId,
+    idempotencyRecordId: input.idempotencyRecordId,
+    lines: input.lines.map((line) => ({
+      inventoryItemId: itemIds.get(line.variantId)!,
+      locationId: input.locationId,
+      condition: line.condition,
+      quantityDelta: `-${line.quantity}`,
+    })),
+  });
+  return { transactionId };
+}
+
 /** Reverse receiving is physical truth too, but deliberately uses its own immutable source. */
 export async function receiveReturnInventoryInTransaction(
   transaction: Transaction<DatabaseSchema>,

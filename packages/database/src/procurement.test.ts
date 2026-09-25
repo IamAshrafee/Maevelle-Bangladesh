@@ -23,18 +23,28 @@ import {
   addPurchaseLine,
   cancelPurchase,
   cancelShipment,
+  closePurchase,
   createPurchase,
   createShipment,
   createSupplier,
+  getInboundReceipt,
+  getPurchase,
   getShipment,
+  listInboundReceipts,
+  listPurchases,
+  listShipments,
+  listSuppliers,
   markShipmentArrived,
   markShipmentInTransit,
   placePurchase,
   postInboundReceipt,
   removePurchaseLine,
+  resolveReceiptLineCondition,
+  reverseInboundReceipt,
   updatePurchase,
   updatePurchaseLine,
   updateShipment,
+  updateShipmentAllocations,
   updateSupplier,
 } from './procurement.js';
 import { createOrganization } from './platform.js';
@@ -941,5 +951,394 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
     expect(purchase.lines[0]?.unitPrice).toBe('12.5000');
     expect(purchase.totalAmount).toBe('62.5000');
     expect(purchase.destinationLocationId).toBe(input.locationId);
+  });
+
+  it('closes a placed purchase order and prevents further shipment allocations', async () => {
+    const input = await fixture();
+    const purchase = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: input.supplier.id,
+      currencyCode: 'BDT',
+      lines: [{ variantId: input.variantId, quantity: '10', unitPrice: '100' }],
+    });
+    const placed = await placePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: purchase.id,
+      expectedVersion: purchase.version,
+    });
+
+    const closed = await closePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: purchase.id,
+      expectedVersion: placed.version,
+      reason: 'Operations completed and verified.',
+    });
+
+    expect(closed.status).toBe('CLOSED');
+    expect(closed.closedAt).toBeTruthy();
+    expect(closed.closedByActorId).toBe(input.actorId);
+
+    // Attempting to allocate shipment against closed PO fails
+    await expect(
+      createShipment(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        receivingLocationId: input.locationId,
+        transportMode: 'ROAD',
+        allocations: [{ purchaseLineId: closed.lines[0]!.id, quantity: '5' }],
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('releases allocated quantity when a planned shipment is cancelled', async () => {
+    const input = await fixture();
+    const purchase = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: input.supplier.id,
+      currencyCode: 'BDT',
+      lines: [{ variantId: input.variantId, quantity: '10', unitPrice: '50' }],
+    });
+    const placed = await placePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: purchase.id,
+      expectedVersion: purchase.version,
+    });
+
+    const lineId = placed.lines[0]!.id;
+
+    // Allocate all 10 units to shipment 1
+    const shipment1 = await createShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      receivingLocationId: input.locationId,
+      transportMode: 'ROAD',
+      allocations: [{ purchaseLineId: lineId, quantity: '10' }],
+    });
+
+    // Verify 10 units are allocated
+    const poAfterAlloc = await getPurchase(database.db, {
+      organizationId: input.organizationId,
+      purchaseId: purchase.id,
+    });
+    expect(Number(poAfterAlloc.lines[0]!.allocatedQuantity)).toBe(10);
+
+    // Cannot allocate more
+    await expect(
+      createShipment(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        receivingLocationId: input.locationId,
+        transportMode: 'ROAD',
+        allocations: [{ purchaseLineId: lineId, quantity: '1' }],
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    // Cancel shipment 1
+    await cancelShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment1.id,
+      expectedVersion: shipment1.version,
+      reason: 'Carrier cancelled pickup',
+    });
+
+    // Check purchase line has allocatedQuantity back to 0
+    const poAfterCancel = await getPurchase(database.db, {
+      organizationId: input.organizationId,
+      purchaseId: purchase.id,
+    });
+    expect(Number(poAfterCancel.lines[0]!.allocatedQuantity)).toBe(0);
+
+    // Now we can successfully create shipment 2 with 10 units
+    const shipment2 = await createShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      receivingLocationId: input.locationId,
+      transportMode: 'ROAD',
+      allocations: [{ purchaseLineId: lineId, quantity: '10' }],
+    });
+    expect(shipment2.allocations).toHaveLength(1);
+    expect(Number(shipment2.allocations[0]!.allocatedQuantity)).toBe(10);
+  });
+
+  it('updates shipment allocations and prevents over-allocation', async () => {
+    const input = await fixture();
+    const purchase = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: input.supplier.id,
+      currencyCode: 'BDT',
+      lines: [{ variantId: input.variantId, quantity: '10', unitPrice: '50' }],
+    });
+    const placed = await placePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: purchase.id,
+      expectedVersion: purchase.version,
+    });
+    const lineId = placed.lines[0]!.id;
+
+    const shipment = await createShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      receivingLocationId: input.locationId,
+      transportMode: 'ROAD',
+      allocations: [{ purchaseLineId: lineId, quantity: '4' }],
+    });
+
+    // Update allocations from 4 to 7
+    const updated = await updateShipmentAllocations(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: shipment.version,
+      allocations: [{ purchaseLineId: lineId, quantity: '7' }],
+    });
+    expect(Number(updated.allocations[0]!.allocatedQuantity)).toBe(7);
+
+    // Over-allocating beyond 10 throws CONFLICT
+    await expect(
+      updateShipmentAllocations(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        shipmentId: shipment.id,
+        expectedVersion: updated.version,
+        allocations: [{ purchaseLineId: lineId, quantity: '15' }],
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('posts an inbound receipt and resolves line conditions into sellable stock', async () => {
+    const input = await fixture();
+    const purchase = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: input.supplier.id,
+      currencyCode: 'BDT',
+      lines: [{ variantId: input.variantId, quantity: '20', unitPrice: '75' }],
+    });
+    const placed = await placePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: purchase.id,
+      expectedVersion: purchase.version,
+    });
+    const lineId = placed.lines[0]!.id;
+
+    const shipment = await createShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      receivingLocationId: input.locationId,
+      transportMode: 'AIR',
+      allocations: [{ purchaseLineId: lineId, quantity: '20' }],
+    });
+
+    const inTransit = await markShipmentInTransit(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: shipment.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const arrived = await markShipmentArrived(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: inTransit.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    // 1. Post receipt with 10 INSPECTION and 10 SELLABLE
+    const receipt = await postInboundReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: arrived.id,
+      lines: [
+        {
+          shipmentAllocationId: arrived.allocations[0]!.id,
+          condition: 'SELLABLE',
+          quantity: '10',
+        },
+        {
+          shipmentAllocationId: arrived.allocations[0]!.id,
+          condition: 'INSPECTION',
+          quantity: '10',
+        },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(receipt.status).toBe('POSTED');
+    expect(receipt.receiptNumber).toMatch(/^RCV-\d{4}-\d{6}$/);
+
+    // Check inventory balances
+    const balances = await listInventoryBalances(database.db, input.organizationId, {
+      locationId: input.locationId,
+    }).then((res) => res.items);
+    const sellableBalance = balances.find((b) => b.condition === 'SELLABLE');
+    const inspectionBalance = balances.find((b) => b.condition === 'INSPECTION');
+    expect(Number(sellableBalance?.onHand)).toBe(10);
+    expect(Number(inspectionBalance?.onHand)).toBe(10);
+
+    // 2. Resolve 6 units of INSPECTION to SELLABLE
+    const inspectionLine = receipt.lines.find((l) => l.condition === 'INSPECTION')!;
+    const afterResolve = await resolveReceiptLineCondition(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      receiptId: receipt.id,
+      lineId: inspectionLine.id,
+      targetCondition: 'SELLABLE',
+      quantity: '6',
+      reason: 'Passed initial laboratory testing',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(afterResolve.receipt.status).toBe('POSTED');
+    expect(afterResolve.receipt.lines).toHaveLength(2);
+
+    const balancesAfterResolve = await listInventoryBalances(database.db, input.organizationId, {
+      locationId: input.locationId,
+    }).then((res) => res.items);
+    expect(Number(balancesAfterResolve.find((b) => b.condition === 'SELLABLE')?.onHand)).toBe(16);
+    expect(Number(balancesAfterResolve.find((b) => b.condition === 'INSPECTION')?.onHand)).toBe(4);
+  });
+
+  it('reverses an inbound receipt with complete inventory and shipment rollback', async () => {
+    const input = await fixture();
+    const purchase = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: input.supplier.id,
+      currencyCode: 'BDT',
+      lines: [{ variantId: input.variantId, quantity: '15', unitPrice: '80' }],
+    });
+    const placed = await placePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: purchase.id,
+      expectedVersion: purchase.version,
+    });
+    const lineId = placed.lines[0]!.id;
+
+    const shipment = await createShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      receivingLocationId: input.locationId,
+      transportMode: 'ROAD',
+      allocations: [{ purchaseLineId: lineId, quantity: '15' }],
+    });
+
+    const inTransit = await markShipmentInTransit(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: shipment.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const arrived = await markShipmentArrived(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: inTransit.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const receipt = await postInboundReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: arrived.id,
+      lines: [
+        {
+          shipmentAllocationId: arrived.allocations[0]!.id,
+          condition: 'SELLABLE',
+          quantity: '15',
+        },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(receipt.status).toBe('POSTED');
+
+    const balancesBefore = await listInventoryBalances(database.db, input.organizationId, {
+      locationId: input.locationId,
+    }).then((res) => res.items);
+    expect(Number(balancesBefore.find((b) => b.condition === 'SELLABLE')?.onHand)).toBe(15);
+
+    // Reverse receipt
+    const reversed = await reverseInboundReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      receiptId: receipt.id,
+      reason: 'Physical inspection failed entire batch upon secondary check',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(reversed.status).toBe('REVERSED');
+    expect(reversed.reversedAt).toBeTruthy();
+    expect(reversed.reversalReason).toBe('Physical inspection failed entire batch upon secondary check');
+
+    // Inventory balances are rolled back to zero
+    const balancesAfterReversal = await listInventoryBalances(database.db, input.organizationId, {
+      locationId: input.locationId,
+    }).then((res) => res.items);
+    expect(Number(balancesAfterReversal.find((b) => b.condition === 'SELLABLE')?.onHand ?? 0)).toBe(0);
+
+    // Shipment receivingStatus is recalculated back to NOT_RECEIVED
+    const shipmentAfterReversal = await getShipment(database.db, {
+      organizationId: input.organizationId,
+      shipmentId: arrived.id,
+    });
+    expect(shipmentAfterReversal.receivingStatus).toBe('NOT_RECEIVED');
+    expect(Number(shipmentAfterReversal.allocations[0]!.receivedQuantity)).toBe(0);
+  });
+
+  it('performs SQL-level pagination and search for suppliers, purchases, shipments, and receipts', async () => {
+    const input = await fixture();
+
+    // 1. Create suppliers with distinct searchable names
+    const s1 = await createSupplier(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      code: `SUP-SRC-1`,
+      name: 'Alpha Loom Mills',
+      countryCode: 'BD',
+    });
+    const s2 = await createSupplier(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      code: `SUP-SRC-2`,
+      name: 'Beta Cotton Works',
+      countryCode: 'BD',
+    });
+
+    // Search by name
+    const searchAlpha = await listSuppliers(database.db, input.organizationId, { search: 'Alpha' });
+    expect(searchAlpha.items).toHaveLength(1);
+    expect(searchAlpha.items[0]!.name).toBe('Alpha Loom Mills');
+
+    // Pagination
+    const page1 = await listSuppliers(database.db, input.organizationId, { page: 1, pageSize: 1 });
+    expect(page1.items).toHaveLength(1);
+    expect(page1.pagination.totalItems).toBeGreaterThanOrEqual(2);
+
+    // 2. Purchases pagination & search
+    const po1 = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: s1.id,
+      currencyCode: 'BDT',
+      supplierReference: 'REF-ALPHA-99',
+    });
+
+    const searchPo = await listPurchases(database.db, input.organizationId, { search: 'REF-ALPHA-99' });
+    expect(searchPo.items).toHaveLength(1);
+    expect(searchPo.items[0]!.id).toBe(po1.id);
   });
 });

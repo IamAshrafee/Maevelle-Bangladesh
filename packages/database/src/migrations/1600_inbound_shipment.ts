@@ -17,6 +17,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       receiving_status text not null default 'NOT_RECEIVED' check (receiving_status in ('NOT_RECEIVED', 'PARTIALLY_RECEIVED', 'RECEIVED')),
       origin_text text,
       tracking_reference text,
+      departed_at timestamptz,
       arrived_at timestamptz,
       created_by_actor_id uuid,
       created_at timestamptz not null default now(),
