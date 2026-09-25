@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleAlert, FilePlus2, PackageSearch, RefreshCw, Search, X } from 'lucide-react';
+import { CircleAlert, Download, FilePlus2, PackageSearch, RefreshCw, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDeferredValue, useEffect, useState } from 'react';
@@ -191,6 +191,81 @@ export function OrdersList() {
     customerId,
   ]);
 
+  const [exporting, setExporting] = useState(false);
+
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const parameters = new URLSearchParams({
+        page: '1',
+        pageSize: '1000',
+      });
+      if (status !== 'ALL') parameters.set('status', status);
+      if (paymentStatus !== 'ALL') parameters.set('paymentStatus', paymentStatus);
+      if (fulfillmentStatus !== 'ALL') parameters.set('fulfillmentStatus', fulfillmentStatus);
+      if (deliveryStatus !== 'ALL') parameters.set('deliveryStatus', deliveryStatus);
+      if (salesChannel !== 'ALL') parameters.set('salesChannel', salesChannel);
+      if (paymentMethod !== 'ALL') parameters.set('paymentMethod', paymentMethod);
+      if (from) parameters.set('from', new Date(`${from}T00:00:00`).toISOString());
+      if (to) parameters.set('to', new Date(`${to}T23:59:59.999`).toISOString());
+      if (deferredQuery) parameters.set('q', deferredQuery);
+      if (customerId) parameters.set('customerId', customerId);
+
+      const data = await fetchApiData<PaginatedEnvelope<OrderSummaryDto>>(
+        `/admin/orders?${parameters.toString()}`,
+      );
+
+      const rows = [
+        [
+          'Order Number',
+          'Date',
+          'Status',
+          'Payment Status',
+          'Payment Method',
+          'Fulfillment Status',
+          'Delivery Status',
+          'Sales Channel',
+          'Customer Name',
+          'Phone',
+          'Email',
+          'Delivery Amount',
+          'Total Amount',
+          'Currency',
+        ],
+        ...data.items.map((item) => [
+          item.orderNumber,
+          item.createdAt,
+          item.status,
+          item.paymentStatus,
+          item.paymentMethod,
+          item.fulfillmentStatus,
+          item.deliveryStatus,
+          item.salesChannel,
+          `"${(item.customerName ?? '').replace(/"/g, '""')}"`,
+          `"${(item.customerPhone ?? '').replace(/"/g, '""')}"`,
+          `"${(item.customerEmail ?? '').replace(/"/g, '""')}"`,
+          item.deliveryAmount,
+          item.total,
+          item.currency,
+        ]),
+      ];
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((e) => e.join(',')).join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `orders-export-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export CSV');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
@@ -207,6 +282,9 @@ export function OrdersList() {
           </Button>
           <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
             <RefreshCw aria-hidden="true" /> Refresh
+          </Button>
+          <Button variant="outline" disabled={exporting} onClick={() => void exportCsv()}>
+            <Download aria-hidden="true" /> {exporting ? 'Exporting…' : 'Export CSV'}
           </Button>
           <Button render={<Link href="/orders/new" />} nativeButton={false}>
             <FilePlus2 aria-hidden="true" /> Create Manual Order

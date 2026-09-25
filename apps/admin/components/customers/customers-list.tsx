@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleAlert, RefreshCw, Search, UserPlus, Users, X } from 'lucide-react';
+import { CircleAlert, Download, RefreshCw, Search, UserPlus, Users, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDeferredValue, useEffect, useState } from 'react';
@@ -86,6 +86,64 @@ export function CustomersList() {
     return () => controller.abort();
   }, [deferredQuery, page, status, source, from, to]);
 
+  const [exporting, setExporting] = useState(false);
+
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const parameters = new URLSearchParams({
+        page: '1',
+        pageSize: '1000',
+      });
+      if (deferredQuery) parameters.set('q', deferredQuery);
+      if (status !== 'ALL') parameters.set('status', status);
+      if (source !== 'ALL') parameters.set('source', source);
+      if (from) parameters.set('from', new Date(`${from}T00:00:00`).toISOString());
+      if (to) parameters.set('to', new Date(`${to}T23:59:59.999`).toISOString());
+
+      const data = await fetchApiData<PaginatedEnvelope<CustomerSummaryDto>>(
+        `/admin/customers?${parameters.toString()}`,
+      );
+
+      const rows = [
+        [
+          'Customer Name',
+          'Phone',
+          'Email',
+          'Status',
+          'Source',
+          'Orders Count',
+          'Lifetime Value (BDT)',
+          'Created Date',
+        ],
+        ...data.items.map((item) => [
+          `"${(item.displayName ?? '').replace(/"/g, '""')}"`,
+          `"${(item.primaryPhone ?? '').replace(/"/g, '""')}"`,
+          `"${(item.primaryEmail ?? '').replace(/"/g, '""')}"`,
+          item.status,
+          item.latestSource ?? '',
+          item.orderCount ?? 0,
+          item.totalSpend ?? '0',
+          item.createdAt,
+        ]),
+      ];
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((e) => e.join(',')).join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `customers-export-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export CSV');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between">
@@ -99,6 +157,9 @@ export function CustomersList() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
             <RefreshCw aria-hidden="true" /> Refresh
+          </Button>
+          <Button variant="outline" disabled={exporting} onClick={() => void exportCsv()}>
+            <Download aria-hidden="true" /> {exporting ? 'Exporting…' : 'Export CSV'}
           </Button>
           <Button render={<Link href="/customers/new" />} nativeButton={false}>
             <UserPlus aria-hidden="true" /> Create Customer

@@ -1955,6 +1955,7 @@ export interface OrderLineDto {
   readonly sku: string;
   readonly productTitle: string;
   readonly variantTitle: string | null;
+  readonly imageUrl?: string | null;
   readonly quantity: string;
   readonly unitPrice: string;
   readonly gross: string;
@@ -2116,3 +2117,82 @@ export interface CreateManualOrderInputDto {
   readonly salesChannel: Exclude<OrderSalesChannelDto, 'STOREFRONT'>;
   readonly currency?: string;
 }
+
+export interface DeliveryPricingRuleDto {
+  readonly id: string;
+  readonly name: string;
+  readonly countryCode: string;
+  readonly geographyNodeId: string | null;
+  readonly geographyNodeName?: string | null;
+  readonly flatAmount: string;
+  readonly currencyCode: string;
+  readonly priority: number;
+  readonly status: 'ACTIVE' | 'INACTIVE';
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface CreateDeliveryPricingRuleInputDto {
+  readonly name: string;
+  readonly countryCode: string;
+  readonly geographyNodeId?: string;
+  readonly flatAmount: string;
+  readonly currencyCode: string;
+  readonly priority?: number;
+}
+
+export interface UpdateDeliveryPricingRuleInputDto {
+  readonly expectedVersion: number;
+  readonly name?: string;
+  readonly flatAmount?: string;
+  readonly priority?: number;
+  readonly status?: 'ACTIVE' | 'INACTIVE';
+}
+
+export interface PublicOrderTrackingDto {
+  readonly orderNumber: string;
+  readonly status: OrderStatusDto;
+  readonly paymentStatus: string;
+  readonly paymentMethod: PaymentMethodCodeDto;
+  readonly fulfillmentStatus: OrderFulfillmentStatusDto;
+  readonly deliveryStatus: OrderDeliveryStatusDto;
+  readonly delivery?: {
+    readonly carrierName: string | null;
+    readonly trackingReference: string | null;
+    readonly estimatedDeliveryAt: string | null;
+    readonly deliveredAt: string | null;
+  } | null;
+  readonly destination: {
+    readonly city: string | null;
+    readonly area: string | null;
+    readonly district: string | null;
+    readonly countryCode: string;
+  };
+  readonly lines: readonly {
+    readonly productTitle: string;
+    readonly variantTitle: string | null;
+    readonly sku: string;
+    readonly quantity: string;
+    readonly imageUrl: string | null;
+    readonly unitPrice: string;
+    readonly net: string;
+    readonly options: readonly { readonly name: string; readonly value: string }[];
+  }[];
+  readonly merchandiseGross: string;
+  readonly discountTotal: string;
+  readonly deliveryAmount: string;
+  readonly total: string;
+  readonly currency: string;
+  readonly createdAt: string;
+}
+
+export interface AddCustomerNoteInputDto {
+  readonly body: string;
+}
+
+export interface CreateCustomerTagInputDto {
+  readonly label: string;
+  readonly color?: string;
+}
+

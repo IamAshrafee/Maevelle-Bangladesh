@@ -20,6 +20,8 @@ interface Order {
   merchandiseGross: string;
   discountTotal: string;
   merchandiseNet: string;
+  deliveryAmount: string;
+  total: string;
   customer: { displayName: string; phone: string; email: string | null };
   address: {
     recipientName: string;
@@ -35,6 +37,7 @@ interface Order {
   lines: readonly {
     sku: string;
     productTitle: string;
+    imageUrl?: string | null;
     quantity: string;
     unitPrice: string;
     gross: string;
@@ -187,18 +190,26 @@ export default function OrderConfirmationPage() {
         <section className="confirmation-items">
           <h2>What you ordered</h2>
           {order.lines.map((line) => (
-            <article key={`${line.sku}-${line.productTitle}`}>
-              <h3>{line.productTitle}</h3>
-              <p>
-                {line.sku}
-                {line.options.length
-                  ? ` · ${line.options.map((option) => `${option.name}: ${option.value}`).join(', ')}`
-                  : ''}
-              </p>
-              <p>
-                Qty {line.quantity} · Unit {money(line.unitPrice)} · Gross {money(line.gross)} ·
-                Discount {money(line.discount)} · Net {money(line.net)}
-              </p>
+            <article key={`${line.sku}-${line.productTitle}`} style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              {line.imageUrl ? (
+                <img
+                  src={line.imageUrl}
+                  alt={line.productTitle}
+                  style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }}
+                />
+              ) : null}
+              <div>
+                <h3>{line.productTitle}</h3>
+                <p>
+                  {line.sku}
+                  {line.options.length
+                    ? ` · ${line.options.map((option) => `${option.name}: ${option.value}`).join(', ')}`
+                    : ''}
+                </p>
+                <p>
+                  Qty {line.quantity} · Unit {money(line.unitPrice)} · Net {money(line.net)}
+                </p>
+              </div>
             </article>
           ))}
         </section>
@@ -207,13 +218,19 @@ export default function OrderConfirmationPage() {
             <dt>Merchandise</dt>
             <dd>{money(order.merchandiseGross)}</dd>
           </div>
+          {Number(order.discountTotal) > 0 ? (
+            <div>
+              <dt>Discount</dt>
+              <dd>−{money(order.discountTotal)}</dd>
+            </div>
+          ) : null}
           <div>
-            <dt>Discount</dt>
-            <dd>−{money(order.discountTotal)}</dd>
+            <dt>Delivery</dt>
+            <dd>{Number(order.deliveryAmount) === 0 ? 'Free' : money(order.deliveryAmount)}</dd>
           </div>
-          <div>
+          <div style={{ fontWeight: 'bold', borderTop: '1px solid var(--color-border, #e5e7eb)', paddingTop: '0.5rem' }}>
             <dt>Total</dt>
-            <dd>{money(order.merchandiseNet)}</dd>
+            <dd>{money(order.total)}</dd>
           </div>
         </dl>
         {payment?.instructions?.method === 'BKASH_MANUAL' ||
@@ -258,7 +275,10 @@ export default function OrderConfirmationPage() {
         ) : null}
         {message ? <p role="status">{message}</p> : null}
         <div className="confirmation-actions">
-          <Link className="button-link dark" href="/orders/track">
+          <Link
+            className="button-link dark"
+            href={`/orders/track?orderNumber=${encodeURIComponent(order.orderNumber)}&phone=${encodeURIComponent(order.customer.phone)}`}
+          >
             Track this order
           </Link>
           <Link className="button-secondary button-link" href="/">

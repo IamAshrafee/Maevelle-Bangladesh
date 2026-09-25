@@ -14,6 +14,8 @@ import { EditCustomerDialog } from './edit-customer-dialog';
 import { AddAddressDialog } from './add-address-dialog';
 import { EditAddressDialog } from './edit-address-dialog';
 import { CustomerIdentityActions } from './customer-identity-actions';
+import { AddNoteDialog } from './add-note-dialog';
+import { ManageTagsDialog } from './manage-tags-dialog';
 
 interface DeliveryHistory {
   eligibleDeliveries: number;
@@ -360,8 +362,13 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
           </section>
 
           <section className="rounded-xl border bg-card shadow-sm">
-            <div className="border-b px-6 py-4">
+            <div className="flex items-center justify-between border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Tags</h2>
+              <ManageTagsDialog
+                customerId={customer.id}
+                assignedTags={customer.tags}
+                onUpdated={() => void load()}
+              />
             </div>
             <div className="px-6 py-4">
               {customer.tags.length === 0 ? (
@@ -383,8 +390,9 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
           </section>
 
           <section className="rounded-xl border bg-card shadow-sm">
-            <div className="border-b px-6 py-4">
+            <div className="flex items-center justify-between border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Notes</h2>
+              <AddNoteDialog customerId={customer.id} onAdded={() => void load()} />
             </div>
             <div className="px-6 py-4">
               <ul className="space-y-4">

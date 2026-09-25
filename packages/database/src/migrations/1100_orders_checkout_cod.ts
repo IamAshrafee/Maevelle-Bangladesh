@@ -171,6 +171,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       sku_snapshot text not null,
       product_title_snapshot text not null,
       variant_title_snapshot text,
+      image_url_snapshot text,
       option_snapshot jsonb not null default '[]'::jsonb check (jsonb_typeof(option_snapshot) = 'array'),
       unit_price numeric(20,4) not null check (unit_price >= 0),
       price_source text not null default 'CATALOG' check (price_source in ('CATALOG', 'MANUAL_OVERRIDE')),

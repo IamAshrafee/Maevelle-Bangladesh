@@ -1,16 +1,16 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "delivery-fulfillment-operations",
-  "active_substage": "DELIVERY_IMPLEMENTATION_COMPLETE",
-  "active_status": "EXTERNAL_CONFIGURATION_REQUIRED",
+  "active_area": "commerce-orders-and-customers",
+  "active_substage": "COMMERCE_MODULE_COMPLETION",
+  "active_status": "IMPLEMENTATION_COMPLETE",
   "baseline_commit": "a5de03d",
   "last_checkpoint_commit": "e799499",
   "last_verified_commit": "e799499",
-  "last_completed_action": "Completed Delivery/Fulfillment and the production-grade Pathao adapter: encrypted credentials/tokens, Store mapping, quote, durable booking, polling/tracking, COD and charge separation, Returns-owned RTO, customer delivery history, explainable risk, and Admin operations. Fresh development/test baselines, 18 focused tests, focused type checks, and production builds pass.",
-  "next_action": "Configure owner-supplied Pathao Merchant sandbox credentials, map the pickup Store, and perform one controlled quote, booking, and tracking smoke test; complete owner visual review.",
+  "last_completed_action": "Completed Orders and Customers architecture overhaul from MVP to production domain: added image URL snapshots to database baseline and contracts, modularized packages/database/src/orders into focused domains, extracted payments API routes, added public order tracking (Order # + Phone), fixed storefront confirmation totals and line thumbnails, added Add Note and Manage Tags dialogs to customer console, and added CSV export for orders and customers. Focused tests and type checks across database, contracts, api, storefront, and admin pass.",
+  "next_action": "Run Docker baseline refresh if needed; owner visual review of customer notes/tags dialogs and public order tracking.",
   "interrupted": false,
-  "blocked_by": ["PATHAO_MERCHANT_CREDENTIALS_AND_SANDBOX_ACCESS"],
+  "blocked_by": [],
   "owner_review_status": "PENDING",
   "verified_complete_areas": []
 }

@@ -193,16 +193,34 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
                       className={line.status === 'CANCELLED' ? 'opacity-60' : undefined}
                     >
                       <TableCell>
-                        <div className="font-medium text-foreground">{line.productTitle}</div>
-                        <div className="text-xs text-muted-foreground">SKU: {line.sku}</div>
-                        {line.status === 'CANCELLED' ? (
-                          <div className="mt-1 text-xs font-medium text-destructive">
-                            Cancelled
-                            {line.cancellationReasonCode
-                              ? ` · ${line.cancellationReasonCode.replaceAll('_', ' ')}`
-                              : ''}
+                        <div className="flex items-center gap-3">
+                          {line.imageUrl ? (
+                            <img
+                              src={line.imageUrl}
+                              alt={line.productTitle}
+                              className="size-11 rounded-md border object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="flex size-11 items-center justify-center rounded-md border bg-muted text-muted-foreground shrink-0">
+                              <Box className="size-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="font-medium text-foreground">{line.productTitle}</div>
+                            {line.variantTitle ? (
+                              <div className="text-xs text-muted-foreground">{line.variantTitle}</div>
+                            ) : null}
+                            <div className="text-xs text-muted-foreground">SKU: {line.sku}</div>
+                            {line.status === 'CANCELLED' ? (
+                              <div className="mt-1 text-xs font-medium text-destructive">
+                                Cancelled
+                                {line.cancellationReasonCode
+                                  ? ` · ${line.cancellationReasonCode.replaceAll('_', ' ')}`
+                                  : ''}
+                              </div>
+                            ) : null}
                           </div>
-                        ) : null}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         {formatMoney(line.unitPrice, order.currency)}

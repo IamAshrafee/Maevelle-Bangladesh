@@ -15,6 +15,7 @@ import { registerPricingRoutes } from './pricing.js';
 import { registerPromotionRoutes } from './promotions.js';
 import { registerCartRoutes } from './cart.js';
 import { registerOrderRoutes } from './orders.js';
+import { registerPaymentRoutes } from './payments.js';
 import { registerFulfillmentDeliveryRoutes } from './fulfillment-delivery.js';
 import { registerProcurementRoutes } from './procurement.js';
 import { registerCostingRoutes } from './costing.js';
@@ -75,6 +76,7 @@ export function registerAuthRoutes(
   registerPromotionRoutes(app, database, auth);
   registerCartRoutes(app, database);
   registerOrderRoutes(app, database, auth);
+  registerPaymentRoutes(app, database, auth);
   registerFulfillmentDeliveryRoutes(app, database, auth);
   registerProcurementRoutes(app, database, auth);
   registerCostingRoutes(app, database, auth);
