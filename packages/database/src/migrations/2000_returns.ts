@@ -20,7 +20,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       inspection_status text not null default 'PENDING' check (inspection_status in ('NOT_REQUIRED', 'PENDING', 'PARTIALLY_INSPECTED', 'COMPLETED')),
       commercial_resolution_status text not null default 'PENDING' check (commercial_resolution_status in ('PENDING', 'NO_REFUND_REQUIRED', 'REFUND_PENDING', 'REFUND_COMPLETED', 'OTHER_RESOLUTION')),
       reason_code text not null check (reason_code in ('CUSTOMER_CHANGED_MIND','WRONG_ITEM_SENT','WRONG_SIZE','DAMAGED_ON_ARRIVAL','DEFECTIVE','QUALITY_NOT_EXPECTED','DELIVERY_REFUSED','CUSTOMER_UNAVAILABLE','ADDRESS_ISSUE','COURIER_FAILURE','ORDER_CANCELLED_IN_TRANSIT','OTHER')),
-      reason_text text, created_by_actor_id uuid, authorized_by_actor_id uuid, created_at timestamptz not null default now(), authorized_at timestamptz, updated_at timestamptz not null default now(), version bigint not null default 1,
+      reason_text text, created_by_actor_id uuid, authorized_by_actor_id uuid, created_at timestamptz not null default now(), authorized_at timestamptz, authorization_expires_at timestamptz, rejected_at timestamptz, rejection_reason text, cancelled_at timestamptz, cancellation_reason text, resolved_at timestamptz, updated_at timestamptz not null default now(), version bigint not null default 1,
       unique (organization_id, return_number), unique (organization_id, id),
       foreign key (organization_id, order_id) references orders.orders(organization_id, id),
       foreign key (organization_id, customer_id) references customers.customers(organization_id, id),
@@ -28,23 +28,46 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       check ((case_type = 'RTO' and delivery_id is not null and authorization_status = 'NOT_REQUIRED') or (case_type = 'CUSTOMER_RETURN' and delivery_id is null))
     );
     create index return_cases_queue on returns.return_cases (organization_id, case_type, case_status, created_at desc);
+    create index return_cases_transport_queue on returns.return_cases (organization_id, transport_status, updated_at, id) where case_status = 'OPEN';
+    create unique index return_cases_one_rto_per_delivery on returns.return_cases (organization_id, delivery_id) where case_type = 'RTO';
     create table returns.return_lines (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_case_id uuid not null references returns.return_cases(id),
       order_id uuid not null references orders.orders(id), order_line_id uuid not null references orders.order_lines(id), fulfillment_line_id uuid references fulfillment.fulfillment_lines(id), delivery_line_id uuid references delivery.delivery_lines(id),
-      requested_quantity numeric(20,6) not null check (requested_quantity > 0), authorized_quantity numeric(20,6) not null default 0 check (authorized_quantity >= 0), received_quantity numeric(20,6) not null default 0 check (received_quantity >= 0), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
-      unique (organization_id, id), unique (return_case_id, order_line_id, fulfillment_line_id), check (authorized_quantity <= requested_quantity), check (received_quantity <= authorized_quantity),
+      requested_quantity numeric(20,6) not null check (requested_quantity > 0), authorized_quantity numeric(20,6) not null default 0 check (authorized_quantity >= 0), received_quantity numeric(20,6) not null default 0 check (received_quantity >= 0), inspected_quantity numeric(20,6) not null default 0 check (inspected_quantity >= 0), disposed_quantity numeric(20,6) not null default 0 check (disposed_quantity >= 0), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
+      unique (organization_id, id), unique (return_case_id, order_line_id, fulfillment_line_id), check (authorized_quantity <= requested_quantity), check (received_quantity <= authorized_quantity), check (inspected_quantity <= received_quantity), check (disposed_quantity <= inspected_quantity),
       foreign key (organization_id, return_case_id) references returns.return_cases(organization_id, id),
       foreign key (organization_id, order_id) references orders.orders(organization_id, id),
       foreign key (organization_id, order_id, order_line_id) references orders.order_lines(organization_id, order_id, id)
     );
     create index return_lines_order on returns.return_lines (organization_id, order_id, order_line_id);
+    create table returns.reverse_shipments (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_case_id uuid not null references returns.return_cases(id),
+      shipment_number text not null, provider_code text not null default 'MANUAL', status text not null default 'EXPECTED' check (status in ('EXPECTED','BOOKED','IN_TRANSIT','ARRIVED','LOST','CANCELLED')),
+      tracking_reference text, external_consignment_id text, shipped_at timestamptz, arrived_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
+      unique (organization_id, shipment_number), unique (organization_id, id),
+      foreign key (organization_id, return_case_id) references returns.return_cases(organization_id, id)
+    );
+    create unique index reverse_shipments_provider_identity on returns.reverse_shipments (organization_id, provider_code, external_consignment_id) where external_consignment_id is not null;
+    create index reverse_shipments_tracking on returns.reverse_shipments (organization_id, tracking_reference) where tracking_reference is not null;
     create table returns.return_receipts (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_case_id uuid not null references returns.return_cases(id), receipt_number text not null, receiving_location_id uuid not null references warehouse.locations(id), status text not null default 'POSTED' check (status = 'POSTED'), posted_inventory_transaction_id uuid unique references inventory.inventory_transactions(id), created_by_actor_id uuid, posted_at timestamptz not null default now(), created_at timestamptz not null default now(), unique (organization_id, receipt_number), unique (organization_id, id), foreign key (organization_id, return_case_id) references returns.return_cases(organization_id, id), foreign key (organization_id, receiving_location_id) references warehouse.locations(organization_id, id)
     );
     create table returns.return_receipt_lines (
-      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_receipt_id uuid not null references returns.return_receipts(id), return_line_id uuid not null references returns.return_lines(id), inventory_item_id uuid not null references inventory.inventory_items(id), condition_code text not null check (condition_code in ('SELLABLE','DAMAGED','QUARANTINE','INSPECTION')), quantity numeric(20,6) not null check (quantity > 0), created_at timestamptz not null default now(), unique (organization_id, id), foreign key (organization_id, return_receipt_id) references returns.return_receipts(organization_id, id), foreign key (organization_id, return_line_id) references returns.return_lines(organization_id, id), foreign key (organization_id, inventory_item_id) references inventory.inventory_items(organization_id, id)
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_receipt_id uuid not null references returns.return_receipts(id), return_line_id uuid not null references returns.return_lines(id), inventory_item_id uuid not null references inventory.inventory_items(id), condition_code text not null default 'INSPECTION' check (condition_code in ('SELLABLE','DAMAGED','QUARANTINE','INSPECTION')), quantity numeric(20,6) not null check (quantity > 0), inspected_quantity numeric(20,6) not null default 0 check (inspected_quantity >= 0 and inspected_quantity <= quantity), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1, unique (organization_id, id), foreign key (organization_id, return_receipt_id) references returns.return_receipts(organization_id, id), foreign key (organization_id, return_line_id) references returns.return_lines(organization_id, id), foreign key (organization_id, inventory_item_id) references inventory.inventory_items(organization_id, id)
     );
     create index return_receipt_lines_return_line on returns.return_receipt_lines (organization_id, return_line_id);
+    create table returns.return_inspections (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_receipt_line_id uuid not null references returns.return_receipt_lines(id),
+      quantity numeric(20,6) not null check (quantity > 0), outcome text not null check (outcome in ('SELLABLE','DAMAGED','QUARANTINE','REJECTED_RETURN')), notes text, inspected_by_actor_id uuid, inspected_at timestamptz not null default now(), created_at timestamptz not null default now(),
+      unique (organization_id, id), foreign key (organization_id, return_receipt_line_id) references returns.return_receipt_lines(organization_id, id)
+    );
+    create index return_inspections_receipt_line on returns.return_inspections (organization_id, return_receipt_line_id, inspected_at);
+    create table returns.return_dispositions (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_inspection_id uuid not null unique references returns.return_inspections(id),
+      disposition_type text not null check (disposition_type in ('RESTOCK_SELLABLE','RESTOCK_DAMAGED','HOLD_QUARANTINE','REJECT_TO_CUSTOMER','WRITE_OFF')),
+      quantity numeric(20,6) not null check (quantity > 0), inventory_transaction_id uuid references inventory.inventory_transactions(id), created_at timestamptz not null default now(),
+      unique (organization_id, id), foreign key (organization_id, return_inspection_id) references returns.return_inspections(organization_id, id)
+    );
     create table returns.return_refund_links (id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), return_case_id uuid not null references returns.return_cases(id), refund_id uuid not null unique references payments.refunds(id), created_at timestamptz not null default now(), unique (organization_id, return_case_id, refund_id), foreign key (organization_id, return_case_id) references returns.return_cases(organization_id, id));
 
     insert into iam.capability_definitions (capability_code, domain, description, sensitivity) values

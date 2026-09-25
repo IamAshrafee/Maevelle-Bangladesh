@@ -38,6 +38,7 @@ import {
   authorizeReturnCase,
   createReturnCase,
   initiateRto,
+  inspectReturnReceiptLine,
   postReturnReceipt,
   verifyReturnIntegrity,
 } from './returns.js';
@@ -337,6 +338,18 @@ describe('reverse logistics', () => {
       lines: [{ returnLineId: line.rows[0]!.id, condition: 'SELLABLE', quantity: '1' }],
       idempotencyKey: crypto.randomUUID(),
     });
+    const receiptLine = await sql<{ id: string; version: string }>`select id,version::text from returns.return_receipt_lines where return_line_id=${line.rows[0]!.id}`.execute(
+      database.db,
+    );
+    await inspectReturnReceiptLine(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      returnReceiptLineId: receiptLine.rows[0]!.id,
+      expectedVersion: Number(receiptLine.rows[0]!.version),
+      quantity: '1',
+      outcome: 'SELLABLE',
+      idempotencyKey: crypto.randomUUID(),
+    });
     const facts = await sql<{
       stock: string;
       return_layers: string;
@@ -349,7 +362,7 @@ describe('reverse logistics', () => {
       stock: '10.000000',
       return_layers: '1',
       recoveries: '1',
-      status: 'RESOLVED',
+      status: 'OPEN',
     });
     expect(await verifyReturnIntegrity(database.db, input.organizationId)).toEqual([]);
     expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
@@ -388,6 +401,18 @@ describe('reverse logistics', () => {
       returnCaseId: created.id,
       locationId: input.locationId,
       lines: [{ returnLineId: line.rows[0]!.id, condition: 'SELLABLE', quantity: '1' }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const receiptLine = await sql<{ id: string; version: string }>`select id,version::text from returns.return_receipt_lines where return_line_id=${line.rows[0]!.id}`.execute(
+      database.db,
+    );
+    await inspectReturnReceiptLine(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      returnReceiptLineId: receiptLine.rows[0]!.id,
+      expectedVersion: Number(receiptLine.rows[0]!.version),
+      quantity: '1',
+      outcome: 'SELLABLE',
       idempotencyKey: crypto.randomUUID(),
     });
 
@@ -550,7 +575,7 @@ describe('reverse logistics', () => {
       database.db,
     );
     expect(facts.rows[0]).toEqual({
-      stock: '10.000000',
+      stock: '9.000000',
       receipts: '1',
       layers: '1',
       recoveries: '1',

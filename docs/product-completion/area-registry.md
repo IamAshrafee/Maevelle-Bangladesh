@@ -15,8 +15,8 @@ means meaningful current implementation exists; it does not mean acceptance.
 | Cart, checkout and orders | `IMPLEMENTATION_COMPLETE / VERIFICATION_PENDING` | Completion evidence in `areas/admin-commerce-orders-customers`; `cart.*`, `orders.*`, Storefront and Admin order routes |
 | Payments and refunds | `ACTIVE_IMPLEMENTATION` | Assessment and foundation checkpoint in `areas/admin-payments-finance`; `payments.*`, payment/admin routes |
 | Supply, receiving and costing | `CODE_SUBSTANTIAL` | procurement, inbound shipment, receiving, landed-cost and costing modules |
-| Fulfillment and delivery | `CODE_SUBSTANTIAL` | fulfillment/delivery modules and Admin workspaces |
-| Returns and RTO | `CODE_SUBSTANTIAL` | returns modules and Admin routes |
+| Fulfillment and delivery | `IMPLEMENTATION_COMPLETE / EXTERNAL_CONFIGURATION_REQUIRED` | Completion evidence in `areas/delivery-fulfillment-operations`; Pathao adapter, fulfillment/delivery modules, worker, and Admin workspaces |
+| Returns and RTO | `IMPLEMENTATION_COMPLETE / OWNER_REVIEW_PENDING` | Completion evidence in `areas/delivery-fulfillment-operations`; returns, provider RTO reconciliation, Inventory/cost recovery, API, and Admin workflows |
 | Finance | `ACTIVE_IMPLEMENTATION` | Assessment and foundation checkpoint in `areas/admin-payments-finance`; finance modules and Admin routes |
 | Reviews | `CODE_SUBSTANTIAL` | reviews modules, Admin moderation, Storefront display/submission |
 | Notifications and integrations | `CODE_SUBSTANTIAL` | notification/integration tables, routes and worker processing |

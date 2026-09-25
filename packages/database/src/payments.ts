@@ -1596,7 +1596,11 @@ export async function createCancellationRefundObligationsInTransaction(
       action: 'payments.refund.created_for_order_cancellation',
       targetType: 'payments.refund',
       targetId: refundId,
-      metadata: { orderId: input.orderId, paymentId: payment.id, amount: remaining.rows[0]!.amount },
+      metadata: {
+        orderId: input.orderId,
+        paymentId: payment.id,
+        amount: remaining.rows[0]!.amount,
+      },
     });
     await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, 'payments.refund.created', 1, 'payments.refund', ${refundId}, 1, ${JSON.stringify({ refundId, paymentId: payment.id, orderId: input.orderId, source: 'ORDER_CANCELLATION' })}::jsonb, now())`.execute(
       transaction,
@@ -1681,6 +1685,30 @@ export async function completeManualRefund(
                 and linked_refund.status <> 'COMPLETED'
             ) then 'REFUND_COMPLETED'
             else 'REFUND_PENDING'
+          end,
+          case_status = case
+            when return_case.inspection_status = 'COMPLETED'
+              and not exists (
+                select 1
+                from returns.return_refund_links link
+                join payments.refunds linked_refund on linked_refund.id = link.refund_id
+                where link.organization_id = return_case.organization_id
+                  and link.return_case_id = return_case.id
+                  and linked_refund.status <> 'COMPLETED'
+              ) then 'RESOLVED'
+            else return_case.case_status
+          end,
+          resolved_at = case
+            when return_case.inspection_status = 'COMPLETED'
+              and not exists (
+                select 1
+                from returns.return_refund_links link
+                join payments.refunds linked_refund on linked_refund.id = link.refund_id
+                where link.organization_id = return_case.organization_id
+                  and link.return_case_id = return_case.id
+                  and linked_refund.status <> 'COMPLETED'
+              ) then coalesce(return_case.resolved_at, now())
+            else return_case.resolved_at
           end,
           updated_at = now(), version = version + 1
       where return_case.organization_id = ${input.organizationId}

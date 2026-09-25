@@ -37,6 +37,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('PAYMENT_VERIFIED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
       ('ORDER_DISPATCHED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
       ('DELIVERY_COMPLETED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
+      ('DELIVERY_ATTEMPT_FAILED','OPTIONAL',array['IN_APP','EMAIL']),
+      ('DELIVERY_FAILED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
+      ('DELIVERY_RTO_INITIATED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
+      ('RETURN_AUTHORIZED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
+      ('RETURN_REJECTED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
+      ('RETURN_RECEIVED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
       ('REFUND_COMPLETED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
       ('REVIEW_VISIBLE','OPTIONAL',array['IN_APP','EMAIL'])
       on conflict(notification_type) do update set delivery_requirement=excluded.delivery_requirement,channels=excluded.channels,updated_at=now();

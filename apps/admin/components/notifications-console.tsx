@@ -42,6 +42,35 @@ type Integrations = {
   webhooks: readonly Row[];
   webhookDeliveries: readonly Row[];
 };
+type PathaoAccount = {
+  accountId: string;
+  name: string;
+  environment: 'SANDBOX' | 'PRODUCTION';
+  status: string;
+  connectionStatus: 'NOT_CHECKED' | 'CONNECTED' | 'ERROR';
+  lastValidatedAt?: string;
+  defaultDeliveryService: 'NORMAL' | 'ON_DEMAND';
+  defaultItemType: 'DOCUMENT' | 'PARCEL';
+  hasCredentials: boolean;
+};
+type PathaoData = {
+  accounts: readonly PathaoAccount[];
+  selectedAccountId?: string;
+  stores: readonly {
+    id: string;
+    externalStoreId: string;
+    name: string;
+    address?: string;
+    isActive: boolean;
+    isDefault: boolean;
+  }[];
+  mappings: readonly {
+    locationId: string;
+    locationName: string;
+    locationCode: string;
+    providerStoreId?: string;
+  }[];
+};
 
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`/api${path}`, {
@@ -138,6 +167,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
   const [notifications, setNotifications] = useState<readonly Notification[]>([]);
   const [preferences, setPreferences] = useState<readonly Preference[]>([]);
   const [integrationData, setIntegrationData] = useState<Integrations>();
+  const [pathaoData, setPathaoData] = useState<PathaoData>();
   const [filter, setFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('Loading…');
@@ -148,7 +178,12 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
   const reload = useCallback(async () => {
     try {
       if (integrations) {
-        setIntegrationData((await request<ApiEnvelope<Integrations>>('/admin/integrations')).data);
+        const [general, pathao] = await Promise.all([
+          request<ApiEnvelope<Integrations>>('/admin/integrations'),
+          request<ApiEnvelope<PathaoData>>('/admin/integrations/pathao'),
+        ]);
+        setIntegrationData(general.data);
+        setPathaoData(pathao.data);
       } else {
         const [inbox, preferenceRows] = await Promise.all([
           request<ApiEnvelope<readonly Notification[]>>('/admin/notifications'),
@@ -207,6 +242,44 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
       await reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Reconciliation was rejected.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runPathaoAction = async (action: 'check-connection' | 'stores/sync') => {
+    const accountId = pathaoData?.selectedAccountId;
+    if (!accountId) return;
+    setBusy(true);
+    try {
+      await request(`/admin/integrations/pathao/${accountId}/${action}`, { method: 'POST' });
+      setMessage(
+        action === 'check-connection'
+          ? 'Pathao connection verified.'
+          : 'Pathao Stores synchronized.',
+      );
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Pathao operation failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const togglePathao = async () => {
+    const account = pathaoData?.accounts[0];
+    if (!account) return;
+    setBusy(true);
+    try {
+      const nextStatus = account.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+      await request(`/admin/integrations/pathao/${account.accountId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      setMessage(`Pathao account ${nextStatus === 'ACTIVE' ? 'enabled' : 'disabled'}.`);
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Pathao status could not be changed.');
     } finally {
       setBusy(false);
     }
@@ -280,6 +353,197 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                 I have stored it safely
               </button>
             </aside>
+          ) : null}
+          <form
+            className="command-panel integration-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const form = event.currentTarget;
+              const data = new FormData(form);
+              setBusy(true);
+              try {
+                await request('/admin/integrations/pathao', {
+                  method: 'PUT',
+                  body: JSON.stringify({
+                    ...(pathaoData?.selectedAccountId
+                      ? { accountId: pathaoData.selectedAccountId }
+                      : {}),
+                    name: String(data.get('name')),
+                    environment: String(data.get('environment')),
+                    defaultDeliveryService: String(data.get('defaultDeliveryService')),
+                    defaultItemType: String(data.get('defaultItemType')),
+                    clientId: String(data.get('clientId')),
+                    clientSecret: String(data.get('clientSecret')),
+                    username: String(data.get('username')),
+                    password: String(data.get('password')),
+                  }),
+                });
+                form.reset();
+                setMessage('Pathao credentials were encrypted and saved server-side.');
+                await reload();
+              } catch (cause) {
+                setError(cause instanceof Error ? cause.message : 'Pathao configuration failed.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <div>
+              <p className="eyebrow">Connected courier</p>
+              <h2>Pathao Courier</h2>
+              <p>
+                Credentials are write-only. Sandbox and Production accounts keep separate tokens,
+                Stores, and consignments.
+              </p>
+              {pathaoData?.accounts[0] ? (
+                <p>
+                  <StatusBadge status={pathaoData.accounts[0].connectionStatus} />{' '}
+                  {pathaoData.accounts[0].environment} · {pathaoData.accounts[0].name}
+                </p>
+              ) : null}
+            </div>
+            <label>
+              Account name
+              <input
+                name="name"
+                required
+                maxLength={120}
+                defaultValue={pathaoData?.accounts[0]?.name ?? 'Pathao Courier'}
+              />
+            </label>
+            <label>
+              Environment
+              <select
+                name="environment"
+                defaultValue={pathaoData?.accounts[0]?.environment ?? 'SANDBOX'}
+              >
+                <option value="SANDBOX">Sandbox / Test</option>
+                <option value="PRODUCTION">Production / Live</option>
+              </select>
+            </label>
+            <label>
+              Default delivery service
+              <select
+                name="defaultDeliveryService"
+                defaultValue={pathaoData?.accounts[0]?.defaultDeliveryService ?? 'NORMAL'}
+              >
+                <option value="NORMAL">Normal</option>
+                <option value="ON_DEMAND">On demand</option>
+              </select>
+            </label>
+            <label>
+              Default item type
+              <select
+                name="defaultItemType"
+                defaultValue={pathaoData?.accounts[0]?.defaultItemType ?? 'PARCEL'}
+              >
+                <option value="PARCEL">Parcel</option>
+                <option value="DOCUMENT">Document</option>
+              </select>
+            </label>
+            <label>
+              Client ID
+              <input name="clientId" required autoComplete="off" />
+            </label>
+            <label>
+              Client secret
+              <input name="clientSecret" required type="password" autoComplete="new-password" />
+            </label>
+            <label>
+              Merchant username
+              <input name="username" required autoComplete="off" />
+            </label>
+            <label>
+              Merchant password
+              <input name="password" required type="password" autoComplete="new-password" />
+            </label>
+            <div className="inline-actions">
+              <button disabled={busy} type="submit">
+                {pathaoData?.selectedAccountId ? 'Replace credentials' : 'Connect Pathao'}
+              </button>
+              {pathaoData?.selectedAccountId ? (
+                <>
+                  <button
+                    disabled={busy}
+                    className="secondary"
+                    type="button"
+                    onClick={() => void runPathaoAction('check-connection')}
+                  >
+                    Check connection
+                  </button>
+                  <button
+                    disabled={busy}
+                    className="secondary"
+                    type="button"
+                    onClick={() => void runPathaoAction('stores/sync')}
+                  >
+                    Sync Stores
+                  </button>
+                  <button
+                    disabled={busy}
+                    className="secondary"
+                    type="button"
+                    onClick={togglePathao}
+                  >
+                    {pathaoData.accounts[0]?.status === 'ACTIVE'
+                      ? 'Disable Pathao'
+                      : 'Enable Pathao'}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </form>
+          {pathaoData?.selectedAccountId && pathaoData.mappings.length ? (
+            <section className="integration-section">
+              <div className="section-heading">
+                <h2>Pathao pickup Store mapping</h2>
+                <span>
+                  {pathaoData.stores.filter((store) => store.isActive).length} active Stores
+                </span>
+              </div>
+              <div className="integration-form">
+                {pathaoData.mappings.map((mapping) => (
+                  <label key={mapping.locationId}>
+                    {mapping.locationName} ({mapping.locationCode})
+                    <select
+                      value={mapping.providerStoreId ?? ''}
+                      disabled={busy || !pathaoData.stores.some((store) => store.isActive)}
+                      onChange={async (event) => {
+                        if (!event.target.value || !pathaoData.selectedAccountId) return;
+                        setBusy(true);
+                        try {
+                          await request(
+                            `/admin/integrations/pathao/${pathaoData.selectedAccountId}/store-mappings/${mapping.locationId}`,
+                            {
+                              method: 'PUT',
+                              body: JSON.stringify({ providerStoreId: event.target.value }),
+                            },
+                          );
+                          setMessage('Fulfillment location mapped to a Pathao Store.');
+                          await reload();
+                        } catch (cause) {
+                          setError(
+                            cause instanceof Error ? cause.message : 'Store mapping failed.',
+                          );
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      <option value="">Select an active Pathao Store</option>
+                      {pathaoData.stores
+                        .filter((store) => store.isActive)
+                        .map((store) => (
+                          <option key={store.id} value={store.id}>
+                            {store.name}
+                            {store.isDefault ? ' (default)' : ''}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </section>
           ) : null}
           <form
             className="command-panel integration-form"
@@ -390,11 +654,15 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
             </StatsCard>
             <StatsCard>
               <StatsTitle>Failed delivery</StatsTitle>
-              <StatsValue>{notifications.filter((item) => item.status === 'FAILED').length}</StatsValue>
+              <StatsValue>
+                {notifications.filter((item) => item.status === 'FAILED').length}
+              </StatsValue>
             </StatsCard>
             <StatsCard>
               <StatsTitle>Pending</StatsTitle>
-              <StatsValue>{notifications.filter((item) => item.status === 'PENDING').length}</StatsValue>
+              <StatsValue>
+                {notifications.filter((item) => item.status === 'PENDING').length}
+              </StatsValue>
             </StatsCard>
             <StatsCard>
               <StatsTitle>Recent total</StatsTitle>

@@ -180,6 +180,9 @@ importers:
       '@maevelle/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@maevelle/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@maevelle/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -198,6 +201,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@maevelle/core':
+        specifier: workspace:*
+        version: link:../core
       '@maevelle/security':
         specifier: workspace:*
         version: link:../security

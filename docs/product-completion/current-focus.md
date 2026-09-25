@@ -2,58 +2,40 @@
 
 ## Active Area
 
-Admin Commerce — Orders & Customers
-
-## Why Now
-
-Orders and Customers are the selected module-completion area. The first
-foundation checkpoint repaired broken manual-order contracts, established
-explicit sales-channel and customer-source facts, hardened guest identity and
-tenant boundaries, and connected customer support context to authoritative
-order, payment, return, and refund history.
+Delivery / Fulfillment Operations
 
 ## Current Status / Substage
 
-`IMPLEMENTATION_COMPLETE / VERIFICATION_PENDING`
+`DELIVERY_IMPLEMENTATION_COMPLETE / EXTERNAL_CONFIGURATION_REQUIRED`
 
 ## Evidence Already Known
 
-Atomic checkout, immutable order/customer/address snapshots, stock
-reservations, payment intents, fulfillment/delivery links, cancellation,
-idempotency, audit, and outbox foundations already existed. Manual order entry
-now uses those same invariants and supports catalog pricing, explicit override
-reasons, payment method, stock location, delivery address, and Bangladesh
-social/phone channels. Customer creation and checkout identity use E.164 phone
-normalization and conservative matching; ambiguous identities remain separate
-for operator review. Admin detail views now expose accurate totals, recent
-orders, and commerce metrics, while failed delivery auto-completion remains
-retryable instead of being acknowledged early.
+The Delivery/Fulfillment implementation is complete. Pathao provides encrypted
+authentication/token refresh, Store sync/mapping, quote, durable booking,
+consignment tracking through polling, safe normalization, actual charge capture,
+COD mapping, and Returns-owned RTO behavior. Customer delivery history and
+explainable internal risk are available in Delivery and Customer workspaces.
 
 ## Immediate Objective
 
-Perform authenticated owner review of the completed Orders and Customers
-workflows at mobile, tablet/iPad, and desktop widths. Record only concrete
-follow-up defects; implementation work has no known open blocker.
+Configure owner-supplied Pathao Merchant sandbox credentials, map the intended
+pickup Store, and perform one controlled quote/booking/tracking smoke test.
 
 ## Last Completed Action
 
-Completed the Commerce implementation: multi-axis lifecycle worklists,
-controlled whole-line cancellation, audited pre-fulfillment address correction,
-Customer merge/anonymization, notes, source/date filtering, and responsive Admin
-controls. Fresh development/test baselines migrate successfully; 32 focused
-tests and Database/API/Admin builds pass.
+Rebuilt the disposable databases from the mutable baseline and passed 18 focused
+Fulfillment/Delivery/Returns/Pathao tests plus Database/API/Worker/Admin type
+checks and Admin/Storefront production builds.
 
 ## Important Constraints
 
-Preserve Orders as the commercial aggregate, Inventory as stock authority,
-Payments as collection/refund authority, Fulfillment as pick/pack authority,
-Delivery as shipment/outcome authority, and Returns as reverse-logistics
-authority. Keep historical snapshots immutable and preserve tenant isolation,
-capability authorization, exact money math, idempotency, optimistic
-concurrency, audit, outbox, and transaction boundaries.
+Do not move Inventory before physical handover, make provider calls inside a
+business transaction, retry unknown booking outcomes as new consignments, turn
+provider COD evidence directly into money truth, or make returned stock
+SELLABLE before inspection/disposition.
 
 ## Blockers / Owner Review
 
-No technical blocker is recorded. Authenticated owner review is still required
-for responsive manual order creation, order detail/actions, customer creation,
-customer detail/history, and the revised worklists.
+No Delivery-domain code blocker is recorded. Real Pathao connection and parcel
+verification require Merchant credentials/access not present in the repository.
+Owner visual review remains pending as a distinct review gate.

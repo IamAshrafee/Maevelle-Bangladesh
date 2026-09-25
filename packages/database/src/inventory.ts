@@ -759,43 +759,17 @@ export async function moveInventoryCondition(
       request: input,
     });
     if (started.replay) return started.replay as { transactionId: string; inventoryItemId: string };
-    await requireActiveLocationCapability(
-      transaction,
-      input.organizationId,
-      input.locationId,
-      'STOCK_HOLDING',
-    );
     const inventoryItemId = await ensureItem(transaction, input.organizationId, input.variantId);
-    const transactionId = await postTransaction(transaction, {
+    const transactionId = await moveInventoryConditionInTransaction(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
-      transactionType: 'CONDITION_CHANGE',
-      reasonCode: 'CONDITION_MOVE',
-      reasonText: input.reason,
-      idempotencyRecordId: started.recordId,
-      lines: [
-        {
-          inventoryItemId,
-          locationId: input.locationId,
-          condition: input.fromCondition,
-          quantityDelta: `-${input.quantity}`,
-        },
-        {
-          inventoryItemId,
-          locationId: input.locationId,
-          condition: input.toCondition,
-          quantityDelta: input.quantity,
-        },
-      ],
-    });
-    await moveCostPositionsInTransaction(transaction, {
-      organizationId: input.organizationId,
       inventoryItemId,
       locationId: input.locationId,
       fromCondition: input.fromCondition,
       toCondition: input.toCondition,
       quantity: input.quantity,
-      inventoryTransactionId: transactionId,
+      ...(input.reason ? { reason: input.reason } : {}),
+      ...(started.recordId ? { idempotencyRecordId: started.recordId } : {}),
     });
     const response = { transactionId, inventoryItemId };
     await completeIdempotency(
@@ -822,6 +796,71 @@ export async function moveInventoryCondition(
     });
     return response;
   });
+}
+
+/** Canonical in-transaction condition move used by inspection/disposition workflows. */
+export async function moveInventoryConditionInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    inventoryItemId: string;
+    locationId: string;
+    fromCondition: InventoryCondition;
+    toCondition: InventoryCondition;
+    quantity: string;
+    reason?: string;
+    idempotencyRecordId?: string;
+    referenceType?: string;
+    referenceId?: string;
+  },
+): Promise<string> {
+  assertQuantity(input.quantity);
+  if (input.fromCondition === input.toCondition)
+    throw new InventoryDomainError(
+      'VALIDATION_FAILED',
+      'Condition movement requires different conditions.',
+    );
+  await requireActiveLocationCapability(
+    transaction,
+    input.organizationId,
+    input.locationId,
+    'STOCK_HOLDING',
+  );
+  const transactionId = await postTransaction(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    transactionType: 'CONDITION_CHANGE',
+    reasonCode: 'CONDITION_MOVE',
+    reasonText: input.reason,
+    referenceType: input.referenceType,
+    referenceId: input.referenceId,
+    idempotencyRecordId: input.idempotencyRecordId,
+    lines: [
+      {
+        inventoryItemId: input.inventoryItemId,
+        locationId: input.locationId,
+        condition: input.fromCondition,
+        quantityDelta: `-${input.quantity}`,
+      },
+      {
+        inventoryItemId: input.inventoryItemId,
+        locationId: input.locationId,
+        condition: input.toCondition,
+        quantityDelta: input.quantity,
+      },
+    ],
+  });
+  await moveCostPositionsInTransaction(transaction, {
+    organizationId: input.organizationId,
+    inventoryItemId: input.inventoryItemId,
+    locationId: input.locationId,
+    fromCondition: input.fromCondition,
+    toCondition: input.toCondition,
+    quantity: input.quantity,
+    inventoryTransactionId: transactionId,
+  });
+  return transactionId;
 }
 
 export async function createInventoryReservation(

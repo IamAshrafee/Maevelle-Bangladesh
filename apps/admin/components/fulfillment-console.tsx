@@ -2,7 +2,7 @@
 
 import { ArrowRight, Boxes, PackageCheck, Truck, Warehouse } from 'lucide-react';
 import Link from 'next/link';
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 
@@ -55,7 +55,7 @@ const searchText = (item: Fulfillment) =>
   ].join(' ');
 const statusOf = (item: Fulfillment) => item.status;
 const referenceOf = (item: Fulfillment) => item.fulfillmentNumber;
-type FulfillmentAction = 'ready' | 'start-picking' | 'pack' | 'dispatch' | 'cancel';
+type FulfillmentAction = 'ready' | 'start-picking' | 'pack' | 'cancel';
 
 function nextActionFor(
   status: Fulfillment['status'],
@@ -63,7 +63,6 @@ function nextActionFor(
   if (status === 'DRAFT') return ['Mark ready', 'ready'];
   if (status === 'READY') return ['Start picking', 'start-picking'];
   if (status === 'PICKING') return ['Mark packed', 'pack'];
-  if (status === 'PACKED') return ['Dispatch and consume stock', 'dispatch'];
   return undefined;
 }
 
@@ -79,7 +78,7 @@ export function FulfillmentConsole() {
   const reload = useCallback(async () => {
     try {
       const [fulfillmentResult, locationResult] = await Promise.all([
-        request<ApiEnvelope<readonly Fulfillment[]>>('/admin/fulfillments'),
+        request<ApiEnvelope<readonly Fulfillment[]>>('/admin/fulfillments?pageSize=100'),
         request<ApiEnvelope<readonly WarehouseLocationDto[]>>('/admin/warehouse/locations'),
       ]);
       setFulfillments(fulfillmentResult.data);
@@ -121,13 +120,6 @@ export function FulfillmentConsole() {
 
   async function action(fulfillment: Fulfillment, actionName: FulfillmentAction) {
     if (
-      actionName === 'dispatch' &&
-      !window.confirm(
-        'Dispatch will physically consume reserved inventory and create immutable costing facts. Continue?',
-      )
-    )
-      return;
-    if (
       actionName === 'cancel' &&
       !window.confirm('Cancel this fulfillment? Its order reservation is retained.')
     )
@@ -136,9 +128,7 @@ export function FulfillmentConsole() {
     try {
       await request(`/admin/fulfillments/${fulfillment.id}/${actionName}`, {
         method: 'POST',
-        ...(actionName === 'dispatch' || actionName === 'cancel'
-          ? { headers: { 'idempotency-key': crypto.randomUUID() } }
-          : {}),
+        ...(actionName === 'cancel' ? { headers: { 'idempotency-key': crypto.randomUUID() } } : {}),
         body: JSON.stringify({ version: fulfillment.version }),
       });
       setMessage(`Fulfillment ${actionName.replace('-', ' ')} completed.`);
@@ -366,13 +356,13 @@ export function FulfillmentConsole() {
                   </div>
                 </section>
                 <div className="detail-actions">
-                  {selected.status === 'DISPATCHED' ? (
+                  {['PACKED', 'DISPATCHED'].includes(selected.status) ? (
                     <button
                       disabled={busy}
                       onClick={() => void createDelivery(selected)}
                       type="button"
                     >
-                      <Truck aria-hidden="true" /> Create delivery
+                      <Truck aria-hidden="true" /> Prepare delivery
                     </button>
                   ) : null}
                   {['DRAFT', 'READY', 'PICKING', 'PACKED'].includes(selected.status) ? (

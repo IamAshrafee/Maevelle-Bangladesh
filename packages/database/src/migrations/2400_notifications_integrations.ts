@@ -61,6 +61,72 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
       unique(organization_id,id), foreign key(organization_id,integration_id) references integrations.integrations(organization_id,id)
     );
+    create table integrations.provider_credentials (
+      integration_account_id uuid primary key references integrations.integration_accounts(id) on delete restrict,
+      organization_id uuid not null references platform.organizations(id),
+      secret_ciphertext text not null,
+      secret_key_id text not null,
+      credential_version bigint not null default 1,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      foreign key(organization_id,integration_account_id) references integrations.integration_accounts(organization_id,id)
+    );
+    create table integrations.oauth_token_states (
+      integration_account_id uuid primary key references integrations.integration_accounts(id) on delete restrict,
+      organization_id uuid not null references platform.organizations(id),
+      access_token_ciphertext text not null,
+      refresh_token_ciphertext text,
+      secret_key_id text not null,
+      token_type text not null default 'Bearer',
+      expires_at timestamptz not null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1,
+      foreign key(organization_id,integration_account_id) references integrations.integration_accounts(organization_id,id)
+    ) with (fillfactor=90);
+    create index oauth_token_states_expiry on integrations.oauth_token_states(expires_at,integration_account_id);
+    create table integrations.courier_provider_stores (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      integration_account_id uuid not null references integrations.integration_accounts(id),
+      provider_code text not null,
+      external_store_id text not null,
+      name text not null,
+      contact_name text,
+      contact_phone text,
+      address text,
+      external_city_id text,
+      external_zone_id text,
+      external_area_id text,
+      is_active boolean not null default true,
+      is_default boolean not null default false,
+      is_default_return boolean not null default false,
+      provider_metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(provider_metadata)='object'),
+      last_synced_at timestamptz not null default now(),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique(integration_account_id,external_store_id),
+      unique(organization_id,id),
+      foreign key(organization_id,integration_account_id) references integrations.integration_accounts(organization_id,id)
+    );
+    create unique index courier_provider_stores_one_default
+      on integrations.courier_provider_stores(integration_account_id) where is_default and is_active;
+    create index courier_provider_stores_account
+      on integrations.courier_provider_stores(organization_id,integration_account_id,is_active,name);
+    create table integrations.courier_pickup_store_mappings (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      integration_account_id uuid not null references integrations.integration_accounts(id),
+      location_id uuid not null references warehouse.locations(id),
+      provider_store_id uuid not null references integrations.courier_provider_stores(id),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique(integration_account_id,location_id),
+      unique(organization_id,id),
+      foreign key(organization_id,integration_account_id) references integrations.integration_accounts(organization_id,id),
+      foreign key(organization_id,location_id) references warehouse.locations(organization_id,id),
+      foreign key(organization_id,provider_store_id) references integrations.courier_provider_stores(organization_id,id)
+    );
     create table integrations.external_entity_mappings (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), integration_account_id uuid not null references integrations.integration_accounts(id),
       local_entity_type text not null, local_entity_id uuid not null, external_entity_type text not null, external_entity_id text not null, created_at timestamptz not null default now(),
@@ -72,6 +138,34 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       external_reference text, attempt_count integer not null default 0 check(attempt_count>=0), last_attempt_at timestamptz, reconcile_after timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
       unique(integration_account_id,operation_type,operation_key), unique(organization_id,id)
     );
+    alter table delivery.courier_bookings
+      add column integration_account_id uuid,
+      add column integration_operation_id uuid,
+      add foreign key (organization_id, integration_account_id) references integrations.integration_accounts(organization_id, id),
+      add foreign key (organization_id, integration_operation_id) references integrations.integration_operations(organization_id, id);
+    create index courier_bookings_integration_account on delivery.courier_bookings (organization_id, integration_account_id, updated_at desc) where integration_account_id is not null;
+    create table delivery.courier_quotes (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      delivery_id uuid not null references delivery.deliveries(id),
+      integration_account_id uuid not null references integrations.integration_accounts(id),
+      provider_code text not null,
+      currency_code text not null check(currency_code ~ '^[A-Z]{3}$'),
+      base_amount numeric(20,4),
+      discount_amount numeric(20,4),
+      cod_fee_amount numeric(20,4),
+      additional_charge_amount numeric(20,4),
+      final_amount numeric(20,4) not null check(final_amount>=0),
+      provider_quote_reference text,
+      request_snapshot jsonb not null default '{}'::jsonb check(jsonb_typeof(request_snapshot)='object'),
+      provider_metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(provider_metadata)='object'),
+      quoted_at timestamptz not null default now(),
+      expires_at timestamptz,
+      unique(organization_id,id),
+      foreign key(organization_id,delivery_id) references delivery.deliveries(organization_id,id),
+      foreign key(organization_id,integration_account_id) references integrations.integration_accounts(organization_id,id)
+    );
+    create index courier_quotes_delivery on delivery.courier_quotes(organization_id,delivery_id,quoted_at desc);
     create table integrations.integration_exceptions (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), integration_account_id uuid not null references integrations.integration_accounts(id), integration_operation_id uuid references integrations.integration_operations(id),
       exception_type text not null, severity text not null check(severity in ('INFO','WARNING','ERROR','CRITICAL')), status text not null default 'OPEN' check(status in ('OPEN','RESOLVED','IGNORED_WITH_REASON')),

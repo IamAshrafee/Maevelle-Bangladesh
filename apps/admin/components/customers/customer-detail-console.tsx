@@ -15,6 +15,26 @@ import { AddAddressDialog } from './add-address-dialog';
 import { EditAddressDialog } from './edit-address-dialog';
 import { CustomerIdentityActions } from './customer-identity-actions';
 
+interface DeliveryHistory {
+  eligibleDeliveries: number;
+  deliveredCount: number;
+  failedDeliveryCount: number;
+  rtoCount: number;
+  successRate: number | null;
+  rtoRate: number | null;
+  risk: {
+    level: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
+    reasons: readonly { code: string; explanation: string }[];
+  };
+  recentOutcomes: readonly {
+    deliveryId: string;
+    deliveryNumber: string;
+    providerCode?: string;
+    outcome: string;
+    occurredAt: string;
+  }[];
+}
+
 export function CustomerDetailConsole({ customerId }: { readonly customerId: string }) {
   const [customer, setCustomer] = useState<CustomerDetailDto>();
   const [orders, setOrders] = useState<
@@ -29,16 +49,19 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
   >([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
+  const [deliveryHistory, setDeliveryHistory] = useState<DeliveryHistory>();
 
   async function load() {
     setState('loading');
     try {
-      const [data, recentOrders] = await Promise.all([
+      const [data, recentOrders, history] = await Promise.all([
         fetchApiData<CustomerDetailDto>(`/admin/customers/${customerId}`),
         fetchApiData<typeof orders>(`/admin/customers/${customerId}/orders?limit=10`),
+        fetchApiData<DeliveryHistory>(`/admin/customers/${customerId}/delivery-history`),
       ]);
       setCustomer(data);
       setOrders(recentOrders);
+      setDeliveryHistory(history);
       setMessage('');
       setState('ready');
     } catch (error) {
@@ -205,6 +228,37 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
 
         {/* Right Column - Contact & Meta */}
         <div className="space-y-6">
+          {deliveryHistory ? (
+            <section className="rounded-xl border bg-card shadow-sm">
+              <div className="flex items-center justify-between border-b px-6 py-4">
+                <h2 className="text-lg font-medium">Delivery history</h2>
+                <StatusBadge status={deliveryHistory.risk.level} />
+              </div>
+              <dl className="grid grid-cols-2 gap-4 px-6 py-4 text-sm">
+                <div>
+                  <dt className="text-muted-foreground">Delivered</dt>
+                  <dd className="mt-1 text-lg font-semibold">{deliveryHistory.deliveredCount}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">RTO</dt>
+                  <dd className="mt-1 text-lg font-semibold">{deliveryHistory.rtoCount}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Success rate</dt>
+                  <dd className="mt-1 font-semibold">{deliveryHistory.successRate ?? '—'}%</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">RTO rate</dt>
+                  <dd className="mt-1 font-semibold">{deliveryHistory.rtoRate ?? '—'}%</dd>
+                </div>
+              </dl>
+              {deliveryHistory.risk.reasons[0] ? (
+                <p className="border-t px-6 py-4 text-sm text-muted-foreground">
+                  {deliveryHistory.risk.reasons[0].explanation}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="border-b px-6 py-4">
               <h2 className="text-lg font-medium">Commerce summary</h2>

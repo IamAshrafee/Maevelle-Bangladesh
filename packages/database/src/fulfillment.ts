@@ -141,7 +141,11 @@ async function emit(
     targetId: input.fulfillmentId,
     metadata: input.metadata,
   });
-  await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at) values (${input.organizationId}, ${input.eventType}, 1, 'fulfillment.fulfillment', ${input.fulfillmentId}::uuid, 1, ${JSON.stringify({ fulfillmentId: input.fulfillmentId })}::jsonb, now())`.execute(
+  await sql`insert into platform.outbox_events (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
+    select fulfillment.organization_id,${input.eventType},1,'fulfillment.fulfillment',fulfillment.id,fulfillment.version,
+      jsonb_build_object('fulfillmentId',fulfillment.id,'orderId',fulfillment.order_id),now()
+    from fulfillment.fulfillments fulfillment
+    where fulfillment.organization_id=${input.organizationId} and fulfillment.id=${input.fulfillmentId}`.execute(
     db,
   );
 }
@@ -218,14 +222,63 @@ export async function listFulfillments(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
 ): Promise<readonly FulfillmentView[]> {
-  const ids = await sql<{
-    id: string;
-  }>`select id from fulfillment.fulfillments where organization_id = ${organizationId} order by created_at desc, id desc limit 100`.execute(
-    db,
-  );
-  return Promise.all(
+  return (await listFulfillmentPage(db, organizationId, { pageSize: 100 })).items;
+}
+
+export async function listFulfillmentPage(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  filters: {
+    readonly page?: number;
+    readonly pageSize?: number;
+    readonly search?: string;
+    readonly status?: FulfillmentStatus;
+  } = {},
+): Promise<{
+  readonly items: readonly FulfillmentView[];
+  readonly pagination: {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+  };
+}> {
+  const page = Math.max(1, Math.trunc(filters.page ?? 1));
+  const pageSize = Math.min(100, Math.max(1, Math.trunc(filters.pageSize ?? 25)));
+  const offset = (page - 1) * pageSize;
+  const search = filters.search?.trim() || null;
+  const status = filters.status ?? null;
+  const [ids, total] = await Promise.all([
+    sql<{ id: string }>`select fulfillment.id
+      from fulfillment.fulfillments fulfillment
+      join orders.orders order_row on order_row.id=fulfillment.order_id and order_row.organization_id=fulfillment.organization_id
+      where fulfillment.organization_id=${organizationId}
+        and (${status}::text is null or fulfillment.status=${status})
+        and (${search}::text is null or fulfillment.fulfillment_number ilike '%'||${search}||'%'
+          or order_row.order_number ilike '%'||${search}||'%')
+      order by fulfillment.created_at desc,fulfillment.id desc
+      limit ${pageSize} offset ${offset}`.execute(db),
+    sql<{ total: string }>`select count(*)::text as total
+      from fulfillment.fulfillments fulfillment
+      join orders.orders order_row on order_row.id=fulfillment.order_id and order_row.organization_id=fulfillment.organization_id
+      where fulfillment.organization_id=${organizationId}
+        and (${status}::text is null or fulfillment.status=${status})
+        and (${search}::text is null or fulfillment.fulfillment_number ilike '%'||${search}||'%'
+          or order_row.order_number ilike '%'||${search}||'%')`.execute(db),
+  ]);
+  const totalItems = Number(total.rows[0]?.total ?? 0);
+  const items = await Promise.all(
     ids.rows.map((row) => getFulfillment(db, { organizationId, fulfillmentId: row.id })),
   );
+  return {
+    items,
+    pagination: {
+      page,
+      pageSize,
+      totalItems,
+      totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+    },
+  };
 }
 
 export async function createFulfillment(
@@ -441,30 +494,66 @@ export async function dispatchFulfillment(
         fulfillmentId: replay.fulfillmentId,
       });
     }
-    const current = await sql<{
-      status: FulfillmentStatus;
-      version: string;
-    }>`select status, version::text from fulfillment.fulfillments where organization_id = ${input.organizationId} and id = ${input.fulfillmentId} for update`.execute(
+    await dispatchFulfillmentInTransaction(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      fulfillmentId: input.fulfillmentId,
+      expectedVersion: input.expectedVersion,
+      ...(input.fault ? { fault: input.fault } : {}),
+    });
+    await completeIdempotency(
       transaction,
+      started.recordId!,
+      'fulfillment.fulfillment',
+      input.fulfillmentId,
+      { fulfillmentId: input.fulfillmentId },
     );
-    const row = current.rows[0];
-    if (!row) throw new FulfillmentDomainError('NOT_FOUND', 'Fulfillment was not found.');
-    if (Number(row.version) !== input.expectedVersion)
-      throw new FulfillmentDomainError(
-        'STALE_VERSION',
-        'Fulfillment has changed; reload before dispatching.',
-      );
-    if (row.status !== 'PACKED')
-      throw new FulfillmentDomainError(
-        'INVALID_TRANSITION',
-        'Only a packed fulfillment may be dispatched.',
-      );
-    const allocations = await sql<{
-      fulfillment_line_id: string;
-      reservation_allocation_id: string;
-      quantity: string;
-      quantity_consumed: string;
-    }>`
+    return getFulfillment(transaction, {
+      organizationId: input.organizationId,
+      fulfillmentId: input.fulfillmentId,
+    });
+  });
+}
+
+/**
+ * Published Fulfillment boundary for a Delivery handover. The surrounding
+ * transaction owns idempotency while Fulfillment keeps inventory and costing
+ * side effects atomic with the physical dispatch state transition.
+ */
+export async function dispatchFulfillmentInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    fulfillmentId: string;
+    expectedVersion?: number;
+    fault?: () => void;
+  },
+): Promise<void> {
+  const current = await sql<{
+    status: FulfillmentStatus;
+    version: string;
+  }>`select status, version::text from fulfillment.fulfillments where organization_id = ${input.organizationId} and id = ${input.fulfillmentId} for update`.execute(
+    transaction,
+  );
+  const row = current.rows[0];
+  if (!row) throw new FulfillmentDomainError('NOT_FOUND', 'Fulfillment was not found.');
+  if (input.expectedVersion !== undefined && Number(row.version) !== input.expectedVersion)
+    throw new FulfillmentDomainError(
+      'STALE_VERSION',
+      'Fulfillment has changed; reload before dispatching.',
+    );
+  if (row.status !== 'PACKED')
+    throw new FulfillmentDomainError(
+      'INVALID_TRANSITION',
+      'Only a packed fulfillment may be dispatched.',
+    );
+  const allocations = await sql<{
+    fulfillment_line_id: string;
+    reservation_allocation_id: string;
+    quantity: string;
+    quantity_consumed: string;
+  }>`
       select allocation.fulfillment_line_id, allocation.reservation_allocation_id, line.quantity::text,
         allocation.quantity_consumed::text
       from inventory.fulfillment_inventory_allocations allocation
@@ -473,59 +562,47 @@ export async function dispatchFulfillment(
       order by allocation.reservation_allocation_id
       for update of allocation, line
     `.execute(transaction);
-    for (const allocation of allocations.rows) {
-      if (Number(allocation.quantity_consumed) !== 0)
-        throw new FulfillmentDomainError('CONFLICT', 'Fulfillment inventory was already consumed.');
-      try {
-        const consumed = await consumeReservationAllocationInTransaction(transaction, {
-          organizationId: input.organizationId,
-          actorId: input.actorId,
-          reservationAllocationId: allocation.reservation_allocation_id,
-          quantity: allocation.quantity,
-          fulfillmentId: input.fulfillmentId,
-        });
-        await sql`update inventory.fulfillment_inventory_allocations set quantity_consumed = ${consumed.consumed}::numeric, inventory_transaction_id = ${consumed.inventoryTransactionId}::uuid, version = version + 1, updated_at = now() where fulfillment_line_id = ${allocation.fulfillment_line_id} and reservation_allocation_id = ${allocation.reservation_allocation_id}`.execute(
-          transaction,
-        );
-      } catch (error) {
-        if (error instanceof InventoryDomainError)
-          throw new FulfillmentDomainError('CONFLICT', error.message);
-        throw error;
-      }
-    }
+  for (const allocation of allocations.rows) {
+    if (Number(allocation.quantity_consumed) !== 0)
+      throw new FulfillmentDomainError('CONFLICT', 'Fulfillment inventory was already consumed.');
     try {
-      await assignOutboundCostsForFulfillmentInTransaction(transaction, {
+      const consumed = await consumeReservationAllocationInTransaction(transaction, {
         organizationId: input.organizationId,
+        actorId: input.actorId,
+        reservationAllocationId: allocation.reservation_allocation_id,
+        quantity: allocation.quantity,
         fulfillmentId: input.fulfillmentId,
       });
+      await sql`update inventory.fulfillment_inventory_allocations set quantity_consumed = ${consumed.consumed}::numeric, inventory_transaction_id = ${consumed.inventoryTransactionId}::uuid, version = version + 1, updated_at = now() where fulfillment_line_id = ${allocation.fulfillment_line_id} and reservation_allocation_id = ${allocation.reservation_allocation_id}`.execute(
+        transaction,
+      );
     } catch (error) {
-      if (error instanceof CostingDomainError)
+      if (error instanceof InventoryDomainError)
         throw new FulfillmentDomainError('CONFLICT', error.message);
       throw error;
     }
-    input.fault?.();
-    await sql`update fulfillment.fulfillments set status = 'DISPATCHED', dispatched_at = now(), version = version + 1, updated_at = now() where id = ${input.fulfillmentId}`.execute(
-      transaction,
-    );
-    await completeIdempotency(
-      transaction,
-      started.recordId!,
-      'fulfillment.fulfillment',
-      input.fulfillmentId,
-      { fulfillmentId: input.fulfillmentId },
-    );
-    await emit(transaction, {
-      organizationId: input.organizationId,
-      actorId: input.actorId,
-      action: 'fulfillment.fulfillment.dispatched',
-      eventType: 'fulfillment.dispatched',
-      fulfillmentId: input.fulfillmentId,
-      metadata: { physicalInventoryConsumed: true },
-    });
-    return getFulfillment(transaction, {
+  }
+  try {
+    await assignOutboundCostsForFulfillmentInTransaction(transaction, {
       organizationId: input.organizationId,
       fulfillmentId: input.fulfillmentId,
     });
+  } catch (error) {
+    if (error instanceof CostingDomainError)
+      throw new FulfillmentDomainError('CONFLICT', error.message);
+    throw error;
+  }
+  input.fault?.();
+  await sql`update fulfillment.fulfillments set status = 'DISPATCHED', dispatched_at = now(), version = version + 1, updated_at = now() where id = ${input.fulfillmentId}`.execute(
+    transaction,
+  );
+  await emit(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    action: 'fulfillment.fulfillment.dispatched',
+    eventType: 'fulfillment.dispatched',
+    fulfillmentId: input.fulfillmentId,
+    metadata: { physicalInventoryConsumed: true },
   });
 }
 

@@ -3,13 +3,18 @@ import { Type } from 'typebox';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   authorizeReturnCase,
+  cancelReturnCase,
   createReturnCase,
+  createReverseShipment,
+  decideReturnAuthorization,
   getReturnCase,
   initiateRto,
+  inspectReturnReceiptLine,
   linkRefundToReturn,
-  listReturnCases,
+  listReturnCasePage,
   postReturnReceipt,
   ReturnDomainError,
+  transitionReturnTransport,
 } from '@maevelle/database/returns';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 import type { createAuth } from '../auth/auth.js';
@@ -46,11 +51,34 @@ export function registerReturnRoutes(
   database: DatabaseClient,
   auth: Auth,
 ): void {
-  app.get('/admin/returns', async (request, reply) => {
-    const active = await admin(database, auth, request.headers, 'returns.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listReturnCases(database.db, active.organizationId) };
-  });
+  app.get(
+    '/admin/returns',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          search: Type.Optional(Type.String()),
+          caseType: Type.Optional(
+            Type.Union([Type.Literal('CUSTOMER_RETURN'), Type.Literal('RTO')]),
+          ),
+          status: Type.Optional(
+            Type.Union([Type.Literal('OPEN'), Type.Literal('RESOLVED'), Type.Literal('CANCELLED')]),
+          ),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'returns.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const result = await listReturnCasePage(
+        database.db,
+        active.organizationId,
+        request.query as Parameters<typeof listReturnCasePage>[2],
+      );
+      return { data: result.items, meta: { pagination: result.pagination } };
+    },
+  );
   app.get('/admin/returns/:id', async (request, reply) => {
     const active = await admin(database, auth, request.headers, 'returns.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -165,12 +193,6 @@ export function registerReturnRoutes(
           lines: Type.Array(
             Type.Object({
               returnLineId: Type.String(),
-              condition: Type.Union([
-                Type.Literal('SELLABLE'),
-                Type.Literal('DAMAGED'),
-                Type.Literal('QUARANTINE'),
-                Type.Literal('INSPECTION'),
-              ]),
               quantity: Type.String(),
             }),
           ),
@@ -191,10 +213,212 @@ export function registerReturnRoutes(
               idempotencyKey: string;
               lines: {
                 returnLineId: string;
-                condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
                 quantity: string;
               }[];
             }),
+          }),
+        });
+      } catch (error) {
+        return send(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/returns/:id/authorization',
+    {
+      schema: {
+        body: Type.Object({
+          expectedVersion: Type.Integer({ minimum: 1 }),
+          decision: Type.Union([Type.Literal('APPROVE'), Type.Literal('REJECT')]),
+          lines: Type.Optional(
+            Type.Array(Type.Object({ returnLineId: Type.String(), quantity: Type.String() })),
+          ),
+          reason: Type.Optional(Type.String()),
+          expiresAt: Type.Optional(Type.String()),
+          idempotencyKey: Type.String(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'returns.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          expectedVersion: number;
+          decision: 'APPROVE' | 'REJECT';
+          lines?: { returnLineId: string; quantity: string }[];
+          reason?: string;
+          expiresAt?: string;
+          idempotencyKey: string;
+        };
+        return {
+          data: await decideReturnAuthorization(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            returnCaseId: (request.params as { id: string }).id,
+            expectedVersion: body.expectedVersion,
+            decision: body.decision,
+            ...(body.lines ? { lines: body.lines } : {}),
+            ...(body.reason ? { reason: body.reason } : {}),
+            ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
+            idempotencyKey: body.idempotencyKey,
+          }),
+        };
+      } catch (error) {
+        return send(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/returns/:id/cancel',
+    {
+      schema: {
+        body: Type.Object({
+          expectedVersion: Type.Integer({ minimum: 1 }),
+          reason: Type.String(),
+          idempotencyKey: Type.String(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'returns.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          expectedVersion: number;
+          reason: string;
+          idempotencyKey: string;
+        };
+        return {
+          data: await cancelReturnCase(database.db, {
+            ...active,
+            returnCaseId: (request.params as { id: string }).id,
+            ...body,
+          }),
+        };
+      } catch (error) {
+        return send(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/returns/:id/reverse-shipments',
+    {
+      schema: {
+        body: Type.Object({
+          expectedVersion: Type.Integer({ minimum: 1 }),
+          providerCode: Type.String(),
+          trackingReference: Type.Optional(Type.String()),
+          externalConsignmentId: Type.Optional(Type.String()),
+          idempotencyKey: Type.String(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'returns.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          expectedVersion: number;
+          providerCode: string;
+          trackingReference?: string;
+          externalConsignmentId?: string;
+          idempotencyKey: string;
+        };
+        return reply.code(201).send({
+          data: await createReverseShipment(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            returnCaseId: (request.params as { id: string }).id,
+            expectedVersion: body.expectedVersion,
+            providerCode: body.providerCode,
+            ...(body.trackingReference ? { trackingReference: body.trackingReference } : {}),
+            ...(body.externalConsignmentId
+              ? { externalConsignmentId: body.externalConsignmentId }
+              : {}),
+            idempotencyKey: body.idempotencyKey,
+          }),
+        });
+      } catch (error) {
+        return send(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/returns/:id/transport',
+    {
+      schema: {
+        body: Type.Object({
+          expectedVersion: Type.Integer({ minimum: 1 }),
+          nextStatus: Type.Union([
+            Type.Literal('IN_TRANSIT'),
+            Type.Literal('ARRIVED'),
+            Type.Literal('LOST'),
+          ]),
+          idempotencyKey: Type.String(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'returns.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          expectedVersion: number;
+          nextStatus: 'IN_TRANSIT' | 'ARRIVED' | 'LOST';
+          idempotencyKey: string;
+        };
+        return {
+          data: await transitionReturnTransport(database.db, {
+            ...active,
+            returnCaseId: (request.params as { id: string }).id,
+            ...body,
+          }),
+        };
+      } catch (error) {
+        return send(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/return-receipt-lines/:id/inspect',
+    {
+      schema: {
+        body: Type.Object({
+          expectedVersion: Type.Integer({ minimum: 1 }),
+          quantity: Type.String(),
+          outcome: Type.Union([
+            Type.Literal('SELLABLE'),
+            Type.Literal('DAMAGED'),
+            Type.Literal('QUARANTINE'),
+            Type.Literal('REJECTED_RETURN'),
+          ]),
+          note: Type.Optional(Type.String()),
+          idempotencyKey: Type.String(),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'returns.receive');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          expectedVersion: number;
+          quantity: string;
+          outcome: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'REJECTED_RETURN';
+          note?: string;
+          idempotencyKey: string;
+        };
+        return reply.code(201).send({
+          data: await inspectReturnReceiptLine(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            returnReceiptLineId: (request.params as { id: string }).id,
+            expectedVersion: body.expectedVersion,
+            quantity: body.quantity,
+            outcome: body.outcome,
+            ...(body.note ? { note: body.note } : {}),
+            idempotencyKey: body.idempotencyKey,
           }),
         });
       } catch (error) {

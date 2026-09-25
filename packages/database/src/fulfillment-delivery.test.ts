@@ -18,12 +18,18 @@ import {
 } from './fulfillment.js';
 import type { FulfillmentDomainError } from './fulfillment.js';
 import {
+  completeCourierBookingOperation,
   createDelivery,
   dispatchDelivery,
+  getDelivery,
+  ingestCourierTrackingEvent,
+  listPendingCourierBookingOperations,
   markDelivered,
   markDeliveryFailed,
   recordManualCourierBooking,
+  requestCourierBooking,
 } from './delivery.js';
+import { getCustomerDeliveryHistory } from './delivery-intelligence.js';
 import {
   cancelOrder,
   createCheckout,
@@ -190,6 +196,171 @@ async function preparedFulfillment(
 }
 
 describe('outbound fulfillment, physical consumption, and delivery operations', () => {
+  it('claims one durable courier booking and consumes reserved stock only at physical handover', async () => {
+    const input = await fixture('4');
+    const order = await orderFor(input, '1');
+    const packed = await preparedFulfillment(input, order, '1');
+    const integration = await sql<{ id: string }>`insert into integrations.integrations
+      (organization_id,provider_code,integration_type,name,status)
+      values (${input.organizationId},'TEST_COURIER','COURIER','Test courier','ACTIVE') returning id`.execute(
+      database.db,
+    );
+    const account = await sql<{ id: string }>`insert into integrations.integration_accounts
+      (organization_id,integration_id,name,status,non_secret_config)
+      values (${input.organizationId},${integration.rows[0]!.id},'Primary account','ACTIVE','{"capabilities":{"cod":true}}'::jsonb)
+      returning id`.execute(database.db);
+    const delivery = await createDelivery(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      fulfillmentId: packed.id,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(await balances(input)).toEqual({ sellable: '4.000000', reserved: '1.000000' });
+
+    const bookingRequested = await requestCourierBooking(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: delivery.id,
+      expectedVersion: delivery.version,
+      integrationAccountId: account.rows[0]!.id,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(bookingRequested.operationalStatus).toBe('BOOKING');
+    const claimed = (await listPendingCourierBookingOperations(database.db)).find(
+      (operation) => operation.organizationId === input.organizationId,
+    );
+    expect(claimed).toBeDefined();
+    expect(
+      (await listPendingCourierBookingOperations(database.db)).some(
+        (operation) => operation.operationId === claimed!.operationId,
+      ),
+    ).toBe(false);
+    await completeCourierBookingOperation(database.db, {
+      organizationId: input.organizationId,
+      operationId: claimed!.operationId,
+      bookingId: claimed!.bookingId,
+      result: {
+        kind: 'BOOKED',
+        providerBookingId: `provider-${crypto.randomUUID()}`,
+        trackingReference: `track-${crypto.randomUUID()}`,
+      },
+    });
+    const booked = await getDelivery(database.db, {
+      organizationId: input.organizationId,
+      deliveryId: delivery.id,
+    });
+    expect(booked.operationalStatus).toBe('BOOKED');
+
+    const handedOver = await dispatchDelivery(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      deliveryId: delivery.id,
+      expectedVersion: booked.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(handedOver.operationalStatus).toBe('IN_TRANSIT');
+    expect(await balances(input)).toEqual({ sellable: '3.000000', reserved: '0.000000' });
+    expect(
+      (
+        await sql<{ count: string }>`select count(*)::text as count
+          from inventory.inventory_transactions
+          where organization_id=${input.organizationId} and transaction_type='FULFILLMENT_DISPATCH'`.execute(
+          database.db,
+        )
+      ).rows[0]!.count,
+    ).toBe('1');
+
+    const deliveredAt = new Date();
+    const providerDelivered = await ingestCourierTrackingEvent(database.db, {
+      organizationId: input.organizationId,
+      integrationAccountId: account.rows[0]!.id,
+      courierBookingId: claimed!.bookingId,
+      providerEventId: `evt-${crypto.randomUUID()}`,
+      providerStatus: 'delivered',
+      normalizedStatus: 'DELIVERED',
+      occurredAt: deliveredAt,
+      authenticationStatus: 'VERIFIED',
+      rawPayload: { status: 'delivered' },
+    });
+    expect(providerDelivered.delivery?.outcomeStatus).toBe('DELIVERED');
+    const staleEventId = `evt-${crypto.randomUUID()}`;
+    const stale = await ingestCourierTrackingEvent(database.db, {
+      organizationId: input.organizationId,
+      integrationAccountId: account.rows[0]!.id,
+      courierBookingId: claimed!.bookingId,
+      providerEventId: staleEventId,
+      providerStatus: 'failed',
+      normalizedStatus: 'FAILED',
+      occurredAt: new Date(deliveredAt.getTime() - 60_000),
+      authenticationStatus: 'VERIFIED',
+      rawPayload: { status: 'failed', eventId: staleEventId },
+    });
+    expect(stale.delivery?.outcomeStatus).toBe('DELIVERED');
+    expect(
+      await ingestCourierTrackingEvent(database.db, {
+        organizationId: input.organizationId,
+        integrationAccountId: account.rows[0]!.id,
+        courierBookingId: claimed!.bookingId,
+        providerEventId: staleEventId,
+        providerStatus: 'failed',
+        normalizedStatus: 'FAILED',
+        occurredAt: new Date(deliveredAt.getTime() - 60_000),
+        authenticationStatus: 'VERIFIED',
+        rawPayload: { status: 'failed', eventId: staleEventId },
+      }),
+    ).toEqual({ created: false });
+  });
+
+  it('uses the verified payment-ledger balance as the courier COD amount', async () => {
+    const input = await fixture('2');
+    const order = await orderFor(input, '1');
+    const packed = await preparedFulfillment(input, order, '1');
+    const method = await sql<{ id: string }>`select id from payments.payment_methods
+      where organization_id=${input.organizationId} and code='COD'`.execute(database.db);
+    const intent = await sql<{ id: string }>`select id from payments.payment_intents
+      where organization_id=${input.organizationId} and order_id=${order.order.id}
+      order by created_at desc limit 1`.execute(database.db);
+    const attempt = await sql<{ id: string }>`insert into payments.payment_attempts
+      (organization_id,payment_intent_id,customer_reference,normalized_reference,claimed_amount,
+        status,resolved_at,reviewed_by_actor_id)
+      values (${input.organizationId},${intent.rows[0]!.id},${`partial-${crypto.randomUUID()}`},
+        ${crypto.randomUUID()},290,'VERIFIED',now(),${input.actorId}) returning id`.execute(
+      database.db,
+    );
+    const payment = await sql<{ id: string }>`insert into payments.payments
+      (organization_id,payment_number,payment_method_id,currency_code,amount,external_reference,
+        normalized_external_reference,status,source_attempt_id,confirmed_by_actor_id)
+      values (${input.organizationId},${`PAY-${crypto.randomUUID()}`},${method.rows[0]!.id},'BDT',290,
+        ${`partial-${crypto.randomUUID()}`},${crypto.randomUUID()},'CONFIRMED',${attempt.rows[0]!.id},${input.actorId})
+      returning id`.execute(database.db);
+    await sql`insert into payments.payment_allocations
+      (organization_id,payment_id,order_id,order_number_snapshot,amount)
+      values (${input.organizationId},${payment.rows[0]!.id},${order.order.id},${order.order.orderNumber},290)`.execute(
+      database.db,
+    );
+
+    const delivery = await createDelivery(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      fulfillmentId: packed.id,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const cod = await sql<{
+      delivery_amount: string;
+      instruction_amount: string;
+    }>`select delivery.cod_expected_amount::text as delivery_amount,
+        instruction.expected_amount::text as instruction_amount
+      from delivery.deliveries delivery
+      join delivery.cod_collection_instructions instruction on instruction.delivery_id=delivery.id
+      where delivery.id=${delivery.id}`.execute(database.db);
+
+    expect(delivery.cod).toMatchObject({ required: true, expectedAmount: '1000.0000' });
+    expect(cod.rows[0]).toEqual({
+      delivery_amount: '1000.0000',
+      instruction_amount: '1000.0000',
+    });
+  });
+
   it('keeps order-owned reservations under the Order lifecycle authority', async () => {
     const input = await fixture('2');
     const order = await orderFor(input, '1');
@@ -348,6 +519,22 @@ describe('outbound fulfillment, physical consumption, and delivery operations', 
         'DELIVERED',
       ]),
     );
+    expect(
+      await getCustomerDeliveryHistory(database.db, {
+        organizationId: input.organizationId,
+        deliveryId: delivered.id,
+      }),
+    ).toMatchObject({
+      totalDeliveries: 1,
+      eligibleDeliveries: 1,
+      deliveredCount: 1,
+      rtoCount: 0,
+      successRate: 100,
+      risk: { level: 'INSUFFICIENT_HISTORY' },
+      externalProviderHistory: {
+        pathao: { available: false, reason: 'NO_OFFICIAL_API_DOCUMENTED' },
+      },
+    });
     expect(await balances(input)).toEqual({ sellable: '8.000000', reserved: '0.000000' });
     const payment = await sql<{
       count: string;

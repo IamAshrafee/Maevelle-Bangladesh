@@ -15,7 +15,10 @@ type ReturnCase = {
   case_type: string;
   case_status: string;
   authorization_status: string;
+  transport_status: string;
   receipt_status: string;
+  inspection_status: string;
+  commercial_resolution_status: string;
   version: string;
   created_at: string;
   order_id: string;
@@ -35,6 +38,15 @@ type ReturnDetail = ReturnCase & {
     received_quantity: string;
   }[];
   receipts: readonly { id: string; receipt_number: string; status: string; posted_at: string }[];
+  receiptLines: readonly {
+    id: string;
+    receipt_number: string;
+    version: string;
+    sku: string;
+    quantity: string;
+    inspected_quantity: string;
+    condition_code: string;
+  }[];
   refunds: readonly { id: string; refund_id: string; created_at: string }[];
   cogsRecovery: { total_cost: string; currency_code: string } | undefined;
 };
@@ -106,9 +118,9 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
     setLoading(true);
     try {
       const [caseRows, orderRows, deliveryRows, locationRows, refundRows] = await Promise.all([
-        request<ApiEnvelope<readonly ReturnCase[]>>('/admin/returns'),
+        request<ApiEnvelope<readonly ReturnCase[]>>('/admin/returns?pageSize=100'),
         request<ApiEnvelope<PaginatedEnvelope<OrderSummary>>>('/admin/orders'),
-        request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries'),
+        request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries?pageSize=100'),
         request<ApiEnvelope<readonly Location[]>>('/admin/warehouse/locations'),
         request<ApiEnvelope<PaginatedResultDto<Refund>>>('/admin/refunds?pageSize=100'),
       ]);
@@ -331,9 +343,9 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
               Reason
               <select name="reasonCode">
                 <option value="CUSTOMER_CHANGED_MIND">Customer changed mind</option>
-                <option value="DAMAGED">Damaged</option>
-                <option value="WRONG_ITEM">Wrong item</option>
-                <option value="SIZE_OR_FIT">Size or fit</option>
+                <option value="DAMAGED_ON_ARRIVAL">Damaged</option>
+                <option value="WRONG_ITEM_SENT">Wrong item</option>
+                <option value="WRONG_SIZE">Size or fit</option>
                 <option value="OTHER">Other</option>
               </select>
             </label>
@@ -431,11 +443,72 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
                   <dd>{selected.authorization_status.replaceAll('_', ' ')}</dd>
                 </div>
                 <div>
+                  <dt>Reverse transport</dt>
+                  <dd>{selected.transport_status.replaceAll('_', ' ')}</dd>
+                </div>
+                <div>
                   <dt>Receipt</dt>
                   <dd>{selected.receipt_status.replaceAll('_', ' ')}</dd>
                 </div>
+                <div>
+                  <dt>Inspection</dt>
+                  <dd>{selected.inspection_status.replaceAll('_', ' ')}</dd>
+                </div>
               </dl>
               {selected.reason_text ? <p>{selected.reason_text}</p> : null}
+              {selected.case_type === 'RTO' &&
+              ['EXPECTED', 'IN_TRANSIT'].includes(selected.transport_status) ? (
+                <section className="next-action-card">
+                  <div>
+                    <strong>Reverse transport</strong>
+                    <p>Track courier return transit separately from warehouse receipt.</p>
+                  </div>
+                  <div className="detail-actions">
+                    {selected.transport_status === 'EXPECTED' ? (
+                      <button
+                        disabled={busy}
+                        type="button"
+                        onClick={() =>
+                          void run(
+                            () =>
+                              request(`/admin/returns/${selected.id}/transport`, {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                  expectedVersion: Number(selected.version),
+                                  nextStatus: 'IN_TRANSIT',
+                                  idempotencyKey: crypto.randomUUID(),
+                                }),
+                              }),
+                            'RTO marked in return transit.',
+                          )
+                        }
+                      >
+                        Mark returning
+                      </button>
+                    ) : null}
+                    <button
+                      disabled={busy}
+                      type="button"
+                      onClick={() =>
+                        void run(
+                          () =>
+                            request(`/admin/returns/${selected.id}/transport`, {
+                              method: 'POST',
+                              body: JSON.stringify({
+                                expectedVersion: Number(selected.version),
+                                nextStatus: 'ARRIVED',
+                                idempotencyKey: crypto.randomUUID(),
+                              }),
+                            }),
+                          'RTO marked arrived; post warehouse receipt next.',
+                        )
+                      }
+                    >
+                      Mark courier arrived
+                    </button>
+                  </div>
+                </section>
+              ) : null}
               <h3>Return lines</h3>
               <div className="table-scroll">
                 <table>
@@ -501,13 +574,12 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
                             lines: [
                               {
                                 returnLineId: form.get('returnLineId'),
-                                condition: form.get('condition'),
                                 quantity: String(form.get('quantity')),
                               },
                             ],
                           }),
                         }),
-                      'Physical return receipt posted; Inventory and Costing were updated atomically.',
+                      'Physical receipt posted into inspection; Inventory and Costing were updated atomically.',
                     );
                   }}
                 >
@@ -539,15 +611,6 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
                     </select>
                   </label>
                   <label>
-                    Condition
-                    <select name="condition">
-                      <option>SELLABLE</option>
-                      <option>INSPECTION</option>
-                      <option>QUARANTINE</option>
-                      <option>DAMAGED</option>
-                    </select>
-                  </label>
-                  <label>
                     Receive now
                     <input name="quantity" type="number" min="0.0001" step="0.0001" required />
                   </label>
@@ -555,6 +618,77 @@ export function ReturnsConsole({ rto = false }: { rto?: boolean }) {
                     Review and post receipt
                   </button>
                 </form>
+              ) : null}
+              {selected.receiptLines.some(
+                (line) => Number(line.inspected_quantity) < Number(line.quantity),
+              ) ? (
+                <section>
+                  <h3>Inspection and disposition</h3>
+                  <p>
+                    Received stock remains unavailable until an explicit condition decision is
+                    posted.
+                  </p>
+                  {selected.receiptLines
+                    .filter((line) => Number(line.inspected_quantity) < Number(line.quantity))
+                    .map((line) => (
+                      <form
+                        className="command-panel"
+                        key={line.id}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const form = new FormData(event.currentTarget);
+                          void run(
+                            () =>
+                              request(`/admin/return-receipt-lines/${line.id}/inspect`, {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                  expectedVersion: Number(line.version),
+                                  quantity: String(form.get('quantity')),
+                                  outcome: form.get('outcome'),
+                                  note: form.get('note') || undefined,
+                                  idempotencyKey: crypto.randomUUID(),
+                                }),
+                              }),
+                            'Inspection and Inventory disposition posted.',
+                          );
+                        }}
+                      >
+                        <strong>
+                          {line.receipt_number} · {line.sku}
+                        </strong>
+                        <p>
+                          Remaining {Number(line.quantity) - Number(line.inspected_quantity)} in
+                          inspection
+                        </p>
+                        <label>
+                          Quantity
+                          <input
+                            name="quantity"
+                            type="number"
+                            min="0.0001"
+                            step="0.0001"
+                            required
+                          />
+                        </label>
+                        <label>
+                          Disposition
+                          <select name="outcome">
+                            <option value="SELLABLE">Restock as sellable</option>
+                            <option value="DAMAGED">Restock as damaged</option>
+                            <option value="QUARANTINE">Hold in quarantine</option>
+                            <option value="REJECTED_RETURN">Reject return</option>
+                          </select>
+                        </label>
+                        <label>
+                          Inspection note
+                          <textarea name="note" maxLength={1000} />
+                        </label>
+                        <button disabled={busy} type="submit">
+                          Post disposition
+                        </button>
+                      </form>
+                    ))}
+                </section>
               ) : null}
               <section>
                 <h3>Refund relationship</h3>

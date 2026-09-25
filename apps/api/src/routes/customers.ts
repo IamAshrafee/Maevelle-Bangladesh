@@ -27,6 +27,7 @@ import {
   anonymizeCustomer,
 } from '@maevelle/database/customers';
 import { searchGeography } from '@maevelle/database/geography';
+import { getCustomerDeliveryHistory } from '@maevelle/database/delivery-intelligence';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
@@ -297,6 +298,17 @@ export function registerCustomerRoutes(
     } catch (error) {
       return sendError(reply, error);
     }
+  });
+
+  app.get('/admin/customers/:customerId/delivery-history', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return {
+      data: await getCustomerDeliveryHistory(database.db, {
+        organizationId: active.organizationId,
+        customerId: (request.params as { customerId: string }).customerId,
+      }),
+    };
   });
 
   app.get(

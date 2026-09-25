@@ -24,12 +24,84 @@ interface Delivery {
   orderNumber: string;
   fulfillmentNumber: string;
   operationalStatus:
-    'READY' | 'BOOKED' | 'HANDED_OVER' | 'IN_TRANSIT' | 'DELIVERED' | 'FAILED' | 'CANCELLED';
+    | 'READY'
+    | 'BOOKING'
+    | 'BOOKED'
+    | 'HANDED_OVER'
+    | 'IN_TRANSIT'
+    | 'OUT_FOR_DELIVERY'
+    | 'DELIVERED'
+    | 'FAILED'
+    | 'CANCELLED'
+    | 'RTO_INITIATED'
+    | 'RETURNING'
+    | 'RETURNED_TO_ORIGIN'
+    | 'LOST'
+    | 'DAMAGED';
   outcomeStatus: string;
   recipient: { name: string; phone: string; address: string };
+  cod: { required: boolean; expectedAmount: string; currency: string };
   manualCarrierName?: string;
   trackingReference?: string;
+  activeBooking?: {
+    id: string;
+    providerCode: string;
+    status: string;
+    externalConsignmentId?: string;
+    trackingNumber?: string;
+  };
   events: readonly { type: string; occurredAt: string }[];
+  attempts: readonly {
+    attemptNumber: number;
+    outcome: string;
+    reasonCode?: string;
+    attemptedAt: string;
+    nextAttemptAt?: string;
+  }[];
+  exceptions: readonly {
+    id: string;
+    type: string;
+    severity: string;
+    summary: string;
+    createdAt: string;
+  }[];
+  claims: readonly {
+    id: string;
+    version: number;
+    claimNumber: string;
+    reason: string;
+    status: string;
+    claimedAmount?: string;
+    approvedAmount?: string;
+    currency: string;
+  }[];
+}
+interface CourierAccount {
+  id: string;
+  providerCode: string;
+  name: string;
+  capabilities?: Record<string, boolean>;
+}
+interface DeliveryHistory {
+  eligibleDeliveries: number;
+  deliveredCount: number;
+  failedDeliveryCount: number;
+  rtoCount: number;
+  successRate: number | null;
+  rtoRate: number | null;
+  risk: {
+    level: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
+    reasons: readonly { code: string; explanation: string }[];
+  };
+}
+interface CourierQuote {
+  id: string;
+  amount: string;
+  currency: string;
+  baseAmount?: string;
+  codFeeAmount?: string;
+  additionalChargeAmount?: string;
+  quotedAt: string;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -67,18 +139,26 @@ const timestampOf = (item: Delivery) => item.events.at(-1)?.occurredAt;
 
 export function DeliveryConsole() {
   const [deliveries, setDeliveries] = useState<readonly Delivery[]>([]);
+  const [courierAccounts, setCourierAccounts] = useState<readonly CourierAccount[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<'success' | 'warning' | 'danger'>('success');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [customerHistory, setCustomerHistory] = useState<DeliveryHistory>();
+  const [quote, setQuote] = useState<CourierQuote>();
 
   const reload = useCallback(async () => {
     try {
-      const result = (await request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries')).data;
-      setDeliveries(result);
+      const [result, accounts] = await Promise.all([
+        request<ApiEnvelope<readonly Delivery[]>>('/admin/deliveries?pageSize=100'),
+        request<ApiEnvelope<readonly CourierAccount[]>>('/admin/deliveries/courier-accounts'),
+      ]);
+      const rows = result.data;
+      setDeliveries(rows);
+      setCourierAccounts(accounts.data);
       setSelectedId((current) =>
-        current && result.some((item) => item.id === current) ? current : result[0]?.id,
+        current && rows.some((item) => item.id === current) ? current : rows[0]?.id,
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load deliveries.');
@@ -104,6 +184,25 @@ export function DeliveryConsole() {
     () => deliveries.find((item) => item.id === selectedId),
     [deliveries, selectedId],
   );
+
+  useEffect(() => {
+    setCustomerHistory(undefined);
+    setQuote(undefined);
+    if (!selectedId) return;
+    let current = true;
+    void request<ApiEnvelope<DeliveryHistory>>(
+      `/admin/deliveries/${selectedId}/customer-delivery-history`,
+    )
+      .then((result) => {
+        if (current) setCustomerHistory(result.data);
+      })
+      .catch(() => {
+        if (current) setCustomerHistory(undefined);
+      });
+    return () => {
+      current = false;
+    };
+  }, [selectedId]);
 
   async function simple(delivery: Delivery, action: 'dispatch' | 'delivered' | 'failed') {
     const confirmation =
@@ -165,6 +264,181 @@ export function DeliveryConsole() {
     }
   }
 
+  async function requestProviderBooking(
+    delivery: Delivery,
+    integrationAccountId: string,
+    packageWeightKg: string,
+  ) {
+    setBusy(true);
+    try {
+      await request(`/admin/deliveries/${delivery.id}/courier-bookings`, {
+        method: 'POST',
+        headers: { 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({ version: delivery.version, integrationAccountId, packageWeightKg }),
+      });
+      setMessage('Courier booking queued. Provider communication will continue in the worker.');
+      setMessageTone('success');
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Courier booking could not be queued.');
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function requestQuote(
+    delivery: Delivery,
+    integrationAccountId: string,
+    packageWeightKg: string,
+  ) {
+    setBusy(true);
+    try {
+      const result = await request<ApiEnvelope<CourierQuote>>(
+        `/admin/deliveries/${delivery.id}/pathao-quotes`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ integrationAccountId, packageWeightKg }),
+        },
+      );
+      setQuote(result.data);
+      setMessage('Pathao quote retrieved. Customer shipping revenue remains separate.');
+      setMessageTone('success');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Courier quote could not be retrieved.');
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function recordFailedAttempt(delivery: Delivery) {
+    if (!window.confirm('Record an unsuccessful attempt and keep this Delivery active for retry?'))
+      return;
+    setBusy(true);
+    try {
+      await request(`/admin/deliveries/${delivery.id}/attempts`, {
+        method: 'POST',
+        headers: { 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({
+          version: delivery.version,
+          outcome: 'CUSTOMER_UNAVAILABLE',
+          reasonCode: 'CUSTOMER_UNAVAILABLE',
+          isFinal: false,
+        }),
+      });
+      setMessage('Failed attempt recorded; the Delivery remains active.');
+      setMessageTone('warning');
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The attempt could not be recorded.');
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelBooking(delivery: Delivery) {
+    if (!window.confirm('Cancel this booking so another courier can be assigned?')) return;
+    setBusy(true);
+    try {
+      await request(`/admin/deliveries/${delivery.id}/cancel-booking`, {
+        method: 'POST',
+        headers: { 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({ version: delivery.version, reason: 'Operator rebooking' }),
+      });
+      setMessage(
+        'Cancellation requested. Provider or manual confirmation may still be required before rebooking.',
+      );
+      setMessageTone('success');
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The booking could not be cancelled.');
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reconcileBooking(
+    delivery: Delivery,
+    outcome:
+      | { outcome: 'BOOKED'; providerBookingId: string; trackingReference?: string }
+      | { outcome: 'NOT_CREATED'; reasonCode: string },
+  ) {
+    if (!delivery.activeBooking) return;
+    setBusy(true);
+    try {
+      await request(
+        `/admin/deliveries/${delivery.id}/courier-bookings/${delivery.activeBooking.id}/reconcile`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ version: delivery.version, ...outcome }),
+        },
+      );
+      setMessage(
+        outcome.outcome === 'BOOKED'
+          ? 'Unknown provider outcome reconciled as booked.'
+          : 'Unknown provider outcome reconciled as not created; the Delivery can be rebooked.',
+      );
+      setMessageTone('success');
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The booking could not be reconciled.');
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resolveException(delivery: Delivery, exceptionId: string) {
+    setBusy(true);
+    try {
+      await request(`/admin/deliveries/${delivery.id}/exceptions/${exceptionId}/resolve`, {
+        method: 'POST',
+        headers: { 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({
+          version: delivery.version,
+          resolution: 'RESOLVED',
+          note: 'Reviewed and resolved by operator.',
+        }),
+      });
+      setMessage('Delivery exception resolved.');
+      setMessageTone('success');
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The exception could not be resolved.');
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createClaim(delivery: Delivery) {
+    const reason = delivery.operationalStatus === 'DAMAGED' ? 'DAMAGED' : 'LOST';
+    setBusy(true);
+    try {
+      await request(`/admin/deliveries/${delivery.id}/claims`, {
+        method: 'POST',
+        headers: { 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({
+          version: delivery.version,
+          reason,
+          currency: delivery.cod.currency,
+          notes: 'Opened from Delivery exception worklist.',
+        }),
+      });
+      setMessage('Courier claim opened.');
+      setMessageTone('success');
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The claim could not be opened.');
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const inTransit = deliveries.filter((item) => item.operationalStatus === 'IN_TRANSIT').length;
   const needsBooking = deliveries.filter((item) => item.operationalStatus === 'READY').length;
   const exceptions = deliveries.filter((item) => item.operationalStatus === 'FAILED').length;
@@ -212,12 +486,19 @@ export function DeliveryConsole() {
           onStatusChange={worklist.setStatus}
           statuses={[
             'READY',
+            'BOOKING',
             'BOOKED',
             'HANDED_OVER',
             'IN_TRANSIT',
+            'OUT_FOR_DELIVERY',
             'DELIVERED',
             'FAILED',
             'CANCELLED',
+            'RTO_INITIATED',
+            'RETURNING',
+            'RETURNED_TO_ORIGIN',
+            'LOST',
+            'DAMAGED',
           ]}
           sort={worklist.sort}
           onSortChange={worklist.setSort}
@@ -265,8 +546,12 @@ export function DeliveryConsole() {
                           <span className="cell-secondary">{item.recipient.phone}</span>
                         </td>
                         <td>
-                          {item.manualCarrierName ?? 'Unassigned'}
-                          <span className="cell-secondary">{item.trackingReference ?? '—'}</span>
+                          {item.manualCarrierName ??
+                            item.activeBooking?.providerCode ??
+                            'Unassigned'}
+                          <span className="cell-secondary">
+                            {item.trackingReference ?? item.activeBooking?.status ?? '—'}
+                          </span>
                         </td>
                         <td>
                           <StatusBadge status={item.operationalStatus} />
@@ -284,7 +569,7 @@ export function DeliveryConsole() {
             ) : (
               <OperationalEmptyState
                 title="No matching deliveries"
-                description="Clear filters or create a delivery after physical fulfillment dispatch."
+                description="Clear filters or prepare a delivery from a packed fulfillment."
                 action={
                   <Link className="button secondary" href="/fulfillments">
                     Open fulfillments
@@ -338,24 +623,175 @@ export function DeliveryConsole() {
                     </p>
                   </div>
                 </section>
+                {customerHistory ? (
+                  <section className="panel inset-form" aria-label="Customer delivery history">
+                    <div className="section-heading">
+                      <h3>Customer delivery history</h3>
+                      <StatusBadge status={customerHistory.risk.level} />
+                    </div>
+                    <p>
+                      {customerHistory.deliveredCount} delivered · {customerHistory.rtoCount} RTO ·{' '}
+                      {customerHistory.failedDeliveryCount} failed from{' '}
+                      {customerHistory.eligibleDeliveries} eligible deliveries
+                    </p>
+                    <p>
+                      Success {customerHistory.successRate ?? '—'}% · RTO{' '}
+                      {customerHistory.rtoRate ?? '—'}%
+                    </p>
+                    {customerHistory.risk.reasons[0] ? (
+                      <p className="cell-secondary">
+                        {customerHistory.risk.reasons[0].explanation}
+                      </p>
+                    ) : null}
+                  </section>
+                ) : null}
                 {selected.operationalStatus === 'READY' ? (
-                  <form
-                    className="panel inset-form"
-                    onSubmit={(event) => void book(selected, event)}
-                  >
-                    <h3>Record manual carrier booking</h3>
-                    <label>
-                      Carrier name
-                      <input name="carrierName" autoComplete="organization" required />
-                    </label>
-                    <label>
-                      Tracking/reference
-                      <input name="trackingReference" autoComplete="off" required />
-                    </label>
-                    <button disabled={busy} type="submit">
-                      <Truck aria-hidden="true" /> Record booking
-                    </button>
-                  </form>
+                  <>
+                    {courierAccounts.length ? (
+                      <form
+                        className="panel inset-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const data = new FormData(event.currentTarget);
+                          void requestProviderBooking(
+                            selected,
+                            String(data.get('integrationAccountId')),
+                            String(data.get('packageWeightKg')),
+                          );
+                        }}
+                      >
+                        <h3>Book connected courier</h3>
+                        <label>
+                          Courier account
+                          <select name="integrationAccountId" required>
+                            {courierAccounts.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.name} · {account.providerCode}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Operational parcel weight (kg)
+                          <input
+                            name="packageWeightKg"
+                            required
+                            inputMode="decimal"
+                            pattern="\d+(?:\.\d{1,6})?"
+                            placeholder="0.5"
+                          />
+                        </label>
+                        {quote ? (
+                          <section className="operational-guidance">
+                            <div>
+                              <strong>
+                                Estimated Pathao expense: {quote.amount} {quote.currency}
+                              </strong>
+                              <p>
+                                Base {quote.baseAmount ?? '—'} · COD fee {quote.codFeeAmount ?? '—'}{' '}
+                                · additional {quote.additionalChargeAmount ?? '—'}
+                              </p>
+                            </div>
+                          </section>
+                        ) : null}
+                        <div className="inline-actions">
+                          <button
+                            disabled={busy}
+                            className="secondary"
+                            type="button"
+                            onClick={(event) => {
+                              const form = event.currentTarget.form;
+                              if (!form?.reportValidity()) return;
+                              const data = new FormData(form);
+                              const accountId = String(data.get('integrationAccountId'));
+                              const account = courierAccounts.find((item) => item.id === accountId);
+                              if (account?.providerCode !== 'PATHAO') {
+                                setMessage('Quoting is currently implemented for Pathao accounts.');
+                                setMessageTone('warning');
+                                return;
+                              }
+                              void requestQuote(
+                                selected,
+                                accountId,
+                                String(data.get('packageWeightKg')),
+                              );
+                            }}
+                          >
+                            Get quote
+                          </button>
+                          <button disabled={busy} type="submit">
+                            <Truck aria-hidden="true" /> Request booking
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                    <form
+                      className="panel inset-form"
+                      onSubmit={(event) => void book(selected, event)}
+                    >
+                      <h3>Record manual carrier booking</h3>
+                      <label>
+                        Carrier name
+                        <input name="carrierName" autoComplete="organization" required />
+                      </label>
+                      <label>
+                        Tracking/reference
+                        <input name="trackingReference" autoComplete="off" required />
+                      </label>
+                      <button disabled={busy} type="submit">
+                        <Truck aria-hidden="true" /> Record booking
+                      </button>
+                    </form>
+                  </>
+                ) : null}
+                {selected.operationalStatus === 'BOOKING' &&
+                selected.activeBooking?.status === 'UNKNOWN_OUTCOME' ? (
+                  <section className="panel inset-form">
+                    <h3>Reconcile unknown courier outcome</h3>
+                    <p>
+                      Check the courier portal using this Delivery reference before choosing an
+                      outcome. This prevents a duplicate consignment.
+                    </p>
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const form = new FormData(event.currentTarget);
+                        const trackingReference = String(form.get('trackingReference') || '');
+                        void reconcileBooking(selected, {
+                          outcome: 'BOOKED',
+                          providerBookingId: String(form.get('providerBookingId')),
+                          ...(trackingReference ? { trackingReference } : {}),
+                        });
+                      }}
+                    >
+                      <label>
+                        Provider consignment ID
+                        <input name="providerBookingId" required />
+                      </label>
+                      <label>
+                        Tracking reference
+                        <input name="trackingReference" />
+                      </label>
+                      <div className="detail-actions">
+                        <button disabled={busy} type="submit">
+                          Confirm booked
+                        </button>
+                        <button
+                          className="secondary"
+                          disabled={busy}
+                          onClick={() =>
+                            void reconcileBooking(selected, {
+                              outcome: 'NOT_CREATED',
+                              reasonCode: 'PROVIDER_CONFIRMED_NOT_CREATED',
+                            })
+                          }
+                          type="button"
+                        >
+                          Confirm not created
+                        </button>
+                      </div>
+                    </form>
+                  </section>
                 ) : null}
                 {selected.operationalStatus === 'BOOKED' ? (
                   <section className="next-action-card">
@@ -370,9 +806,17 @@ export function DeliveryConsole() {
                     >
                       Record handover
                     </button>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => void cancelBooking(selected)}
+                      type="button"
+                    >
+                      Cancel booking
+                    </button>
                   </section>
                 ) : null}
-                {selected.operationalStatus === 'IN_TRANSIT' ? (
+                {['IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(selected.operationalStatus) ? (
                   <section className="next-action-card">
                     <div>
                       <strong>Record carrier outcome</strong>
@@ -387,6 +831,14 @@ export function DeliveryConsole() {
                         <PackageCheck aria-hidden="true" /> Delivered
                       </button>
                       <button
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => void recordFailedAttempt(selected)}
+                        type="button"
+                      >
+                        Failed attempt
+                      </button>
+                      <button
                         className="danger-action"
                         disabled={busy}
                         onClick={() => void simple(selected, 'failed')}
@@ -395,6 +847,87 @@ export function DeliveryConsole() {
                         Failed
                       </button>
                     </div>
+                  </section>
+                ) : null}
+                {selected.attempts.length ? (
+                  <section>
+                    <h3>Delivery attempts</h3>
+                    <ol className="timeline-list">
+                      {selected.attempts.map((attempt) => (
+                        <li key={attempt.attemptNumber}>
+                          <Route aria-hidden="true" />
+                          <div>
+                            <strong>
+                              Attempt {attempt.attemptNumber}:{' '}
+                              {attempt.outcome.replaceAll('_', ' ')}
+                            </strong>
+                            <time dateTime={attempt.attemptedAt}>
+                              {new Date(attempt.attemptedAt).toLocaleString('en-BD')}
+                            </time>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+                ) : null}
+                {selected.exceptions.length ? (
+                  <section>
+                    <h3>Open exceptions</h3>
+                    <ul className="timeline-list">
+                      {selected.exceptions.map((exception) => (
+                        <li key={exception.id}>
+                          <Route aria-hidden="true" />
+                          <div>
+                            <strong>{exception.type.replaceAll('_', ' ')}</strong>
+                            <p>{exception.summary}</p>
+                            <button
+                              className="secondary"
+                              disabled={busy}
+                              onClick={() => void resolveException(selected, exception.id)}
+                              type="button"
+                            >
+                              Mark resolved
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {['LOST', 'DAMAGED'].includes(selected.operationalStatus) ? (
+                  <section className="next-action-card">
+                    <div>
+                      <strong>Courier claim</strong>
+                      <p>Open a traceable claim without changing Inventory or Payment truth.</p>
+                    </div>
+                    <button
+                      disabled={busy}
+                      onClick={() => void createClaim(selected)}
+                      type="button"
+                    >
+                      Open claim
+                    </button>
+                  </section>
+                ) : null}
+                {selected.claims.length ? (
+                  <section>
+                    <h3>Courier claims</h3>
+                    <ul className="timeline-list">
+                      {selected.claims.map((claim) => (
+                        <li key={claim.id}>
+                          <Route aria-hidden="true" />
+                          <div>
+                            <strong>{claim.claimNumber}</strong>
+                            <p>
+                              {claim.reason.replaceAll('_', ' ')} · {claim.status}
+                              {claim.claimedAmount
+                                ? ` · ${claim.claimedAmount} ${claim.currency}`
+                                : ''}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </section>
                 ) : null}
                 <section>

@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig, type RuntimeConfig } from '@maevelle/config';
 import { createDatabase } from '@maevelle/database';
 import { createLogger } from '@maevelle/observability';
+import { pathaoProviderResolver } from '@maevelle/database/pathao';
 
 import { createWorker, type WorkerRuntime } from './worker.js';
 
@@ -19,6 +20,18 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
       id: 'runtime-auth-key',
       value: Buffer.from(config.authEncryptionKey, 'base64'),
     },
+    courierProviderResolver: (input) =>
+      pathaoProviderResolver(
+        database.db,
+        {
+          id: 'runtime-auth-key',
+          value: Buffer.from(config.authEncryptionKey, 'base64'),
+        },
+        {
+          accountId: input.integrationAccountId,
+          providerCode: input.providerCode,
+        },
+      ),
   });
 
   try {

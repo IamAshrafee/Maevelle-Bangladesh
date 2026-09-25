@@ -1,16 +1,16 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "admin-commerce-orders-customers",
-  "active_substage": "IMPLEMENTATION_COMPLETE",
-  "active_status": "VERIFICATION_PENDING",
-  "baseline_commit": "a32c40d",
+  "active_area": "delivery-fulfillment-operations",
+  "active_substage": "DELIVERY_IMPLEMENTATION_COMPLETE",
+  "active_status": "EXTERNAL_CONFIGURATION_REQUIRED",
+  "baseline_commit": "a5de03d",
   "last_checkpoint_commit": "e799499",
   "last_verified_commit": "e799499",
-  "last_completed_action": "Completed Commerce Orders/Customers implementation: authoritative lifecycle projections and worklists, controlled line cancellation and address correction, Customer merge/anonymization, notes, filtering, evidence, capabilities, and responsive Admin controls. Fresh development/test baselines, 32 focused tests, targeted lint, and Database/API/Admin production builds pass.",
-  "next_action": "Perform authenticated owner review at mobile, tablet/iPad, and desktop widths and record any concrete UX defects.",
+  "last_completed_action": "Completed Delivery/Fulfillment and the production-grade Pathao adapter: encrypted credentials/tokens, Store mapping, quote, durable booking, polling/tracking, COD and charge separation, Returns-owned RTO, customer delivery history, explainable risk, and Admin operations. Fresh development/test baselines, 18 focused tests, focused type checks, and production builds pass.",
+  "next_action": "Configure owner-supplied Pathao Merchant sandbox credentials, map the pickup Store, and perform one controlled quote, booking, and tracking smoke test; complete owner visual review.",
   "interrupted": false,
-  "blocked_by": [],
+  "blocked_by": ["PATHAO_MERCHANT_CREDENTIALS_AND_SANDBOX_ACCESS"],
   "owner_review_status": "PENDING",
   "verified_complete_areas": []
 }

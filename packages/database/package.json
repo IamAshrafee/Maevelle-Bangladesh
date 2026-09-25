@@ -84,6 +84,18 @@
       "types": "./src/delivery.ts",
       "default": "./dist/src/delivery.js"
     },
+    "./delivery-finance": {
+      "types": "./src/delivery-finance.ts",
+      "default": "./dist/src/delivery-finance.js"
+    },
+    "./pathao": {
+      "types": "./src/pathao.ts",
+      "default": "./dist/src/pathao.js"
+    },
+    "./delivery-intelligence": {
+      "types": "./src/delivery-intelligence.ts",
+      "default": "./dist/src/delivery-intelligence.js"
+    },
     "./procurement": {
       "types": "./src/procurement.ts",
       "default": "./dist/src/procurement.js"
@@ -133,6 +145,7 @@
     "seed:staging": "pnpm run build && node dist/src/staging-seed.js"
   },
   "dependencies": {
+    "@maevelle/core": "workspace:*",
     "@maevelle/security": "workspace:*",
     "kysely": "0.29.5",
     "libphonenumber-js": "1.13.12",

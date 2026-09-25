@@ -33,8 +33,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       order_id uuid not null references orders.orders(id),
       fulfillment_id uuid not null unique references fulfillment.fulfillments(id),
       delivery_method_id uuid not null references delivery.delivery_methods(id),
-      operational_status text not null default 'READY' check (operational_status in ('READY', 'BOOKED', 'HANDED_OVER', 'IN_TRANSIT', 'DELIVERED', 'FAILED', 'CANCELLED')),
-      outcome_status text not null default 'PENDING' check (outcome_status in ('PENDING', 'DELIVERED', 'FAILED', 'CANCELLED_BEFORE_HANDOVER', 'LOST', 'DAMAGED')),
+      operational_status text not null default 'READY' check (operational_status in ('READY', 'BOOKING', 'BOOKED', 'HANDED_OVER', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'CANCELLED', 'RTO_INITIATED', 'RETURNING', 'RETURNED_TO_ORIGIN', 'LOST', 'DAMAGED')),
+      outcome_status text not null default 'PENDING' check (outcome_status in ('PENDING', 'DELIVERED', 'FAILED', 'CANCELLED_BEFORE_HANDOVER', 'LOST', 'DAMAGED', 'RETURNED_TO_ORIGIN')),
       recipient_name text not null,
       recipient_phone text not null,
       address_snapshot jsonb not null check (jsonb_typeof(address_snapshot) = 'object'),
@@ -46,8 +46,10 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       created_by_actor_id uuid,
       ready_at timestamptz not null default now(),
       handed_over_at timestamptz,
+      estimated_delivery_at timestamptz,
       delivered_at timestamptz,
       failed_at timestamptz,
+      last_tracking_event_at timestamptz,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       version bigint not null default 1,
@@ -86,6 +88,10 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       weight_value numeric(20,6),
       weight_unit text not null default 'KG',
       weight_source text not null default 'MANUAL' check (weight_source in ('ESTIMATED_FROM_PRODUCTS', 'MANUAL', 'MEASURED')),
+      length_value numeric(20,6) check (length_value is null or length_value > 0),
+      width_value numeric(20,6) check (width_value is null or width_value > 0),
+      height_value numeric(20,6) check (height_value is null or height_value > 0),
+      dimension_unit text not null default 'CM' check (dimension_unit in ('CM', 'IN')),
       declared_value numeric(20,4),
       currency_code text,
       status text not null default 'READY' check (status in ('READY', 'HANDED_OVER', 'DELIVERED', 'FAILED')),
@@ -109,10 +115,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       delivery_id uuid not null references delivery.deliveries(id),
       provider_code text not null default 'MANUAL',
       booking_sequence integer not null check (booking_sequence > 0),
-      status text not null default 'PENDING' check (status in ('PENDING', 'BOOKED', 'REJECTED', 'CANCELLED', 'UNKNOWN_OUTCOME')),
+      status text not null default 'PENDING' check (status in ('PENDING', 'BOOKED', 'REJECTED', 'CANCELLATION_PENDING', 'CANCELLED', 'UNKNOWN_OUTCOME')),
       merchant_reference text not null,
       external_consignment_id text,
       tracking_number text,
+      tracking_url text,
+      provider_status_raw text,
       requested_cod_amount numeric(20,4) not null default 0 check (requested_cod_amount >= 0),
       provider_confirmed_cod_amount numeric(20,4),
       package_snapshot jsonb not null default '{}'::jsonb check (jsonb_typeof(package_snapshot) = 'object'),
@@ -120,6 +128,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       created_at timestamptz not null default now(),
       booked_at timestamptz,
       cancelled_at timestamptz,
+      last_reconciled_at timestamptz,
+      last_error_code text,
+      last_error_message text,
       updated_at timestamptz not null default now(),
       version bigint not null default 1,
       unique (delivery_id, booking_sequence),
@@ -128,6 +139,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create unique index courier_bookings_one_active_per_delivery on delivery.courier_bookings (delivery_id)
       where status in ('PENDING', 'BOOKED', 'UNKNOWN_OUTCOME');
+    create unique index courier_bookings_external_identity
+      on delivery.courier_bookings (organization_id, provider_code, external_consignment_id)
+      where external_consignment_id is not null;
+    create index courier_bookings_reconciliation_queue
+      on delivery.courier_bookings (organization_id, status, updated_at, id)
+      where status in ('PENDING', 'CANCELLATION_PENDING', 'UNKNOWN_OUTCOME');
 
     create table delivery.delivery_events (
       id uuid primary key default uuidv7(),
@@ -135,6 +152,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       delivery_id uuid not null references delivery.deliveries(id),
       courier_booking_id uuid references delivery.courier_bookings(id),
       event_type text not null,
+      normalized_status text,
       provider_status_raw text,
       provider_event_id text,
       occurred_at timestamptz not null default now(),
@@ -159,6 +177,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       outcome text not null check (outcome in ('DELIVERED', 'CUSTOMER_UNAVAILABLE', 'CUSTOMER_REFUSED', 'ADDRESS_NOT_FOUND', 'RESCHEDULE_REQUESTED', 'PHONE_UNREACHABLE', 'PROVIDER_FAILURE', 'OTHER_FAILED')),
       reason_code text,
       notes text,
+      next_attempt_at timestamptz,
       created_at timestamptz not null default now(),
       unique (delivery_id, attempt_number),
       unique (organization_id, id),
@@ -180,6 +199,93 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       unique (organization_id, id),
       foreign key (organization_id, delivery_id) references delivery.deliveries(organization_id, id)
     );
+
+    create table delivery.provider_collection_observations (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      delivery_id uuid not null references delivery.deliveries(id),
+      courier_booking_id uuid references delivery.courier_bookings(id),
+      provider_event_id text,
+      currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
+      collected_amount numeric(20,4) not null check (collected_amount >= 0),
+      collected_at timestamptz not null,
+      observed_at timestamptz not null default now(),
+      metadata jsonb not null default '{}'::jsonb check (jsonb_typeof(metadata) = 'object'),
+      unique (organization_id, id),
+      foreign key (organization_id, delivery_id) references delivery.deliveries(organization_id, id),
+      foreign key (organization_id, courier_booking_id) references delivery.courier_bookings(organization_id, id)
+    );
+    create unique index provider_collection_observations_dedupe
+      on delivery.provider_collection_observations (courier_booking_id, provider_event_id)
+      where courier_booking_id is not null and provider_event_id is not null;
+
+    create table delivery.provider_charges (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      delivery_id uuid not null references delivery.deliveries(id),
+      courier_booking_id uuid references delivery.courier_bookings(id),
+      charge_type text not null check (charge_type in ('DELIVERY', 'COD_COLLECTION', 'RTO', 'SURCHARGE', 'OTHER')),
+      charge_basis text not null check (charge_basis in ('ESTIMATE', 'ACTUAL', 'ADJUSTMENT')),
+      currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
+      amount numeric(20,4) not null check (amount >= 0),
+      provider_reference text,
+      occurred_at timestamptz not null default now(),
+      created_at timestamptz not null default now(),
+      unique (organization_id, id),
+      foreign key (organization_id, delivery_id) references delivery.deliveries(organization_id, id),
+      foreign key (organization_id, courier_booking_id) references delivery.courier_bookings(organization_id, id)
+    );
+    create unique index provider_charges_provider_dedupe
+      on delivery.provider_charges (organization_id, courier_booking_id, provider_reference, charge_type)
+      where provider_reference is not null;
+    create index provider_charges_delivery on delivery.provider_charges (organization_id, delivery_id, occurred_at desc);
+
+    create table delivery.delivery_exceptions (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      delivery_id uuid not null references delivery.deliveries(id),
+      courier_booking_id uuid references delivery.courier_bookings(id),
+      exception_type text not null,
+      severity text not null check (severity in ('INFO', 'WARNING', 'ERROR', 'CRITICAL')),
+      status text not null default 'OPEN' check (status in ('OPEN', 'RESOLVED', 'IGNORED_WITH_REASON')),
+      summary text not null,
+      details jsonb not null default '{}'::jsonb check (jsonb_typeof(details) = 'object'),
+      created_at timestamptz not null default now(),
+      resolved_at timestamptz,
+      resolved_by_actor_id uuid,
+      resolution_note text,
+      version bigint not null default 1,
+      unique (organization_id, id),
+      foreign key (organization_id, delivery_id) references delivery.deliveries(organization_id, id),
+      foreign key (organization_id, courier_booking_id) references delivery.courier_bookings(organization_id, id)
+    );
+    create index delivery_exceptions_queue on delivery.delivery_exceptions (organization_id, status, severity, created_at desc);
+
+    create table delivery.delivery_claims (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      delivery_id uuid not null references delivery.deliveries(id),
+      courier_booking_id uuid references delivery.courier_bookings(id),
+      claim_number text not null,
+      reason text not null check (reason in ('LOST', 'DAMAGED', 'COD_MISMATCH', 'OVERCHARGE', 'OTHER')),
+      status text not null default 'OPEN' check (status in ('OPEN', 'SUBMITTED', 'APPROVED', 'REJECTED', 'PAID', 'CLOSED')),
+      claimed_amount numeric(20,4),
+      approved_amount numeric(20,4),
+      currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
+      provider_reference text,
+      notes text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1,
+      unique (organization_id, claim_number),
+      unique (organization_id, id),
+      foreign key (organization_id, delivery_id) references delivery.deliveries(organization_id, id),
+      foreign key (organization_id, courier_booking_id) references delivery.courier_bookings(organization_id, id)
+    );
+    create index delivery_claims_queue on delivery.delivery_claims (organization_id, status, created_at desc);
+    create unique index delivery_claims_one_active_reason
+      on delivery.delivery_claims (organization_id, delivery_id, reason)
+      where status in ('OPEN', 'SUBMITTED', 'APPROVED');
 
     alter table payments.payments
       add column source_delivery_id uuid unique,

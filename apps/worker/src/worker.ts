@@ -13,6 +13,7 @@ import { processCatalogImports } from '@maevelle/database/admin-operations';
 import { processStorefrontSearchOutbox } from '@maevelle/database/storefront';
 import { processExpiredPaymentOrders, processOrderOutbox } from '@maevelle/database/orders';
 import { expireInventoryReservations } from '@maevelle/database/inventory';
+import { processCourierBookings, type CourierProviderResolver } from './courier-bookings.js';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -24,6 +25,7 @@ export interface WorkerOptions {
   readonly heartbeatIntervalMs: number;
   readonly logger?: WorkerLogger;
   readonly encryptionKey?: EncryptionKey;
+  readonly courierProviderResolver?: CourierProviderResolver;
 }
 
 export interface WorkerRuntime {
@@ -62,6 +64,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           processOrderOutbox(options.database.db),
           expireInventoryReservations(options.database.db),
           processExpiredPaymentOrders(options.database.db),
+          processCourierBookings(options.database, options.courierProviderResolver),
           ...(options.encryptionKey
             ? [deliverPendingWebhooks(options.database.db, options.encryptionKey)]
             : []),
@@ -78,6 +81,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
               orders,
               expiredReservations,
               expiredPaymentOrders,
+              courierBookings,
               webhookDeliveries,
             ]) =>
               logger?.debug(
@@ -92,6 +96,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
                   orders,
                   expiredReservations,
                   expiredPaymentOrders,
+                  courierBookings,
                   webhookDeliveries,
                 },
                 'Worker recovery tick.',

@@ -30,6 +30,12 @@ const supportedEvents: Record<string, { type: string; required: boolean }> = {
   'payments.payment.verified': { type: 'PAYMENT_VERIFIED', required: true },
   'fulfillment.dispatched': { type: 'ORDER_DISPATCHED', required: true },
   'delivery.delivered': { type: 'DELIVERY_COMPLETED', required: true },
+  'delivery.attempt_failed': { type: 'DELIVERY_ATTEMPT_FAILED', required: false },
+  'delivery.failed': { type: 'DELIVERY_FAILED', required: true },
+  'rto.initiated': { type: 'DELIVERY_RTO_INITIATED', required: true },
+  'returns.authorized': { type: 'RETURN_AUTHORIZED', required: true },
+  'returns.rejected': { type: 'RETURN_REJECTED', required: true },
+  'returns.received': { type: 'RETURN_RECEIVED', required: true },
   'payments.refund.completed': { type: 'REFUND_COMPLETED', required: true },
   'reviews.review.visible': { type: 'REVIEW_VISIBLE', required: false },
 };
@@ -388,8 +394,12 @@ export async function createNotificationFromOutbox(
             and fulfillment.organization_id = ${event.organization_id} and fulfillment.id = ${event.aggregate_id}::uuid
         union all
         select delivery.order_id from delivery.deliveries delivery
-          where ${event.event_type} = 'delivery.delivered'
+          where ${event.event_type} like 'delivery.%'
             and delivery.organization_id = ${event.organization_id} and delivery.id = ${event.aggregate_id}::uuid
+        union all
+        select return_case.order_id from returns.return_cases return_case
+          where (${event.event_type} like 'returns.%' or ${event.event_type} = 'rto.initiated')
+            and return_case.organization_id = ${event.organization_id} and return_case.id = ${event.aggregate_id}::uuid
       )
       select orders.customer_id
       from candidate_orders candidate
