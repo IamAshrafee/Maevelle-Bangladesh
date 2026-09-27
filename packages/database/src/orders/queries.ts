@@ -190,6 +190,7 @@ export async function getOrderForAdmin(
     baseOrder,
     notesQuery,
     timelineQuery,
+    tagsQuery,
     fulfillmentsQuery,
     deliveriesQuery,
     returnsQuery,
@@ -218,6 +219,13 @@ export async function getOrderForAdmin(
       where aggregate_type in ('orders.order', 'fulfillment.fulfillment', 'delivery.delivery', 'returns.return_case')
         and (payload->>'orderId' = ${input.orderId} or aggregate_id = ${input.orderId})
       order by occurred_at desc limit 30
+    `.execute(db),
+    sql<{ id: string; label: string; color: string | null; created_at: Date }>`
+      select t.id, t.label, t.color, t.created_at
+      from orders.order_tag_assignments a
+      join orders.order_tags t on t.id = a.tag_id
+      where a.organization_id = ${input.organizationId} and a.order_id = ${input.orderId}
+      order by t.label asc
     `.execute(db),
     sql<{
       id: string;
@@ -347,6 +355,12 @@ export async function getOrderForAdmin(
     fulfillmentStatus,
     deliveryStatus,
     deliveryAmount: exists.rows[0]!.delivery_amount,
+    tags: tagsQuery.rows.map((t) => ({
+      id: t.id,
+      label: t.label,
+      color: t.color,
+      createdAt: t.created_at.toISOString(),
+    })),
     notes: notesQuery.rows.map((n) => ({
       id: n.id,
       authorActorId: n.author_actor_id,
@@ -583,11 +597,47 @@ export async function listOrders(
         or lower(coalesce(email, '')) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
         or normalized_phone = ${normalizedSearchPhone ?? ''}
       )
+      and (
+        ${filters?.tagId ?? null}::uuid is null
+        or exists (
+          select 1 from orders.order_tag_assignments ota
+          where ota.organization_id = ${organizationId} and ota.order_id = projected.id and ota.tag_id = ${filters?.tagId ?? null}::uuid
+        )
+      )
     order by created_at desc, id desc
     limit ${pageSize} offset ${offset}
   `.execute(db);
 
   const totalItems = Number(result.rows[0]?.total_count ?? 0);
+
+  const orderIds = result.rows.map((r) => r.id);
+  const tagsByOrderId = new Map<string, { id: string; label: string; color: string | null; createdAt: string }[]>();
+  if (orderIds.length > 0) {
+    const tagAssignments = await sql<{
+      order_id: string;
+      id: string;
+      label: string;
+      color: string | null;
+      created_at: Date;
+    }>`
+      select a.order_id, t.id, t.label, t.color, t.created_at
+      from orders.order_tag_assignments a
+      join orders.order_tags t on t.id = a.tag_id
+      where a.organization_id = ${organizationId}
+        and a.order_id = any(${orderIds}::uuid[])
+      order by t.label asc
+    `.execute(db);
+    for (const row of tagAssignments.rows) {
+      const list = tagsByOrderId.get(row.order_id) ?? [];
+      list.push({
+        id: row.id,
+        label: row.label,
+        color: row.color,
+        createdAt: row.created_at.toISOString(),
+      });
+      tagsByOrderId.set(row.order_id, list);
+    }
+  }
 
   const data: OrderListItem[] = result.rows.map((row) => ({
     id: row.id,
@@ -606,6 +656,7 @@ export async function listOrders(
     customerId: row.customer_id ?? null,
     customerPhone: row.phone,
     customerEmail: row.email,
+    tags: tagsByOrderId.get(row.id) ?? [],
     createdAt: row.created_at.toISOString(),
   }));
 

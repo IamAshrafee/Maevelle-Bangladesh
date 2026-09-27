@@ -1856,6 +1856,13 @@ export type OrderDeliveryStatusDto =
   | 'FAILED'
   | 'CANCELLED';
 
+export interface OrderTagDto {
+  readonly id: string;
+  readonly label: string;
+  readonly name?: string;
+  readonly color?: string | null;
+}
+
 export interface OrderSummaryDto {
   readonly id: string;
   readonly orderNumber: string;
@@ -1874,11 +1881,13 @@ export interface OrderSummaryDto {
   readonly customerName?: string;
   readonly customerPhone?: string;
   readonly customerEmail?: string | null;
+  readonly tags?: readonly OrderTagDto[];
 }
 
 export interface OrderDetailDto extends OrderSummaryDto {
   readonly version: number;
   readonly lines: readonly OrderLineDto[];
+  readonly tags?: readonly OrderTagDto[];
   readonly notes: readonly OrderNoteDto[];
   readonly timeline: readonly OrderTimelineEventDto[];
   readonly payment: OrderPaymentSummaryDto;
@@ -2039,6 +2048,7 @@ export interface CustomerDetailDto extends CustomerSummaryDto {
     readonly lifetimeOrderValue: string;
     readonly collectedAmount: string;
     readonly refundedAmount: string;
+    readonly outstandingAmount: string;
     readonly lastOrderAt: string | null;
   };
 }
@@ -2094,7 +2104,12 @@ export interface CustomerNoteDto {
 }
 
 export interface CreateManualOrderInputDto {
-  readonly customerId: string;
+  readonly customerId?: string;
+  readonly customer?: {
+    readonly name: string;
+    readonly phone: string;
+    readonly email?: string | null | undefined;
+  };
   readonly locationId: string;
   readonly lines: readonly {
     readonly variantId: string;
@@ -2117,6 +2132,8 @@ export interface CreateManualOrderInputDto {
   };
   readonly deliveryAmount?: string;
   readonly deliveryOverrideReason?: string;
+  readonly discountAmount?: string;
+  readonly discountOverrideReason?: string;
   readonly paymentMethod: PaymentMethodCodeDto;
   readonly salesChannel: Exclude<OrderSalesChannelDto, 'STOREFRONT'>;
   readonly currency?: string;
@@ -2198,5 +2215,36 @@ export interface AddCustomerNoteInputDto {
 export interface CreateCustomerTagInputDto {
   readonly label: string;
   readonly color?: string;
+}
+
+export interface CreateOrderTagInputDto {
+  readonly label: string;
+  readonly color?: string;
+}
+
+export interface CompleteOrderInputDto {
+  readonly manualReason?: string;
+}
+
+export interface UpdateOrderCustomerContactInputDto {
+  readonly displayName: string;
+  readonly phone: string;
+  readonly email?: string | null;
+  readonly reason: string;
+}
+
+export interface UpdateCustomerAddressInputDto {
+  readonly recipientName: string;
+  readonly addressLine1: string;
+  readonly countryCode: string;
+  readonly label?: string | null;
+  readonly phone?: string | null;
+  readonly addressLine2?: string | null;
+  readonly geographyNodeId?: string | null;
+  readonly area?: string | null;
+  readonly city?: string | null;
+  readonly district?: string | null;
+  readonly postalCode?: string | null;
+  readonly isDefault?: boolean;
 }
 

@@ -44,6 +44,7 @@ export function CreateManualOrderDialog() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [customerMode, setCustomerMode] = useState<'existing' | 'inline'>('existing');
   const [customers, setCustomers] = useState<readonly CustomerSummaryDto[]>([]);
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
   const [variants, setVariants] = useState<readonly CatalogVariantChoiceDto[]>([]);
@@ -98,15 +99,35 @@ export function CreateManualOrderDialog() {
     setMessage('');
 
     const formData = new FormData(event.currentTarget);
+    const deliveryOverrideReason = String(formData.get('deliveryOverrideReason') || '').trim();
+    const discountAmount = String(formData.get('discountAmount') || '').trim();
+    const discountOverrideReason = String(formData.get('discountOverrideReason') || '').trim();
+
     const payload: CreateManualOrderInputDto = {
-      customerId: String(formData.get('customerId')),
       locationId: String(formData.get('locationId')),
       paymentMethod: formData.get('paymentMethod') as CreateManualOrderInputDto['paymentMethod'],
       salesChannel: formData.get('salesChannel') as CreateManualOrderInputDto['salesChannel'],
-      ...(formData.get('deliveryOverrideReason')
+      ...(customerMode === 'inline'
+        ? {
+            customer: {
+              name: String(formData.get('inlineCustomerName')),
+              phone: String(formData.get('inlineCustomerPhone')),
+              email: String(formData.get('inlineCustomerEmail')) || undefined,
+            },
+          }
+        : {
+            customerId: String(formData.get('customerId')),
+          }),
+      ...(deliveryOverrideReason
         ? {
             deliveryAmount: String(formData.get('deliveryAmount') || '0'),
-            deliveryOverrideReason: String(formData.get('deliveryOverrideReason')),
+            deliveryOverrideReason,
+          }
+        : {}),
+      ...(discountAmount && Number(discountAmount) > 0
+        ? {
+            discountAmount,
+            discountOverrideReason: discountOverrideReason || 'Negotiated order discount',
           }
         : {}),
       lines: lines.map((line) => ({
@@ -166,27 +187,95 @@ export function CreateManualOrderDialog() {
 
       <form onSubmit={submit} className="space-y-7">
         <section className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="customerId">Customer</Label>
-            <select
-              id="customerId"
-              name="customerId"
-              required
-              disabled={isLoading || busy}
-              className={selectClassName}
-            >
-              <option value="">Select a customer</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.displayName} · {customer.primaryPhone ?? customer.customerNumber}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">
-              Create the customer first if this is a new buyer; the order keeps its own historical
-              snapshot.
-            </p>
+          <div className="space-y-3 sm:col-span-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Customer Selection</Label>
+              <div className="flex rounded-lg border bg-muted/40 p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setCustomerMode('existing')}
+                  className={`rounded-md px-3 py-1 font-medium transition-colors ${
+                    customerMode === 'existing'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Existing Customer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomerMode('inline')}
+                  className={`rounded-md px-3 py-1 font-medium transition-colors ${
+                    customerMode === 'inline'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  New / Social Customer
+                </button>
+              </div>
+            </div>
+
+            {customerMode === 'existing' ? (
+              <div className="space-y-2">
+                <select
+                  id="customerId"
+                  name="customerId"
+                  required={customerMode === 'existing'}
+                  disabled={isLoading || busy}
+                  className={selectClassName}
+                >
+                  <option value="">Select an existing customer</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.displayName} · {customer.primaryPhone ?? customer.customerNumber}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Select an existing customer from the database.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="inlineCustomerName" className="text-xs">Customer Name *</Label>
+                  <Input
+                    id="inlineCustomerName"
+                    name="inlineCustomerName"
+                    placeholder="e.g. Ashrafee Ahmed"
+                    required={customerMode === 'inline'}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="inlineCustomerPhone" className="text-xs">Phone Number *</Label>
+                  <Input
+                    id="inlineCustomerPhone"
+                    name="inlineCustomerPhone"
+                    type="tel"
+                    placeholder="e.g. 01712345678"
+                    required={customerMode === 'inline'}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="inlineCustomerEmail" className="text-xs">Email (Optional)</Label>
+                  <Input
+                    id="inlineCustomerEmail"
+                    name="inlineCustomerEmail"
+                    type="email"
+                    placeholder="e.g. buyer@example.com"
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground sm:col-span-3">
+                  Customer will be automatically linked to an existing profile matching this phone or created new without leaving this screen.
+                </p>
+              </div>
+            )}
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="salesChannel">Sales channel</Label>
             <select
@@ -312,6 +401,9 @@ export function CreateManualOrderDialog() {
         </section>
 
         <section className="grid gap-4 border-t pt-5 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <h2 className="font-medium">Payment & Pricing Adjustments</h2>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="paymentMethod">Payment method</Label>
             <select id="paymentMethod" name="paymentMethod" required className={selectClassName}>
@@ -324,6 +416,9 @@ export function CreateManualOrderDialog() {
             </select>
           </div>
           <div className="space-y-2">
+            {/* spacer */}
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="deliveryAmount">Delivery override amount</Label>
             <Input
               id="deliveryAmount"
@@ -334,8 +429,22 @@ export function CreateManualOrderDialog() {
             <p className="text-xs text-muted-foreground">Leave the reason blank to use the configured delivery rate.</p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="deliveryOverrideReason">Override reason</Label>
+            <Label htmlFor="deliveryOverrideReason">Delivery override reason</Label>
             <Input id="deliveryOverrideReason" name="deliveryOverrideReason" placeholder="Required to override the configured rate" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="discountAmount">Negotiated order discount (BDT)</Label>
+            <Input
+              id="discountAmount"
+              name="discountAmount"
+              inputMode="decimal"
+              placeholder="0.00"
+            />
+            <p className="text-xs text-muted-foreground">Order-level commercial discount agreed with buyer.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="discountOverrideReason">Discount reason</Label>
+            <Input id="discountOverrideReason" name="discountOverrideReason" placeholder="E.g., Social media campaign, VIP buyer agreement" />
           </div>
         </section>
 

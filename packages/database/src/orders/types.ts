@@ -122,10 +122,18 @@ export type PlaceOrderResult =
   | { readonly kind: 'PLACED'; readonly order: OrderView }
   | { readonly kind: 'CHANGED'; readonly checkout: CheckoutView };
 
+export interface OrderTag {
+  readonly id: string;
+  readonly label: string;
+  readonly color: string | null;
+  readonly createdAt: string;
+}
+
 export interface AdminOrderDetailView extends OrderView {
   readonly fulfillmentStatus: OrderFulfillmentStatus;
   readonly deliveryStatus: OrderDeliveryStatus;
   readonly deliveryAmount: string;
+  readonly tags: readonly OrderTag[];
   readonly notes: readonly {
     id: string;
     authorActorId: string;
@@ -200,6 +208,7 @@ export interface OrderListFilters {
   readonly paymentMethod?: PaymentMethodCode;
   readonly salesChannel?: OrderView['salesChannel'];
   readonly source?: OrderView['source'];
+  readonly tagId?: string;
   /** Searched against historical order number, customer name, phone, and email snapshots. */
   readonly q?: string;
   readonly from?: string;
@@ -251,6 +260,7 @@ export interface OrderListItem {
   readonly customerId: string | null;
   readonly customerPhone: string;
   readonly customerEmail: string | null;
+  readonly tags?: readonly OrderTag[];
   readonly createdAt: string;
 }
 
@@ -282,19 +292,48 @@ export interface ManualOrderDeliveryAddress {
   readonly saveToCustomer?: boolean;
 }
 
+export interface ManualOrderInlineCustomer {
+  readonly name: string;
+  readonly phone: string;
+  readonly email?: string | null;
+}
+
 export interface CreateManualOrderInput {
   readonly organizationId: string;
   readonly actorId: string;
-  readonly customerId: string;
+  readonly customerId?: string;
+  readonly customer?: ManualOrderInlineCustomer;
   readonly locationId: string;
   readonly lines: readonly ManualOrderLine[];
   readonly deliveryAddress: ManualOrderDeliveryAddress;
   readonly deliveryAmount?: string;
   readonly deliveryOverrideReason?: string;
+  readonly discountAmount?: string;
+  readonly discountOverrideReason?: string;
   readonly paymentMethod: PaymentMethodCode;
   readonly salesChannel?: Exclude<OrderView['salesChannel'], 'STOREFRONT'>;
   readonly currency?: string;
   readonly idempotencyKey: string;
+}
+
+export interface UpdateOrderCustomerContactInput {
+  readonly organizationId: string;
+  readonly orderId: string;
+  readonly actorId: string;
+  readonly displayName: string;
+  readonly phone: string;
+  readonly email?: string | null | undefined;
+  readonly reason: string;
+  readonly idempotencyKey?: string | undefined;
+}
+
+export interface CompleteOrderInput {
+  readonly organizationId: string;
+  readonly orderId: string;
+  readonly actorId: string | null;
+  readonly idempotencyKey: string;
+  readonly triggerOutboxEventId?: string | null | undefined;
+  readonly manualReason?: string | null | undefined;
 }
 
 export interface PublicOrderTrackingView {

@@ -19,7 +19,11 @@ import { HoldOrderDialog } from './hold-order-dialog';
 import { CancelOrderLineDialog } from './cancel-order-line-dialog';
 import { AddOrderNoteDialog } from './add-order-note-dialog';
 import { CorrectDeliveryAddressDialog } from './correct-delivery-address-dialog';
+import { CompleteOrderDialog } from './complete-order-dialog';
+import { CorrectCustomerContactDialog } from './correct-customer-contact-dialog';
+import { ManageOrderTagsDialog } from './manage-order-tags-dialog';
 import { StatusBadge } from '@/components/status-badge';
+import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import {
@@ -143,11 +147,39 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               Placed on {formatDateTime(order.createdAt)} ·{' '}
               {order.salesChannel.replaceAll('_', ' ')}
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {order.tags?.map((t) => (
+                <Badge
+                  key={t.id}
+                  variant="outline"
+                  className="px-2 py-0.5 text-xs font-normal"
+                  style={{
+                    borderColor: t.color ? `${t.color}80` : undefined,
+                    backgroundColor: t.color ? `${t.color}15` : undefined,
+                    color: t.color || undefined,
+                  }}
+                >
+                  <span
+                    className="mr-1 inline-block size-1.5 rounded-full"
+                    style={{ backgroundColor: t.color ?? '#6b7280' }}
+                  />
+                  {t.label ?? t.name}
+                </Badge>
+              ))}
+              <ManageOrderTagsDialog order={order} onCompleted={() => void load()} />
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => void load()}>
               <RefreshCw className="mr-2 size-4" aria-hidden="true" /> Refresh
             </Button>
+            {order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
+              <CompleteOrderDialog
+                orderId={order.id}
+                orderNumber={order.orderNumber}
+                onCompleted={() => void load()}
+              />
+            )}
             {order.status === 'PENDING' && (
               <CancelOrderDialog orderId={order.id} currentVersion={order.version} />
             )}
@@ -494,30 +526,49 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
           </section>
 
           <section className="rounded-xl border bg-card shadow-sm">
-            <div className="border-b px-6 py-4">
+            <div className="flex items-center justify-between border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Customer</h2>
+              <CorrectCustomerContactDialog order={order} onCompleted={() => void load()} />
             </div>
-            <div className="px-6 py-4 text-sm">
-              <div className="font-medium text-foreground">
-                {order.customerId ? (
-                  <Link
-                    href={`/customers/${order.customerId}`}
-                    className="hover:underline text-primary"
-                  >
-                    {order.customerName ?? 'Guest'}
-                  </Link>
-                ) : (
-                  (order.customerName ?? 'Guest')
-                )}
+            <div className="space-y-3 px-6 py-4 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Name</p>
+                <div className="font-medium text-foreground">
+                  {order.customerId ? (
+                    <Link
+                      href={`/customers/${order.customerId}`}
+                      className="hover:underline text-primary"
+                    >
+                      {order.customerName ?? 'Guest'}
+                    </Link>
+                  ) : (
+                    (order.customerName ?? 'Guest')
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Phone</p>
+                <div className="font-medium text-foreground">
+                  {order.customerPhone ? (
+                    <a href={`tel:${order.customerPhone}`} className="hover:underline">
+                      {order.customerPhone}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground italic">None recorded</span>
+                  )}
+                </div>
               </div>
               {order.customerEmail ? (
-                <div className="mt-1 text-muted-foreground">
-                  <a
-                    href={`mailto:${order.customerEmail}`}
-                    className="hover:underline text-blue-600"
-                  >
-                    {order.customerEmail}
-                  </a>
+                <div>
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <div className="text-muted-foreground">
+                    <a
+                      href={`mailto:${order.customerEmail}`}
+                      className="hover:underline text-blue-600"
+                    >
+                      {order.customerEmail}
+                    </a>
+                  </div>
                 </div>
               ) : null}
             </div>

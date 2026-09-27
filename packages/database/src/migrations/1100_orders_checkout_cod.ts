@@ -227,6 +227,20 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index order_address_corrections_order
       on orders.order_address_corrections (organization_id, order_id, created_at desc);
 
+    create table orders.order_customer_corrections (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      order_id uuid not null references orders.orders(id),
+      before_snapshot jsonb not null check (jsonb_typeof(before_snapshot) = 'object'),
+      after_snapshot jsonb not null check (jsonb_typeof(after_snapshot) = 'object'),
+      reason text not null check (length(trim(reason)) > 0),
+      created_by_actor_id uuid not null,
+      created_at timestamptz not null default now(),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id)
+    );
+    create index order_customer_corrections_order
+      on orders.order_customer_corrections (organization_id, order_id, created_at desc);
+
     create table orders.order_discount_applications (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
@@ -292,6 +306,30 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create index order_notes_order_idx on orders.order_notes (order_id, created_at desc);
 
+    -- Organisation-level order tag registry: tags are shared across orders, not free-form per record.
+    create table orders.order_tags (
+      id              uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      label           text not null check (length(trim(label)) > 0),
+      color           text,
+      created_at      timestamptz not null default now(),
+      unique (organization_id, id)
+    );
+    create unique index order_tags_label_unique_idx on orders.order_tags (organization_id, lower(label));
+
+    -- Many-to-many assignment of org tags to individual orders.
+    create table orders.order_tag_assignments (
+      organization_id uuid not null references platform.organizations(id),
+      order_id        uuid not null,
+      tag_id          uuid not null,
+      created_at      timestamptz not null default now(),
+      primary key (organization_id, order_id, tag_id),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id),
+      foreign key (organization_id, tag_id) references orders.order_tags(organization_id, id) on delete cascade
+    );
+    create index order_tag_order_idx on orders.order_tag_assignments (order_id);
+    create index order_tag_assignment_tag_idx on orders.order_tag_assignments (organization_id, tag_id);
+
     -- Traceability record linking order completion to the triggering event.
     -- trigger_outbox_event_id is null when an admin manually completes an order.
     create table orders.order_completion_events (
@@ -299,6 +337,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       organization_id         uuid not null references platform.organizations(id),
       trigger_outbox_event_id uuid,
       completed_by_actor_id   uuid,
+      completion_reason       text,
       created_at              timestamptz not null default now()
     );
 

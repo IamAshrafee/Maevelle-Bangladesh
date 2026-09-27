@@ -3,7 +3,11 @@ import { sql, type Kysely } from 'kysely';
 import { hashToken } from '@maevelle/security';
 
 import type { DatabaseSchema } from '../index.js';
-import type { CustomerSource } from '../customers.js';
+import {
+  CustomerDomainError,
+  resolveOrCreateOrderCustomerInTransaction,
+  type CustomerSource,
+} from '../customers.js';
 import { normalizeCustomerPhone } from '../customer-identities.js';
 import {
   createInventoryReservationInTransaction,
@@ -36,11 +40,11 @@ const positiveDecimalPattern = /^(?:(?:[1-9]\d*)(?:\.\d{1,4})?|(?:0\.\d*[1-9]\d*
  * checkout flow. Unlike placeOrder:
  *
  * - Catalog prices are authoritative unless an operator supplies a reasoned override.
- * - Customer must be ACTIVE (not INACTIVE, BLOCKED, MERGED, or ANONYMIZED).
+ * - Customer must be ACTIVE (not INACTIVE, BLOCKED, MERGED, or ANONYMIZED), or resolved/created inline.
  * - Admin selects the warehouse location explicitly.
  * - Delivery is calculated from the same configured rule as Storefront;
  *   deliberate exceptions require a recorded operator reason.
- * - No promotion discounts are applied (discount_amount = 0 on all lines).
+ * - Negotiated order-level discounts can be applied with a recorded operator reason.
  * - Line item images are snapshotted at creation time.
  *
  * All inventory reservation logic uses the same primitive as placeOrder so
@@ -52,6 +56,22 @@ export async function createManualOrder(
 ): Promise<OrderView> {
   // ---- Input validation (server-enforced, not UI-only) -------------------
 
+  if (!input.customerId && !input.customer) {
+    throw new OrderDomainError(
+      'VALIDATION_FAILED',
+      'Either an existing customerId or customer details (name and phone) must be provided.',
+    );
+  }
+
+  if (input.customer) {
+    if (!input.customer.name.trim()) {
+      throw new OrderDomainError('VALIDATION_FAILED', 'Customer name is required.');
+    }
+    if (!input.customer.phone.trim()) {
+      throw new OrderDomainError('VALIDATION_FAILED', 'Customer phone number is required.');
+    }
+  }
+
   if (!input.lines.length)
     throw new OrderDomainError('VALIDATION_FAILED', 'At least one line item is required.');
 
@@ -62,6 +82,15 @@ export async function createManualOrder(
       'VALIDATION_FAILED',
       'A delivery override requires a non-negative delivery amount.',
     );
+
+  const discountAmountRaw = input.discountAmount?.trim();
+  const discountOverrideReason = input.discountOverrideReason?.trim();
+  if (discountAmountRaw && !decimalPattern.test(discountAmountRaw)) {
+    throw new OrderDomainError(
+      'VALIDATION_FAILED',
+      'Discount amount must be a non-negative decimal.',
+    );
+  }
 
   ensureAddress(input.deliveryAddress);
 
@@ -92,12 +121,15 @@ export async function createManualOrder(
         idempotencyKey: input.idempotencyKey,
         requestFingerprint: hashToken(
           JSON.stringify({
-            customerId: input.customerId,
+            customerId: input.customerId ?? null,
+            customer: input.customer ?? null,
             locationId: input.locationId,
             lines: input.lines,
             deliveryAddress: input.deliveryAddress,
             deliveryAmount: deliveryAmountRaw ?? null,
             deliveryOverrideReason: deliveryOverrideReason ?? null,
+            discountAmount: discountAmountRaw ?? null,
+            discountOverrideReason: discountOverrideReason ?? null,
             paymentMethod: input.paymentMethod,
             salesChannel,
             currency,
@@ -130,20 +162,59 @@ export async function createManualOrder(
       throw error;
     }
 
-    // ---- Customer guard ----------------------------------------------------
-    const customerRow = await sql<{ id: string; status: string; display_name: string }>`
-      select id, status, display_name
-      from customers.customers
-      where id = ${input.customerId} and organization_id = ${input.organizationId}
-      for update
-    `.execute(transaction);
-    const customer = customerRow.rows[0];
-    if (!customer) throw new OrderDomainError('NOT_FOUND', 'Customer was not found.');
-    if (!['ACTIVE'].includes(customer.status))
-      throw new OrderDomainError(
-        'VALIDATION_FAILED',
-        `Manual orders cannot be created for a customer with status ${customer.status}.`,
-      );
+    // ---- Customer resolution ----------------------------------------------
+    const customerSourceByChannel: Record<
+      Exclude<OrderView['salesChannel'], 'STOREFRONT'>,
+      CustomerSource
+    > = {
+      ADMIN: 'MANUAL_ORDER',
+      FACEBOOK: 'FACEBOOK',
+      INSTAGRAM: 'INSTAGRAM',
+      WHATSAPP: 'WHATSAPP',
+      PHONE: 'PHONE',
+      EXTERNAL_API: 'EXTERNAL_API',
+      IMPORT: 'IMPORT',
+    };
+
+    let customerId: string;
+    let customerDisplayName: string;
+
+    if (input.customerId) {
+      const customerRow = await sql<{ id: string; status: string; display_name: string }>`
+        select id, status, display_name
+        from customers.customers
+        where id = ${input.customerId} and organization_id = ${input.organizationId}
+        for update
+      `.execute(transaction);
+      const customer = customerRow.rows[0];
+      if (!customer) throw new OrderDomainError('NOT_FOUND', 'Customer was not found.');
+      if (!['ACTIVE'].includes(customer.status))
+        throw new OrderDomainError(
+          'VALIDATION_FAILED',
+          `Manual orders cannot be created for a customer with status ${customer.status}.`,
+        );
+      customerId = customer.id;
+      customerDisplayName = customer.display_name;
+    } else {
+      try {
+        const resolved = await resolveOrCreateOrderCustomerInTransaction(transaction, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          actorType: 'USER',
+          displayName: input.customer!.name.trim(),
+          phone: input.customer!.phone.trim(),
+          ...(input.customer!.email?.trim() ? { email: input.customer!.email.trim() } : {}),
+          source: customerSourceByChannel[salesChannel],
+        });
+        customerId = resolved.customerId;
+        customerDisplayName = input.customer!.name.trim();
+      } catch (error) {
+        if (error instanceof CustomerDomainError) {
+          throw new OrderDomainError('VALIDATION_FAILED', error.message);
+        }
+        throw error;
+      }
+    }
 
     // ---- Location guard ----------------------------------------------------
     const locationRow = await sql<{ id: string }>`
@@ -288,8 +359,18 @@ export async function createManualOrder(
     const subtotalAmount = decimal4Text(
       resolvedLines.reduce((sum, line) => sum + decimal4Minor(line.gross), 0n),
     );
+    const effectiveDiscountAmount = discountAmountRaw ?? '0.0000';
+    const subtotalMinor = decimal4Minor(subtotalAmount);
+    const discountMinor = decimal4Minor(effectiveDiscountAmount);
+    if (discountMinor > subtotalMinor) {
+      throw new OrderDomainError(
+        'VALIDATION_FAILED',
+        'Discount amount cannot exceed the order subtotal.',
+      );
+    }
+    const merchandiseNetMinor = subtotalMinor - discountMinor;
     const totalAmount = decimal4Text(
-      decimal4Minor(subtotalAmount) + decimal4Minor(effectiveDeliveryAmount),
+      merchandiseNetMinor + decimal4Minor(effectiveDeliveryAmount),
     );
 
     // ---- Insert order header -----------------------------------------------
@@ -300,48 +381,51 @@ export async function createManualOrder(
         order_status, payment_method,
         subtotal_amount, discount_amount, delivery_amount, tax_amount, total_amount
       ) values (
-        ${input.organizationId}, ${orderNumber}, ${input.customerId}, 'MANUAL', ${salesChannel},
+        ${input.organizationId}, ${orderNumber}, ${customerId}, 'MANUAL', ${salesChannel},
         ${currency}, 'PENDING', ${input.paymentMethod},
-        ${subtotalAmount}::numeric, 0::numeric,
+        ${subtotalAmount}::numeric, ${effectiveDiscountAmount}::numeric,
         ${effectiveDeliveryAmount}::numeric, 0::numeric,
         ${totalAmount}::numeric
       ) returning id
     `.execute(transaction);
     const orderId = orderCreated.rows[0]?.id;
     if (!orderId) throw new Error('Manual order creation did not return an id.');
-    const customerSourceByChannel: Record<
-      Exclude<OrderView['salesChannel'], 'STOREFRONT'>,
-      CustomerSource
-    > = {
-      ADMIN: 'MANUAL_ORDER',
-      FACEBOOK: 'FACEBOOK',
-      INSTAGRAM: 'INSTAGRAM',
-      WHATSAPP: 'WHATSAPP',
-      PHONE: 'PHONE',
-      EXTERNAL_API: 'EXTERNAL_API',
-      IMPORT: 'IMPORT',
-    };
+
+    if (discountMinor > 0n) {
+      await sql`
+        insert into orders.order_discount_applications (
+          organization_id, order_id, promotion_id, promotion_revision_id, coupon_code_id,
+          promotion_name_snapshot, coupon_code_snapshot, benefit_type_snapshot, benefit_value_snapshot,
+          discount_amount
+        ) values (
+          ${input.organizationId}, ${orderId}, null, null, null,
+          ${discountOverrideReason || 'Manual Order Discount'}, null, 'FIXED_AMOUNT',
+          ${effectiveDiscountAmount}::numeric, ${effectiveDiscountAmount}::numeric
+        )
+      `.execute(transaction);
+    }
+
     await sql`
       update customers.customers
       set latest_source = ${customerSourceByChannel[salesChannel]}, updated_at = now(), version = version + 1
-      where organization_id = ${input.organizationId} and id = ${input.customerId}
+      where organization_id = ${input.organizationId} and id = ${customerId}
     `.execute(transaction);
 
     // ---- Customer and address snapshots -----------------------------------
     // Fetch primary contact details from the customer's profile.
     const primaryContact = await sql<{ phone: string | null; email: string | null }>`
       select
-        (select raw_value from customers.customer_phones where customer_id = ${input.customerId} and is_primary order by created_at limit 1) as phone,
-        (select raw_value from customers.customer_emails where customer_id = ${input.customerId} and is_primary order by created_at limit 1) as email
+        (select raw_value from customers.customer_phones where customer_id = ${customerId} and is_primary order by created_at limit 1) as phone,
+        (select raw_value from customers.customer_emails where customer_id = ${customerId} and is_primary order by created_at limit 1) as email
     `.execute(transaction);
-    const phone = primaryContact.rows[0]?.phone ?? input.deliveryAddress.phone;
-    const email = primaryContact.rows[0]?.email ?? null;
+    const phone = primaryContact.rows[0]?.phone ?? input.customer?.phone ?? input.deliveryAddress.phone;
+    const email = primaryContact.rows[0]?.email ?? input.customer?.email ?? null;
 
     await sql`
       insert into orders.order_customer_snapshots
         (order_id, organization_id, customer_id, display_name, phone, normalized_phone, email)
-      values (${orderId}, ${input.organizationId}, ${input.customerId},
-        ${customer.display_name}, ${phone}, ${normalizeCustomerPhone(phone)}, ${email})
+      values (${orderId}, ${input.organizationId}, ${customerId},
+        ${customerDisplayName}, ${phone}, ${normalizeCustomerPhone(phone)}, ${email})
     `.execute(transaction);
     await sql`
       insert into orders.order_addresses (
@@ -384,7 +468,7 @@ export async function createManualOrder(
           address_line_1, address_line_2, geography_node_id,
           area, city, district, postal_code, country_code, is_default
         ) values (
-          ${input.organizationId}, ${input.customerId},
+          ${input.organizationId}, ${customerId},
           ${input.deliveryAddress.recipientName.trim()},
           ${input.deliveryAddress.phone.trim()},
           ${input.deliveryAddress.addressLine1.trim()},

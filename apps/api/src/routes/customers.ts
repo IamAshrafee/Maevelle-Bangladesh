@@ -15,6 +15,10 @@ import {
   removeCustomerPhone,
   removeCustomerEmail,
   removeCustomerAddress,
+  updateCustomerAddress,
+  setPrimaryCustomerPhone,
+  setPrimaryCustomerEmail,
+  setDefaultCustomerAddress,
   addCustomerNote,
   listCustomerOrders,
   listCustomerReturns,
@@ -541,6 +545,105 @@ export function registerCustomerRoutes(
         addressId: params.addressId,
       });
       return reply.code(204).send();
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  app.put(
+    '/admin/customers/:customerId/addresses/:addressId',
+    {
+      schema: {
+        body: Type.Object({
+          recipientName: Type.String({ minLength: 1 }),
+          addressLine1: Type.String({ minLength: 1 }),
+          countryCode: Type.String({ pattern: '^[A-Z]{2}$' }),
+          label: Type.Optional(Type.String()),
+          phone: Type.Optional(Type.String()),
+          addressLine2: Type.Optional(Type.String()),
+          geographyNodeId: Type.Optional(Type.String()),
+          area: Type.Optional(Type.String()),
+          city: Type.Optional(Type.String()),
+          district: Type.Optional(Type.String()),
+          postalCode: Type.Optional(Type.String()),
+          isDefault: Type.Optional(Type.Boolean()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string; addressId: string };
+      try {
+        await updateCustomerAddress(database.db, {
+          ...active,
+          customerId: params.customerId,
+          addressId: params.addressId,
+          ...(request.body as {
+            recipientName: string;
+            addressLine1: string;
+            countryCode: string;
+            label?: string | null;
+            phone?: string | null;
+            addressLine2?: string | null;
+            geographyNodeId?: string | null;
+            area?: string | null;
+            city?: string | null;
+            district?: string | null;
+            postalCode?: string | null;
+            isDefault?: boolean;
+          }),
+        });
+        return reply.code(200).send({ success: true });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post('/admin/customers/:customerId/phones/:phoneId/primary', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string; phoneId: string };
+    try {
+      await setPrimaryCustomerPhone(database.db, {
+        ...active,
+        customerId: params.customerId,
+        phoneId: params.phoneId,
+      });
+      return reply.code(200).send({ success: true });
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  app.post('/admin/customers/:customerId/emails/:emailId/primary', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string; emailId: string };
+    try {
+      await setPrimaryCustomerEmail(database.db, {
+        ...active,
+        customerId: params.customerId,
+        emailId: params.emailId,
+      });
+      return reply.code(200).send({ success: true });
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  app.post('/admin/customers/:customerId/addresses/:addressId/default', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string; addressId: string };
+    try {
+      await setDefaultCustomerAddress(database.db, {
+        ...active,
+        customerId: params.customerId,
+        addressId: params.addressId,
+      });
+      return reply.code(200).send({ success: true });
     } catch (error) {
       return sendError(reply, error);
     }

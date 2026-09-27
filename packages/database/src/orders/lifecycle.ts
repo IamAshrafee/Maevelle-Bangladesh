@@ -19,12 +19,16 @@ import {
   claimIdempotencyRecord,
   IdempotencyKeyReuseError,
 } from '../platform.js';
+import { normalizeCustomerPhone } from '../customer-identities.js';
 import { ensureAddress } from './checkout.js';
 import { orderView } from './queries.js';
 import {
   OrderDomainError,
   type CheckoutAddressInput,
+  type CompleteOrderInput,
+  type OrderTag,
   type OrderView,
+  type UpdateOrderCustomerContactInput,
 } from './types.js';
 
 export async function updateOrderStatus(
@@ -869,13 +873,7 @@ export async function resumeOrderFromHold(
  */
 export async function completeOrder(
   db: Kysely<DatabaseSchema>,
-  input: {
-    organizationId: string;
-    orderId: string;
-    actorId: string | null;
-    idempotencyKey: string;
-    triggerOutboxEventId?: string | null;
-  },
+  input: CompleteOrderInput,
 ): Promise<OrderView> {
   return db.transaction().execute(async (transaction) => {
     const order = await sql<{ order_status: string; version: string; organization_id: string }>`
@@ -896,26 +894,30 @@ export async function completeOrder(
         `Cannot complete an order in ${row.order_status} status.`,
       );
 
-    // Guard: all ordered lines must be covered by delivered delivery lines.
-    // An order line is covered when sum(delivery_line.delivered_quantity) >= order_line.quantity.
-    const undelivered = await sql<{ count: string }>`
-      select count(*)::text as count
-      from orders.order_lines ol
-      where ol.order_id = ${input.orderId}
-        and ol.line_status = 'ACTIVE'
-        and (
-          select coalesce(sum(dl.delivered_quantity), 0)
-          from delivery.delivery_lines dl
-          join delivery.deliveries d on d.id = dl.delivery_id
-          where dl.order_line_id = ol.id
-            and d.outcome_status = 'DELIVERED'
-        ) < ol.quantity
-    `.execute(transaction);
-    if (Number(undelivered.rows[0]?.count ?? 1) > 0)
-      throw new OrderDomainError(
-        'INVALID_TRANSITION',
-        'Not all order lines have been delivered. Cannot complete.',
-      );
+    const hasManualReason =
+      typeof input.manualReason === 'string' && input.manualReason.trim().length > 0;
+    if (!hasManualReason) {
+      // Guard: all ordered lines must be covered by delivered delivery lines.
+      // An order line is covered when sum(delivery_line.delivered_quantity) >= order_line.quantity.
+      const undelivered = await sql<{ count: string }>`
+        select count(*)::text as count
+        from orders.order_lines ol
+        where ol.order_id = ${input.orderId}
+          and ol.line_status = 'ACTIVE'
+          and (
+            select coalesce(sum(dl.delivered_quantity), 0)
+            from delivery.delivery_lines dl
+            join delivery.deliveries d on d.id = dl.delivery_id
+            where dl.order_line_id = ol.id
+              and d.outcome_status = 'DELIVERED'
+          ) < ol.quantity
+      `.execute(transaction);
+      if (Number(undelivered.rows[0]?.count ?? 1) > 0)
+        throw new OrderDomainError(
+          'INVALID_TRANSITION',
+          'Not all order lines have been delivered. Cannot complete without an operator reason.',
+        );
+    }
 
     // Idempotency check against explicit key (handles retry of auto-completion event).
     let recordId: string | undefined;
@@ -945,8 +947,8 @@ export async function completeOrder(
 
     // Record completion traceability — links to the delivery event that triggered this, if any.
     await sql`
-      insert into orders.order_completion_events (order_id, organization_id, trigger_outbox_event_id, completed_by_actor_id)
-      values (${input.orderId}, ${input.organizationId}, ${input.triggerOutboxEventId ?? null}, ${input.actorId ?? null})
+      insert into orders.order_completion_events (order_id, organization_id, trigger_outbox_event_id, completed_by_actor_id, completion_reason)
+      values (${input.orderId}, ${input.organizationId}, ${input.triggerOutboxEventId ?? null}, ${input.actorId ?? null}, ${input.manualReason?.trim() ?? null})
       on conflict (order_id) do nothing
     `.execute(transaction);
 
@@ -964,7 +966,10 @@ export async function completeOrder(
       action: 'orders.order.completed',
       targetType: 'orders.order',
       targetId: input.orderId,
-      metadata: { triggerOutboxEventId: input.triggerOutboxEventId ?? null },
+      metadata: {
+        triggerOutboxEventId: input.triggerOutboxEventId ?? null,
+        manualReason: input.manualReason?.trim() ?? null,
+      },
     });
 
     await sql`
@@ -974,5 +979,272 @@ export async function completeOrder(
     `.execute(transaction);
 
     return orderView(transaction, input.orderId);
+  });
+}
+
+export async function updateOrderCustomerContact(
+  db: Kysely<DatabaseSchema>,
+  input: UpdateOrderCustomerContactInput,
+): Promise<OrderView> {
+  const reason = input.reason.trim();
+  if (!reason)
+    throw new OrderDomainError('VALIDATION_FAILED', 'A correction reason is required.');
+  const displayName = input.displayName.trim();
+  if (!displayName)
+    throw new OrderDomainError('VALIDATION_FAILED', 'Customer name is required.');
+  const phone = input.phone.trim();
+  if (!phone)
+    throw new OrderDomainError('VALIDATION_FAILED', 'Customer phone number is required.');
+
+  let normalizedPhone: string;
+  try {
+    normalizedPhone = normalizeCustomerPhone(phone);
+  } catch (error) {
+    throw new OrderDomainError(
+      'VALIDATION_FAILED',
+      error instanceof Error ? error.message : 'Invalid customer phone number.',
+    );
+  }
+  const email = input.email?.trim() || null;
+
+  return db.transaction().execute(async (transaction) => {
+    let recordId: string | undefined;
+    if (input.idempotencyKey) {
+      try {
+        const record = await claimIdempotencyRecord(transaction, {
+          organizationId: input.organizationId,
+          principalType: 'USER',
+          principalId: input.actorId,
+          operationType: 'orders.correct-customer-contact',
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint: JSON.stringify({
+            orderId: input.orderId,
+            displayName,
+            phone,
+            email,
+            reason,
+          }),
+        });
+        if (!record.created && record.status === 'SUCCEEDED') {
+          return orderView(transaction, input.orderId);
+        }
+        recordId = record.id;
+      } catch (error) {
+        if (error instanceof IdempotencyKeyReuseError)
+          throw new OrderDomainError('IDEMPOTENCY_CONFLICT', 'Idempotency key reused.');
+        throw error;
+      }
+    }
+
+    const orderRow = await sql<{ order_status: string }>`
+      select order_status from orders.orders
+      where id = ${input.orderId} and organization_id = ${input.organizationId}
+      for update
+    `.execute(transaction);
+    if (!orderRow.rows[0]) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
+    if (['CANCELLED'].includes(orderRow.rows[0].order_status)) {
+      throw new OrderDomainError('INVALID_TRANSITION', 'Cannot correct customer contact on a cancelled order.');
+    }
+
+    const currentSnapshot = await sql<{
+      display_name: string;
+      phone: string;
+      normalized_phone: string;
+      email: string | null;
+    }>`
+      select display_name, phone, normalized_phone, email
+      from orders.order_customer_snapshots
+      where order_id = ${input.orderId} and organization_id = ${input.organizationId}
+      for update
+    `.execute(transaction);
+    const before = currentSnapshot.rows[0];
+    if (!before) throw new OrderDomainError('NOT_FOUND', 'Order customer snapshot was not found.');
+
+    const beforeSnapshot = {
+      displayName: before.display_name,
+      phone: before.phone,
+      normalizedPhone: before.normalized_phone,
+      email: before.email,
+    };
+    const afterSnapshot = {
+      displayName,
+      phone,
+      normalizedPhone,
+      email,
+    };
+
+    await sql`
+      update orders.order_customer_snapshots
+      set display_name = ${displayName},
+          phone = ${phone},
+          normalized_phone = ${normalizedPhone},
+          email = ${email}
+      where order_id = ${input.orderId} and organization_id = ${input.organizationId}
+    `.execute(transaction);
+
+    const updated = await sql<{ version: string }>`
+      update orders.orders set version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.orderId}
+      returning version::text
+    `.execute(transaction);
+
+    await sql`
+      insert into orders.order_customer_corrections (
+        organization_id, order_id, before_snapshot, after_snapshot,
+        reason, created_by_actor_id
+      ) values (
+        ${input.organizationId}, ${input.orderId},
+        ${JSON.stringify(beforeSnapshot)}::jsonb, ${JSON.stringify(afterSnapshot)}::jsonb,
+        ${reason}, ${input.actorId}
+      )
+    `.execute(transaction);
+
+    await appendAuditEvent(transaction, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'orders.order.customer_contact_corrected',
+      targetType: 'orders.order',
+      targetId: input.orderId,
+      reason,
+      metadata: { before: beforeSnapshot, after: afterSnapshot },
+    });
+
+    await sql`
+      insert into platform.outbox_events (
+        organization_id, event_type, event_version, aggregate_type, aggregate_id,
+        aggregate_version, payload, occurred_at
+      ) values (
+        ${input.organizationId}, 'orders.order.customer_contact_corrected', 1,
+        'orders.order', ${input.orderId}, ${Number(updated.rows[0]!.version)},
+        ${JSON.stringify({ orderId: input.orderId })}::jsonb, now()
+      )
+    `.execute(transaction);
+
+    if (recordId) {
+      await sql`
+        update platform.idempotency_records
+        set status = 'SUCCEEDED', result_entity_type = 'orders.order',
+            result_entity_id = ${input.orderId}::uuid,
+            safe_response = ${JSON.stringify({ orderId: input.orderId })}::jsonb,
+            completed_at = now()
+        where id = ${recordId}
+      `.execute(transaction);
+    }
+
+    return orderView(transaction, input.orderId);
+  });
+}
+
+export async function listOrderTags(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+): Promise<readonly OrderTag[]> {
+  const result = await sql<{ id: string; label: string; color: string | null; created_at: Date }>`
+    select id, label, color, created_at
+    from orders.order_tags
+    where organization_id = ${organizationId}
+    order by label asc
+  `.execute(db);
+  return result.rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    color: row.color,
+    createdAt: row.created_at.toISOString(),
+  }));
+}
+
+export async function createOrderTag(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; label: string; color?: string | null },
+): Promise<OrderTag> {
+  const label = input.label.trim();
+  if (!label) throw new OrderDomainError('VALIDATION_FAILED', 'Tag label cannot be empty.');
+  const color = input.color?.trim() || 'slate';
+
+  const existing = await sql<{ id: string; label: string; color: string | null; created_at: Date }>`
+    select id, label, color, created_at
+    from orders.order_tags
+    where organization_id = ${input.organizationId} and lower(label) = lower(${label})
+  `.execute(db);
+  if (existing.rows[0]) {
+    return {
+      id: existing.rows[0].id,
+      label: existing.rows[0].label,
+      color: existing.rows[0].color,
+      createdAt: existing.rows[0].created_at.toISOString(),
+    };
+  }
+
+  const created = await sql<{ id: string; label: string; color: string | null; created_at: Date }>`
+    insert into orders.order_tags (organization_id, label, color)
+    values (${input.organizationId}, ${label}, ${color})
+    returning id, label, color, created_at
+  `.execute(db);
+  const row = created.rows[0]!;
+  return {
+    id: row.id,
+    label: row.label,
+    color: row.color,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+export async function assignTagToOrder(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; orderId: string; tagId: string; actorId?: string },
+): Promise<void> {
+  await db.transaction().execute(async (transaction) => {
+    const order = await sql<{ id: string }>`
+      select id from orders.orders where organization_id = ${input.organizationId} and id = ${input.orderId}
+    `.execute(transaction);
+    if (!order.rows[0]) throw new OrderDomainError('NOT_FOUND', 'Order was not found.');
+
+    const tag = await sql<{ id: string }>`
+      select id from orders.order_tags where organization_id = ${input.organizationId} and id = ${input.tagId}
+    `.execute(transaction);
+    if (!tag.rows[0]) throw new OrderDomainError('NOT_FOUND', 'Order tag was not found.');
+
+    await sql`
+      insert into orders.order_tag_assignments (organization_id, order_id, tag_id)
+      values (${input.organizationId}, ${input.orderId}, ${input.tagId})
+      on conflict (organization_id, order_id, tag_id) do nothing
+    `.execute(transaction);
+
+    if (input.actorId) {
+      await appendAuditEvent(transaction, {
+        organizationId: input.organizationId,
+        actorType: 'USER',
+        actorId: input.actorId,
+        action: 'orders.order.tag_assigned',
+        targetType: 'orders.order',
+        targetId: input.orderId,
+        metadata: { tagId: input.tagId },
+      });
+    }
+  });
+}
+
+export async function removeTagFromOrder(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; orderId: string; tagId: string; actorId?: string },
+): Promise<void> {
+  await db.transaction().execute(async (transaction) => {
+    await sql`
+      delete from orders.order_tag_assignments
+      where organization_id = ${input.organizationId} and order_id = ${input.orderId} and tag_id = ${input.tagId}
+    `.execute(transaction);
+
+    if (input.actorId) {
+      await appendAuditEvent(transaction, {
+        organizationId: input.organizationId,
+        actorType: 'USER',
+        actorId: input.actorId,
+        action: 'orders.order.tag_removed',
+        targetType: 'orders.order',
+        targetId: input.orderId,
+        metadata: { tagId: input.tagId },
+      });
+    }
   });
 }

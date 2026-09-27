@@ -33,12 +33,16 @@ export function EditAddressDialog({ customerId, address }: { customerId: string,
     
     const formData = new FormData(e.currentTarget);
     const payload = {
-      version: address.version,
-      label: formData.get('label') as string || undefined,
+      label: (formData.get('label') as string) || undefined,
       recipientName: formData.get('recipientName') as string,
-      phone: formData.get('phone') as string || undefined,
+      phone: (formData.get('phone') as string) || undefined,
       addressLine1: formData.get('addressLine1') as string,
-      city: formData.get('city') as string,
+      addressLine2: (formData.get('addressLine2') as string) || undefined,
+      city: (formData.get('city') as string) || undefined,
+      area: (formData.get('area') as string) || undefined,
+      district: (formData.get('district') as string) || undefined,
+      postalCode: (formData.get('postalCode') as string) || undefined,
+      countryCode: (formData.get('countryCode') as string) || address.countryCode || 'BD',
     };
 
     try {
@@ -50,6 +54,22 @@ export function EditAddressDialog({ customerId, address }: { customerId: string,
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Address could not be updated.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function makeDefault() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fetchApiData(`/admin/customers/${customerId}/addresses/${address.id}/default`, {
+        method: 'POST',
+      });
+      setOpen(false);
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not set default address.');
     } finally {
       setBusy(false);
     }
@@ -94,6 +114,7 @@ export function EditAddressDialog({ customerId, address }: { customerId: string,
         )}
 
         <form onSubmit={submit} className="space-y-4">
+          <input type="hidden" name="countryCode" value={address.countryCode || 'BD'} />
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="label">Label (Optional)</Label>
@@ -115,15 +136,28 @@ export function EditAddressDialog({ customerId, address }: { customerId: string,
             <Input id="addressLine1" name="addressLine1" defaultValue={address.addressLine1} required />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="city">City</Label>
-            <Input id="city" name="city" defaultValue={address.city || ''} required />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="city">City</Label>
+              <Input id="city" name="city" defaultValue={address.city || ''} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="district">District (Optional)</Label>
+              <Input id="district" name="district" defaultValue={address.district || ''} />
+            </div>
           </div>
 
-          <DialogFooter className="flex justify-between items-center sm:justify-between w-full">
-            <Button type="button" variant="destructive" onClick={deactivate} disabled={busy || address.status === 'INACTIVE'}>
-              Deactivate
-            </Button>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row justify-between items-center w-full gap-2">
+            <div className="flex gap-2">
+              <Button type="button" variant="destructive" onClick={deactivate} disabled={busy || address.status === 'INACTIVE'}>
+                Deactivate
+              </Button>
+              {!address.isDefault && address.status === 'ACTIVE' && (
+                <Button type="button" variant="outline" onClick={makeDefault} disabled={busy}>
+                  Set as Default
+                </Button>
+              )}
+            </div>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
               <Button type="submit" disabled={busy}>

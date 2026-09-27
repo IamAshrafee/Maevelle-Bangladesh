@@ -27,6 +27,12 @@ import {
   createManualOrder,
   addOrderNote,
   resumeOrderFromHold,
+  completeOrder,
+  updateOrderCustomerContact,
+  listOrderTags,
+  createOrderTag,
+  assignTagToOrder,
+  removeTagFromOrder,
 } from '@maevelle/database/orders';
 import {
   getOrderPaymentInstructions,
@@ -635,6 +641,7 @@ export function registerOrderRoutes(
           from: Type.Optional(Type.String({ format: 'date-time' })),
           to: Type.Optional(Type.String({ format: 'date-time' })),
           customerId: Type.Optional(Type.String()),
+          tagId: Type.Optional(Type.String()),
         }),
       },
     },
@@ -851,6 +858,149 @@ export function registerOrderRoutes(
       }
     },
   );
+
+  app.post(
+    '/admin/orders/:orderId/complete',
+    {
+      schema: {
+        body: Type.Optional(
+          Type.Object({
+            manualReason: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'orders.manage');
+      const key = request.headers['idempotency-key'];
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      if (typeof key !== 'string' || !key.trim())
+        return reply
+          .code(422)
+          .send({ error: { code: 'VALIDATION_FAILED', message: 'Idempotency-Key is required.' } });
+      try {
+        const body = (request.body as { manualReason?: string } | undefined) ?? {};
+        return {
+          data: await completeOrder(database.db, {
+            organizationId: active.organizationId,
+            orderId: (request.params as { orderId: string }).orderId,
+            actorId: active.actorId,
+            idempotencyKey: key,
+            manualReason: body.manualReason,
+          }),
+        };
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/orders/:orderId/customer-contact',
+    {
+      schema: {
+        body: Type.Object({
+          displayName: Type.String({ minLength: 1 }),
+          phone: Type.String({ minLength: 1 }),
+          email: Type.Optional(Type.String()),
+          reason: Type.String({ minLength: 1, maxLength: 1000 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'orders.manage');
+      const key = request.headers['idempotency-key'];
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as {
+          displayName: string;
+          phone: string;
+          email?: string;
+          reason: string;
+        };
+        return {
+          data: await updateOrderCustomerContact(database.db, {
+            organizationId: active.organizationId,
+            orderId: (request.params as { orderId: string }).orderId,
+            actorId: active.actorId,
+            displayName: body.displayName,
+            phone: body.phone,
+            email: body.email,
+            reason: body.reason,
+            ...(typeof key === 'string' && key.trim() ? { idempotencyKey: key } : {}),
+          }),
+        };
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
+
+  app.get('/admin/orders/tags', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return { data: await listOrderTags(database.db, active.organizationId) };
+  });
+
+  app.post(
+    '/admin/orders/tags',
+    {
+      schema: {
+        body: Type.Object({
+          label: Type.String({ minLength: 1 }),
+          color: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'orders.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        return reply.code(201).send({
+          data: await createOrderTag(database.db, {
+            organizationId: active.organizationId,
+            ...(request.body as { label: string; color?: string }),
+          }),
+        });
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
+
+  app.post('/admin/orders/:orderId/tags/:tagId', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { orderId: string; tagId: string };
+    try {
+      await assignTagToOrder(database.db, {
+        organizationId: active.organizationId,
+        orderId: params.orderId,
+        tagId: params.tagId,
+        actorId: active.actorId,
+      });
+      return reply.code(204).send();
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
+
+  app.delete('/admin/orders/:orderId/tags/:tagId', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { orderId: string; tagId: string };
+    try {
+      await removeTagFromOrder(database.db, {
+        organizationId: active.organizationId,
+        orderId: params.orderId,
+        tagId: params.tagId,
+        actorId: active.actorId,
+      });
+      return reply.code(204).send();
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
   app.post(
     '/admin/orders/:orderId/notes',
     {
@@ -884,7 +1034,14 @@ export function registerOrderRoutes(
     {
       schema: {
         body: Type.Object({
-          customerId: Type.String({ minLength: 1 }),
+          customerId: Type.Optional(Type.String({ minLength: 1 })),
+          customer: Type.Optional(
+            Type.Object({
+              name: Type.String({ minLength: 1 }),
+              phone: Type.String({ minLength: 1 }),
+              email: Type.Optional(Type.String()),
+            }),
+          ),
           locationId: Type.String({ minLength: 1 }),
           lines: Type.Array(
             Type.Object({
@@ -914,6 +1071,8 @@ export function registerOrderRoutes(
           }),
           deliveryAmount: Type.Optional(Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' })),
           deliveryOverrideReason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+          discountAmount: Type.Optional(Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' })),
+          discountOverrideReason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
           paymentMethod: Type.Union([
             Type.Literal('COD'),
             Type.Literal('BKASH_MANUAL'),

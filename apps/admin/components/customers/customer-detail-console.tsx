@@ -294,11 +294,19 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                   )}
                 </dd>
               </div>
-              <div className="col-span-2">
+              <div>
                 <dt className="text-muted-foreground">Refunded</dt>
-                <dd className="mt-1 font-semibold">
+                <dd className="mt-1 font-semibold text-rose-700">
                   {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
                     Number(customer.commerceMetrics.refundedAmount),
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Outstanding</dt>
+                <dd className="mt-1 font-semibold text-amber-700">
+                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
+                    Number(customer.commerceMetrics.outstandingAmount || '0'),
                   )}
                 </dd>
               </div>
@@ -308,9 +316,6 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <h2 className="text-lg font-medium text-foreground">Contact</h2>
-              <Button variant="ghost" size="sm">
-                Manage
-              </Button>
             </div>
             <div className="px-6 py-4 text-sm">
               <div className="space-y-4">
@@ -321,14 +326,31 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                   {customer.emails.length === 0 ? (
                     <p className="text-muted-foreground italic">No email on file</p>
                   ) : (
-                    <ul className="space-y-1">
+                    <ul className="space-y-2">
                       {customer.emails.map((email) => (
-                        <li key={email.id} className="flex items-center justify-between">
+                        <li key={email.id} className="flex items-center justify-between text-xs">
                           <span>{email.email}</span>
-                          {email.isPrimary && (
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {email.isPrimary ? (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
                               Primary
                             </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await fetchApiData(`/admin/customers/${customer.id}/emails/${email.id}/primary`, {
+                                    method: 'POST',
+                                  });
+                                  void load();
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Failed to update primary email');
+                                }
+                              }}
+                              className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                            >
+                              Make primary
+                            </button>
                           )}
                         </li>
                       ))}
@@ -343,14 +365,31 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                   {customer.phones.length === 0 ? (
                     <p className="text-muted-foreground italic">No phone on file</p>
                   ) : (
-                    <ul className="space-y-1">
+                    <ul className="space-y-2">
                       {customer.phones.map((phone) => (
-                        <li key={phone.id} className="flex items-center justify-between">
+                        <li key={phone.id} className="flex items-center justify-between text-xs">
                           <span>{phone.phone}</span>
-                          {phone.isPrimary && (
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {phone.isPrimary ? (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
                               Primary
                             </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await fetchApiData(`/admin/customers/${customer.id}/phones/${phone.id}/primary`, {
+                                    method: 'POST',
+                                  });
+                                  void load();
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Failed to update primary phone');
+                                }
+                              }}
+                              className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                            >
+                              Make primary
+                            </button>
                           )}
                         </li>
                       ))}

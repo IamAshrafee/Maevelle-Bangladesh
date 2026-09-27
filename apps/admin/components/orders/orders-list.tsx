@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDeferredValue, useEffect, useState } from 'react';
 
-import type { OrderSummaryDto, PaginatedEnvelope } from '@maevelle/contracts';
+import type { OrderSummaryDto, OrderTagDto, PaginatedEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -98,6 +98,7 @@ export function OrdersList() {
   const deferredQuery = useDeferredValue(query.trim());
 
   const [orders, setOrders] = useState<PaginatedEnvelope<OrderSummaryDto>>();
+  const [tags, setTags] = useState<readonly OrderTagDto[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
@@ -110,6 +111,7 @@ export function OrdersList() {
   const deliveryStatus = allowedValue(deliveryStatuses, searchParameters.get('deliveryStatus'));
   const salesChannel = allowedValue(salesChannels, searchParameters.get('salesChannel'));
   const paymentMethod = allowedValue(paymentMethods, searchParameters.get('paymentMethod'));
+  const tagId = searchParameters.get('tagId') ?? '';
   const from = searchParameters.get('from') ?? '';
   const to = searchParameters.get('to') ?? '';
   const page = Math.max(1, Number(searchParameters.get('page') ?? 1) || 1);
@@ -122,6 +124,7 @@ export function OrdersList() {
     deliveryStatus !== 'ALL' ||
     salesChannel !== 'ALL' ||
     paymentMethod !== 'ALL' ||
+    tagId ||
     from ||
     to ||
     customerId,
@@ -141,6 +144,18 @@ export function OrdersList() {
     if (current !== deferredQuery) replaceQuery({ q: deferredQuery || undefined, page: '1' });
   }, [deferredQuery]);
 
+  useEffect(() => {
+    async function loadTags() {
+      try {
+        const list = await fetchApiData<OrderTagDto[]>('/admin/orders/tags');
+        setTags(list);
+      } catch {
+        // Tag list load is supplementary
+      }
+    }
+    void loadTags();
+  }, []);
+
   async function load(signal?: AbortSignal) {
     setState('loading');
     const parameters = new URLSearchParams({
@@ -153,6 +168,7 @@ export function OrdersList() {
     if (deliveryStatus !== 'ALL') parameters.set('deliveryStatus', deliveryStatus);
     if (salesChannel !== 'ALL') parameters.set('salesChannel', salesChannel);
     if (paymentMethod !== 'ALL') parameters.set('paymentMethod', paymentMethod);
+    if (tagId) parameters.set('tagId', tagId);
     if (from) parameters.set('from', new Date(`${from}T00:00:00`).toISOString());
     if (to) parameters.set('to', new Date(`${to}T23:59:59.999`).toISOString());
     if (deferredQuery) parameters.set('q', deferredQuery);
@@ -384,6 +400,22 @@ export function OrdersList() {
             </div>
           ))}
           <div className="space-y-1.5">
+            <Label htmlFor="orders-tag">Tag</Label>
+            <NativeSelect
+              id="orders-tag"
+              className="w-full"
+              value={tagId}
+              onChange={(event) => replaceQuery({ tagId: event.target.value, page: '1' })}
+            >
+              <NativeSelectOption value="">All tags</NativeSelectOption>
+              {tags.map((t) => (
+                <NativeSelectOption key={t.id} value={t.id}>
+                  {t.label ?? t.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="orders-from">From</Label>
             <Input
               id="orders-from"
@@ -436,6 +468,27 @@ export function OrdersList() {
                     <div className="text-xs font-normal text-muted-foreground">
                       {order.salesChannel.replaceAll('_', ' ')}
                     </div>
+                    {order.tags && order.tags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {order.tags.map((t) => (
+                          <span
+                            key={t.id}
+                            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border"
+                            style={{
+                              borderColor: t.color ? `${t.color}60` : undefined,
+                              backgroundColor: t.color ? `${t.color}15` : undefined,
+                              color: t.color || undefined,
+                            }}
+                          >
+                            <span
+                              className="size-1.5 rounded-full"
+                              style={{ backgroundColor: t.color ?? '#6b7280' }}
+                            />
+                            {t.label ?? t.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatDateTime(order.createdAt)}

@@ -8,6 +8,7 @@ import {
   normalizeCustomerPhone,
 } from './customer-identities.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
+import { decimal4Minor, decimal4Text } from './orders/types.js';
 
 export type CustomerSource =
   | 'STOREFRONT'
@@ -744,6 +745,7 @@ export interface CustomerDetailView extends CustomerSummary {
     readonly lifetimeOrderValue: string;
     readonly collectedAmount: string;
     readonly refundedAmount: string;
+    readonly outstandingAmount: string;
     readonly lastOrderAt: string | null;
   };
 }
@@ -955,15 +957,24 @@ export async function getCustomerDetail(
       label: t.label,
       color: t.color,
     })),
-    commerceMetrics: {
-      totalOrders: Number(stats.rows[0]?.order_count ?? 0),
-      activeOrders: Number(stats.rows[0]?.active_order_count ?? 0),
-      cancelledOrders: Number(stats.rows[0]?.cancelled_order_count ?? 0),
-      lifetimeOrderValue: stats.rows[0]?.total_spend ?? '0',
-      collectedAmount: stats.rows[0]?.collected_amount ?? '0',
-      refundedAmount: stats.rows[0]?.refunded_amount ?? '0',
-      lastOrderAt: stats.rows[0]?.last_order_at?.toISOString() ?? null,
-    },
+    commerceMetrics: (() => {
+      const totalSpend = stats.rows[0]?.total_spend ?? '0';
+      const collectedAmount = stats.rows[0]?.collected_amount ?? '0';
+      const refundedAmount = stats.rows[0]?.refunded_amount ?? '0';
+      const totalSpendMinor = decimal4Minor(totalSpend);
+      const netCollectedMinor = decimal4Minor(collectedAmount) - decimal4Minor(refundedAmount);
+      const outstandingMinor = totalSpendMinor > netCollectedMinor ? totalSpendMinor - netCollectedMinor : 0n;
+      return {
+        totalOrders: Number(stats.rows[0]?.order_count ?? 0),
+        activeOrders: Number(stats.rows[0]?.active_order_count ?? 0),
+        cancelledOrders: Number(stats.rows[0]?.cancelled_order_count ?? 0),
+        lifetimeOrderValue: totalSpend,
+        collectedAmount,
+        refundedAmount,
+        outstandingAmount: decimal4Text(outstandingMinor),
+        lastOrderAt: stats.rows[0]?.last_order_at?.toISOString() ?? null,
+      };
+    })(),
   };
 }
 
@@ -1569,6 +1580,215 @@ export async function removeCustomerEmail(
     await sql`update customers.customers set version = version + 1, updated_at = now() where organization_id = ${input.organizationId} and id = ${input.customerId}`.execute(
       transaction,
     );
+    await emitCustomerEvent(transaction, { ...input, action: 'customers.customer.updated' });
+  });
+}
+
+export async function updateCustomerAddress(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    customerId: string;
+    addressId: string;
+    recipientName: string;
+    addressLine1: string;
+    countryCode: string;
+    label?: string | null;
+    phone?: string | null;
+    addressLine2?: string | null;
+    geographyNodeId?: string | null;
+    area?: string | null;
+    city?: string | null;
+    district?: string | null;
+    postalCode?: string | null;
+    isDefault?: boolean;
+  },
+): Promise<void> {
+  if (
+    !input.recipientName.trim() ||
+    !input.addressLine1.trim() ||
+    !/^[A-Z]{2}$/.test(input.countryCode)
+  ) {
+    throw new CustomerDomainError(
+      'VALIDATION_FAILED',
+      'Recipient, address line, and ISO country code are required.',
+    );
+  }
+  return db.transaction().execute(async (transaction) => {
+    const customer = await sql<{ id: string }>`
+      select id from customers.customers
+      where id = ${input.customerId} and organization_id = ${input.organizationId}
+        and status not in ('MERGED', 'ANONYMIZED')
+      for update
+    `.execute(transaction);
+    if (!customer.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer was not found.');
+
+    const address = await sql<{ id: string }>`
+      select id from customers.customer_addresses
+      where organization_id = ${input.organizationId} and id = ${input.addressId}
+        and customer_id = ${input.customerId} and status = 'ACTIVE'
+      for update
+    `.execute(transaction);
+    if (!address.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer address was not found.');
+
+    if (input.geographyNodeId) {
+      const geography = await sql<{
+        id: string;
+      }>`select id from geography.nodes where id = ${input.geographyNodeId} and status = 'ACTIVE'`.execute(
+        transaction,
+      );
+      if (!geography.rows[0])
+        throw new CustomerDomainError('NOT_FOUND', 'Geography node was not found.');
+    }
+
+    if (input.isDefault) {
+      await sql`
+        update customers.customer_addresses
+        set is_default = false, version = version + 1, updated_at = now()
+        where organization_id = ${input.organizationId} and customer_id = ${input.customerId} and status = 'ACTIVE'
+      `.execute(transaction);
+    }
+
+    await sql`
+      update customers.customer_addresses
+      set label = ${input.label?.trim() ?? null},
+          recipient_name = ${input.recipientName.trim()},
+          phone = ${input.phone?.trim() ?? null},
+          address_line_1 = ${input.addressLine1.trim()},
+          address_line_2 = ${input.addressLine2?.trim() ?? null},
+          geography_node_id = ${input.geographyNodeId ?? null},
+          area = ${input.area?.trim() ?? null},
+          city = ${input.city?.trim() ?? null},
+          district = ${input.district?.trim() ?? null},
+          postal_code = ${input.postalCode?.trim() ?? null},
+          country_code = ${input.countryCode},
+          is_default = coalesce(${input.isDefault ?? null}, is_default),
+          version = version + 1,
+          updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.addressId} and customer_id = ${input.customerId}
+    `.execute(transaction);
+
+    await sql`
+      update customers.customers
+      set version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.customerId}
+    `.execute(transaction);
+
+    await emitCustomerEvent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      customerId: input.customerId,
+      action: 'customers.customer.address_updated',
+    });
+  });
+}
+
+export async function setPrimaryCustomerPhone(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; customerId: string; phoneId: string },
+): Promise<void> {
+  return db.transaction().execute(async (transaction) => {
+    const customer = await sql<{ id: string }>`
+      select id from customers.customers
+      where id = ${input.customerId} and organization_id = ${input.organizationId}
+        and status not in ('MERGED', 'ANONYMIZED')
+      for update
+    `.execute(transaction);
+    if (!customer.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer was not found.');
+
+    const targetPhone = await sql<{ id: string }>`
+      select id from customers.customer_phones
+      where organization_id = ${input.organizationId} and customer_id = ${input.customerId}
+        and id = ${input.phoneId}
+      for update
+    `.execute(transaction);
+    if (!targetPhone.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer phone was not found.');
+
+    await sql`
+      update customers.customer_phones
+      set is_primary = (id = ${input.phoneId}), version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.customerId}
+    `.execute(transaction);
+
+    await sql`
+      update customers.customers set version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.customerId}
+    `.execute(transaction);
+
+    await emitCustomerEvent(transaction, { ...input, action: 'customers.customer.updated' });
+  });
+}
+
+export async function setPrimaryCustomerEmail(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; customerId: string; emailId: string },
+): Promise<void> {
+  return db.transaction().execute(async (transaction) => {
+    const customer = await sql<{ id: string }>`
+      select id from customers.customers
+      where id = ${input.customerId} and organization_id = ${input.organizationId}
+        and status not in ('MERGED', 'ANONYMIZED')
+      for update
+    `.execute(transaction);
+    if (!customer.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer was not found.');
+
+    const targetEmail = await sql<{ id: string }>`
+      select id from customers.customer_emails
+      where organization_id = ${input.organizationId} and customer_id = ${input.customerId}
+        and id = ${input.emailId}
+      for update
+    `.execute(transaction);
+    if (!targetEmail.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer email was not found.');
+
+    await sql`
+      update customers.customer_emails
+      set is_primary = (id = ${input.emailId}), version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.customerId}
+    `.execute(transaction);
+
+    await sql`
+      update customers.customers set version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.customerId}
+    `.execute(transaction);
+
+    await emitCustomerEvent(transaction, { ...input, action: 'customers.customer.updated' });
+  });
+}
+
+export async function setDefaultCustomerAddress(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; actorId: string; customerId: string; addressId: string },
+): Promise<void> {
+  return db.transaction().execute(async (transaction) => {
+    const customer = await sql<{ id: string }>`
+      select id from customers.customers
+      where id = ${input.customerId} and organization_id = ${input.organizationId}
+        and status not in ('MERGED', 'ANONYMIZED')
+      for update
+    `.execute(transaction);
+    if (!customer.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer was not found.');
+
+    const targetAddress = await sql<{ id: string }>`
+      select id from customers.customer_addresses
+      where organization_id = ${input.organizationId} and customer_id = ${input.customerId}
+        and id = ${input.addressId} and status = 'ACTIVE'
+      for update
+    `.execute(transaction);
+    if (!targetAddress.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer address was not found.');
+
+    await sql`
+      update customers.customer_addresses
+      set is_default = (id = ${input.addressId}), version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.customerId}
+        and status = 'ACTIVE'
+    `.execute(transaction);
+
+    await sql`
+      update customers.customers set version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.customerId}
+    `.execute(transaction);
+
     await emitCustomerEvent(transaction, { ...input, action: 'customers.customer.updated' });
   });
 }
