@@ -1700,6 +1700,7 @@ export interface FinanceLedgerEntryDto {
   readonly description: string;
   readonly source_domain: string | null;
   readonly source_id: string | null;
+  readonly account_id?: string;
   readonly account_name: string;
 }
 

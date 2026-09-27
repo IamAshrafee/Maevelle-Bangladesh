@@ -1,9 +1,13 @@
 'use client';
 
-import { ArrowRight, CreditCard } from 'lucide-react';
+import { ArrowRight, CreditCard, Search } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -64,6 +68,11 @@ async function fetchEnvelope<T>(path: string): Promise<T> {
 }
 
 export function PaymentsConsole() {
+  const searchParams = useSearchParams();
+  const paramTab = searchParams.get('tab') as PaymentTab | null;
+  const paramQ = searchParams.get('q') || '';
+  const paramPosting = searchParams.get('posting') || 'ALL';
+
   const canViewAccounts = useAdminCapability('finance.accounts.view');
   const canPostFinance = useAdminCapability('finance.cash.record_manual');
   const [methods, setMethods] = useState<readonly PaymentMethodDto[]>([]);
@@ -74,12 +83,18 @@ export function PaymentsConsole() {
   const [paymentPagination, setPaymentPagination] = useState<PaginationDto>(EMPTY_PAGINATION);
   const [refundPagination, setRefundPagination] = useState<PaginationDto>(EMPTY_PAGINATION);
   const [accounts, setAccounts] = useState<readonly FinancialAccountDto[]>([]);
-  const [tab, setTab] = useState<PaymentTab>('verification');
-  const [query, setQuery] = useState('');
-  const [appliedQuery, setAppliedQuery] = useState('');
+  const [tab, setTab] = useState<PaymentTab>(() => {
+    if (paramTab && ['verification', 'cod', 'payments', 'refunds', 'methods'].includes(paramTab)) {
+      return paramTab;
+    }
+    if (paramQ) return 'payments';
+    return 'verification';
+  });
+  const [query, setQuery] = useState(paramQ);
+  const [appliedQuery, setAppliedQuery] = useState(paramQ);
   const [paymentMethod, setPaymentMethod] = useState('ALL');
   const [refundStatus, setRefundStatus] = useState('ALL');
-  const [posting, setPosting] = useState('ALL');
+  const [posting, setPosting] = useState(paramPosting);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [paymentPage, setPaymentPage] = useState(1);
@@ -88,6 +103,37 @@ export function PaymentsConsole() {
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<'success' | 'warning' | 'danger'>('success');
   const [busy, setBusy] = useState(false);
+
+  const handleTabChange = useCallback((newTab: PaymentTab) => {
+    setTab(newTab);
+    if (typeof window !== 'undefined') {
+      const currentUrl = new URL(window.location.href);
+      if (newTab === 'verification') {
+        currentUrl.searchParams.delete('tab');
+      } else {
+        currentUrl.searchParams.set('tab', newTab);
+      }
+      window.history.replaceState(null, '', currentUrl.pathname + currentUrl.search);
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = searchParams.get('tab') as PaymentTab | null;
+    const q = searchParams.get('q');
+    const p = searchParams.get('posting');
+    if (t && ['verification', 'cod', 'payments', 'refunds', 'methods'].includes(t)) {
+      setTab(t);
+    } else if (q && !t) {
+      setTab('payments');
+    }
+    if (q !== null && q !== appliedQuery) {
+      setQuery(q);
+      setAppliedQuery(q);
+    }
+    if (p && p !== posting) {
+      setPosting(p);
+    }
+  }, [searchParams]);
   const [loading, setLoading] = useState(true);
   const [verification, setVerification] = useState<VerificationDecision>();
   const [codCollection, setCodCollection] = useState<PendingCodCollectionDto>();
@@ -486,16 +532,16 @@ export function PaymentsConsole() {
   }
 
   return (
-    <main>
-      <section className="shell admin-page">
+    <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-[1500px] gap-6">
         <OperationalPageHeader
           eyebrow="Payments & finance"
           title="Payment operations"
           description="Verify money received, trace it to orders, issue refunds, and connect each completed movement to the account that holds it."
           actions={
-            <Link className="button" href="/finance">
-              Finance overview <ArrowRight aria-hidden="true" />
-            </Link>
+            <Button render={<Link href="/finance" />} variant="outline">
+              Finance overview <ArrowRight className="size-4" />
+            </Button>
           }
         />
         <Stats aria-label="Payment summary">
@@ -519,7 +565,7 @@ export function PaymentsConsole() {
         <Tabs
           value={tab}
           onValueChange={(val) => {
-            if (val) setTab(val as PaymentTab);
+            if (val) handleTabChange(val as PaymentTab);
           }}
           className="w-full"
         >
@@ -545,16 +591,16 @@ export function PaymentsConsole() {
           </TabsList>
         </Tabs>
         {tab === 'verification' || tab === 'cod' ? (
-          <label className="table-search standalone-search">
-            <CreditCard aria-hidden="true" />
-            <span className="sr-only">Search payment operations</span>
-            <input
+          <div className="relative max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search order, payment, reference, or reason"
+              placeholder="Search order, payment, reference, or reason..."
+              className="pl-9"
             />
-          </label>
+          </div>
         ) : null}
         {tab === 'payments' || tab === 'refunds' ? (
           <PaymentRecordControls
@@ -613,10 +659,10 @@ export function PaymentsConsole() {
           />
         ) : null}
         {loading ? (
-          <div className="skeleton-list" aria-label="Loading payment operations">
-            <span />
-            <span />
-            <span />
+          <div className="grid gap-3" aria-label="Loading payment operations">
+            <Skeleton className="h-16 rounded-xl" />
+            <Skeleton className="h-16 rounded-xl" />
+            <Skeleton className="h-16 rounded-xl" />
           </div>
         ) : null}
         {!loading && tab === 'verification' ? (
@@ -693,7 +739,7 @@ export function PaymentsConsole() {
             onSubmit={submitRefundCompletion}
           />
         ) : null}
-      </section>
+      </div>
     </main>
   );
 }

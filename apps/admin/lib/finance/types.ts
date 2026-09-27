@@ -32,6 +32,7 @@ export interface FinanceWorkspaceData {
   readonly expenses: readonly FinanceExpenseDto[];
   readonly expensePagination: PaginatedResultDto<FinanceExpenseDto>['pagination'];
   readonly ledger: readonly FinanceLedgerEntryDto[];
+  readonly ledgerPagination: PaginatedResultDto<FinanceLedgerEntryDto>['pagination'];
   readonly categories: readonly ExpenseCategoryDto[];
   readonly reconciliations: readonly FinanceReconciliationDto[];
   readonly outstandingCodPayments: readonly OutstandingCodSettlementPaymentDto[];
@@ -45,6 +46,7 @@ export const emptyFinanceWorkspace: FinanceWorkspaceData = {
   expenses: [],
   expensePagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 },
   ledger: [],
+  ledgerPagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 },
   categories: [],
   reconciliations: [],
   outstandingCodPayments: [],

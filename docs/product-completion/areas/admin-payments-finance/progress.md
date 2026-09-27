@@ -60,10 +60,36 @@
   modify cancelled Expenses, erase the obligation, or reduce it below money
   already paid; lifecycle changes emit audit and outbox evidence.
 - Preserved the required Delivery booking lifecycle in COD test coverage.
+- Streamlined global Payments & Finance navigation down to four coherent surfaces:
+  Finance Overview (`/finance`), Payments (`/payments`), Accounts & treasury (`/finance/accounts`),
+  and Expenses (`/finance/expenses`).
+- Integrated Courier COD settlements directly into Accounts & treasury as a first-class
+  operational tab (`/finance/accounts?tab=cod-settlements`) while maintaining URL redirection
+  compatibility for legacy `/finance/cod-settlements` links.
+- Replaced capped/in-memory Financial Activity with server-paginated, filterable activity
+  ledger supporting search, quick date presets, direction filter, movement type filter,
+  direct account links, and rich business origin links (`payments.payment`, `finance.expense`,
+  `procurement.purchase`, `finance.cod_settlement`).
+- Modernized Payments queue and record tables (`VerificationQueue`, `CodCollectionQueue`,
+  `PaymentsTable`, `RefundsTable`) to use shadcn/ui Card, Table, Badge, and Button primitives,
+  with clickable order and delivery links and clear Courier Holding badges for unremitted COD.
+- Modernized Payment command dialogs (COD collection, manual verification, refund issuance,
+  account posting, and refund completion) and payment method settings with responsive shadcn
+  Dialog, Card, Input, NativeSelect, and Button controls.
+- Added URL search parameters reactivity and deep-linking to `PaymentsConsole` (`?tab=...`,
+  `?q=...`, `?posting=...`), ensuring filters from Order Details ("Payment operations",
+  "Review refunds") and Finance Overview attention cards automatically select the target
+  tab and search filter.
+- Enhanced `PaymentDetail` with in-context financial operations: operators can now directly
+  post payments to treasury accounts and request/issue refunds from the payment detail view
+  with immediate operational feedback.
+- Wrapped `/payments` with a Suspense boundary and accessible skeleton layout.
+- Connected Finance Overview attention items directly to specific filtered views
+  (e.g., `/payments?tab=verification`, `/payments?tab=payments&posting=UNPOSTED`,
+  `/finance/accounts?tab=cod-settlements`).
+- Verified TypeScript compilation and production builds across all routes in `@maevelle/admin`.
 
 ## Next implementation slice
 
-Scale Financial Activity and account detail with paginated, server-filtered
-history and authoritative account summaries instead of unbounded browser
-aggregation. Complete explicit account lifecycle controls, then perform
-authenticated responsive review of the Payments and Finance surfaces.
+Conduct owner visual review of the updated Payments and Finance surfaces across mobile
+and desktop viewports; preserve all immutable financial transaction and audit safeguards.

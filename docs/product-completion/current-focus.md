@@ -2,46 +2,45 @@
 
 ## Active Areas
 
-Commerce: Orders (`/admin/orders`) & Customers (`/admin/customers`); Media
+Payments & Finance: Overview (`/finance`), Payments (`/payments`), Accounts & Treasury (`/finance/accounts`), Expenses (`/finance/expenses`)
 
 ## Current Status / Substage
 
-`COMMERCE_MODULE_COMPLETION + MEDIA_IMPLEMENTATION_COMPLETE / OWNER_REVIEW_PENDING`
+`PAYMENTS_AND_FINANCE_MODULE_COMPLETION / OWNER_REVIEW_PENDING`
 
 ## Evidence Already Known
 
-Orders and Customers are completed with their focused domain split, order-line
-image snapshots, public tracking, delivery pricing, payment routing, customer
-notes/tags, exports, and their Admin and Storefront workflows.
-
-The shared Media platform is implemented across storage, schema, API, worker,
-Admin, Catalog/Product/Variant, Storefront/Cart, and verified-purchase Reviews.
-The legacy request-buffered Product-image path has been removed.
+Payments & Finance has been completed as a practical, operationally complete financial
+module for merchants:
+- Consolidated global navigation into four focused operational surfaces: Overview,
+  Payments, Accounts & treasury, and Expenses.
+- Courier COD settlements are integrated directly into Accounts & treasury as an operational
+  tab (`/finance/accounts?tab=cod-settlements`) with transparent handling for courier remittances,
+  deductions, and net holding receipts.
+- Server-paginated, filterable Activity & Ledger with direct bidirectional links to
+  underlying business records (`payments.payment`, `payments.refund`, `finance.expense`,
+  `procurement.purchase`, `finance.cod_settlement`).
+- Modernized Payments queues, record tables, and command dialogs with responsive shadcn/ui
+  primitives, URL search parameter reactivity, and deep linking from Orders and Attention cards.
+- Enhanced Payment Detail with in-place account posting and refund dispatch capabilities.
 
 ## Immediate Objective
 
-Perform owner visual review of customer notes/tags, public order tracking, CSV
-exports, the responsive Admin Media library and Product creator, Storefront
-galleries, and verified-purchase Review uploads. Configure a live Cloudflare R2
-smoke environment only when credentials are available.
+Conduct owner visual and operational review of Payments, Finance Overview, Accounts & Treasury,
+and Expense surfaces across mobile, tablet, and desktop viewports.
 
 ## Last Completed Action
 
-Completed the Media final verification checkpoint after the Commerce completion.
-The focused migration/domain run passed 21 tests, the API application run passed
-6, identity enforcement passed, Media storage/processing passed 2, and the
-Worker lifecycle check passed. Production images built and runtime services are
-healthy.
+Streamlined navigation, integrated Courier COD settlements, modernized Payments and Finance
+consoles to shadcn/ui design standards, enabled URL sync and deep linking, added in-context
+actions to Payment Detail, and passed comprehensive TypeScript typechecks and Next.js builds.
 
 ## Important Constraints
 
-Storage bytes, Media assets, and domain usages remain separate. Catalog and
-Reviews own relationship semantics. Private bytes must not be placed in public
-storage, archived assets must keep existing usages working, and destructive
-purge must remain delayed and usage-aware.
+- Ledger records remain immutable financial facts once created.
+- Reconciliations, refunds, and cancellations emit audit and outbox events.
+- Cash movements must not be labeled as business profit without complete landed cost coverage.
 
 ## Blockers / Owner Review
 
-No code blocker is recorded. A real Cloudflare R2 smoke test requires
-owner-supplied bucket credentials and CORS configuration; the S3-compatible
-adapter and local provider are implemented. Owner visual review remains pending.
+No code blockers. Ready for owner visual and operational review.

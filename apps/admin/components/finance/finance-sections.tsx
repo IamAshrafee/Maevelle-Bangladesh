@@ -3,11 +3,26 @@
 import {
   AlertTriangle,
   ArrowDownLeft,
+  ArrowLeftRight,
   ArrowUpRight,
+  Banknote,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  Landmark,
   Link2,
+  Package,
+  ReceiptText,
+  RotateCcw,
   Scale,
+  Search,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
+import { type FormEvent, useState } from 'react';
 import { Area, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from 'recharts';
 
 import type {
@@ -18,6 +33,7 @@ import type {
   FinanceTrendRangeDto,
   FinanceTrendsDto,
   FinancialAccountDto,
+  PaginationDto,
 } from '@maevelle/contracts';
 
 import { AccountsTable } from '@/components/finance/accounts-table';
@@ -25,6 +41,8 @@ import { OperationalEmptyState } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/native-select';
 import {
   type ChartConfig,
   ChartContainer,
@@ -256,7 +274,11 @@ export function FinanceOverview({
             {paymentWork > 0 ? (
               <Link
                 className="rounded-lg border bg-background p-3 hover:bg-muted/50"
-                href="/payments"
+                href={
+                  overview.attention.pendingPaymentVerifications > 0
+                    ? '/payments?tab=verification'
+                    : '/payments?tab=cod'
+                }
               >
                 <strong className="block">
                   {paymentWork} collection task{paymentWork === 1 ? '' : 's'}
@@ -269,7 +291,7 @@ export function FinanceOverview({
             {unposted > 0 ? (
               <Link
                 className="rounded-lg border bg-background p-3 hover:bg-muted/50"
-                href="/payments"
+                href="/payments?tab=payments&posting=UNPOSTED"
               >
                 <strong className="block">
                   {unposted} account posting{unposted === 1 ? '' : 's'}
@@ -282,7 +304,7 @@ export function FinanceOverview({
             {overview.attention.outstandingCodPayments > 0 ? (
               <Link
                 className="rounded-lg border bg-background p-3 hover:bg-muted/50"
-                href="/finance/cod-settlements"
+                href="/finance/accounts?tab=cod-settlements"
               >
                 <strong className="block">
                   {overview.attention.outstandingCodPayments} unsettled COD Payment
@@ -542,75 +564,415 @@ export function ExpensesSection({
   );
 }
 
+export interface ActivitySectionProps {
+  readonly entries: readonly FinanceLedgerEntryDto[];
+  readonly pagination: PaginationDto;
+  readonly query: string;
+  readonly direction: 'ALL' | 'IN' | 'OUT';
+  readonly transactionType: string;
+  readonly accountId: string;
+  readonly from: string;
+  readonly to: string;
+  readonly accounts: readonly FinancialAccountDto[];
+  readonly loading: boolean;
+  readonly onQueryChange: (query: string) => void;
+  readonly onDirectionChange: (direction: 'ALL' | 'IN' | 'OUT') => void;
+  readonly onTransactionTypeChange: (type: string) => void;
+  readonly onAccountChange: (accountId: string) => void;
+  readonly onFromChange: (from: string) => void;
+  readonly onToChange: (to: string) => void;
+  readonly onQuickRangeChange: (from: string, to: string) => void;
+  readonly onApply: (e: FormEvent<HTMLFormElement>) => void;
+  readonly onReset: () => void;
+  readonly onPageChange: (page: number) => void;
+}
+
+function renderBusinessOrigin(entry: FinanceLedgerEntryDto) {
+  if (!entry.source_domain || !entry.source_id) {
+    if (entry.transaction_type === 'INTERNAL_TRANSFER') {
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <ArrowLeftRight className="size-3.5" /> Internal transfer
+        </span>
+      );
+    }
+    if (entry.transaction_type === 'OPENING_BALANCE') {
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Landmark className="size-3.5" /> Opening balance
+        </span>
+      );
+    }
+    return <span className="text-xs text-muted-foreground">Manual / internal</span>;
+  }
+
+  switch (entry.source_domain) {
+    case 'payments.payment':
+      return (
+        <Link
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          href={`/payments/${entry.source_id}`}
+        >
+          <CreditCard className="size-3.5" /> Payment <ExternalLink className="size-3" />
+        </Link>
+      );
+    case 'payments.refund':
+      return (
+        <Link
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          href={`/payments?tab=refunds&q=${encodeURIComponent(entry.transaction_number)}`}
+        >
+          <RotateCcw className="size-3.5" /> Refund <ExternalLink className="size-3" />
+        </Link>
+      );
+    case 'finance.expense':
+      return (
+        <Link
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          href={`/finance/expenses/${entry.source_id}`}
+        >
+          <ReceiptText className="size-3.5" /> Expense <ExternalLink className="size-3" />
+        </Link>
+      );
+    case 'procurement.purchase':
+      return (
+        <Link
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          href={`/purchases/${entry.source_id}`}
+        >
+          <Package className="size-3.5" /> Purchase <ExternalLink className="size-3" />
+        </Link>
+      );
+    case 'finance.cod_settlement':
+      return (
+        <Link
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          href="/finance/accounts?tab=cod-settlements"
+        >
+          <Banknote className="size-3.5" /> COD settlement <ExternalLink className="size-3" />
+        </Link>
+      );
+    case 'finance.account':
+      return (
+        <Link
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          href={`/finance/accounts/${entry.source_id}`}
+        >
+          <Landmark className="size-3.5" /> Account <ExternalLink className="size-3" />
+        </Link>
+      );
+    default:
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Link2 className="size-3.5" /> {humanizeFinanceCode(entry.source_domain)}
+        </span>
+      );
+  }
+}
+
 export function ActivitySection({
   entries,
-}: {
-  readonly entries: readonly FinanceLedgerEntryDto[];
-}) {
-  if (!entries.length)
-    return (
-      <OperationalEmptyState
-        title="No account activity"
-        description="Payments, refunds, expenses, transfers, opening balances, and controlled adjustments will appear here."
-      />
-    );
+  pagination,
+  query,
+  direction,
+  transactionType,
+  accountId,
+  from,
+  to,
+  accounts,
+  loading,
+  onQueryChange,
+  onDirectionChange,
+  onTransactionTypeChange,
+  onAccountChange,
+  onFromChange,
+  onToChange,
+  onQuickRangeChange,
+  onApply,
+  onReset,
+  onPageChange,
+}: ActivitySectionProps) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1800);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const hasFilters = Boolean(
+    query.trim() ||
+      direction !== 'ALL' ||
+      transactionType !== 'ALL' ||
+      accountId ||
+      from ||
+      to,
+  );
+
+  const presets = [
+    { label: '7 days', days: 7 },
+    { label: '30 days', days: 30 },
+    { label: 'This month', days: 'month' },
+    { label: '90 days', days: 90 },
+  ] as const;
+
+  function presetDates(days: (typeof presets)[number]['days']) {
+    const end = new Date();
+    const start = new Date(end);
+    if (days === 'month') start.setDate(1);
+    else start.setDate(start.getDate() - days + 1);
+    const toStr = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    return { from: toStr(start), to: toStr(end) };
+  }
+
+  const startItem =
+    pagination.totalItems > 0 ? (pagination.page - 1) * pagination.pageSize + 1 : 0;
+  const endItem = Math.min(pagination.page * pagination.pageSize, pagination.totalItems);
+  const totalPages = Math.max(1, pagination.totalPages);
+
   return (
-    <Card>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Movement</TableHead>
-            <TableHead>Account</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Business source</TableHead>
-            <TableHead>Date</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {entries.map((entry) => {
-            const incoming = Number(entry.amount_delta) > 0;
+    <div className="grid gap-4">
+      {/* Controls Bar */}
+      <section className="rounded-xl border bg-card p-3 shadow-2xs" aria-label="Activity filters">
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 border-b pb-3">
+          <span className="mr-1 text-xs font-medium text-muted-foreground">Quick dates</span>
+          {presets.map((preset) => {
+            const dates = presetDates(preset.days);
+            const selected = from === dates.from && to === dates.to;
             return (
-              <TableRow key={entry.id}>
-                <TableCell>
-                  <span className="flex items-center gap-2">
-                    <span className={incoming ? 'text-emerald-600' : 'text-rose-600'}>
-                      {incoming ? (
-                        <ArrowDownLeft className="size-4" />
-                      ) : (
-                        <ArrowUpRight className="size-4" />
-                      )}
-                    </span>
-                    <span>
-                      <strong className="block">{entry.description}</strong>
-                      <span className="text-xs text-muted-foreground">
-                        {entry.transaction_number}
-                      </span>
-                    </span>
-                  </span>
-                </TableCell>
-                <TableCell>{entry.account_name}</TableCell>
-                <TableCell>
-                  <StatusBadge status={entry.transaction_type} />
-                </TableCell>
-                <TableCell>
-                  {entry.source_domain
-                    ? humanizeFinanceCode(entry.source_domain)
-                    : 'Manual / internal'}
-                </TableCell>
-                <TableCell>{formatFinanceDate(entry.created_at, true)}</TableCell>
-                <TableCell
-                  className={`text-right font-semibold ${incoming ? 'text-emerald-600' : 'text-rose-600'}`}
-                >
-                  {incoming ? '+' : ''}
-                  {formatMoney(entry.amount_delta, entry.currency_code)}
-                </TableCell>
-              </TableRow>
+              <Button
+                key={preset.label}
+                type="button"
+                size="sm"
+                variant={selected ? 'default' : 'outline'}
+                disabled={loading}
+                onClick={() => onQuickRangeChange(dates.from, dates.to)}
+              >
+                {preset.label}
+              </Button>
             );
           })}
-        </TableBody>
-      </Table>
-    </Card>
+        </div>
+
+        <form
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_repeat(3,minmax(8rem,11rem))_auto] xl:items-end"
+          onSubmit={onApply}
+        >
+          <label className="grid gap-1 text-sm font-medium sm:col-span-2 xl:col-span-1">
+            Search
+            <span className="relative">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                className="pl-8"
+                type="search"
+                value={query}
+                onChange={(event) => onQueryChange(event.target.value)}
+                placeholder="Search transaction, description, or domain..."
+              />
+            </span>
+          </label>
+
+          <label className="grid gap-1 text-sm font-medium">
+            Account
+            <NativeSelect
+              value={accountId}
+              onChange={(e) => onAccountChange(e.target.value)}
+              aria-label="Filter by account"
+            >
+              <option value="">All accounts</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+
+          <label className="grid gap-1 text-sm font-medium">
+            Direction
+            <NativeSelect
+              value={direction}
+              onChange={(e) => onDirectionChange(e.target.value as 'ALL' | 'IN' | 'OUT')}
+              aria-label="Filter by direction"
+            >
+              <option value="ALL">All directions</option>
+              <option value="IN">Money in (+)</option>
+              <option value="OUT">Money out (-)</option>
+            </NativeSelect>
+          </label>
+
+          <label className="grid gap-1 text-sm font-medium">
+            Type
+            <NativeSelect
+              value={transactionType}
+              onChange={(e) => onTransactionTypeChange(e.target.value)}
+              aria-label="Filter by transaction type"
+            >
+              <option value="ALL">All movement types</option>
+              <option value="INTERNAL_TRANSFER">Internal transfers</option>
+              <option value="PAYMENT_SOURCE_POSTING">Customer payments</option>
+              <option value="REFUND_SOURCE_POSTING">Customer refunds</option>
+              <option value="EXPENSE_PAYMENT">Expense payments</option>
+              <option value="COD_SETTLEMENT">COD courier settlements</option>
+              <option value="EXTERNAL_ADJUSTMENT">Adjustments</option>
+              <option value="OPENING_BALANCE">Opening balances</option>
+            </NativeSelect>
+          </label>
+
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-1">
+            <Button type="submit" disabled={loading}>
+              Apply
+            </Button>
+            {hasFilters ? (
+              <Button type="button" variant="outline" onClick={onReset} disabled={loading}>
+                <X aria-hidden="true" /> Reset
+              </Button>
+            ) : null}
+          </div>
+        </form>
+      </section>
+
+      {/* Ledger Table */}
+      {!entries.length ? (
+        <OperationalEmptyState
+          title={hasFilters ? 'No matching activity' : 'No account activity yet'}
+          description={
+            hasFilters
+              ? 'Try adjusting your search, direction, movement type, or date range filters.'
+              : 'Payments, refunds, expenses, transfers, opening balances, and courier settlements will appear here.'
+          }
+        />
+      ) : (
+        <Card className="overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Movement</TableHead>
+                <TableHead>Account</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Business source</TableHead>
+                <TableHead>Date & time</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((entry) => {
+                const incoming = Number(entry.amount_delta) > 0;
+                return (
+                  <TableRow key={entry.id}>
+                    <TableCell>
+                      <span className="flex items-start gap-2.5">
+                        <span
+                          className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg ${
+                            incoming
+                              ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400'
+                              : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
+                          }`}
+                        >
+                          {incoming ? (
+                            <ArrowDownLeft className="size-4" />
+                          ) : (
+                            <ArrowUpRight className="size-4" />
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <strong className="block truncate text-sm">{entry.description}</strong>
+                          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span>{entry.transaction_number}</span>
+                            <button
+                              type="button"
+                              className="text-muted-foreground/70 hover:text-foreground"
+                              title="Copy transaction number"
+                              onClick={() => copyToClipboard(entry.transaction_number, entry.id)}
+                            >
+                              {copiedId === entry.id ? (
+                                <Check className="size-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="size-3" />
+                              )}
+                            </button>
+                          </span>
+                        </span>
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {entry.account_id ? (
+                        <Link
+                          className="font-medium text-primary hover:underline"
+                          href={`/finance/accounts/${entry.account_id}`}
+                        >
+                          {entry.account_name}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-foreground">{entry.account_name}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={entry.transaction_type} />
+                    </TableCell>
+                    <TableCell>{renderBusinessOrigin(entry)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatFinanceDate(entry.created_at, true)}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right font-semibold ${
+                        incoming ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                      }`}
+                    >
+                      {incoming ? '+' : ''}
+                      {formatMoney(entry.amount_delta, entry.currency_code)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+
+          {/* Pagination Toolbar */}
+          <div className="flex flex-col gap-2.5 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              Showing {startItem} to {endItem} of {pagination.totalItems} movement
+              {pagination.totalItems === 1 ? '' : 's'}
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                Page {pagination.page} of {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pagination.page <= 1 || loading}
+                  onClick={() => onPageChange(pagination.page - 1)}
+                >
+                  <ChevronLeft className="size-4" /> Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pagination.page >= totalPages || loading}
+                  onClick={() => onPageChange(pagination.page + 1)}
+                >
+                  Next <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
 

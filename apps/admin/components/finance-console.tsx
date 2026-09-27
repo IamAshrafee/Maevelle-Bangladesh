@@ -67,8 +67,8 @@ const idempotentPaths = new Set([
 
 function resolveTreasurySection(tab?: string | null): FinanceSection {
   if (!tab) return 'accounts';
-  if (tab === 'transfers') return 'transfers';
-  if (['accounts', 'movements', 'transfers', 'reconciliation'].includes(tab)) {
+  if (tab === 'transfers') return 'movements';
+  if (['accounts', 'movements', 'transfers', 'cod-settlements', 'reconciliation'].includes(tab)) {
     return tab as FinanceSection;
   }
   if (tab === 'activity') return 'movements';
@@ -101,20 +101,14 @@ function sectionCopy(section: FinanceSection, mode: FinanceConsoleMode): { title
     case 'accounts':
       return {
         title: 'Financial accounts',
-        description: 'Where company money is held across banks, mobile wallets, and cash drawers.',
+        description: 'Where company money is held across banks, mobile wallets, cash drawers, and holding accounts.',
       };
     case 'movements':
     case 'transfers':
       return {
-        title: 'Activity & transfers',
+        title: 'Activity & ledger',
         description:
           'Chronological ledger of money in, money out, internal transfers, and controlled adjustments.',
-      };
-    case 'reconciliation':
-      return {
-        title: 'Balance checks',
-        description:
-          'Compare Maevelle balances with bank, wallet, cash, or courier statements without changing history.',
       };
     case 'cod-settlements':
       return {
@@ -122,10 +116,16 @@ function sectionCopy(section: FinanceSection, mode: FinanceConsoleMode): { title
         description:
           'Track collected cash held by couriers, record remittances and deductions, and receive the net amount into a financial account.',
       };
+    case 'reconciliation':
+      return {
+        title: 'Balance checks',
+        description:
+          'Compare Maevelle balances with bank, wallet, cash, or courier statements without changing history.',
+      };
     default:
       return {
-        title: 'Accounts & activity',
-        description: 'Manage company financial accounts, internal transfers, and cash ledger records.',
+        title: 'Accounts & treasury',
+        description: 'Manage company financial accounts, activity ledger, courier COD settlements, and balance checks.',
       };
   }
 }
@@ -191,7 +191,6 @@ export function FinanceConsole({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<'success' | 'warning' | 'danger'>('success');
-  const [query, setQuery] = useState('');
   const [codSettlementPage, setCodSettlementPage] = useState(1);
   const [codDialogOpen, setCodDialogOpen] = useState(false);
   const [trendRange, setTrendRange] = useState<FinanceTrendRangeDto>('LAST_30_DAYS');
@@ -205,10 +204,14 @@ export function FinanceConsole({
   const [expenseTo, setExpenseTo] = useState('');
   const [expensePage, setExpensePage] = useState(1);
 
-  const [activityFilter, setActivityFilter] = useState<
-    'ALL' | 'TRANSFERS' | 'IN' | 'OUT' | 'ADJUSTMENTS'
-  >(activeSection === 'transfers' ? 'TRANSFERS' : 'ALL');
-  const [activityAccountName, setActivityAccountName] = useState<string>('');
+  const [ledgerQuery, setLedgerQuery] = useState('');
+  const [appliedLedgerQuery, setAppliedLedgerQuery] = useState('');
+  const [ledgerDirection, setLedgerDirection] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
+  const [ledgerTransactionType, setLedgerTransactionType] = useState('ALL');
+  const [ledgerAccountId, setLedgerAccountId] = useState('');
+  const [ledgerFrom, setLedgerFrom] = useState('');
+  const [ledgerTo, setLedgerTo] = useState('');
+  const [ledgerPage, setLedgerPage] = useState(1);
 
   const load = useCallback(async () => {
     setState('loading');
@@ -230,10 +233,11 @@ export function FinanceConsole({
         ].includes(activeSection);
       const needsExpenses = isOverview || isExpenses;
       const needsLedger =
-        !isExpenses && !isCodSettlements && ['accounts', 'movements', 'transfers'].includes(activeSection);
+        !isExpenses && (isOverview || activeSection === 'movements' || activeSection === 'transfers');
       const needsCategories = isExpenses;
       const needsChecks = isOverview || (!isExpenses && !isCodSettlements && activeSection === 'reconciliation');
-      const needsCodSettlements = isCodSettlements;
+      const needsCodSettlements =
+        isCodSettlements || (mode === 'treasury' && (activeSection === 'cod-settlements' || activeSection === 'accounts'));
       const expenseParameters = new URLSearchParams({
         page: String(expensePage),
         pageSize: '25',
@@ -245,6 +249,18 @@ export function FinanceConsole({
       if (expensePaymentState !== 'ALL') expenseParameters.set('paymentState', expensePaymentState);
       if (expenseFrom) expenseParameters.set('from', expenseFrom);
       if (expenseTo) expenseParameters.set('to', expenseTo);
+
+      const ledgerParameters = new URLSearchParams({
+        page: String(ledgerPage),
+        pageSize: '25',
+      });
+      if (appliedLedgerQuery) ledgerParameters.set('q', appliedLedgerQuery);
+      if (ledgerDirection !== 'ALL') ledgerParameters.set('direction', ledgerDirection);
+      if (ledgerTransactionType !== 'ALL') ledgerParameters.set('transactionType', ledgerTransactionType);
+      if (ledgerAccountId) ledgerParameters.set('accountId', ledgerAccountId);
+      if (ledgerFrom) ledgerParameters.set('from', ledgerFrom);
+      if (ledgerTo) ledgerParameters.set('to', ledgerTo);
+
       const [
         accounts,
         expenseResult,
@@ -269,7 +285,7 @@ export function FinanceConsole({
             }),
         canViewCash && needsLedger
           ? fetchApiData<PaginatedResultDto<FinanceLedgerEntryDto>>(
-              '/admin/finance/ledger?pageSize=100',
+              `/admin/finance/ledger?${ledgerParameters.toString()}`,
             )
           : Promise.resolve({
               items: [],
@@ -312,6 +328,7 @@ export function FinanceConsole({
           ledgerResult.items.length > 0 || !prev.ledger.length
             ? ledgerResult.items
             : prev.ledger,
+        ledgerPagination: ledgerResult.pagination,
         categories:
           categories.length > 0 || !prev.categories.length ? categories : prev.categories,
         reconciliations:
@@ -338,6 +355,7 @@ export function FinanceConsole({
   }, [
     activeSection,
     appliedExpenseQuery,
+    appliedLedgerQuery,
     canViewAccounts,
     canViewCash,
     canViewCodSettlements,
@@ -351,6 +369,12 @@ export function FinanceConsole({
     expensePaymentState,
     expenseStatus,
     expenseTo,
+    ledgerAccountId,
+    ledgerDirection,
+    ledgerFrom,
+    ledgerPage,
+    ledgerTo,
+    ledgerTransactionType,
     mode,
     trendRange,
   ]);
@@ -384,35 +408,6 @@ export function FinanceConsole({
     }
   }
 
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visibleLedger = useMemo(() => {
-    return data.ledger
-      .filter((entry) => {
-        if (activityAccountName && entry.account_name !== activityAccountName) {
-          return false;
-        }
-        if (activityFilter === 'TRANSFERS') {
-          return entry.transaction_type === 'INTERNAL_TRANSFER';
-        }
-        if (activityFilter === 'IN') {
-          return Number(entry.amount_delta) > 0;
-        }
-        if (activityFilter === 'OUT') {
-          return Number(entry.amount_delta) < 0;
-        }
-        if (activityFilter === 'ADJUSTMENTS') {
-          return entry.transaction_type === 'EXTERNAL_ADJUSTMENT';
-        }
-        return true;
-      })
-      .filter((entry) =>
-        [entry.transaction_number, entry.description, entry.account_name, entry.transaction_type]
-          .join(' ')
-          .toLocaleLowerCase()
-          .includes(normalizedQuery),
-      );
-  }, [activityAccountName, activityFilter, data.ledger, normalizedQuery]);
-
   const copy = sectionCopy(activeSection, mode);
   const actions =
     mode === 'overview' ? (
@@ -441,7 +436,7 @@ export function FinanceConsole({
           </Button>
         ) : null}
       </div>
-    ) : mode === 'cod-settlements' ? (
+    ) : mode === 'cod-settlements' || activeSection === 'cod-settlements' ? (
       canManageCodSettlements ? (
         <Button
           onClick={() => setCodDialogOpen(true)}
@@ -491,8 +486,14 @@ export function FinanceConsole({
     },
     {
       key: 'movements' as const,
-      label: 'Activity & transfers',
+      label: 'Activity & ledger',
       icon: Activity,
+    },
+    {
+      key: 'cod-settlements' as const,
+      label: 'COD settlements',
+      icon: Banknote,
+      badge: data.outstandingCodPayments.filter((p) => p.canSettle).length || undefined,
     },
     {
       key: 'reconciliation' as const,
@@ -520,9 +521,6 @@ export function FinanceConsole({
           <Tabs
             value={activeSection === 'transfers' ? 'movements' : activeSection}
             onValueChange={(val) => {
-              if (val === 'movements') {
-                setActivityFilter('ALL');
-              }
               handleTabChange(val as FinanceSection);
             }}
             className="w-full"
@@ -548,65 +546,6 @@ export function FinanceConsole({
               })}
             </TabsList>
           </Tabs>
-        ) : null}
-
-        {mode === 'treasury' &&
-        (activeSection === 'movements' || activeSection === 'transfers') &&
-        state === 'ready' ? (
-          <div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-card p-2.5 sm:p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
-            <Tabs
-              value={activityFilter}
-              onValueChange={(val) => {
-                if (val) setActivityFilter(val as typeof activityFilter);
-              }}
-              aria-label="Activity filter"
-              className="w-full sm:w-auto"
-            >
-              <TabsList className="h-8 p-0.5 w-full justify-start overflow-x-auto sm:w-fit bg-muted/70">
-                {(
-                  [
-                    ['ALL', 'All movements'],
-                    ['TRANSFERS', 'Transfers'],
-                    ['IN', 'Money in'],
-                    ['OUT', 'Money out'],
-                    ['ADJUSTMENTS', 'Adjustments'],
-                  ] as const
-                ).map(([filterVal, label]) => (
-                  <TabsTrigger
-                    key={filterVal}
-                    value={filterVal}
-                    className="px-2.5 py-1 text-xs font-medium"
-                  >
-                    {label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {data.accounts.length > 0 ? (
-                <NativeSelect
-                  value={activityAccountName}
-                  onChange={(e) => setActivityAccountName(e.target.value)}
-                  className="h-8 text-xs bg-background shadow-2xs"
-                  aria-label="Filter by account"
-                >
-                  <option value="">All accounts</option>
-                  {data.accounts.map((acc) => (
-                    <option key={acc.id} value={acc.name}>
-                      {acc.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              ) : null}
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search activity..."
-                className="h-8 w-44 text-xs sm:w-56 bg-background shadow-2xs"
-              />
-            </div>
-          </div>
         ) : null}
 
         {mode === 'expenses' && state === 'ready' ? (
@@ -709,8 +648,7 @@ export function FinanceConsole({
               setDialog({ kind: 'transfer', defaultSourceAccountId: accountId })
             }
             onViewActivity={(accountId) => {
-              const acc = data.accounts.find((a) => a.id === accountId);
-              if (acc) setActivityAccountName(acc.name);
+              setLedgerAccountId(accountId);
               handleTabChange('movements');
             }}
             onReconcile={(accountId) =>
@@ -731,7 +669,60 @@ export function FinanceConsole({
         {state === 'ready' &&
         mode === 'treasury' &&
         (activeSection === 'movements' || activeSection === 'transfers') ? (
-          <ActivitySection entries={visibleLedger} />
+          <ActivitySection
+            entries={data.ledger}
+            pagination={data.ledgerPagination}
+            query={ledgerQuery}
+            direction={ledgerDirection}
+            transactionType={ledgerTransactionType}
+            accountId={ledgerAccountId}
+            from={ledgerFrom}
+            to={ledgerTo}
+            accounts={data.accounts}
+            loading={busy}
+            onQueryChange={setLedgerQuery}
+            onDirectionChange={(dir) => {
+              setLedgerDirection(dir);
+              setLedgerPage(1);
+            }}
+            onTransactionTypeChange={(type) => {
+              setLedgerTransactionType(type);
+              setLedgerPage(1);
+            }}
+            onAccountChange={(id) => {
+              setLedgerAccountId(id);
+              setLedgerPage(1);
+            }}
+            onFromChange={(f) => {
+              setLedgerFrom(f);
+              setLedgerPage(1);
+            }}
+            onToChange={(t) => {
+              setLedgerTo(t);
+              setLedgerPage(1);
+            }}
+            onQuickRangeChange={(f, t) => {
+              setLedgerFrom(f);
+              setLedgerTo(t);
+              setLedgerPage(1);
+            }}
+            onApply={(e) => {
+              e.preventDefault();
+              setAppliedLedgerQuery(ledgerQuery.trim());
+              setLedgerPage(1);
+            }}
+            onReset={() => {
+              setLedgerQuery('');
+              setAppliedLedgerQuery('');
+              setLedgerDirection('ALL');
+              setLedgerTransactionType('ALL');
+              setLedgerAccountId('');
+              setLedgerFrom('');
+              setLedgerTo('');
+              setLedgerPage(1);
+            }}
+            onPageChange={setLedgerPage}
+          />
         ) : null}
 
         {state === 'ready' && mode === 'treasury' && activeSection === 'reconciliation' ? (
@@ -743,7 +734,8 @@ export function FinanceConsole({
           />
         ) : null}
 
-        {state === 'ready' && mode === 'cod-settlements' ? (
+        {state === 'ready' &&
+        (mode === 'cod-settlements' || (mode === 'treasury' && activeSection === 'cod-settlements')) ? (
           <CodSettlementSection
             outstanding={data.outstandingCodPayments}
             settlements={data.codSettlements}

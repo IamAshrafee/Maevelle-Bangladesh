@@ -196,6 +196,7 @@ export interface FinanceOverviewView {
     readonly description: string;
     readonly source_domain: string | null;
     readonly source_id: string | null;
+    readonly account_id?: string;
     readonly account_name: string;
   }[];
 }
@@ -462,7 +463,7 @@ export async function getFinanceOverview(
       select entry.id::text, entry.amount_delta::text, entry.currency_code, entry.created_at::text,
         transaction.id as transaction_id, transaction.transaction_number, transaction.transaction_type,
         transaction.description, transaction.source_domain, transaction.source_id,
-        account.name as account_name
+        account.id as account_id, account.name as account_name
       from finance.financial_account_entries entry
       join finance.finance_transactions transaction on transaction.id = entry.finance_transaction_id
       join finance.financial_accounts account on account.id = entry.financial_account_id
@@ -679,11 +680,12 @@ export async function listLedger(
       description: string;
       source_domain: string | null;
       source_id: string | null;
+      account_id: string;
       account_name: string;
     }>`select entry.id::text,entry.amount_delta::text,entry.currency_code,
       transaction.occurred_at::text as created_at,transaction.id as transaction_id,
       transaction.transaction_number,transaction.transaction_type,transaction.description,
-      transaction.source_domain,transaction.source_id,account.name as account_name
+      transaction.source_domain,transaction.source_id,account.id as account_id,account.name as account_name
     from finance.financial_account_entries entry
     join finance.finance_transactions transaction
       on transaction.organization_id=entry.organization_id

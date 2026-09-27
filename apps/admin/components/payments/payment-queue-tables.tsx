@@ -1,8 +1,19 @@
 'use client';
 
-import { Banknote, CheckCircle2 } from 'lucide-react';
+import { Banknote, CheckCircle2, XCircle } from 'lucide-react';
 import Link from 'next/link';
 
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { formatFinanceDate, formatMoney } from '@/lib/finance/types';
 
 import type { PaymentAttemptDto, PendingCodCollectionDto } from '@maevelle/contracts';
@@ -16,71 +27,94 @@ interface VerificationQueueProps {
 }
 
 export function VerificationQueue({ attempts, busy, onDecision }: VerificationQueueProps) {
-  if (!attempts.length)
+  if (!attempts.length) {
     return (
       <OperationalEmptyState
         title="Verification queue is clear"
         description="No matching manual payment submissions need a decision."
       />
     );
+  }
 
   return (
-    <section className="panel worklist-panel">
-      <div className="data-table-shell">
-        <table>
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Method</th>
-              <th>Expected</th>
-              <th>Claimed</th>
-              <th>Customer reference</th>
-              <th>Submitted</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[140px]">Order</TableHead>
+              <TableHead>Method</TableHead>
+              <TableHead className="text-right">Expected</TableHead>
+              <TableHead className="text-right">Claimed</TableHead>
+              <TableHead>Customer reference</TableHead>
+              <TableHead>Submitted</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {attempts.map((attempt) => (
-              <tr key={attempt.id}>
-                <td>
-                  <strong>{attempt.orderNumber}</strong>
-                </td>
-                <td>{attempt.methodName}</td>
-                <td className="numeric">{formatMoney(attempt.expectedAmount)}</td>
-                <td className="numeric">
-                  {attempt.claimedAmount ? formatMoney(attempt.claimedAmount) : '—'}
-                </td>
-                <td>{attempt.customerReference}</td>
-                <td>
+              <TableRow key={attempt.id}>
+                <TableCell>
+                  <Link
+                    className="font-semibold text-primary hover:underline"
+                    href={`/orders/${attempt.orderId}`}
+                  >
+                    {attempt.orderNumber}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="font-normal">
+                    {attempt.methodName}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {formatMoney(attempt.expectedAmount)}
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {attempt.claimedAmount ? formatMoney(attempt.claimedAmount) : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell>
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono font-medium">
+                    {attempt.customerReference}
+                  </code>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
                   <time dateTime={attempt.submittedAt}>
                     {formatFinanceDate(attempt.submittedAt, true)}
                   </time>
-                </td>
-                <td>
-                  <div className="row-actions">
-                    <button
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 text-xs font-medium"
                       disabled={busy}
                       onClick={() => onDecision(attempt, 'verify')}
                       type="button"
                     >
-                      <CheckCircle2 aria-hidden="true" /> Verify
-                    </button>
-                    <button
-                      className="danger-action"
+                      <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                      Verify
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 gap-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                       disabled={busy}
                       onClick={() => onDecision(attempt, 'reject')}
                       type="button"
                     >
+                      <XCircle className="size-3.5" aria-hidden="true" />
                       Reject
-                    </button>
+                    </Button>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -91,65 +125,80 @@ interface CodCollectionQueueProps {
 }
 
 export function CodCollectionQueue({ collections, busy, onCollect }: CodCollectionQueueProps) {
-  if (!collections.length)
+  if (!collections.length) {
     return (
       <OperationalEmptyState
         title="No delivered COD awaiting collection"
         description="Delivered COD parcels appear here until the collected amount and courier reference are recorded."
       />
     );
+  }
 
   return (
-    <section className="panel worklist-panel">
-      <div className="data-table-shell">
-        <table>
-          <thead>
-            <tr>
-              <th>Delivery</th>
-              <th>Order</th>
-              <th>Expected here</th>
-              <th>Order outstanding</th>
-              <th>Courier / tracking</th>
-              <th>Delivered</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[120px]">Delivery</TableHead>
+              <TableHead className="w-[120px]">Order</TableHead>
+              <TableHead className="text-right">Expected here</TableHead>
+              <TableHead className="text-right">Order balance</TableHead>
+              <TableHead>Courier / tracking</TableHead>
+              <TableHead>Delivered</TableHead>
+              <TableHead className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {collections.map((item) => (
-              <tr key={item.deliveryId}>
-                <td>
-                  <strong>{item.deliveryNumber}</strong>
-                </td>
-                <td>
-                  <Link className="text-primary hover:underline" href={`/orders/${item.orderId}`}>
+              <TableRow key={item.deliveryId}>
+                <TableCell className="font-medium text-foreground">
+                  {item.deliveryNumber}
+                </TableCell>
+                <TableCell>
+                  <Link className="font-semibold text-primary hover:underline" href={`/orders/${item.orderId}`}>
                     {item.orderNumber}
                   </Link>
-                </td>
-                <td className="numeric">
-                  <strong>{formatMoney(item.expectedAmount, item.currency)}</strong>
-                </td>
-                <td className="numeric">{formatMoney(item.outstandingAmount, item.currency)}</td>
-                <td>
-                  {item.carrierName ?? 'Manual delivery'}
-                  <span className="cell-secondary">
-                    {item.trackingReference ?? 'No tracking reference'}
-                  </span>
-                </td>
-                <td>
+                </TableCell>
+                <TableCell className="text-right font-semibold text-foreground">
+                  {formatMoney(item.expectedAmount, item.currency)}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {formatMoney(item.outstandingAmount, item.currency)}
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-medium text-foreground">
+                      {item.carrierName ?? 'Manual delivery'}
+                    </span>
+                    <span className="block font-mono text-[11px] text-muted-foreground">
+                      {item.trackingReference ?? 'No tracking reference'}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
                   <time dateTime={item.deliveredAt}>
                     {formatFinanceDate(item.deliveredAt, true)}
                   </time>
-                </td>
-                <td>
-                  <button disabled={busy} onClick={() => onCollect(item)} type="button">
-                    <Banknote aria-hidden="true" /> Record collection
-                  </button>
-                </td>
-              </tr>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-8 gap-1.5 text-xs"
+                    disabled={busy}
+                    onClick={() => onCollect(item)}
+                    type="button"
+                  >
+                    <Banknote className="size-3.5" aria-hidden="true" />
+                    Record collection
+                  </Button>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }

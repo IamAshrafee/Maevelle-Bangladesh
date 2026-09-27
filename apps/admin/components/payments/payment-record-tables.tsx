@@ -1,8 +1,19 @@
 'use client';
 
-import { CheckCircle2, Landmark, RotateCcw } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Landmark, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { formatFinanceDate, formatMoney, humanizeFinanceCode } from '@/lib/finance/types';
 
 import type { PaymentDto, RefundDto } from '@maevelle/contracts';
@@ -27,102 +38,144 @@ export function PaymentsTable({
   onPost,
   onRefund,
 }: PaymentsTableProps) {
-  if (!payments.length)
+  if (!payments.length) {
     return (
       <OperationalEmptyState
         title="No collected payments"
         description="No Payment records match the current filters."
       />
     );
+  }
 
   return (
-    <section className="panel worklist-panel">
-      <div className="data-table-shell">
-        <table>
-          <thead>
-            <tr>
-              <th>Payment</th>
-              <th>Order</th>
-              <th>Method</th>
-              <th>Amount</th>
-              <th>Refunded</th>
-              <th>Net</th>
-              <th>Received into</th>
-              <th>Reference</th>
-              <th>Received</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[130px]">Payment</TableHead>
+              <TableHead className="w-[130px]">Order</TableHead>
+              <TableHead>Method</TableHead>
+              <TableHead className="text-right">Collected</TableHead>
+              <TableHead className="text-right">Refunded</TableHead>
+              <TableHead className="text-right">Net</TableHead>
+              <TableHead>Received into</TableHead>
+              <TableHead>Reference</TableHead>
+              <TableHead>Confirmed</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {payments.map((payment) => (
-              <tr key={payment.id}>
-                <td>
+              <TableRow key={payment.id}>
+                <TableCell>
                   <Link
                     className="font-semibold text-primary hover:underline"
                     href={`/payments/${payment.id}`}
                   >
                     {payment.paymentNumber}
                   </Link>
-                </td>
-                <td>
+                </TableCell>
+                <TableCell>
                   <Link
-                    className="text-primary hover:underline"
+                    className="font-medium text-foreground hover:text-primary hover:underline"
                     href={`/orders/${payment.orderId}`}
                   >
                     {payment.orderNumber}
                   </Link>
-                </td>
-                <td>{humanizeFinanceCode(payment.method)}</td>
-                <td className="numeric">{formatMoney(payment.amount, payment.currency)}</td>
-                <td className="numeric">{formatMoney(payment.refunded, payment.currency)}</td>
-                <td className="numeric">
-                  <strong>{formatMoney(payment.net, payment.currency)}</strong>
-                </td>
-                <td>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="font-normal text-xs">
+                    {humanizeFinanceCode(payment.method)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {formatMoney(payment.amount, payment.currency)}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {Number(payment.refunded) > 0 ? (
+                    <span className="text-destructive font-medium">
+                      -{formatMoney(payment.refunded, payment.currency)}
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell className="text-right font-semibold text-foreground">
+                  {formatMoney(payment.net, payment.currency)}
+                </TableCell>
+                <TableCell>
                   {payment.financePosting ? (
-                    <span>
-                      {payment.financePosting.accountName}
-                      <span className="cell-secondary">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-medium text-foreground">
+                        {payment.financePosting.accountName}
+                      </span>
+                      <span className="block font-mono text-[11px] text-muted-foreground">
                         {payment.financePosting.transactionNumber}
                       </span>
+                    </div>
+                  ) : payment.method === 'COD' ? (
+                    <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                      Courier Holding
                     </span>
                   ) : (
                     <StatusBadge status="NOT_POSTED" />
                   )}
-                </td>
-                <td>{payment.externalReference}</td>
-                <td>
+                </TableCell>
+                <TableCell>
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-mono">
+                    {payment.externalReference}
+                  </code>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
                   <time dateTime={payment.confirmedAt}>
                     {formatFinanceDate(payment.confirmedAt)}
                   </time>
-                </td>
-                <td>
-                  <div className="row-actions">
-                    <Link href={`/payments/${payment.id}`}>View details</Link>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs"
+                      render={<Link href={`/payments/${payment.id}`} />}
+                    >
+                      View
+                    </Button>
                     {!payment.financePosting && canPostFinance ? (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1 text-xs"
                         disabled={busy || !hasAccounts}
                         onClick={() => onPost(payment)}
                         type="button"
+                        title="Post to financial treasury account"
                       >
-                        <Landmark aria-hidden="true" /> Receive into account
-                      </button>
+                        <Landmark className="size-3.5" aria-hidden="true" />
+                        Receive
+                      </Button>
                     ) : null}
-                    <button
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
                       disabled={busy || Number(payment.net) <= 0}
                       onClick={() => onRefund(payment)}
                       type="button"
+                      title="Issue refund"
                     >
-                      <RotateCcw aria-hidden="true" /> Refund
-                    </button>
+                      <RotateCcw className="size-3.5" aria-hidden="true" />
+                      Refund
+                    </Button>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -143,87 +196,129 @@ export function RefundsTable({
   onComplete,
   onPost,
 }: RefundsTableProps) {
-  if (!refunds.length)
+  if (!refunds.length) {
     return (
       <OperationalEmptyState
         title="No refunds"
         description="No Refund records match the current filters."
       />
     );
+  }
 
   return (
-    <section className="panel worklist-panel">
-      <div className="data-table-shell">
-        <table>
-          <thead>
-            <tr>
-              <th>Refund</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Order / payment</th>
-              <th>Paid from</th>
-              <th>Reason</th>
-              <th>Reference</th>
-              <th>Requested</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[140px]">Refund</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Order / payment</TableHead>
+              <TableHead>Paid from</TableHead>
+              <TableHead>Reason</TableHead>
+              <TableHead>Reference</TableHead>
+              <TableHead>Requested</TableHead>
+              <TableHead className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {refunds.map((refund) => (
-              <tr key={refund.id}>
-                <td>
-                  <strong>{refund.refundNumber}</strong>
-                  <span className="cell-secondary">Payment {refund.paymentNumber}</span>
-                </td>
-                <td className="numeric">{formatMoney(refund.amount, refund.currency)}</td>
-                <td>
+              <TableRow key={refund.id}>
+                <TableCell>
+                  <div className="space-y-0.5">
+                    <span className="font-semibold text-foreground">
+                      {refund.refundNumber}
+                    </span>
+                    <span className="block font-mono text-[11px] text-muted-foreground">
+                      Pmt {refund.paymentNumber}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right font-semibold text-destructive">
+                  -{formatMoney(refund.amount, refund.currency)}
+                </TableCell>
+                <TableCell>
                   <StatusBadge status={refund.status} />
-                </td>
-                <td>
-                  <Link className="text-primary hover:underline" href={`/orders/${refund.orderId}`}>
-                    {refund.orderNumber}
-                  </Link>
-                  <span className="cell-secondary">{refund.paymentNumber}</span>
-                </td>
-                <td>
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-0.5">
+                    <Link
+                      className="font-medium text-primary hover:underline text-xs"
+                      href={`/orders/${refund.orderId}`}
+                    >
+                      {refund.orderNumber}
+                    </Link>
+                    <span className="block font-mono text-[11px] text-muted-foreground">
+                      {refund.paymentNumber}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
                   {refund.financePosting ? (
-                    <span>
-                      {refund.financePosting.accountName}
-                      <span className="cell-secondary">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-medium text-foreground">
+                        {refund.financePosting.accountName}
+                      </span>
+                      <span className="block font-mono text-[11px] text-muted-foreground">
                         {refund.financePosting.transactionNumber}
                       </span>
-                    </span>
+                    </div>
                   ) : refund.status === 'COMPLETED' ? (
                     <StatusBadge status="NOT_POSTED" />
                   ) : (
-                    '—'
+                    <span className="text-muted-foreground">—</span>
                   )}
-                </td>
-                <td>{humanizeFinanceCode(refund.reasonCode)}</td>
-                <td>{refund.externalReference ?? 'Awaiting completion'}</td>
-                <td>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {humanizeFinanceCode(refund.reasonCode)}
+                </TableCell>
+                <TableCell>
+                  {refund.externalReference ? (
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-mono">
+                      {refund.externalReference}
+                    </code>
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">Awaiting completion</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
                   <time dateTime={refund.requestedAt}>{formatFinanceDate(refund.requestedAt)}</time>
-                </td>
-                <td>
-                  {['REQUESTED', 'PROCESSING'].includes(refund.status) ? (
-                    <button disabled={busy} onClick={() => onComplete(refund)} type="button">
-                      <CheckCircle2 aria-hidden="true" /> Complete refund
-                    </button>
-                  ) : refund.status === 'COMPLETED' && !refund.financePosting && canPostFinance ? (
-                    <button
-                      disabled={busy || !hasAccounts}
-                      onClick={() => onPost(refund)}
-                      type="button"
-                    >
-                      <Landmark aria-hidden="true" /> Record account
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    {['REQUESTED', 'PROCESSING'].includes(refund.status) ? (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-8 gap-1.5 text-xs"
+                        disabled={busy}
+                        onClick={() => onComplete(refund)}
+                        type="button"
+                      >
+                        <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                        Complete refund
+                      </Button>
+                    ) : refund.status === 'COMPLETED' && !refund.financePosting && canPostFinance ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 text-xs"
+                        disabled={busy || !hasAccounts}
+                        onClick={() => onPost(refund)}
+                        type="button"
+                      >
+                        <Landmark className="size-3.5" aria-hidden="true" />
+                        Record account
+                      </Button>
+                    ) : null}
+                  </div>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }
