@@ -1,6 +1,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
+import { withMediaTransaction } from './transaction.js';
 import { MediaDomainError } from './types.js';
 
 export async function attachMediaToProduct(
@@ -23,7 +24,7 @@ export async function attachMediaToProduct(
       'VALIDATION_FAILED',
       'Choose either a Variant gallery or an option-value gallery, not both.',
     );
-  await db.transaction().execute(async (transaction) => {
+  await withMediaTransaction(db, async (transaction) => {
     const asset = await sql<{ id: string }>`select id::text from media.media_assets
       where id=${input.assetId}::uuid and organization_id=${input.organizationId}
         and asset_type='IMAGE' and status='READY' and visibility_class='PUBLIC' for share`.execute(
@@ -100,7 +101,7 @@ export async function detachMediaFromProduct(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; actorId?: string; productId: string; productMediaId: string },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withMediaTransaction(db, async (transaction) => {
     const removed = await sql<{ asset_id: string }>`delete from catalog.product_media
       where id=${input.productMediaId}::uuid and product_id=${input.productId}::uuid
         and organization_id=${input.organizationId} returning asset_id::text`.execute(transaction);

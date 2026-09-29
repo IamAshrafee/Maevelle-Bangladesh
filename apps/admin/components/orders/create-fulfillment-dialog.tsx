@@ -57,13 +57,20 @@ export function CreateFulfillmentDialog({ orderId, currentVersion, lines }: { or
     const formData = new FormData(e.currentTarget);
     const locationId = formData.get('locationId') as string;
     
-    const fulfillLines = lines.map(line => ({
-      orderLineId: line.id,
-      quantity: Number(formData.get(`qty-${line.id}`)),
-    })).filter(l => l.quantity > 0);
+    const fulfillLines = lines
+      .map((line) => {
+        const remaining = Number(line.remainingFulfillableQuantity ?? line.quantity);
+        const inputQty = Number(formData.get(`qty-${line.id}`));
+        const effectiveQty = Math.min(remaining, Math.max(0, inputQty));
+        return {
+          orderLineId: line.id,
+          quantity: String(effectiveQty),
+        };
+      })
+      .filter((l) => Number(l.quantity) > 0);
 
     if (fulfillLines.length === 0) {
-      setMessage('You must fulfill at least one item.');
+      setMessage('You must fulfill at least one item with remaining quantity.');
       setBusy(false);
       return;
     }
@@ -129,25 +136,37 @@ export function CreateFulfillmentDialog({ orderId, currentVersion, lines }: { or
           <div className="space-y-4">
             <h3 className="text-sm font-medium">Items to Fulfill</h3>
             <div className="rounded-md border divide-y">
-              {lines.map((line) => (
-                <div key={line.id} className="flex items-center justify-between p-3">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">{line.productTitle}</span>
-                    <span className="text-xs text-muted-foreground">{line.sku}</span>
+              {lines.map((line) => {
+                const remaining = Number(line.remainingFulfillableQuantity ?? line.quantity);
+                const fulfilled = Number(line.fulfilledQuantity ?? 0);
+                const isFullyFulfilled = remaining <= 0;
+
+                return (
+                  <div key={line.id} className="flex items-center justify-between p-3">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">{line.productTitle}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {line.sku} • {line.quantity} ordered
+                        {fulfilled > 0 ? ` (${fulfilled} already fulfilled)` : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {isFullyFulfilled ? 'Fully fulfilled' : `rem: ${remaining}`}
+                      </span>
+                      <Input 
+                        name={`qty-${line.id}`} 
+                        type="number" 
+                        min="0" 
+                        max={remaining} 
+                        defaultValue={remaining}
+                        disabled={isFullyFulfilled || busy}
+                        className="w-20"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">of {line.quantity}</span>
-                    <Input 
-                      name={`qty-${line.id}`} 
-                      type="number" 
-                      min="0" 
-                      max={line.quantity} 
-                      defaultValue={line.quantity}
-                      className="w-20"
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

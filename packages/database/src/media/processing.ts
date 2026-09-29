@@ -1,6 +1,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
+import { withMediaTransaction } from './transaction.js';
 import type { MediaRenditionKey } from './types.js';
 
 export interface ClaimedMediaAsset {
@@ -23,7 +24,7 @@ export async function claimMediaAssetForProcessing(
   db: Kysely<DatabaseSchema>,
   processorVersion: string,
 ): Promise<ClaimedMediaAsset | undefined> {
-  return db.transaction().execute(async (transaction) => {
+  return withMediaTransaction(db, async (transaction) => {
     const candidate = await sql<{
       asset_id: string;
       organization_id: string;
@@ -101,7 +102,7 @@ export async function completeMediaProcessing(
     }[];
   },
 ): Promise<void> {
-  await db.transaction().execute(async (transaction) => {
+  await withMediaTransaction(db, async (transaction) => {
     const locked = await sql<{ status: string }>`select status from media.media_assets
       where organization_id=${input.asset.organizationId} and id=${input.asset.assetId}::uuid
       for update`.execute(transaction);
@@ -147,7 +148,7 @@ export async function failMediaProcessing(
   },
 ): Promise<void> {
   const safeMessage = input.errorMessage.slice(0, 500);
-  await db.transaction().execute(async (transaction) => {
+  await withMediaTransaction(db, async (transaction) => {
     await sql`update media.media_assets set status=${input.quarantine ? 'QUARANTINED' : 'FAILED'},
       processing_error_code=${input.errorCode},processing_error_message=${safeMessage},
       updated_at=now(),version=version+1 where organization_id=${input.asset.organizationId}
@@ -166,7 +167,7 @@ export async function expireMediaUploadSessions(db: Kysely<DatabaseSchema>): Pro
     objectKey: string;
   }[]
 > {
-  return db.transaction().execute(async (transaction) => {
+  return withMediaTransaction(db, async (transaction) => {
     const expired = await sql<{
       asset_id: string;
       storage_provider: string;
@@ -189,7 +190,7 @@ export async function expireMediaUploadSessions(db: Kysely<DatabaseSchema>): Pro
 }
 
 export async function claimDueMediaPurge(db: Kysely<DatabaseSchema>) {
-  return db.transaction().execute(async (transaction) => {
+  return withMediaTransaction(db, async (transaction) => {
     const result = await sql<{
       asset_id: string;
       organization_id: string;

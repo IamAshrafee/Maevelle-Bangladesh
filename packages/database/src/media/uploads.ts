@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
+import { withMediaTransaction } from './transaction.js';
 import { MediaDomainError, type MediaVisibility, type SupportedMediaMime } from './types.js';
 
 const MIME_POLICY: Record<SupportedMediaMime, { type: 'IMAGE' | 'DOCUMENT'; extension: string }> = {
@@ -66,7 +67,7 @@ export async function createMediaUploadSession(
     throw new MediaDomainError('VALIDATION_FAILED', 'Guest upload ownership is invalid.');
   if (input.uploadSource === 'CUSTOMER_REVIEW' && !input.guestOwnerHash)
     throw new MediaDomainError('VALIDATION_FAILED', 'Customer Review uploads require ownership.');
-  return db.transaction().execute(async (transaction) => {
+  return withMediaTransaction(db, async (transaction) => {
     const asset = await sql<{ id: string }>`
       insert into media.media_assets(
         organization_id,asset_type,visibility_class,status,original_filename,
@@ -158,7 +159,7 @@ export async function completeMediaUploadSession(
     guestOwnerHash?: string;
   },
 ) {
-  return db.transaction().execute(async (transaction) => {
+  return withMediaTransaction(db, async (transaction) => {
     const locked = await sql<{
       asset_id: string;
       status: 'PENDING' | 'UPLOADED' | 'COMPLETED' | 'EXPIRED' | 'FAILED';
@@ -255,7 +256,7 @@ export async function registerUploadedMedia(
   },
 ) {
   const policy = mediaTypePolicy(input.mimeType);
-  return db.transaction().execute(async (transaction) => {
+  return withMediaTransaction(db, async (transaction) => {
     const asset = await sql<{ id: string }>`insert into media.media_assets(
       organization_id,asset_type,visibility_class,status,original_filename,normalized_extension,
       title,alt_text,upload_source
@@ -308,7 +309,7 @@ export async function registerUrlMedia(
       : 'jpg';
   const mimeType =
     extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg';
-  return db.transaction().execute(async (transaction) => {
+  return withMediaTransaction(db, async (transaction) => {
     const asset = await sql<{ id: string }>`insert into media.media_assets(
       organization_id,asset_type,visibility_class,status,original_filename,normalized_extension,
       title,alt_text,upload_source

@@ -27,6 +27,8 @@ import { registerNotificationRoutes } from './notifications.js';
 import { registerAnalyticsRoutes } from './analytics.js';
 import { registerAdminOperationsRoutes } from './admin-operations.js';
 import { registerPathaoRoutes } from './pathao.js';
+import { registerSteadfastRoutes } from './steadfast.js';
+import { registerCourierWebhookRoutes } from './courier-webhooks.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -93,7 +95,7 @@ export function registerAuthRoutes(
   registerCartRoutes(app, database);
   registerOrderRoutes(app, database, auth);
   registerPaymentRoutes(app, database, auth);
-  registerFulfillmentDeliveryRoutes(app, database, auth);
+  registerFulfillmentDeliveryRoutes(app, database, auth, config);
   registerProcurementRoutes(app, database, auth);
   registerCostingRoutes(app, database, auth);
   registerReturnRoutes(app, database, auth);
@@ -101,6 +103,8 @@ export function registerAuthRoutes(
   registerReviewRoutes(app, database, auth);
   registerNotificationRoutes(app, database, auth, config);
   registerPathaoRoutes(app, database, auth, config);
+  registerSteadfastRoutes(app, database, auth, config);
+  registerCourierWebhookRoutes(app, database);
   registerAnalyticsRoutes(app, database, auth);
   registerAdminOperationsRoutes(app, database, auth);
 }

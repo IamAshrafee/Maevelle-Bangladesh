@@ -107,6 +107,8 @@ export interface OrderView {
     cancellationReasonCode: string | null;
     cancellationReasonText: string | null;
     cancelledAt: string | null;
+    fulfilledQuantity?: string;
+    remainingFulfillableQuantity?: string;
     options: readonly { name: string; value: string }[];
   }[];
 }

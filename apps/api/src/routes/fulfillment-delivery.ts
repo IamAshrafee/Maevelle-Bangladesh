@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
+import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   cancelFulfillment,
@@ -18,11 +19,13 @@ import {
   createDeliveryClaim,
   DeliveryDomainError,
   dispatchDelivery,
+  getCourierQuoteRequest,
   getDelivery,
   listCourierIntegrationAccounts,
   listDeliveryPage,
   markDelivered,
   markDeliveryFailed,
+  recordCourierQuote,
   recordDeliveryAttempt,
   recordManualCourierBooking,
   reconcileUnknownCourierBooking,
@@ -30,6 +33,8 @@ import {
   resolveDeliveryException,
   transitionDeliveryClaim,
 } from '@maevelle/database/delivery';
+import { resolveCourierProvider } from '@maevelle/database/courier-resolver';
+import { initiateRto, ReturnDomainError } from '@maevelle/database/returns';
 import {
   listDeliveryFinancialObservations,
   recordProviderCharge,
@@ -104,6 +109,7 @@ export function registerFulfillmentDeliveryRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
   auth: Auth,
+  config?: RuntimeConfig,
 ): void {
   app.get(
     '/admin/fulfillments',
@@ -883,6 +889,100 @@ export function registerFulfillmentDeliveryRoutes(
           }),
         };
       } catch (error) {
+        return sendDomainError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/deliveries/:deliveryId/quotes',
+    {
+      schema: {
+        params: Type.Object({ deliveryId: Type.String({ minLength: 1 }) }),
+        body: Type.Object({
+          integrationAccountId: Type.String({ minLength: 1 }),
+          packageWeightKg: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await requireAdmin(database, auth, request.headers, 'delivery.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as { integrationAccountId: string; packageWeightKg: string };
+        const deliveryId = (request.params as { deliveryId: string }).deliveryId;
+        const prepared = await getCourierQuoteRequest(database.db, {
+          organizationId: active.organizationId,
+          deliveryId,
+          integrationAccountId: body.integrationAccountId,
+          packageWeightKg: body.packageWeightKg,
+        });
+
+        const authKey = config
+          ? { id: 'runtime-auth-key', value: Buffer.from(config.authEncryptionKey, 'base64') }
+          : { id: 'runtime-auth-key', value: Buffer.alloc(32) };
+
+        const provider = await resolveCourierProvider(
+          database.db,
+          authKey,
+          {
+            accountId: body.integrationAccountId,
+            providerCode: prepared.providerCode,
+          },
+        );
+
+        if (!provider || !provider.quote) {
+          return reply.code(422).send({
+            error: {
+              code: 'QUOTING_UNSUPPORTED',
+              message: `Quoting is not supported by courier provider ${prepared.providerCode}.`,
+            },
+          });
+        }
+
+        const quote = await provider.quote(prepared.request);
+        const persisted = await recordCourierQuote(database.db, {
+          organizationId: active.organizationId,
+          deliveryId,
+          integrationAccountId: body.integrationAccountId,
+          providerCode: prepared.providerCode,
+          request: prepared.request,
+          quote,
+        });
+
+        return reply.code(201).send({ data: { ...quote, ...persisted } });
+      } catch (error) {
+        return sendDomainError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/deliveries/:deliveryId/initiate-rto',
+    {
+      schema: {
+        params: Type.Object({ deliveryId: Type.String({ minLength: 1 }) }),
+      },
+    },
+    async (request, reply) => {
+      const active = await requireAdmin(database, auth, request.headers, 'delivery.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const key = requireKey(request, reply);
+      if (!key) return;
+      try {
+        const deliveryId = (request.params as { deliveryId: string }).deliveryId;
+        const result = await initiateRto(database.db, {
+          organizationId: active.organizationId,
+          actorId: active.actorId,
+          deliveryId,
+          idempotencyKey: key,
+        });
+        return reply.code(201).send({ data: result });
+      } catch (error) {
+        if (error instanceof ReturnDomainError) {
+          const status = error.code === 'NOT_FOUND' ? 404 : error.code === 'CONFLICT' ? 409 : 422;
+          return reply.code(status).send({ error: { code: error.code, message: error.message } });
+        }
         return sendDomainError(reply, error);
       }
     },

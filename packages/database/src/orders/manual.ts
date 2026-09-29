@@ -282,7 +282,7 @@ export async function createManualOrder(
           v.id as variant_id, p.id as product_id, item.id as inventory_item_id,
           v.sku, p.title as product_title, v.title as variant_title,
           coalesce(
-            (select media.url from catalog.product_media media
+            (select ('/api/media/' || media.asset_id)::text from catalog.product_media media
              where media.organization_id = ${input.organizationId}
                and media.product_id = p.id
                and (media.variant_id = v.id or media.variant_id is null)

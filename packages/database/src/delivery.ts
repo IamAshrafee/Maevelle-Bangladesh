@@ -2698,3 +2698,48 @@ export async function ingestCourierTrackingEvent(
     throw error;
   }
 }
+
+export async function findCourierBookingForWebhook(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    providerCode: string;
+    externalBookingId?: string;
+    merchantInvoice?: string;
+  },
+): Promise<
+  | {
+      bookingId: string;
+      deliveryId: string;
+      organizationId: string;
+      integrationAccountId: string;
+    }
+  | undefined
+> {
+  const result = await sql<{
+    booking_id: string;
+    delivery_id: string;
+    organization_id: string;
+    integration_account_id: string;
+  }>`
+    select b.id as booking_id, b.delivery_id, b.organization_id, b.integration_account_id
+    from delivery.courier_bookings b
+    join delivery.deliveries d on d.id = b.delivery_id and d.organization_id = b.organization_id
+    where b.provider_code = ${input.providerCode}
+      and (
+        (${input.externalBookingId ?? null}::text is not null and (b.external_consignment_id = ${input.externalBookingId ?? null} or b.tracking_number = ${input.externalBookingId ?? null}))
+        or
+        (${input.merchantInvoice ?? null}::text is not null and d.delivery_number = ${input.merchantInvoice ?? null})
+      )
+    order by b.created_at desc limit 1
+  `.execute(db);
+
+  const row = result.rows[0];
+  if (!row) return undefined;
+  return {
+    bookingId: row.booking_id,
+    deliveryId: row.delivery_id,
+    organizationId: row.organization_id,
+    integrationAccountId: row.integration_account_id,
+  };
+}
+

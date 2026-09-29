@@ -5,3 +5,4 @@ export * from './media/processing.js';
 export * from './media/product-media.js';
 export * from './media/organization.js';
 export * from './media/health.js';
+export * from './media/transaction.js';

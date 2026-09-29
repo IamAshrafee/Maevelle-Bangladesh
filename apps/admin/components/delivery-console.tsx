@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, MapPin, PackageCheck, Route, Truck } from 'lucide-react';
+import { ArrowRight, MapPin, PackageCheck, RotateCcw, Route, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -295,17 +295,36 @@ export function DeliveryConsole() {
     setBusy(true);
     try {
       const result = await request<ApiEnvelope<CourierQuote>>(
-        `/admin/deliveries/${delivery.id}/pathao-quotes`,
+        `/admin/deliveries/${delivery.id}/quotes`,
         {
           method: 'POST',
           body: JSON.stringify({ integrationAccountId, packageWeightKg }),
         },
       );
       setQuote(result.data);
-      setMessage('Pathao quote retrieved. Customer shipping revenue remains separate.');
+      setMessage('Courier quote retrieved. Customer shipping revenue remains separate.');
       setMessageTone('success');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Courier quote could not be retrieved.');
+      setMessageTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function initiateRtoAction(delivery: Delivery) {
+    if (!window.confirm('Initiate Return-to-Origin (RTO) for this failed delivery?')) return;
+    setBusy(true);
+    try {
+      await request(`/admin/deliveries/${delivery.id}/initiate-rto`, {
+        method: 'POST',
+        headers: { 'idempotency-key': crypto.randomUUID() },
+      });
+      setMessage('RTO initiated. Reverse transport and warehouse receiving can now be tracked in Returns.');
+      setMessageTone('success');
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'RTO could not be initiated.');
       setMessageTone('danger');
     } finally {
       setBusy(false);
@@ -845,6 +864,23 @@ export function DeliveryConsole() {
                         type="button"
                       >
                         Failed
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+                {selected.operationalStatus === 'FAILED' ? (
+                  <section className="next-action-card">
+                    <div>
+                      <strong>Failed Delivery: Ready for RTO</strong>
+                      <p>Initiate Return-to-Origin to track the reverse parcel back to the warehouse.</p>
+                    </div>
+                    <div className="detail-actions">
+                      <button
+                        disabled={busy}
+                        onClick={() => void initiateRtoAction(selected)}
+                        type="button"
+                      >
+                        <RotateCcw aria-hidden="true" /> Initiate RTO
                       </button>
                     </div>
                   </section>

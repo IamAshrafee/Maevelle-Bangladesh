@@ -72,6 +72,17 @@ type PathaoData = {
   }[];
 };
 
+type SteadfastAccount = {
+  accountId: string;
+  name: string;
+  environment: 'SANDBOX' | 'PRODUCTION';
+  status: string;
+  connectionStatus: 'NOT_CHECKED' | 'CONNECTED' | 'ERROR';
+  lastValidatedAt?: string;
+  lastErrorCode?: string;
+  hasCredentials: boolean;
+};
+
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
@@ -168,6 +179,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
   const [preferences, setPreferences] = useState<readonly Preference[]>([]);
   const [integrationData, setIntegrationData] = useState<Integrations>();
   const [pathaoData, setPathaoData] = useState<PathaoData>();
+  const [steadfastData, setSteadfastData] = useState<readonly SteadfastAccount[]>([]);
   const [filter, setFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('Loading…');
@@ -178,12 +190,14 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
   const reload = useCallback(async () => {
     try {
       if (integrations) {
-        const [general, pathao] = await Promise.all([
+        const [general, pathao, steadfast] = await Promise.all([
           request<ApiEnvelope<Integrations>>('/admin/integrations'),
           request<ApiEnvelope<PathaoData>>('/admin/integrations/pathao'),
+          request<ApiEnvelope<readonly SteadfastAccount[]>>('/admin/integrations/steadfast'),
         ]);
         setIntegrationData(general.data);
         setPathaoData(pathao.data);
+        setSteadfastData(steadfast.data);
       } else {
         const [inbox, preferenceRows] = await Promise.all([
           request<ApiEnvelope<readonly Notification[]>>('/admin/notifications'),
@@ -280,6 +294,47 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
       await reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Pathao status could not be changed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const checkSteadfastConnectionAction = async () => {
+    const account = steadfastData[0];
+    if (!account) return;
+    setBusy(true);
+    try {
+      const res = await request<{ data: { ok: boolean; message: string; balance?: number } }>(
+        `/admin/integrations/steadfast/${account.accountId}/check-connection`,
+        { method: 'POST' },
+      );
+      setMessage(
+        res.data.ok
+          ? `Steadfast connection verified.${res.data.balance !== undefined ? ` Balance: ৳${res.data.balance}` : ''}`
+          : res.data.message,
+      );
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Steadfast connection check failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleSteadfast = async () => {
+    const account = steadfastData[0];
+    if (!account) return;
+    const nextStatus = account.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+    setBusy(true);
+    try {
+      await request(`/admin/integrations/steadfast/${account.accountId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      setMessage(`Steadfast account ${nextStatus === 'ACTIVE' ? 'enabled' : 'disabled'}.`);
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Steadfast status could not be changed.');
     } finally {
       setBusy(false);
     }
@@ -545,6 +600,112 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
               </div>
             </section>
           ) : null}
+          <form
+            className="command-panel integration-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const form = event.currentTarget;
+              const data = new FormData(form);
+              setBusy(true);
+              try {
+                const account = steadfastData[0];
+                const apiKey = String(data.get('apiKey') || '').trim();
+                const secretKey = String(data.get('secretKey') || '').trim();
+                await request('/admin/integrations/steadfast', {
+                  method: 'PUT',
+                  body: JSON.stringify({
+                    ...(account ? { accountId: account.accountId } : {}),
+                    name: String(data.get('name') || 'Steadfast Courier'),
+                    environment: String(data.get('environment')),
+                    ...(apiKey && secretKey ? { credentials: { apiKey, secretKey } } : {}),
+                  }),
+                });
+                form.reset();
+                setMessage('Steadfast credentials were encrypted and saved server-side.');
+                await reload();
+              } catch (cause) {
+                setError(cause instanceof Error ? cause.message : 'Steadfast configuration failed.');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <div>
+              <p className="eyebrow">Connected courier</p>
+              <h2>Steadfast Courier</h2>
+              <p>
+                Nationwide coverage across all 64 districts in Bangladesh. Credentials are write-only.
+              </p>
+              {steadfastData[0] ? (
+                <p>
+                  <StatusBadge status={steadfastData[0].connectionStatus} />{' '}
+                  {steadfastData[0].environment} · {steadfastData[0].name}
+                </p>
+              ) : null}
+            </div>
+            <label>
+              Account name
+              <input
+                name="name"
+                required
+                maxLength={120}
+                defaultValue={steadfastData[0]?.name ?? 'Steadfast Courier'}
+              />
+            </label>
+            <label>
+              Environment
+              <select
+                name="environment"
+                defaultValue={steadfastData[0]?.environment ?? 'PRODUCTION'}
+              >
+                <option value="PRODUCTION">Production / Live</option>
+                <option value="SANDBOX">Sandbox / Test</option>
+              </select>
+            </label>
+            <label>
+              API Key
+              <input
+                name="apiKey"
+                type="password"
+                placeholder={steadfastData[0]?.hasCredentials ? '••••••••••••••••' : 'Enter API Key'}
+              />
+            </label>
+            <label>
+              Secret Key
+              <input
+                name="secretKey"
+                type="password"
+                placeholder={steadfastData[0]?.hasCredentials ? '••••••••••••••••' : 'Enter Secret Key'}
+              />
+            </label>
+            <div className="inline-actions">
+              <button disabled={busy} type="submit">
+                {steadfastData[0]?.hasCredentials ? 'Replace credentials' : 'Connect Steadfast'}
+              </button>
+              {steadfastData[0] ? (
+                <>
+                  <button
+                    disabled={busy || !steadfastData[0].hasCredentials}
+                    className="secondary"
+                    type="button"
+                    onClick={checkSteadfastConnectionAction}
+                  >
+                    Check connection
+                  </button>
+                  <button
+                    disabled={busy}
+                    className="secondary"
+                    type="button"
+                    onClick={toggleSteadfast}
+                  >
+                    {steadfastData[0].status === 'ACTIVE'
+                      ? 'Disable Steadfast'
+                      : 'Enable Steadfast'}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </form>
           <form
             className="command-panel integration-form"
             onSubmit={async (event) => {

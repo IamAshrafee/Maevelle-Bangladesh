@@ -1979,6 +1979,8 @@ export interface OrderLineDto {
   readonly cancellationReasonText: string | null;
   readonly cancelledAt: string | null;
   readonly options: readonly { readonly name: string; readonly value: string }[];
+  readonly fulfilledQuantity?: string;
+  readonly remainingFulfillableQuantity?: string;
 }
 
 export interface OrderNoteDto {
@@ -2247,4 +2249,389 @@ export interface UpdateCustomerAddressInputDto {
   readonly postalCode?: string | null;
   readonly isDefault?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Fulfillment Contracts
+// ---------------------------------------------------------------------------
+
+export type FulfillmentStatusDto =
+  | 'DRAFT'
+  | 'READY'
+  | 'PICKING'
+  | 'PACKED'
+  | 'DISPATCHED'
+  | 'CANCELLED';
+
+export interface FulfillmentLineDto {
+  readonly id: string;
+  readonly orderLineId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly quantity: string;
+  readonly consumed: string;
+}
+
+export interface FulfillmentDto {
+  readonly id: string;
+  readonly version: number;
+  readonly fulfillmentNumber: string;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly locationId: string;
+  readonly locationName: string;
+  readonly status: FulfillmentStatusDto;
+  readonly createdAt: string;
+  readonly dispatchedAt?: string;
+  readonly lines: readonly FulfillmentLineDto[];
+}
+
+export interface CreateFulfillmentInputDto {
+  readonly locationId: string;
+  readonly expectedVersion?: number;
+  readonly lines: readonly {
+    readonly orderLineId: string;
+    readonly quantity: string;
+  }[];
+}
+
+export interface TransitionFulfillmentInputDto {
+  readonly version: number;
+}
+
+// ---------------------------------------------------------------------------
+// Delivery & Courier Contracts
+// ---------------------------------------------------------------------------
+
+export type DeliveryOperationalStatusDto =
+  | 'READY'
+  | 'BOOKING'
+  | 'BOOKED'
+  | 'HANDED_OVER'
+  | 'IN_TRANSIT'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'RTO_INITIATED'
+  | 'RETURNING'
+  | 'RETURNED_TO_ORIGIN'
+  | 'LOST'
+  | 'DAMAGED';
+
+export type DeliveryOutcomeStatusDto =
+  | 'PENDING'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'CANCELLED_BEFORE_HANDOVER'
+  | 'LOST'
+  | 'DAMAGED'
+  | 'RETURNED_TO_ORIGIN';
+
+export type DeliveryAttemptOutcomeDto =
+  | 'DELIVERED'
+  | 'CUSTOMER_UNAVAILABLE'
+  | 'CUSTOMER_REFUSED'
+  | 'ADDRESS_NOT_FOUND'
+  | 'RESCHEDULE_REQUESTED'
+  | 'PHONE_UNREACHABLE'
+  | 'PROVIDER_FAILURE'
+  | 'OTHER_FAILED';
+
+export interface DeliveryLineDto {
+  readonly orderLineId: string;
+  readonly sku: string;
+  readonly quantity: string;
+}
+
+export interface DeliveryPackageDto {
+  readonly packageNumber: number;
+  readonly weightValue?: string | null;
+  readonly weightUnit?: string;
+  readonly lengthValue?: string | null;
+  readonly widthValue?: string | null;
+  readonly heightValue?: string | null;
+  readonly dimensionUnit?: string;
+  readonly declaredValue?: string | null;
+}
+
+export interface CourierBookingDto {
+  readonly id: string;
+  readonly providerCode: string;
+  readonly status: string;
+  readonly externalConsignmentId?: string;
+  readonly trackingNumber?: string;
+  readonly trackingUrl?: string;
+  readonly bookedAt?: string;
+}
+
+export interface DeliveryEventDto {
+  readonly type: string;
+  readonly source: string;
+  readonly occurredAt: string;
+  readonly normalizedStatus?: string;
+  readonly providerStatusRaw?: string;
+}
+
+export interface DeliveryAttemptDto {
+  readonly attemptNumber: number;
+  readonly outcome: DeliveryAttemptOutcomeDto;
+  readonly reasonCode?: string;
+  readonly note?: string;
+  readonly attemptedAt: string;
+  readonly nextAttemptAt?: string;
+}
+
+export interface DeliveryExceptionDto {
+  readonly id: string;
+  readonly type: string;
+  readonly severity: 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+  readonly summary: string;
+  readonly createdAt: string;
+}
+
+export interface DeliveryClaimDto {
+  readonly id: string;
+  readonly version: number;
+  readonly claimNumber: string;
+  readonly reason: 'LOST' | 'DAMAGED' | 'COD_MISMATCH' | 'OVERCHARGE' | 'OTHER';
+  readonly status: 'OPEN' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'PAID' | 'CLOSED';
+  readonly claimedAmount?: string;
+  readonly approvedAmount?: string;
+  readonly currency: string;
+}
+
+export interface DeliveryDto {
+  readonly id: string;
+  readonly version: number;
+  readonly deliveryNumber: string;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly fulfillmentId: string;
+  readonly fulfillmentNumber: string;
+  readonly method: string;
+  readonly operationalStatus: DeliveryOperationalStatusDto;
+  readonly outcomeStatus: DeliveryOutcomeStatusDto;
+  readonly recipient: {
+    readonly name: string;
+    readonly phone: string;
+    readonly address: string;
+  };
+  readonly cod: {
+    readonly required: boolean;
+    readonly expectedAmount: string;
+    readonly currency: string;
+  };
+  readonly manualCarrierName?: string;
+  readonly trackingReference?: string;
+  readonly activeBooking?: CourierBookingDto;
+  readonly lines: readonly DeliveryLineDto[];
+  readonly events: readonly DeliveryEventDto[];
+  readonly attempts: readonly DeliveryAttemptDto[];
+  readonly exceptions: readonly DeliveryExceptionDto[];
+  readonly claims: readonly DeliveryClaimDto[];
+}
+
+export interface CreateDeliveryInputDto {
+  readonly fulfillmentId: string;
+}
+
+export interface ManualCourierBookingInputDto {
+  readonly version: number;
+  readonly carrierName: string;
+  readonly trackingReference: string;
+}
+
+export interface RequestCourierBookingInputDto {
+  readonly version: number;
+  readonly integrationAccountId: string;
+  readonly packageWeightKg?: string;
+}
+
+export interface CourierQuoteDto {
+  readonly id: string;
+  readonly amount: string;
+  readonly currency: string;
+  readonly baseAmount?: string;
+  readonly discountAmount?: string;
+  readonly codFeeAmount?: string;
+  readonly additionalChargeAmount?: string;
+  readonly providerQuoteReference?: string;
+}
+
+export interface CourierAccountDto {
+  readonly id: string;
+  readonly providerCode: string;
+  readonly name: string;
+  readonly capabilities: Record<string, boolean>;
+}
+
+export interface CustomerDeliveryHistoryDto {
+  readonly eligibleDeliveries: number;
+  readonly deliveredCount: number;
+  readonly failedDeliveryCount: number;
+  readonly rtoCount: number;
+  readonly successRate: number | null;
+  readonly rtoRate: number | null;
+  readonly risk: {
+    readonly level: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
+    readonly reasons: readonly { readonly code: string; readonly explanation: string }[];
+  };
+}
+
+export interface DeliveryFinancialObservationDto {
+  readonly id: string;
+  readonly type: 'COLLECTION' | 'CHARGE';
+  readonly chargeType?: string;
+  readonly amount: string;
+  readonly currency: string;
+  readonly occurredAt: string;
+  readonly providerReference?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Returns & Reverse Logistics (RTO & Customer Returns) Contracts
+// ---------------------------------------------------------------------------
+
+export type ReturnCaseTypeDto = 'CUSTOMER_RETURN' | 'RTO';
+export type ReturnCaseStatusDto = 'OPEN' | 'RESOLVED' | 'CANCELLED';
+export type ReturnAuthorizationStatusDto =
+  | 'NOT_REQUIRED'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'PARTIALLY_APPROVED'
+  | 'REJECTED';
+export type ReturnTransportStatusDto =
+  | 'NOT_STARTED'
+  | 'EXPECTED'
+  | 'IN_TRANSIT'
+  | 'ARRIVED'
+  | 'LOST'
+  | 'CANCELLED';
+export type ReturnReceiptStatusDto =
+  | 'NOT_RECEIVED'
+  | 'PARTIALLY_RECEIVED'
+  | 'RECEIVED'
+  | 'DISCREPANCY';
+export type ReturnInspectionStatusDto =
+  | 'NOT_REQUIRED'
+  | 'PENDING'
+  | 'PARTIALLY_INSPECTED'
+  | 'COMPLETED';
+export type ReturnResolutionStatusDto =
+  | 'PENDING'
+  | 'NO_REFUND_REQUIRED'
+  | 'REFUND_PENDING'
+  | 'REFUND_COMPLETED'
+  | 'OTHER_RESOLUTION';
+
+export interface ReturnLineDto {
+  readonly id: string;
+  readonly orderLineId: string;
+  readonly sku: string;
+  readonly productTitle: string;
+  readonly requestedQuantity: string;
+  readonly authorizedQuantity: string;
+  readonly receivedQuantity: string;
+}
+
+export interface ReturnCaseDto {
+  readonly id: string;
+  readonly version: string;
+  readonly returnNumber: string;
+  readonly caseType: ReturnCaseTypeDto;
+  readonly caseStatus: ReturnCaseStatusDto;
+  readonly authorizationStatus: ReturnAuthorizationStatusDto;
+  readonly transportStatus: ReturnTransportStatusDto;
+  readonly receiptStatus: ReturnReceiptStatusDto;
+  readonly inspectionStatus: ReturnInspectionStatusDto;
+  readonly commercialResolutionStatus: ReturnResolutionStatusDto;
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly customerName: string | null;
+  readonly reasonCode: string;
+  readonly reasonText?: string | null;
+  readonly deliveryId?: string | null;
+  readonly createdAt: string;
+  readonly lines?: readonly ReturnLineDto[];
+}
+
+export interface ReturnReceiptLineDto {
+  readonly id: string;
+  readonly receiptNumber: string;
+  readonly version: string;
+  readonly sku: string;
+  readonly quantity: string;
+  readonly inspectedQuantity: string;
+  readonly conditionCode: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+}
+
+export interface ReturnReceiptDto {
+  readonly id: string;
+  readonly receiptNumber: string;
+  readonly status: string;
+  readonly receivingLocationId: string;
+  readonly receivingLocationName?: string;
+  readonly postedAt: string;
+  readonly lines: readonly ReturnReceiptLineDto[];
+}
+
+export interface CreateReturnCaseInputDto {
+  readonly orderId: string;
+  readonly reasonCode: string;
+  readonly reasonText?: string;
+  readonly lines: readonly {
+    readonly orderLineId: string;
+    readonly quantity: string;
+  }[];
+}
+
+export interface AuthorizeReturnCaseInputDto {
+  readonly version: number;
+}
+
+export interface PostReturnReceiptInputDto {
+  readonly locationId: string;
+  readonly lines: readonly {
+    readonly returnLineId: string;
+    readonly quantity: string;
+  }[];
+}
+
+export interface InspectReturnReceiptLineInputDto {
+  readonly version: number;
+  readonly quantity: string;
+  readonly outcome: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'REJECTED_RETURN';
+  readonly note?: string;
+}
+
+export interface InitiateRtoInputDto {
+  readonly deliveryId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Steadfast Courier Configuration Contracts
+// ---------------------------------------------------------------------------
+
+export type SteadfastEnvironmentDto = 'SANDBOX' | 'PRODUCTION';
+
+export interface SteadfastSafeConfigurationDto {
+  readonly accountId: string;
+  readonly name: string;
+  readonly environment: SteadfastEnvironmentDto;
+  readonly status: string;
+  readonly connectionStatus: 'NOT_CHECKED' | 'CONNECTED' | 'ERROR';
+  readonly lastValidatedAt?: string;
+  readonly lastErrorCode?: string;
+  readonly hasCredentials: boolean;
+  readonly capabilities: Record<string, boolean>;
+}
+
+export interface ConfigureSteadfastInputDto {
+  readonly accountId?: string;
+  readonly name?: string;
+  readonly environment: SteadfastEnvironmentDto;
+  readonly apiKey?: string;
+  readonly secretKey?: string;
+}
+
 

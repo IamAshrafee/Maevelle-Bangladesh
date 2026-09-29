@@ -92,6 +92,14 @@
       "types": "./src/pathao.ts",
       "default": "./dist/src/pathao.js"
     },
+    "./steadfast": {
+      "types": "./src/steadfast.ts",
+      "default": "./dist/src/steadfast.js"
+    },
+    "./courier-resolver": {
+      "types": "./src/courier-resolver.ts",
+      "default": "./dist/src/courier-resolver.js"
+    },
     "./delivery-intelligence": {
       "types": "./src/delivery-intelligence.ts",
       "default": "./dist/src/delivery-intelligence.js"

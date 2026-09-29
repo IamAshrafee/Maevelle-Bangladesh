@@ -80,12 +80,20 @@ export async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Pr
     cancellation_reason_code: string | null;
     cancellation_reason_text: string | null;
     cancelled_at: Date | null;
+    fulfilled_quantity: string;
     option_snapshot: readonly { name: string; value: string }[];
   }>`
-    select id, variant_id, sku_snapshot, product_title_snapshot, variant_title_snapshot, image_url_snapshot,
-      quantity::text, unit_price::text, gross_amount::text, discount_amount::text, net_amount::text,
-      line_status, cancellation_reason_code, cancellation_reason_text, cancelled_at, option_snapshot
-    from orders.order_lines where order_id = ${orderId} order by id
+    select ol.id, ol.variant_id, ol.sku_snapshot, ol.product_title_snapshot, ol.variant_title_snapshot, ol.image_url_snapshot,
+      ol.quantity::text, ol.unit_price::text, ol.gross_amount::text, ol.discount_amount::text, ol.net_amount::text,
+      ol.line_status, ol.cancellation_reason_code, ol.cancellation_reason_text, ol.cancelled_at, ol.option_snapshot,
+      coalesce(
+        (select sum(fl.quantity)::text
+         from fulfillment.fulfillment_lines fl
+         join fulfillment.fulfillments f on f.id = fl.fulfillment_id
+         where fl.order_line_id = ol.id and f.status <> 'CANCELLED'),
+        '0'
+      ) as fulfilled_quantity
+    from orders.order_lines ol where ol.order_id = ${orderId} order by ol.id
   `.execute(db);
   const payment = await getOrderPaymentSummary(db, {
     organizationId: row.organization_id,
@@ -128,24 +136,33 @@ export async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Pr
       ...(row.postal_code ? { postalCode: row.postal_code } : {}),
       countryCode: row.country_code,
     },
-    lines: lines.rows.map((line) => ({
-      id: line.id,
-      variantId: line.variant_id,
-      sku: line.sku_snapshot,
-      productTitle: line.product_title_snapshot,
-      variantTitle: line.variant_title_snapshot,
-      imageUrl: line.image_url_snapshot ?? null,
-      quantity: line.quantity,
-      unitPrice: line.unit_price,
-      gross: line.gross_amount,
-      discount: line.discount_amount,
-      net: line.net_amount,
-      status: line.line_status,
-      cancellationReasonCode: line.cancellation_reason_code,
-      cancellationReasonText: line.cancellation_reason_text,
-      cancelledAt: line.cancelled_at?.toISOString() ?? null,
-      options: line.option_snapshot,
-    })),
+    lines: lines.rows.map((line) => {
+      const fulfilled = line.fulfilled_quantity ?? '0';
+      const remaining =
+        line.line_status === 'CANCELLED'
+          ? '0'
+          : Math.max(0, Number(line.quantity) - Number(fulfilled)).toString();
+      return {
+        id: line.id,
+        variantId: line.variant_id,
+        sku: line.sku_snapshot,
+        productTitle: line.product_title_snapshot,
+        variantTitle: line.variant_title_snapshot,
+        imageUrl: line.image_url_snapshot ?? null,
+        quantity: line.quantity,
+        unitPrice: line.unit_price,
+        gross: line.gross_amount,
+        discount: line.discount_amount,
+        net: line.net_amount,
+        status: line.line_status,
+        cancellationReasonCode: line.cancellation_reason_code,
+        cancellationReasonText: line.cancellation_reason_text,
+        cancelledAt: line.cancelled_at?.toISOString() ?? null,
+        fulfilledQuantity: fulfilled,
+        remainingFulfillableQuantity: remaining,
+        options: line.option_snapshot,
+      };
+    }),
   };
 }
 

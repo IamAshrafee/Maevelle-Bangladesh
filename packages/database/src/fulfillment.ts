@@ -662,6 +662,31 @@ export async function cancelFulfillment(
         fulfillmentId: input.fulfillmentId,
       });
     }
+
+    const delivery = await sql<{
+      id: string;
+      operational_status: string;
+    }>`select id, operational_status from delivery.deliveries
+      where organization_id = ${input.organizationId} and fulfillment_id = ${input.fulfillmentId}
+      for update`.execute(transaction);
+    const deliveryRow = delivery.rows[0];
+    if (deliveryRow) {
+      if (!['READY', 'CANCELLED'].includes(deliveryRow.operational_status)) {
+        throw new FulfillmentDomainError(
+          'INVALID_TRANSITION',
+          `Cannot cancel fulfillment because linked delivery is in status ${deliveryRow.operational_status}. Cancel the courier booking or use the recovery workflow first.`,
+        );
+      }
+      if (deliveryRow.operational_status === 'READY') {
+        await sql`update delivery.deliveries set operational_status='CANCELLED', outcome_status='CANCELLED_BEFORE_HANDOVER', version=version+1, updated_at=now() where id=${deliveryRow.id}`.execute(
+          transaction,
+        );
+        await sql`update delivery.cod_collection_instructions set status='CANCELLED' where organization_id=${input.organizationId} and delivery_id=${deliveryRow.id} and status='ACTIVE'`.execute(
+          transaction,
+        );
+      }
+    }
+
     await sql`update fulfillment.fulfillments set status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now() where id = ${input.fulfillmentId}`.execute(
       transaction,
     );
@@ -715,6 +740,30 @@ export async function cancelOpenFulfillmentsForOrderInTransaction(
     );
   const open = fulfillments.rows.filter((fulfillment) => fulfillment.status !== 'CANCELLED');
   for (const fulfillment of open) {
+    const delivery = await sql<{
+      id: string;
+      operational_status: string;
+    }>`select id, operational_status from delivery.deliveries
+      where organization_id = ${input.organizationId} and fulfillment_id = ${fulfillment.id}
+      for update`.execute(transaction);
+    const deliveryRow = delivery.rows[0];
+    if (deliveryRow) {
+      if (!['READY', 'CANCELLED'].includes(deliveryRow.operational_status)) {
+        throw new FulfillmentDomainError(
+          'INVALID_TRANSITION',
+          `Cannot cancel Order fulfillments because delivery ${deliveryRow.id} is in status ${deliveryRow.operational_status}.`,
+        );
+      }
+      if (deliveryRow.operational_status === 'READY') {
+        await sql`update delivery.deliveries set operational_status='CANCELLED', outcome_status='CANCELLED_BEFORE_HANDOVER', version=version+1, updated_at=now() where id=${deliveryRow.id}`.execute(
+          transaction,
+        );
+        await sql`update delivery.cod_collection_instructions set status='CANCELLED' where organization_id=${input.organizationId} and delivery_id=${deliveryRow.id} and status='ACTIVE'`.execute(
+          transaction,
+        );
+      }
+    }
+
     await sql`
       update fulfillment.fulfillments
       set status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now()

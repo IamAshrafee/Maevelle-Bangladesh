@@ -64,7 +64,7 @@ async function cartOrderLines(db: Kysely<DatabaseSchema>, cart: CartView) {
     category_ids: string[];
   }>`
     select line.id as line_id, variant.id as variant_id, product.id as product_id, line.quantity::text, variant.sku, product.title as product_title,
-      (select coalesce(asset.public_url, asset.url, asset.storage_key, '/api/media/' || asset.id)::text
+      (select ('/api/media/' || asset.id)::text
        from catalog.product_media media_link
        join media.media_assets asset on asset.id = media_link.asset_id
        where media_link.organization_id = cart_row.organization_id and media_link.product_id = product.id
