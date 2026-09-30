@@ -494,12 +494,24 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {order.returnCases.map((rc) => (
-                    <div key={rc.id} className="relative rounded-lg border p-4">
-                      <p className="font-medium text-foreground">{rc.caseNumber}</p>
-                      <StatusBadge status={rc.status} />
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {rc.returnType} • {formatDate(rc.createdAt)}
-                      </p>
+                    <div key={rc.id} className="relative rounded-lg border p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-medium text-foreground">{rc.caseNumber}</p>
+                          <StatusBadge status={rc.status} />
+                        </div>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {rc.returnType} • {formatDate(rc.createdAt)}
+                        </p>
+                      </div>
+                      <div className="mt-3 pt-2 border-t flex justify-end">
+                        <Link
+                          href={`/returns?selected=${encodeURIComponent(rc.id)}`}
+                          className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                        >
+                          View return case →
+                        </Link>
+                      </div>
                     </div>
                   ))}
                 </div>

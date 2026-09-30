@@ -186,10 +186,11 @@ const navigation: readonly NavGroup[] = [
   {
     label: 'Delivery',
     items: [
+      { label: 'Overview', href: '/delivery', icon: LayoutDashboard, capability: 'delivery.view' },
       { label: 'Fulfillments', href: '/fulfillments', icon: Boxes, capability: 'fulfillment.view' },
       { label: 'Deliveries', href: '/deliveries', icon: Truck, capability: 'delivery.view' },
-      { label: 'Customer returns', href: '/returns', icon: RotateCcw, capability: 'returns.view' },
-      { label: 'RTO', href: '/rto', icon: PackageOpen, capability: 'returns.view' },
+      { label: 'Returns & RTO', href: '/returns', icon: RotateCcw, capability: 'returns.view' },
+      { label: 'Couriers', href: '/delivery/couriers', icon: Plug, capability: 'integrations.view' },
     ],
   },
   {
