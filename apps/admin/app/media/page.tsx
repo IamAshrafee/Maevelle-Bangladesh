@@ -10,23 +10,14 @@ import {
   useState,
 } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import {
-  AlertTriangle,
   Archive,
-  ArrowDownToLine,
-  Check,
   Copy,
   Download,
-  ExternalLink,
-  Eye,
-  FileCheck,
   FileIcon,
   FileImage,
   FolderIcon,
   FolderPlus,
-  Grid3X3,
-  ImagePlus,
   LayoutGrid,
   List,
   LoaderCircle,
@@ -34,11 +25,9 @@ import {
   RefreshCw,
   RotateCw,
   Search,
-  ShieldAlert,
   ShieldCheck,
   TagIcon,
   Trash2,
-  UploadCloud,
   X,
 } from 'lucide-react';
 
@@ -71,7 +60,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { StatusBadge } from '../../components/status-badge';
 import {
@@ -103,6 +91,8 @@ type MediaAsset = {
   readonly tags: readonly { id: string; name: string }[];
   readonly title: string | null;
   readonly altText: string | null;
+  readonly caption: string | null;
+  readonly internalDescription: string | null;
   readonly mimeType: string | null;
   readonly byteSize: number | null;
   readonly widthPx: number | null;
@@ -136,7 +126,13 @@ type MediaTag = { readonly id: string; readonly name: string; readonly assetCoun
 type Pagination = { page: number; pageSize: number; totalItems: number; totalPages: number };
 type ProductWorkspace = ProductSummary & {
   readonly variants: readonly { id: string; sku: string; status: string }[];
+  readonly options: readonly {
+    id: string;
+    name: string;
+    values: readonly { id: string; label: string; status: string }[];
+  }[];
 };
+type PlacementScope = 'PRODUCT' | 'VARIANT' | 'OPTION';
 
 async function errorMessage(response: Response, fallback: string) {
   const body = (await response.json().catch(() => ({}))) as {
@@ -154,9 +150,9 @@ export default function MediaPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [lifecycleFilter, setLifecycleFilter] = useState('');
   const [visibilityFilter, setVisibilityFilter] = useState('');
-  const [assetTypeFilter, setAssetTypeFilter] = useState('');
+  const [assetTypeFilter] = useState('');
   const [selectedFolderId, setSelectedFolderId] = useState('');
-  const [selectedTagId, setSelectedTagId] = useState('');
+  const [selectedTagId] = useState('');
   const [unusedOnly, setUnusedOnly] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
@@ -169,6 +165,7 @@ export default function MediaPage() {
   });
 
   const [product, setProduct] = useState<ProductWorkspace | null>(null);
+  const [placementScope, setPlacementScope] = useState<PlacementScope>('PRODUCT');
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
 
@@ -236,7 +233,11 @@ export default function MediaPage() {
       setProducts(productsPayload.data);
       setFolders(((await foldersResponse.json()) as { data: readonly MediaFolder[] }).data);
       setTags(((await tagsResponse.json()) as { data: readonly MediaTag[] }).data);
-      setSelectedAssetId((current) => current || mediaPayload.data[0]?.id || '');
+      setSelectedAssetId((current) =>
+        mediaPayload.data.some((asset) => asset.id === current)
+          ? current
+          : (mediaPayload.data[0]?.id ?? ''),
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Media library could not be loaded.');
       setTone('danger');
@@ -292,6 +293,7 @@ export default function MediaPage() {
   async function selectProduct(productId: string) {
     if (!productId) {
       setProduct(null);
+      setPlacementScope('PRODUCT');
       return;
     }
     setBusy(true);
@@ -303,6 +305,7 @@ export default function MediaPage() {
       if (!response.ok)
         throw new Error(await errorMessage(response, 'Product could not be loaded.'));
       setProduct(((await response.json()) as { data: ProductWorkspace }).data);
+      setPlacementScope('PRODUCT');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Product could not be loaded.');
       setTone('danger');
@@ -391,6 +394,8 @@ export default function MediaPage() {
         body: JSON.stringify({
           title: String(data.get('title') ?? '').trim() || null,
           altText: String(data.get('altText') ?? '').trim() || null,
+          caption: String(data.get('caption') ?? '').trim() || null,
+          internalDescription: String(data.get('internalDescription') ?? '').trim() || null,
           visibility: data.get('visibility'),
           version: selectedAsset.version,
         }),
@@ -496,7 +501,7 @@ export default function MediaPage() {
     event.preventDefault();
     if (!selectedAsset || !product) return;
     const data = new FormData(event.currentTarget);
-    const variantId = String(data.get('variantId') ?? '');
+    const scopedId = String(data.get('scopedId') ?? '');
     setBusy(true);
     try {
       const response = await fetch(`/api/admin/catalog/products/${product.id}/media`, {
@@ -507,7 +512,10 @@ export default function MediaPage() {
           assetId: selectedAsset.id,
           role: data.get('role'),
           position: Number(data.get('position') ?? 0),
-          ...(variantId ? { variantId } : {}),
+          ...(placementScope === 'VARIANT' && scopedId ? { variantId: scopedId } : {}),
+          ...(placementScope === 'OPTION' && scopedId ? { optionValueId: scopedId } : {}),
+          isPrimary: data.get('isPrimary') === 'on',
+          altTextOverride: String(data.get('altTextOverride') ?? '').trim() || null,
         }),
       });
       if (!response.ok)
@@ -1346,6 +1354,34 @@ export default function MediaPage() {
 
                   <div>
                     <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                      Caption
+                    </label>
+                    <Textarea
+                      name="caption"
+                      defaultValue={selectedAsset.caption ?? ''}
+                      rows={2}
+                      maxLength={1000}
+                      className="text-xs"
+                      placeholder="Optional customer-facing supporting copy"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                      Internal Notes
+                    </label>
+                    <Textarea
+                      name="internalDescription"
+                      defaultValue={selectedAsset.internalDescription ?? ''}
+                      rows={3}
+                      maxLength={4000}
+                      className="text-xs"
+                      placeholder="Production, rights, or operational notes"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
                       Visibility Class
                     </label>
                     <select
@@ -1468,21 +1504,68 @@ export default function MediaPage() {
                     </select>
                   </div>
 
-                  {product && product.variants.length > 0 && (
+                  {product && (
                     <div>
                       <label className="text-[11px] font-medium text-muted-foreground block mb-1">
-                        Variant Override (optional)
+                        Placement Scope
                       </label>
                       <select
-                        name="variantId"
-                        defaultValue=""
+                        value={placementScope}
+                        onChange={(event) =>
+                          setPlacementScope(event.target.value as PlacementScope)
+                        }
                         className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
                       >
-                        <option value="">All Variants (Product Gallery)</option>
-                        {product.variants.map((v) => (
-                          <option key={v.id} value={v.id}>
-                            {v.sku}
+                        <option value="PRODUCT">Product-level (all variants)</option>
+                        <option value="VARIANT">Specific variant</option>
+                        <option value="OPTION">Option value gallery</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {product && placementScope === 'VARIANT' && (
+                    <div>
+                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                        Variant
+                      </label>
+                      <select
+                        name="scopedId"
+                        defaultValue=""
+                        required
+                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                      >
+                        <option value="">Choose a variant…</option>
+                        {product.variants.map((variant) => (
+                          <option key={variant.id} value={variant.id}>
+                            {variant.sku}
                           </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {product && placementScope === 'OPTION' && (
+                    <div>
+                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                        Option Value
+                      </label>
+                      <select
+                        name="scopedId"
+                        defaultValue=""
+                        required
+                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                      >
+                        <option value="">Choose an option value…</option>
+                        {product.options.map((axis) => (
+                          <optgroup key={axis.id} label={axis.name}>
+                            {axis.values
+                              .filter((value) => value.status === 'ACTIVE')
+                              .map((value) => (
+                                <option key={value.id} value={value.id}>
+                                  {value.label}
+                                </option>
+                              ))}
+                          </optgroup>
                         ))}
                       </select>
                     </div>
@@ -1517,6 +1600,28 @@ export default function MediaPage() {
                         className="h-8 text-xs"
                       />
                     </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs text-foreground">
+                    <input
+                      name="isPrimary"
+                      type="checkbox"
+                      className="rounded border-input text-primary"
+                    />
+                    Make primary for this scope
+                  </label>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                      Placement-specific alternative text
+                    </label>
+                    <Textarea
+                      name="altTextOverride"
+                      rows={2}
+                      maxLength={500}
+                      className="text-xs"
+                      placeholder="Optional override for this product placement"
+                    />
                   </div>
 
                   <Button

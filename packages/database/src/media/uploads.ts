@@ -13,8 +13,10 @@ const MIME_POLICY: Record<SupportedMediaMime, { type: 'IMAGE' | 'DOCUMENT'; exte
 };
 
 function safeFilename(value: string): string {
+  // This intentionally strips ASCII control characters from untrusted filenames.
   const normalized = value
     .normalize('NFKC')
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim();
   if (!normalized || normalized.length > 255)
