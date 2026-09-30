@@ -5,6 +5,8 @@ import type { DatabaseClient } from '@maevelle/database';
 import {
   archiveMediaAsset,
   attachMediaToProduct,
+  bulkOrganizeMediaAssets,
+  bulkTrashMediaAssets,
   completeMediaUploadSession,
   createMediaFolder,
   createMediaTag,
@@ -22,8 +24,10 @@ import {
   listMediaTags,
   MediaDomainError,
   organizeMediaAsset,
+  replaceProductMediaAsset,
   retryMediaProcessing,
   restoreTrashedMediaAsset,
+  syncProductMediaPlacements,
   trashUnusedMediaAsset,
   updateMediaAssetMetadata,
   updateMediaFolder,
@@ -35,6 +39,7 @@ import { findActiveAdminContext } from '@maevelle/database/platform';
 import {
   createMediaObjectKey,
   sha256,
+  validateMediaSignature,
   type ObjectStoragePort,
   type StoredObjectLocator,
 } from '@maevelle/media';
@@ -213,6 +218,11 @@ export function registerMediaRoutes(
           throw new MediaDomainError('UPLOAD_EXPIRED', 'Upload session has expired.');
         if (!Buffer.isBuffer(request.body) || request.body.length !== session.declaredByteSize)
           throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Upload body size is not authorized.');
+        if (!validateMediaSignature(request.body, session.declaredMimeType))
+          throw new MediaDomainError(
+            'VALIDATION_FAILED',
+            'Uploaded file signature does not match declared type.',
+          );
         await storage.put(
           { provider: session.provider, bucket: session.bucket, key: session.objectKey },
           request.body,
@@ -561,6 +571,68 @@ export function registerMediaRoutes(
   );
 
   app.post(
+    '/admin/media/bulk/organize',
+    {
+      schema: {
+        body: Type.Object({
+          assetIds: Type.Array(UUID, { minItems: 1, maxItems: 100, uniqueItems: true }),
+          folderId: Type.Optional(Type.Union([UUID, Type.Null()])),
+          addTagIds: Type.Optional(Type.Array(UUID, { maxItems: 50, uniqueItems: true })),
+          removeTagIds: Type.Optional(Type.Array(UUID, { maxItems: 50, uniqueItems: true })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'media.manage');
+      if (!context) return sendForbidden(reply);
+      try {
+        const body = request.body as {
+          assetIds: string[];
+          folderId?: string | null;
+          addTagIds?: string[];
+          removeTagIds?: string[];
+        };
+        const result = await bulkOrganizeMediaAssets(database.db, {
+          organizationId: context.organizationId,
+          assetIds: body.assetIds,
+          ...(body.folderId !== undefined ? { folderId: body.folderId } : {}),
+          ...(body.addTagIds ? { addTagIds: body.addTagIds } : {}),
+          ...(body.removeTagIds ? { removeTagIds: body.removeTagIds } : {}),
+        });
+        return { data: result };
+      } catch (error) {
+        return mediaError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/media/bulk/trash',
+    {
+      schema: {
+        body: Type.Object({
+          assetIds: Type.Array(UUID, { minItems: 1, maxItems: 100, uniqueItems: true }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'media.manage');
+      if (!context) return sendForbidden(reply);
+      try {
+        const body = request.body as { assetIds: string[] };
+        const result = await bulkTrashMediaAssets(database.db, {
+          organizationId: context.organizationId,
+          actorId: context.actorId,
+          assetIds: body.assetIds,
+        });
+        return { data: result };
+      } catch (error) {
+        return mediaError(reply, error);
+      }
+    },
+  );
+
+  app.post(
     '/admin/media/uploads',
     {
       schema: {
@@ -674,6 +746,11 @@ export function registerMediaRoutes(
           throw new MediaDomainError('UPLOAD_EXPIRED', 'Upload session has expired.');
         if (!Buffer.isBuffer(request.body) || request.body.length !== session.declaredByteSize)
           throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Upload body size is not authorized.');
+        if (!validateMediaSignature(request.body, session.declaredMimeType))
+          throw new MediaDomainError(
+            'VALIDATION_FAILED',
+            'Uploaded file signature does not match declared type.',
+          );
         await storage.put(
           { provider: session.provider, bucket: session.bucket, key: session.objectKey },
           request.body,
@@ -879,6 +956,92 @@ export function registerMediaRoutes(
     },
   );
 
+  app.put(
+    '/admin/catalog/products/:productId/media',
+    {
+      schema: {
+        params: Type.Object({ productId: UUID }),
+        body: Type.Object({
+          placements: Type.Array(
+            Type.Object({
+              assetId: UUID,
+              role: Type.Union([
+                Type.Literal('GALLERY'),
+                Type.Literal('THUMBNAIL'),
+                Type.Literal('COLOR_GALLERY'),
+                Type.Literal('SIZE_DIAGRAM'),
+              ]),
+              position: Type.Integer({ minimum: 0 }),
+              variantId: Type.Optional(Type.Union([UUID, Type.Null()])),
+              optionValueId: Type.Optional(Type.Union([UUID, Type.Null()])),
+              isPrimary: Type.Optional(Type.Boolean()),
+              altTextOverride: Type.Optional(
+                Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+              ),
+            }),
+            { maxItems: 100 },
+          ),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return sendForbidden(reply);
+      try {
+        const body = request.body as {
+          placements: Array<{
+            assetId: string;
+            role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+            position: number;
+            variantId?: string | null;
+            optionValueId?: string | null;
+            isPrimary?: boolean;
+            altTextOverride?: string | null;
+          }>;
+        };
+        await syncProductMediaPlacements(database.db, {
+          organizationId: context.organizationId,
+          actorId: context.actorId,
+          productId: (request.params as { productId: string }).productId,
+          placements: body.placements,
+        });
+        return { data: { synced: true, count: body.placements.length } };
+      } catch (error) {
+        return mediaError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/catalog/products/:productId/media/replace',
+    {
+      schema: {
+        params: Type.Object({ productId: UUID }),
+        body: Type.Object({
+          productMediaId: UUID,
+          newAssetId: UUID,
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return sendForbidden(reply);
+      try {
+        const body = request.body as { productMediaId: string; newAssetId: string };
+        await replaceProductMediaAsset(database.db, {
+          organizationId: context.organizationId,
+          actorId: context.actorId,
+          productId: (request.params as { productId: string }).productId,
+          productMediaId: body.productMediaId,
+          newAssetId: body.newAssetId,
+        });
+        return { data: { replaced: true } };
+      } catch (error) {
+        return mediaError(reply, error);
+      }
+    },
+  );
+
   app.delete('/admin/catalog/products/:productId/media/:productMediaId', async (request, reply) => {
     const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
     if (!context) return sendForbidden(reply);
@@ -911,21 +1074,51 @@ export function registerMediaRoutes(
     return deliverObject(reply, storage, asset, true);
   });
 
-  app.get('/admin/media/:assetId/content', async (request, reply) => {
-    const context = await requireCapability(database, auth, request.headers, 'media.view');
-    if (!context) return sendForbidden(reply);
-    const asset = await findMediaAsset(
-      database.db,
-      (request.params as { assetId: string }).assetId,
-      context.organizationId,
-      'thumbnail',
-    );
-    if (!asset)
-      return reply
-        .code(404)
-        .send({ error: { code: 'NOT_FOUND', message: 'Media was not found.' } });
-    return deliverObject(reply, storage, asset, false);
-  });
+  app.get(
+    '/admin/media/:assetId/content',
+    {
+      schema: {
+        querystring: Type.Object({
+          rendition: Type.Optional(
+            Type.Union([
+              Type.Literal('original'),
+              Type.Literal('thumbnail'),
+              Type.Literal('card'),
+              Type.Literal('pdp'),
+              Type.Literal('zoom'),
+            ]),
+          ),
+          download: Type.Optional(Type.Boolean()),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'media.view');
+      if (!context) return sendForbidden(reply);
+      const query = request.query as {
+        rendition?: MediaRenditionKey | 'original';
+        download?: boolean;
+      };
+      const rendition = query.rendition ?? 'thumbnail';
+      const asset = await findMediaAsset(
+        database.db,
+        (request.params as { assetId: string }).assetId,
+        context.organizationId,
+        rendition,
+      );
+      if (!asset)
+        return reply
+          .code(404)
+          .send({ error: { code: 'NOT_FOUND', message: 'Media was not found.' } });
+      return deliverObject(
+        reply,
+        storage,
+        asset,
+        false,
+        query.download !== undefined ? { download: query.download } : undefined,
+      );
+    },
+  );
 }
 
 async function deliverObject(
@@ -938,6 +1131,7 @@ async function deliverObject(
   storage: ObjectStoragePort,
   asset: Awaited<ReturnType<typeof findMediaAsset>> & {},
   isPublic: boolean,
+  options?: { download?: boolean },
 ) {
   if (asset.provider === 'url') return reply.redirect(asset.objectKey, 302);
   const locator: StoredObjectLocator = {
@@ -945,9 +1139,11 @@ async function deliverObject(
     bucket: asset.bucket,
     key: asset.objectKey,
   };
+  const downloadName = options?.download ? asset.originalFilename : undefined;
   if (storage.provider !== 'local') {
     const url = await storage.createSignedRead(locator, {
       expiresInSeconds: isPublic ? 3_600 : 300,
+      ...(downloadName ? { downloadName } : {}),
     });
     if (url) {
       reply.header('cache-control', isPublic ? 'public, max-age=300' : 'private, no-store');
@@ -966,5 +1162,11 @@ async function deliverObject(
       'cache-control',
       isPublic ? 'public, max-age=31536000, immutable' : 'private, no-store',
     );
+  if (options?.download) {
+    reply.header(
+      'content-disposition',
+      `attachment; filename="${asset.originalFilename.replace(/"/g, '')}"`,
+    );
+  }
   return reply.send(content);
 }

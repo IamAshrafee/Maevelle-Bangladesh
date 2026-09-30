@@ -194,3 +194,70 @@ export async function organizeMediaAsset(
     return { version: Number(asset.rows[0].version) };
   });
 }
+
+export async function bulkOrganizeMediaAssets(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    assetIds: readonly string[];
+    folderId?: string | null;
+    tagIds?: readonly string[];
+    actorId?: string;
+  },
+): Promise<{ updatedCount: number }> {
+  if (input.assetIds.length === 0) return { updatedCount: 0 };
+  const uniqueAssetIds = [...new Set(input.assetIds)];
+  const assetIdList = sql.join(uniqueAssetIds.map((id) => sql`${id}::uuid`));
+
+  return db.transaction().execute(async (transaction) => {
+    if (input.folderId) {
+      const folder = await sql`select 1 from media.media_folders where
+        organization_id=${input.organizationId} and id=${input.folderId}::uuid`.execute(
+        transaction,
+      );
+      if (!folder.rows[0]) throw new MediaDomainError('NOT_FOUND', 'Media folder was not found.');
+    }
+
+    if (input.tagIds && input.tagIds.length > 0) {
+      const uniqueTagIds = [...new Set(input.tagIds)];
+      const ids = sql.join(uniqueTagIds.map((id) => sql`${id}::uuid`));
+      const tags = await sql<{ count: number }>`select count(*)::int count from media.media_tags
+        where organization_id=${input.organizationId} and id in (${ids})`.execute(transaction);
+      if (tags.rows[0]?.count !== uniqueTagIds.length) {
+        throw new MediaDomainError('NOT_FOUND', 'One or more Media tags were not found.');
+      }
+    }
+
+    let updatedCount = 0;
+    if (input.folderId !== undefined) {
+      const result = await sql`update media.media_assets set
+        folder_id=${input.folderId ?? null}, updated_at=now(), version=version+1
+        where organization_id=${input.organizationId} and id in (${assetIdList})
+          and status not in ('TRASHED','PURGING')`.execute(transaction);
+      updatedCount = Number(result.numAffectedRows);
+    } else {
+      const result = await sql`update media.media_assets set
+        updated_at=now(), version=version+1
+        where organization_id=${input.organizationId} and id in (${assetIdList})
+          and status not in ('TRASHED','PURGING')`.execute(transaction);
+      updatedCount = Number(result.numAffectedRows);
+    }
+
+    if (input.tagIds !== undefined) {
+      const uniqueTagIds = [...new Set(input.tagIds)];
+      // Replace tags for each target asset
+      await sql`delete from media.media_asset_tags where organization_id=${input.organizationId}
+        and asset_id in (${assetIdList})`.execute(transaction);
+
+      for (const assetId of uniqueAssetIds) {
+        for (const tagId of uniqueTagIds) {
+          await sql`insert into media.media_asset_tags(organization_id,asset_id,tag_id)
+            values (${input.organizationId},${assetId}::uuid,${tagId}::uuid)
+            on conflict do nothing`.execute(transaction);
+        }
+      }
+    }
+
+    return { updatedCount };
+  });
+}

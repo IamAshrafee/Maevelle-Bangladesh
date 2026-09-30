@@ -12,6 +12,8 @@ import {
 import {
   archiveMediaAsset,
   attachMediaToProduct,
+  bulkOrganizeMediaAssets,
+  bulkTrashMediaAssets,
   createMediaFolder,
   createMediaTag,
   detachMediaFromProduct,
@@ -20,7 +22,9 @@ import {
   listMediaLibrary,
   organizeMediaAsset,
   registerUploadedMedia,
+  replaceProductMediaAsset,
   restoreTrashedMediaAsset,
+  syncProductMediaPlacements,
   trashUnusedMediaAsset,
   updateMediaAssetMetadata,
 } from './media.js';
@@ -404,5 +408,232 @@ describe('media tenant ownership', () => {
     expect(await findMediaAsset(database.db, asset.id, owner.id)).toMatchObject({
       status: 'ARCHIVED',
     });
+  });
+
+  it('atomically synchronizes and reorders product media placements while rejecting tenant mismatches', async () => {
+    const ownerA = await createOrganization(database.db, {
+      code: `sync-owner-a-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Sync Owner A',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+    const ownerB = await createOrganization(database.db, {
+      code: `sync-owner-b-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Sync Owner B',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+
+    const productType = await sql<{ id: string }>`insert into catalog.product_types
+      (organization_id,code,name) values (${ownerA.id},'apparel','Apparel') returning id::text`.execute(
+      database.db,
+    );
+
+    const product = await createCatalogProduct(database.db, {
+      organizationId: ownerA.id,
+      actorId: crypto.randomUUID(),
+      productTypeId: productType.rows[0]!.id,
+      title: 'Sync Dress',
+      handle: `sync-dress-${crypto.randomUUID().slice(0, 8)}`,
+    });
+
+    const assetsA = await Promise.all(
+      ['1', '2', '3'].map((checksum) =>
+        registerUploadedMedia(database.db, {
+          organizationId: ownerA.id,
+          objectKey: `images/${crypto.randomUUID()}.webp`,
+          mimeType: 'image/webp',
+          byteSize: 100,
+          checksumSha256: checksum.repeat(64),
+          visibility: 'PUBLIC',
+        }),
+      ),
+    );
+
+    const foreignAsset = await registerUploadedMedia(database.db, {
+      organizationId: ownerB.id,
+      objectKey: `images/${crypto.randomUUID()}.webp`,
+      mimeType: 'image/webp',
+      byteSize: 100,
+      checksumSha256: '9'.repeat(64),
+      visibility: 'PUBLIC',
+    });
+
+    // 1. Initial Sync with 2 images
+    await syncProductMediaPlacements(database.db, {
+      organizationId: ownerA.id,
+      actorId: crypto.randomUUID(),
+      productId: product.id,
+      placements: [
+        {
+          assetId: assetsA[0]!.id,
+          role: 'THUMBNAIL',
+          position: 0,
+          isPrimary: true,
+          altTextOverride: 'Front cover',
+        },
+        {
+          assetId: assetsA[1]!.id,
+          role: 'GALLERY',
+          position: 1,
+          isPrimary: false,
+        },
+      ],
+    });
+
+    let workspace = await getCatalogProductWorkspace(database.db, ownerA.id, product.id);
+    expect(workspace?.media).toHaveLength(2);
+    expect(workspace?.media[0]).toMatchObject({
+      assetId: assetsA[0]!.id,
+      isPrimary: true,
+      position: 0,
+    });
+    expect(workspace?.media[1]).toMatchObject({
+      assetId: assetsA[1]!.id,
+      isPrimary: false,
+      position: 1,
+    });
+
+    // 2. Reorder & swap primary cover atomically (assetsA[1] becomes cover at pos 0, assetsA[2] is added, assetsA[0] removed)
+    await syncProductMediaPlacements(database.db, {
+      organizationId: ownerA.id,
+      actorId: crypto.randomUUID(),
+      productId: product.id,
+      placements: [
+        {
+          assetId: assetsA[1]!.id,
+          role: 'THUMBNAIL',
+          position: 0,
+          isPrimary: true,
+        },
+        {
+          assetId: assetsA[2]!.id,
+          role: 'GALLERY',
+          position: 1,
+          isPrimary: false,
+        },
+      ],
+    });
+
+    workspace = await getCatalogProductWorkspace(database.db, ownerA.id, product.id);
+    expect(workspace?.media).toHaveLength(2);
+    expect(workspace?.media[0]).toMatchObject({
+      assetId: assetsA[1]!.id,
+      isPrimary: true,
+      position: 0,
+    });
+    expect(workspace?.media[1]).toMatchObject({
+      assetId: assetsA[2]!.id,
+      isPrimary: false,
+      position: 1,
+    });
+
+    // 3. Reject foreign asset from Owner B (tenant isolation MED-INV-001)
+    await expect(
+      syncProductMediaPlacements(database.db, {
+        organizationId: ownerA.id,
+        actorId: crypto.randomUUID(),
+        productId: product.id,
+        placements: [
+          {
+            assetId: foreignAsset.id,
+            role: 'GALLERY',
+            position: 0,
+            isPrimary: true,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    // 4. Reject multiple primary covers in the same scope
+    await expect(
+      syncProductMediaPlacements(database.db, {
+        organizationId: ownerA.id,
+        actorId: crypto.randomUUID(),
+        productId: product.id,
+        placements: [
+          {
+            assetId: assetsA[0]!.id,
+            role: 'GALLERY',
+            position: 0,
+            isPrimary: true,
+          },
+          {
+            assetId: assetsA[1]!.id,
+            role: 'GALLERY',
+            position: 1,
+            isPrimary: true,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('performs bulk organize and bulk trash safely based on usage', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `bulk-media-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Bulk Media Owner',
+      timezone: 'UTC',
+      defaultLocale: 'en',
+      defaultCurrency: 'USD',
+    });
+
+    const folder = await createMediaFolder(database.db, {
+      organizationId: owner.id,
+      name: 'Bulk Folder',
+    });
+    const tag = await createMediaTag(database.db, {
+      organizationId: owner.id,
+      name: 'Bulk Tag',
+    });
+
+    const assets = await Promise.all(
+      ['a', 'b', 'c'].map((checksum) =>
+        registerUploadedMedia(database.db, {
+          organizationId: owner.id,
+          objectKey: `images/${crypto.randomUUID()}.webp`,
+          mimeType: 'image/webp',
+          byteSize: 100,
+          checksumSha256: checksum.repeat(64),
+          visibility: 'PUBLIC',
+        }),
+      ),
+    );
+
+    // Bulk organize all 3
+    const organizeResult = await bulkOrganizeMediaAssets(database.db, {
+      organizationId: owner.id,
+      assetIds: assets.map((a) => a.id),
+      folderId: folder.id,
+      tagIds: [tag.id],
+    });
+    expect(organizeResult.updatedCount).toBe(3);
+
+    const library = await listMediaLibrary(database.db, {
+      organizationId: owner.id,
+      page: 1,
+      pageSize: 10,
+      folderId: folder.id,
+      tagId: tag.id,
+    });
+    expect(library.items).toHaveLength(3);
+
+    // Bulk trash 2 of them
+    const trashResult = await bulkTrashMediaAssets(database.db, {
+      organizationId: owner.id,
+      assetIds: [assets[0]!.id, assets[1]!.id],
+    });
+    expect(trashResult.trashedCount).toBe(2);
+    expect(trashResult.inUseCount).toBe(0);
+
+    const trashedLibrary = await listMediaLibrary(database.db, {
+      organizationId: owner.id,
+      page: 1,
+      pageSize: 10,
+      status: 'TRASHED',
+    });
+    expect(trashedLibrary.items).toHaveLength(2);
   });
 });

@@ -1,27 +1,85 @@
 'use client';
 
 import {
-  FileImage,
-  ImagePlus,
-  Link2,
-  LockKeyhole,
-  RefreshCw,
-  ShieldCheck,
-  Trash2,
-} from 'lucide-react';
+  type ClipboardEvent,
+  type FormEvent,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { type FormEvent, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-
 import {
-  OperationalEmptyState,
-  OperationalFeedback,
-  OperationalPageHeader,
-  OperationalWorklistToolbar,
-  useOperationalWorklist,
-} from '../../components/operational-worklist';
+  AlertTriangle,
+  Archive,
+  ArrowDownToLine,
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  FileCheck,
+  FileIcon,
+  FileImage,
+  FolderIcon,
+  FolderPlus,
+  Grid3X3,
+  ImagePlus,
+  LayoutGrid,
+  List,
+  LoaderCircle,
+  Plus,
+  RefreshCw,
+  RotateCw,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  TagIcon,
+  Trash2,
+  UploadCloud,
+  X,
+} from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { StatusBadge } from '../../components/status-badge';
-import { uploadMediaFile } from '../../lib/media/api';
+import {
+  bulkOrganizeMedia,
+  bulkTrashMedia,
+  getAdminMediaUrl,
+  uploadMediaFile,
+} from '../../lib/media/api';
 
 type MediaUsage = {
   readonly id: string;
@@ -95,20 +153,38 @@ export default function MediaPage() {
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [lifecycleFilter, setLifecycleFilter] = useState('');
+  const [visibilityFilter, setVisibilityFilter] = useState('');
+  const [assetTypeFilter, setAssetTypeFilter] = useState('');
+  const [selectedFolderId, setSelectedFolderId] = useState('');
+  const [selectedTagId, setSelectedTagId] = useState('');
+  const [unusedOnly, setUnusedOnly] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
-    pageSize: 24,
+    pageSize: 32,
     totalItems: 0,
     totalPages: 0,
   });
+
   const [product, setProduct] = useState<ProductWorkspace | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState('');
+  const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
+
   const [message, setMessage] = useState('');
   const [tone, setTone] = useState<'success' | 'warning' | 'danger'>('success');
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Modals
+  const [isHealthOpen, setIsHealthOpen] = useState(false);
+  const [isBulkFolderOpen, setIsBulkFolderOpen] = useState(false);
+  const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [isNewTagOpen, setIsNewTagOpen] = useState(false);
+  const [bulkTargetFolderId, setBulkTargetFolderId] = useState('');
+
   const [health, setHealth] = useState<{
     status: 'HEALTHY' | 'DEGRADED';
     checkedObjectCount: number;
@@ -119,21 +195,34 @@ export default function MediaPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('page', String(page));
+      queryParams.set('pageSize', '32');
+      if (deferredSearchQuery.trim()) queryParams.set('query', deferredSearchQuery.trim());
+      if (lifecycleFilter) queryParams.set('status', lifecycleFilter);
+      if (visibilityFilter) queryParams.set('visibility', visibilityFilter);
+      if (assetTypeFilter) queryParams.set('assetType', assetTypeFilter);
+      if (selectedFolderId) queryParams.set('folderId', selectedFolderId);
+      if (selectedTagId) queryParams.set('tagId', selectedTagId);
+      if (unusedOnly) queryParams.set('unused', 'true');
+
       const [mediaResponse, productsResponse, foldersResponse, tagsResponse] = await Promise.all([
-        fetch(
-          `/api/admin/media?page=${page}&pageSize=24${deferredSearchQuery.trim() ? `&query=${encodeURIComponent(deferredSearchQuery.trim())}` : ''}${lifecycleFilter ? `&status=${encodeURIComponent(lifecycleFilter)}` : ''}`,
-          { credentials: 'include', cache: 'no-store' },
-        ),
+        fetch(`/api/admin/media?${queryParams.toString()}`, {
+          credentials: 'include',
+          cache: 'no-store',
+        }),
         fetch('/api/admin/catalog/products', { credentials: 'include', cache: 'no-store' }),
         fetch('/api/admin/media/folders', { credentials: 'include', cache: 'no-store' }),
         fetch('/api/admin/media/tags', { credentials: 'include', cache: 'no-store' }),
       ]);
+
       if (!mediaResponse.ok)
         throw new Error(await errorMessage(mediaResponse, 'Media library could not be loaded.'));
       if (!productsResponse.ok)
         throw new Error(await errorMessage(productsResponse, 'Products could not be loaded.'));
       if (!foldersResponse.ok || !tagsResponse.ok)
         throw new Error('Media organization could not be loaded.');
+
       const mediaPayload = (await mediaResponse.json()) as {
         data: readonly MediaAsset[];
         pagination: Pagination;
@@ -141,6 +230,7 @@ export default function MediaPage() {
       const productsPayload = (await productsResponse.json()) as {
         data: readonly ProductSummary[];
       };
+
       setAssets(mediaPayload.data);
       setPagination(mediaPayload.pagination);
       setProducts(productsPayload.data);
@@ -153,34 +243,51 @@ export default function MediaPage() {
     } finally {
       setLoading(false);
     }
-  }, [deferredSearchQuery, lifecycleFilter, page]);
+  }, [
+    deferredSearchQuery,
+    lifecycleFilter,
+    visibilityFilter,
+    assetTypeFilter,
+    selectedFolderId,
+    selectedTagId,
+    unusedOnly,
+    page,
+  ]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const worklist = useOperationalWorklist({
-    items: assets,
-    storageKey: 'admin-media-library',
-    getSearchText: (asset) =>
-      [
-        asset.title,
-        asset.altText,
-        asset.originalFilename,
-        asset.id,
-        ...asset.usages.map((usage) => usage.label),
-      ]
-        .filter(Boolean)
-        .join(' '),
-    getStatus: (asset) => asset.visibility,
-    getReference: (asset) => asset.title ?? asset.id,
-    getTimestamp: (asset) => asset.createdAt,
-  });
-
   const selectedAsset = useMemo(
     () => assets.find((asset) => asset.id === selectedAssetId),
     [assets, selectedAssetId],
   );
+
+  async function checkHealth() {
+    setBusy(true);
+    try {
+      const response = await fetch('/api/admin/media/health', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!response.ok)
+        throw new Error(await errorMessage(response, 'Media health check could not run.'));
+      const result = (await response.json()) as { data: NonNullable<typeof health> };
+      setHealth(result.data);
+      setIsHealthOpen(true);
+      setMessage(
+        result.data.status === 'HEALTHY'
+          ? `Media storage is healthy across ${result.data.checkedObjectCount} stored objects.`
+          : `Storage diagnostics found ${result.data.issueCount} issue${result.data.issueCount === 1 ? '' : 's'}.`,
+      );
+      setTone(result.data.status === 'HEALTHY' ? 'success' : 'warning');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Media health check could not run.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function selectProduct(productId: string) {
     if (!productId) {
@@ -204,60 +311,30 @@ export default function MediaPage() {
     }
   }
 
-  async function checkHealth() {
-    setBusy(true);
-    try {
-      const response = await fetch('/api/admin/media/health', {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (!response.ok)
-        throw new Error(await errorMessage(response, 'Media health check could not run.'));
-      const result = (await response.json()) as { data: NonNullable<typeof health> };
-      setHealth(result.data);
-      setMessage(
-        result.data.status === 'HEALTHY'
-          ? `Media health is good across ${result.data.checkedObjectCount} stored objects.`
-          : `Media health found ${result.data.issueCount} issue${result.data.issueCount === 1 ? '' : 's'}.`,
-      );
-      setTone(result.data.status === 'HEALTHY' ? 'success' : 'warning');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Media health check could not run.');
-      setTone('danger');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function upload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const data = new FormData(formElement);
-    const files = data
-      .getAll('image')
-      .filter((entry): entry is File => entry instanceof File && entry.size > 0);
-    if (files.length === 0) return;
+  async function handleFilesUpload(
+    files: FileList | null,
+    initialVisibility: 'PUBLIC' | 'PRIVATE' = 'PRIVATE',
+  ) {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
     setBusy(true);
     setMessage('');
     try {
       const progress = new Map<number, number>();
       const results = await Promise.allSettled(
-        files.map((file, index) =>
+        fileList.map((file, index) =>
           uploadMediaFile(file, {
-            visibility: data.get('visibility') === 'public' ? 'PUBLIC' : 'PRIVATE',
-            title:
-              files.length === 1
-                ? String(data.get('title') ?? '').trim() || null
-                : file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
-            altText: files.length === 1 ? String(data.get('altText') ?? '').trim() || null : null,
+            visibility: initialVisibility,
+            title: file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
+            altText: null,
             onProgress: (value) => {
               progress.set(index, value);
               setUploadProgress(
                 Math.round(
                   Array.from(
-                    { length: files.length },
+                    { length: fileList.length },
                     (_, fileIndex) => progress.get(fileIndex) ?? 0,
-                  ).reduce((sum, current) => sum + current, 0) / files.length,
+                  ).reduce((sum, current) => sum + current, 0) / fileList.length,
                 ),
               );
             },
@@ -272,8 +349,7 @@ export default function MediaPage() {
         `${uploaded.length} asset${uploaded.length === 1 ? '' : 's'} uploaded and queued for processing${failed ? `; ${failed} failed` : ''}.`,
       );
       setTone(failed ? 'warning' : 'success');
-      formElement.reset();
-      setSelectedAssetId(uploaded[0]?.assetId ?? '');
+      if (uploaded[0]) setSelectedAssetId(uploaded[0].assetId);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Upload failed.');
@@ -283,6 +359,24 @@ export default function MediaPage() {
       setBusy(false);
     }
   }
+
+  const handlePaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length > 0) {
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(f);
+      void handleFilesUpload(dt.files);
+    }
+  };
 
   async function saveMetadata(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -314,32 +408,54 @@ export default function MediaPage() {
     }
   }
 
-  async function createLibraryTerm(event: FormEvent<HTMLFormElement>, kind: 'folder' | 'tag') {
+  async function createLibraryFolder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
+    const form = new FormData(event.currentTarget);
     const name = String(form.get('name') ?? '').trim();
     const parentId = String(form.get('parentId') ?? '');
     if (!name) return;
     setBusy(true);
     try {
-      const response = await fetch(`/api/admin/media/${kind === 'folder' ? 'folders' : 'tags'}`, {
+      const response = await fetch('/api/admin/media/folders', {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          ...(kind === 'folder' ? { parentId: parentId || null } : {}),
-        }),
+        body: JSON.stringify({ name, ...(parentId ? { parentId } : {}) }),
       });
       if (!response.ok)
-        throw new Error(await errorMessage(response, `${kind} could not be created.`));
-      formElement.reset();
-      setMessage(`${kind === 'folder' ? 'Folder' : 'Tag'} created.`);
+        throw new Error(await errorMessage(response, 'Folder could not be created.'));
+      setIsNewFolderOpen(false);
+      setMessage(`Folder "${name}" created.`);
       setTone('success');
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `${kind} could not be created.`);
+      setMessage(error instanceof Error ? error.message : 'Folder could not be created.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createLibraryTag(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('name') ?? '').trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const response = await fetch('/api/admin/media/tags', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) throw new Error(await errorMessage(response, 'Tag could not be created.'));
+      setIsNewTagOpen(false);
+      setMessage(`Tag "${name}" created.`);
+      setTone('success');
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Tag could not be created.');
       setTone('danger');
     } finally {
       setBusy(false);
@@ -410,13 +526,9 @@ export default function MediaPage() {
   }
 
   async function detach(usage: MediaUsage) {
-    if (
-      !window.confirm(
-        `Remove this ${(usage.role ?? 'media').toLowerCase()} placement from ${usage.productTitle ?? usage.label ?? 'this usage'}?`,
-      )
-    )
-      return;
     if (!usage.productId) return;
+    if (!window.confirm(`Remove placement from ${usage.productTitle ?? usage.label ?? 'product'}?`))
+      return;
     setBusy(true);
     try {
       const response = await fetch(
@@ -425,7 +537,7 @@ export default function MediaPage() {
       );
       if (!response.ok)
         throw new Error(await errorMessage(response, 'Media placement could not be removed.'));
-      setMessage('Media placement removed. The asset remains safely in the library.');
+      setMessage('Media placement detached safely.');
       setTone('success');
       await load();
     } catch (error) {
@@ -440,9 +552,7 @@ export default function MediaPage() {
     if (!selectedAsset) return;
     if (
       action === 'trash' &&
-      !window.confirm(
-        `Move ${selectedAsset.title || selectedAsset.originalFilename} to trash? It will be retained before physical cleanup.`,
-      )
+      !window.confirm(`Move ${selectedAsset.title || selectedAsset.originalFilename} to trash?`)
     )
       return;
     setBusy(true);
@@ -459,10 +569,10 @@ export default function MediaPage() {
         action === 'retry'
           ? 'Media processing queued for retry.'
           : action === 'archive'
-            ? 'Asset archived and removed from new selection.'
+            ? 'Asset archived.'
             : action === 'restore'
-              ? 'Asset restored from trash as archived media.'
-              : 'Unused asset moved to recoverable trash.',
+              ? 'Asset restored from trash.'
+              : 'Unused asset moved to trash.',
       );
       setTone('success');
       await load();
@@ -474,545 +584,1201 @@ export default function MediaPage() {
     }
   }
 
+  // Bulk operations
+  const handleToggleSelectAll = () => {
+    if (selectedForBulk.size === assets.length) {
+      setSelectedForBulk(new Set());
+    } else {
+      setSelectedForBulk(new Set(assets.map((a) => a.id)));
+    }
+  };
+
+  const handleToggleSelectItem = (id: string) => {
+    setSelectedForBulk((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkTrash = async () => {
+    if (selectedForBulk.size === 0) return;
+    if (
+      !window.confirm(
+        `Move ${selectedForBulk.size} selected assets to trash? Unused assets will be trashed; in-use assets will be safely skipped.`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const result = await bulkTrashMedia(Array.from(selectedForBulk));
+      setMessage(
+        `Bulk trash complete: ${result.trashedCount} trashed${result.skippedInUseCount > 0 ? `, ${result.skippedInUseCount} skipped because they are active in catalog/reviews` : ''}.`,
+      );
+      setTone(result.skippedInUseCount > 0 ? 'warning' : 'success');
+      setSelectedForBulk(new Set());
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Bulk trash failed.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleBulkMoveToFolder = async () => {
+    if (selectedForBulk.size === 0) return;
+    setBusy(true);
+    try {
+      const result = await bulkOrganizeMedia({
+        assetIds: Array.from(selectedForBulk),
+        folderId: bulkTargetFolderId === 'unfiled' ? null : bulkTargetFolderId || null,
+      });
+      setMessage(`Moved ${result.updatedCount} assets to target folder.`);
+      setTone('success');
+      setIsBulkFolderOpen(false);
+      setSelectedForBulk(new Set());
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Bulk move failed.');
+      setTone('danger');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <main>
-      <section className="shell admin-page">
-        <OperationalPageHeader
-          eyebrow="Catalog / Assets"
-          title="Media library"
-          description="Upload, process, find, reuse, and safely manage organization-owned images and documents."
-          actions={
-            <>
-              <button className="button secondary" type="button" onClick={() => void load()}>
-                <RefreshCw aria-hidden="true" /> Refresh
-              </button>
-              <button
-                className="button secondary"
-                disabled={busy}
-                type="button"
-                onClick={() => void checkHealth()}
-              >
-                <ShieldCheck aria-hidden="true" /> Check health
-              </button>
-              <Link className="button secondary" href="/products">
-                Open Products
-              </Link>
-            </>
-          }
-        />
-        {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        {health?.status === 'DEGRADED' ? (
-          <OperationalFeedback tone="warning">
-            <strong>Media health needs attention.</strong>
-            <ul>
-              {health.issues.slice(0, 10).map((issue, index) => (
-                <li key={`${issue.code}-${issue.assetId}-${index}`}>
-                  {issue.code.replaceAll('_', ' ')} · {issue.assetId}: {issue.detail}
-                </li>
-              ))}
-            </ul>
-            {health.issues.length > 10 ? <small>Showing the first 10 issues.</small> : null}
-          </OperationalFeedback>
-        ) : null}
-        <section className="media-workspace">
-          <form className="panel media-upload" onSubmit={(event) => void upload(event)}>
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">New asset</p>
-                <h2>Upload asset</h2>
-              </div>
-              <ImagePlus aria-hidden="true" />
-            </div>
-            <label htmlFor="media-image">Image or PDF</label>
-            <label className="file-drop" htmlFor="media-image">
-              <FileImage aria-hidden="true" />
-              <strong>Choose a JPEG, PNG, WebP, or PDF</strong>
-              <span>File signatures and configured size limits are validated by the server.</span>
-              <input
-                id="media-image"
-                name="image"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                multiple
-                required
-              />
-            </label>
-            <label htmlFor="media-title">Internal title</label>
-            <input
-              id="media-title"
-              name="title"
-              maxLength={160}
-              placeholder="Black linen dress — front"
-            />
-            <label htmlFor="media-alt">Alternative text</label>
-            <textarea
-              id="media-alt"
-              name="altText"
-              rows={2}
-              maxLength={500}
-              placeholder="Front view of a black linen wrap dress"
-            />
-            <label htmlFor="media-visibility">Initial visibility</label>
-            <select id="media-visibility" name="visibility" defaultValue="private">
-              <option value="private">Private — recommended for new uploads</option>
-              <option value="public">Public — customer-facing media route enabled</option>
-            </select>
-            <button className="button primary" disabled={busy} type="submit">
-              <ImagePlus aria-hidden="true" />{' '}
-              {busy
-                ? `Uploading${uploadProgress === null ? '…' : ` ${uploadProgress}%`}`
-                : 'Upload assets'}
-            </button>
-          </form>
-          <aside className="panel media-policy">
-            <p className="eyebrow">Safety policy</p>
-            <h2>Controlled asset lifecycle</h2>
-            <div>
-              <LockKeyhole aria-hidden="true" />
-              <span>
-                <strong>Private by default</strong>
-                <small>Private media requires an authenticated Admin request.</small>
-              </span>
-            </div>
-            <div>
-              <ShieldCheck aria-hidden="true" />
-              <span>
-                <strong>Content validated</strong>
-                <small>MIME type is derived from the file signature.</small>
-              </span>
-            </div>
-            <div>
-              <FileImage aria-hidden="true" />
-              <span>
-                <strong>Catalog-owned placement</strong>
-                <small>Role, Product, Variant, and order are explicit commands.</small>
-              </span>
-            </div>
-          </aside>
-        </section>
-
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Library organization</p>
-              <h2>Folders and tags</h2>
-            </div>
+    <div className="min-h-screen bg-muted/10 p-4 sm:p-6 lg:p-8 space-y-6" onPaste={handlePaste}>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+              Media Library
+            </h1>
+            <Badge variant="outline" className="text-xs">
+              Platform Asset Hub
+            </Badge>
           </div>
-          <div className="form-grid">
-            <form
-              className="inset-form"
-              onSubmit={(event) => void createLibraryTerm(event, 'folder')}
-            >
-              <label htmlFor="new-media-folder">New folder</label>
-              <input id="new-media-folder" name="name" maxLength={120} required />
-              <label htmlFor="new-media-folder-parent">Parent folder</label>
-              <select id="new-media-folder-parent" name="parentId" defaultValue="">
-                <option value="">Top level</option>
-                {folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folder.name}
-                  </option>
-                ))}
-              </select>
-              <button className="button secondary" disabled={busy} type="submit">
-                Create folder
-              </button>
-            </form>
-            <form className="inset-form" onSubmit={(event) => void createLibraryTerm(event, 'tag')}>
-              <label htmlFor="new-media-tag">New tag</label>
-              <input id="new-media-tag" name="name" maxLength={80} required />
-              <button className="button secondary" disabled={busy} type="submit">
-                Create tag
-              </button>
-            </form>
-          </div>
-        </section>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Deterministic WebP delivery, EXIF normalization, tenant isolation, and atomic placement
+            syncing.
+          </p>
+        </div>
 
-        <OperationalWorklistToolbar
-          query={searchQuery}
-          onQueryChange={(value) => {
-            setSearchQuery(value);
-            setPage(1);
-          }}
-          status={worklist.status}
-          onStatusChange={worklist.setStatus}
-          statuses={['PRIVATE', 'PUBLIC']}
-          sort={worklist.sort}
-          onSortChange={worklist.setSort}
-          density={worklist.density}
-          onDensityChange={worklist.setDensity}
-          resultCount={worklist.visibleItems.length}
-          savedViews={worklist.savedViews}
-          onSaveView={worklist.saveView}
-          onApplyView={worklist.applyView}
-          searchLabel="Search by title, alt text, Product, or asset ID"
-        />
-        <label htmlFor="media-lifecycle-filter">
-          Lifecycle
-          <select
-            id="media-lifecycle-filter"
-            value={lifecycleFilter}
-            onChange={(event) => {
-              setLifecycleFilter(event.target.value);
-              setPage(1);
-            }}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => void load()}
+            disabled={loading}
           >
-            <option value="">Active library</option>
-            <option value="PENDING_UPLOAD">Pending upload</option>
-            <option value="PROCESSING">Processing</option>
-            <option value="FAILED">Failed</option>
-            <option value="QUARANTINED">Quarantined</option>
-            <option value="READY">Ready</option>
-            <option value="ARCHIVED">Archived</option>
-            <option value="TRASHED">Trash</option>
-          </select>
-        </label>
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
 
-        <section className="media-library-layout">
-          <div className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Organization library</p>
-                <h2>Assets</h2>
-              </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => void checkHealth()}
+            disabled={busy}
+          >
+            <ShieldCheck className="size-3.5 text-primary" />
+            Storage Health
+          </Button>
+
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => document.getElementById('main-media-upload-input')?.click()}
+            disabled={busy}
+          >
+            <Plus className="size-3.5" />
+            Upload Assets
+          </Button>
+          <input
+            id="main-media-upload-input"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            multiple
+            className="hidden"
+            onChange={(e) => void handleFilesUpload(e.target.files)}
+          />
+        </div>
+      </div>
+
+      {/* Notification banner */}
+      {message && (
+        <div
+          className={`flex items-center justify-between rounded-lg p-3 text-xs font-medium border ${
+            tone === 'danger'
+              ? 'bg-destructive/10 border-destructive/30 text-destructive'
+              : tone === 'warning'
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+          }`}
+        >
+          <span>{message}</span>
+          <button
+            type="button"
+            className="hover:opacity-75"
+            onClick={() => setMessage('')}
+            aria-label="Dismiss feedback"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Uploading progress banner */}
+      {uploadProgress !== null && (
+        <Card className="border-primary/30 bg-primary/5 shadow-xs">
+          <CardContent className="flex items-center gap-3 p-3">
+            <LoaderCircle className="size-4 animate-spin text-primary shrink-0" />
+            <div className="flex-1 text-xs">
+              <span className="font-semibold text-foreground">
+                Streaming and processing uploads… ({uploadProgress}%)
+              </span>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Validating file signatures, stripping EXIF tags, and generating WebP renditions.
+              </p>
             </div>
-            {loading ? (
-              <div className="skeleton-list" aria-label="Loading media library">
-                <span />
-                <span />
-                <span />
-              </div>
-            ) : worklist.visibleItems.length ? (
-              <div className="media-grid">
-                {worklist.visibleItems.map((asset) => (
-                  <button
-                    className="media-card"
-                    aria-pressed={selectedAssetId === asset.id}
-                    key={asset.id}
-                    type="button"
-                    onClick={() => setSelectedAssetId(asset.id)}
-                  >
-                    <span className="media-preview">
-                      {asset.assetType === 'IMAGE' && asset.status === 'READY' ? (
-                        <Image
-                          src={`/api/admin/media/${asset.id}/content`}
-                          alt={asset.altText || asset.title || 'Admin media asset'}
-                          width={320}
-                          height={240}
-                          unoptimized
-                        />
-                      ) : (
-                        <FileImage aria-hidden="true" />
-                      )}
-                    </span>
-                    <span className="media-card-copy">
-                      <strong>{asset.title || asset.originalFilename}</strong>
-                      <span>
-                        <StatusBadge status={asset.visibility} /> {asset.usages.length} placement
-                        {asset.usages.length === 1 ? '' : 's'}
-                      </span>
-                      <small>
-                        {asset.widthPx && asset.heightPx
-                          ? `${asset.widthPx} × ${asset.heightPx} · `
-                          : ''}
-                        {asset.byteSize === null
-                          ? asset.status.replaceAll('_', ' ')
-                          : `${Math.ceil(asset.byteSize / 1024)} KB`}
-                      </small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <OperationalEmptyState
-                title="No matching media"
-                description="Upload an image or clear the active filters."
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bulk Action Bar */}
+      {selectedForBulk.size > 0 && (
+        <Card className="border-primary bg-primary/10 shadow-sm sticky top-4 z-20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
+            <div className="flex items-center gap-2">
+              <Badge className="bg-primary text-primary-foreground font-semibold text-xs">
+                {selectedForBulk.size} selected
+              </Badge>
+              <span className="text-xs text-muted-foreground">across current filter</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => setIsBulkFolderOpen(true)}
+              >
+                <FolderIcon className="size-3.5" />
+                Move to Folder
+              </Button>
+
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => void handleBulkTrash()}
+              >
+                <Trash2 className="size-3.5" />
+                Trash Unused
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setSelectedForBulk(new Set())}
+              >
+                Clear
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Search and Filters Toolbar */}
+      <Card className="shadow-xs">
+        <CardContent className="p-3 sm:p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search filenames, alt text, internal titles, or asset IDs…"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+                className="h-8 pl-8 text-xs bg-background"
               />
-            )}
-            <div className="button-row" aria-label="Media library pages">
+            </div>
+
+            {/* Folder filter */}
+            <select
+              value={selectedFolderId}
+              onChange={(e) => {
+                setSelectedFolderId(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by folder"
+              className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+            >
+              <option value="">All Folders</option>
+              <option value="unfiled">Unfiled Only</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({f.assetCount})
+                </option>
+              ))}
+            </select>
+
+            {/* Status filter */}
+            <select
+              value={lifecycleFilter}
+              onChange={(e) => {
+                setLifecycleFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by lifecycle status"
+              className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+            >
+              <option value="">All Lifecycles</option>
+              <option value="READY">Ready</option>
+              <option value="PROCESSING">Processing</option>
+              <option value="PENDING_UPLOAD">Pending</option>
+              <option value="FAILED">Failed</option>
+              <option value="QUARANTINED">Quarantined</option>
+              <option value="ARCHIVED">Archived</option>
+              <option value="TRASHED">Trash</option>
+            </select>
+
+            {/* Visibility filter */}
+            <select
+              value={visibilityFilter}
+              onChange={(e) => {
+                setVisibilityFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by visibility"
+              className="h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+            >
+              <option value="">All Visibility</option>
+              <option value="PUBLIC">Public</option>
+              <option value="PRIVATE">Private</option>
+            </select>
+
+            {/* Unused filter button */}
+            <Button
+              variant={unusedOnly ? 'default' : 'outline'}
+              size="sm"
+              className="h-8 text-xs gap-1.5 shrink-0"
+              onClick={() => {
+                setUnusedOnly(!unusedOnly);
+                setPage(1);
+              }}
+            >
+              {unusedOnly ? 'Showing Unused' : 'Filter Unused'}
+            </Button>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center rounded-md border bg-muted/40 p-0.5 shrink-0">
               <button
-                className="button secondary"
-                disabled={loading || page <= 1}
                 type="button"
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className={`p-1.5 rounded text-xs ${viewMode === 'grid' ? 'bg-background shadow-xs text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setViewMode('grid')}
+                title="Grid view"
+                aria-label="Grid view"
+              >
+                <LayoutGrid className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                className={`p-1.5 rounded text-xs ${viewMode === 'list' ? 'bg-background shadow-xs text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setViewMode('list')}
+                title="List view"
+                aria-label="List view"
+              >
+                <List className="size-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Secondary bar: Folders & Tags management buttons */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t text-xs text-muted-foreground">
+            <div className="flex items-center gap-3">
+              <span className="font-medium text-foreground">Taxonomy:</span>
+              <button
+                type="button"
+                className="hover:text-primary transition-colors flex items-center gap-1"
+                onClick={() => setIsNewFolderOpen(true)}
+              >
+                <FolderPlus className="size-3.5 text-primary" /> + New Folder
+              </button>
+              <button
+                type="button"
+                className="hover:text-primary transition-colors flex items-center gap-1"
+                onClick={() => setIsNewTagOpen(true)}
+              >
+                <TagIcon className="size-3.5 text-primary" /> + New Tag
+              </button>
+            </div>
+
+            <div className="text-[11px]">
+              Showing {assets.length} of {pagination.totalItems} assets (Page {pagination.page} of{' '}
+              {Math.max(1, pagination.totalPages)})
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Main Workspace: 2-column layout on large screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Asset Gallery (Grid or List) */}
+        <div className="lg:col-span-8 space-y-4">
+          <Card className="shadow-xs overflow-hidden">
+            <CardHeader className="p-4 border-b flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={assets.length > 0 && selectedForBulk.size === assets.length}
+                  onCheckedChange={handleToggleSelectAll}
+                  aria-label="Select all assets on this page"
+                />
+                <span className="text-xs font-semibold text-foreground">Select All on Page</span>
+              </div>
+
+              <span className="text-xs text-muted-foreground">
+                Paste anywhere (Ctrl+V) to upload
+              </span>
+            </CardHeader>
+
+            <CardContent className="p-4 min-h-[400px]">
+              {loading ? (
+                <div className="flex h-72 flex-col items-center justify-center gap-2 text-muted-foreground">
+                  <LoaderCircle className="size-6 animate-spin text-primary" />
+                  <span className="text-xs">Loading media assets…</span>
+                </div>
+              ) : assets.length === 0 ? (
+                <div className="flex h-72 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+                  <FileImage className="size-10 text-muted-foreground/30" />
+                  <p className="text-sm font-semibold text-foreground">No media assets found</p>
+                  <p className="text-xs text-muted-foreground max-w-sm">
+                    No files match the active filters. Upload an asset above or clear filters to
+                    view library files.
+                  </p>
+                </div>
+              ) : viewMode === 'grid' ? (
+                /* Grid View */
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+                  {assets.map((asset) => {
+                    const isSelected = selectedAssetId === asset.id;
+                    const isBulkChecked = selectedForBulk.has(asset.id);
+
+                    return (
+                      <div
+                        key={asset.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedAssetId(asset.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedAssetId(asset.id);
+                          }
+                        }}
+                        className={`group relative flex flex-col overflow-hidden rounded-lg border text-left transition-all cursor-pointer ${
+                          isSelected
+                            ? 'ring-2 ring-primary ring-offset-1 border-primary bg-primary/5'
+                            : 'hover:border-primary/50 bg-background'
+                        }`}
+                      >
+                        {/* Thumbnail Container */}
+                        <div className="aspect-square relative w-full overflow-hidden bg-muted">
+                          {asset.assetType === 'IMAGE' && asset.status === 'READY' ? (
+                            <Image
+                              src={getAdminMediaUrl(asset.id, { rendition: 'card' })}
+                              alt={asset.altText || asset.title || asset.originalFilename}
+                              fill
+                              className="object-cover transition-transform group-hover:scale-105"
+                              sizes="(max-width: 768px) 50vw, 25vw"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 p-3 text-muted-foreground">
+                              {asset.assetType === 'DOCUMENT' ? (
+                                <FileIcon className="size-8 text-primary/70" />
+                              ) : (
+                                <FileImage className="size-8 text-muted-foreground/50" />
+                              )}
+                              <span className="text-[10px] uppercase font-semibold">
+                                {asset.status}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Checkbox for bulk actions */}
+                          <div
+                            className="absolute top-2 left-2 z-10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleSelectItem(asset.id);
+                            }}
+                          >
+                            <Checkbox
+                              checked={isBulkChecked}
+                              className="bg-background/90 backdrop-blur-xs"
+                            />
+                          </div>
+
+                          {/* Visibility badge */}
+                          <div className="absolute top-2 right-2">
+                            <Badge
+                              variant="outline"
+                              className={`text-[9px] px-1 py-0 backdrop-blur-xs ${asset.visibility === 'PUBLIC' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-background/90 text-foreground'}`}
+                            >
+                              {asset.visibility}
+                            </Badge>
+                          </div>
+
+                          {/* Dimensions & size overlay */}
+                          {asset.widthPx && asset.heightPx && (
+                            <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1 py-0.5 text-[9px] font-medium text-white">
+                              {asset.widthPx}×{asset.heightPx}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Card metadata */}
+                        <div className="p-2 space-y-1">
+                          <p className="truncate text-xs font-semibold text-foreground">
+                            {asset.title || asset.originalFilename}
+                          </p>
+                          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                            <span>
+                              {asset.byteSize ? `${Math.ceil(asset.byteSize / 1024)} KB` : '—'}
+                            </span>
+                            <span>
+                              {asset.usages.length} placement{asset.usages.length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* List View */
+                <Table>
+                  <TableHeader>
+                    <TableRow className="text-xs">
+                      <TableHead className="w-10"></TableHead>
+                      <TableHead className="w-14">Preview</TableHead>
+                      <TableHead>Filename / Title</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Visibility</TableHead>
+                      <TableHead>Placements</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {assets.map((asset) => {
+                      const isSelected = selectedAssetId === asset.id;
+                      const isBulkChecked = selectedForBulk.has(asset.id);
+
+                      return (
+                        <TableRow
+                          key={asset.id}
+                          className={`cursor-pointer text-xs ${isSelected ? 'bg-primary/5' : ''}`}
+                          onClick={() => setSelectedAssetId(asset.id)}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={isBulkChecked}
+                              onCheckedChange={() => handleToggleSelectItem(asset.id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="size-10 relative rounded border overflow-hidden bg-muted">
+                              {asset.assetType === 'IMAGE' && asset.status === 'READY' ? (
+                                <Image
+                                  src={getAdminMediaUrl(asset.id, { rendition: 'thumbnail' })}
+                                  alt=""
+                                  fill
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <FileIcon className="size-5 m-auto text-muted-foreground" />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-semibold text-foreground truncate max-w-xs">
+                              {asset.title || asset.originalFilename}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground truncate">{asset.id}</p>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {asset.widthPx && asset.heightPx
+                              ? `${asset.widthPx}×${asset.heightPx} · `
+                              : ''}
+                            {asset.byteSize ? `${Math.ceil(asset.byteSize / 1024)} KB` : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={asset.status} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${asset.visibility === 'PUBLIC' ? 'text-emerald-600' : ''}`}
+                            >
+                              {asset.visibility}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground font-medium">
+                              {asset.usages.length}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+
+            {/* Pagination footer */}
+            <CardFooter className="p-4 border-t flex flex-row items-center justify-between bg-muted/10">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                disabled={loading || page <= 1}
+                onClick={() => setPage((c) => Math.max(1, c - 1))}
               >
                 Previous
-              </button>
-              <span>
-                Page {pagination.page} of {Math.max(1, pagination.totalPages)} ·{' '}
-                {pagination.totalItems} assets
+              </Button>
+
+              <span className="text-xs text-muted-foreground">
+                Page {pagination.page} of {Math.max(1, pagination.totalPages)}
               </span>
-              <button
-                className="button secondary"
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
                 disabled={loading || page >= pagination.totalPages}
-                type="button"
-                onClick={() => setPage((current) => current + 1)}
+                onClick={() => setPage((c) => c + 1)}
               >
                 Next
-              </button>
-            </div>
-          </div>
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
 
-          <aside className="panel media-inspector">
-            {selectedAsset ? (
-              <>
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Selected asset</p>
-                    <h2>{selectedAsset.title || selectedAsset.originalFilename}</h2>
+        {/* Right Column: Asset Inspector / Details & Actions */}
+        <div className="lg:col-span-4 space-y-4">
+          {selectedAsset ? (
+            <Card className="shadow-xs sticky top-4">
+              <CardHeader className="p-4 border-b pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="truncate">
+                    <CardTitle className="text-sm font-semibold truncate">
+                      {selectedAsset.title || selectedAsset.originalFilename}
+                    </CardTitle>
+                    <CardDescription className="text-[11px] truncate">
+                      {selectedAsset.id}
+                    </CardDescription>
                   </div>
-                  <StatusBadge status={selectedAsset.visibility} />
+                  <Badge variant="outline" className="text-xs">
+                    {selectedAsset.visibility}
+                  </Badge>
                 </div>
-                <p>
-                  Source: {selectedAsset.uploadSource.replaceAll('_', ' ').toLowerCase()}
-                  {selectedAsset.uploadedBy
-                    ? ` · Uploaded by ${selectedAsset.uploadedBy.name}`
-                    : ''}
-                </p>
-                {selectedAsset.status !== 'READY' ? (
-                  <OperationalFeedback
-                    tone={
-                      selectedAsset.status === 'FAILED' || selectedAsset.status === 'QUARANTINED'
-                        ? 'danger'
-                        : 'warning'
-                    }
+              </CardHeader>
+
+              <CardContent className="p-4 space-y-4 max-h-[75vh] overflow-y-auto">
+                {/* Large Preview */}
+                <div className="aspect-4/3 relative w-full overflow-hidden rounded-lg border bg-muted">
+                  {selectedAsset.assetType === 'IMAGE' && selectedAsset.status === 'READY' ? (
+                    <Image
+                      src={getAdminMediaUrl(selectedAsset.id, { rendition: 'pdp' })}
+                      alt={selectedAsset.altText || ''}
+                      fill
+                      className="object-contain"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <FileIcon className="size-10 text-primary" />
+                      <span className="text-xs font-semibold">{selectedAsset.mimeType}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Action Toolbar: Download, Copy URL */}
+                <div className="flex items-center gap-2">
+                  <a
+                    href={getAdminMediaUrl(selectedAsset.id, {
+                      rendition: 'original',
+                      download: true,
+                    })}
+                    download={selectedAsset.originalFilename}
+                    className="flex-1"
                   >
-                    {selectedAsset.processingErrorMessage ??
-                      selectedAsset.status.replaceAll('_', ' ')}
-                  </OperationalFeedback>
-                ) : null}
-                <div className="button-row">
-                  {selectedAsset.status === 'FAILED' ? (
-                    <button
-                      className="button secondary"
-                      disabled={busy}
-                      type="button"
-                      onClick={() => void runAssetAction('retry')}
+                    <Button variant="outline" size="sm" className="w-full h-8 text-xs gap-1.5">
+                      <Download className="size-3.5" />
+                      Download Original
+                    </Button>
+                  </a>
+
+                  {selectedAsset.visibility === 'PUBLIC' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => {
+                        const url = `${window.location.origin}/api/media/public/${selectedAsset.id}`;
+                        void navigator.clipboard.writeText(url);
+                        setMessage('Public media URL copied to clipboard.');
+                        setTone('success');
+                      }}
+                      title="Copy Public URL"
                     >
-                      <RefreshCw aria-hidden="true" /> Retry processing
-                    </button>
-                  ) : null}
-                  {selectedAsset.status === 'READY' ? (
-                    <button
-                      className="button secondary"
-                      disabled={busy}
-                      type="button"
-                      onClick={() => void runAssetAction('archive')}
-                    >
-                      Archive
-                    </button>
-                  ) : null}
-                  {selectedAsset.status === 'TRASHED' ? (
-                    <button
-                      className="button secondary"
-                      disabled={busy}
-                      type="button"
-                      onClick={() => void runAssetAction('restore')}
-                    >
-                      Restore
-                    </button>
-                  ) : null}
-                  {selectedAsset.usages.length === 0 &&
-                  ['READY', 'ARCHIVED', 'FAILED'].includes(selectedAsset.status) ? (
-                    <button
-                      className="button secondary"
-                      disabled={busy}
-                      type="button"
-                      onClick={() => void runAssetAction('trash')}
-                    >
-                      <Trash2 aria-hidden="true" /> Move to trash
-                    </button>
-                  ) : null}
+                      <Copy className="size-3.5" />
+                    </Button>
+                  )}
                 </div>
+
+                {/* Lifecycle status alert if failed/quarantined */}
+                {selectedAsset.status !== 'READY' && (
+                  <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-700 dark:text-amber-400">
+                    <p className="font-semibold">Processing: {selectedAsset.status}</p>
+                    <p className="text-[11px] mt-0.5">
+                      {selectedAsset.processingErrorMessage ||
+                        'Derivatives are not yet available for storefront delivery.'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Action Buttons: Retry, Archive, Restore, Trash */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedAsset.status === 'FAILED' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => void runAssetAction('retry')}
+                      disabled={busy}
+                    >
+                      <RotateCw className="size-3" /> Retry Processing
+                    </Button>
+                  )}
+
+                  {selectedAsset.status === 'READY' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => void runAssetAction('archive')}
+                      disabled={busy}
+                    >
+                      <Archive className="size-3" /> Archive
+                    </Button>
+                  )}
+
+                  {selectedAsset.status === 'TRASHED' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => void runAssetAction('restore')}
+                      disabled={busy}
+                    >
+                      <RotateCw className="size-3" /> Restore
+                    </Button>
+                  )}
+
+                  {selectedAsset.usages.length === 0 &&
+                    ['READY', 'ARCHIVED', 'FAILED'].includes(selectedAsset.status) && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => void runAssetAction('trash')}
+                        disabled={busy}
+                      >
+                        <Trash2 className="size-3" /> Trash Asset
+                      </Button>
+                    )}
+                </div>
+
+                {/* Metadata Form */}
                 <form
                   key={`metadata-${selectedAsset.id}`}
-                  className="inset-form"
+                  className="space-y-3 border-t pt-3"
                   onSubmit={(event) => void saveMetadata(event)}
                 >
-                  <label htmlFor="asset-title">Internal title</label>
-                  <input
-                    id="asset-title"
-                    name="title"
-                    defaultValue={selectedAsset.title ?? ''}
-                    maxLength={160}
-                  />
-                  <label htmlFor="asset-alt">Alternative text</label>
-                  <textarea
-                    id="asset-alt"
-                    name="altText"
-                    defaultValue={selectedAsset.altText ?? ''}
-                    rows={3}
-                    maxLength={500}
-                  />
-                  <label htmlFor="asset-visibility">Visibility</label>
-                  <select
-                    id="asset-visibility"
-                    name="visibility"
-                    defaultValue={selectedAsset.visibility}
-                  >
-                    <option
-                      value="PRIVATE"
-                      disabled={
-                        selectedAsset.visibility === 'PUBLIC' &&
-                        ['PROCESSING', 'READY', 'ARCHIVED'].includes(selectedAsset.status)
-                      }
+                  <h3 className="text-xs font-semibold text-foreground">Asset Metadata</h3>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                      Internal Title
+                    </label>
+                    <Input
+                      name="title"
+                      defaultValue={selectedAsset.title ?? ''}
+                      maxLength={160}
+                      className="h-8 text-xs"
+                      placeholder="e.g. Lawn Embroidered Kurti — Front"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                      Alternative Text (Alt Text)
+                    </label>
+                    <Textarea
+                      name="altText"
+                      defaultValue={selectedAsset.altText ?? ''}
+                      rows={2}
+                      maxLength={500}
+                      className="text-xs"
+                      placeholder="Contextual description for accessibility and search"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                      Visibility Class
+                    </label>
+                    <select
+                      name="visibility"
+                      defaultValue={selectedAsset.visibility}
+                      className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
                     >
-                      Private
-                    </option>
-                    <option value="PUBLIC">Public</option>
-                  </select>
-                  {selectedAsset.visibility === 'PUBLIC' &&
-                  ['PROCESSING', 'READY', 'ARCHIVED'].includes(selectedAsset.status) ? (
-                    <small>Processed public bytes cannot be reclassified as private.</small>
-                  ) : null}
-                  <button className="button secondary" disabled={busy} type="submit">
-                    Save metadata
-                  </button>
+                      <option
+                        value="PRIVATE"
+                        disabled={
+                          selectedAsset.visibility === 'PUBLIC' &&
+                          ['PROCESSING', 'READY', 'ARCHIVED'].includes(selectedAsset.status)
+                        }
+                      >
+                        Private — internal admin access only
+                      </option>
+                      <option value="PUBLIC">Public — storefront delivery enabled</option>
+                    </select>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="secondary"
+                    className="w-full h-8 text-xs"
+                    disabled={busy}
+                  >
+                    Save Metadata
+                  </Button>
                 </form>
+
+                {/* Organization Form: Folder & Tags */}
                 <form
-                  key={`organization-${selectedAsset.id}`}
-                  className="inset-form"
+                  key={`org-${selectedAsset.id}`}
+                  className="space-y-3 border-t pt-3"
                   onSubmit={(event) => void saveOrganization(event)}
                 >
-                  <h3>Library organization</h3>
-                  <label htmlFor="asset-folder">Folder</label>
-                  <select
-                    id="asset-folder"
-                    name="folderId"
-                    defaultValue={selectedAsset.folderId ?? ''}
+                  <h3 className="text-xs font-semibold text-foreground">Folder & Taxonomy</h3>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                      Folder
+                    </label>
+                    <select
+                      name="folderId"
+                      defaultValue={selectedAsset.folderId ?? ''}
+                      className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                    >
+                      <option value="">Unfiled</option>
+                      {folders.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name} ({f.assetCount})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {tags.length > 0 && (
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-muted-foreground block">
+                        Tags
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {tags.map((tag) => (
+                          <label
+                            key={tag.id}
+                            className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              name="tagIds"
+                              value={tag.id}
+                              defaultChecked={selectedAsset.tags.some((t) => t.id === tag.id)}
+                              className="rounded border-input text-primary"
+                            />
+                            <span>{tag.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="secondary"
+                    className="w-full h-8 text-xs"
+                    disabled={busy}
                   >
-                    <option value="">Unfiled</option>
-                    {folders.map((folder) => (
-                      <option key={folder.id} value={folder.id}>
-                        {folder.name} ({folder.assetCount})
-                      </option>
-                    ))}
-                  </select>
-                  <fieldset>
-                    <legend>Tags</legend>
-                    {tags.length ? (
-                      tags.map((tag) => (
-                        <label key={tag.id}>
-                          <input
-                            name="tagIds"
-                            type="checkbox"
-                            value={tag.id}
-                            defaultChecked={selectedAsset.tags.some((item) => item.id === tag.id)}
-                          />{' '}
-                          {tag.name}
-                        </label>
-                      ))
-                    ) : (
-                      <small>Create a tag above to classify assets.</small>
-                    )}
-                  </fieldset>
-                  <button className="button secondary" disabled={busy} type="submit">
-                    Save organization
-                  </button>
+                    Save Organization
+                  </Button>
                 </form>
+
+                {/* Product Placement */}
                 <form
                   key={`placement-${selectedAsset.id}`}
-                  className="inset-form"
+                  className="space-y-3 border-t pt-3"
                   onSubmit={(event) => void attach(event)}
                 >
-                  <h3>
-                    <Link2 aria-hidden="true" /> Product placement
-                  </h3>
-                  <label htmlFor="asset-product">Product</label>
-                  <select
-                    id="asset-product"
-                    defaultValue=""
-                    onChange={(event) => void selectProduct(event.target.value)}
-                    required
-                  >
-                    <option value="" disabled>
-                      Choose a Product
-                    </option>
-                    {products.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.title}
+                  <h3 className="text-xs font-semibold text-foreground">Attach to Product</h3>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                      Target Product
+                    </label>
+                    <select
+                      defaultValue=""
+                      onChange={(e) => void selectProduct(e.target.value)}
+                      className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                      required
+                    >
+                      <option value="" disabled>
+                        Select a catalog product…
                       </option>
-                    ))}
-                  </select>
-                  <label htmlFor="asset-variant">Variant (optional)</label>
-                  <select id="asset-variant" name="variantId" defaultValue="">
-                    <option value="">All Variants / Product-level</option>
-                    {product?.variants.map((variant) => (
-                      <option key={variant.id} value={variant.id}>
-                        {variant.sku}
-                      </option>
-                    ))}
-                  </select>
-                  <label htmlFor="asset-role">Placement role</label>
-                  <select id="asset-role" name="role" defaultValue="GALLERY">
-                    <option value="THUMBNAIL">Thumbnail</option>
-                    <option value="GALLERY">Gallery</option>
-                    <option value="COLOR_GALLERY">Color gallery</option>
-                    <option value="SIZE_DIAGRAM">Size diagram</option>
-                  </select>
-                  <label htmlFor="asset-position">Position</label>
-                  <input
-                    id="asset-position"
-                    name="position"
-                    type="number"
-                    min={0}
-                    defaultValue={0}
-                  />
-                  <button
-                    className="button primary"
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {product && product.variants.length > 0 && (
+                    <div>
+                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                        Variant Override (optional)
+                      </label>
+                      <select
+                        name="variantId"
+                        defaultValue=""
+                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                      >
+                        <option value="">All Variants (Product Gallery)</option>
+                        {product.variants.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.sku}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                        Role
+                      </label>
+                      <select
+                        name="role"
+                        defaultValue="GALLERY"
+                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                      >
+                        <option value="GALLERY">Gallery</option>
+                        <option value="THUMBNAIL">Cover</option>
+                        <option value="COLOR_GALLERY">Color Gallery</option>
+                        <option value="SIZE_DIAGRAM">Size Diagram</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-medium text-muted-foreground block mb-1">
+                        Position
+                      </label>
+                      <Input
+                        name="position"
+                        type="number"
+                        min={0}
+                        defaultValue={0}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="w-full h-8 text-xs"
                     disabled={
                       busy ||
                       !product ||
-                      selectedAsset.assetType !== 'IMAGE' ||
                       selectedAsset.status !== 'READY' ||
                       selectedAsset.visibility !== 'PUBLIC'
                     }
-                    type="submit"
                   >
-                    Attach to Product
-                  </button>
+                    Attach Placement
+                  </Button>
                 </form>
-                <section>
-                  <h3>Current placements</h3>
-                  {selectedAsset.usages.length ? (
-                    <ul className="media-usage-list">
-                      {selectedAsset.usages.map((usage) => (
-                        <li key={usage.id}>
-                          <span>
-                            <strong>{usage.productTitle ?? usage.label ?? usage.domain}</strong>
-                            <small>
-                              {usage.variantSku ? `${usage.variantSku} · ` : ''}
-                              {(usage.role ?? usage.domain).replaceAll('_', ' ')}
-                              {usage.position === undefined ? '' : ` · position ${usage.position}`}
-                            </small>
-                          </span>
-                          <button
-                            aria-label={`Remove placement from ${usage.productTitle ?? usage.label ?? usage.domain}`}
-                            className="button secondary"
-                            disabled={busy}
-                            type="button"
-                            onClick={() => void detach(usage)}
-                            hidden={!usage.productId}
-                          >
-                            <Trash2 aria-hidden="true" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+
+                {/* Existing Usages / Placements */}
+                <div className="space-y-2 border-t pt-3">
+                  <h3 className="text-xs font-semibold text-foreground">Active Placements</h3>
+                  {selectedAsset.usages.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      This asset is currently unattached (can be safely trashed).
+                    </p>
                   ) : (
-                    <p>No Product placements yet.</p>
+                    <div className="space-y-2">
+                      {selectedAsset.usages.map((u) => (
+                        <div
+                          key={u.id}
+                          className="flex items-center justify-between rounded-md border p-2 text-xs bg-muted/20"
+                        >
+                          <div>
+                            <p className="font-semibold text-foreground">
+                              {u.productTitle ?? u.label ?? u.domain}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {u.role ?? 'MEDIA'} · Position {u.position ?? 0}
+                              {u.variantSku ? ` · SKU: ${u.variantSku}` : ''}
+                            </p>
+                          </div>
+                          {u.productId && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="size-7 p-0 text-destructive hover:bg-destructive/10"
+                              onClick={() => void detach(u)}
+                              title="Detach placement"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </section>
-              </>
-            ) : (
-              <OperationalEmptyState
-                title="Select an asset"
-                description="Choose an image to edit metadata and manage Product placements."
-              />
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="shadow-xs p-6 text-center text-muted-foreground">
+              <FileImage className="size-8 mx-auto mb-2 text-muted-foreground/40" />
+              <p className="text-xs font-semibold text-foreground">Select an asset</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Click any image in the gallery to inspect renditions, manage placements, or update
+                metadata.
+              </p>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Health Check Modal */}
+      <Dialog open={isHealthOpen} onOpenChange={setIsHealthOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="size-5 text-primary" /> Storage Health Diagnostics
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Verified {health?.checkedObjectCount ?? 0} physical storage objects and metadata
+              integrity.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div
+              className={`rounded-lg p-3 text-xs font-medium border ${
+                health?.status === 'HEALTHY'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'
+              }`}
+            >
+              Status:{' '}
+              <strong className="uppercase">
+                {health?.status === 'HEALTHY'
+                  ? 'Healthy — All Storage Verified'
+                  : 'Degraded — Issues Detected'}
+              </strong>
+            </div>
+
+            {health?.issues && health.issues.length > 0 && (
+              <ScrollArea className="max-h-60 rounded border p-2">
+                <div className="space-y-2 text-xs">
+                  {health.issues.map((issue, idx) => (
+                    <div key={idx} className="border-b pb-2 last:border-b-0">
+                      <p className="font-semibold text-destructive">{issue.code}</p>
+                      <p className="text-muted-foreground text-[11px]">{issue.detail}</p>
+                      <p className="text-[10px] text-muted-foreground/80 font-mono mt-0.5">
+                        Asset: {issue.assetId}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             )}
-          </aside>
-        </section>
-      </section>
-    </main>
+          </div>
+
+          <DialogFooter>
+            <Button size="sm" onClick={() => setIsHealthOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Move To Folder Modal */}
+      <Dialog open={isBulkFolderOpen} onOpenChange={setIsBulkFolderOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Move Selected Assets</DialogTitle>
+            <DialogDescription className="text-xs">
+              Assign {selectedForBulk.size} assets to a destination folder.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            <label className="text-xs font-medium block mb-1">Destination Folder</label>
+            <select
+              value={bulkTargetFolderId}
+              onChange={(e) => setBulkTargetFolderId(e.target.value)}
+              className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+            >
+              <option value="">Choose a folder…</option>
+              <option value="unfiled">Unfiled (Root)</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsBulkFolderOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleBulkMoveToFolder()}
+              disabled={!bulkTargetFolderId}
+            >
+              Move Assets
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Folder Modal */}
+      <Dialog open={isNewFolderOpen} onOpenChange={setIsNewFolderOpen}>
+        <DialogContent className="max-w-sm">
+          <form onSubmit={(e) => void createLibraryFolder(e)}>
+            <DialogHeader>
+              <DialogTitle className="text-sm">Create New Folder</DialogTitle>
+              <DialogDescription className="text-xs">
+                Organize images and documents hierarchically.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-3">
+              <div>
+                <label className="text-xs font-medium block mb-1">Folder Name</label>
+                <Input
+                  name="name"
+                  placeholder="e.g. Eid 2026 Collection"
+                  maxLength={120}
+                  required
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium block mb-1">Parent Folder (optional)</label>
+                <select
+                  name="parentId"
+                  defaultValue=""
+                  className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none"
+                >
+                  <option value="">Top Level (Root)</option>
+                  {folders.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsNewFolderOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm">
+                Create Folder
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Tag Modal */}
+      <Dialog open={isNewTagOpen} onOpenChange={setIsNewTagOpen}>
+        <DialogContent className="max-w-sm">
+          <form onSubmit={(e) => void createLibraryTag(e)}>
+            <DialogHeader>
+              <DialogTitle className="text-sm">Create New Tag</DialogTitle>
+              <DialogDescription className="text-xs">
+                Add a classification tag across multiple assets.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-3">
+              <label className="text-xs font-medium block mb-1">Tag Name</label>
+              <Input
+                name="name"
+                placeholder="e.g. Silk, Lookbook, Studio"
+                maxLength={80}
+                required
+                className="h-8 text-xs"
+              />
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsNewTagOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm">
+                Create Tag
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

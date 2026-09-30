@@ -507,3 +507,55 @@ export async function authoritativeMediaUsageCount(
   )::text count`.execute(db);
   return Number(result.rows[0]?.count ?? 0);
 }
+
+export async function bulkTrashMediaAssets(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    assetIds: readonly string[];
+    retentionDays?: number;
+    actorId?: string;
+  },
+): Promise<{ trashedCount: number; inUseCount: number; trashedAssetIds: readonly string[] }> {
+  if (input.assetIds.length === 0) {
+    return { trashedCount: 0, inUseCount: 0, trashedAssetIds: [] };
+  }
+  const uniqueIds = [...new Set(input.assetIds)];
+  return db.transaction().execute(async (transaction) => {
+    const trashedAssetIds: string[] = [];
+    let inUseCount = 0;
+
+    for (const assetId of uniqueIds) {
+      const usage = await authoritativeMediaUsageCount(transaction, input.organizationId, assetId);
+      if (usage > 0) {
+        inUseCount++;
+        continue;
+      }
+      const result = await sql`update media.media_assets set status='TRASHED', trashed_at=now(),
+        purge_after=now()+(${input.retentionDays ?? 30}::text || ' days')::interval,
+        archived_at=null, updated_at=now(), version=version+1
+        where organization_id=${input.organizationId} and id=${assetId}::uuid
+          and status in ('READY','ARCHIVED','FAILED')`.execute(transaction);
+      if (Number(result.numAffectedRows) === 1) {
+        trashedAssetIds.push(assetId);
+        if (input.actorId) {
+          await appendAuditEvent(transaction, {
+            organizationId: input.organizationId,
+            actorType: 'USER',
+            actorId: input.actorId,
+            action: 'media.asset.trashed',
+            targetType: 'media.asset',
+            targetId: assetId,
+            metadata: { retentionDays: input.retentionDays ?? 30, bulk: true },
+          });
+        }
+      }
+    }
+
+    return {
+      trashedCount: trashedAssetIds.length,
+      inUseCount,
+      trashedAssetIds,
+    };
+  });
+}

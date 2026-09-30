@@ -50,6 +50,10 @@ export interface StagedMediaItem {
   previewUrl: string;
   assetId?: string;
   isPrimary: boolean;
+  role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+  variantId?: string | null;
+  optionValueId?: string | null;
+  position?: number;
   altText: string;
   isUploading: boolean;
   uploadProgress?: number;

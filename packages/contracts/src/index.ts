@@ -2255,12 +2255,7 @@ export interface UpdateCustomerAddressInputDto {
 // ---------------------------------------------------------------------------
 
 export type FulfillmentStatusDto =
-  | 'DRAFT'
-  | 'READY'
-  | 'PICKING'
-  | 'PACKED'
-  | 'DISPATCHED'
-  | 'CANCELLED';
+  'DRAFT' | 'READY' | 'PICKING' | 'PACKED' | 'DISPATCHED' | 'CANCELLED';
 
 export interface FulfillmentLineDto {
   readonly id: string;
@@ -2495,34 +2490,15 @@ export interface DeliveryFinancialObservationDto {
 export type ReturnCaseTypeDto = 'CUSTOMER_RETURN' | 'RTO';
 export type ReturnCaseStatusDto = 'OPEN' | 'RESOLVED' | 'CANCELLED';
 export type ReturnAuthorizationStatusDto =
-  | 'NOT_REQUIRED'
-  | 'PENDING'
-  | 'APPROVED'
-  | 'PARTIALLY_APPROVED'
-  | 'REJECTED';
+  'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'PARTIALLY_APPROVED' | 'REJECTED';
 export type ReturnTransportStatusDto =
-  | 'NOT_STARTED'
-  | 'EXPECTED'
-  | 'IN_TRANSIT'
-  | 'ARRIVED'
-  | 'LOST'
-  | 'CANCELLED';
+  'NOT_STARTED' | 'EXPECTED' | 'IN_TRANSIT' | 'ARRIVED' | 'LOST' | 'CANCELLED';
 export type ReturnReceiptStatusDto =
-  | 'NOT_RECEIVED'
-  | 'PARTIALLY_RECEIVED'
-  | 'RECEIVED'
-  | 'DISCREPANCY';
+  'NOT_RECEIVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'DISCREPANCY';
 export type ReturnInspectionStatusDto =
-  | 'NOT_REQUIRED'
-  | 'PENDING'
-  | 'PARTIALLY_INSPECTED'
-  | 'COMPLETED';
+  'NOT_REQUIRED' | 'PENDING' | 'PARTIALLY_INSPECTED' | 'COMPLETED';
 export type ReturnResolutionStatusDto =
-  | 'PENDING'
-  | 'NO_REFUND_REQUIRED'
-  | 'REFUND_PENDING'
-  | 'REFUND_COMPLETED'
-  | 'OTHER_RESOLUTION';
+  'PENDING' | 'NO_REFUND_REQUIRED' | 'REFUND_PENDING' | 'REFUND_COMPLETED' | 'OTHER_RESOLUTION';
 
 export interface ReturnLineDto {
   readonly id: string;
@@ -2634,4 +2610,79 @@ export interface ConfigureSteadfastInputDto {
   readonly secretKey?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Media Platform Contracts
+// ---------------------------------------------------------------------------
 
+export type MediaRenditionKeyDto = 'thumbnail' | 'card' | 'pdp' | 'zoom';
+
+export type MediaStatusDto =
+  | 'PENDING_UPLOAD'
+  | 'UPLOADED'
+  | 'PROCESSING'
+  | 'READY'
+  | 'FAILED'
+  | 'QUARANTINED'
+  | 'ARCHIVED'
+  | 'TRASHED'
+  | 'PURGING';
+
+export type MediaVisibilityDto = 'PUBLIC' | 'PRIVATE';
+
+export type MediaAssetTypeDto = 'IMAGE' | 'DOCUMENT';
+
+export interface MediaLibraryItemDto {
+  readonly id: string;
+  readonly originalFilename: string;
+  readonly assetType: MediaAssetTypeDto;
+  readonly mimeType: string;
+  readonly byteSize: number;
+  readonly status: MediaStatusDto;
+  readonly visibility: MediaVisibilityDto;
+  readonly width: number | null;
+  readonly height: number | null;
+  readonly title: string | null;
+  readonly altText: string | null;
+  readonly caption: string | null;
+  readonly internalDescription: string | null;
+  readonly folderId: string | null;
+  readonly folderName: string | null;
+  readonly tagIds: readonly string[];
+  readonly version: number;
+  readonly usageCount: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface MediaFolderDto {
+  readonly id: string;
+  readonly name: string;
+  readonly parentId: string | null;
+  readonly version: number;
+}
+
+export interface MediaTagDto {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface ProductMediaPlacementInputDto {
+  readonly assetId: string;
+  readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+  readonly position: number;
+  readonly variantId?: string | null;
+  readonly optionValueId?: string | null;
+  readonly isPrimary?: boolean;
+  readonly altTextOverride?: string | null;
+}
+
+export interface MediaBulkOrganizeDto {
+  readonly assetIds: readonly string[];
+  readonly folderId?: string | null;
+  readonly addTagIds?: readonly string[];
+  readonly removeTagIds?: readonly string[];
+}
+
+export interface MediaBulkTrashDto {
+  readonly assetIds: readonly string[];
+}

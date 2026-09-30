@@ -44,6 +44,8 @@ import type {
   StagedMediaItem,
   VariantMatrixRow,
 } from './types';
+import type { SelectedMediaAsset } from '@/components/media/asset-picker-dialog';
+import type { MediaCardScopeOption } from './media-card';
 
 export const DRAFT_STORAGE_KEY = 'maevelle_product_creator_draft_v2';
 
@@ -322,7 +324,11 @@ export function useProductCreatorState({
                 assetId: m.assetId,
                 previewUrl: productMediaUrl(m.assetId, 'PUBLIC'),
                 isPrimary: m.isPrimary,
-                altText: m.title || '',
+                role: m.role,
+                variantId: m.variantId,
+                optionValueId: m.optionValueId,
+                position: m.position,
+                altText: m.title || m.altText || '',
                 isUploading: false,
               })),
             );
@@ -749,6 +755,57 @@ export function useProductCreatorState({
     setIsDirty(true);
   };
 
+  const handleMoveMedia = (id: string, direction: 'left' | 'right') => {
+    setMediaItems((prev) => {
+      const index = prev.findIndex((m) => m.id === id);
+      if (index === -1) return prev;
+      const targetIndex = direction === 'left' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      if (item) next.splice(targetIndex, 0, item);
+      return next;
+    });
+    setIsDirty(true);
+  };
+
+  const handleUpdateMediaScope = (
+    id: string,
+    scope: {
+      role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+      variantId?: string | null;
+      optionValueId?: string | null;
+    },
+  ) => {
+    setMediaItems((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? {
+              ...m,
+              ...(scope.role !== undefined ? { role: scope.role } : {}),
+              ...(scope.variantId !== undefined ? { variantId: scope.variantId } : {}),
+              ...(scope.optionValueId !== undefined ? { optionValueId: scope.optionValueId } : {}),
+            }
+          : m,
+      ),
+    );
+    setIsDirty(true);
+  };
+
+  const handleAddExistingAssets = (assets: readonly SelectedMediaAsset[]) => {
+    if (assets.length === 0) return;
+    const newItems: StagedMediaItem[] = assets.map((asset, idx) => ({
+      id: `${Date.now()}-${idx}-${asset.id.slice(0, 8)}`,
+      assetId: asset.id,
+      previewUrl: asset.previewUrl,
+      isPrimary: mediaItems.length === 0 && idx === 0,
+      altText: asset.altText || asset.filename.replace(/\.[^.]+$/, ''),
+      isUploading: false,
+    }));
+    setMediaItems((prev) => [...prev, ...newItems]);
+    setIsDirty(true);
+  };
+
   // --------------------------------------------------------------------------
   // Category Selection
   // --------------------------------------------------------------------------
@@ -783,6 +840,40 @@ export function useProductCreatorState({
   // Option Axes & Matrix Generation
   // --------------------------------------------------------------------------
   const activeAxes = useMemo(() => optionAxes.filter((a) => a.values.length > 0), [optionAxes]);
+
+  const scopeOptions = useMemo(() => {
+    const options: MediaCardScopeOption[] = [];
+    const colorAxis = activeAxes.find((a) => a.name.toLowerCase() === 'color');
+    if (colorAxis) {
+      for (const val of colorAxis.values) {
+        const optionVal = workspaceData?.options
+          ?.find((o) => o.name.toLowerCase() === 'color')
+          ?.values?.find((v) => v.label.toLowerCase() === val.toLowerCase());
+        options.push({
+          id: `color-${val}`,
+          label: `Color Gallery: ${val}`,
+          type: 'COLOR',
+          optionValueId: optionVal?.id,
+        });
+      }
+    }
+    if (variantMode === 'variants') {
+      for (const row of matrixRows) {
+        if (row.enabled && row.sku) {
+          options.push({
+            id: `variant-${row.id}`,
+            label: `Variant: ${row.sku} (${row.optionSelections.map((s) => s.valueDisplay).join(' / ') || row.title})`,
+            type: 'VARIANT',
+            variantId:
+              isEditMode && workspaceData?.variants.some((v) => v.id === row.id)
+                ? row.id
+                : undefined,
+          });
+        }
+      }
+    }
+    return options;
+  }, [activeAxes, matrixRows, variantMode, workspaceData, isEditMode]);
 
   const regenerateMatrix = useCallback(() => {
     const validAxes = optionAxes.filter((a) => a.values.length > 0);
@@ -1273,36 +1364,25 @@ export function useProductCreatorState({
           }
         }
 
-        // 6. Media Updates (Delete removed, Attach newly staged)
-        if (removedMediaPlacementIds.length > 0) {
-          setSavingStatusText('Removing deleted gallery images…');
-          for (const mId of removedMediaPlacementIds) {
-            await catalogData(`/admin/catalog/products/${productId}/media/${mId}`, {
-              method: 'DELETE',
-            }).catch(() => null);
-          }
-          setRemovedMediaPlacementIds([]);
-        }
-
-        const newMediaToAttach = mediaItems.filter(
-          (m) => m.assetId && !workspaceData?.media.some((existing) => existing.id === m.id),
-        );
-        if (newMediaToAttach.length > 0) {
-          setSavingStatusText('Attaching newly uploaded images…');
-          const existingCount =
-            (workspaceData?.media.length || 0) - removedMediaPlacementIds.length;
-          for (const [idx, m] of newMediaToAttach.entries()) {
-            await catalogData(`/admin/catalog/products/${productId}/media`, {
-              method: 'POST',
-              body: JSON.stringify({
-                assetId: m.assetId,
-                role: m.isPrimary ? 'THUMBNAIL' : 'GALLERY',
-                position: Math.max(0, existingCount) + idx,
-                isPrimary: m.isPrimary,
-              }),
-            }).catch(() => null);
-          }
-        }
+        // 6. Media Placements Batch Synchronization
+        const validMedia = mediaItems.filter((m) => m.assetId);
+        setSavingStatusText('Synchronizing product media placements & gallery…');
+        const placements = validMedia.map((m, index) => ({
+          assetId: m.assetId!,
+          role: m.role || (m.isPrimary ? 'THUMBNAIL' : 'GALLERY'),
+          position: index,
+          variantId: m.variantId || null,
+          optionValueId: m.optionValueId || null,
+          isPrimary: Boolean(m.isPrimary),
+          altTextOverride: m.altText || null,
+        }));
+        await catalogData(`/admin/catalog/products/${productId}/media`, {
+          method: 'PUT',
+          body: JSON.stringify({ placements }),
+        }).catch((err) => {
+          console.error('Failed to sync media placements', err);
+        });
+        setRemovedMediaPlacementIds([]);
 
         // 7. Update Customer Content & SEO
         const validFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
@@ -1608,25 +1688,23 @@ export function useProductCreatorState({
         body: JSON.stringify(payload),
       });
 
-      // 4. Attach uploaded media items
+      // 4. Attach and sequence uploaded media items atomically
       const validMedia = mediaItems.filter((m) => m.assetId);
       if (validMedia.length > 0) {
-        setSavingStatusText('Attaching gallery images…');
-        for (const [index, media] of validMedia.entries()) {
-          try {
-            await catalogData(`/admin/catalog/products/${created.id}/media`, {
-              method: 'POST',
-              body: JSON.stringify({
-                assetId: media.assetId,
-                role: media.isPrimary ? 'THUMBNAIL' : 'GALLERY',
-                position: index,
-                isPrimary: media.isPrimary,
-              }),
-            });
-          } catch {
-            // non-fatal
-          }
-        }
+        setSavingStatusText('Attaching and sequencing gallery images…');
+        const placements = validMedia.map((media, index) => ({
+          assetId: media.assetId!,
+          role: media.role || (media.isPrimary ? 'THUMBNAIL' : 'GALLERY'),
+          position: index,
+          variantId: media.variantId || null,
+          optionValueId: media.optionValueId || null,
+          isPrimary: Boolean(media.isPrimary),
+          altTextOverride: media.altText || null,
+        }));
+        await catalogData(`/admin/catalog/products/${created.id}/media`, {
+          method: 'PUT',
+          body: JSON.stringify({ placements }),
+        }).catch(() => null);
       }
 
       // 5. Save Customer Content (FAQs and Highlights)
@@ -1796,6 +1874,10 @@ export function useProductCreatorState({
     handleSetPrimaryMedia,
     handleRemoveMedia,
     handleUpdateMediaAlt,
+    handleMoveMedia,
+    handleUpdateMediaScope,
+    handleAddExistingAssets,
+    scopeOptions,
     handleToggleCategory,
     handleSelectPrimaryCategory,
     addOptionValue,

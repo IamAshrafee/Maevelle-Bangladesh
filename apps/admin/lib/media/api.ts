@@ -1,4 +1,10 @@
-import type { ApiEnvelope } from '@maevelle/contracts';
+import type {
+  ApiEnvelope,
+  MediaFolderDto,
+  MediaLibraryItemDto,
+  MediaTagDto,
+  ProductMediaPlacementInputDto,
+} from '@maevelle/contracts';
 
 import { catalogRequest } from '../catalog/api';
 
@@ -93,4 +99,118 @@ export async function waitForMediaReady(
     await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
   }
   return 'PROCESSING';
+}
+
+export interface ListMediaParams {
+  readonly page?: number;
+  readonly pageSize?: number;
+  readonly query?: string;
+  readonly status?: string;
+  readonly assetType?: 'IMAGE' | 'DOCUMENT';
+  readonly visibility?: 'PUBLIC' | 'PRIVATE';
+  readonly unused?: boolean;
+  readonly folderId?: string;
+  readonly tagId?: string;
+}
+
+export interface MediaLibraryResponse {
+  readonly data: readonly MediaLibraryItemDto[];
+  readonly pagination: {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+  };
+}
+
+export async function listMediaLibrary(
+  params: ListMediaParams = {},
+): Promise<MediaLibraryResponse> {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.pageSize) query.set('pageSize', String(params.pageSize));
+  if (params.query) query.set('query', params.query);
+  if (params.status) query.set('status', params.status);
+  if (params.assetType) query.set('assetType', params.assetType);
+  if (params.visibility) query.set('visibility', params.visibility);
+  if (params.unused !== undefined) query.set('unused', String(params.unused));
+  if (params.folderId) query.set('folderId', params.folderId);
+  if (params.tagId) query.set('tagId', params.tagId);
+
+  const qs = query.toString();
+  return catalogRequest<MediaLibraryResponse>(`/admin/media${qs ? `?${qs}` : ''}`);
+}
+
+export async function listMediaFolders(): Promise<readonly MediaFolderDto[]> {
+  const response =
+    await catalogRequest<ApiEnvelope<readonly MediaFolderDto[]>>('/admin/media/folders');
+  return response.data;
+}
+
+export async function listMediaTags(): Promise<readonly MediaTagDto[]> {
+  const response = await catalogRequest<ApiEnvelope<readonly MediaTagDto[]>>('/admin/media/tags');
+  return response.data;
+}
+
+export async function syncProductMediaPlacements(
+  productId: string,
+  placements: readonly ProductMediaPlacementInputDto[],
+): Promise<{ readonly synced: boolean; readonly count: number }> {
+  const response = await catalogRequest<
+    ApiEnvelope<{ readonly synced: boolean; readonly count: number }>
+  >(`/admin/catalog/products/${productId}/media`, {
+    method: 'PUT',
+    body: JSON.stringify({ placements }),
+  });
+  return response.data;
+}
+
+export async function bulkTrashMedia(
+  assetIds: readonly string[],
+): Promise<{
+  readonly trashedCount: number;
+  readonly skippedInUseCount: number;
+  readonly inUseAssetIds: readonly string[];
+}> {
+  const response = await catalogRequest<
+    ApiEnvelope<{
+      readonly trashedCount: number;
+      readonly skippedInUseCount: number;
+      readonly inUseAssetIds: readonly string[];
+    }>
+  >('/admin/media/bulk/trash', {
+    method: 'POST',
+    body: JSON.stringify({ assetIds }),
+  });
+  return response.data;
+}
+
+export async function bulkOrganizeMedia(payload: {
+  readonly assetIds: readonly string[];
+  readonly folderId?: string | null;
+  readonly addTagIds?: readonly string[];
+  readonly removeTagIds?: readonly string[];
+}): Promise<{ readonly updatedCount: number }> {
+  const response = await catalogRequest<ApiEnvelope<{ readonly updatedCount: number }>>(
+    '/admin/media/bulk/organize',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+  return response.data;
+}
+
+export function getAdminMediaUrl(
+  assetId: string,
+  options?: {
+    readonly rendition?: 'thumbnail' | 'card' | 'pdp' | 'zoom' | 'original';
+    readonly download?: boolean;
+  },
+): string {
+  const query = new URLSearchParams();
+  if (options?.rendition) query.set('rendition', options.rendition);
+  if (options?.download) query.set('download', 'true');
+  const qs = query.toString();
+  return `/api/admin/media/${encodeURIComponent(assetId)}/content${qs ? `?${qs}` : ''}`;
 }

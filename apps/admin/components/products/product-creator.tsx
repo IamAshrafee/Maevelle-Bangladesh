@@ -64,9 +64,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
           <Alert variant="destructive" className="shadow-xs">
             <AlertCircle className="size-4" />
             <AlertTitle>Unable to Save Product</AlertTitle>
-            <AlertDescription className="text-xs">
-              {state.generalError}
-            </AlertDescription>
+            <AlertDescription className="text-xs">{state.generalError}</AlertDescription>
           </Alert>
         )}
 
@@ -75,9 +73,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
           <Alert className="border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
             <CheckCircle2 className="size-4 text-emerald-600" />
             <AlertTitle>Success</AlertTitle>
-            <AlertDescription className="text-xs">
-              {state.successMessage}
-            </AlertDescription>
+            <AlertDescription className="text-xs">{state.successMessage}</AlertDescription>
           </Alert>
         )}
 
@@ -99,9 +95,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               fieldErrors={state.fieldErrors}
               onTitleChange={state.handleTitleChange}
               onHandleChange={state.handleHandleChange}
-              onToggleHandleLock={() =>
-                state.setIsHandleLocked(!state.isHandleLocked)
-              }
+              onToggleHandleLock={() => state.setIsHandleLocked(!state.isHandleLocked)}
               onProductTypeChange={state.handleProductTypeChange}
               onAttributeChange={(attrId, val) => {
                 state.setAttributeValues((prev) => ({ ...prev, [attrId]: val }));
@@ -123,6 +117,10 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               onSetPrimaryMedia={state.handleSetPrimaryMedia}
               onRemoveMedia={state.handleRemoveMedia}
               onUpdateMediaAlt={state.handleUpdateMediaAlt}
+              onMoveMedia={state.handleMoveMedia}
+              onUpdateMediaScope={state.handleUpdateMediaScope}
+              onAddExistingAssets={state.handleAddExistingAssets}
+              scopeOptions={state.scopeOptions}
             />
 
             {/* Card 3: Pricing & Margins */}
@@ -266,25 +264,19 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               onSelectPrimaryCategory={state.handleSelectPrimaryCategory}
               onToggleTag={(id) => {
                 state.setSelectedTagIds((prev) =>
-                  prev.includes(id)
-                    ? prev.filter((item) => item !== id)
-                    : [...prev, id],
+                  prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
                 );
                 state.setIsDirty(true);
               }}
               onToggleOccasion={(id) => {
                 state.setSelectedOccasionIds((prev) =>
-                  prev.includes(id)
-                    ? prev.filter((item) => item !== id)
-                    : [...prev, id],
+                  prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
                 );
                 state.setIsDirty(true);
               }}
               onToggleCollection={(id) => {
                 state.setSelectedCollectionIds((prev) =>
-                  prev.includes(id)
-                    ? prev.filter((item) => item !== id)
-                    : [...prev, id],
+                  prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
                 );
                 state.setIsDirty(true);
               }}

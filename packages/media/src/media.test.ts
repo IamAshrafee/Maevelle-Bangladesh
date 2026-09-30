@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
-import { inspectAndProcessImage } from './image-processing.js';
+import { inspectAndProcessImage, validateMediaSignature } from './image-processing.js';
 import { LocalObjectStorage } from './local-storage.js';
 import { createMediaObjectKey, sha256 } from './storage.js';
 
@@ -72,5 +72,23 @@ describe('Media storage and image processing', () => {
       const metadata = await sharp(rendition.content).metadata();
       expect(metadata.exif).toBeUndefined();
     }
+  });
+
+  it('validates magic bytes for allowed media formats and rejects invalid signatures', () => {
+    const jpeg = Buffer.from([
+      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+    ]);
+    const png = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    ]);
+    const pdf = Buffer.from('%PDF-1.7\n%fake-pdf-content');
+    const fake = Buffer.from('hello world, this is a plain text file');
+
+    expect(validateMediaSignature(jpeg, 'image/jpeg')).toBe(true);
+    expect(validateMediaSignature(jpeg, 'image/png')).toBe(false);
+    expect(validateMediaSignature(png, 'image/png')).toBe(true);
+    expect(validateMediaSignature(pdf, 'application/pdf')).toBe(true);
+    expect(validateMediaSignature(fake, 'image/jpeg')).toBe(false);
+    expect(validateMediaSignature(fake, 'image/webp')).toBe(false);
   });
 });
