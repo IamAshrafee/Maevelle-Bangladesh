@@ -15,6 +15,7 @@ import {
   OperationalWorklistToolbar,
   useOperationalWorklist,
 } from './operational-worklist';
+import { FulfillmentCreateDialog } from './fulfillment-create-dialog';
 import { StatusBadge } from './status-badge';
 
 interface Fulfillment {
@@ -170,9 +171,20 @@ export function FulfillmentConsole() {
           title="Fulfillment worklist"
           description="Move reserved order lines through pick, pack, and physical dispatch with one authoritative next action."
           actions={
-            <Link className="button secondary" href="/deliveries">
-              Open deliveries <ArrowRight aria-hidden="true" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <FulfillmentCreateDialog
+                locations={locations}
+                onSuccess={async (newId) => {
+                  setMessage('Fulfillment created successfully.');
+                  setMessageTone('success');
+                  await reload();
+                  if (newId) setSelectedId(newId);
+                }}
+              />
+              <Link className="button secondary inline-flex items-center gap-1.5" href="/deliveries">
+                Open deliveries <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            </div>
           }
         />
         <Stats aria-label="Fulfillment summary">

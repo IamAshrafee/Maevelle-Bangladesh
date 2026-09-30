@@ -412,14 +412,26 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {order.fulfillments.map((fulfillment) => (
-                    <div key={fulfillment.id} className="relative rounded-lg border p-4">
-                      <p className="font-medium text-foreground">{fulfillment.fulfillmentNumber}</p>
-                      <StatusBadge status={fulfillment.status} />
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {fulfillment.dispatchedAt
-                          ? `Dispatched: ${formatDate(fulfillment.dispatchedAt)}`
-                          : 'Pending Dispatch'}
-                      </p>
+                    <div key={fulfillment.id} className="relative rounded-lg border p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-medium text-foreground">{fulfillment.fulfillmentNumber}</p>
+                          <StatusBadge status={fulfillment.status} />
+                        </div>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {fulfillment.dispatchedAt
+                            ? `Dispatched: ${formatDate(fulfillment.dispatchedAt)}`
+                            : 'Pending Dispatch'}
+                        </p>
+                      </div>
+                      <div className="mt-3 pt-2 border-t flex justify-end">
+                        <Link
+                          href={`/fulfillments?q=${encodeURIComponent(fulfillment.fulfillmentNumber)}`}
+                          className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                        >
+                          Manage fulfillment →
+                        </Link>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -441,19 +453,26 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {order.deliveries.map((delivery) => (
-                    <div key={delivery.id} className="relative rounded-lg border p-4">
-                      <p className="font-medium text-foreground">{delivery.deliveryNumber}</p>
-                      <StatusBadge status={delivery.status} />
-                      {delivery.trackingNumber && (
-                        <p className="mt-2 text-sm text-primary">
-                          Tracking: {delivery.trackingNumber}
-                        </p>
-                      )}
-                      {delivery.status !== 'DELIVERED' && delivery.status !== 'FAILED' && (
-                        <Button variant="outline" size="sm" className="mt-4 w-full">
-                          Initiate RTO
-                        </Button>
-                      )}
+                    <div key={delivery.id} className="relative rounded-lg border p-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-medium text-foreground">{delivery.deliveryNumber}</p>
+                          <StatusBadge status={delivery.status} />
+                        </div>
+                        {delivery.trackingNumber && (
+                          <p className="mt-2 text-sm font-mono text-primary truncate">
+                            Tracking: {delivery.trackingNumber}
+                          </p>
+                        )}
+                      </div>
+                      <div className="mt-3 pt-2 border-t flex justify-end">
+                        <Link
+                          href={`/deliveries?q=${encodeURIComponent(delivery.deliveryNumber)}`}
+                          className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                        >
+                          Manage delivery →
+                        </Link>
+                      </div>
                     </div>
                   ))}
                 </div>

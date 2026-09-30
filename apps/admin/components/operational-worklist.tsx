@@ -78,7 +78,7 @@ export function useOperationalWorklist<T>({
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setQuery(params.get('q') ?? '');
+    setQuery(params.get('q') ?? params.get('search') ?? params.get('query') ?? '');
     setStatus(params.get('status') ?? 'ALL');
     const urlSort = params.get('sort');
     if (urlSort === 'newest' || urlSort === 'oldest' || urlSort === 'reference') setSort(urlSort);

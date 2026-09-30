@@ -259,6 +259,18 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                   {deliveryHistory.risk.reasons[0].explanation}
                 </p>
               ) : null}
+              <div className="border-t px-6 py-3 flex justify-end">
+                <Link
+                  href={`/deliveries?q=${encodeURIComponent(
+                    customer.phones.find((p) => p.isPrimary)?.phone ??
+                      customer.phones[0]?.phone ??
+                      customer.displayName,
+                  )}`}
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                >
+                  View customer deliveries →
+                </Link>
+              </div>
             </section>
           ) : null}
           <section className="rounded-xl border bg-card shadow-sm">

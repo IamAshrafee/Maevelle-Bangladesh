@@ -15,6 +15,7 @@ import {
   OperationalWorklistToolbar,
   useOperationalWorklist,
 } from './operational-worklist';
+import { DeliveryCreateDialog } from './delivery-create-dialog';
 import { StatusBadge } from './status-badge';
 
 interface Delivery {
@@ -470,9 +471,19 @@ export function DeliveryConsole() {
           title="Delivery worklist"
           description="Book carriers, record handover, resolve exceptions, and preserve delivery outcomes independently from payment and inventory history."
           actions={
-            <Link className="button secondary" href="/rto">
-              Open RTO <ArrowRight aria-hidden="true" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <DeliveryCreateDialog
+                onSuccess={async (newId) => {
+                  setMessage('Delivery created successfully. You can now assign a courier or record handover.');
+                  setMessageTone('success');
+                  await reload();
+                  if (newId) setSelectedId(newId);
+                }}
+              />
+              <Link className="button secondary inline-flex items-center gap-1.5" href="/rto">
+                Open RTO <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            </div>
           }
         />
         <Stats aria-label="Delivery summary">
