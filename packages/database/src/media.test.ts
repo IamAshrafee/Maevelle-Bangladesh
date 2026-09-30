@@ -431,9 +431,16 @@ describe('media tenant ownership', () => {
       database.db,
     );
 
+    const actor = await sql<{ id: string }>`
+      insert into iam.users (name,email,email_normalized)
+      values ('Sync operator',${`sync-${crypto.randomUUID()}@test.local`},${`sync-${crypto.randomUUID()}@test.local`})
+      returning id::text
+    `.execute(database.db);
+    const actorId = actor.rows[0]!.id;
+
     const product = await createCatalogProduct(database.db, {
       organizationId: ownerA.id,
-      actorId: crypto.randomUUID(),
+      actorId,
       productTypeId: productType.rows[0]!.id,
       title: 'Sync Dress',
       handle: `sync-dress-${crypto.randomUUID().slice(0, 8)}`,
@@ -464,7 +471,7 @@ describe('media tenant ownership', () => {
     // 1. Initial Sync with 2 images
     await syncProductMediaPlacements(database.db, {
       organizationId: ownerA.id,
-      actorId: crypto.randomUUID(),
+      actorId,
       productId: product.id,
       placements: [
         {
@@ -499,7 +506,7 @@ describe('media tenant ownership', () => {
     // 2. Reorder & swap primary cover atomically (assetsA[1] becomes cover at pos 0, assetsA[2] is added, assetsA[0] removed)
     await syncProductMediaPlacements(database.db, {
       organizationId: ownerA.id,
-      actorId: crypto.randomUUID(),
+      actorId,
       productId: product.id,
       placements: [
         {
@@ -534,7 +541,7 @@ describe('media tenant ownership', () => {
     await expect(
       syncProductMediaPlacements(database.db, {
         organizationId: ownerA.id,
-        actorId: crypto.randomUUID(),
+        actorId,
         productId: product.id,
         placements: [
           {
@@ -551,7 +558,7 @@ describe('media tenant ownership', () => {
     await expect(
       syncProductMediaPlacements(database.db, {
         organizationId: ownerA.id,
-        actorId: crypto.randomUUID(),
+        actorId,
         productId: product.id,
         placements: [
           {

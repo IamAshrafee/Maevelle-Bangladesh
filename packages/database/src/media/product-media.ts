@@ -142,12 +142,28 @@ export async function syncProductMediaPlacements(
     const uniqueAssetIds = [...new Set(input.placements.map((p) => p.assetId))];
     if (uniqueAssetIds.length > 0) {
       const assetList = sql.join(uniqueAssetIds.map((id) => sql`${id}::uuid`));
-      const validAssets = await sql<{ id: string }>`select id::text from media.media_assets
-        where organization_id=${input.organizationId} and id in (${assetList})
-          and asset_type='IMAGE' and status in ('READY','ARCHIVED') and visibility_class='PUBLIC' for share`.execute(
+      const foundAssets = await sql<{
+        id: string;
+        asset_type: string;
+        status: string;
+        visibility_class: string;
+      }>`select id::text, asset_type, status, visibility_class from media.media_assets
+        where organization_id=${input.organizationId} and id in (${assetList}) for share`.execute(
         transaction,
       );
-      if (validAssets.rows.length !== uniqueAssetIds.length) {
+      if (foundAssets.rows.length !== uniqueAssetIds.length) {
+        throw new MediaDomainError(
+          'NOT_FOUND',
+          'One or more media assets were not found in this organization.',
+        );
+      }
+      const invalid = foundAssets.rows.find(
+        (a) =>
+          a.asset_type !== 'IMAGE' ||
+          !['READY', 'ARCHIVED'].includes(a.status) ||
+          a.visibility_class !== 'PUBLIC',
+      );
+      if (invalid) {
         throw new MediaDomainError(
           'MEDIA_NOT_READY',
           'Only ready public image assets can be used by Products.',
@@ -205,16 +221,21 @@ export async function syncProductMediaPlacements(
         and product_id=${input.productId}::uuid for update`.execute(transaction);
 
     const scopePrimaryAssigned = new Set<string>();
-    const normalizedPlacements = input.placements.map((p, idx) => {
-      const scopeKey = `${p.variantId ?? 'none'}:${p.optionValueId ?? 'none'}`;
-      let isPrimary = Boolean(p.isPrimary);
-      if (isPrimary) {
+    for (const p of input.placements) {
+      if (p.isPrimary) {
+        const scopeKey = `${p.variantId ?? 'none'}:${p.optionValueId ?? 'none'}`;
         if (scopePrimaryAssigned.has(scopeKey)) {
-          isPrimary = false;
-        } else {
-          scopePrimaryAssigned.add(scopeKey);
+          throw new MediaDomainError(
+            'CONFLICT',
+            'Only one primary media asset is allowed per scope.',
+          );
         }
+        scopePrimaryAssigned.add(scopeKey);
       }
+    }
+
+    const normalizedPlacements = input.placements.map((p, idx) => {
+      const isPrimary = Boolean(p.isPrimary);
       return {
         ...p,
         role: p.role ?? (isPrimary ? 'THUMBNAIL' : 'GALLERY'),
