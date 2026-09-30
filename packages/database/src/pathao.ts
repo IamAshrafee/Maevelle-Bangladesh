@@ -24,6 +24,7 @@ export interface PathaoCredentials {
   readonly clientSecret: string;
   readonly username: string;
   readonly password: string;
+  readonly webhookSecret?: string;
 }
 
 export interface PathaoSafeConfiguration {
@@ -37,6 +38,7 @@ export interface PathaoSafeConfiguration {
   readonly defaultDeliveryService: PathaoDeliveryService;
   readonly defaultItemType: PathaoItemType;
   readonly hasCredentials: boolean;
+  readonly hasWebhookSecret?: boolean;
   readonly capabilities: CourierCapabilities;
 }
 
@@ -70,6 +72,7 @@ interface PathaoAccountConfig {
   readonly defaultDeliveryService: PathaoDeliveryService;
   readonly defaultItemType: PathaoItemType;
   readonly capabilities: CourierCapabilities;
+  readonly hasWebhookSecret?: boolean;
   readonly connectionStatus?: 'NOT_CHECKED' | 'CONNECTED' | 'ERROR';
   readonly lastValidatedAt?: string;
   readonly lastErrorCode?: string;
@@ -106,13 +109,13 @@ const PATHAO_ITEM_TYPES: Readonly<Record<PathaoItemType, number>> = {
 
 const PATHAO_CAPABILITIES: CourierCapabilities = {
   booking: true,
-  cancellation: false,
+  cancellation: true,
   tracking: true,
-  webhooks: false,
+  webhooks: true,
   cod: true,
   codUpdate: false,
   returnTracking: true,
-  serviceability: false,
+  serviceability: true,
   quoting: true,
 };
 
@@ -192,6 +195,9 @@ function parseAccountConfig(value: unknown): PathaoAccountConfig {
     defaultDeliveryService,
     defaultItemType,
     capabilities: PATHAO_CAPABILITIES,
+    ...(typeof value.hasWebhookSecret === 'boolean'
+      ? { hasWebhookSecret: value.hasWebhookSecret }
+      : {}),
     ...(value.connectionStatus === 'CONNECTED' ||
     value.connectionStatus === 'ERROR' ||
     value.connectionStatus === 'NOT_CHECKED'
@@ -225,12 +231,19 @@ function parseCredentials(value: string): PathaoCredentials {
   const clientSecret = stringValue(parsed.clientSecret);
   const username = stringValue(parsed.username);
   const password = stringValue(parsed.password);
+  const webhookSecret = stringValue(parsed.webhookSecret);
   if (!clientId || !clientSecret || !username || !password)
     throw new PathaoIntegrationError(
       'INVALID_CREDENTIALS',
       'Stored Pathao credentials are incomplete.',
     );
-  return { clientId, clientSecret, username, password };
+  return {
+    clientId,
+    clientSecret,
+    username,
+    password,
+    ...(webhookSecret ? { webhookSecret } : {}),
+  };
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -305,27 +318,44 @@ export function normalizePathaoStatus(status: string): NormalizedCourierStatus |
     .toUpperCase();
   const statuses: Readonly<Record<string, NormalizedCourierStatus>> = {
     PENDING: 'BOOKED',
+    ACCEPTED: 'BOOKED',
     PICKUP_REQUESTED: 'BOOKED',
     ASSIGNED_FOR_PICKUP: 'BOOKED',
+    PICKUP_IN_PROGRESS: 'BOOKED',
     PICKED: 'HANDED_OVER',
     PICKED_UP: 'HANDED_OVER',
     AT_THE_SORTING_HUB: 'IN_TRANSIT',
+    SORTING_HUB: 'IN_TRANSIT',
     IN_TRANSIT: 'IN_TRANSIT',
     RECEIVED_AT_LAST_MILE_HUB: 'IN_TRANSIT',
+    LAST_MILE_HUB: 'IN_TRANSIT',
     ASSIGNED_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
     OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
     DELIVERED: 'DELIVERED',
+    PARTIALLY_DELIVERED: 'DELIVERED',
+    PARTIAL_DELIVERY: 'DELIVERED',
+    PAYMENT_COLLECTED: 'DELIVERED',
     DELIVERY_FAILED: 'ATTEMPT_FAILED',
+    FAILED_DELIVERY: 'ATTEMPT_FAILED',
+    FAILED: 'ATTEMPT_FAILED',
+    HOLD: 'ATTEMPT_FAILED',
+    ON_HOLD: 'ATTEMPT_FAILED',
     RETURN: 'RTO_INITIATED',
     RETURN_INITIATED: 'RTO_INITIATED',
+    RTO: 'RTO_INITIATED',
+    RTO_INITIATED: 'RTO_INITIATED',
     RETURN_IN_TRANSIT: 'RETURNING',
     RETURNING: 'RETURNING',
+    RETURN_RECEIVED_AT_HUB: 'RETURNING',
     RETURNED_TO_MERCHANT: 'RETURNED_TO_ORIGIN',
     RETURNED_TO_ORIGIN: 'RETURNED_TO_ORIGIN',
+    RETURNED: 'RETURNED_TO_ORIGIN',
     LOST: 'LOST',
     DAMAGED: 'DAMAGED',
     PICKUP_CANCELLED: 'CANCELLED',
     CANCELLED: 'CANCELLED',
+    CANCELED: 'CANCELLED',
+    ORDER_CANCELLED: 'CANCELLED',
   };
   return statuses[key];
 }
@@ -515,6 +545,18 @@ class PathaoCourierProvider implements CourierProviderPort {
     return PATHAO_CAPABILITIES;
   }
 
+  public async checkServiceability(input: {
+    readonly district?: string;
+    readonly city?: string;
+    readonly area?: string;
+    readonly postalCode?: string;
+  }): Promise<{ readonly serviceable: boolean; readonly reasonCode?: string }> {
+    if (!input.district && !input.city && !input.area && !input.postalCode) {
+      return { serviceable: false, reasonCode: 'DESTINATION_REQUIRED' };
+    }
+    return { serviceable: true };
+  }
+
   private async request(
     path: string,
     init: RequestInit,
@@ -687,6 +729,30 @@ class PathaoCourierProvider implements CourierProviderPort {
     }
   }
 
+  public async cancelBooking(
+    providerBookingId: string,
+  ): Promise<
+    | { readonly kind: 'CANCELLED' }
+    | { readonly kind: 'REJECTED'; readonly reasonCode: string }
+    | { readonly kind: 'UNKNOWN_OUTCOME' }
+  > {
+    try {
+      await this.request(
+        `/aladdin/api/v1/orders/${encodeURIComponent(providerBookingId)}/cancel`,
+        { method: 'POST' },
+      );
+      return { kind: 'CANCELLED' };
+    } catch (error) {
+      if (error instanceof PathaoIntegrationError) {
+        if (error.outcomeUnknown || error.retryable) {
+          return { kind: 'UNKNOWN_OUTCOME' };
+        }
+        return { kind: 'REJECTED', reasonCode: error.code };
+      }
+      return { kind: 'UNKNOWN_OUTCOME' };
+    }
+  }
+
   public async getBooking(providerBookingId: string): Promise<CourierTrackingResult> {
     const payload = responseData(
       await this.request(`/aladdin/api/v1/orders/${encodeURIComponent(providerBookingId)}/info`, {
@@ -705,20 +771,51 @@ class PathaoCourierProvider implements CourierProviderPort {
       occurredAtRaw && !Number.isNaN(Date.parse(occurredAtRaw))
         ? occurredAtRaw
         : new Date().toISOString();
+
+    const historyCandidate = Array.isArray(payload.order_history)
+      ? payload.order_history
+      : Array.isArray(payload.history)
+        ? payload.history
+        : undefined;
+
+    let events: CourierTrackingResult['events'] = [];
+    if (historyCandidate && historyCandidate.length > 0) {
+      events = historyCandidate
+        .filter(isRecord)
+        .map((entry, idx) => {
+          const entryStatus = stringValue(entry.status ?? entry.order_status);
+          const entryNormalized = entryStatus ? normalizePathaoStatus(entryStatus) : undefined;
+          const entryOccurredAtRaw = stringValue(entry.time ?? entry.created_at ?? entry.updated_at);
+          const entryOccurredAt =
+            entryOccurredAtRaw && !Number.isNaN(Date.parse(entryOccurredAtRaw))
+              ? entryOccurredAtRaw
+              : occurredAt;
+          if (!entryStatus || !entryNormalized) return undefined;
+          return {
+            providerEventId: `${providerBookingId}:${entryStatus.trim().toUpperCase()}:${idx}`,
+            providerStatus: entryStatus,
+            normalizedStatus: entryNormalized,
+            occurredAt: entryOccurredAt,
+          };
+        })
+        .filter((e): e is NonNullable<typeof e> => e !== undefined);
+    }
+
+    if (events.length === 0 && providerStatus && normalizedStatus) {
+      events = [
+        {
+          providerEventId: `${providerBookingId}:${providerStatus.trim().toUpperCase()}`,
+          providerStatus,
+          normalizedStatus,
+          occurredAt,
+        },
+      ];
+    }
+
     return {
       providerBookingId,
       ...(providerStatus ? { providerStatus } : {}),
-      events:
-        providerStatus && normalizedStatus
-          ? [
-              {
-                providerEventId: `${providerBookingId}:${providerStatus.trim().toUpperCase()}`,
-                providerStatus,
-                normalizedStatus,
-                occurredAt,
-              },
-            ]
-          : [],
+      events,
     };
   }
 }
@@ -755,9 +852,17 @@ export async function configurePathaoAccount(
     encryptionKey: EncryptionKey;
   },
 ): Promise<{ accountId: string }> {
-  for (const [name, value] of Object.entries(input.credentials))
-    if (!value.trim())
-      throw new PathaoIntegrationError('VALIDATION_FAILED', `${name} is required.`);
+  const requiredFields: (keyof PathaoCredentials)[] = [
+    'clientId',
+    'clientSecret',
+    'username',
+    'password',
+  ];
+  for (const field of requiredFields) {
+    if (!input.credentials[field]?.trim()) {
+      throw new PathaoIntegrationError('VALIDATION_FAILED', `${field} is required.`);
+    }
+  }
   if (!input.name.trim())
     throw new PathaoIntegrationError('VALIDATION_FAILED', 'Account name is required.');
   return db.transaction().execute(async (tx) => {
@@ -772,6 +877,7 @@ export async function configurePathaoAccount(
       defaultDeliveryService: input.defaultDeliveryService,
       defaultItemType: input.defaultItemType,
       capabilities: PATHAO_CAPABILITIES,
+      hasWebhookSecret: Boolean(input.credentials.webhookSecret?.trim()),
       connectionStatus: 'NOT_CHECKED',
     };
     let accountId = input.accountId;
@@ -906,6 +1012,7 @@ export async function getPathaoConfigurations(
       defaultDeliveryService: config.defaultDeliveryService,
       defaultItemType: config.defaultItemType,
       hasCredentials: row.has_credentials,
+      hasWebhookSecret: Boolean(config.hasWebhookSecret),
       capabilities: PATHAO_CAPABILITIES,
     };
   });
@@ -1124,11 +1231,34 @@ export async function mapPathaoStore(
   });
 }
 
+export async function getPathaoCredentials(
+  db: Kysely<DatabaseSchema>,
+  account: { id: string; organizationId: string },
+  encryptionKey: EncryptionKey,
+): Promise<PathaoCredentials> {
+  const record: PathaoAccountRecord = {
+    id: account.id,
+    organizationId: account.organizationId,
+    config: {
+      environment: 'PRODUCTION',
+      defaultDeliveryService: 'NORMAL',
+      defaultItemType: 'PARCEL',
+      capabilities: PATHAO_CAPABILITIES,
+    },
+  };
+  return loadCredentials(db, record, encryptionKey);
+}
+
 export async function pathaoProviderResolver(
   db: Kysely<DatabaseSchema>,
   encryptionKey: EncryptionKey,
   input: { accountId: string; providerCode: string },
+  fetcher?: typeof fetch,
 ): Promise<CourierProviderPort | undefined> {
   if (input.providerCode !== PATHAO_PROVIDER_CODE) return undefined;
-  return createPathaoProvider(db, { accountId: input.accountId, encryptionKey });
+  return createPathaoProvider(db, {
+    accountId: input.accountId,
+    encryptionKey,
+    ...(fetcher ? { fetcher } : {}),
+  });
 }

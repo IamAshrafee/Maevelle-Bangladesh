@@ -13,7 +13,7 @@ export async function resolveCourierProvider(
   fetchImpl: typeof fetch = fetch,
 ): Promise<CourierProviderPort | undefined> {
   if (input.providerCode === PATHAO_PROVIDER_CODE) {
-    return pathaoProviderResolver(db, encryptionKey, input);
+    return pathaoProviderResolver(db, encryptionKey, input, fetchImpl);
   }
   if (input.providerCode === STEADFAST_PROVIDER_CODE) {
     return steadfastProviderResolver(db, encryptionKey, input, fetchImpl);

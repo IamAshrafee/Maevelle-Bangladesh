@@ -14,6 +14,10 @@ import {
   setPathaoAccountStatus,
   syncPathaoStores,
 } from './pathao.js';
+import {
+  getCustomerDeliveryHistory,
+  normalizeBangladeshCustomerPhone,
+} from './delivery-intelligence.js';
 import { createOrganization } from './platform.js';
 
 const database = createDatabase({
@@ -78,9 +82,19 @@ describe('Pathao courier adapter', () => {
         return json({
           data: { consignment_id: 'DX-1001', order_status: 'Pending', delivery_fee: 120 },
         });
+      if (url.endsWith('/aladdin/api/v1/orders/DX-1001/cancel') && init?.method === 'POST')
+        return json({ data: { message: 'Order Cancelled' } });
       if (url.endsWith('/aladdin/api/v1/orders/DX-1001/info'))
         return json({
-          data: { order_status: 'Delivered', updated_at: '2026-09-25T10:30:00.000Z' },
+          data: {
+            order_status: 'Delivered',
+            updated_at: '2026-09-25T10:30:00.000Z',
+            order_history: [
+              { status: 'Pending', time: '2026-09-25T08:00:00.000Z' },
+              { status: 'In Transit', time: '2026-09-25T09:15:00.000Z' },
+              { status: 'Delivered', time: '2026-09-25T10:30:00.000Z' },
+            ],
+          },
         });
       return json({ message: 'Unexpected request' }, 404);
     }) as typeof fetch;
@@ -97,6 +111,7 @@ describe('Pathao courier adapter', () => {
         clientSecret: 'client-secret-value',
         username: 'merchant@example.com',
         password: 'merchant-password',
+        webhookSecret: 'test-webhook-secret-123',
       },
       encryptionKey,
     });
@@ -107,6 +122,7 @@ describe('Pathao courier adapter', () => {
         accountId: configured.accountId,
         environment: 'SANDBOX',
         hasCredentials: true,
+        hasWebhookSecret: true,
       }),
     ]);
     expect(JSON.stringify(safe)).not.toContain('client-secret-value');
@@ -170,15 +186,29 @@ describe('Pathao courier adapter', () => {
       baseAmount: '110.0000',
       codFeeAmount: '10.0000',
     });
+    expect(await provider.checkServiceability!({ district: 'Dhaka', city: 'Dhaka' })).toEqual({
+      serviceable: true,
+    });
+    expect(await provider.checkServiceability!({})).toEqual({
+      serviceable: false,
+      reasonCode: 'DESTINATION_REQUIRED',
+    });
     expect(await provider.createBooking(request)).toMatchObject({
       kind: 'BOOKED',
       providerBookingId: 'DX-1001',
       charge: { amount: '120.0000', basis: 'ACTUAL' },
     });
-    expect(await provider.getBooking!('DX-1001')).toMatchObject({
+    const tracking = await provider.getBooking!('DX-1001');
+    expect(tracking).toMatchObject({
       providerBookingId: 'DX-1001',
-      events: [{ normalizedStatus: 'DELIVERED' }],
+      providerStatus: 'Delivered',
     });
+    expect(tracking.events).toHaveLength(3);
+    expect(tracking.events[0]).toMatchObject({ normalizedStatus: 'BOOKED' });
+    expect(tracking.events[1]).toMatchObject({ normalizedStatus: 'IN_TRANSIT' });
+    expect(tracking.events[2]).toMatchObject({ normalizedStatus: 'DELIVERED' });
+
+    expect(await provider.cancelBooking!('DX-1001')).toEqual({ kind: 'CANCELLED' });
 
     await sql`update integrations.oauth_token_states set expires_at=now()-interval '1 minute'
       where integration_account_id=${configured.accountId}`.execute(database.db);
@@ -224,6 +254,44 @@ describe('Pathao courier adapter', () => {
 
   it('maps only known provider statuses and rejects arbitrary guesses', () => {
     expect(normalizePathaoStatus('out for delivery')).toBe('OUT_FOR_DELIVERY');
+    expect(normalizePathaoStatus('Accepted')).toBe('BOOKED');
+    expect(normalizePathaoStatus('Sorting Hub')).toBe('IN_TRANSIT');
+    expect(normalizePathaoStatus('Partially Delivered')).toBe('DELIVERED');
+    expect(normalizePathaoStatus('On Hold')).toBe('ATTEMPT_FAILED');
+    expect(normalizePathaoStatus('RTO')).toBe('RTO_INITIATED');
+    expect(normalizePathaoStatus('Order Cancelled')).toBe('CANCELLED');
     expect(normalizePathaoStatus('a future Pathao state')).toBeUndefined();
+  });
+
+  it('normalizes Bangladesh mobile phone numbers consistently', () => {
+    expect(normalizeBangladeshCustomerPhone('+8801712345678')).toBe('01712345678');
+    expect(normalizeBangladeshCustomerPhone('8801812345678')).toBe('01812345678');
+    expect(normalizeBangladeshCustomerPhone('01912345678')).toBe('01912345678');
+    expect(normalizeBangladeshCustomerPhone('01712-345678')).toBe('01712345678');
+  });
+
+  it('queries customer delivery history by phone with explainable risk indicators', async () => {
+    const organization = await createOrganization(database.db, {
+      code: `intel-${crypto.randomUUID().slice(0, 10)}`,
+      displayName: 'Delivery Intelligence Test',
+      timezone: 'Asia/Dhaka',
+      defaultLocale: 'en',
+      defaultCurrency: 'BDT',
+    });
+    const history = await getCustomerDeliveryHistory(database.db, {
+      organizationId: organization.id,
+      phone: '+8801711223344',
+    });
+    expect(history).toMatchObject({
+      totalDeliveries: 0,
+      eligibleDeliveries: 0,
+      deliveredCount: 0,
+      failedDeliveryCount: 0,
+      rtoCount: 0,
+      risk: {
+        level: 'INSUFFICIENT_HISTORY',
+      },
+    });
+    expect(history.risk.reasons[0]?.code).toBe('INSUFFICIENT_HISTORY');
   });
 });

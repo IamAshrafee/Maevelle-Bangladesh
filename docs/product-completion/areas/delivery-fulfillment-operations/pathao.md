@@ -28,11 +28,16 @@
   consignment ID as the tracking reference. A timeout/ambiguous response becomes
   `UNKNOWN_OUTCOME`; it is never retried as a new consignment.
 
-## Tracking and RTO
+## Tracking, cancellation, and RTO
 
-- The worker polls authenticated order info because no current official public
-  standard-Courier webhook signature/payload contract was found. Raw status is
-  retained, known statuses are normalized, and unknown values open an
+- The worker polls authenticated order info (`/aladdin/api/v1/orders/{consignment_id}/info`)
+  and ingests inbound webhooks at `/webhooks/courier/PATHAO`.
+- Inbound Pathao webhooks verify the webhook secret and respond with the required
+  `X-Pathao-Merchant-Webhook-Integration-Secret` header within 10 seconds.
+- Order cancellation is supported via `POST /aladdin/api/v1/orders/{consignment_id}/cancel`
+  before physical pickup.
+- Multi-event tracking history is extracted from provider status logs when provided.
+- Raw status is retained, known statuses are normalized, and unknown values open an
   integration exception without changing Delivery state.
 - Polling can safely reconstruct skipped outbound milestones from a current
   provider snapshot. Duplicate, stale, regressive, and terminal events remain
@@ -48,21 +53,25 @@
   observations and courier charges remain evidence; they never create Payments,
   settlements, refunds, or Finance postings automatically.
 - Customer history is organization-scoped and matches canonical/merged customer
-  identity plus normalized phone snapshots. It reports success, failure, RTO,
-  COD, provider, and recent-outcome facts. Cancellations before handover are
-  excluded from customer failure risk. Risk levels are explainable internal
-  indicators, not automated order rejection.
+  identity, order snapshots, and normalized Bangladesh mobile phone numbers (`+8801...`, `01...`).
+- It reports factual success, failure, RTO, COD, provider, and recent-outcome facts.
+  Cancellations before handover are excluded from customer failure risk.
+- Risk levels are explainable internal indicators (`INSUFFICIENT_HISTORY`, `LOW`,
+  `MODERATE`, `ELEVATED`), not automated order rejection or black-box fraud scores.
+- Surfaced across Order Detail, Customer Detail, and Delivery Console.
 
 ## Capability boundary
 
-Implemented: authentication/refresh, connection check, Store sync/mapping,
-quote, booking, COD, consignment/tracking reference, polling reconciliation,
-status normalization, RTO evidence, actual booking charge, and customer history.
+Implemented: OAuth authentication/refresh, connection check, Store sync/mapping,
+quote, booking, booking cancellation, serviceability check, COD calculation,
+consignment/tracking reference, multi-event tracking timeline, webhook ingestion,
+fallback polling reconciliation, comprehensive status normalization, RTO evidence,
+actual booking charge, and customer delivery risk intelligence across couriers.
 
-Not automated without an official current standard-Courier contract: booking
-cancellation, webhook ingestion, COD mutation after booking, serviceability,
-Fraud Check/external customer history, claims, and settlement/remittance import.
-Maevelle exposes these as unsupported rather than guessing endpoints or payloads.
+Not automated without an official public merchant API: COD mutation after booking,
+Pathao Fraud Check (dashboard-only feature; Maevelle uses internal first-party cross-courier
+history with clean provider extension points), automated claims, and settlement/remittance import.
+Maevelle exposes these as unsupported rather than guessing endpoints or scraping dashboards.
 
 Operational references:
 [Merchant integration](https://help.pathao.com/integrate-pathao-panel-with-website/),

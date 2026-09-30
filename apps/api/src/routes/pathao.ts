@@ -128,6 +128,7 @@ export function registerPathaoRoutes(
           clientSecret: Type.String({ minLength: 1 }),
           username: Type.String({ minLength: 1 }),
           password: Type.String({ minLength: 1 }),
+          webhookSecret: Type.Optional(Type.String()),
         }),
       },
     },
@@ -145,6 +146,7 @@ export function registerPathaoRoutes(
           clientSecret: string;
           username: string;
           password: string;
+          webhookSecret?: string;
         };
         const saved = await configurePathaoAccount(database.db, {
           organizationId: active.organizationId,
@@ -159,6 +161,7 @@ export function registerPathaoRoutes(
             clientSecret: body.clientSecret,
             username: body.username,
             password: body.password,
+            ...(body.webhookSecret?.trim() ? { webhookSecret: body.webhookSecret.trim() } : {}),
           },
           encryptionKey: encryptionKey(config),
         });

@@ -131,6 +131,14 @@ function assessRisk(input: {
   };
 }
 
+export function normalizeBangladeshCustomerPhone(phone: string): string {
+  const compact = phone.trim().replace(/[\s().-]+/g, '');
+  if (/^\+8801\d{9}$/.test(compact)) return `0${compact.slice(4)}`;
+  if (/^8801\d{9}$/.test(compact)) return `0${compact.slice(3)}`;
+  if (/^01\d{9}$/.test(compact)) return compact;
+  return compact;
+}
+
 /**
  * Produces factual, organization-scoped delivery history using Maevelle's
  * normalized customer phones and canonical/alias customer family. Merchant
@@ -139,15 +147,25 @@ function assessRisk(input: {
  */
 export async function getCustomerDeliveryHistory(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; customerId?: string; deliveryId?: string },
+  input: {
+    organizationId: string;
+    customerId?: string;
+    deliveryId?: string;
+    orderId?: string;
+    phone?: string;
+  },
 ): Promise<CustomerDeliveryHistory> {
-  if (!input.customerId && !input.deliveryId)
-    throw new Error('Customer or Delivery identity is required.');
+  if (!input.customerId && !input.deliveryId && !input.orderId && !input.phone)
+    throw new Error('Customer, Order, Delivery, or Phone identity is required.');
+  const normalizedDirectPhone = input.phone ? normalizeBangladeshCustomerPhone(input.phone) : undefined;
   const deliveries = await sql<DeliveryHistoryRow>`with recursive customer_family as (
       select customer.id
       from customers.customers customer
       where customer.organization_id=${input.organizationId}
-        and customer.id=${input.customerId ?? null}::uuid
+        and (
+          customer.id=${input.customerId ?? null}::uuid
+          or customer.id=(select customer_id from orders.orders where organization_id=${input.organizationId} and id=${input.orderId ?? null}::uuid)
+        )
       union
       select case when alias.canonical_customer_id=family.id
         then alias.alias_customer_id else alias.canonical_customer_id end
@@ -165,18 +183,30 @@ export async function getCustomerDeliveryHistory(
       where snapshot.organization_id=${input.organizationId} and order_row.customer_id in (select id from customer_family)
       union
       select snapshot.normalized_phone
+      from orders.orders target_order
+      join orders.order_customer_snapshots snapshot on snapshot.order_id=target_order.id
+        and snapshot.organization_id=target_order.organization_id
+      where target_order.organization_id=${input.organizationId} and target_order.id=${input.orderId ?? null}::uuid
+      union
+      select snapshot.normalized_phone
       from delivery.deliveries selected
       join orders.order_customer_snapshots snapshot on snapshot.order_id=selected.order_id
         and snapshot.organization_id=selected.organization_id
       where selected.organization_id=${input.organizationId} and selected.id=${input.deliveryId ?? null}::uuid
+      union
+      select ${normalizedDirectPhone ?? null}::text
+      where ${normalizedDirectPhone ?? null}::text is not null
     ), matched_orders as (
       select distinct order_row.id
       from orders.orders order_row
-      join orders.order_customer_snapshots snapshot on snapshot.order_id=order_row.id
+      left join orders.order_customer_snapshots snapshot on snapshot.order_id=order_row.id
         and snapshot.organization_id=order_row.organization_id
       where order_row.organization_id=${input.organizationId}
-        and (order_row.customer_id in (select id from customer_family)
-          or snapshot.normalized_phone in (select normalized_value from target_phones))
+        and (
+          order_row.id=${input.orderId ?? null}::uuid
+          or order_row.customer_id in (select id from customer_family)
+          or snapshot.normalized_phone in (select normalized_value from target_phones)
+        )
     )
     select delivery.id,delivery.delivery_number,order_row.order_number,delivery.outcome_status,
       delivery.operational_status,delivery.cod_required,delivery.handed_over_at,delivery.delivered_at,
@@ -215,6 +245,7 @@ export async function getCustomerDeliveryHistory(
   ).length;
   const codRows = eligibleRows.filter((row) => row.cod_required);
   const orderNumbers = new Set(rows.map((row) => row.order_number));
+  const deliveryIds = rows.map((row) => row.id);
   const customerReturns = await sql<{ count: string }>`with recursive customer_family as (
       select customer.id from customers.customers customer
       where customer.organization_id=${input.organizationId} and customer.id=${input.customerId ?? null}::uuid
@@ -224,7 +255,7 @@ export async function getCustomerDeliveryHistory(
       where alias.organization_id=${input.organizationId}
     ), target_orders as (
       select distinct delivery.order_id from delivery.deliveries delivery
-      where delivery.organization_id=${input.organizationId} and delivery.id=any(${rows.map((row) => row.id)}::uuid[])
+      where delivery.organization_id=${input.organizationId} and delivery.id=any(${deliveryIds.length ? deliveryIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
     ) select count(*)::text as count from returns.return_cases return_case
       where return_case.organization_id=${input.organizationId} and return_case.case_type='CUSTOMER_RETURN'
         and (return_case.order_id in (select order_id from target_orders)

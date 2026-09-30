@@ -58,8 +58,22 @@ function formatMoney(amount: number | string | undefined | null, currency = 'BDT
   }).format(Number.isNaN(num) ? 0 : num);
 }
 
+interface DeliveryRiskHistory {
+  eligibleDeliveries: number;
+  deliveredCount: number;
+  failedDeliveryCount: number;
+  rtoCount: number;
+  successRate: number | null;
+  rtoRate: number | null;
+  risk: {
+    level: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
+    reasons: readonly { code: string; explanation: string }[];
+  };
+}
+
 export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
   const [order, setOrder] = useState<OrderDetailDto>();
+  const [deliveryRisk, setDeliveryRisk] = useState<DeliveryRiskHistory>();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
@@ -90,8 +104,14 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
   async function load() {
     setState('loading');
     try {
-      const data = await fetchApiData<OrderDetailDto>(`/admin/orders/${orderId}`);
+      const [data, risk] = await Promise.all([
+        fetchApiData<OrderDetailDto>(`/admin/orders/${orderId}`),
+        fetchApiData<DeliveryRiskHistory>(`/admin/orders/${orderId}/customer-delivery-history`).catch(
+          () => undefined,
+        ),
+      ]);
       setOrder(data);
+      setDeliveryRisk(risk);
       setMessage('');
       setState('ready');
     } catch (error) {
@@ -573,6 +593,40 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               ) : null}
             </div>
           </section>
+
+          {deliveryRisk ? (
+            <section className="rounded-xl border bg-card shadow-sm" aria-label="Customer delivery risk">
+              <div className="flex items-center justify-between border-b px-6 py-4">
+                <h2 className="text-lg font-medium text-foreground">Delivery risk / history</h2>
+                <StatusBadge status={deliveryRisk.risk.level} />
+              </div>
+              <div className="space-y-3 px-6 py-4 text-sm">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Delivered</span>
+                    <p className="font-semibold text-foreground text-sm">{deliveryRisk.deliveredCount}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">RTO</span>
+                    <p className="font-semibold text-rose-600 text-sm">{deliveryRisk.rtoCount}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Success rate</span>
+                    <p className="font-medium text-foreground">{deliveryRisk.successRate ?? '—'}%</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">RTO rate</span>
+                    <p className="font-medium text-foreground">{deliveryRisk.rtoRate ?? '—'}%</p>
+                  </div>
+                </div>
+                {deliveryRisk.risk.reasons[0] ? (
+                  <p className="text-xs text-muted-foreground border-t pt-2">
+                    {deliveryRisk.risk.reasons[0].explanation}
+                  </p>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
 
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="border-b px-6 py-4">

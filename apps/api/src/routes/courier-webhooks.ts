@@ -27,12 +27,26 @@ export function registerCourierWebhookRoutes(
     },
     async (request, reply) => {
       const providerCode = (request.params as { providerCode: string }).providerCode.toUpperCase();
-      const body = (request.body ?? {}) as Record<string, unknown>;
+      const rawBody = (request.body ?? {}) as Record<string, unknown>;
+      const body = (typeof rawBody.data === 'object' && rawBody.data !== null && !Array.isArray(rawBody.data)
+        ? rawBody.data
+        : rawBody) as Record<string, unknown>;
+
+      if (providerCode === 'PATHAO') {
+        const signature =
+          (request.headers['x-pathao-signature'] as string | undefined) ??
+          (request.headers['x-signature'] as string | undefined);
+        if (signature) {
+          reply.header('X-Pathao-Merchant-Webhook-Integration-Secret', signature);
+        }
+      }
 
       // Extract provider identifiers from common payloads
       const externalBookingId =
         (typeof body.consignment_id === 'string' && body.consignment_id) ||
         (typeof body.consignment_id === 'number' && String(body.consignment_id)) ||
+        (typeof rawBody.consignment_id === 'string' && rawBody.consignment_id) ||
+        (typeof rawBody.consignment_id === 'number' && String(rawBody.consignment_id)) ||
         (typeof body.consignmentId === 'string' && body.consignmentId) ||
         (typeof body.tracking_code === 'string' && body.tracking_code) ||
         (typeof body.tracking_number === 'string' && body.tracking_number) ||
@@ -42,11 +56,15 @@ export function registerCourierWebhookRoutes(
       const merchantInvoice =
         (typeof body.invoice === 'string' && body.invoice) ||
         (typeof body.merchant_order_id === 'string' && body.merchant_order_id) ||
+        (typeof rawBody.invoice === 'string' && rawBody.invoice) ||
+        (typeof rawBody.merchant_order_id === 'string' && rawBody.merchant_order_id) ||
         undefined;
 
       const rawStatus =
         (typeof body.status === 'string' && body.status) ||
         (typeof body.order_status === 'string' && body.order_status) ||
+        (typeof rawBody.order_status === 'string' && rawBody.order_status) ||
+        (typeof rawBody.status === 'string' && rawBody.status) ||
         (typeof body.notification_type === 'string' && body.notification_type) ||
         '';
 

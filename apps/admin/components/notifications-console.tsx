@@ -52,6 +52,7 @@ type PathaoAccount = {
   defaultDeliveryService: 'NORMAL' | 'ON_DEMAND';
   defaultItemType: 'DOCUMENT' | 'PARCEL';
   hasCredentials: boolean;
+  hasWebhookSecret?: boolean;
 };
 type PathaoData = {
   accounts: readonly PathaoAccount[];
@@ -431,6 +432,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                     clientSecret: String(data.get('clientSecret')),
                     username: String(data.get('username')),
                     password: String(data.get('password')),
+                    webhookSecret: String(data.get('webhookSecret') || '').trim() || undefined,
                   }),
                 });
                 form.reset();
@@ -511,6 +513,15 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
             <label>
               Merchant password
               <input name="password" required type="password" autoComplete="new-password" />
+            </label>
+            <label>
+              Webhook secret (optional)
+              <input
+                name="webhookSecret"
+                type="password"
+                autoComplete="off"
+                placeholder={pathaoData?.accounts[0]?.hasWebhookSecret ? '••••••••••••••••' : 'Enter Webhook Secret if configured'}
+              />
             </label>
             <div className="inline-actions">
               <button disabled={busy} type="submit">

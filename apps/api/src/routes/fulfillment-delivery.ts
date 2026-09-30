@@ -319,6 +319,56 @@ export function registerFulfillmentDeliveryRoutes(
       }),
     };
   });
+  app.get('/admin/orders/:orderId/customer-delivery-history', async (request, reply) => {
+    const active = await requireAdmin(database, auth, request.headers, 'delivery.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    return {
+      data: await getCustomerDeliveryHistory(database.db, {
+        organizationId: active.organizationId,
+        orderId: (request.params as { orderId: string }).orderId,
+      }),
+    };
+  });
+  app.get(
+    '/admin/delivery-intelligence/customer-risk',
+    {
+      schema: {
+        querystring: Type.Object({
+          phone: Type.Optional(Type.String({ minLength: 1 })),
+          customerId: Type.Optional(Type.String({ minLength: 1 })),
+          orderId: Type.Optional(Type.String({ minLength: 1 })),
+          deliveryId: Type.Optional(Type.String({ minLength: 1 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await requireAdmin(database, auth, request.headers, 'delivery.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as {
+        phone?: string;
+        customerId?: string;
+        orderId?: string;
+        deliveryId?: string;
+      };
+      if (!query.phone && !query.customerId && !query.orderId && !query.deliveryId) {
+        return reply.code(400).send({
+          error: {
+            code: 'QUERY_REQUIRED',
+            message: 'One of phone, customerId, orderId, or deliveryId is required.',
+          },
+        });
+      }
+      return {
+        data: await getCustomerDeliveryHistory(database.db, {
+          organizationId: active.organizationId,
+          ...(query.phone ? { phone: query.phone } : {}),
+          ...(query.customerId ? { customerId: query.customerId } : {}),
+          ...(query.orderId ? { orderId: query.orderId } : {}),
+          ...(query.deliveryId ? { deliveryId: query.deliveryId } : {}),
+        }),
+      };
+    },
+  );
   app.get('/admin/deliveries/:deliveryId/financial-observations', async (request, reply) => {
     const active = await requireAdmin(database, auth, request.headers, 'delivery.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });

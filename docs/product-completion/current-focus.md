@@ -2,44 +2,34 @@
 
 ## Active Areas
 
-Payments & Finance: Overview (`/finance`), Payments (`/payments`), Accounts & Treasury (`/finance/accounts`), Expenses (`/finance/expenses`)
+Delivery & Fulfillment Operations: Delivery Console (`/delivery`), Fulfillment, Pathao & Steadfast Connected Courier Providers, Customer Delivery Intelligence
 
 ## Current Status / Substage
 
-`PAYMENTS_AND_FINANCE_MODULE_COMPLETION / OWNER_REVIEW_PENDING`
+`DELIVERY_COMPLETE / READY_FOR_OWNER_REVIEW`
 
 ## Evidence Already Known
 
-Payments & Finance has been completed as a practical, operationally complete financial
-module for merchants:
-- Consolidated global navigation into four focused operational surfaces: Overview,
-  Payments, Accounts & treasury, and Expenses.
-- Courier COD settlements are integrated directly into Accounts & treasury as an operational
-  tab (`/finance/accounts?tab=cod-settlements`) with transparent handling for courier remittances,
-  deductions, and net holding receipts.
-- Server-paginated, filterable Activity & Ledger with direct bidirectional links to
-  underlying business records (`payments.payment`, `payments.refund`, `finance.expense`,
-  `procurement.purchase`, `finance.cod_settlement`).
-- Modernized Payments queues, record tables, and command dialogs with responsive shadcn/ui
-  primitives, URL search parameter reactivity, and deep linking from Orders and Attention cards.
-- Enhanced Payment Detail with in-place account posting and refund dispatch capabilities.
+Delivery / Fulfillment has been completed as a production-grade, multi-courier fulfillment platform:
+- Pathao Courier integrated as primary connected provider: AES-256-GCM encrypted credentials, automated OAuth 2.0 token management with concurrent refresh locks, Store sync and pickup mapping, price quoting, consignment booking with automatic address detection, cancellation support, multi-event tracking timelines, and webhook ingestion with signature verification and required response header.
+- Customer Delivery Intelligence & Delivery Risk: Factual first-party cross-courier performance analysis queryable by Customer ID, Order ID, Delivery ID, or normalized Bangladesh phone (`+8801...`, `01...`). Generates explainable, non-accusatory risk levels (`INSUFFICIENT_HISTORY`, `LOW`, `MODERATE`, `ELEVATED`) with explicit reasons (e.g. repeated RTO, recent negative trends, courier exceptions).
+- Surfaced across Order Detail, Customer Detail, and Delivery Console for operator review before fulfillment.
+- Inbound courier webhooks automatically trigger Return-to-Origin (RTO) cases and reverse transport state transitions.
+- Background worker processes bookings, cancellations, and reconciliation safely without duplicate consignments or unsafe retries.
 
 ## Immediate Objective
 
-Conduct owner visual and operational review of Payments, Finance Overview, Accounts & Treasury,
-and Expense surfaces across mobile, tablet, and desktop viewports.
+Conduct owner visual and operational review of Delivery Console, Order Detail delivery risk indicators, and Pathao integration settings.
 
 ## Last Completed Action
 
-Streamlined navigation, integrated Courier COD settlements, modernized Payments and Finance
-consoles to shadcn/ui design standards, enabled URL sync and deep linking, added in-context
-actions to Payment Detail, and passed comprehensive TypeScript typechecks and Next.js builds.
+Integrated Pathao Courier provider adapter, multi-event tracking, booking cancellation, webhook responses, customer delivery intelligence across couriers, and admin order detail delivery risk displays. Passed focused vitest suites and full TypeScript compilation.
 
 ## Important Constraints
 
-- Ledger records remain immutable financial facts once created.
-- Reconciliations, refunds, and cancellations emit audit and outbox events.
-- Cash movements must not be labeled as business profit without complete landed cost coverage.
+- Authoritative state transitions remain inside Maevelle's delivery state machine.
+- Courier tracking and COD observations are operational evidence, separated from finance and ledger truth.
+- Delivery risk scores are explainable decision aids; orders are never silently cancelled based solely on automated risk scores.
 
 ## Blockers / Owner Review
 
