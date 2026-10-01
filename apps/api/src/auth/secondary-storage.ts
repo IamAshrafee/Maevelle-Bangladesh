@@ -45,3 +45,50 @@ export function createAuthSecondaryStorage(options: AuthStorageOptions) {
     },
   };
 }
+
+type StoredSessionIndexEntry = { readonly token: string; readonly expiresAt: number };
+type StoredSessionPayload = {
+  readonly session?: {
+    readonly id?: string;
+    readonly createdAt?: string;
+    readonly updatedAt?: string;
+    readonly expiresAt?: string;
+    readonly ipAddress?: string | null;
+    readonly userAgent?: string | null;
+  };
+};
+
+function parseJson<T>(value: unknown): T | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Revokes every Better Auth secondary-storage session without exposing tokens. */
+export async function revokeAuthSessionsForUser(
+  options: AuthStorageOptions,
+  userId: string,
+): Promise<number> {
+  const storage = createAuthSecondaryStorage(options);
+  const indexKey = `active-sessions-${userId}`;
+  const entries = parseJson<StoredSessionIndexEntry[]>(await storage.get(indexKey)) ?? [];
+  await Promise.all(entries.map((entry) => storage.delete(entry.token)));
+  await storage.delete(indexKey);
+  return entries.length;
+}
+
+/** Returns security metadata only; session tokens never leave encrypted storage. */
+export async function listAuthSessionsForUser(options: AuthStorageOptions, userId: string) {
+  const storage = createAuthSecondaryStorage(options);
+  const entries =
+    parseJson<StoredSessionIndexEntry[]>(await storage.get(`active-sessions-${userId}`)) ?? [];
+  const sessions = await Promise.all(
+    entries
+      .filter((entry) => entry.expiresAt > Date.now())
+      .map(async (entry) => parseJson<StoredSessionPayload>(await storage.get(entry.token))?.session),
+  );
+  return sessions.filter((session) => session !== undefined);
+}

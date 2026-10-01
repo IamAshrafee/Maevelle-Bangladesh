@@ -54,6 +54,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('receiving.post', 'receiving', 'Post inspected physical inbound receipts.', 'HIGH'),
       ('receiving.adjust', 'receiving', 'Reverse posted inbound receipts and resolve receiving conditions.', 'HIGH')
     on conflict (capability_code) do nothing;
+    update iam.capability_definitions
+    set supported_scope_types = array['LOCATION']::text[]
+    where capability_code in ('receiving.view', 'receiving.post', 'receiving.adjust');
     insert into iam.membership_capability_grants (membership_id, capability_code)
       select membership.id, capability.capability_code
       from iam.organization_memberships membership

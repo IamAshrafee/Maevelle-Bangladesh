@@ -33,10 +33,18 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       membership_type text not null check (membership_type in ('OWNER', 'STANDARD')),
       status text not null check (status in ('INVITED', 'ACTIVE', 'DISABLED', 'EXPIRED_INVITE', 'REMOVED')),
       display_name text,
+      access_version bigint not null default 1 check (access_version > 0),
+      invited_at timestamptz,
+      activated_at timestamptz,
+      disabled_at timestamptz,
+      removed_at timestamptz,
+      lifecycle_reason text,
+      lifecycle_changed_by uuid references iam.users(id),
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       version bigint not null default 1,
-      unique (organization_id, user_id)
+      unique (organization_id, user_id),
+      unique (organization_id, id)
     );
     create unique index organization_single_owner on iam.organization_memberships (organization_id) where membership_type = 'OWNER' and status = 'ACTIVE';
     create index memberships_active_user on iam.organization_memberships (user_id, organization_id) where status = 'ACTIVE';
@@ -45,8 +53,22 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       capability_code text primary key,
       domain text not null,
       description text not null,
-      sensitivity text not null
+      sensitivity text not null check (sensitivity in ('INTERNAL', 'HIGH', 'CRITICAL', 'RESTRICTED')),
+      supported_scope_types text[] not null default '{}',
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'DEPRECATED')),
+      check (capability_code ~ '^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$')
     );
+    insert into iam.capability_definitions
+      (capability_code, domain, description, sensitivity, supported_scope_types)
+    values
+      ('admin.team.view', 'identity-access', 'View organization memberships, invitations, and access assignments.', 'INTERNAL', '{}'),
+      ('admin.team.invite', 'identity-access', 'Invite a person and resend or revoke pending invitations.', 'HIGH', '{}'),
+      ('admin.team.permissions.manage', 'identity-access', 'Replace a member''s direct capabilities and resource scopes.', 'CRITICAL', '{}'),
+      ('admin.team.lifecycle.manage', 'identity-access', 'Suspend, restore, or remove non-Owner memberships.', 'CRITICAL', '{}'),
+      ('admin.team.owner.transfer', 'identity-access', 'Transfer the protected primary Owner relationship.', 'CRITICAL', '{}'),
+      ('admin.team.sessions.revoke', 'identity-access', 'Revoke active administrator sessions.', 'HIGH', '{}'),
+      ('admin.team.manage', 'identity-access', 'Deprecated broad team-management capability retained for migration visibility.', 'CRITICAL', '{}');
+    update iam.capability_definitions set status = 'DEPRECATED' where capability_code = 'admin.team.manage';
     create table iam.permission_presets (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
@@ -75,11 +97,79 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       organization_id uuid not null references platform.organizations(id),
       membership_id uuid not null references iam.organization_memberships(id),
       capability_code text references iam.capability_definitions(capability_code),
-      scope_type text not null,
+      scope_type text not null check (scope_type in ('LOCATION')),
       scope_id uuid not null,
-      created_at timestamptz not null default now()
+      created_at timestamptz not null default now(),
+      unique nulls not distinct (membership_id, capability_code, scope_type, scope_id),
+      foreign key (organization_id, membership_id) references iam.organization_memberships(organization_id, id)
     );
     create index membership_scopes_lookup on iam.membership_scopes (membership_id, capability_code, scope_type, scope_id);
+
+    create table iam.membership_invitations (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      email text not null,
+      email_normalized text not null,
+      display_name text not null,
+      token_hash text not null unique,
+      token_prefix text not null,
+      encrypted_delivery_token text,
+      idempotency_key text,
+      request_fingerprint text,
+      status text not null default 'PENDING' check (status in ('PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED')),
+      invited_by_membership_id uuid not null,
+      accepted_by_user_id uuid references iam.users(id),
+      accepted_membership_id uuid references iam.organization_memberships(id),
+      expires_at timestamptz not null,
+      last_sent_at timestamptz,
+      delivery_attempt_count integer not null default 0 check (delivery_attempt_count >= 0),
+      delivery_lease_until timestamptz,
+      last_delivery_error_code text,
+      accepted_at timestamptz,
+      revoked_at timestamptz,
+      revoked_by_membership_id uuid references iam.organization_memberships(id),
+      revoke_reason text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1 check (version > 0),
+      foreign key (organization_id, invited_by_membership_id) references iam.organization_memberships(organization_id, id),
+      check (expires_at > created_at),
+      check ((status = 'ACCEPTED') = (accepted_at is not null)),
+      check ((status = 'REVOKED') = (revoked_at is not null))
+    );
+    create unique index membership_invitations_pending_email
+      on iam.membership_invitations (organization_id, email_normalized) where status = 'PENDING';
+    create unique index membership_invitations_idempotency
+      on iam.membership_invitations (organization_id, invited_by_membership_id, idempotency_key)
+      where idempotency_key is not null;
+    create index membership_invitations_pending_delivery
+      on iam.membership_invitations (delivery_lease_until, created_at, id) where status = 'PENDING' and encrypted_delivery_token is not null;
+    create index membership_invitations_expiry
+      on iam.membership_invitations (expires_at, id) where status = 'PENDING';
+    create table iam.membership_invitation_capabilities (
+      invitation_id uuid not null references iam.membership_invitations(id) on delete cascade,
+      capability_code text not null references iam.capability_definitions(capability_code),
+      primary key (invitation_id, capability_code)
+    );
+    create table iam.membership_invitation_scopes (
+      id uuid primary key default uuidv7(),
+      invitation_id uuid not null references iam.membership_invitations(id) on delete cascade,
+      capability_code text references iam.capability_definitions(capability_code),
+      scope_type text not null check (scope_type in ('LOCATION')),
+      scope_id uuid not null,
+      unique nulls not distinct (invitation_id, capability_code, scope_type, scope_id)
+    );
+    create table iam.membership_invitation_delivery_attempts (
+      id bigint generated always as identity primary key,
+      invitation_id uuid not null references iam.membership_invitations(id),
+      attempt_number integer not null check (attempt_number > 0),
+      provider text not null,
+      status text not null check (status in ('SENT', 'FAILED')),
+      provider_reference text,
+      error_code text,
+      attempted_at timestamptz not null default now(),
+      unique (invitation_id, attempt_number)
+    );
 
     create table iam.auth_accounts (
       id uuid primary key default uuidv7(),

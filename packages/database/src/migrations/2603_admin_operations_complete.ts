@@ -29,10 +29,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('admin.integrity.view','admin','View unified integrity findings and safe projection repairs.','HIGH'),
       ('admin.integrity.repair','admin','Run allow-listed rebuildable projection repairs.','HIGH'),
       ('admin.team.view','iam','View organization membership and capability assignments.','HIGH'),
-      ('admin.team.manage','iam','Manage non-owner membership lifecycle and capability assignments.','CRITICAL'),
       ('admin.imports.manage','admin','Validate and confirm domain-service imports.','HIGH') on conflict do nothing;
     insert into iam.membership_capability_grants(membership_id,capability_code)
-      select m.id,c.capability_code from iam.organization_memberships m cross join(values('admin.integrity.view'),('admin.integrity.repair'),('admin.team.view'),('admin.team.manage'),('admin.imports.manage')) c(capability_code)
+      select m.id,c.capability_code from iam.organization_memberships m cross join(values('admin.integrity.view'),('admin.integrity.repair'),('admin.team.view'),('admin.imports.manage')) c(capability_code)
       where m.membership_type='OWNER' and m.status='ACTIVE' on conflict do nothing;
   `.execute(db);
 }

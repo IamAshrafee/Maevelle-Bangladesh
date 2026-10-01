@@ -66,6 +66,9 @@ async function requireCapability(
   if (!session?.user?.id) return undefined;
   const context = await findActiveAdminContext(database.db, session.user.id, {
     requiredCapability: capability,
+    ...(typeof requestHeaders['x-organization-id'] === 'string'
+      ? { organizationId: requestHeaders['x-organization-id'] }
+      : {}),
   });
   return context ? { ...context, actorId: session.user.id } : undefined;
 }

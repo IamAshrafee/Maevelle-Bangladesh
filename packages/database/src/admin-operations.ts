@@ -36,7 +36,11 @@ export type AttentionItem = {
   readonly href: string;
 };
 
-export async function getOperationsOverview(db: Kysely<DatabaseSchema>, organizationId: string) {
+export async function getOperationsOverview(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  capabilities?: readonly string[],
+) {
   const [payments, deliveries, returns, inventory, supply, integrations, jobs, outbox, integrity] =
     await Promise.all([
       sql<{
@@ -85,7 +89,7 @@ export async function getOperationsOverview(db: Kysely<DatabaseSchema>, organiza
         db,
       ),
     ]);
-  return [
+  const items = [
     {
       domain: 'Payments',
       reason: 'Verification pending',
@@ -150,16 +154,31 @@ export async function getOperationsOverview(db: Kysely<DatabaseSchema>, organiza
       href: '/integrity',
     },
   ] satisfies AttentionItem[];
+  if (!capabilities) return items;
+  const visibleByDomain: Record<string, string> = {
+    Payments: 'payments.view',
+    Delivery: 'delivery.view',
+    Returns: 'returns.view',
+    Inventory: 'inventory.view',
+    Supply: 'inbound_shipment.view',
+    Integrations: 'integrations.view',
+    Integrity: 'admin.integrity.view',
+  };
+  return items.filter((item) => {
+    const required = visibleByDomain[item.domain];
+    return !required || capabilities.includes(required);
+  });
 }
 
 export async function globalSearch(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   query: string,
+  capabilities?: readonly string[],
 ) {
   const term = `%${query.trim().replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
   if (query.trim().length < 2) return [];
-  return (
+  const rows = (
     await sql<{ kind: string; label: string; detail: string; href: string }>`
       select 'Order' as kind,order_number as label,order_status as detail,('/orders?order=' || id::text) as href from orders.orders where organization_id=${organizationId} and order_number ilike ${term}
       union all select 'Customer',customer_number,display_name,('/customers?customer=' || id::text) from customers.customers where organization_id=${organizationId} and (customer_number ilike ${term} or display_name ilike ${term})
@@ -171,6 +190,20 @@ export async function globalSearch(
       limit 30
     `.execute(db)
   ).rows;
+  if (!capabilities) return rows;
+  const visibleByKind: Record<string, string> = {
+    Order: 'orders.view',
+    Customer: 'customers.view',
+    Product: 'catalog.view',
+    Delivery: 'delivery.view',
+    Payment: 'payments.view',
+    Purchase: 'procurement.view',
+    Shipment: 'inbound_shipment.view',
+  };
+  return rows.filter((row) => {
+    const required = visibleByKind[row.kind];
+    return required !== undefined && capabilities.includes(required);
+  });
 }
 
 export async function listSavedViews(
@@ -281,69 +314,6 @@ export async function updateSavedView(
         tx,
       )
     ).rows[0];
-  });
-}
-
-export async function listTeam(db: Kysely<DatabaseSchema>, organizationId: string) {
-  return (
-    await sql`select membership.id,membership.user_id,u.name,u.email,u.two_factor_enabled,membership.membership_type,membership.status,membership.created_at::text,coalesce(array_agg(g.capability_code order by g.capability_code) filter(where g.capability_code is not null),'{}') capabilities from iam.organization_memberships membership join iam.users u on u.id=membership.user_id left join iam.membership_capability_grants g on g.membership_id=membership.id where membership.organization_id=${organizationId} group by membership.id,u.id order by membership.created_at`.execute(
-      db,
-    )
-  ).rows;
-}
-
-export async function listCapabilityDefinitions(db: Kysely<DatabaseSchema>) {
-  return (
-    await sql<{
-      capability_code: string;
-      domain: string;
-      description: string;
-      sensitivity: string;
-    }>`select capability_code,domain,description,sensitivity from iam.capability_definitions order by domain,capability_code`.execute(
-      db,
-    )
-  ).rows;
-}
-
-export async function updateTeamMember(
-  db: Kysely<DatabaseSchema>,
-  input: {
-    organizationId: string;
-    actorMembershipId: string;
-    membershipId: string;
-    status?: 'ACTIVE' | 'DISABLED';
-    grant?: string;
-    revoke?: string;
-  },
-) {
-  return db.transaction().execute(async (tx) => {
-    const target = await sql<{
-      membership_type: string;
-      status: string;
-    }>`select membership_type,status from iam.organization_memberships where id=${input.membershipId}::uuid and organization_id=${input.organizationId} for update`.execute(
-      tx,
-    );
-    if (!target.rows[0]) throw new AdminOperationsError('Team member was not found.');
-    if (target.rows[0].membership_type === 'OWNER')
-      throw new AdminOperationsError('The protected Owner membership cannot be changed here.');
-    if (
-      input.membershipId === input.actorMembershipId &&
-      (input.grant || input.revoke || input.status === 'DISABLED')
-    )
-      throw new AdminOperationsError('Self privilege escalation or self-disable is not allowed.');
-    if (input.status)
-      await sql`update iam.organization_memberships set status=${input.status},updated_at=now(),version=version+1 where id=${input.membershipId}::uuid`.execute(
-        tx,
-      );
-    if (input.grant)
-      await sql`insert into iam.membership_capability_grants(membership_id,capability_code) select ${input.membershipId}::uuid,capability_code from iam.capability_definitions where capability_code=${input.grant} on conflict do nothing`.execute(
-        tx,
-      );
-    if (input.revoke)
-      await sql`delete from iam.membership_capability_grants where membership_id=${input.membershipId}::uuid and capability_code=${input.revoke}`.execute(
-        tx,
-      );
-    return { updated: true };
   });
 }
 

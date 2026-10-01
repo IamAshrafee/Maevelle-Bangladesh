@@ -58,7 +58,7 @@ export function buildApi(options: BuildApiOptions) {
       options.config &&
       origin &&
       ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
-      request.url.startsWith('/admin/')
+      (request.url.startsWith('/admin/') || request.url.startsWith('/invitations/'))
     ) {
       const trustedOrigin = new URL(options.config.authBaseUrl).origin;
       const sameHost = new URL(origin).host === request.headers.host;
@@ -69,6 +69,7 @@ export function buildApi(options: BuildApiOptions) {
     }
     const limits = [
       { prefix: '/auth/', maximum: 20 },
+      { prefix: '/invitations/', maximum: 12 },
       { prefix: '/storefront/v1/reviews', maximum: 15 },
       { prefix: '/storefront/v1/orders/confirmation', maximum: 60 },
       { prefix: '/integrations/', maximum: 120 },

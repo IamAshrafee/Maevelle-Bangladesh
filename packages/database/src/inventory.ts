@@ -872,6 +872,32 @@ export async function createInventoryReservation(
     .execute((transaction) => createInventoryReservationInTransaction(transaction, input));
 }
 
+export async function findInventoryReservationLocation(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  reservationId: string,
+): Promise<string | undefined> {
+  return (
+    await sql<{ location_id: string }>`
+      select location_id::text from inventory.inventory_reservations
+      where id = ${reservationId}::uuid and organization_id = ${organizationId}::uuid
+    `.execute(db)
+  ).rows[0]?.location_id;
+}
+
+export async function findStocktakeLocation(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  stocktakeId: string,
+): Promise<string | undefined> {
+  return (
+    await sql<{ location_id: string }>`
+      select location_id::text from inventory.stocktake_sessions
+      where id = ${stocktakeId}::uuid and organization_id = ${organizationId}::uuid
+    `.execute(db)
+  ).rows[0]?.location_id;
+}
+
 export interface ReservationInput {
   organizationId: string;
   actorId: string;

@@ -21,7 +21,7 @@ means meaningful current implementation exists; it does not mean acceptance.
 | Reviews | `CODE_SUBSTANTIAL` | reviews modules, Admin moderation, Storefront display/submission |
 | Notifications and integrations | `CODE_SUBSTANTIAL` | notification/integration tables, routes and worker processing |
 | Analytics, search and audit | `CODE_SUBSTANTIAL` | analytics/search/audit schemas, worker processors and Admin pages |
-| IAM, settings and operations | `CODE_SUBSTANTIAL` | platform/IAM modules, Team/Settings/Integrity/Admin operations |
+| IAM, settings and operations | `IMPLEMENTATION_COMPLETE / OWNER_REVIEW_PENDING` | Team & Access completion evidence in `areas/team-access`; IAM modules, explicit Team API, invitation worker, capability/scoped authorization, session revocation, audit and notifications |
 | Storefront experience | `ASSESSMENT_REQUIRED` | `apps/storefront` customer paths and public API projections |
 
 No area is currently `VERIFIED_COMPLETE`.

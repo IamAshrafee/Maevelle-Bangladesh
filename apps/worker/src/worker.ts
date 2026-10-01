@@ -10,6 +10,7 @@ import {
 import type { EncryptionKey } from '@maevelle/security';
 import { processAnalyticsOutbox } from '@maevelle/database/analytics';
 import { processCatalogImports } from '@maevelle/database/admin-operations';
+import { deliverPendingInvitationEmails } from '@maevelle/database/iam';
 import { processStorefrontSearchOutbox } from '@maevelle/database/storefront';
 import { processExpiredPaymentOrders, processOrderOutbox } from '@maevelle/database/orders';
 import { expireInventoryReservations } from '@maevelle/database/inventory';
@@ -27,6 +28,7 @@ export interface WorkerOptions {
   readonly heartbeatIntervalMs: number;
   readonly logger?: WorkerLogger;
   readonly encryptionKey?: EncryptionKey;
+  readonly adminBaseUrl?: string;
   readonly courierProviderResolver?: CourierProviderResolver;
   readonly mediaStorage?: ObjectStoragePort;
 }
@@ -67,6 +69,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         expiredMediaUploads,
         mediaPurged,
         webhookDeliveries,
+        invitationEmails,
       ] = await Promise.all([
         reclaimExpiredJobs(options.database.db),
         processNotificationOutbox(options.database.db),
@@ -91,6 +94,14 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         options.encryptionKey
           ? deliverPendingWebhooks(options.database.db, options.encryptionKey)
           : Promise.resolve(0),
+        options.encryptionKey && options.adminBaseUrl
+          ? deliverPendingInvitationEmails(
+              options.database.db,
+              createLocalEmailAdapter(),
+              options.encryptionKey,
+              options.adminBaseUrl,
+            )
+          : Promise.resolve(0),
       ]);
       logger?.debug(
         {
@@ -109,6 +120,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           expiredMediaUploads,
           mediaPurged,
           webhookDeliveries,
+          invitationEmails,
         },
         'Worker recovery tick.',
       );

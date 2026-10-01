@@ -29,6 +29,7 @@ import { registerAdminOperationsRoutes } from './admin-operations.js';
 import { registerPathaoRoutes } from './pathao.js';
 import { registerSteadfastRoutes } from './steadfast.js';
 import { registerCourierWebhookRoutes } from './courier-webhooks.js';
+import { registerTeamAccessRoutes } from './team-access.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -107,4 +108,5 @@ export function registerAuthRoutes(
   registerCourierWebhookRoutes(app, database);
   registerAnalyticsRoutes(app, database, auth);
   registerAdminOperationsRoutes(app, database, auth);
+  registerTeamAccessRoutes(app, database, auth, config);
 }

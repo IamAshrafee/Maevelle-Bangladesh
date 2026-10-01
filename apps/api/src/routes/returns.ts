@@ -36,6 +36,9 @@ async function admin(
   if (!session?.user?.id) return undefined;
   const active = await findActiveAdminContext(database.db, session.user.id, {
     requiredCapability: capability,
+    ...(typeof source['x-organization-id'] === 'string'
+      ? { organizationId: source['x-organization-id'] }
+      : {}),
   });
   return active ? { ...active, actorId: session.user.id } : undefined;
 }

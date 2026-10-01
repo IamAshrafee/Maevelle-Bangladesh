@@ -10,6 +10,7 @@ import {
   getTransferDetail,
   listWarehouseTransfers,
   WarehouseDomainError,
+  findWarehouseTransferLocations,
 } from '@maevelle/database/warehouse';
 import {
   createWarehouseTransfer,
@@ -24,6 +25,11 @@ import {
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
+import {
+  canAccessLocation,
+  locationScopeError,
+  locationScopeIds,
+} from '../authorization/location-scope.js';
 
 type Auth = ReturnType<typeof createAuth>;
 
@@ -47,6 +53,9 @@ async function context(
   if (!session?.user?.id) return undefined;
   const active = await findActiveAdminContext(database.db, session.user.id, {
     requiredCapability: capability,
+    ...(typeof requestHeaders['x-organization-id'] === 'string'
+      ? { organizationId: requestHeaders['x-organization-id'] }
+      : {}),
   });
   return active ? { ...active, actorId: session.user.id } : undefined;
 }
@@ -95,6 +104,39 @@ function requireKey(
   );
 }
 
+function requireLocation(
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  active: NonNullable<Awaited<ReturnType<typeof context>>>,
+  capability: string,
+  locationId: string,
+): boolean {
+  if (canAccessLocation(active, capability, locationId)) return true;
+  reply.code(403).send(locationScopeError());
+  return false;
+}
+
+async function requireTransferLocations(
+  database: DatabaseClient,
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  active: NonNullable<Awaited<ReturnType<typeof context>>>,
+  capability: string,
+  transferId: string,
+): Promise<boolean> {
+  const transfer = await findWarehouseTransferLocations(
+    database.db,
+    active.organizationId,
+    transferId,
+  );
+  if (!transfer) {
+    reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'The transfer was not found.' } });
+    return false;
+  }
+  return (
+    requireLocation(reply, active, capability, transfer.sourceLocationId) &&
+    requireLocation(reply, active, capability, transfer.destinationLocationId)
+  );
+}
+
 export function registerWarehouseRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
@@ -103,7 +145,13 @@ export function registerWarehouseRoutes(
   app.get('/admin/warehouse/locations', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'warehouse.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await listLocations(database.db, active.organizationId) };
+    return {
+      data: await listLocations(
+        database.db,
+        active.organizationId,
+        locationScopeIds(active, 'warehouse.view'),
+      ),
+    };
   });
 
   app.post(
@@ -153,12 +201,19 @@ export function registerWarehouseRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'warehouse.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      if (locationScopeIds(active, 'warehouse.manage'))
+        return reply.code(403).send({
+          error: {
+            code: 'ORGANIZATION_SCOPE_REQUIRED',
+            message: 'Creating a location requires organization-wide warehouse access.',
+          },
+        });
       try {
         const body = request.body as {
           code: string;
           name: string;
-          locationType: any;
-          capabilities: any[];
+          locationType: Parameters<typeof createLocation>[1]['locationType'];
+          capabilities: Parameters<typeof createLocation>[1]['capabilities'];
           status?: 'ACTIVE' | 'DRAFT';
           address?: Record<string, unknown>;
         };
@@ -204,19 +259,21 @@ export function registerWarehouseRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'warehouse.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const locationId = (request.params as { locationId: string }).locationId;
+      if (!requireLocation(reply, active, 'warehouse.manage', locationId)) return;
       try {
         const body = request.body as {
           version: number;
           name?: string;
           status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
-          capabilities?: any[];
+          capabilities?: Parameters<typeof updateLocation>[1]['capabilities'];
           address?: Record<string, unknown> | null;
         };
         return {
           data: await updateLocation(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            locationId: (request.params as { locationId: string }).locationId,
+            locationId,
             expectedVersion: body.version,
             ...(body.name === undefined ? {} : { name: body.name }),
             ...(body.status === undefined ? {} : { status: body.status }),
@@ -233,10 +290,12 @@ export function registerWarehouseRoutes(
   app.get('/admin/warehouse/locations/:locationId', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'warehouse.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const locationId = (request.params as { locationId: string }).locationId;
+    if (!requireLocation(reply, active, 'warehouse.view', locationId)) return;
     const detail = await getLocationDetail(
       database.db,
       active.organizationId,
-      (request.params as { locationId: string }).locationId,
+      locationId,
     );
     return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
   });
@@ -256,6 +315,12 @@ export function registerWarehouseRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'warehouse.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const body = request.body as { sourceLocationId: string; destinationLocationId: string };
+      if (
+        !requireLocation(reply, active, 'warehouse.manage', body.sourceLocationId) ||
+        !requireLocation(reply, active, 'warehouse.manage', body.destinationLocationId)
+      )
+        return;
       const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
       if (!key || typeof key !== 'string') return key;
       try {
@@ -302,6 +367,11 @@ export function registerWarehouseRoutes(
           lines: readonly { variantId: string; quantity: string }[];
           notes?: string | null;
         };
+        if (
+          !requireLocation(reply, active, 'warehouse.manage', body.sourceLocationId) ||
+          !requireLocation(reply, active, 'warehouse.manage', body.destinationLocationId)
+        )
+          return;
         return {
           data: await updateWarehouseTransferDraft(database.db, {
             organizationId: active.organizationId,
@@ -342,13 +412,18 @@ export function registerWarehouseRoutes(
         data: await listWarehouseTransfers(
           database.db,
           active.organizationId,
-          request.query as {
-            search?: string;
-            status?: string;
-            sourceLocationId?: string;
-            destinationLocationId?: string;
-            page?: number;
-            limit?: number;
+          {
+            ...(request.query as {
+              search?: string;
+              status?: string;
+              sourceLocationId?: string;
+              destinationLocationId?: string;
+              page?: number;
+              limit?: number;
+            }),
+            ...(locationScopeIds(active, 'warehouse.view')
+              ? { allowedLocationIds: locationScopeIds(active, 'warehouse.view')! }
+              : {}),
           },
         ),
       };
@@ -358,10 +433,12 @@ export function registerWarehouseRoutes(
   app.get('/admin/warehouse/transfers/:transferId', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'warehouse.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const transferId = (request.params as { transferId: string }).transferId;
+    if (!(await requireTransferLocations(database, reply, active, 'warehouse.view', transferId))) return;
     const detail = await getTransferDetail(
       database.db,
       active.organizationId,
-      (request.params as { transferId: string }).transferId,
+      transferId,
     );
     return detail ? { data: detail } : reply.code(404).send({ error: 'NOT_FOUND' });
   });
@@ -372,12 +449,14 @@ export function registerWarehouseRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'warehouse.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const transferId = (request.params as { transferId: string }).transferId;
+      if (!(await requireTransferLocations(database, reply, active, 'warehouse.manage', transferId))) return;
       try {
         return {
           data: await approveWarehouseTransfer(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            transferId: (request.params as { transferId: string }).transferId,
+            transferId,
             expectedVersion: (request.body as { version: number }).version,
           }),
         };
@@ -393,12 +472,14 @@ export function registerWarehouseRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'warehouse.manage');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const transferId = (request.params as { transferId: string }).transferId;
+      if (!(await requireTransferLocations(database, reply, active, 'warehouse.manage', transferId))) return;
       try {
         return {
           data: await cancelWarehouseTransfer(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            transferId: (request.params as { transferId: string }).transferId,
+            transferId,
             expectedVersion: (request.body as { version: number }).version,
           }),
         };
@@ -411,6 +492,8 @@ export function registerWarehouseRoutes(
   app.post('/admin/warehouse/transfers/:transferId/dispatch', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'inventory.transfer');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const transferId = (request.params as { transferId: string }).transferId;
+    if (!(await requireTransferLocations(database, reply, active, 'inventory.transfer', transferId))) return;
     const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
     if (!key || typeof key !== 'string') return key;
     try {
@@ -418,7 +501,7 @@ export function registerWarehouseRoutes(
         data: await dispatchWarehouseTransfer(database.db, {
           organizationId: active.organizationId,
           actorId: active.actorId,
-          transferId: (request.params as { transferId: string }).transferId,
+          transferId,
           idempotencyKey: key,
         }),
       };
@@ -448,6 +531,8 @@ export function registerWarehouseRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.transfer');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const transferId = (request.params as { transferId: string }).transferId;
+      if (!(await requireTransferLocations(database, reply, active, 'inventory.transfer', transferId))) return;
       const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
       if (!key || typeof key !== 'string') return key;
       try {
@@ -455,7 +540,7 @@ export function registerWarehouseRoutes(
           data: await receiveWarehouseTransfer(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            transferId: (request.params as { transferId: string }).transferId,
+            transferId,
             lines: (request.body as { lines: never[] }).lines,
             idempotencyKey: key,
           }),
@@ -486,6 +571,8 @@ export function registerWarehouseRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.transfer');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const transferId = (request.params as { transferId: string }).transferId;
+      if (!(await requireTransferLocations(database, reply, active, 'inventory.transfer', transferId))) return;
       const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
       if (!key || typeof key !== 'string') return key;
       try {
@@ -493,7 +580,7 @@ export function registerWarehouseRoutes(
           data: await closeWarehouseTransferDiscrepancy(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            transferId: (request.params as { transferId: string }).transferId,
+            transferId,
             lines: (
               request.body as {
                 lines: {

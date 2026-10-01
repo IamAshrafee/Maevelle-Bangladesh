@@ -86,6 +86,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('inventory.transfer', 'inventory', 'Dispatch and receive warehouse transfers.', 'HIGH'),
       ('inventory.stocktake', 'inventory', 'Create and post stocktakes.', 'HIGH')
     on conflict (capability_code) do nothing;
+    update iam.capability_definitions
+    set supported_scope_types = array['LOCATION']::text[]
+    where capability_code in (
+      'warehouse.view', 'warehouse.manage', 'inventory.view', 'inventory.adjust',
+      'inventory.reserve', 'inventory.transfer', 'inventory.stocktake'
+    );
 
     insert into iam.membership_capability_grants (membership_id, capability_code)
     select membership.id, capability.capability_code

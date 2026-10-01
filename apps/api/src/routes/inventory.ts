@@ -23,11 +23,18 @@ import {
   getInventoryItemDetail,
   listInventoryReservations,
   InventoryDomainError,
+  findInventoryReservationLocation,
+  findStocktakeLocation,
 } from '@maevelle/database/inventory';
 import { WarehouseDomainError } from '@maevelle/database/warehouse';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
+import {
+  canAccessLocation,
+  locationScopeError,
+  locationScopeIds,
+} from '../authorization/location-scope.js';
 
 type Auth = ReturnType<typeof createAuth>;
 const condition = Type.Union([
@@ -67,6 +74,9 @@ async function context(
   if (!session?.user?.id) return undefined;
   const active = await findActiveAdminContext(database.db, session.user.id, {
     requiredCapability: capability,
+    ...(typeof requestHeaders['x-organization-id'] === 'string'
+      ? { organizationId: requestHeaders['x-organization-id'] }
+      : {}),
   });
   return active ? { ...active, actorId: session.user.id } : undefined;
 }
@@ -115,6 +125,54 @@ function requireKey(
   );
 }
 
+function requireLocation(
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  active: NonNullable<Awaited<ReturnType<typeof context>>>,
+  capability: string,
+  locationId: string,
+): boolean {
+  if (canAccessLocation(active, capability, locationId)) return true;
+  reply.code(403).send(locationScopeError());
+  return false;
+}
+
+function requireListLocation(
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  active: NonNullable<Awaited<ReturnType<typeof context>>>,
+  capability: string,
+  locationId?: string,
+): boolean {
+  const scoped = locationScopeIds(active, capability);
+  if (scoped === undefined) return true;
+  if (locationId && scoped.includes(locationId)) return true;
+  reply.code(403).send({
+    error: {
+      code: 'LOCATION_SCOPE_FILTER_REQUIRED',
+      message: 'Select an authorized location before accessing this location-scoped collection.',
+    },
+  });
+  return false;
+}
+
+async function requireStocktakeLocation(
+  database: DatabaseClient,
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  active: NonNullable<Awaited<ReturnType<typeof context>>>,
+  stocktakeId: string,
+): Promise<boolean> {
+  const locationId = await findStocktakeLocation(database.db, active.organizationId, stocktakeId);
+  if (!locationId) {
+    reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'The stocktake was not found.' } });
+    return false;
+  }
+  return requireLocation(
+    reply,
+    active,
+    'inventory.stocktake',
+    locationId,
+  );
+}
+
 export function registerInventoryRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
@@ -143,6 +201,13 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      if (locationScopeIds(active, 'inventory.view'))
+        return reply.code(403).send({
+          error: {
+            code: 'LOCATION_SCOPE_FILTER_REQUIRED',
+            message: 'Location-scoped members must use a location-filtered inventory view.',
+          },
+        });
       return {
         data: await listInventoryItemChoices(
           database.db,
@@ -197,6 +262,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as { locationId?: string };
+      if (!requireListLocation(reply, active, 'inventory.view', query.locationId)) return;
       return {
         data: await listInventoryPositions(
           database.db,
@@ -239,6 +306,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as { locationId?: string };
+      if (!requireListLocation(reply, active, 'inventory.view', query.locationId)) return;
       return {
         data: await listInventoryBalances(
           database.db,
@@ -276,6 +345,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as { locationId?: string };
+      if (!requireListLocation(reply, active, 'inventory.view', query.locationId)) return;
       return {
         data: await listInventoryHistory(
           database.db,
@@ -319,6 +390,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.adjust');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const locationId = (request.body as { locationId: string }).locationId;
+      if (!requireLocation(reply, active, 'inventory.adjust', locationId)) return;
       const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
       if (!key || typeof key !== 'string') return key;
       try {
@@ -355,6 +428,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.adjust');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const locationId = (request.body as { locationId: string }).locationId;
+      if (!requireLocation(reply, active, 'inventory.adjust', locationId)) return;
       const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
       if (!key || typeof key !== 'string') return key;
       try {
@@ -391,6 +466,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.reserve');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const requestedLocationId = (request.body as { locationId: string }).locationId;
+      if (!requireLocation(reply, active, 'inventory.reserve', requestedLocationId)) return;
       const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
       if (!key || typeof key !== 'string') return key;
       try {
@@ -423,6 +500,15 @@ export function registerInventoryRoutes(
   app.post('/admin/inventory/reservations/:reservationId/release', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'inventory.reserve');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const reservationId = (request.params as { reservationId: string }).reservationId;
+    const reservationLocationId = await findInventoryReservationLocation(
+      database.db,
+      active.organizationId,
+      reservationId,
+    );
+    if (!reservationLocationId)
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'The reservation was not found.' } });
+    if (!requireLocation(reply, active, 'inventory.reserve', reservationLocationId)) return;
     const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
     if (!key || typeof key !== 'string') return key;
     try {
@@ -430,7 +516,7 @@ export function registerInventoryRoutes(
         data: await releaseInventoryReservation(database.db, {
           organizationId: active.organizationId,
           actorId: active.actorId,
-          reservationId: (request.params as { reservationId: string }).reservationId,
+          reservationId,
           idempotencyKey: key,
         }),
       };
@@ -444,6 +530,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.stocktake');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const locationId = (request.body as { locationId: string }).locationId;
+      if (!requireLocation(reply, active, 'inventory.stocktake', locationId)) return;
       try {
         return reply.code(201).send({
           data: await startStocktake(database.db, {
@@ -460,10 +548,12 @@ export function registerInventoryRoutes(
   app.get('/admin/inventory/stocktakes/:stocktakeId', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'inventory.stocktake');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
+    if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
     const workspace = await getStocktakeWorkspace(
       database.db,
       active.organizationId,
-      (request.params as { stocktakeId: string }).stocktakeId,
+      stocktakeId,
     );
     return workspace ? { data: workspace } : reply.code(404).send({ error: 'NOT_FOUND' });
   });
@@ -488,6 +578,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.stocktake');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
+      if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
       try {
         const body = request.body as {
           countedQuantity: string;
@@ -498,7 +590,7 @@ export function registerInventoryRoutes(
         };
         await recordStocktakeCount(database.db, {
           organizationId: active.organizationId,
-          stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,
+          stocktakeId,
           inventoryItemId: (request.params as { inventoryItemId: string }).inventoryItemId,
           ...body,
           expectedVersion: body.version,
@@ -519,12 +611,14 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.stocktake');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
+      if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
       try {
         const body = request.body as { variantId: string; version: number };
         return reply.code(201).send({
           data: await addFoundStocktakeLine(database.db, {
             organizationId: active.organizationId,
-            stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,
+            stocktakeId,
             variantId: body.variantId,
             expectedVersion: body.version,
           }),
@@ -540,13 +634,15 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.stocktake');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
+      if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
       try {
         const body = request.body as { version: number };
         return {
           data: await submitStocktakeForReview(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,
+            stocktakeId,
             expectedVersion: body.version,
           }),
         };
@@ -561,13 +657,15 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.stocktake');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
+      if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
       try {
         const body = request.body as { version: number };
         return {
           data: await cancelStocktake(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,
+            stocktakeId,
             expectedVersion: body.version,
           }),
         };
@@ -579,6 +677,8 @@ export function registerInventoryRoutes(
   app.post('/admin/inventory/stocktakes/:stocktakeId/post', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'inventory.stocktake');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
+    if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
     const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
     if (!key || typeof key !== 'string') return key;
     try {
@@ -586,7 +686,7 @@ export function registerInventoryRoutes(
         data: await postStocktake(database.db, {
           organizationId: active.organizationId,
           actorId: active.actorId,
-          stocktakeId: (request.params as { stocktakeId: string }).stocktakeId,
+          stocktakeId,
           idempotencyKey: key,
         }),
       };
@@ -598,6 +698,13 @@ export function registerInventoryRoutes(
   app.get('/admin/inventory/stats', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'inventory.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    if (locationScopeIds(active, 'inventory.view'))
+      return reply.code(403).send({
+        error: {
+          code: 'LOCATION_SCOPE_FILTER_REQUIRED',
+          message: 'Organization-wide inventory statistics are unavailable to a location-scoped membership.',
+        },
+      });
     return { data: await getInventoryStats(database.db, active.organizationId) };
   });
 
@@ -611,6 +718,13 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      if (locationScopeIds(active, 'inventory.view'))
+        return reply.code(403).send({
+          error: {
+            code: 'LOCATION_SCOPE_FILTER_REQUIRED',
+            message: 'Use a location-filtered stock view for a location-scoped membership.',
+          },
+        });
       const detail = await getInventoryItemDetail(
         database.db,
         active.organizationId,
@@ -636,6 +750,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as { locationId?: string };
+      if (!requireListLocation(reply, active, 'inventory.view', query.locationId)) return;
       return {
         data: await listInventoryReservations(
           database.db,
@@ -667,6 +783,8 @@ export function registerInventoryRoutes(
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'inventory.stocktake');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as { locationId?: string };
+      if (!requireListLocation(reply, active, 'inventory.stocktake', query.locationId)) return;
       return {
         data: await listStocktakeSessions(
           database.db,

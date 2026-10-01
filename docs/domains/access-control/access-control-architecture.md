@@ -1,9 +1,28 @@
 # Maevelle Ecommerce — Identity, Authentication & Access Control Architecture
 
 **Document:** `docs/domains/access-control/access-control-architecture.md`
-**Status:** Initial Domain Design / Living Document
-**Version:** 0.1
+**Status:** Implemented Architecture / Living Document
+**Version:** 1.0
 **Related:** All business domains, `requirements.md`, `scope.md`, `media-architecture.md`, `customer-architecture.md`
+
+---
+
+## Implementation status
+
+The human Team & Access model described here is implemented. Better Auth owns
+authentication and sessions; Maevelle IAM owns organization memberships,
+structural ownership, capabilities, permission presets, location scopes,
+invitations, lifecycle, audit/outbox, and access-related notifications.
+
+Runtime authorization uses direct additive membership grants. Presets are
+one-time templates and are not role-name security boundaries. Owner is a
+protected structural membership type. Invitation secrets are hashed for
+acceptance and encrypted only while awaiting worker delivery. Effective access
+is resolved from current database state, so grant and lifecycle changes do not
+depend on stale permission claims in sessions.
+
+Completion evidence and remaining owner/environment review gates are recorded in
+`docs/product-completion/areas/team-access/`.
 
 ---
 

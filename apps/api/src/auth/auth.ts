@@ -9,7 +9,10 @@ import { createAuthSecondaryStorage } from './secondary-storage.js';
 export interface MaevelleAuth {
   readonly handler: (request: Request) => Promise<Response>;
   readonly api: {
-    getSession(input: { headers: Headers }): Promise<{ user?: { id?: string } } | null>;
+    getSession(input: { headers: Headers }): Promise<{
+      user?: { id?: string; twoFactorEnabled: boolean | null | undefined };
+      session?: { createdAt?: Date | string; updatedAt?: Date | string };
+    } | null>;
     signUpEmail(input: {
       body: { email: string; password: string; name: string };
     }): Promise<{ user?: { id?: string } }>;

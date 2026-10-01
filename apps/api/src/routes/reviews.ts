@@ -18,7 +18,12 @@ async function admin(
 ) {
   const s = await a.api.getSession({ headers: headers(h) });
   if (!s?.user?.id) return;
-  const c = await findActiveAdminContext(d.db, s.user.id, { requiredCapability: cap });
+  const c = await findActiveAdminContext(d.db, s.user.id, {
+    requiredCapability: cap,
+    ...(typeof h['x-organization-id'] === 'string'
+      ? { organizationId: h['x-organization-id'] }
+      : {}),
+  });
   return c && { ...c, actorId: s.user.id };
 }
 function fail(reply: { code(n: number): { send(v: unknown): unknown } }, e: unknown) {

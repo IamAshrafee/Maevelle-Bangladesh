@@ -144,6 +144,7 @@ export async function createLocation(
 export async function listLocations(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
+  allowedLocationIds?: readonly string[],
 ): Promise<readonly LocationSummary[]> {
   const result = await sql<{
     id: string;
@@ -159,6 +160,9 @@ export async function listLocations(
     from warehouse.locations location
     left join warehouse.location_capabilities capability on capability.location_id = location.id and capability.organization_id = location.organization_id
     where location.organization_id = ${organizationId}
+      and (${allowedLocationIds === undefined} or location.id in (
+        ${allowedLocationIds?.length ? sql.join(allowedLocationIds.map((id) => sql`${id}::uuid`)) : sql`null`}
+      ))
     group by location.id order by location.name, location.id
   `.execute(db);
   return result.rows.map(mapLocation);
@@ -364,6 +368,7 @@ export async function listWarehouseTransfers(
     status?: string;
     sourceLocationId?: string;
     destinationLocationId?: string;
+    allowedLocationIds?: readonly string[];
     page?: number;
     limit?: number;
   } = {},
@@ -399,6 +404,11 @@ export async function listWarehouseTransfers(
   const destFilter = input.destinationLocationId
     ? sql`t.destination_location_id = ${input.destinationLocationId}::uuid`
     : sql`1=1`;
+  const scopeFilter = input.allowedLocationIds
+    ? input.allowedLocationIds.length
+      ? sql`t.source_location_id in (${sql.join(input.allowedLocationIds.map((id) => sql`${id}::uuid`))}) and t.destination_location_id in (${sql.join(input.allowedLocationIds.map((id) => sql`${id}::uuid`))})`
+      : sql`false`
+    : sql`true`;
 
   const countResult = await sql<{ count: string }>`
     select count(*)::text as count
@@ -408,6 +418,7 @@ export async function listWarehouseTransfers(
       and ${searchFilter}
       and ${sourceFilter}
       and ${destFilter}
+      and ${scopeFilter}
   `.execute(db);
 
   const transfers = await sql<WarehouseTransferListRow>`
@@ -426,6 +437,7 @@ export async function listWarehouseTransfers(
       and ${searchFilter}
       and ${sourceFilter}
       and ${destFilter}
+      and ${scopeFilter}
     group by t.id, sl.name, dl.name
     order by t.created_at desc
     limit ${input.limit || 25} offset ${offset}
@@ -565,4 +577,24 @@ export async function getTransferDetail(
     lineCount: lines.length,
     lines,
   };
+}
+
+export async function findWarehouseTransferLocations(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  transferId: string,
+): Promise<{ sourceLocationId: string; destinationLocationId: string } | undefined> {
+  const row = (
+    await sql<{ source_location_id: string; destination_location_id: string }>`
+      select source_location_id::text, destination_location_id::text
+      from warehouse.transfers
+      where id = ${transferId}::uuid and organization_id = ${organizationId}::uuid
+    `.execute(db)
+  ).rows[0];
+  return row
+    ? {
+        sourceLocationId: row.source_location_id,
+        destinationLocationId: row.destination_location_id,
+      }
+    : undefined;
 }

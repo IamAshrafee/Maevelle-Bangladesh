@@ -11,12 +11,9 @@ import {
   createCatalogImport,
   createExport,
   listSavedViews,
-  listCapabilityDefinitions,
-  listTeam,
   processCatalogImports,
   saveView,
   updateSavedView,
-  updateTeamMember,
   updateOrganizationProfile,
 } from './admin-operations.js';
 
@@ -156,72 +153,4 @@ describe('admin operations support', () => {
     expect(exported.rows).toEqual([]);
   });
 
-  it('protects the Owner and prevents cross-tenant or self access mutation', async () => {
-    expect(await listCapabilityDefinitions(database.db)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ capability_code: 'admin.team.view', domain: 'iam' }),
-      ]),
-    );
-    const organization = await createOrganization(database.db, {
-      code: `team-${crypto.randomUUID().slice(0, 8)}`,
-      displayName: 'Team A',
-      timezone: 'UTC',
-      defaultLocale: 'en',
-      defaultCurrency: 'BDT',
-    });
-    const other = await createOrganization(database.db, {
-      code: `team-b-${crypto.randomUUID().slice(0, 8)}`,
-      displayName: 'Team B',
-      timezone: 'UTC',
-      defaultLocale: 'en',
-      defaultCurrency: 'BDT',
-    });
-    const ownerEmail = `owner-${crypto.randomUUID()}@example.test`;
-    const memberEmail = `member-${crypto.randomUUID()}@example.test`;
-    const owner = await sql<{
-      id: string;
-    }>`insert into iam.users(name,email,email_normalized) values('Owner',${ownerEmail},${ownerEmail}) returning id`.execute(
-      database.db,
-    );
-    const member = await sql<{
-      id: string;
-    }>`insert into iam.users(name,email,email_normalized) values('Member',${memberEmail},${memberEmail}) returning id`.execute(
-      database.db,
-    );
-    const ownerMembership = await sql<{
-      id: string;
-    }>`insert into iam.organization_memberships(organization_id,user_id,membership_type,status) values(${organization.id},${owner.rows[0]!.id}::uuid,'OWNER','ACTIVE') returning id`.execute(
-      database.db,
-    );
-    const standard = await sql<{
-      id: string;
-    }>`insert into iam.organization_memberships(organization_id,user_id,membership_type,status) values(${organization.id},${member.rows[0]!.id}::uuid,'STANDARD','ACTIVE') returning id`.execute(
-      database.db,
-    );
-    await expect(
-      updateTeamMember(database.db, {
-        organizationId: organization.id,
-        actorMembershipId: ownerMembership.rows[0]!.id,
-        membershipId: ownerMembership.rows[0]!.id,
-        status: 'DISABLED',
-      }),
-    ).rejects.toThrow('Owner');
-    await expect(
-      updateTeamMember(database.db, {
-        organizationId: other.id,
-        actorMembershipId: ownerMembership.rows[0]!.id,
-        membershipId: standard.rows[0]!.id,
-        status: 'DISABLED',
-      }),
-    ).rejects.toThrow('not found');
-    await updateTeamMember(database.db, {
-      organizationId: organization.id,
-      actorMembershipId: ownerMembership.rows[0]!.id,
-      membershipId: standard.rows[0]!.id,
-      status: 'DISABLED',
-    });
-    expect(await listTeam(database.db, organization.id)).toEqual(
-      expect.arrayContaining([expect.objectContaining({ status: 'DISABLED' })]),
-    );
-  });
 });

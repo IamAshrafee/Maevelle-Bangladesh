@@ -21,6 +21,7 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
       id: 'runtime-auth-key',
       value: Buffer.from(config.authEncryptionKey, 'base64'),
     },
+    adminBaseUrl: config.authTrustedOrigins[0] ?? new URL(config.authBaseUrl).origin,
     courierProviderResolver: (input) =>
       resolveCourierProvider(
         database.db,

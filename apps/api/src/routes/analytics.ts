@@ -32,7 +32,12 @@ async function admin(
 ) {
   const session = await auth.api.getSession({ headers: headers(source) });
   if (!session?.user?.id) return undefined;
-  return findActiveAdminContext(database.db, session.user.id, { requiredCapability: capability });
+  return findActiveAdminContext(database.db, session.user.id, {
+    requiredCapability: capability,
+    ...(typeof source['x-organization-id'] === 'string'
+      ? { organizationId: source['x-organization-id'] }
+      : {}),
+  });
 }
 
 /** Read-only reporting projections; commands only rebuild from source facts. */

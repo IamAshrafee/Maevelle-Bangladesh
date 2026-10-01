@@ -64,21 +64,57 @@ export async function createOrganization(
   db: Kysely<DatabaseSchema>,
   input: CreateOrganizationInput,
 ): Promise<{ id: string }> {
-  const result = await sql<{ id: string }>`
-    insert into platform.organizations (code, display_name, legal_name, timezone, default_locale, default_currency, status)
-    values (${input.code}, ${input.displayName}, ${input.legalName ?? null}, ${input.timezone}, ${input.defaultLocale}, ${input.defaultCurrency}, 'ACTIVE')
-    returning id
-  `.execute(db);
-  const id = result.rows[0]?.id;
-  if (!id) throw new Error('Organization creation did not return an id.');
-  // Commerce must always have an explicit server-owned baseline quote. New
-  // tenants can replace it through the delivery-pricing API before checkout.
-  await sql`
-    insert into orders.delivery_pricing_rules (organization_id,name,country_code,flat_amount,currency_code)
-    values (${id}, 'Standard Bangladesh delivery', 'BD', 0, ${input.defaultCurrency})
-    on conflict (organization_id,name) do nothing
-  `.execute(db);
-  return { id };
+  return db.transaction().execute(async (tx) => {
+    const result = await sql<{ id: string }>`
+      insert into platform.organizations (code, display_name, legal_name, timezone, default_locale, default_currency, status)
+      values (${input.code}, ${input.displayName}, ${input.legalName ?? null}, ${input.timezone}, ${input.defaultLocale}, ${input.defaultCurrency}, 'ACTIVE')
+      returning id
+    `.execute(tx);
+    const id = result.rows[0]?.id;
+    if (!id) throw new Error('Organization creation did not return an id.');
+    // Commerce must always have an explicit server-owned baseline quote. New
+    // tenants can replace it through the delivery-pricing API before checkout.
+    await sql`
+      insert into orders.delivery_pricing_rules (organization_id,name,country_code,flat_amount,currency_code)
+      values (${id}, 'Standard Bangladesh delivery', 'BD', 0, ${input.defaultCurrency})
+      on conflict (organization_id,name) do nothing
+    `.execute(tx);
+    await sql`
+      with preset_seed(name, description, capability_codes) as (
+        values
+          ('Catalog & Merchandising', 'Product, pricing, promotion, media, sizing, and inventory visibility.', array[
+            'catalog.view','catalog.manage','catalog.publish','pricing.view','pricing.manage',
+            'promotions.view','promotions.manage','media.view','media.manage','sizing.view','sizing.manage','inventory.view'
+          ]::text[]),
+          ('Commerce Operations', 'Order, fulfillment, delivery, customer, payment, and inventory operations.', array[
+            'orders.view','orders.create','orders.manage','fulfillment.view','fulfillment.manage','fulfillment.dispatch',
+            'delivery.view','delivery.manage','delivery.dispatch','customers.view','customers.manage',
+            'payments.view','inventory.view','inventory.reserve'
+          ]::text[]),
+          ('Finance Viewer', 'Read-only financial, payment, refund, costing, and analytical visibility.', array[
+            'finance.accounts.view','finance.cash.view','finance.expenses.view','finance.reconciliation.view',
+            'finance.cod_settlements.view','payments.view','refunds.view','costing.view','analytics.view'
+          ]::text[]),
+          ('Customer Support', 'Customer, order, delivery, return, refund, and review support workflows.', array[
+            'customers.view','customers.manage','orders.view','orders.manage','delivery.view',
+            'returns.view','returns.manage','refunds.view','reviews.view','reviews.respond'
+          ]::text[])
+      ), inserted as (
+        insert into iam.permission_presets (organization_id, name, description, is_system_default)
+        select ${id}::uuid, name, description, true from preset_seed
+        on conflict (organization_id, name) do update set description = excluded.description, updated_at = now()
+        returning id, name
+      )
+      insert into iam.permission_preset_capabilities (preset_id, capability_code)
+      select inserted.id, capability.capability_code
+      from inserted
+      join preset_seed on preset_seed.name = inserted.name
+      join iam.capability_definitions capability on capability.capability_code = any(preset_seed.capability_codes)
+      where capability.status = 'ACTIVE'
+      on conflict do nothing
+    `.execute(tx);
+    return { id };
+  });
 }
 
 export async function findOrganizationByCode(
@@ -339,7 +375,14 @@ export async function incrementAuthStorageValue(
 export interface AdminContextRecord {
   readonly organizationId: string;
   readonly membershipId: string;
+  readonly membershipType: 'OWNER' | 'STANDARD';
+  readonly accessVersion: number;
   readonly capabilities: readonly string[];
+  readonly scopes: readonly {
+    capabilityCode: string | null;
+    scopeType: string;
+    scopeId: string;
+  }[];
 }
 
 export interface AdminContextRequest {
@@ -352,19 +395,45 @@ export async function findActiveAdminContext(
   userId: string,
   request: AdminContextRequest = {},
 ): Promise<AdminContextRecord | undefined> {
-  const membership = await sql<{ organization_id: string; membership_id: string }>`
-    select organization_id, id as membership_id from iam.organization_memberships
+  const membership = await sql<{
+    organization_id: string;
+    membership_id: string;
+    membership_type: 'OWNER' | 'STANDARD';
+    access_version: string;
+  }>`
+    select organization_id, id as membership_id, membership_type, access_version::text
+    from iam.organization_memberships
     where user_id = ${userId}
       and status = 'ACTIVE'
       and (${request.organizationId ?? null}::uuid is null or organization_id = ${request.organizationId ?? null}::uuid)
-    order by created_at asc limit 1
+    order by created_at asc limit 2
   `.execute(db);
+  if (!request.organizationId && membership.rows.length > 1) return undefined;
   const active = membership.rows[0];
   if (!active) return undefined;
   const grants = await sql<{ capability_code: string }>`
-    select capability_code from iam.membership_capability_grants
-    where membership_id = ${active.membership_id}
+    select capability.capability_code
+    from iam.capability_definitions capability
+    where capability.status = 'ACTIVE'
+      and (
+        ${active.membership_type === 'OWNER'}
+        or exists (
+          select 1 from iam.membership_capability_grants grant_record
+          where grant_record.membership_id = ${active.membership_id}::uuid
+            and grant_record.capability_code = capability.capability_code
+        )
+      )
     order by capability_code
+  `.execute(db);
+  const scopes = await sql<{
+    capability_code: string | null;
+    scope_type: string;
+    scope_id: string;
+  }>`
+    select capability_code, scope_type, scope_id::text
+    from iam.membership_scopes
+    where membership_id = ${active.membership_id}::uuid
+    order by capability_code, scope_type, scope_id
   `.execute(db);
   if (
     request.requiredCapability &&
@@ -375,7 +444,14 @@ export async function findActiveAdminContext(
   return {
     organizationId: active.organization_id,
     membershipId: active.membership_id,
+    membershipType: active.membership_type,
+    accessVersion: Number(active.access_version),
     capabilities: grants.rows.map((grant) => grant.capability_code),
+    scopes: scopes.rows.map((scope) => ({
+      capabilityCode: scope.capability_code,
+      scopeType: scope.scope_type,
+      scopeId: scope.scope_id,
+    })),
   };
 }
 
@@ -463,16 +539,11 @@ export async function createOwnerMembership(
   userId: string,
   displayName: string,
 ): Promise<void> {
-  await sql`
-    insert into iam.organization_memberships (organization_id, user_id, membership_type, status, display_name)
-    values (${organizationId}, ${userId}, 'OWNER', 'ACTIVE', ${displayName})
-  `.execute(db);
-  await sql`
-    insert into iam.membership_capability_grants (membership_id, capability_code)
-    select membership.id, capability.capability_code
-    from iam.organization_memberships membership
-    join iam.capability_definitions capability on true
-    where membership.organization_id = ${organizationId} and membership.user_id = ${userId}
-    on conflict do nothing
-  `.execute(db);
+  await db.transaction().execute(async (tx) => {
+    await sql`
+      insert into iam.organization_memberships (
+        organization_id, user_id, membership_type, status, display_name, activated_at
+      ) values (${organizationId}, ${userId}, 'OWNER', 'ACTIVE', ${displayName}, now())
+    `.execute(tx);
+  });
 }

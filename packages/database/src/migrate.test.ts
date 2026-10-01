@@ -130,7 +130,11 @@ describe('clean PostgreSQL migration path', () => {
         where table_schema = 'audit' and table_name = 'audit_events'
         union all
         select table_name from information_schema.tables
-        where table_schema = 'iam' and table_name in ('users', 'organization_memberships')
+        where table_schema = 'iam' and table_name in (
+          'users', 'organization_memberships', 'membership_invitations',
+          'membership_invitation_capabilities', 'membership_invitation_scopes',
+          'membership_invitation_delivery_attempts'
+        )
         union all
         select table_name from information_schema.tables
         where table_schema = 'warehouse' and table_name in ('locations', 'transfers', 'transfer_lines')
@@ -224,6 +228,10 @@ describe('clean PostgreSQL migration path', () => {
         'inventory_reservation_allocations',
         'inventory_reservations',
         'locations',
+        'membership_invitation_capabilities',
+        'membership_invitation_delivery_attempts',
+        'membership_invitation_scopes',
+        'membership_invitations',
         'node_aliases',
         'nodes',
         'order_addresses',

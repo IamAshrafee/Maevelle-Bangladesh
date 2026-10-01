@@ -25,6 +25,9 @@ async function context(
   if (!session?.user?.id) return undefined;
   const active = await findActiveAdminContext(database.db, session.user.id, {
     requiredCapability: capability,
+    ...(typeof source['x-organization-id'] === 'string'
+      ? { organizationId: source['x-organization-id'] }
+      : {}),
   });
   return active && { ...active, actorId: session.user.id };
 }
@@ -37,7 +40,13 @@ export function registerAdminOperationsRoutes(
   app.get('/admin/operations/overview', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'admin.operations.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await operations.getOperationsOverview(database.db, active.organizationId) };
+    return {
+      data: await operations.getOperationsOverview(
+        database.db,
+        active.organizationId,
+        active.capabilities,
+      ),
+    };
   });
   app.get(
     '/admin/search',
@@ -50,6 +59,7 @@ export function registerAdminOperationsRoutes(
           database.db,
           active.organizationId,
           (request.query as { q: string }).q,
+          active.capabilities,
         ),
       };
     },
@@ -171,51 +181,6 @@ export function registerAdminOperationsRoutes(
         return reply
           .code(422)
           .send({ error: error instanceof Error ? error.message : 'REPAIR_REJECTED' });
-      }
-    },
-  );
-  app.get('/admin/team', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'admin.team.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await operations.listTeam(database.db, active.organizationId) };
-  });
-  app.get('/admin/team/capabilities', async (request, reply) => {
-    const active = await context(database, auth, request.headers, 'admin.team.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await operations.listCapabilityDefinitions(database.db) };
-  });
-  app.patch(
-    '/admin/team/:membershipId',
-    {
-      schema: {
-        params: Type.Object({ membershipId: Type.String() }),
-        body: Type.Object({
-          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('DISABLED')])),
-          grant: Type.Optional(Type.String()),
-          revoke: Type.Optional(Type.String()),
-        }),
-      },
-    },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'admin.team.manage');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      try {
-        return {
-          data: await operations.updateTeamMember(database.db, {
-            organizationId: active.organizationId,
-            actorMembershipId: active.membershipId,
-            membershipId: (request.params as { membershipId: string }).membershipId,
-            ...(request.body as {
-              status?: 'ACTIVE' | 'DISABLED';
-              grant?: string;
-              revoke?: string;
-            }),
-          }),
-        };
-      } catch (error) {
-        return reply
-          .code(422)
-          .send({ error: error instanceof Error ? error.message : 'TEAM_CHANGE_REJECTED' });
       }
     },
   );

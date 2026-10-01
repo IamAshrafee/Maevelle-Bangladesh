@@ -13,6 +13,7 @@ import {
   useOperationalWorklist,
 } from './operational-worklist';
 import { StatusBadge } from './status-badge';
+import { TeamInviteDialog } from './team-invite-dialog';
 
 type Member = {
   readonly id: string;
@@ -22,6 +23,12 @@ type Member = {
   readonly membership_type: string;
   readonly status: string;
   readonly created_at: string;
+  readonly version: string;
+  readonly scopes: readonly {
+    readonly capabilityCode: string;
+    readonly scopeType: 'LOCATION';
+    readonly scopeId: string;
+  }[];
   readonly capabilities: readonly string[];
 };
 type Capability = {
@@ -29,6 +36,24 @@ type Capability = {
   readonly domain: string;
   readonly description: string;
   readonly sensitivity: string;
+  readonly status?: string;
+};
+type PermissionPreset = {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly capability_codes: readonly string[];
+};
+type Invitation = {
+  readonly id: string;
+  readonly email: string;
+  readonly display_name: string;
+  readonly status: string;
+  readonly expires_at: string;
+  readonly last_sent_at: string | null;
+  readonly delivery_attempt_count: number;
+  readonly version: string;
+  readonly capability_codes: readonly string[];
 };
 
 async function request<T>(path: string, init?: RequestInit) {
@@ -53,6 +78,8 @@ async function request<T>(path: string, init?: RequestInit) {
 export function TeamConsole() {
   const [members, setMembers] = useState<readonly Member[]>([]);
   const [capabilities, setCapabilities] = useState<readonly Capability[]>([]);
+  const [presets, setPresets] = useState<readonly PermissionPreset[]>([]);
+  const [invitations, setInvitations] = useState<readonly Invitation[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [selectedCapability, setSelectedCapability] = useState('');
   const [message, setMessage] = useState('');
@@ -63,13 +90,17 @@ export function TeamConsole() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [teamResponse, capabilityResponse] = await Promise.all([
-        request<{ data: readonly Member[] }>('/admin/team'),
+      const [teamResponse, capabilityResponse, presetResponse, invitationResponse] = await Promise.all([
+        request<{ data: { items: readonly Member[] } }>('/admin/team?pageSize=100'),
         request<{ data: readonly Capability[] }>('/admin/team/capabilities'),
+        request<{ data: readonly PermissionPreset[] }>('/admin/team/presets'),
+        request<{ data: readonly Invitation[] }>('/admin/team/invitations'),
       ]);
-      setMembers(teamResponse.data);
+      setMembers(teamResponse.data.items);
       setCapabilities(capabilityResponse.data);
-      setSelectedId((current) => current || teamResponse.data[0]?.id || '');
+      setPresets(presetResponse.data);
+      setInvitations(invitationResponse.data);
+      setSelectedId((current) => current || teamResponse.data.items[0]?.id || '');
       setMessage('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load team access.');
@@ -100,10 +131,10 @@ export function TeamConsole() {
     [capabilities, selected],
   );
 
-  async function change(memberId: string, body: object, success: string) {
+  async function change(path: string, method: 'POST' | 'PUT', body: object, success: string) {
     setBusy(true);
     try {
-      await request(`/admin/team/${memberId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      await request(path, { method, body: JSON.stringify(body) });
       setMessage(success);
       setTone('success');
       await reload();
@@ -123,9 +154,20 @@ export function TeamConsole() {
           title="Team and access"
           description="Review organization membership, MFA posture, and explicit server-enforced capabilities."
           actions={
-            <button className="button secondary" type="button" onClick={() => void reload()}>
-              <RefreshCw aria-hidden="true" /> Refresh
-            </button>
+            <>
+              <TeamInviteDialog
+                capabilities={capabilities}
+                presets={presets}
+                onInvited={async (success) => {
+                  await reload();
+                  setMessage(success);
+                  setTone('success');
+                }}
+              />
+              <button className="button secondary" type="button" onClick={() => void reload()}>
+                <RefreshCw aria-hidden="true" /> Refresh
+              </button>
+            </>
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
@@ -151,6 +193,75 @@ export function TeamConsole() {
             <StatsDescription>protected memberships</StatsDescription>
           </StatsCard>
         </Stats>
+        {invitations.some((invitation) => invitation.status === 'PENDING') ? (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Pending access</p>
+                <h2>Invitations</h2>
+              </div>
+            </div>
+            <div className="data-table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Person</th>
+                    <th>Expires</th>
+                    <th>Delivery</th>
+                    <th>Access</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invitations
+                    .filter((invitation) => invitation.status === 'PENDING')
+                    .map((invitation) => (
+                      <tr key={invitation.id}>
+                        <td><strong>{invitation.display_name}</strong><small>{invitation.email}</small></td>
+                        <td>{new Date(invitation.expires_at).toLocaleString()}</td>
+                        <td>{invitation.last_sent_at ? 'Sent' : `Queued · ${invitation.delivery_attempt_count} attempts`}</td>
+                        <td>{invitation.capability_codes.length} capabilities</td>
+                        <td>
+                          <div className="detail-actions">
+                            <button
+                              className="button secondary"
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void change(
+                                  `/admin/team/invitations/${invitation.id}/resend`,
+                                  'POST',
+                                  { expectedVersion: Number(invitation.version) },
+                                  `Invitation resent to ${invitation.email}.`,
+                                )
+                              }
+                            >Resend</button>
+                            <button
+                              className="button secondary"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                if (window.confirm(`Revoke the invitation for ${invitation.email}?`))
+                                  void change(
+                                    `/admin/team/invitations/${invitation.id}/revoke`,
+                                    'POST',
+                                    {
+                                      expectedVersion: Number(invitation.version),
+                                      reason: 'Revoked from Team and access',
+                                    },
+                                    `Invitation revoked for ${invitation.email}.`,
+                                  );
+                              }}
+                            >Revoke</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
         <OperationalWorklistToolbar
           query={worklist.query}
           onQueryChange={worklist.setQuery}
@@ -279,8 +390,18 @@ export function TeamConsole() {
                                   onClick={() => {
                                     if (window.confirm(`Revoke ${code} from ${selected.name}?`))
                                       void change(
-                                        selected.id,
-                                        { revoke: code },
+                                        `/admin/team/${selected.id}/permissions`,
+                                        'PUT',
+                                        {
+                                          expectedVersion: Number(selected.version),
+                                          capabilityCodes: selected.capabilities.filter(
+                                            (capability) => capability !== code,
+                                          ),
+                                          scopes: selected.scopes.filter(
+                                            (scope) => scope.capabilityCode !== code,
+                                          ),
+                                          reason: `Removed ${code} in Team and access`,
+                                        },
                                         `${code} revoked from ${selected.name}.`,
                                       );
                                   }}
@@ -319,8 +440,14 @@ export function TeamConsole() {
                         type="button"
                         onClick={() =>
                           void change(
-                            selected.id,
-                            { grant: selectedCapability },
+                            `/admin/team/${selected.id}/permissions`,
+                            'PUT',
+                            {
+                              expectedVersion: Number(selected.version),
+                              capabilityCodes: [...selected.capabilities, selectedCapability],
+                              scopes: selected.scopes,
+                              reason: `Added ${selectedCapability} in Team and access`,
+                            },
                             `${selectedCapability} granted to ${selected.name}.`,
                           )
                         }
@@ -342,8 +469,17 @@ export function TeamConsole() {
                             )
                           )
                             void change(
-                              selected.id,
-                              { status: nextStatus },
+                              `/admin/team/${selected.id}/${
+                                nextStatus === 'ACTIVE' ? 'restore' : 'suspend'
+                              }`,
+                              'POST',
+                              {
+                                expectedVersion: Number(selected.version),
+                                reason:
+                                  nextStatus === 'ACTIVE'
+                                    ? 'Restored in Team and access'
+                                    : 'Suspended in Team and access',
+                              },
                               `${selected.name} is now ${nextStatus.toLowerCase()}.`,
                             );
                         }}

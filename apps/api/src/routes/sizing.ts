@@ -334,6 +334,9 @@ async function requireSizing(
     session.user.id,
     {
       requiredCapability: capability,
+      ...(typeof headers['x-organization-id'] === 'string'
+        ? { organizationId: headers['x-organization-id'] }
+        : {}),
     },
   );
 

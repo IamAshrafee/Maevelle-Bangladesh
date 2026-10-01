@@ -125,6 +125,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('fulfillment.manage', 'fulfillment', 'Create, prepare, pick, pack, and cancel eligible fulfillments.', 'HIGH'),
       ('fulfillment.dispatch', 'fulfillment', 'Dispatch fulfillment and consume reserved physical inventory.', 'HIGH')
     on conflict (capability_code) do nothing;
+    update iam.capability_definitions
+    set supported_scope_types = array['LOCATION']::text[]
+    where capability_code in ('fulfillment.view', 'fulfillment.manage', 'fulfillment.dispatch');
     insert into iam.membership_capability_grants (membership_id, capability_code)
       select membership.id, capability.capability_code
       from iam.organization_memberships membership

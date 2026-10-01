@@ -1,42 +1,48 @@
 # Current Focus
 
-## Active Areas
+## Active Area
 
-Media Platform: Media Library (`/media`), Object Storage Ports & Adapters, Image Processing Worker, Product Media Placement Sync, Asset Picker Dialog, Customer Review Media
+Team & Access: identity/membership boundaries, organization context, capability
+authorization, permission presets, location scopes, invitations, membership
+lifecycle, ownership, sessions, audit, and security notifications.
 
 ## Current Status / Substage
 
-`MEDIA_COMPLETE / READY_FOR_OWNER_REVIEW`
+`IMPLEMENTATION_COMPLETE / READY_FOR_OWNER_REVIEW`
 
 ## Evidence Already Known
 
-Media has been transitioned from MVP to a complete, production-grade digital asset platform:
-- Decoupled asset identity from storage keys and URLs (`Stored Object -> Media Asset -> Asset Usage -> Business Entity`).
-- Magic-byte signature validation (`validateMediaSignature`) for JPEG, PNG, WebP, and PDF preventing MIME-type spoofing before upload writes.
-- Atomic Product Media placement batch synchronization (`syncProductMediaPlacements`) supporting reordering, primary cover swaps, option-value (Color) gallery assignments, and variant-specific SKU overrides, with single-primary enforcement per scope.
-- Single-transaction asset replacement (`replaceProductMediaAsset`) with full usage history audit trail.
-- Bulk operations: `bulkOrganizeMediaAssets` (multi-asset folder and tag updates) and `bulkTrashMediaAssets` (safe usage-checked batch trashing of unattached assets).
-- Modernized Admin Media Library (`apps/admin/app/media/page.tsx`) with shadcn/ui and Tailwind CSS, featuring Grid and List view toggle, multi-select checkboxes, sticky bulk action bar, taxonomy management, comprehensive search/filter toolbar (including unused filter), storage health diagnostics modal, and clipboard paste (`Ctrl+V`) direct upload.
-- Reusable `AssetPickerDialog` (`apps/admin/components/media/asset-picker-dialog.tsx`) for choosing library photography or uploading new photography inline from catalog and content forms.
-- Upgraded Product Creator & Editor (`apps/admin/components/products/creator/*`) with Media Library picker integration, reordering controls (Move Left / Right), scope/color selectors, and atomic batch sync on draft and active submissions.
-- Private document delivery supporting renditions and `download=true` for authenticated `Content-Disposition` attachments.
-- Verified 100% monorepo TypeScript compilation and focused test suites.
+- Better Auth remains the identity/session authority; active organization membership
+  and capabilities are resolved dynamically for authorization.
+- Owner is a structural membership type with one-Owner database protection and an
+  atomic, recent-MFA ownership transfer command.
+- Invitations are hashed at rest, encrypted only for asynchronous delivery,
+  expiring, revocable, resendable, idempotent, and consumable exactly once.
+- Permission presets are organization-scoped grant templates. Runtime access uses
+  direct additive capability grants with delegation ceilings and optional LOCATION scopes.
+- Explicit lifecycle commands replace the MVP generic mutation; suspend/remove
+  deny access immediately and trigger Better Auth session cleanup.
+- Organization context is propagated across Admin routes; ambiguous multi-org
+  identities must select an organization that they actively belong to.
+- Warehouse and inventory resource paths enforce capability-specific location scope;
+  operations overview and search no longer disclose unauthorized domain summaries.
+- All sensitive Team changes emit audit/outbox evidence and relevant security notices.
+- Focused IAM, notification, and Admin operation tests and TypeScript checks pass.
 
 ## Immediate Objective
 
-Conduct owner visual and operational review of the modernized Media Library, AssetPickerDialog, and Product gallery management.
-
-## Last Completed Action
-
-Completed Media module from MVP to production product: added atomic placement batch sync and swap, magic-byte signature validation, modernized shadcn/ui and Tailwind Media Library with Grid/List view and bulk actions, reusable AssetPickerDialog, Product Creator reordering and variant/color placement assignment, private document download delivery, and verified tests and typecheck.
+Conduct owner operational review of the minimal Team workflows and verify external
+invitation email delivery in the configured environment.
 
 ## Important Constraints
 
-- Organization / tenant isolation strictly enforced on every media lookup, session, placement, and bulk operation.
-- No direct filesystem storage dependency in production; storage port supports local dev and S3/R2 cloud storage.
-- Processed public bytes cannot be reclassified as private.
-- Trashing is usage-aware: assets in active catalog or review placements are never deleted.
+- Authentication never grants authorization by itself.
+- Unknown capabilities, inactive memberships, ambiguous organization context, and
+  resources outside the verified organization/location scope deny by default.
+- Invitation/session/MFA secrets never appear in Team DTOs, audit, outbox, or logs.
+- Membership removal preserves business history and actor attribution.
+- Presets do not remain linked runtime roles; applying one snapshots its grants.
 
 ## Blockers / Owner Review
 
-No code blockers. Ready for owner visual and operational review.
+No code blocker. Owner operational review and external-provider verification remain pending.

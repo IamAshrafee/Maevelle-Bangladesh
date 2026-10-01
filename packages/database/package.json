@@ -40,6 +40,10 @@
       "types": "./src/platform.ts",
       "default": "./dist/src/platform.js"
     },
+    "./iam": {
+      "types": "./src/iam.ts",
+      "default": "./dist/src/iam.js"
+    },
     "./warehouse": {
       "types": "./src/warehouse.ts",
       "default": "./dist/src/warehouse.js"
