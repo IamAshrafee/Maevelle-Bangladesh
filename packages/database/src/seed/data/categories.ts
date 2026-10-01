@@ -129,12 +129,28 @@ export const categorySeedData: readonly CategorySeedItem[] = [
     handle: 'home-lifestyle',
     children: [
       {
+        name: 'Drinkware',
+        handle: 'drinkware',
+        children: [{ name: 'Cups & Mugs', handle: 'cups-mugs' }],
+      },
+      {
         name: 'Closet Organization',
         handle: 'closet-organization',
         children: [
           { name: 'Clothes Hangers', handle: 'clothes-hangers' },
           { name: 'Pants Hangers', handle: 'pants-hangers' },
         ],
+      },
+    ],
+  },
+  {
+    name: 'Shoes',
+    handle: 'shoes',
+    children: [
+      {
+        name: "Women's Shoes",
+        handle: 'womens-shoes',
+        children: [{ name: 'Sandals & Heels', handle: 'sandals-heels' }],
       },
     ],
   },

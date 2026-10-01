@@ -147,6 +147,10 @@
     "./seed": {
       "types": "./src/seed/index.ts",
       "default": "./dist/src/seed/index.js"
+    },
+    "./skybuy-import": {
+      "types": "./src/imports/skybuy/index.ts",
+      "default": "./dist/src/imports/skybuy/index.js"
     }
   },
   "scripts": {
@@ -154,11 +158,14 @@
     "migrate": "pnpm run build && node dist/src/migrate-cli.js",
     "migrate:status": "pnpm run build && node dist/src/migrate-cli.js --status",
     "seed": "pnpm run build && node dist/src/seed/cli.js",
-    "seed:staging": "pnpm run build && node dist/src/staging-seed.js"
+    "seed:staging": "pnpm run build && node dist/src/staging-seed.js",
+    "import:skybuy": "pnpm run build && node dist/src/imports/skybuy/cli.js",
+    "import:skybuy:apply": "pnpm run build && node dist/src/imports/skybuy/apply-cli.js"
   },
   "dependencies": {
     "@maevelle/core": "workspace:*",
     "@maevelle/security": "workspace:*",
+    "exceljs": "4.4.0",
     "kysely": "0.29.5",
     "libphonenumber-js": "1.13.12",
     "pg": "8.23.0"

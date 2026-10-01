@@ -6,7 +6,11 @@ export const productTypeSeedData: readonly ProductTypeSeedItem[] = [
   { name: 'Claw Clip', code: 'claw-clip', primaryCategoryHandle: 'claw-clips' },
   { name: 'Hair Pin', code: 'hair-pin', primaryCategoryHandle: 'hair-pins' },
   { name: 'Headband', code: 'headband', primaryCategoryHandle: 'headbands' },
-  { name: 'Triangle Headscarf', code: 'triangle-headscarf', primaryCategoryHandle: 'triangle-headscarves' },
+  {
+    name: 'Triangle Headscarf',
+    code: 'triangle-headscarf',
+    primaryCategoryHandle: 'triangle-headscarves',
+  },
   { name: 'Hair Wrap', code: 'hair-wrap', primaryCategoryHandle: 'hair-wraps' },
   { name: 'Earrings', code: 'earrings', primaryCategoryHandle: 'earrings' },
   { name: 'Necklace', code: 'necklace', primaryCategoryHandle: 'necklaces' },
@@ -25,4 +29,10 @@ export const productTypeSeedData: readonly ProductTypeSeedItem[] = [
   { name: 'Nail Glue', code: 'nail-glue', primaryCategoryHandle: 'nail-glue' },
   { name: 'Clothes Hanger', code: 'clothes-hanger', primaryCategoryHandle: 'clothes-hangers' },
   { name: 'Pants Hanger', code: 'pants-hanger', primaryCategoryHandle: 'pants-hangers' },
+  { name: 'Cup or Mug', code: 'cup-mug', primaryCategoryHandle: 'cups-mugs' },
+  {
+    name: 'High-Heel Sandal',
+    code: 'high-heel-sandal',
+    primaryCategoryHandle: 'sandals-heels',
+  },
 ];

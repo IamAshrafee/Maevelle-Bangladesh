@@ -108,6 +108,31 @@ function reviewMediaError(
 }
 
 const UUID = Type.String({ format: 'uuid' });
+const EXTERNAL_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+export async function fetchExternalImage(url: string): Promise<{
+  readonly content: Buffer;
+  readonly mimeType: string;
+} | null> {
+  const location = new URL(url);
+  if (location.protocol !== 'https:' || location.username || location.password) return null;
+
+  const response = await fetch(location, {
+    headers: { 'user-agent': 'Maevelle media delivery/1.0' },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => undefined);
+  if (!response?.ok) return null;
+
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > EXTERNAL_IMAGE_MAX_BYTES) return null;
+  const mimeType = response.headers.get('content-type')?.split(';', 1)[0]?.toLowerCase();
+  if (!mimeType || !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) return null;
+
+  const content = Buffer.from(await response.arrayBuffer());
+  if (content.length === 0 || content.length > EXTERNAL_IMAGE_MAX_BYTES) return null;
+  return { content, mimeType };
+}
 
 export function registerMediaRoutes(
   app: FastifyInstance,
@@ -1136,7 +1161,18 @@ async function deliverObject(
   isPublic: boolean,
   options?: { download?: boolean },
 ) {
-  if (asset.provider === 'url') return reply.redirect(asset.objectKey, 302);
+  if (asset.provider === 'url') {
+    const external = await fetchExternalImage(asset.objectKey);
+    if (!external)
+      return reply
+        .code(502)
+        .send({ error: { code: 'MEDIA_SOURCE_UNAVAILABLE', message: 'Media file is unavailable.' } });
+    return reply
+      .header('content-type', external.mimeType)
+      .header('content-length', String(external.content.length))
+      .header('cache-control', isPublic ? 'public, max-age=300' : 'private, no-store')
+      .send(external.content);
+  }
   const locator: StoredObjectLocator = {
     provider: asset.provider,
     bucket: asset.bucket,

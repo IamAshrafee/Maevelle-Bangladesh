@@ -55,6 +55,20 @@ describe('API health endpoints', () => {
 });
 
 describe('API hardening foundation', () => {
+  it('routes storefront-sized product handles without rejecting the path parameter', async () => {
+    const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
+    const app = buildApi({ database, logger: false });
+    const handle =
+      'flower-hairpin-side-clip-super-fairy-side-hairpin-for-women-2026-new-high-end-artificial-flower-hair-accessory-seaside-hair-ornament-62329587';
+    app.get('/test/products/:handle', async (request) => request.params);
+
+    const response = await app.inject({ method: 'GET', url: `/test/products/${handle}` });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ handle });
+    await app.close();
+  });
+
   it('validates Product overview updates and protects valid requests', async () => {
     const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
     const app = buildApi({

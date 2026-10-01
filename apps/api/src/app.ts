@@ -26,6 +26,7 @@ export function buildApi(options: BuildApiOptions) {
   const app = Fastify({
     ...loggerOptions,
     bodyLimit: 1_048_576,
+    routerOptions: { maxParamLength: 160 },
     genReqId: (request) => resolveCorrelationId(request.headers['x-correlation-id']),
   }).withTypeProvider<TypeBoxTypeProvider>();
 

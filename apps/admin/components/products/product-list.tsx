@@ -31,6 +31,7 @@ import { SearchInput } from '@/components/ui/search-input';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { cn } from '@/lib/utils';
 import { catalogData, formatCatalogMoney } from '@/lib/catalog/api';
+import { getAdminMediaUrl } from '@/lib/media/api';
 
 const statuses = ['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'] as const;
 const readinessStates = ['ALL', 'READY', 'BLOCKED', 'ATTENTION'] as const;
@@ -486,7 +487,7 @@ export function ProductList() {
                             className="size-full object-cover"
                             height={44}
                             loading="lazy"
-                            src={`/api/admin/media/${product.primaryMediaId}`}
+                            src={getAdminMediaUrl(product.primaryMediaId, { rendition: 'thumbnail' })}
                             width={44}
                           />
                         ) : (
