@@ -32,6 +32,14 @@ const config: RuntimeConfig = {
   mediaMaxUploadBytes: 10 * 1024 * 1024,
   mediaUploadExpirySeconds: 900,
   storefrontOrganizationCode: 'maevelle',
+  storefrontBaseUrl: 'http://localhost:3001',
+  emailEnabled: false,
+  emailProvider: 'local',
+  emailEnvironment: 'test',
+  emailFromName: 'Maevelle',
+  emailFromAddress: 'notifications@maevelle.example',
+  emailReplyTo: 'support@maevelle.example',
+  emailAllowedTestRecipients: [],
 };
 
 function cookieHeader(setCookie: string | string[] | undefined): string {

@@ -8,18 +8,23 @@ import {
   acceptMembershipInvitation,
   changeMemberLifecycle,
   createMembershipInvitation,
+  createPermissionPreset,
+  deletePermissionPreset,
+  findMembershipUserId,
+  findTeamMemberDetail,
   IamError,
   listCapabilityCatalog,
+  listIamAuditEvents,
   listMembershipInvitations,
   listPermissionPresets,
-  listIamAuditEvents,
+  listTeamLocations,
   listTeamMembers,
-  findMembershipUserId,
-  requestMemberSessionRevocation,
   replaceMemberPermissions,
+  requestMemberSessionRevocation,
   resendMembershipInvitation,
   revokeMembershipInvitation,
   transferOwnership,
+  updatePermissionPreset,
 } from '@maevelle/database/iam';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
@@ -160,6 +165,119 @@ export function registerTeamAccessRoutes(
     return {
       data: await listPermissionPresets(database.db, context.active.organizationId),
     };
+  });
+
+  app.post(
+    '/admin/team/presets',
+    {
+      schema: {
+        body: Type.Object({
+          name: Type.String({ minLength: 1, maxLength: 120 }),
+          description: Type.Optional(Type.String({ maxLength: 500 })),
+          capabilityCodes: Type.Array(Type.String({ minLength: 3, maxLength: 160 }), { maxItems: 250 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireContext(
+        database,
+        auth,
+        request.headers,
+        'admin.team.permissions.manage',
+      );
+      if ('error' in context) return sendAuthorizationError(reply, context.error);
+      try {
+        const body = request.body as { name: string; description?: string; capabilityCodes: string[] };
+        return reply.code(201).send({
+          data: await createPermissionPreset(database.db, {
+            actor: context.actor,
+            ...body,
+          }),
+        });
+      } catch (error) {
+        return sendIamError(reply, error);
+      }
+    },
+  );
+
+  app.put(
+    '/admin/team/presets/:presetId',
+    {
+      schema: {
+        params: Type.Object({ presetId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          expectedVersion: Type.Integer({ minimum: 1 }),
+          name: Type.String({ minLength: 1, maxLength: 120 }),
+          description: Type.Optional(Type.String({ maxLength: 500 })),
+          capabilityCodes: Type.Array(Type.String({ minLength: 3, maxLength: 160 }), { maxItems: 250 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireContext(
+        database,
+        auth,
+        request.headers,
+        'admin.team.permissions.manage',
+      );
+      if ('error' in context) return sendAuthorizationError(reply, context.error);
+      try {
+        const body = request.body as {
+          expectedVersion: number;
+          name: string;
+          description?: string;
+          capabilityCodes: string[];
+        };
+        return {
+          data: await updatePermissionPreset(database.db, {
+            actor: context.actor,
+            presetId: (request.params as { presetId: string }).presetId,
+            ...body,
+          }),
+        };
+      } catch (error) {
+        return sendIamError(reply, error);
+      }
+    },
+  );
+
+  app.delete(
+    '/admin/team/presets/:presetId',
+    {
+      schema: {
+        params: Type.Object({ presetId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          expectedVersion: Type.Integer({ minimum: 1 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireContext(
+        database,
+        auth,
+        request.headers,
+        'admin.team.permissions.manage',
+      );
+      if ('error' in context) return sendAuthorizationError(reply, context.error);
+      try {
+        const body = request.body as { expectedVersion: number };
+        return {
+          data: await deletePermissionPreset(database.db, {
+            actor: context.actor,
+            presetId: (request.params as { presetId: string }).presetId,
+            expectedVersion: body.expectedVersion,
+          }),
+        };
+      } catch (error) {
+        return sendIamError(reply, error);
+      }
+    },
+  );
+
+  app.get('/admin/team/locations', async (request, reply) => {
+    const context = await requireContext(database, auth, request.headers, 'admin.team.view');
+    if ('error' in context) return sendAuthorizationError(reply, context.error);
+    return { data: await listTeamLocations(database.db, context.active.organizationId) };
   });
 
   app.get(
@@ -431,6 +549,31 @@ export function registerTeamAccessRoutes(
       } catch (error) {
         return sendIamError(reply, error);
       }
+    },
+  );
+
+  app.get(
+    '/admin/team/:membershipId',
+    {
+      schema: {
+        params: Type.Object({ membershipId: Type.String({ format: 'uuid' }) }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireContext(database, auth, request.headers, 'admin.team.view');
+      if ('error' in context) return sendAuthorizationError(reply, context.error);
+      const membershipId = (request.params as { membershipId: string }).membershipId;
+      const member = await findTeamMemberDetail(
+        database.db,
+        context.active.organizationId,
+        membershipId,
+      );
+      if (!member) {
+        return reply
+          .code(404)
+          .send({ error: { code: 'NOT_FOUND', message: 'The membership was not found.' } });
+      }
+      return { data: member };
     },
   );
 

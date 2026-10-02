@@ -2982,7 +2982,41 @@ export interface PermissionPresetDto {
   readonly name: string;
   readonly description: string | null;
   readonly is_system_default?: boolean;
+  readonly version?: string | number;
   readonly capability_codes: readonly string[];
+  readonly member_count?: number;
+}
+
+export interface TeamLocationOptionDto {
+  readonly id: string;
+  readonly name: string;
+  readonly code: string;
+  readonly type: string;
+}
+
+export interface TeamMemberDetailDto extends TeamMemberListItemDto {
+  readonly invited_at?: string | null;
+  readonly activated_at?: string | null;
+  readonly disabled_at?: string | null;
+  readonly removed_at?: string | null;
+  readonly lifecycle_reason?: string | null;
+}
+
+export interface CreatePermissionPresetRequestDto {
+  readonly name: string;
+  readonly description?: string;
+  readonly capabilityCodes: readonly string[];
+}
+
+export interface UpdatePermissionPresetRequestDto {
+  readonly expectedVersion: number;
+  readonly name: string;
+  readonly description?: string;
+  readonly capabilityCodes: readonly string[];
+}
+
+export interface DeletePermissionPresetRequestDto {
+  readonly expectedVersion: number;
 }
 
 export interface MembershipInvitationDto {
@@ -3000,17 +3034,32 @@ export interface MembershipInvitationDto {
 
 export interface TeamAuditItemDto {
   readonly id: string;
+  readonly event_id?: string;
   readonly action: string;
-  readonly actorId: string;
-  readonly membershipId: string | null;
-  readonly actorName: string | null;
-  readonly actorEmail: string | null;
-  readonly targetType: string | null;
-  readonly targetId: string | null;
-  readonly occurredAt: string;
+  readonly actor_id?: string | null;
+  readonly actorId?: string;
+  readonly membership_id?: string | null;
+  readonly membershipId?: string | null;
+  readonly actor_name?: string | null;
+  readonly actorName?: string | null;
+  readonly actor_email?: string | null;
+  readonly actorEmail?: string | null;
+  readonly target_type?: string | null;
+  readonly targetType?: string | null;
+  readonly target_id?: string | null;
+  readonly targetId?: string | null;
+  readonly target_name?: string | null;
+  readonly targetName?: string | null;
+  readonly target_email?: string | null;
+  readonly targetEmail?: string | null;
+  readonly occurredAt?: string;
+  readonly created_at?: string;
   readonly reason: string | null;
-  readonly beforeDiff: unknown;
-  readonly afterDiff: unknown;
+  readonly before_diff?: unknown;
+  readonly beforeDiff?: unknown;
+  readonly after_diff?: unknown;
+  readonly afterDiff?: unknown;
+  readonly metadata?: unknown;
 }
 
 export interface AuthSessionDto {

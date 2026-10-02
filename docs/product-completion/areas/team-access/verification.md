@@ -32,4 +32,4 @@
 ## Unverified external evidence
 
 - A real external email-provider delivery was not exercised locally.
-- Owner visual/responsive review remains pending for the intentionally minimal UI.
+- Owner visual and operational review of the full production Admin experience remains pending.

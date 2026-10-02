@@ -108,15 +108,245 @@ export async function listPermissionPresets(db: IamDatabase, organizationId: str
       is_system_default: boolean;
       version: string;
       capability_codes: string[];
+      member_count: number;
     }>`
       select preset.id::text, preset.name, preset.description, preset.is_system_default,
         preset.version::text,
         coalesce(array_agg(capability.capability_code order by capability.capability_code)
-          filter (where capability.capability_code is not null), '{}') capability_codes
+          filter (where capability.capability_code is not null), '{}') capability_codes,
+        (
+          select count(distinct m.id)::int
+          from iam.organization_memberships m
+          where m.organization_id = preset.organization_id
+            and m.status = 'ACTIVE'
+            and not exists (
+              select 1 from iam.permission_preset_capabilities pc
+              where pc.preset_id = preset.id
+                and not exists (
+                  select 1 from iam.membership_capability_grants g
+                  where g.membership_id = m.id and g.capability_code = pc.capability_code
+                )
+            )
+            and exists (select 1 from iam.permission_preset_capabilities pc2 where pc2.preset_id = preset.id)
+        ) as member_count
       from iam.permission_presets preset
       left join iam.permission_preset_capabilities capability on capability.preset_id = preset.id
       where preset.organization_id = ${organizationId}::uuid
       group by preset.id order by preset.is_system_default desc, preset.name
+    `.execute(db)
+  ).rows;
+}
+
+export async function createPermissionPreset(
+  db: IamDatabase,
+  input: {
+    readonly actor: IamActor;
+    readonly name: string;
+    readonly description?: string;
+    readonly capabilityCodes: readonly string[];
+  },
+) {
+  const name = input.name.trim();
+  if (!name || name.length > 120) {
+    throw new IamError('VALIDATION_FAILED', 'A preset name between 1 and 120 characters is required.');
+  }
+  return db.transaction().execute(async (tx) => {
+    const access = await loadActorAccess(tx, input.actor, 'admin.team.permissions.manage');
+    await validateCapabilityAssignment(tx, access, input.capabilityCodes, [], input.actor.organizationId);
+
+    const inserted = await sql<{ id: string; version: string }>`
+      insert into iam.permission_presets (
+        organization_id, name, description, is_system_default
+      ) values (
+        ${input.actor.organizationId}::uuid, ${name}, ${input.description?.trim() || null}, false
+      ) returning id::text, version::text
+    `.execute(tx);
+    const preset = inserted.rows[0]!;
+
+    if (input.capabilityCodes.length) {
+      await sql`
+        insert into iam.permission_preset_capabilities (preset_id, capability_code)
+        select ${preset.id}::uuid, capability_code
+        from iam.capability_definitions
+        where capability_code in (${sql.join(input.capabilityCodes.map((code) => sql`${code}`))})
+      `.execute(tx);
+    }
+
+    await appendIamAudit(tx, {
+      actor: input.actor,
+      action: 'iam.preset.created',
+      targetType: 'iam.permission_preset',
+      targetId: preset.id,
+      after: { name, description: input.description, capabilityCodes: input.capabilityCodes },
+    });
+
+    return { id: preset.id, name, version: Number(preset.version) };
+  });
+}
+
+export async function updatePermissionPreset(
+  db: IamDatabase,
+  input: {
+    readonly actor: IamActor;
+    readonly presetId: string;
+    readonly expectedVersion: number;
+    readonly name: string;
+    readonly description?: string;
+    readonly capabilityCodes: readonly string[];
+  },
+) {
+  const name = input.name.trim();
+  if (!name || name.length > 120) {
+    throw new IamError('VALIDATION_FAILED', 'A preset name between 1 and 120 characters is required.');
+  }
+  return db.transaction().execute(async (tx) => {
+    const access = await loadActorAccess(tx, input.actor, 'admin.team.permissions.manage');
+    const existing = await sql<{ is_system_default: boolean; version: string; name: string }>`
+      select is_system_default, version::text, name
+      from iam.permission_presets
+      where id = ${input.presetId}::uuid and organization_id = ${input.actor.organizationId}::uuid
+      for update
+    `.execute(tx);
+    const preset = existing.rows[0];
+    if (!preset) throw new IamError('NOT_FOUND', 'The permission preset was not found.');
+    if (preset.is_system_default) {
+      throw new IamError('FORBIDDEN', 'System default presets are protected and cannot be edited.');
+    }
+    if (Number(preset.version) !== input.expectedVersion) {
+      throw new IamError('VERSION_CONFLICT', 'The preset changed; reload before saving.');
+    }
+
+    await validateCapabilityAssignment(tx, access, input.capabilityCodes, [], input.actor.organizationId);
+
+    const updated = await sql<{ version: string }>`
+      update iam.permission_presets
+      set name = ${name}, description = ${input.description?.trim() || null},
+        version = version + 1, updated_at = now()
+      where id = ${input.presetId}::uuid
+      returning version::text
+    `.execute(tx);
+
+    await sql`delete from iam.permission_preset_capabilities where preset_id = ${input.presetId}::uuid`.execute(tx);
+    if (input.capabilityCodes.length) {
+      await sql`
+        insert into iam.permission_preset_capabilities (preset_id, capability_code)
+        select ${input.presetId}::uuid, capability_code
+        from iam.capability_definitions
+        where capability_code in (${sql.join(input.capabilityCodes.map((code) => sql`${code}`))})
+      `.execute(tx);
+    }
+
+    await appendIamAudit(tx, {
+      actor: input.actor,
+      action: 'iam.preset.updated',
+      targetType: 'iam.permission_preset',
+      targetId: input.presetId,
+      after: { name, description: input.description, capabilityCodes: input.capabilityCodes },
+    });
+
+    return { id: input.presetId, name, version: Number(updated.rows[0]!.version) };
+  });
+}
+
+export async function deletePermissionPreset(
+  db: IamDatabase,
+  input: {
+    readonly actor: IamActor;
+    readonly presetId: string;
+    readonly expectedVersion: number;
+  },
+) {
+  return db.transaction().execute(async (tx) => {
+    await loadActorAccess(tx, input.actor, 'admin.team.permissions.manage');
+    const existing = await sql<{ is_system_default: boolean; version: string; name: string }>`
+      select is_system_default, version::text, name
+      from iam.permission_presets
+      where id = ${input.presetId}::uuid and organization_id = ${input.actor.organizationId}::uuid
+      for update
+    `.execute(tx);
+    const preset = existing.rows[0];
+    if (!preset) throw new IamError('NOT_FOUND', 'The permission preset was not found.');
+    if (preset.is_system_default) {
+      throw new IamError('FORBIDDEN', 'System default presets are protected and cannot be deleted.');
+    }
+    if (Number(preset.version) !== input.expectedVersion) {
+      throw new IamError('VERSION_CONFLICT', 'The preset changed; reload before deleting.');
+    }
+
+    await sql`delete from iam.permission_preset_capabilities where preset_id = ${input.presetId}::uuid`.execute(tx);
+    await sql`delete from iam.permission_presets where id = ${input.presetId}::uuid`.execute(tx);
+
+    await appendIamAudit(tx, {
+      actor: input.actor,
+      action: 'iam.preset.deleted',
+      targetType: 'iam.permission_preset',
+      targetId: input.presetId,
+      before: { name: preset.name },
+    });
+
+    return { id: input.presetId, deleted: true as const };
+  });
+}
+
+export async function findTeamMemberDetail(
+  db: IamDatabase,
+  organizationId: string,
+  membershipId: string,
+) {
+  const result = await sql<{
+    id: string;
+    user_id: string;
+    name: string;
+    email: string;
+    two_factor_enabled: boolean;
+    membership_type: string;
+    status: string;
+    version: string;
+    access_version: string;
+    created_at: string;
+    updated_at: string;
+    invited_at: string | null;
+    activated_at: string | null;
+    disabled_at: string | null;
+    removed_at: string | null;
+    lifecycle_reason: string | null;
+    capabilities: string[];
+    scopes: AccessScope[];
+  }>`
+    select membership.id::text, membership.user_id::text, user_record.name, user_record.email,
+      user_record.two_factor_enabled, membership.membership_type, membership.status,
+      membership.version::text, membership.access_version::text,
+      membership.created_at::text, membership.updated_at::text,
+      membership.invited_at::text, membership.activated_at::text,
+      membership.disabled_at::text, membership.removed_at::text,
+      membership.lifecycle_reason,
+      coalesce((select array_agg(grant_record.capability_code order by grant_record.capability_code)
+        from iam.membership_capability_grants grant_record where grant_record.membership_id = membership.id), '{}') capabilities,
+      coalesce((select jsonb_agg(jsonb_build_object(
+        'capabilityCode', scope.capability_code, 'scopeType', scope.scope_type, 'scopeId', scope.scope_id::text
+      ) order by scope.capability_code, scope.scope_type, scope.scope_id)
+        from iam.membership_scopes scope where scope.membership_id = membership.id), '[]'::jsonb) scopes
+    from iam.organization_memberships membership
+    join iam.users user_record on user_record.id = membership.user_id
+    where membership.organization_id = ${organizationId}::uuid
+      and membership.id = ${membershipId}::uuid
+    limit 1
+  `.execute(db);
+  return result.rows[0];
+}
+
+export async function listTeamLocations(db: IamDatabase, organizationId: string) {
+  return (
+    await sql<{
+      id: string;
+      name: string;
+      code: string;
+      type: string;
+    }>`
+      select id::text, name, code, type
+      from warehouse.locations
+      where organization_id = ${organizationId}::uuid and status = 'ACTIVE'
+      order by name
     `.execute(db)
   ).rows;
 }

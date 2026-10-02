@@ -48,15 +48,11 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { ApiEnvelope } from '@maevelle/contracts';
+import type { AdminContextDto, ApiEnvelope } from '@maevelle/contracts';
 
 import { AdminCapabilitiesProvider } from './admin-capabilities';
 
-type AdminContext = {
-  actorId: string;
-  organizationId: string;
-  capabilities: readonly string[];
-};
+type AdminContext = AdminContextDto;
 
 type SearchResult = { kind: string; label: string; detail: string; href: string };
 
@@ -647,7 +643,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <div className="admin-content">
-          <AdminCapabilitiesProvider capabilities={context?.capabilities ?? []}>
+          <AdminCapabilitiesProvider
+            capabilities={context?.capabilities ?? []}
+            context={context}
+          >
             {children}
           </AdminCapabilitiesProvider>
         </div>

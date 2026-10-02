@@ -96,6 +96,14 @@ describe('API hardening foundation', () => {
         mediaMaxUploadBytes: 1024,
         mediaUploadExpirySeconds: 900,
         storefrontOrganizationCode: 'maevelle',
+        storefrontBaseUrl: 'http://localhost:3001',
+        emailEnabled: false,
+        emailProvider: 'local',
+        emailEnvironment: 'test',
+        emailFromName: 'Maevelle',
+        emailFromAddress: 'notifications@maevelle.example',
+        emailReplyTo: 'support@maevelle.example',
+        emailAllowedTestRecipients: [],
       },
     });
     const productId = '018f1f77-6b10-7cc0-9b11-4fefab124000';
@@ -257,6 +265,14 @@ describe('API hardening foundation', () => {
         mediaMaxUploadBytes: 1024,
         mediaUploadExpirySeconds: 900,
         storefrontOrganizationCode: 'maevelle',
+        storefrontBaseUrl: 'http://localhost:3001',
+        emailEnabled: false,
+        emailProvider: 'local',
+        emailEnvironment: 'test',
+        emailFromName: 'Maevelle',
+        emailFromAddress: 'notifications@maevelle.example',
+        emailReplyTo: 'support@maevelle.example',
+        emailAllowedTestRecipients: [],
       },
     });
     const publicResponse = await app.inject({ method: 'GET', url: '/health/live' });
