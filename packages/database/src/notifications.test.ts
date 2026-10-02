@@ -459,4 +459,119 @@ describe('notifications and integrations', () => {
     expect(resendNotification.trigger_type).toBe('RESEND');
     expect(resendNotification.parent_notification_id).toBe(manualResult.id);
   });
+
+  it('evaluates order email eligibility accurately across status, policy, and suppression state', async () => {
+    const data = await fixture('eligibility');
+
+    // 1. Initial order eligibility
+    const initialEligibility = await notifications.getOrderEmailEligibility(database.db, {
+      organizationId: data.organizationId,
+      orderId: data.orderId,
+      globalEnabled: true,
+    });
+
+    expect(initialEligibility.orderId).toBe(data.orderId);
+    expect(initialEligibility.customerEmail).toBeTruthy();
+    expect(initialEligibility.isSuppressed).toBe(false);
+    expect(initialEligibility.events.length).toBeGreaterThan(4);
+
+    const placedEvent = initialEligibility.events.find((e) => e.notificationType === 'ORDER_PLACED');
+    expect(placedEvent).toBeDefined();
+    expect(placedEvent?.orderReachedState).toBe(true);
+    expect(placedEvent?.canSendManually).toBe(true);
+
+    const shippedEvent = initialEligibility.events.find((e) => e.notificationType === 'ORDER_DISPATCHED');
+    expect(shippedEvent).toBeDefined();
+    expect(shippedEvent?.orderReachedState).toBe(false); // Order not dispatched yet
+
+    // 2. Recipient suppression check
+    await sql`insert into notifications.email_suppressions(organization_id, normalized_email, reason, source, active)
+      values(${data.organizationId}, ${initialEligibility.customerEmail!.toLowerCase()}, 'HARD_BOUNCE', 'RESEND_WEBHOOK', true)`.execute(database.db);
+
+    const suppressedEligibility = await notifications.getOrderEmailEligibility(database.db, {
+      organizationId: data.organizationId,
+      orderId: data.orderId,
+      globalEnabled: true,
+    });
+
+    expect(suppressedEligibility.isSuppressed).toBe(true);
+    expect(suppressedEligibility.suppressionReason).toBe('HARD_BOUNCE');
+    const suppressedPlaced = suppressedEligibility.events.find((e) => e.notificationType === 'ORDER_PLACED');
+    expect(suppressedPlaced?.canSendManually).toBe(false);
+    expect(suppressedPlaced?.eligibilityCode).toBe('RECIPIENT_SUPPRESSED');
+  });
+
+  it('renders template previews for sample fixtures and authentic orders with zero side effects', async () => {
+    const data = await fixture('preview');
+    const options = {
+      storefrontBaseUrl: 'http://localhost:3000',
+      supportEmail: 'maevelleBangladesh@gmail.com',
+      senderFrom: 'Maevelle <orders@maevelle.com>',
+    };
+
+    // 1. Fixture preview
+    const fixturePreview = await notifications.previewOrderEmail(database.db, {
+      organizationId: data.organizationId,
+      notificationType: 'ORDER_CONFIRMED',
+      fixtureKey: 'multi-item',
+      options,
+    });
+
+    expect(fixturePreview.isSampleFixture).toBe(true);
+    expect(fixturePreview.subject).toContain('Maevelle');
+    expect(fixturePreview.html).toContain('<!DOCTYPE html');
+    expect(fixturePreview.text).toContain('Maevelle');
+    expect(fixturePreview.availableFixtures?.length).toBeGreaterThan(3);
+
+    // 2. Real order preview
+    const orderPreview = await notifications.previewOrderEmail(database.db, {
+      organizationId: data.organizationId,
+      orderId: data.orderId,
+      notificationType: 'ORDER_PLACED',
+      options,
+    });
+
+    expect(orderPreview.isSampleFixture).toBe(false);
+    expect(orderPreview.subject).toContain('Maevelle');
+    expect(orderPreview.html).toContain('<!DOCTYPE html');
+
+    // 3. Confirm zero notifications were written by previewing
+    const operations = await notifications.listEmailNotifications(database.db, {
+      organizationId: data.organizationId,
+      sourceId: data.orderId,
+    });
+    expect(operations.data.length).toBe(0);
+  });
+
+  it('dispatches test emails to allow-listed test recipients with audit tracking', async () => {
+    const data = await fixture('test-send');
+    const options = {
+      storefrontBaseUrl: 'http://localhost:3000',
+      supportEmail: 'maevelleBangladesh@gmail.com',
+      senderFrom: 'Maevelle <orders@maevelle.com>',
+    };
+    const testRecipient = 'qa-dev@example.test';
+
+    const testSendResult = await notifications.sendTestEmail(database.db, {
+      organizationId: data.organizationId,
+      actorId: crypto.randomUUID(),
+      notificationType: 'ORDER_CONFIRMED',
+      testRecipient,
+      orderId: data.orderId,
+      reason: 'Automated test suite verification',
+      options,
+    });
+
+    expect(testSendResult.id).toBeDefined();
+    expect(testSendResult.recipient).toBe(testRecipient);
+
+    const testNotification = await notifications.getEmailNotification(
+      database.db,
+      data.organizationId,
+      testSendResult.id,
+    );
+    expect(testNotification.trigger_type).toBe('TEST');
+    expect(testNotification.intended_recipient).toBe(testRecipient);
+    expect(testNotification.status).toBe('QUEUED');
+  });
 });

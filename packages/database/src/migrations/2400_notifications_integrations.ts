@@ -63,6 +63,11 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create unique index notifications_source_recipient_channel on notifications.notifications(source_event_id,recipient_type,coalesce(customer_id,membership_id),channel) where source_event_id is not null;
     create index notifications_inbox on notifications.notifications(organization_id,membership_id,created_at desc) where channel='IN_APP';
+    create index notifications_channel_status_created on notifications.notifications(organization_id, channel, status, created_at desc);
+    create index notifications_source on notifications.notifications(organization_id, source_id);
+    create index notifications_customer on notifications.notifications(organization_id, customer_id, created_at desc);
+    create index notifications_provider_message on notifications.notifications(provider, provider_message_id) where provider_message_id is not null;
+    create index notifications_intended_recipient on notifications.notifications(organization_id, lower(intended_recipient));
     create table notifications.delivery_attempts (
       id bigint generated always as identity primary key, organization_id uuid not null references platform.organizations(id), notification_id uuid not null references notifications.notifications(id),
       attempt_number integer not null check(attempt_number>0), provider text not null, provider_message_id text, status text not null check(status in ('PENDING','SENT','FAILED','RETRY_WAIT','PERMANENT_FAILURE')),

@@ -16,6 +16,7 @@ import { EditAddressDialog } from './edit-address-dialog';
 import { CustomerIdentityActions } from './customer-identity-actions';
 import { AddNoteDialog } from './add-note-dialog';
 import { ManageTagsDialog } from './manage-tags-dialog';
+import { CustomerEmailCommunications } from './customer-email-communications';
 
 interface DeliveryHistory {
   eligibleDeliveries: number;
@@ -411,6 +412,15 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
               </div>
             </div>
           </section>
+          
+          <CustomerEmailCommunications
+            customerId={customer.id}
+            primaryEmail={
+              customer.emails.find((e) => e.isPrimary)?.email ??
+              customer.emails[0]?.email ??
+              null
+            }
+          />
 
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-4">

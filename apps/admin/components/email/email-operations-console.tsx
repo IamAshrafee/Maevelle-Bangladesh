@@ -1,334 +1,370 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  LayoutDashboard,
+  Activity,
+  Layers,
+  Zap,
+  Sliders,
+  Ban,
+  ShieldCheck,
+  RotateCw,
+  Mail,
+  AlertTriangle,
+} from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { StatusBadge } from '@/components/status-badge';
-
-type Diagnostic = {
-  provider: string;
-  environment: string;
-  enabled: boolean;
-  from: string;
-  replyTo: string;
-  providerConfigured: boolean;
-  webhookConfigured: boolean;
-  testRecipientOverride: string | null;
-  allowedTestRecipients?: readonly string[];
-  queued: number;
-  processing: number;
-  failed: number;
-  delivered: number;
-  suppressed: number;
-  last_webhook_at: string | null;
-};
-type Policy = {
-  notification_type: string;
-  delivery_requirement: string;
-  template_key: string;
-  enabled: boolean;
-  automatic_enabled: boolean;
-  manual_allowed: boolean;
-};
-type EmailRow = {
-  id: string;
-  notification_type: string;
-  status: string;
-  intended_recipient: string | null;
-  effective_recipient: string | null;
-  rendered_subject: string | null;
-  source_id: string;
-  provider: string | null;
-  provider_message_id: string | null;
-  trigger_type: string;
-  created_at: string;
-  skip_reason: string | null;
-  failure_code: string | null;
-};
-type Template = { key: string; version: number; subject: string; description: string };
-type Suppression = {
-  id: string;
-  normalized_email: string;
-  reason: string;
-  source: string;
-  active: boolean;
-  created_at: string;
-};
-type EmailDetail = EmailRow & {
-  attempts: readonly { id: number; attempt_number: number; status: string; error_code: string | null; next_retry_at: string | null }[];
-  timeline: readonly { id: number; event_type: string; event_at: string; source: string }[];
-};
-
-const templateKeyToEvent: Record<string, string> = {
-  'order-received': 'ORDER_PLACED',
-  'order-confirmed': 'ORDER_CONFIRMED',
-  'payment-confirmed': 'PAYMENT_VERIFIED',
-  'order-shipped': 'ORDER_DISPATCHED',
-  'order-delivered': 'DELIVERY_COMPLETED',
-  'order-cancelled': 'ORDER_CANCELLED',
-  'refund-completed': 'REFUND_COMPLETED',
-};
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    credentials: 'include',
-    ...init,
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  const payload = (await response.json().catch(() => undefined)) as
-    | T
-    | { error?: { message?: string } }
-    | undefined;
-  if (!response.ok)
-    throw new Error(
-      payload && typeof payload === 'object' && 'error' in payload && payload.error?.message
-        ? payload.error.message
-        : 'Email operation failed.',
-    );
-  return payload as T;
-}
-
-function when(value: string | null) {
-  return value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : 'Never';
-}
+import { Badge } from '@/components/ui/badge';
+import { EmailOverviewTab } from './email-overview-tab';
+import { EmailActivityTab } from './email-activity-tab';
+import { EmailTemplatesTab } from './email-templates-tab';
+import { EmailTestLabTab } from './email-test-lab-tab';
+import { EmailPoliciesTab } from './email-policies-tab';
+import { EmailSuppressionsTab } from './email-suppressions-tab';
+import { EmailDiagnosticsTab } from './email-diagnostics-tab';
+import { EmailDetailDrawer } from './email-detail-drawer';
+import {
+  type EmailTabKey,
+  type EmailDiagnosticsDto,
+  type EmailPolicyDto,
+  type EmailNotificationRowDto,
+  type EmailNotificationDetailDto,
+  type EmailTemplateSummary,
+  type EmailSuppressionDto,
+  fetchEmailApi,
+} from './email-types';
 
 export function EmailOperationsConsole() {
-  const [diagnostic, setDiagnostic] = useState<Diagnostic>();
-  const [policies, setPolicies] = useState<readonly Policy[]>([]);
-  const [emails, setEmails] = useState<readonly EmailRow[]>([]);
-  const [templates, setTemplates] = useState<readonly Template[]>([]);
-  const [suppressions, setSuppressions] = useState<readonly Suppression[]>([]);
-  const [selected, setSelected] = useState<EmailRow>();
-  const [detail, setDetail] = useState<EmailDetail>();
-  const [orderId, setOrderId] = useState('');
-  const [notificationType, setNotificationType] = useState('ORDER_CONFIRMED');
-  const [testRecipient, setTestRecipient] = useState('');
-  const [preview, setPreview] = useState<{ subject: string; html: string; text: string; isSampleFixture?: boolean }>();
-  const [message, setMessage] = useState('Loading email operations…');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+
+  // Active tab state driven by URL or default 'overview'
+  const activeTab = (searchParams.get('tab') as EmailTabKey) || 'overview';
+
+  // Filters & Pagination for Activity Tab
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(25);
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
+  const [eventFilter, setEventFilter] = useState(searchParams.get('event') || '');
+  const [triggerFilter, setTriggerFilter] = useState(searchParams.get('trigger') || '');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
+
+  // Domain state
+  const [diagnostic, setDiagnostic] = useState<EmailDiagnosticsDto>();
+  const [policies, setPolicies] = useState<readonly EmailPolicyDto[]>([]);
+  const [emails, setEmails] = useState<readonly EmailNotificationRowDto[]>([]);
+  const [totalEmails, setTotalEmails] = useState(0);
+  const [templates, setTemplates] = useState<readonly EmailTemplateSummary[]>([]);
+  const [suppressions, setSuppressions] = useState<readonly EmailSuppressionDto[]>([]);
+
+  // Drawer & detail inspection state
+  const [selectedDetail, setSelectedDetail] = useState<EmailNotificationDetailDto | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Loading & error state
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const reload = useCallback(async () => {
+  // Synchronize Tab with URL
+  const handleTabChange = (newTab: string) => {
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', newTab);
+      router.replace(`/email?${params.toString()}`);
+    });
+  };
+
+  // Inspect email row
+  const inspectEmail = useCallback(async (email: EmailNotificationRowDto) => {
     try {
-      const [d, p, e, t, s] = await Promise.all([
-        api<{ data: Diagnostic }>('/admin/email/diagnostics'),
-        api<{ data: Policy[] }>('/admin/email/policies'),
-        api<{ data: EmailRow[] }>('/admin/email/operations?page=1&pageSize=50'),
-        api<{ data: Template[] }>('/admin/email/templates'),
-        api<{ data: Suppression[] }>('/admin/email/suppressions'),
-      ]);
-      setDiagnostic(d.data);
-      setPolicies(p.data);
-      setEmails(e.data);
-      setTemplates(t.data);
-      setSuppressions(s.data);
-      setMessage('');
-      setError('');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Email operations could not be loaded.');
-      setMessage('');
+      const result = await fetchEmailApi<{ data: EmailNotificationDetailDto }>(
+        `/admin/email/operations/${email.id}`,
+      );
+      setSelectedDetail(result.data);
+      setDrawerOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load email details.');
     }
   }, []);
 
-  useEffect(() => void reload(), [reload]);
-
-  const changePolicy = async (item: Policy, field: 'enabled' | 'automatic_enabled' | 'manual_allowed', value: boolean) => {
+  // Primary data loader
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
-      await api(`/admin/email/policies/${item.notification_type}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          enabled: field === 'enabled' ? value : item.enabled,
-          automaticEnabled: field === 'automatic_enabled' ? value : item.automatic_enabled,
-          manualAllowed: field === 'manual_allowed' ? value : item.manual_allowed,
-          reason: 'Changed from Email Operations',
-        }),
+      // Build query string for activity
+      const activityParams = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
       });
-      setMessage(`${item.notification_type.replaceAll('_', ' ')} policy updated.`);
-      await reload();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Policy update failed.');
-    }
-  };
+      if (statusFilter) activityParams.set('status', statusFilter);
+      if (eventFilter) activityParams.set('notificationType', eventFilter);
+      if (triggerFilter) activityParams.set('triggerType', triggerFilter);
+      if (searchQuery.trim()) activityParams.set('search', searchQuery.trim());
 
-  const previewTemplate = async (selectedType = notificationType) => {
-    try {
-      const result = await api<{ data: { subject: string; html: string; text: string; isSampleFixture?: boolean } }>(
-        `/admin/email/templates/${selectedType}/preview`,
-        { method: 'POST', body: JSON.stringify(orderId.trim() ? { orderId: orderId.trim() } : {}) },
-      );
-      setPreview(result.data);
-      if (selectedType !== notificationType) {
-        setNotificationType(selectedType);
+      const [diagRes, polRes, emailRes, tplRes, supRes] = await Promise.all([
+        fetchEmailApi<{ data: EmailDiagnosticsDto }>('/admin/email/diagnostics'),
+        fetchEmailApi<{ data: EmailPolicyDto[] }>('/admin/email/policies'),
+        fetchEmailApi<{ data: EmailNotificationRowDto[]; pagination: { totalItems: number } }>(
+          `/admin/email/operations?${activityParams.toString()}`,
+        ),
+        fetchEmailApi<{ data: EmailTemplateSummary[] }>('/admin/email/templates'),
+        fetchEmailApi<{ data: EmailSuppressionDto[] }>('/admin/email/suppressions'),
+      ]);
+
+      setDiagnostic(diagRes.data);
+      setPolicies(polRes.data);
+      setEmails(emailRes.data);
+      setTotalEmails(emailRes.pagination.totalItems);
+      setTemplates(tplRes.data);
+      setSuppressions(supRes.data);
+
+      // If notificationId is in URL, auto-open
+      const urlNotificationId = searchParams.get('notificationId');
+      if (urlNotificationId && !selectedDetail) {
+        const found = emailRes.data.find((e) => e.id === urlNotificationId);
+        if (found) {
+          void inspectEmail(found);
+        } else {
+          try {
+            const detailRes = await fetchEmailApi<{ data: EmailNotificationDetailDto }>(
+              `/admin/email/operations/${urlNotificationId}`,
+            );
+            setSelectedDetail(detailRes.data);
+            setDrawerOpen(true);
+          } catch {
+            // ignore
+          }
+        }
       }
-      setError('');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Preview failed.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load email operations.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [
+    page,
+    pageSize,
+    statusFilter,
+    eventFilter,
+    triggerFilter,
+    searchQuery,
+    searchParams,
+    selectedDetail,
+    inspectEmail,
+  ]);
 
-  const send = async (test = false) => {
-    try {
-      await api(`/admin/email/orders/${orderId}/send`, {
-        method: 'POST',
-        body: JSON.stringify({
-          notificationType,
-          idempotencyKey: crypto.randomUUID(),
-          reason: 'Manual send from Email Operations',
-          ...(test ? { testRecipient: testRecipient.trim() } : {}),
-        }),
-      });
-      setMessage('Transactional email queued. Delivery continues in the worker.');
-      await reload();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Email could not be queued.');
-    }
-  };
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
-  const inspect = async (item: EmailRow) => {
-    setSelected(item);
-    try {
-      const result = await api<{ data: EmailDetail }>(`/admin/email/operations/${item.id}`);
-      setDetail(result.data);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Email detail could not be loaded.');
-    }
-  };
+  // Polling for active operations: if any email is in QUEUED or PROCESSING, refresh every 6 seconds
+  useEffect(() => {
+    const hasPending = emails.some((e) => e.status === 'QUEUED' || e.status === 'PROCESSING');
+    if (!hasPending) return;
+
+    const timer = setInterval(() => {
+      void reload();
+    }, 6000);
+
+    return () => clearInterval(timer);
+  }, [emails, reload]);
 
   return (
     <main className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 p-4 sm:p-6 lg:p-8">
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Email operations</h1>
-          {diagnostic ? <Badge variant={diagnostic.enabled ? 'default' : 'secondary'}>{diagnostic.enabled ? 'Sending enabled' : 'Sending disabled'}</Badge> : null}
+      {/* Header Area */}
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              Transactional Email Operations
+            </h1>
+            {diagnostic ? (
+              <Badge
+                variant={diagnostic.enabled ? 'default' : 'secondary'}
+                className={diagnostic.enabled ? 'bg-emerald-600 text-xs' : 'text-xs'}
+              >
+                {diagnostic.enabled ? 'Sending Active' : 'Sending Disabled'}
+              </Badge>
+            ) : null}
+            {diagnostic?.environment && diagnostic.environment !== 'production' ? (
+              <Badge variant="outline" className="text-xs uppercase font-mono">
+                {diagnostic.environment}
+              </Badge>
+            ) : null}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground max-w-3xl">
+            Authoritative transactional email control center: delivery lifecycles, Resend provider integration,
+            policies, template rendering, safe testing, suppressions, and diagnostics.
+          </p>
         </div>
-        <p className="max-w-3xl text-sm text-muted-foreground">Transactional delivery, policy controls, templates, provider lifecycle, retries and suppressions. Deployment secrets are never shown here.</p>
+
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={reload}
+            disabled={loading || isPending}
+            className="h-8 text-xs"
+          >
+            <RotateCw className={`mr-1.5 size-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh Data
+          </Button>
+        </div>
       </header>
-      {message ? <p className="rounded-md border bg-muted/50 p-3 text-sm">{message}</p> : null}
-      {error ? <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
 
-      {diagnostic ? (
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {[['Queued', diagnostic.queued], ['Processing', diagnostic.processing], ['Failed', diagnostic.failed], ['Delivered', diagnostic.delivered], ['Suppressed', diagnostic.suppressed]].map(([label, value]) => (
-            <Card key={String(label)}><CardHeader className="pb-2"><CardDescription>{label}</CardDescription><CardTitle className="text-2xl">{value}</CardTitle></CardHeader></Card>
-          ))}
-        </section>
+      {/* Global Error Alert */}
+      {error ? (
+        <div role="alert" className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-xs text-destructive">
+          <AlertTriangle className="size-4 shrink-0" />
+          <span>{error}</span>
+        </div>
       ) : null}
 
-      <section className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
-        <Card>
-          <CardHeader><CardTitle>Provider diagnostics</CardTitle><CardDescription>Application, deployment and external provider facts are shown separately.</CardDescription></CardHeader>
-          <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
-            <div><span className="text-muted-foreground">Provider</span><p className="font-medium capitalize">{diagnostic?.provider ?? '—'} · {diagnostic?.environment ?? '—'}</p></div>
-            <div><span className="text-muted-foreground">Configuration</span><p>{diagnostic?.providerConfigured ? 'Provider configured' : 'Provider not configured'} · {diagnostic?.webhookConfigured ? 'Webhook configured' : 'Webhook not configured'}</p></div>
-            <div><span className="text-muted-foreground">From</span><p>{diagnostic?.from ?? '—'}</p></div>
-            <div><span className="text-muted-foreground">Reply-To</span><p>{diagnostic?.replyTo ?? '—'}</p></div>
-            <div><span className="text-muted-foreground">Last webhook</span><p>{when(diagnostic?.last_webhook_at ?? null)}</p></div>
-            <div><span className="text-muted-foreground">Test redirect</span><p>{diagnostic?.testRecipientOverride ?? 'None'}</p></div>
-          </CardContent>
-        </Card>
+      {/* Primary Navigation Tabs */}
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 h-auto p-1 bg-muted/60">
+          <TabsTrigger value="overview" className="flex items-center gap-1.5 py-2 text-xs">
+            <LayoutDashboard className="size-3.5" />
+            <span>Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="flex items-center gap-1.5 py-2 text-xs">
+            <Activity className="size-3.5" />
+            <span>Activity</span>
+            {totalEmails > 0 ? (
+              <span className="ml-1 rounded-full bg-background px-1.5 py-0.2 text-[10px] font-mono text-muted-foreground">
+                {totalEmails}
+              </span>
+            ) : null}
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="flex items-center gap-1.5 py-2 text-xs">
+            <Layers className="size-3.5" />
+            <span>Templates</span>
+          </TabsTrigger>
+          <TabsTrigger value="test-lab" className="flex items-center gap-1.5 py-2 text-xs">
+            <Zap className="size-3.5" />
+            <span>Test Lab</span>
+          </TabsTrigger>
+          <TabsTrigger value="policies" className="flex items-center gap-1.5 py-2 text-xs">
+            <Sliders className="size-3.5" />
+            <span>Policies</span>
+          </TabsTrigger>
+          <TabsTrigger value="suppressions" className="flex items-center gap-1.5 py-2 text-xs">
+            <Ban className="size-3.5" />
+            <span>Suppressions</span>
+            {suppressions.filter((s) => s.active).length > 0 ? (
+              <span className="ml-1 rounded-full bg-destructive/10 text-destructive px-1.5 py-0.2 text-[10px] font-mono font-bold">
+                {suppressions.filter((s) => s.active).length}
+              </span>
+            ) : null}
+          </TabsTrigger>
+          <TabsTrigger value="diagnostics" className="flex items-center gap-1.5 py-2 text-xs">
+            <ShieldCheck className="size-3.5" />
+            <span>Diagnostics</span>
+          </TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader><CardTitle>Preview or send</CardTitle><CardDescription>Preview with sample fixture or an existing order, and safely test delivery.</CardDescription></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="email-order-id">Order ID or Number (optional for preview)</Label><Input id="email-order-id" value={orderId} onChange={(event) => setOrderId(event.target.value)} placeholder="e.g. MV-10248 or leave blank for sample preview" /></div>
-            <div className="space-y-2"><Label htmlFor="email-template">Event</Label><select id="email-template" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={notificationType} onChange={(event) => setNotificationType(event.target.value)}>{policies.map((item) => <option key={item.notification_type} value={item.notification_type}>{item.notification_type.replaceAll('_', ' ')}</option>)}</select></div>
-            <div className="space-y-2">
-              <Label htmlFor="email-test-recipient">Allow-listed test recipient</Label>
-              <Input id="email-test-recipient" type="email" value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder="Development and staging only" />
-              {diagnostic?.allowedTestRecipients && diagnostic.allowedTestRecipients.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-                  <span>Allowed:</span>
-                  {diagnostic.allowedTestRecipients.map((email) => (
-                    <button
-                      key={email}
-                      type="button"
-                      onClick={() => setTestRecipient(email)}
-                      className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground hover:bg-muted-foreground/20"
-                    >
-                      {email}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void previewTemplate()}>Preview</Button>
-              <Button onClick={() => void send(false)} disabled={!orderId.trim()}>Queue manual email</Button>
-              <Button variant="secondary" onClick={() => void send(true)} disabled={!orderId.trim() || !testRecipient.trim()}>Send safe test copy</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
+        {/* Tab 1: Overview Dashboard */}
+        <TabsContent value="overview" className="mt-6">
+          <EmailOverviewTab
+            diagnostic={diagnostic}
+            recentEmails={emails}
+            onSelectTab={handleTabChange}
+            onInspectEmail={inspectEmail}
+            onRefresh={reload}
+          />
+        </TabsContent>
 
-      {preview ? (
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle>{preview.subject}</CardTitle>
-              {preview.isSampleFixture ? (
-                <Badge variant="outline">Sample Fixture Preview</Badge>
-              ) : (
-                <Badge variant="default">Order {orderId} Preview</Badge>
-              )}
-            </div>
-            <CardDescription>Preview only — no provider call was made.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-[560px] overflow-auto rounded-md border bg-white p-2" dangerouslySetInnerHTML={{ __html: preview.html }} />
-            <details className="mt-4"><summary className="cursor-pointer text-sm font-medium">Plain-text fallback</summary><pre className="mt-2 whitespace-pre-wrap rounded-md bg-muted p-4 text-xs font-mono">{preview.text}</pre></details>
-          </CardContent>
-        </Card>
-      ) : null}
+        {/* Tab 2: Activity List & Search */}
+        <TabsContent value="activity" className="mt-6">
+          <EmailActivityTab
+            emails={emails}
+            totalItems={totalEmails}
+            page={page}
+            pageSize={pageSize}
+            statusFilter={statusFilter}
+            eventFilter={eventFilter}
+            triggerFilter={triggerFilter}
+            searchQuery={searchQuery}
+            loading={loading}
+            onSearchChange={(q) => {
+              setSearchQuery(q);
+              setPage(1);
+            }}
+            onStatusFilterChange={(s) => {
+              setStatusFilter(s);
+              setPage(1);
+            }}
+            onEventFilterChange={(ev) => {
+              setEventFilter(ev);
+              setPage(1);
+            }}
+            onTriggerFilterChange={(trig) => {
+              setTriggerFilter(trig);
+              setPage(1);
+            }}
+            onPageChange={setPage}
+            onInspectEmail={inspectEmail}
+            onRefresh={reload}
+          />
+        </TabsContent>
 
-      <Card>
-        <CardHeader><CardTitle>Automatic and manual policy</CardTitle><CardDescription>Disabling automatic delivery never blocks the underlying order transition.</CardDescription></CardHeader>
-        <CardContent className="grid gap-3 lg:grid-cols-2">
-          {policies.map((item) => <div key={item.notification_type} className="rounded-lg border p-4"><div className="mb-4"><p className="font-medium">{item.notification_type.replaceAll('_', ' ')}</p><p className="text-xs text-muted-foreground">{item.template_key} · {item.delivery_requirement.replaceAll('_', ' ')}</p></div><div className="grid gap-3 text-sm sm:grid-cols-3">{([['enabled', 'Enabled'], ['automatic_enabled', 'Automatic'], ['manual_allowed', 'Manual']] as const).map(([field, label]) => <label key={field} className="flex items-center justify-between gap-2 sm:flex-col sm:items-start"><span>{label}</span><Switch checked={item[field]} onCheckedChange={(value) => void changePolicy(item, field, value)} /></label>)}</div></div>)}
-        </CardContent>
-      </Card>
+        {/* Tab 3: Templates Gallery & Preview */}
+        <TabsContent value="templates" className="mt-6">
+          <EmailTemplatesTab templates={templates} policies={policies} />
+        </TabsContent>
 
-      <Card>
-        <CardHeader><CardTitle>Recent email lifecycle</CardTitle><CardDescription>Select a row to inspect provider identity and the intended/effective recipient distinction.</CardDescription></CardHeader>
-        <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[850px] text-sm"><thead className="border-y bg-muted/50 text-left"><tr><th className="p-3">Created</th><th className="p-3">Event</th><th className="p-3">Recipient</th><th className="p-3">Status</th><th className="p-3">Trigger</th><th className="p-3">Provider ID</th></tr></thead><tbody>{emails.map((item) => <tr key={item.id} className="cursor-pointer border-b hover:bg-muted/40" onClick={() => void inspect(item)}><td className="p-3">{when(item.created_at)}</td><td className="p-3 font-medium">{item.notification_type.replaceAll('_', ' ')}</td><td className="p-3">{item.intended_recipient ?? item.skip_reason ?? 'No email'}</td><td className="p-3"><StatusBadge status={item.status} /></td><td className="p-3">{item.trigger_type}</td><td className="max-w-48 truncate p-3">{item.provider_message_id ?? '—'}</td></tr>)}</tbody></table></div>{emails.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">No transactional emails yet.</p> : null}</CardContent>
-      </Card>
+        {/* Tab 4: Safe Test Lab */}
+        <TabsContent value="test-lab" className="mt-6">
+          <EmailTestLabTab
+            diagnostic={diagnostic}
+            templates={templates}
+            recentEmails={emails}
+            onInspectEmail={inspectEmail}
+            onRefresh={reload}
+          />
+        </TabsContent>
 
-      {selected ? <Card><CardHeader><CardTitle>{selected.rendered_subject ?? selected.notification_type}</CardTitle><CardDescription>Notification {selected.id}</CardDescription></CardHeader><CardContent className="grid gap-5 text-sm lg:grid-cols-[1fr_1.3fr]"><div className="grid content-start gap-3 sm:grid-cols-2"><div><span className="text-muted-foreground">Intended</span><p>{selected.intended_recipient ?? '—'}</p></div><div><span className="text-muted-foreground">Effective</span><p>{selected.effective_recipient ?? '—'}</p></div><div><span className="text-muted-foreground">Provider</span><p>{selected.provider ?? 'Not submitted'}</p></div><div><span className="text-muted-foreground">Failure</span><p>{selected.failure_code ?? 'None'}</p></div><div className="flex flex-wrap gap-2 sm:col-span-2">{selected.status === 'FAILED' ? <Button variant="outline" onClick={async () => { await api(`/admin/email/operations/${selected.id}/retry`, { method: 'POST', body: JSON.stringify({ reason: 'Retry from Email Operations' }) }); setMessage('Retry queued.'); await reload(); }}>Retry technical failure</Button> : null}{selected.intended_recipient ? <Button variant="outline" onClick={async () => { await api(`/admin/email/operations/${selected.id}/resend`, { method: 'POST', body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), reason: 'Intentional resend from Email Operations' }) }); setMessage('A new audited copy was queued.'); await reload(); }}>Send another copy</Button> : null}</div></div><div><h3 className="mb-3 font-medium">Delivery timeline</h3><ol className="space-y-3 border-l pl-4">{detail?.timeline.map((event) => <li key={event.id}><div className="flex flex-wrap items-center justify-between gap-2"><StatusBadge status={event.event_type} /><span className="text-xs text-muted-foreground">{when(event.event_at)}</span></div><p className="mt-1 text-xs text-muted-foreground">Source: {event.source}</p></li>)}{detail && detail.timeline.length === 0 ? <li className="text-muted-foreground">No timeline events recorded.</li> : null}</ol></div></CardContent></Card> : null}
+        {/* Tab 5: Policy Controls */}
+        <TabsContent value="policies" className="mt-6">
+          <EmailPoliciesTab
+            policies={policies}
+            diagnostic={diagnostic}
+            onRefresh={reload}
+          />
+        </TabsContent>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Template registry</CardTitle><CardDescription>Version-controlled HTML and plain-text templates.</CardDescription></CardHeader>
-          <CardContent className="space-y-3">
-            {templates.map((item) => {
-              const mappedEvent = templateKeyToEvent[item.key] ?? 'ORDER_CONFIRMED';
-              return (
-                <div key={item.key} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{item.key}</p>
-                      <Badge variant="outline">v{item.version}</Badge>
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setNotificationType(mappedEvent);
-                      void previewTemplate(mappedEvent);
-                    }}
-                  >
-                    Preview
-                  </Button>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-        <Card><CardHeader><CardTitle>Active suppressions</CardTitle><CardDescription>Hard bounces, complaints, provider and administrator blocks.</CardDescription></CardHeader><CardContent className="space-y-3">{suppressions.filter((item) => item.active).map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"><div><p className="font-medium">{item.normalized_email}</p><p className="text-xs text-muted-foreground">{item.reason.replaceAll('_', ' ')} · {item.source}</p></div><Button variant="outline" size="sm" onClick={async () => { await api('/admin/email/suppressions', { method: 'POST', body: JSON.stringify({ email: item.normalized_email, active: false, reason: 'Cleared from Email Operations after review' }) }); await reload(); }}>Clear</Button></div>)}{suppressions.every((item) => !item.active) ? <p className="text-sm text-muted-foreground">No active suppressions.</p> : null}</CardContent></Card>
-      </section>
+        {/* Tab 6: Suppression Registry */}
+        <TabsContent value="suppressions" className="mt-6">
+          <EmailSuppressionsTab suppressions={suppressions} onRefresh={reload} />
+        </TabsContent>
+
+        {/* Tab 7: Diagnostics & Setup Checklist */}
+        <TabsContent value="diagnostics" className="mt-6">
+          <EmailDiagnosticsTab diagnostic={diagnostic} onRefresh={reload} />
+        </TabsContent>
+      </Tabs>
+
+      {/* Slide-out Email Detail Drawer */}
+      <EmailDetailDrawer
+        notification={selectedDetail}
+        open={drawerOpen}
+        onOpenChange={(open) => {
+          setDrawerOpen(open);
+          if (!open) {
+            // Remove notificationId query param if present
+            const params = new URLSearchParams(searchParams.toString());
+            if (params.has('notificationId')) {
+              params.delete('notificationId');
+              router.replace(`/email?${params.toString()}`);
+            }
+          }
+        }}
+        onActionCompleted={reload}
+      />
     </main>
   );
 }

@@ -259,6 +259,9 @@ export function registerNotificationRoutes(
           notificationType: Type.Optional(Type.String()),
           search: Type.Optional(Type.String({ maxLength: 200 })),
           sourceId: Type.Optional(Type.String({ format: 'uuid' })),
+          customerId: Type.Optional(Type.String({ format: 'uuid' })),
+          recipient: Type.Optional(Type.String({ maxLength: 200 })),
+          triggerType: Type.Optional(Type.String({ maxLength: 40 })),
           provider: Type.Optional(Type.String({ maxLength: 80 })),
           createdAfter: Type.Optional(Type.String({ format: 'date-time' })),
           createdBefore: Type.Optional(Type.String({ format: 'date-time' })),
@@ -275,6 +278,9 @@ export function registerNotificationRoutes(
         notificationType?: string;
         search?: string;
         sourceId?: string;
+        customerId?: string;
+        recipient?: string;
+        triggerType?: string;
         provider?: string;
         createdAfter?: string;
         createdBefore?: string;
@@ -287,6 +293,9 @@ export function registerNotificationRoutes(
         ...(query.notificationType ? { notificationType: query.notificationType } : {}),
         ...(query.search ? { search: query.search } : {}),
         ...(query.sourceId ? { sourceId: query.sourceId } : {}),
+        ...(query.customerId ? { customerId: query.customerId } : {}),
+        ...(query.recipient ? { recipient: query.recipient } : {}),
+        ...(query.triggerType ? { triggerType: query.triggerType } : {}),
         ...(query.provider ? { provider: query.provider } : {}),
         ...(query.createdAfter ? { createdAfter: query.createdAfter } : {}),
         ...(query.createdBefore ? { createdBefore: query.createdBefore } : {}),
@@ -361,22 +370,99 @@ export function registerNotificationRoutes(
     {
       schema: {
         params: Type.Object({ notificationType: Type.String() }),
-        body: Type.Object({ orderId: Type.Optional(Type.String({ maxLength: 80 })) }),
+        body: Type.Object({
+          orderId: Type.Optional(Type.String({ maxLength: 80 })),
+          fixtureKey: Type.Optional(Type.String({ maxLength: 80 })),
+        }),
       },
     },
     async (req, reply) => {
       const a = await admin(database, auth, req.headers, 'notifications.view');
       if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-      const reqOrderId = (req.body as { orderId?: string })?.orderId?.trim();
+      const body = (req.body ?? {}) as { orderId?: string; fixtureKey?: string };
+      const reqOrderId = body.orderId?.trim();
+      const reqFixtureKey = body.fixtureKey?.trim();
       try {
         return {
           data: await notifications.previewOrderEmail(database.db, {
             organizationId: a.organizationId,
             ...(reqOrderId ? { orderId: reqOrderId } : {}),
+            ...(reqFixtureKey ? { fixtureKey: reqFixtureKey } : {}),
             notificationType: (req.params as { notificationType: string }).notificationType,
             options: renderOptions,
           }),
         };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.get(
+    '/admin/email/orders/:orderId/eligibility',
+    { schema: { params: Type.Object({ orderId: Type.String({ minLength: 1, maxLength: 80 }) }) } },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        return {
+          data: await notifications.getOrderEmailEligibility(database.db, {
+            organizationId: a.organizationId,
+            orderId: (req.params as { orderId: string }).orderId,
+            globalEnabled: config.emailEnabled ?? false,
+          }),
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/email/test-send',
+    {
+      schema: {
+        body: Type.Object({
+          notificationType: Type.String(),
+          testRecipient: Type.String(),
+          orderId: Type.Optional(Type.String({ maxLength: 80 })),
+          fixtureKey: Type.Optional(Type.String({ maxLength: 80 })),
+          reason: Type.Optional(Type.String({ maxLength: 500 })),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.send');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const body = req.body as {
+        notificationType: string;
+        testRecipient: string;
+        orderId?: string;
+        fixtureKey?: string;
+        reason?: string;
+      };
+      const testRecipient = body.testRecipient.trim().toLowerCase();
+      if (
+        emailEnvironment === 'production' ||
+        !(config.emailAllowedTestRecipients ?? []).includes(testRecipient)
+      ) {
+        return reply.code(422).send({
+          error: {
+            code: 'UNSAFE_TEST_RECIPIENT',
+            message: 'The test recipient is not in the deployment allow-list.',
+          },
+        });
+      }
+      try {
+        const result = await notifications.sendTestEmail(database.db, {
+          organizationId: a.organizationId,
+          actorId: a.actorId,
+          notificationType: body.notificationType,
+          ...(body.orderId?.trim() ? { orderId: body.orderId.trim() } : {}),
+          ...(body.fixtureKey?.trim() ? { fixtureKey: body.fixtureKey.trim() } : {}),
+          testRecipient,
+          ...(body.reason?.trim() ? { reason: body.reason.trim() } : {}),
+          options: renderOptions,
+        });
+        return reply.code(201).send({ data: result });
       } catch (error) {
         return failure(reply, error);
       }

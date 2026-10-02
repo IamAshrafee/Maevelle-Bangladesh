@@ -3121,3 +3121,184 @@ export interface AdminContextDto {
   readonly capabilities: readonly string[];
   readonly scopes: readonly AccessScopeDto[];
 }
+
+export type EmailNotificationStatus =
+  | 'NOT_APPLICABLE'
+  | 'SKIPPED_NO_EMAIL'
+  | 'PENDING_MANUAL'
+  | 'QUEUED'
+  | 'PROCESSING'
+  | 'SENT'
+  | 'DELIVERED'
+  | 'DELIVERY_DELAYED'
+  | 'FAILED'
+  | 'BOUNCED'
+  | 'COMPLAINED'
+  | 'SUPPRESSED'
+  | 'READ';
+
+export type EmailTriggerType = 'AUTOMATIC' | 'MANUAL' | 'TEST' | 'RESEND';
+
+export interface EmailNotificationRowDto {
+  readonly id: string;
+  readonly notification_type: string;
+  readonly status: EmailNotificationStatus;
+  readonly intended_recipient: string | null;
+  readonly effective_recipient: string | null;
+  readonly rendered_subject: string | null;
+  readonly source_id: string;
+  readonly source_domain: string;
+  readonly provider: string | null;
+  readonly provider_message_id: string | null;
+  readonly trigger_type: EmailTriggerType;
+  readonly created_at: string;
+  readonly queued_at?: string | null;
+  readonly sent_at?: string | null;
+  readonly delivered_at?: string | null;
+  readonly skip_reason?: string | null;
+  readonly failure_code?: string | null;
+  readonly failure_message?: string | null;
+  readonly customer_id?: string | null;
+  readonly parent_notification_id?: string | null;
+  readonly template_key?: string | null;
+  readonly template_version?: number | null;
+}
+
+export interface EmailDeliveryAttemptDto {
+  readonly id: number;
+  readonly attempt_number: number;
+  readonly provider: string;
+  readonly provider_message_id: string | null;
+  readonly status: string;
+  readonly started_at: string;
+  readonly completed_at: string | null;
+  readonly next_retry_at: string | null;
+  readonly error_code: string | null;
+  readonly error_metadata: Record<string, unknown>;
+}
+
+export interface EmailTimelineEventDto {
+  readonly id: number;
+  readonly event_type: string;
+  readonly event_at: string;
+  readonly source: 'APPLICATION' | 'PROVIDER' | 'ADMIN';
+  readonly provider_event_id: string | null;
+  readonly metadata: Record<string, unknown>;
+  readonly actor_name?: string | null;
+}
+
+export interface EmailNotificationDetailDto extends EmailNotificationRowDto {
+  readonly attempts: readonly EmailDeliveryAttemptDto[];
+  readonly timeline: readonly EmailTimelineEventDto[];
+  readonly rendered_html: string | null;
+  readonly rendered_body: string;
+  readonly availableActions: {
+    readonly canRetry: boolean;
+    readonly canResend: boolean;
+    readonly canPreview: boolean;
+    readonly retryReason?: string;
+    readonly resendReason?: string;
+  };
+  readonly recipientSuppressed: boolean;
+}
+
+export interface EmailPolicyDto {
+  readonly notification_type: string;
+  readonly delivery_requirement: string;
+  readonly template_key: string | null;
+  readonly enabled: boolean;
+  readonly automatic_enabled: boolean;
+  readonly manual_allowed: boolean;
+  readonly updated_at: string | null;
+}
+
+export interface EmailSuppressionDto {
+  readonly id: string;
+  readonly normalized_email: string;
+  readonly reason: 'HARD_BOUNCE' | 'COMPLAINT' | 'ADMINISTRATOR' | 'PROVIDER';
+  readonly source: string;
+  readonly provider: string | null;
+  readonly active: boolean;
+  readonly created_at: string;
+  readonly cleared_at: string | null;
+  readonly clear_reason: string | null;
+}
+
+export interface EmailDiagnosticsDto {
+  readonly provider: string;
+  readonly environment: string;
+  readonly enabled: boolean;
+  readonly from: string;
+  readonly replyTo: string;
+  readonly providerConfigured: boolean;
+  readonly webhookConfigured: boolean;
+  readonly testRecipientOverride: string | null;
+  readonly allowedTestRecipients: readonly string[];
+  readonly queued: number;
+  readonly processing: number;
+  readonly failed: number;
+  readonly delivered: number;
+  readonly suppressed: number;
+  readonly last_webhook_at: string | null;
+  readonly oldest_queued_at: string | null;
+  readonly worker_status: 'HEALTHY' | 'BACKLOG' | 'DEGRADED' | 'IDLE';
+  readonly top_failure_reason: { readonly code: string; readonly count: number } | null;
+  readonly today: {
+    readonly created: number;
+    readonly queued: number;
+    readonly sent: number;
+    readonly delivered: number;
+    readonly failed: number;
+    readonly bounced: number;
+    readonly complained: number;
+    readonly suppressed: number;
+  };
+  readonly last_7_days: {
+    readonly total: number;
+    readonly delivered: number;
+    readonly failed: number;
+    readonly success_rate: number | null;
+  };
+}
+
+export type OrderEmailEligibilityCode =
+  | 'DELIVERED'
+  | 'ACCEPTED'
+  | 'QUEUED'
+  | 'FAILED'
+  | 'READY_TO_SEND'
+  | 'WAITING_FOR_ORDER_STATE'
+  | 'CUSTOMER_EMAIL_MISSING'
+  | 'RECIPIENT_SUPPRESSED'
+  | 'POLICY_DISABLED'
+  | 'GLOBAL_EMAIL_DISABLED'
+  | 'MANUAL_SEND_FORBIDDEN';
+
+export interface OrderEmailEventEligibilityDto {
+  readonly notificationType: string;
+  readonly templateKey: string;
+  readonly label: string;
+  readonly description: string;
+  readonly policy: {
+    readonly enabled: boolean;
+    readonly automaticEnabled: boolean;
+    readonly manualAllowed: boolean;
+  };
+  readonly orderReachedState: boolean;
+  readonly canSendManually: boolean;
+  readonly eligibilityCode: OrderEmailEligibilityCode;
+  readonly explanation: string;
+  readonly latestNotification: EmailNotificationRowDto | null;
+}
+
+export interface OrderEmailEligibilityDto {
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly orderStatus: string;
+  readonly customerEmail: string | null;
+  readonly isSuppressed: boolean;
+  readonly suppressionReason: string | null;
+  readonly globalEmailEnabled: boolean;
+  readonly events: readonly OrderEmailEventEligibilityDto[];
+}
+
