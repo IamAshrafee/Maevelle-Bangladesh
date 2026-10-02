@@ -44,6 +44,11 @@ import { findActiveAdminContext } from '@maevelle/database/platform';
 import { getCustomerDeliveryHistory } from '@maevelle/database/delivery-intelligence';
 
 import type { createAuth } from '../auth/auth.js';
+import {
+  canAccessLocation,
+  locationScopeError,
+  locationScopeIds,
+} from '../authorization/location-scope.js';
 
 type Auth = ReturnType<typeof createAuth>;
 
@@ -138,11 +143,12 @@ export function registerFulfillmentDeliveryRoutes(
     async (request, reply) => {
       const active = await requireAdmin(database, auth, request.headers, 'fulfillment.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      const result = await listFulfillmentPage(
-        database.db,
-        active.organizationId,
-        request.query as Parameters<typeof listFulfillmentPage>[2],
-      );
+      const allowedLocationIds = locationScopeIds(active, 'fulfillment.view');
+      const query = request.query as Parameters<typeof listFulfillmentPage>[2];
+      const result = await listFulfillmentPage(database.db, active.organizationId, {
+        ...query,
+        ...(allowedLocationIds ? { locationIds: allowedLocationIds } : {}),
+      });
       return { data: result.items, meta: { pagination: result.pagination } };
     },
   );
@@ -150,12 +156,14 @@ export function registerFulfillmentDeliveryRoutes(
     const active = await requireAdmin(database, auth, request.headers, 'fulfillment.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     try {
-      return {
-        data: await getFulfillment(database.db, {
-          organizationId: active.organizationId,
-          fulfillmentId: (request.params as { fulfillmentId: string }).fulfillmentId,
-        }),
-      };
+      const fulfillment = await getFulfillment(database.db, {
+        organizationId: active.organizationId,
+        fulfillmentId: (request.params as { fulfillmentId: string }).fulfillmentId,
+      });
+      if (!canAccessLocation(active, 'fulfillment.view', fulfillment.locationId)) {
+        return reply.code(403).send(locationScopeError());
+      }
+      return { data: fulfillment };
     } catch (error) {
       return sendDomainError(reply, error);
     }
@@ -186,6 +194,9 @@ export function registerFulfillmentDeliveryRoutes(
           locationId: string;
           lines: { orderLineId: string; quantity: string }[];
         };
+        if (!canAccessLocation(active, 'fulfillment.manage', body.locationId)) {
+          return reply.code(403).send(locationScopeError());
+        }
         return reply.code(201).send({
           data: await createFulfillment(database.db, {
             ...active,
@@ -211,10 +222,18 @@ export function registerFulfillmentDeliveryRoutes(
         const active = await requireAdmin(database, auth, request.headers, 'fulfillment.manage');
         if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
         try {
+          const fulfillmentId = (request.params as { fulfillmentId: string }).fulfillmentId;
+          const current = await getFulfillment(database.db, {
+            organizationId: active.organizationId,
+            fulfillmentId,
+          });
+          if (!canAccessLocation(active, 'fulfillment.manage', current.locationId)) {
+            return reply.code(403).send(locationScopeError());
+          }
           return {
             data: await transitionFulfillment(database.db, {
               ...active,
-              fulfillmentId: (request.params as { fulfillmentId: string }).fulfillmentId,
+              fulfillmentId,
               expectedVersion: (request.body as { version: number }).version,
               nextStatus,
             }),
@@ -234,10 +253,18 @@ export function registerFulfillmentDeliveryRoutes(
       const key = requireKey(request, reply);
       if (!key) return;
       try {
+        const fulfillmentId = (request.params as { fulfillmentId: string }).fulfillmentId;
+        const current = await getFulfillment(database.db, {
+          organizationId: active.organizationId,
+          fulfillmentId,
+        });
+        if (!canAccessLocation(active, 'fulfillment.dispatch', current.locationId)) {
+          return reply.code(403).send(locationScopeError());
+        }
         return {
           data: await dispatchFulfillment(database.db, {
             ...active,
-            fulfillmentId: (request.params as { fulfillmentId: string }).fulfillmentId,
+            fulfillmentId,
             expectedVersion: (request.body as { version: number }).version,
             idempotencyKey: key,
           }),
@@ -256,10 +283,18 @@ export function registerFulfillmentDeliveryRoutes(
       const key = requireKey(request, reply);
       if (!key) return;
       try {
+        const fulfillmentId = (request.params as { fulfillmentId: string }).fulfillmentId;
+        const current = await getFulfillment(database.db, {
+          organizationId: active.organizationId,
+          fulfillmentId,
+        });
+        if (!canAccessLocation(active, 'fulfillment.manage', current.locationId)) {
+          return reply.code(403).send(locationScopeError());
+        }
         return {
           data: await cancelFulfillment(database.db, {
             ...active,
-            fulfillmentId: (request.params as { fulfillmentId: string }).fulfillmentId,
+            fulfillmentId,
             expectedVersion: (request.body as { version: number }).version,
             idempotencyKey: key,
           }),

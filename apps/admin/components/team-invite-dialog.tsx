@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from 'react';
 import { UserPlus } from 'lucide-react';
+import type { CapabilityCatalogItemDto, PermissionPresetDto } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -16,28 +17,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-interface CapabilityChoice {
-  readonly capability_code: string;
-  readonly domain: string;
-  readonly description: string;
-  readonly sensitivity: string;
-  readonly status?: string;
-}
-
-interface PermissionPreset {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string | null;
-  readonly capability_codes: readonly string[];
-}
-
 export function TeamInviteDialog({
   capabilities,
   presets,
   onInvited,
 }: {
-  readonly capabilities: readonly CapabilityChoice[];
-  readonly presets: readonly PermissionPreset[];
+  readonly capabilities: readonly CapabilityCatalogItemDto[];
+  readonly presets: readonly PermissionPresetDto[];
   readonly onInvited: (message: string) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);

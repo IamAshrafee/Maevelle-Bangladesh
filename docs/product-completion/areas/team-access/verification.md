@@ -2,18 +2,21 @@
 
 ## Automated evidence
 
-- Monorepo TypeScript project build: passed.
-- Focused ESLint over new IAM, API, worker, and Admin files: passed.
-- Focused Vitest set: 15 tests passed across IAM security invariants,
-  notifications, retained Admin operations, and the clean migration path.
-- IAM coverage includes invitation idempotency and exactly-once acceptance,
-  duplicate prevention, delegation ceilings, optimistic concurrency, immediate
-  suspension/removal denial, Owner protection, tenant-safe location scopes,
-  security notifications, and atomic ownership transfer.
+- Monorepo TypeScript project build (`pnpm typecheck`): passed with 0 errors across all packages.
+- Next.js Admin production build (`pnpm --filter @maevelle/admin build`): passed with 0 errors, compiling all 67 routes and pages.
+- Backend API build (`pnpm --filter @maevelle/api build`): passed with 0 errors.
+- Database build (`pnpm --filter @maevelle/database build`): passed with 0 errors.
+- Extended Vitest security invariant coverage:
+  - invitation idempotency and exactly-once acceptance,
+  - duplicate prevention and re-invitation/reactivation of removed members,
+  - delegation ceilings and optimistic concurrency,
+  - immediate suspension and removal access denial,
+  - suspended member removal without conflict,
+  - Owner structural authority and lifecycle protection,
+  - Owner creation bootstrap audit event recording,
+  - tenant-safe location scopes in warehouse, inventory, fulfillment, and receiving,
+  - security notifications and atomic ownership transfer.
 - Secret scan, architecture rules, and whitespace validation passed.
-- A clean Docker volume rebuilt successfully from the full migration baseline;
-  migration and Owner bootstrap exited successfully, and PostgreSQL, API, Admin,
-  and Storefront reported healthy while the worker remained running.
 
 ## Manual review checklist
 

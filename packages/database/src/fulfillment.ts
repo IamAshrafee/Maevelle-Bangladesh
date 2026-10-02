@@ -233,6 +233,7 @@ export async function listFulfillmentPage(
     readonly pageSize?: number;
     readonly search?: string;
     readonly status?: FulfillmentStatus;
+    readonly locationIds?: readonly string[];
   } = {},
 ): Promise<{
   readonly items: readonly FulfillmentView[];
@@ -248,6 +249,9 @@ export async function listFulfillmentPage(
   const offset = (page - 1) * pageSize;
   const search = filters.search?.trim() || null;
   const status = filters.status ?? null;
+  const locationFilter = filters.locationIds?.length
+    ? sql`and fulfillment.location_id in (${sql.join(filters.locationIds.map((id) => sql`${id}::uuid`))})`
+    : sql``;
   const [ids, total] = await Promise.all([
     sql<{ id: string }>`select fulfillment.id
       from fulfillment.fulfillments fulfillment
@@ -256,6 +260,7 @@ export async function listFulfillmentPage(
         and (${status}::text is null or fulfillment.status=${status})
         and (${search}::text is null or fulfillment.fulfillment_number ilike '%'||${search}||'%'
           or order_row.order_number ilike '%'||${search}||'%')
+        ${locationFilter}
       order by fulfillment.created_at desc,fulfillment.id desc
       limit ${pageSize} offset ${offset}`.execute(db),
     sql<{ total: string }>`select count(*)::text as total
@@ -264,7 +269,8 @@ export async function listFulfillmentPage(
       where fulfillment.organization_id=${organizationId}
         and (${status}::text is null or fulfillment.status=${status})
         and (${search}::text is null or fulfillment.fulfillment_number ilike '%'||${search}||'%'
-          or order_row.order_number ilike '%'||${search}||'%')`.execute(db),
+          or order_row.order_number ilike '%'||${search}||'%')
+        ${locationFilter}`.execute(db),
   ]);
   const totalItems = Number(total.rows[0]?.total ?? 0);
   const items = await Promise.all(

@@ -1,6 +1,8 @@
 import { Kysely, PostgresDialect, sql, type Transaction } from 'kysely';
 import { Pool } from 'pg';
 
+export { sql };
+
 /**
  * Table types are intentionally empty until migration-controlled schemas are
  * introduced. Raw infrastructure queries such as readiness checks remain typed.

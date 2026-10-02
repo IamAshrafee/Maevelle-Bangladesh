@@ -540,10 +540,32 @@ export async function createOwnerMembership(
   displayName: string,
 ): Promise<void> {
   await db.transaction().execute(async (tx) => {
-    await sql`
+    const inserted = await sql<{ id: string }>`
       insert into iam.organization_memberships (
         organization_id, user_id, membership_type, status, display_name, activated_at
       ) values (${organizationId}, ${userId}, 'OWNER', 'ACTIVE', ${displayName}, now())
+      returning id::text
     `.execute(tx);
+    const membershipId = inserted.rows[0]?.id;
+    if (membershipId) {
+      await sql`
+        insert into audit.audit_events (
+          organization_id, actor_type, actor_id, membership_id, action, target_type, target_id, after_diff
+        ) values (
+          ${organizationId}::uuid, 'USER', ${userId}::uuid, ${membershipId}::uuid,
+          'iam.organization.owner_created', 'iam.organization_membership', ${membershipId}::uuid,
+          ${JSON.stringify({ organizationId, userId, displayName, membershipType: 'OWNER' })}::jsonb
+        )
+      `.execute(tx);
+      await sql`
+        insert into platform.outbox_events (
+          organization_id, event_type, event_version, aggregate_type, aggregate_id,
+          aggregate_version, payload, occurred_at
+        ) values (
+          ${organizationId}::uuid, 'iam.organization.owner_created', 1, 'iam.organization_membership',
+          ${membershipId}::uuid, 1, ${JSON.stringify({ organizationId, userId, membershipId })}::jsonb, now()
+        )
+      `.execute(tx);
+    }
   });
 }

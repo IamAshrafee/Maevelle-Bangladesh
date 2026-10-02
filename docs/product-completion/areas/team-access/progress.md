@@ -17,19 +17,28 @@
 - Added secure invitation token generation, hash-at-rest validation, encrypted
   delivery handoff, expiry/revocation/resend, idempotent creation, exactly-once
   acceptance, worker leasing, retry history, and secret-free audit/outbox payloads.
-- Made Owner authority structural, protected Owner lifecycle operations, and added
+- Added re-invitation and atomic reactivation of `REMOVED` members, preserving
+  historical business attribution, actor references, and `unique(organization_id, user_id)` integrity.
+- Made Owner authority structural, protected Owner lifecycle operations, emitted
+  `iam.organization.owner_created` audit/outbox events at bootstrap, and added
   atomic ownership transfer requiring a recent MFA-authenticated session.
 - Made Admin organization selection explicit when identity membership is ambiguous;
   every route verifies the selected active membership and requested capability.
-- Added capability-specific LOCATION enforcement to warehouse and inventory lists,
-  details, aggregate paths, stocktakes, reservations, and transfers.
+- Added capability-specific LOCATION enforcement to warehouse, inventory, fulfillment,
+  and receiving lists, details, aggregate paths, stocktakes, reservations, transfers, and receipts.
+- Implemented user session indexing (`active-sessions-${userId}`) in secondary storage to
+  enable authoritative `listAuthSessionsForUser` and immediate `revokeAuthSessionsForUser`
+  across member suspension, removal, and explicit session revocation.
 - Prevented cross-capability data leakage in operations overview and global search.
 - Integrated invitation and security messages with the worker/notification system,
   including membership recipients.
+- Standardized all IAM wire types in `@maevelle/contracts` (`TeamMemberListItemDto`,
+  `CapabilityCatalogItemDto`, `PermissionPresetDto`, `MembershipInvitationDto`,
+  `AdminContextDto`, etc.).
 - Added Team member search/pagination, capability and preset discovery, pending
-  invitation operations, audit history, session metadata/revocation, and the
-  minimal Admin invite/accept/member-management UI required to operate the APIs.
-- Removed the obsolete generic Team database and API mutations.
+  invitation operations, audit history, session metadata/revocation, and Admin
+  invite/accept/member-management UI actions (including session revocation and member removal).
+- Removed obsolete generic Team database and API mutations.
 
 ## Remaining gates
 

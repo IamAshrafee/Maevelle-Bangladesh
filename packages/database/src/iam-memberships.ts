@@ -323,9 +323,16 @@ export async function changeMemberLifecycle(
     if (Number(member.version) !== input.expectedVersion)
       throw new IamError('VERSION_CONFLICT', 'The membership changed; reload before continuing.');
 
-    const expectedStatus = input.action === 'RESTORE' ? 'DISABLED' : 'ACTIVE';
-    if (member.status !== expectedStatus)
-      throw new IamError('CONFLICT', `The membership cannot be ${input.action.toLowerCase()}ed from ${member.status}.`);
+    if (input.action === 'RESTORE') {
+      if (member.status !== 'DISABLED')
+        throw new IamError('CONFLICT', `The membership cannot be restored from ${member.status}.`);
+    } else if (input.action === 'SUSPEND') {
+      if (member.status !== 'ACTIVE')
+        throw new IamError('CONFLICT', `The membership cannot be suspended from ${member.status}.`);
+    } else if (input.action === 'REMOVE') {
+      if (member.status !== 'ACTIVE' && member.status !== 'DISABLED')
+        throw new IamError('CONFLICT', `The membership cannot be removed from ${member.status}.`);
+    }
     const nextStatus = input.action === 'RESTORE' ? 'ACTIVE' : input.action === 'SUSPEND' ? 'DISABLED' : 'REMOVED';
     const timestampColumn = input.action === 'RESTORE' ? 'activated_at' : input.action === 'SUSPEND' ? 'disabled_at' : 'removed_at';
     const updated = await sql<{ version: string; access_version: string }>`

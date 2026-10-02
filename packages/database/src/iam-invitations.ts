@@ -132,8 +132,8 @@ export async function createMembershipInvitation(
           where invitation.organization_id = ${input.actor.organizationId}::uuid
             and invitation.email_normalized = ${email} and invitation.status = 'PENDING' limit 1) invitation_id
     `.execute(tx);
-      if (existing.rows[0]?.membership_status)
-        throw new IamError('CONFLICT', 'This person already has a membership in the organization.');
+      if (existing.rows[0]?.membership_status && existing.rows[0].membership_status !== 'REMOVED')
+        throw new IamError('CONFLICT', 'This person already has an active membership in the organization.');
       if (existing.rows[0]?.invitation_id)
         throw new IamError('CONFLICT', 'A pending invitation already exists for this email.');
 
@@ -453,17 +453,29 @@ export async function acceptMembershipInvitation(
       where organization_id = ${invitation.organization_id}::uuid and user_id = ${user.id}::uuid
       for update
     `.execute(tx);
-    if (existingMembership.rows[0])
-      throw new IamError('CONFLICT', 'This identity already has an organization membership.');
-    const membership = await sql<{ id: string }>`
-      insert into iam.organization_memberships (
-        organization_id, user_id, membership_type, status, display_name, invited_at, activated_at
-      ) values (
-        ${invitation.organization_id}::uuid, ${user.id}::uuid, 'STANDARD', 'ACTIVE',
-        ${invitation.display_name}, now(), now()
-      ) returning id::text
-    `.execute(tx);
-    const membershipId = membership.rows[0]!.id;
+    let membershipId: string;
+    if (existingMembership.rows[0]) {
+      if (existingMembership.rows[0].status !== 'REMOVED')
+        throw new IamError('CONFLICT', 'This identity already has an active organization membership.');
+      membershipId = existingMembership.rows[0].id;
+      await sql`
+        update iam.organization_memberships
+        set status = 'ACTIVE', display_name = ${invitation.display_name},
+          activated_at = now(), version = version + 1, access_version = access_version + 1,
+          updated_at = now(), lifecycle_reason = 'Re-activated via accepted invitation'
+        where id = ${membershipId}::uuid
+      `.execute(tx);
+    } else {
+      const membership = await sql<{ id: string }>`
+        insert into iam.organization_memberships (
+          organization_id, user_id, membership_type, status, display_name, invited_at, activated_at
+        ) values (
+          ${invitation.organization_id}::uuid, ${user.id}::uuid, 'STANDARD', 'ACTIVE',
+          ${invitation.display_name}, now(), now()
+        ) returning id::text
+      `.execute(tx);
+      membershipId = membership.rows[0]!.id;
+    }
     await replaceCapabilityRows(tx, membershipId, user.id, invitation.capability_codes);
     await replaceScopeRows(tx, invitation.organization_id, membershipId, invitation.scopes);
     const version = Number(invitation.version) + 1;

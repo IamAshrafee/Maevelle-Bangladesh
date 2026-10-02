@@ -375,4 +375,76 @@ describe('organization IAM', () => {
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+  it('allows removing a suspended member and reactivating a removed member via invitation', async () => {
+    const fixture = await createFixture('removal-reinvite');
+    const member = await createStandardMember(fixture.organizationId, 'rejoiner');
+
+    // Suspend member (version 1 -> 2)
+    const suspended = await changeMemberLifecycle(database.db, {
+      actor: fixture.actor,
+      membershipId: member.membership.id,
+      action: 'SUSPEND',
+      expectedVersion: 1,
+      reason: 'Temporary suspension',
+    });
+    expect(suspended.status).toBe('DISABLED');
+
+    // Remove member from DISABLED status (version 2 -> 3)
+    const removed = await changeMemberLifecycle(database.db, {
+      actor: fixture.actor,
+      membershipId: member.membership.id,
+      action: 'REMOVE',
+      expectedVersion: 2,
+      reason: 'Departed team',
+    });
+    expect(removed.status).toBe('REMOVED');
+
+    // Re-invite the removed member back with new capabilities
+    const inviteInput = {
+      actor: fixture.actor,
+      email: member.user.email,
+      displayName: 'Rejoined Team Member',
+      capabilityCodes: ['catalog.view'],
+      scopes: [],
+      idempotencyKey: crypto.randomUUID(),
+      encryptionKey: invitationKey,
+    } as const;
+    const invitation = await createMembershipInvitation(database.db, inviteInput);
+    const stored = (
+      await sql<{ encrypted_delivery_token: string }>`
+        select encrypted_delivery_token from iam.membership_invitations
+        where id = ${invitation.invitationId}::uuid
+      `.execute(database.db)
+    ).rows[0]!;
+    const token = decryptSecret(stored.encrypted_delivery_token, invitationKey);
+
+    // Accept invitation as the existing user
+    const accepted = await acceptMembershipInvitation(database.db, {
+      token,
+      passwordHash: 'test-hash-for-existing-user',
+    });
+
+    // Verify membership was safely reactivated with the same id
+    expect(accepted.membershipId).toBe(member.membership.id);
+    expect(accepted.alreadyAccepted).toBe(false);
+
+    // Context resolution should now succeed with the newly granted capability
+    const context = await findActiveAdminContext(database.db, member.user.id, {
+      organizationId: fixture.organizationId,
+      requiredCapability: 'catalog.view',
+    });
+    expect(context).toBeDefined();
+    expect(context?.capabilities).toContain('catalog.view');
+  });
+
+  it('records an audit event when owner membership is created at bootstrap', async () => {
+    const fixture = await createFixture('owner-audit');
+    const audits = await sql<{ event_name: string }>`
+      select event_name from platform.audit_events
+      where organization_id = ${fixture.organizationId}::uuid
+        and event_name = 'iam.organization.owner_created'
+    `.execute(database.db);
+    expect(audits.rows.length).toBeGreaterThan(0);
+  });
 });

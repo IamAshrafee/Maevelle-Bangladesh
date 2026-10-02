@@ -30,7 +30,15 @@ export function registerAdminContextRoute(
             actorId: Type.String(),
             organizationId: Type.String(),
             membershipId: Type.String(),
+            membershipType: Type.Union([Type.Literal('OWNER'), Type.Literal('STANDARD')]),
             capabilities: Type.Array(Type.String()),
+            scopes: Type.Array(
+              Type.Object({
+                capabilityCode: Type.String(),
+                scopeType: Type.Literal('LOCATION'),
+                scopeId: Type.String(),
+              }),
+            ),
           }),
           401: Type.Object({ error: Type.Literal('UNAUTHENTICATED') }),
           403: Type.Object({ error: Type.Literal('FORBIDDEN') }),
@@ -61,7 +69,9 @@ export function registerAdminContextRoute(
         actorId: session.user.id,
         organizationId: active.organizationId,
         membershipId: active.membershipId,
+        membershipType: active.membershipType,
         capabilities: [...active.capabilities],
+        scopes: [...active.scopes],
       };
     },
   );

@@ -36,6 +36,38 @@ export function createAuthSecondaryStorage(options: AuthStorageOptions) {
         Buffer.from(encryptSecret(value, key), 'utf8'),
         expiresAt,
       );
+      if (typeof value === 'string' && value.includes('userId') && !storageKey.startsWith('active-sessions-')) {
+        try {
+          const parsed = JSON.parse(value) as {
+            session?: { userId?: string; expiresAt?: string | Date; id?: string };
+            user?: { id?: string };
+          };
+          const userId = parsed?.session?.userId ?? parsed?.user?.id;
+          if (userId) {
+            const indexKey = `active-sessions-${userId}`;
+            const currentRaw = decode(await getAuthStorageValue(options.database.db, hash(indexKey)));
+            const currentList = parseJson<StoredSessionIndexEntry[]>(currentRaw) ?? [];
+            const now = Date.now();
+            const expTime = parsed.session?.expiresAt
+              ? new Date(parsed.session.expiresAt).getTime()
+              : expiresAt
+                ? expiresAt.getTime()
+                : now + 12 * 60 * 60 * 1000;
+            const updatedList = [
+              ...currentList.filter((e) => e.token !== storageKey && e.expiresAt > now),
+              { token: storageKey, expiresAt: expTime },
+            ];
+            await setAuthStorageValue(
+              options.database.db,
+              hash(indexKey),
+              Buffer.from(encryptSecret(JSON.stringify(updatedList), key), 'utf8'),
+              new Date(now + 30 * 24 * 60 * 60 * 1000),
+            );
+          }
+        } catch {
+          // ignore non-json or unexpected payload
+        }
+      }
     },
     async delete(storageKey: string): Promise<void> {
       await deleteAuthStorageValue(options.database.db, hash(storageKey));

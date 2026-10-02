@@ -2939,3 +2939,136 @@ export interface MediaBulkOrganizeDto {
 export interface MediaBulkTrashDto {
   readonly assetIds: readonly string[];
 }
+
+/** IAM & Team Access contracts. */
+export type MembershipTypeDto = 'OWNER' | 'STANDARD';
+export type MembershipStatusDto = 'INVITED' | 'ACTIVE' | 'DISABLED' | 'EXPIRED_INVITE' | 'REMOVED';
+export type CapabilitySensitivityDto = 'INTERNAL' | 'HIGH' | 'CRITICAL' | 'RESTRICTED';
+export type ScopeTypeDto = 'LOCATION';
+
+export interface AccessScopeDto {
+  readonly capabilityCode: string;
+  readonly scopeType: ScopeTypeDto;
+  readonly scopeId: string;
+}
+
+export interface TeamMemberListItemDto {
+  readonly id: string;
+  readonly user_id?: string;
+  readonly name: string;
+  readonly email: string;
+  readonly two_factor_enabled: boolean;
+  readonly membership_type: MembershipTypeDto;
+  readonly status: MembershipStatusDto;
+  readonly version: string | number;
+  readonly access_version?: string | number;
+  readonly created_at: string;
+  readonly updated_at?: string;
+  readonly capabilities: readonly string[];
+  readonly scopes: readonly AccessScopeDto[];
+}
+
+export interface CapabilityCatalogItemDto {
+  readonly capability_code: string;
+  readonly domain: string;
+  readonly description: string;
+  readonly sensitivity: CapabilitySensitivityDto;
+  readonly supported_scope_types?: readonly ScopeTypeDto[];
+  readonly status?: string;
+}
+
+export interface PermissionPresetDto {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly is_system_default?: boolean;
+  readonly capability_codes: readonly string[];
+}
+
+export interface MembershipInvitationDto {
+  readonly id: string;
+  readonly email: string;
+  readonly display_name: string;
+  readonly status: string;
+  readonly expires_at: string;
+  readonly last_sent_at: string | null;
+  readonly delivery_attempt_count: number;
+  readonly version: string | number;
+  readonly capability_codes: readonly string[];
+  readonly scopes?: readonly AccessScopeDto[];
+}
+
+export interface TeamAuditItemDto {
+  readonly id: string;
+  readonly action: string;
+  readonly actorId: string;
+  readonly membershipId: string | null;
+  readonly actorName: string | null;
+  readonly actorEmail: string | null;
+  readonly targetType: string | null;
+  readonly targetId: string | null;
+  readonly occurredAt: string;
+  readonly reason: string | null;
+  readonly beforeDiff: unknown;
+  readonly afterDiff: unknown;
+}
+
+export interface AuthSessionDto {
+  readonly id?: string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly expiresAt?: string;
+  readonly ipAddress?: string | null;
+  readonly userAgent?: string | null;
+}
+
+export interface CreateMembershipInvitationRequestDto {
+  readonly email: string;
+  readonly displayName: string;
+  readonly capabilityCodes: readonly string[];
+  readonly scopes: readonly AccessScopeDto[];
+  readonly expiresInHours?: number;
+}
+
+export interface ResendMembershipInvitationRequestDto {
+  readonly expectedVersion: number;
+  readonly expiresInHours?: number;
+}
+
+export interface RevokeMembershipInvitationRequestDto {
+  readonly expectedVersion: number;
+  readonly reason: string;
+}
+
+export interface AcceptMembershipInvitationRequestDto {
+  readonly token: string;
+  readonly password?: string;
+}
+
+export interface ReplaceMemberPermissionsRequestDto {
+  readonly expectedVersion: number;
+  readonly capabilityCodes: readonly string[];
+  readonly scopes: readonly AccessScopeDto[];
+  readonly reason?: string;
+}
+
+export interface ChangeMemberLifecycleRequestDto {
+  readonly expectedVersion: number;
+  readonly reason: string;
+}
+
+export interface TransferOwnershipRequestDto {
+  readonly targetMembershipId: string;
+  readonly expectedOwnerVersion: number;
+  readonly expectedTargetVersion: number;
+  readonly reason: string;
+}
+
+export interface AdminContextDto {
+  readonly actorId: string;
+  readonly organizationId: string;
+  readonly membershipId: string;
+  readonly membershipType: MembershipTypeDto;
+  readonly capabilities: readonly string[];
+  readonly scopes: readonly AccessScopeDto[];
+}

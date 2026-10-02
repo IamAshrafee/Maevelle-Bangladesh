@@ -214,6 +214,7 @@ export interface InboundReceiptListOptions extends ProcurementPaginationOptions 
   status?: string | undefined;
   shipmentId?: string | undefined;
   locationId?: string | undefined;
+  locationIds?: readonly string[] | undefined;
   fromDate?: string | undefined;
   toDate?: string | undefined;
   sortBy?: ('receiptNumber' | 'postedAt' | 'createdAt') | undefined;
@@ -2435,6 +2436,13 @@ export async function listInboundReceipts(
   const statuses = parseDelimitedValues(options?.status);
   const shipmentId = options?.shipmentId?.trim() || null;
   const locationId = options?.locationId?.trim() || null;
+  const locationIds = options?.locationIds;
+  const locationScopeFilter =
+    locationIds !== undefined
+      ? locationIds.length === 0
+        ? sql`and 1 = 0`
+        : sql`and receipt.receiving_location_id in (${sql.join(locationIds.map((id) => sql`${id}::uuid`))})`
+      : sql``;
   const fromDate = options?.fromDate?.trim() || null;
   const toDate = options?.toDate?.trim() || null;
 
@@ -2444,7 +2452,8 @@ export async function listInboundReceipts(
     and (${shipmentId}::uuid is null or receipt.shipment_id = ${shipmentId}::uuid)
     and (${locationId}::uuid is null or receipt.receiving_location_id = ${locationId}::uuid)
     and (${fromDate}::date is null or receipt.posted_at::date >= ${fromDate}::date)
-    and (${toDate}::date is null or receipt.posted_at::date <= ${toDate}::date)`;
+    and (${toDate}::date is null or receipt.posted_at::date <= ${toDate}::date)
+    ${locationScopeFilter}`;
 
   const sortBy = options?.sortBy ?? 'postedAt';
   const sortAsc = (options?.sortOrder ?? 'desc') === 'asc';

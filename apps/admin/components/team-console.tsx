@@ -15,46 +15,12 @@ import {
 import { StatusBadge } from './status-badge';
 import { TeamInviteDialog } from './team-invite-dialog';
 
-type Member = {
-  readonly id: string;
-  readonly name: string;
-  readonly email: string;
-  readonly two_factor_enabled: boolean;
-  readonly membership_type: string;
-  readonly status: string;
-  readonly created_at: string;
-  readonly version: string;
-  readonly scopes: readonly {
-    readonly capabilityCode: string;
-    readonly scopeType: 'LOCATION';
-    readonly scopeId: string;
-  }[];
-  readonly capabilities: readonly string[];
-};
-type Capability = {
-  readonly capability_code: string;
-  readonly domain: string;
-  readonly description: string;
-  readonly sensitivity: string;
-  readonly status?: string;
-};
-type PermissionPreset = {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string | null;
-  readonly capability_codes: readonly string[];
-};
-type Invitation = {
-  readonly id: string;
-  readonly email: string;
-  readonly display_name: string;
-  readonly status: string;
-  readonly expires_at: string;
-  readonly last_sent_at: string | null;
-  readonly delivery_attempt_count: number;
-  readonly version: string;
-  readonly capability_codes: readonly string[];
-};
+import type {
+  TeamMemberListItemDto as Member,
+  CapabilityCatalogItemDto as Capability,
+  PermissionPresetDto as PermissionPreset,
+  MembershipInvitationDto as Invitation,
+} from '@maevelle/contracts';
 
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`/api${path}`, {
@@ -490,6 +456,51 @@ export function TeamConsole() {
                           <UserRoundCheck aria-hidden="true" />
                         )}
                         {selected.status === 'ACTIVE' ? 'Disable member' : 'Reactivate member'}
+                      </button>
+                      <button
+                        className="button secondary"
+                        disabled={busy}
+                        type="button"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Revoke all active sessions for ${selected.name}? They will be required to log in again.`,
+                            )
+                          ) {
+                            void change(
+                              `/admin/team/${selected.id}/sessions/revoke`,
+                              'POST',
+                              {},
+                              `All sessions revoked for ${selected.name}.`,
+                            );
+                          }
+                        }}
+                      >
+                        <KeyRound aria-hidden="true" /> Revoke sessions
+                      </button>
+                      <button
+                        className="button secondary danger"
+                        disabled={busy}
+                        type="button"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Remove ${selected.name} from the organization? Their permissions will be removed and sessions revoked.`,
+                            )
+                          ) {
+                            void change(
+                              `/admin/team/${selected.id}/remove`,
+                              'POST',
+                              {
+                                expectedVersion: Number(selected.version),
+                                reason: 'Removed by administrator in Team and access',
+                              },
+                              `${selected.name} was removed from the organization.`,
+                            );
+                          }
+                        }}
+                      >
+                        <UserRoundX aria-hidden="true" /> Remove member
                       </button>
                     </section>
                   </>

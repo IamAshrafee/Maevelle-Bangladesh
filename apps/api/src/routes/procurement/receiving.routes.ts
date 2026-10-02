@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { DatabaseClient } from '@maevelle/database';
+import { sql, type DatabaseClient } from '@maevelle/database';
 import {
   getInboundReceipt,
   listInboundReceipts,
@@ -8,6 +8,11 @@ import {
   reverseInboundReceipt,
 } from '@maevelle/database/procurement';
 
+import {
+  canAccessLocation,
+  locationScopeError,
+  locationScopeIds,
+} from '../../authorization/location-scope.js';
 import { idempotencyKey, requireAdmin, requireKey, sendError, type Auth } from './common.js';
 import {
   listReceiptsQuerySchema,
@@ -27,8 +32,12 @@ export function registerReceivingRoutes(
     async (request, reply) => {
       const active = await requireAdmin(database, auth, request.headers, 'receiving.view');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const allowedLocationIds = locationScopeIds(active, 'receiving.view');
       try {
         const query = request.query as Record<string, string | undefined>;
+        if (query.locationId && !canAccessLocation(active, 'receiving.view', query.locationId)) {
+          return reply.code(403).send(locationScopeError());
+        }
         const page = query.page ? Number.parseInt(query.page, 10) : undefined;
         const pageSize = query.pageSize ? Number.parseInt(query.pageSize, 10) : undefined;
         const search = query.search ?? query.q;
@@ -39,10 +48,15 @@ export function registerReceivingRoutes(
           ...(query.status !== undefined ? { status: query.status } : {}),
           ...(query.shipmentId !== undefined ? { shipmentId: query.shipmentId } : {}),
           ...(query.locationId !== undefined ? { locationId: query.locationId } : {}),
+          ...(allowedLocationIds !== undefined ? { locationIds: allowedLocationIds } : {}),
           ...(query.fromDate !== undefined ? { fromDate: query.fromDate } : {}),
           ...(query.toDate !== undefined ? { toDate: query.toDate } : {}),
-          ...(query.sortBy !== undefined ? { sortBy: query.sortBy as any } : {}),
-          ...(query.sortOrder !== undefined ? { sortOrder: query.sortOrder as any } : {}),
+          ...(query.sortBy !== undefined
+            ? { sortBy: query.sortBy as 'receiptNumber' | 'postedAt' | 'createdAt' }
+            : {}),
+          ...(query.sortOrder !== undefined
+            ? { sortOrder: query.sortOrder as 'asc' | 'desc' }
+            : {}),
         });
         return { data: result.items, pagination: result.pagination };
       } catch (error) {
@@ -55,12 +69,14 @@ export function registerReceivingRoutes(
     const active = await requireAdmin(database, auth, request.headers, 'receiving.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
     try {
-      return {
-        data: await getInboundReceipt(database.db, {
-          organizationId: active.organizationId,
-          receiptId: (request.params as { receiptId: string }).receiptId,
-        }),
-      };
+      const receipt = await getInboundReceipt(database.db, {
+        organizationId: active.organizationId,
+        receiptId: (request.params as { receiptId: string }).receiptId,
+      });
+      if (!canAccessLocation(active, 'receiving.view', receipt.locationId)) {
+        return reply.code(403).send(locationScopeError());
+      }
+      return { data: receipt };
     } catch (error) {
       return sendError(reply, error);
     }
@@ -72,6 +88,11 @@ export function registerReceivingRoutes(
     async (request, reply) => {
       const active = await requireAdmin(database, auth, request.headers, 'receiving.post');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const shipmentId = (request.params as { shipmentId: string }).shipmentId;
+      const shipmentRow = await sql<{ receiving_location_id: string }>`select receiving_location_id from inbound_shipment.shipments where organization_id = ${active.organizationId} and id = ${shipmentId}`.execute(database.db);
+      if (shipmentRow.rows[0] && !canAccessLocation(active, 'receiving.post', shipmentRow.rows[0].receiving_location_id)) {
+        return reply.code(403).send(locationScopeError());
+      }
       const key = requireKey(reply, idempotencyKey(request.headers));
       if (!key) return;
       try {
@@ -80,7 +101,7 @@ export function registerReceivingRoutes(
           data: await postInboundReceipt(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            shipmentId: (request.params as { shipmentId: string }).shipmentId,
+            shipmentId,
             lines: body.lines,
             ...(body.packingSlipReference !== undefined
               ? { packingSlipReference: body.packingSlipReference }
@@ -101,15 +122,23 @@ export function registerReceivingRoutes(
     async (request, reply) => {
       const active = await requireAdmin(database, auth, request.headers, 'receiving.adjust');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      const key = requireKey(reply, idempotencyKey(request.headers));
-      if (!key) return;
+      const receiptId = (request.params as { receiptId: string }).receiptId;
       try {
+        const receipt = await getInboundReceipt(database.db, {
+          organizationId: active.organizationId,
+          receiptId,
+        });
+        if (!canAccessLocation(active, 'receiving.adjust', receipt.locationId)) {
+          return reply.code(403).send(locationScopeError());
+        }
+        const key = requireKey(reply, idempotencyKey(request.headers));
+        if (!key) return;
         const body = request.body as { reason: string };
         return {
           data: await reverseInboundReceipt(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            receiptId: (request.params as { receiptId: string }).receiptId,
+            receiptId,
             reason: body.reason,
             idempotencyKey: key,
           }),
@@ -126,9 +155,17 @@ export function registerReceivingRoutes(
     async (request, reply) => {
       const active = await requireAdmin(database, auth, request.headers, 'receiving.adjust');
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      const key = requireKey(reply, idempotencyKey(request.headers));
-      if (!key) return;
+      const receiptId = (request.params as { receiptId: string }).receiptId;
       try {
+        const receipt = await getInboundReceipt(database.db, {
+          organizationId: active.organizationId,
+          receiptId,
+        });
+        if (!canAccessLocation(active, 'receiving.adjust', receipt.locationId)) {
+          return reply.code(403).send(locationScopeError());
+        }
+        const key = requireKey(reply, idempotencyKey(request.headers));
+        if (!key) return;
         const body = request.body as {
           lineId: string;
           targetCondition: 'SELLABLE' | 'DAMAGED';
@@ -139,7 +176,7 @@ export function registerReceivingRoutes(
           data: await resolveReceiptLineCondition(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
-            receiptId: (request.params as { receiptId: string }).receiptId,
+            receiptId,
             lineId: body.lineId,
             targetCondition: body.targetCondition,
             quantity: body.quantity,
