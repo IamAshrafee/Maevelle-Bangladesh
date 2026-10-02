@@ -1,16 +1,16 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "asset-management",
-  "active_substage": "ASSET_MANAGEMENT_IMPLEMENTATION_COMPLETE",
+  "active_area": "transactional-email-notifications",
+  "active_substage": "RESEND_PLATFORM_IMPLEMENTATION_COMPLETE",
   "active_status": "LOCAL_DB_VERIFICATION_BLOCKED",
   "baseline_commit": "a5de03d",
-  "last_checkpoint_commit": "044ea35",
-  "last_verified_commit": "e799499",
-  "last_completed_action": "Completed the Asset Management frontend product pass: modularized console and detail components, interactive stat filtering, multi-attribute filters, multi-mode acquisition modal, state-aware operational action banners, cross-module financial provenance navigation, inline maintenance, and private media.",
-  "next_action": "Start Docker/PostgreSQL, rebuild the disposable database, run the focused Asset integration test, and conduct owner operational/visual review of /admin/assets.",
+  "last_checkpoint_commit": "75353b0",
+  "last_verified_commit": "75353b0",
+  "last_completed_action": "Implemented the production transactional-email platform: Resend adapter, safe configuration, outbox policy evaluation, durable delivery lifecycle, retries/idempotency, verified provider webhooks, suppressions, code-backed HTML/text templates, Admin operations and order visibility.",
+  "next_action": "Start Docker/PostgreSQL, rebuild the disposable database, run packages/database/src/notifications.test.ts, then complete external Resend/domain/webhook setup and owner operational review of /email.",
   "interrupted": false,
-  "blocked_by": ["Docker Desktop is not running, so the clean migration and focused PostgreSQL integration test cannot execute."],
+  "blocked_by": ["Docker Desktop is not running, so the clean notification migration and focused PostgreSQL integration test cannot execute.", "External Resend account, verified sender-domain DNS, API key, and webhook configuration require business-owner/deployment setup."],
   "owner_review_status": "PENDING",
   "verified_complete_areas": []
 }
