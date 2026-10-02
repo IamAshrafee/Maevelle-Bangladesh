@@ -21,9 +21,11 @@ location, condition, maintenance, private documents, and terminal lifecycle.
   idempotency, Audit, outbox, and private Media rules protect the workflows.
 - Responsive Admin list/detail/create/category/assignment/movement/maintenance/
   file/lifecycle/sale/disposal workflows are implemented with progressive disclosure.
-- Cross-module workflows link Expenses, Purchases, Owner Capital, and Finance Ledgers
-  directly to Asset records with prefilled registration and bidirectional links.
-- Database/contracts/API and Admin TypeScript checks pass.
+- Frontend product completion pass complete: modular components, interactive stat card filters,
+  multi-attribute search/filter controls, multi-mode acquisition modal, state-aware operational
+  action banners, bidirectional cross-module links to Owner Capital, Accounts, Expenses, and
+  Purchases with lines, dedicated inline maintenance and private media management, and deep linking.
+- Database/contracts/API and Admin TypeScript and production builds pass.
 
 ## Immediate Objective
 

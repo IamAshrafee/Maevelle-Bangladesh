@@ -10,6 +10,17 @@
 - Atomic, idempotent Asset sale proceeds into the immutable Finance Account ledger.
 - `assets.view`, `assets.manage`, and `assets.lifecycle.manage` authorization.
 - Responsive Admin list, registration, category management, detail tabs, and all normal operational actions.
+- Frontend product completion pass:
+  - Interactive summary stat cards with click-to-filter capability.
+  - Search and multi-attribute filters including condition, business location, and custodian.
+  - Responsive table and mobile touch cards with row actions menu and deep links.
+  - Comprehensive registration modal with explicit acquisition modes: Existing property, Business expense, Owner-funded expense (highlighting contributor attribution), Procurement purchase with line items, and Gifts.
+  - State-aware asset detail workspace with contextual action banners (Complete Repair, Send to Repair, Mark Recovered, Deploy to Service, Terminal Archive).
+  - Cross-module financial provenance with direct navigation to Owner Capital (`/finance/capital`), Financial Accounts (`/finance/accounts`), Expenses (`/finance/expenses`), and Purchases (`/purchases`).
+  - Dedicated Maintenance tab with inline recording and audited voiding.
+  - Dedicated Files tab with private media image thumbnails, role badges, and audited detachment.
+  - Formatted domain activity timeline with before/after state diffs.
+  - Deep-link action and tab parameter handling for cross-domain operational agility.
 - Domain documentation and focused integration tests.
 
 ## Deliberate exclusions
