@@ -432,12 +432,16 @@ export async function createNotificationFromOutbox(
             and return_case.organization_id = ${event.organization_id} and return_case.id = ${event.aggregate_id}::uuid
       )
       select orders.id as order_id, orders.customer_id, orders.order_number,
-        snapshot.display_name, snapshot.email, orders.currency_code, orders.total_amount::text,
+        coalesce(snapshot.display_name, customer.display_name, 'Customer') as display_name,
+        case when snapshot.order_id is not null then snapshot.email else customer_email.normalized_value end as email,
+        orders.currency_code, orders.total_amount::text,
         concat_ws(', ', address.address_line_1, address.address_line_2, address.area, address.city, address.district, address.postal_code) delivery_address
       from candidate_orders candidate
       join orders.orders orders
         on orders.id = candidate.order_id and orders.organization_id = ${event.organization_id}
-      join orders.order_customer_snapshots snapshot on snapshot.order_id = orders.id
+      left join orders.order_customer_snapshots snapshot on snapshot.order_id = orders.id
+      left join customers.customers customer on customer.id = orders.customer_id
+      left join customers.customer_emails customer_email on customer_email.customer_id = orders.customer_id and customer_email.is_primary
       left join orders.order_addresses address on address.order_id = orders.id and address.address_type = 'DELIVERY'
       where orders.customer_id is not null
       limit 1

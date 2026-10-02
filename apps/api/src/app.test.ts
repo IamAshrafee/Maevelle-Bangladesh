@@ -305,4 +305,118 @@ describe('API hardening foundation', () => {
     expect(response?.headers['retry-after']).toBeDefined();
     await app.close();
   });
+
+  it('rejects Resend webhooks when secret is unconfigured or headers are invalid', async () => {
+    const database = createDatabaseStub(vi.fn().mockResolvedValue(undefined));
+    const baseConfig = {
+      nodeEnv: 'test' as const,
+      databaseUrl: 'postgresql://test',
+      testDatabaseUrl: 'postgresql://test',
+      databasePoolMax: 1,
+      apiHost: '127.0.0.1',
+      apiPort: 3000,
+      logLevel: 'error' as const,
+      workerHeartbeatIntervalMs: 1000,
+      betterAuthSecret: 'x'.repeat(32),
+      authEncryptionKey: Buffer.alloc(32).toString('base64'),
+      authBaseUrl: 'https://admin.maevelle.example/api',
+      authTrustedOrigins: ['http://localhost:3000'],
+      mediaStorageProvider: 'local' as const,
+      mediaStoragePath: 'var/media',
+      mediaStorageRegion: 'auto',
+      mediaPrivateBucket: 'private',
+      mediaPublicBucket: 'public',
+      mediaStorageForcePathStyle: true,
+      mediaMaxUploadBytes: 1024,
+      mediaUploadExpirySeconds: 900,
+      storefrontOrganizationCode: 'maevelle',
+      storefrontBaseUrl: 'http://localhost:3001',
+      emailEnabled: true,
+      emailProvider: 'resend' as const,
+      emailEnvironment: 'test' as const,
+      emailFromName: 'Maevelle',
+      emailFromAddress: 'orders@maevelle.example',
+      emailReplyTo: 'maevelleBangladesh@gmail.com',
+      emailAllowedTestRecipients: [],
+    };
+
+    const unconfiguredApp = buildApi({
+      database,
+      logger: false,
+      config: baseConfig,
+    });
+
+    const unconfiguredResponse = await unconfiguredApp.inject({
+      method: 'POST',
+      url: '/webhooks/resend',
+      payload: { type: 'email.delivered' },
+    });
+    expect(unconfiguredResponse.statusCode).toBe(503);
+    expect(unconfiguredResponse.json()).toMatchObject({
+      error: { code: 'WEBHOOK_NOT_CONFIGURED' },
+    });
+    await unconfiguredApp.close();
+
+    const configuredApp = buildApi({
+      database,
+      logger: false,
+      config: {
+        ...baseConfig,
+        resendApiKey: 're_test_key_123',
+        resendWebhookSecret: 'whsec_test_secret_12345',
+      },
+    });
+
+    const missingHeadersResponse = await configuredApp.inject({
+      method: 'POST',
+      url: '/webhooks/resend',
+      payload: { type: 'email.delivered' },
+    });
+    expect(missingHeadersResponse.statusCode).toBe(400);
+    expect(missingHeadersResponse.json()).toMatchObject({
+      error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature headers are missing.' },
+    });
+
+    const invalidSignatureResponse = await configuredApp.inject({
+      method: 'POST',
+      url: '/webhooks/resend',
+      headers: {
+        'svix-id': 'msg_test_123',
+        'svix-timestamp': '1700000000',
+        'svix-signature': 'v1,invalidsignaturestring',
+      },
+      payload: { type: 'email.delivered' },
+    });
+    expect(invalidSignatureResponse.statusCode).toBe(400);
+    expect(invalidSignatureResponse.json()).toMatchObject({
+      error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature is invalid.' },
+    });
+
+    const protectedDiagnostics = await configuredApp.inject({
+      method: 'GET',
+      url: '/admin/email/diagnostics',
+    });
+    expect(protectedDiagnostics.statusCode).toBe(403);
+
+    const protectedOperations = await configuredApp.inject({
+      method: 'GET',
+      url: '/admin/email/operations',
+    });
+    expect(protectedOperations.statusCode).toBe(403);
+
+    const protectedPolicies = await configuredApp.inject({
+      method: 'GET',
+      url: '/admin/email/policies',
+    });
+    expect(protectedPolicies.statusCode).toBe(403);
+
+    const protectedSuppressions = await configuredApp.inject({
+      method: 'GET',
+      url: '/admin/email/suppressions',
+    });
+    expect(protectedSuppressions.statusCode).toBe(403);
+
+    await configuredApp.close();
+  });
 });
+

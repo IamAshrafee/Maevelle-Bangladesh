@@ -361,17 +361,18 @@ export function registerNotificationRoutes(
     {
       schema: {
         params: Type.Object({ notificationType: Type.String() }),
-        body: Type.Object({ orderId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({ orderId: Type.Optional(Type.String({ maxLength: 80 })) }),
       },
     },
     async (req, reply) => {
       const a = await admin(database, auth, req.headers, 'notifications.view');
       if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const reqOrderId = (req.body as { orderId?: string })?.orderId?.trim();
       try {
         return {
           data: await notifications.previewOrderEmail(database.db, {
             organizationId: a.organizationId,
-            orderId: (req.body as { orderId: string }).orderId,
+            ...(reqOrderId ? { orderId: reqOrderId } : {}),
             notificationType: (req.params as { notificationType: string }).notificationType,
             options: renderOptions,
           }),
@@ -385,7 +386,7 @@ export function registerNotificationRoutes(
     '/admin/email/orders/:orderId/send',
     {
       schema: {
-        params: Type.Object({ orderId: Type.String({ format: 'uuid' }) }),
+        params: Type.Object({ orderId: Type.String({ minLength: 1, maxLength: 80 }) }),
         body: Type.Object({
           notificationType: Type.String(),
           idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }),
@@ -540,6 +541,7 @@ export function registerNotificationRoutes(
         providerConfigured: (config.emailProvider ?? 'local') === 'local' || Boolean(config.resendApiKey),
         webhookConfigured: Boolean(config.resendWebhookSecret),
         testRecipientOverride: config.emailTestRecipientOverride ?? null,
+        allowedTestRecipients: config.emailAllowedTestRecipients ?? [],
         ...(await notifications.emailOperationalSummary(database.db, a.organizationId)),
       },
     };

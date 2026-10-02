@@ -33,6 +33,7 @@ async function fixture(label: string) {
   }>`insert into orders.orders(organization_id,order_number,customer_id,currency_code,payment_method,subtotal_amount,discount_amount,total_amount) values(${organization.id},${`NOT-${crypto.randomUUID().slice(0, 8)}`},${customer.rows[0]!.id}::uuid,'BDT','COD',1,0,1) returning id`.execute(
     database.db,
   );
+  await sql`insert into orders.order_customer_snapshots(order_id,organization_id,customer_id,display_name,phone,normalized_phone,email) values(${order.rows[0]!.id}::uuid,${organization.id},${customer.rows[0]!.id}::uuid,'Notification buyer','01700000000','01700000000',${customerEmail})`.execute(database.db);
   const event = await sql<{
     id: string;
   }>`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,payload,occurred_at) values(${organization.id},'orders.order.placed',1,'orders.order',${order.rows[0]!.id}::uuid,${JSON.stringify({ orderId: order.rows[0]!.id })}::jsonb,now()) returning id::text`.execute(
@@ -320,28 +321,142 @@ describe('notifications and integrations', () => {
   it('deduplicates Resend webhooks, guards out-of-order state, and suppresses complaints', async () => {
     const data = await fixture('resend-webhook');
     await notifications.createNotificationFromOutbox(database.db, data.eventId);
-    const email = await sql<{ id: string }>`update notifications.notifications set provider='resend',provider_message_id='resend-message-1',status='SENT' where organization_id=${data.organizationId} and channel='EMAIL' returning id`.execute(database.db);
+    const messageId = `resend-msg-${crypto.randomUUID()}`;
+    const baseEventId = `resend-evt-${crypto.randomUUID()}`;
+    const email = await sql<{ id: string }>`update notifications.notifications set provider='resend',provider_message_id=${messageId},status='SENT' where organization_id=${data.organizationId} and channel='EMAIL' returning id`.execute(database.db);
     const delivered = {
-      providerEventId: 'resend-event-delivered',
+      providerEventId: `${baseEventId}-delivered`,
       type: 'email.delivered',
       createdAt: new Date().toISOString(),
-      data: { email_id: 'resend-message-1', to: ['buyer@example.test'] },
-      rawPayload: { type: 'email.delivered', data: { email_id: 'resend-message-1' } },
+      data: { email_id: messageId, to: ['buyer@example.test'] },
+      rawPayload: { type: 'email.delivered', data: { email_id: messageId } },
     };
     expect(await notifications.ingestResendWebhook(database.db, delivered)).toMatchObject({ created: true, processed: true });
     expect(await notifications.ingestResendWebhook(database.db, delivered)).toMatchObject({ created: false, processed: false });
     await notifications.ingestResendWebhook(database.db, {
       ...delivered,
-      providerEventId: 'resend-event-delayed-late',
+      providerEventId: `${baseEventId}-delayed-late`,
       type: 'email.delivery_delayed',
     });
     expect((await sql<{ status: string }>`select status from notifications.notifications where id=${email.rows[0]!.id}::uuid`.execute(database.db)).rows[0]?.status).toBe('DELIVERED');
     await notifications.ingestResendWebhook(database.db, {
       ...delivered,
-      providerEventId: 'resend-event-complaint',
+      providerEventId: `${baseEventId}-complaint`,
       type: 'email.complained',
     });
     expect((await sql<{ status: string }>`select status from notifications.notifications where id=${email.rows[0]!.id}::uuid`.execute(database.db)).rows[0]?.status).toBe('COMPLAINED');
     expect((await sql<{ count: string }>`select count(*)::text count from notifications.email_suppressions where organization_id=${data.organizationId} and active`.execute(database.db)).rows[0]?.count).toBe('1');
+  });
+
+  it('previews email templates with sample fixture data and with human order numbers without side effects', async () => {
+    const data = await fixture('preview-test');
+    const options = {
+      storefrontBaseUrl: 'https://shop.maevelle.local',
+      supportEmail: 'maevelleBangladesh@gmail.com',
+    };
+
+    // 1. Preview with sample fixture (no orderId)
+    const samplePreview = await notifications.previewOrderEmail(database.db, {
+      organizationId: data.organizationId,
+      notificationType: 'ORDER_CONFIRMED',
+      options,
+    });
+    expect(samplePreview.isSampleFixture).toBe(true);
+    expect(samplePreview.intendedRecipient).toBe('ayesha.rahman@example.com');
+    expect(samplePreview.subject).toContain('MV-10248');
+    expect(samplePreview.html).toContain('Ayesha Rahman');
+    expect(samplePreview.text).toContain('MV-10248');
+
+    // 2. Preview with human order number instead of UUID
+    const orderRow = await sql<{ order_number: string }>`select order_number from orders.orders where id=${data.orderId}::uuid`.execute(database.db);
+    const orderNumber = orderRow.rows[0]!.order_number;
+
+    const orderPreview = await notifications.previewOrderEmail(database.db, {
+      organizationId: data.organizationId,
+      orderId: orderNumber,
+      notificationType: 'ORDER_PLACED',
+      options,
+    });
+    expect(orderPreview.isSampleFixture).toBe(false);
+    expect(orderPreview.subject).toContain(orderNumber);
+    expect(orderPreview.html).toContain('Notification buyer');
+
+    // Verify preview had zero sending side effects
+    const count = await sql<{ count: string }>`select count(*)::text count from notifications.notifications where organization_id=${data.organizationId}`.execute(database.db);
+    expect(Number(count.rows[0]?.count ?? 0)).toBe(0);
+  });
+
+  it('supports manual transactional sending, retry of failed email, and manual resend with parent correlation', async () => {
+    const data = await fixture('manual-send-test');
+    const userEmail = `actor-${crypto.randomUUID()}@example.test`;
+    const user = await sql<{ id: string }>`insert into iam.users(name,email,email_normalized) values('Admin actor',${userEmail},${userEmail}) returning id`.execute(database.db);
+    const actorId = user.rows[0]!.id;
+    const options = {
+      storefrontBaseUrl: 'https://shop.maevelle.local',
+      supportEmail: 'maevelleBangladesh@gmail.com',
+    };
+
+    // 1. Manual send
+    const manualResult = await notifications.createManualOrderEmail(database.db, {
+      organizationId: data.organizationId,
+      orderId: data.orderId,
+      notificationType: 'ORDER_PLACED',
+      actorId,
+      idempotencyKey: 'manual-key-1',
+      reason: 'Manual order confirmation send from test',
+      options,
+    });
+    expect(manualResult.created).toBe(true);
+
+    const firstNotification = await notifications.getEmailNotification(database.db, data.organizationId, manualResult.id);
+    expect(firstNotification.status).toBe('QUEUED');
+    expect(firstNotification.trigger_type).toBe('MANUAL');
+
+    // Idempotent duplicate manual send
+    const dupResult = await notifications.createManualOrderEmail(database.db, {
+      organizationId: data.organizationId,
+      orderId: data.orderId,
+      notificationType: 'ORDER_PLACED',
+      actorId,
+      idempotencyKey: 'manual-key-1',
+      reason: 'Duplicate manual send',
+      options,
+    });
+    expect(dupResult.created).toBe(false);
+    expect(dupResult.id).toBe(manualResult.id);
+
+    // 2. Technical failure & Retry
+    await sql`update notifications.notifications set status='FAILED',failure_code='RESEND_NETWORK_ERROR' where id=${manualResult.id}::uuid`.execute(database.db);
+    await notifications.retryEmailNotification(database.db, {
+      organizationId: data.organizationId,
+      notificationId: manualResult.id,
+      actorId,
+      reason: 'Operator retry after network recovery',
+    });
+
+    const retried = await notifications.getEmailNotification(database.db, data.organizationId, manualResult.id);
+    expect(retried.status).toBe('QUEUED');
+    expect(retried.failure_code).toBeNull();
+    const retryEvent = retried.timeline.find((t: { event_type: string }) => t.event_type === 'RETRY_REQUESTED');
+    expect(retryEvent).toBeDefined();
+
+    // 3. Intentional Resend (creates distinct new notification linked to parent)
+    const resendResult = await notifications.createManualOrderEmail(database.db, {
+      organizationId: data.organizationId,
+      orderId: data.orderId,
+      notificationType: 'ORDER_PLACED',
+      actorId,
+      idempotencyKey: 'resend-key-1',
+      reason: 'Customer requested another copy',
+      triggerType: 'RESEND',
+      parentNotificationId: manualResult.id,
+      options,
+    });
+    expect(resendResult.created).toBe(true);
+    expect(resendResult.id).not.toBe(manualResult.id);
+
+    const resendNotification = await notifications.getEmailNotification(database.db, data.organizationId, resendResult.id);
+    expect(resendNotification.trigger_type).toBe('RESEND');
+    expect(resendNotification.parent_notification_id).toBe(manualResult.id);
   });
 });

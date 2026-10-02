@@ -26,8 +26,10 @@ export interface EmailRenderOptions {
 async function orderEmailModel(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-  orderId: string,
+  orderIdentifier: string,
 ) {
+  const trimmed = orderIdentifier.trim();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
   const order = await sql<{
     id: string;
     customer_id: string;
@@ -38,18 +40,22 @@ async function orderEmailModel(
     total_amount: string;
     order_status: string;
     delivery_address: string | null;
-  }>`select order_row.id,order_row.customer_id,order_row.order_number,snapshot.display_name,snapshot.email,
+  }>`select order_row.id,order_row.customer_id,order_row.order_number,
+      coalesce(snapshot.display_name, customer.display_name, 'Customer') display_name,
+      case when snapshot.order_id is not null then snapshot.email else customer_email.normalized_value end email,
       order_row.currency_code,order_row.total_amount::text,order_row.order_status,
       concat_ws(', ',address.address_line_1,address.address_line_2,address.area,address.city,address.district,address.postal_code) delivery_address
     from orders.orders order_row
-    join orders.order_customer_snapshots snapshot on snapshot.order_id=order_row.id
+    left join orders.order_customer_snapshots snapshot on snapshot.order_id=order_row.id
+    left join customers.customers customer on customer.id=order_row.customer_id
+    left join customers.customer_emails customer_email on customer_email.customer_id=order_row.customer_id and customer_email.is_primary
     left join orders.order_addresses address on address.order_id=order_row.id and address.address_type='DELIVERY'
-    where order_row.organization_id=${organizationId} and order_row.id=${orderId}::uuid`.execute(db);
+    where order_row.organization_id=${organizationId} and (${isUuid ? sql`order_row.id=${trimmed}::uuid` : sql`false`} or order_row.order_number=${trimmed})`.execute(db);
   const row = order.rows[0];
   if (!row) throw new EmailNotificationError('NOT_FOUND', 'Order was not found.');
   const items = await sql<{ title: string; variant: string | null; quantity: string; amount: string }>`
     select product_title_snapshot title,variant_title_snapshot variant,quantity::text,net_amount::text amount
-    from orders.order_lines where order_id=${orderId}::uuid and line_status='ACTIVE' order by id
+    from orders.order_lines where order_id=${row.id}::uuid and line_status='ACTIVE' order by id
   `.execute(db);
   return { ...row, items: items.rows };
 }
@@ -164,31 +170,66 @@ export async function previewOrderEmail(
   db: Kysely<DatabaseSchema>,
   input: {
     organizationId: string;
-    orderId: string;
+    orderId?: string | undefined;
     notificationType: string;
     options: EmailRenderOptions;
   },
 ) {
-  const [order, selectedPolicy] = await Promise.all([
-    orderEmailModel(db, input.organizationId, input.orderId),
-    policy(db, input.organizationId, input.notificationType),
-  ]);
+  const selectedPolicy = await policy(db, input.organizationId, input.notificationType);
   if (!selectedPolicy?.template_key)
     throw new EmailNotificationError('VALIDATION_FAILED', 'This event has no transactional email template.');
+
+  let orderData: {
+    display_name: string;
+    order_number: string;
+    currency_code: string;
+    total_amount: string;
+    delivery_address: string | null;
+    email: string | null;
+    items: readonly { title: string; variant?: string | null; quantity: string; amount: string }[];
+  };
+
+  if (input.orderId && input.orderId.trim()) {
+    const order = await orderEmailModel(db, input.organizationId, input.orderId.trim());
+    orderData = {
+      display_name: order.display_name,
+      order_number: order.order_number,
+      currency_code: order.currency_code,
+      total_amount: order.total_amount,
+      delivery_address: order.delivery_address,
+      email: order.email,
+      items: order.items,
+    };
+  } else {
+    orderData = {
+      display_name: 'Ayesha Rahman',
+      order_number: 'MV-10248',
+      currency_code: 'BDT',
+      total_amount: '4250.00',
+      delivery_address: 'House 12, Road 4, Dhanmondi, Dhaka 1205',
+      email: 'ayesha.rahman@example.com',
+      items: [
+        { title: 'Embroidered Silk Kurti', variant: 'Plum / M', quantity: '1', amount: '2850.00' },
+        { title: 'Matching Organza Dupatta', variant: 'Plum', quantity: '1', amount: '1400.00' },
+      ],
+    };
+  }
+
   return {
-    intendedRecipient: order.email,
+    intendedRecipient: orderData.email,
+    isSampleFixture: !input.orderId?.trim(),
     ...renderTransactionalEmail(selectedPolicy.template_key, {
-      customerName: order.display_name,
-      orderNumber: order.order_number,
-      currencyCode: order.currency_code,
-      totalAmount: order.total_amount,
-      ...(order.delivery_address ? { deliveryAddress: order.delivery_address } : {}),
+      customerName: orderData.display_name,
+      orderNumber: orderData.order_number,
+      currencyCode: orderData.currency_code,
+      totalAmount: orderData.total_amount,
+      ...(orderData.delivery_address ? { deliveryAddress: orderData.delivery_address } : {}),
       trackingUrl: `${input.options.storefrontBaseUrl}/orders/track`,
       supportEmail: input.options.supportEmail,
       ...(input.options.environmentLabel
         ? { environmentLabel: input.options.environmentLabel }
         : {}),
-      items: order.items.map((item) => ({
+      items: orderData.items.map((item) => ({
         title: item.title,
         ...(item.variant ? { variant: item.variant } : {}),
         quantity: item.quantity,
@@ -226,7 +267,7 @@ export async function createManualOrderEmail(
       !(await manualEventEligible(
         tx,
         input.organizationId,
-        input.orderId,
+        order.id,
         input.notificationType,
         order.order_status,
       ))
@@ -257,14 +298,14 @@ export async function createManualOrderEmail(
         amount: item.amount,
       })),
     });
-    const logicalKey = `notification:manual:v1:${input.organizationId}:${input.notificationType}:${input.orderId}:${input.idempotencyKey}`;
+    const logicalKey = `notification:manual:v1:${input.organizationId}:${input.notificationType}:${order.id}:${input.idempotencyKey}`;
     const inserted = await sql<{ id: string }>`insert into notifications.notifications(
       organization_id,notification_type,recipient_type,customer_id,channel,template_key,template_version,
       rendered_subject,rendered_body,rendered_html,intended_recipient,effective_recipient,sender_from,reply_to,status,trigger_type,
       triggered_by_actor_id,parent_notification_id,idempotency_key,queued_at,source_domain,source_id
     ) values(${input.organizationId},${input.notificationType},'CUSTOMER',${order.customer_id}::uuid,'EMAIL',${rendered.templateKey},${rendered.templateVersion},
       ${rendered.subject},${rendered.text},${rendered.html},${recipient},${recipient},${input.options.senderFrom ?? null},${input.options.supportEmail},'QUEUED',${input.triggerType ?? 'MANUAL'},
-      ${input.actorId},${input.parentNotificationId ?? null}::uuid,${logicalKey},now(),'orders.order',${input.orderId}::uuid)
+      ${input.actorId},${input.parentNotificationId ?? null}::uuid,${logicalKey},now(),'orders.order',${order.id}::uuid)
     on conflict(idempotency_key) do nothing returning id`.execute(tx);
     const notificationId = inserted.rows[0]?.id;
     if (!notificationId) {
@@ -359,7 +400,7 @@ export async function getEmailNotification(
   organizationId: string,
   notificationId: string,
 ) {
-  const row = await sql`select n.*,
+  const row = await sql<Record<string, any>>`select n.*,
       coalesce((select jsonb_agg(to_jsonb(a) order by a.attempt_number) from notifications.delivery_attempts a where a.notification_id=n.id),'[]'::jsonb) attempts,
       coalesce((select jsonb_agg(to_jsonb(e) order by e.event_at,e.id) from notifications.delivery_events e where e.notification_id=n.id),'[]'::jsonb) timeline
     from notifications.notifications n where n.organization_id=${organizationId} and n.id=${notificationId}::uuid and n.channel='EMAIL'`.execute(db);

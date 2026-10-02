@@ -18,6 +18,7 @@ type Diagnostic = {
   providerConfigured: boolean;
   webhookConfigured: boolean;
   testRecipientOverride: string | null;
+  allowedTestRecipients?: readonly string[];
   queued: number;
   processing: number;
   failed: number;
@@ -62,6 +63,16 @@ type EmailDetail = EmailRow & {
   timeline: readonly { id: number; event_type: string; event_at: string; source: string }[];
 };
 
+const templateKeyToEvent: Record<string, string> = {
+  'order-received': 'ORDER_PLACED',
+  'order-confirmed': 'ORDER_CONFIRMED',
+  'payment-confirmed': 'PAYMENT_VERIFIED',
+  'order-shipped': 'ORDER_DISPATCHED',
+  'order-delivered': 'DELIVERY_COMPLETED',
+  'order-cancelled': 'ORDER_CANCELLED',
+  'refund-completed': 'REFUND_COMPLETED',
+};
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     credentials: 'include',
@@ -96,7 +107,7 @@ export function EmailOperationsConsole() {
   const [orderId, setOrderId] = useState('');
   const [notificationType, setNotificationType] = useState('ORDER_CONFIRMED');
   const [testRecipient, setTestRecipient] = useState('');
-  const [preview, setPreview] = useState<{ subject: string; html: string; text: string }>();
+  const [preview, setPreview] = useState<{ subject: string; html: string; text: string; isSampleFixture?: boolean }>();
   const [message, setMessage] = useState('Loading email operations…');
   const [error, setError] = useState('');
 
@@ -142,13 +153,16 @@ export function EmailOperationsConsole() {
     }
   };
 
-  const previewTemplate = async () => {
+  const previewTemplate = async (selectedType = notificationType) => {
     try {
-      const result = await api<{ data: { subject: string; html: string; text: string } }>(
-        `/admin/email/templates/${notificationType}/preview`,
-        { method: 'POST', body: JSON.stringify({ orderId }) },
+      const result = await api<{ data: { subject: string; html: string; text: string; isSampleFixture?: boolean } }>(
+        `/admin/email/templates/${selectedType}/preview`,
+        { method: 'POST', body: JSON.stringify(orderId.trim() ? { orderId: orderId.trim() } : {}) },
       );
       setPreview(result.data);
+      if (selectedType !== notificationType) {
+        setNotificationType(selectedType);
+      }
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Preview failed.');
@@ -217,17 +231,57 @@ export function EmailOperationsConsole() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Preview or send</CardTitle><CardDescription>Uses a real order snapshot and the same renderer as automatic delivery.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Preview or send</CardTitle><CardDescription>Preview with sample fixture or an existing order, and safely test delivery.</CardDescription></CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="email-order-id">Order ID</Label><Input id="email-order-id" value={orderId} onChange={(event) => setOrderId(event.target.value)} placeholder="Paste an order ID" /></div>
+            <div className="space-y-2"><Label htmlFor="email-order-id">Order ID or Number (optional for preview)</Label><Input id="email-order-id" value={orderId} onChange={(event) => setOrderId(event.target.value)} placeholder="e.g. MV-10248 or leave blank for sample preview" /></div>
             <div className="space-y-2"><Label htmlFor="email-template">Event</Label><select id="email-template" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={notificationType} onChange={(event) => setNotificationType(event.target.value)}>{policies.map((item) => <option key={item.notification_type} value={item.notification_type}>{item.notification_type.replaceAll('_', ' ')}</option>)}</select></div>
-            <div className="space-y-2"><Label htmlFor="email-test-recipient">Allow-listed test recipient</Label><Input id="email-test-recipient" type="email" value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder="Development and staging only" /></div>
-            <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={previewTemplate} disabled={!orderId}>Preview</Button><Button onClick={() => void send(false)} disabled={!orderId}>Queue manual email</Button><Button variant="secondary" onClick={() => void send(true)} disabled={!orderId || !testRecipient.trim()}>Send safe test copy</Button></div>
+            <div className="space-y-2">
+              <Label htmlFor="email-test-recipient">Allow-listed test recipient</Label>
+              <Input id="email-test-recipient" type="email" value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder="Development and staging only" />
+              {diagnostic?.allowedTestRecipients && diagnostic.allowedTestRecipients.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                  <span>Allowed:</span>
+                  {diagnostic.allowedTestRecipients.map((email) => (
+                    <button
+                      key={email}
+                      type="button"
+                      onClick={() => setTestRecipient(email)}
+                      className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground hover:bg-muted-foreground/20"
+                    >
+                      {email}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void previewTemplate()}>Preview</Button>
+              <Button onClick={() => void send(false)} disabled={!orderId.trim()}>Queue manual email</Button>
+              <Button variant="secondary" onClick={() => void send(true)} disabled={!orderId.trim() || !testRecipient.trim()}>Send safe test copy</Button>
+            </div>
           </CardContent>
         </Card>
       </section>
 
-      {preview ? <Card><CardHeader><CardTitle>{preview.subject}</CardTitle><CardDescription>Preview only — no provider call was made.</CardDescription></CardHeader><CardContent><div className="max-h-[560px] overflow-auto rounded-md border bg-white p-2" dangerouslySetInnerHTML={{ __html: preview.html }} /><details className="mt-4"><summary className="cursor-pointer text-sm font-medium">Plain-text fallback</summary><pre className="mt-2 whitespace-pre-wrap rounded-md bg-muted p-4 text-xs">{preview.text}</pre></details></CardContent></Card> : null}
+      {preview ? (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle>{preview.subject}</CardTitle>
+              {preview.isSampleFixture ? (
+                <Badge variant="outline">Sample Fixture Preview</Badge>
+              ) : (
+                <Badge variant="default">Order {orderId} Preview</Badge>
+              )}
+            </div>
+            <CardDescription>Preview only — no provider call was made.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[560px] overflow-auto rounded-md border bg-white p-2" dangerouslySetInnerHTML={{ __html: preview.html }} />
+            <details className="mt-4"><summary className="cursor-pointer text-sm font-medium">Plain-text fallback</summary><pre className="mt-2 whitespace-pre-wrap rounded-md bg-muted p-4 text-xs font-mono">{preview.text}</pre></details>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader><CardTitle>Automatic and manual policy</CardTitle><CardDescription>Disabling automatic delivery never blocks the underlying order transition.</CardDescription></CardHeader>
@@ -244,7 +298,35 @@ export function EmailOperationsConsole() {
       {selected ? <Card><CardHeader><CardTitle>{selected.rendered_subject ?? selected.notification_type}</CardTitle><CardDescription>Notification {selected.id}</CardDescription></CardHeader><CardContent className="grid gap-5 text-sm lg:grid-cols-[1fr_1.3fr]"><div className="grid content-start gap-3 sm:grid-cols-2"><div><span className="text-muted-foreground">Intended</span><p>{selected.intended_recipient ?? '—'}</p></div><div><span className="text-muted-foreground">Effective</span><p>{selected.effective_recipient ?? '—'}</p></div><div><span className="text-muted-foreground">Provider</span><p>{selected.provider ?? 'Not submitted'}</p></div><div><span className="text-muted-foreground">Failure</span><p>{selected.failure_code ?? 'None'}</p></div><div className="flex flex-wrap gap-2 sm:col-span-2">{selected.status === 'FAILED' ? <Button variant="outline" onClick={async () => { await api(`/admin/email/operations/${selected.id}/retry`, { method: 'POST', body: JSON.stringify({ reason: 'Retry from Email Operations' }) }); setMessage('Retry queued.'); await reload(); }}>Retry technical failure</Button> : null}{selected.intended_recipient ? <Button variant="outline" onClick={async () => { await api(`/admin/email/operations/${selected.id}/resend`, { method: 'POST', body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), reason: 'Intentional resend from Email Operations' }) }); setMessage('A new audited copy was queued.'); await reload(); }}>Send another copy</Button> : null}</div></div><div><h3 className="mb-3 font-medium">Delivery timeline</h3><ol className="space-y-3 border-l pl-4">{detail?.timeline.map((event) => <li key={event.id}><div className="flex flex-wrap items-center justify-between gap-2"><StatusBadge status={event.event_type} /><span className="text-xs text-muted-foreground">{when(event.event_at)}</span></div><p className="mt-1 text-xs text-muted-foreground">Source: {event.source}</p></li>)}{detail && detail.timeline.length === 0 ? <li className="text-muted-foreground">No timeline events recorded.</li> : null}</ol></div></CardContent></Card> : null}
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <Card><CardHeader><CardTitle>Template registry</CardTitle><CardDescription>Version-controlled HTML and plain-text templates.</CardDescription></CardHeader><CardContent className="space-y-3">{templates.map((item) => <div key={item.key} className="rounded-md border p-3"><div className="flex justify-between gap-3"><p className="font-medium">{item.key}</p><Badge variant="outline">v{item.version}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{item.description}</p></div>)}</CardContent></Card>
+        <Card>
+          <CardHeader><CardTitle>Template registry</CardTitle><CardDescription>Version-controlled HTML and plain-text templates.</CardDescription></CardHeader>
+          <CardContent className="space-y-3">
+            {templates.map((item) => {
+              const mappedEvent = templateKeyToEvent[item.key] ?? 'ORDER_CONFIRMED';
+              return (
+                <div key={item.key} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{item.key}</p>
+                      <Badge variant="outline">v{item.version}</Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setNotificationType(mappedEvent);
+                      void previewTemplate(mappedEvent);
+                    }}
+                  >
+                    Preview
+                  </Button>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
         <Card><CardHeader><CardTitle>Active suppressions</CardTitle><CardDescription>Hard bounces, complaints, provider and administrator blocks.</CardDescription></CardHeader><CardContent className="space-y-3">{suppressions.filter((item) => item.active).map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"><div><p className="font-medium">{item.normalized_email}</p><p className="text-xs text-muted-foreground">{item.reason.replaceAll('_', ' ')} · {item.source}</p></div><Button variant="outline" size="sm" onClick={async () => { await api('/admin/email/suppressions', { method: 'POST', body: JSON.stringify({ email: item.normalized_email, active: false, reason: 'Cleared from Email Operations after review' }) }); await reload(); }}>Clear</Button></div>)}{suppressions.every((item) => !item.active) ? <p className="text-sm text-muted-foreground">No active suppressions.</p> : null}</CardContent></Card>
       </section>
     </main>
