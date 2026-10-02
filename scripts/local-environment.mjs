@@ -1,5 +1,6 @@
-import { copyFileSync, existsSync } from 'node:fs';
+import { copyFileSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { spawnSync } from 'node:child_process';
@@ -24,6 +25,41 @@ function runPnpm(...args) {
     throw new Error('pnpm is required to seed the local database. Install it, then try again.');
   }
   if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+function optionalEnvironmentValue(name) {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
+function applyConfiguredSkyBuyImport() {
+  const configuredWorkbookPath = optionalEnvironmentValue('SKYBUY_IMPORT_WORKBOOK_PATH');
+  if (!configuredWorkbookPath) return;
+
+  const workbookPath = resolve(configuredWorkbookPath);
+  if (!existsSync(workbookPath) || !statSync(workbookPath).isFile()) {
+    throw new Error(
+      `SKYBUY_IMPORT_WORKBOOK_PATH points to a missing workbook: ${workbookPath}. ` +
+        'Restore the local workbook or remove the setting before running Prepare or Reset.',
+    );
+  }
+  if (!/\.xlsx$/i.test(workbookPath)) {
+    throw new Error('SKYBUY_IMPORT_WORKBOOK_PATH must point to a .xlsx workbook.');
+  }
+
+  const organizationCode = optionalEnvironmentValue('SKYBUY_IMPORT_ORGANIZATION_CODE') ?? 'maevelle';
+  const locationCode = optionalEnvironmentValue('SKYBUY_IMPORT_LOCATION_CODE') ?? 'WH-EAST-MAISHA';
+  console.log('Reapplying configured SkyBuy catalog and procurement history...');
+  runPnpm(
+    '--filter',
+    '@maevelle/database',
+    'import:skybuy:apply',
+    '--',
+    workbookPath,
+    `--org=${organizationCode}`,
+    `--location=${locationCode}`,
+    '--apply',
+  );
 }
 
 function assertDockerAvailable() {
@@ -51,6 +87,7 @@ async function prepare() {
       if (response.ok) {
         console.log('Seeding canonical catalog data...');
         runPnpm('db:seed');
+        applyConfiguredSkyBuyImport();
         console.log('\nMaevelle is ready.');
         console.log('Storefront:   http://localhost:8080/');
         console.log('Admin login: http://localhost:8080/admin/login');

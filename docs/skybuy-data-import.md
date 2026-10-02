@@ -75,6 +75,25 @@ places non-cancelled purchases and cancels source-cancelled purchases. The sourc
 workbook hash and external-to-Maevelle identity links make repeat runs idempotent
 and recoverable.
 
+## Reapply after local reset
+
+The source workbook is intentionally not committed because it is operational
+supplier data. To make a local environment replay it after every
+`Prepare.command` or `Reset.command`, retain the workbook locally and add this
+to `.env`:
+
+```bash
+SKYBUY_IMPORT_WORKBOOK_PATH=var/imports/skybuy-orders.xlsx
+SKYBUY_IMPORT_ORGANIZATION_CODE=maevelle
+SKYBUY_IMPORT_LOCATION_CODE=WH-EAST-MAISHA
+```
+
+The path can be absolute or relative to the repository root. Preparation runs
+the normal canonical seed first, then applies the workbook with `--apply`. A
+configured missing or non-XLSX workbook fails preparation instead of silently
+starting with the SkyBuy data missing. Leave `SKYBUY_IMPORT_WORKBOOK_PATH`
+unset when that historical import is not wanted in a local environment.
+
 The command deliberately stops before inbound shipments, receipts, inventory,
 supplier payments, and landed-cost finalization. Those operations need the
 missing SkyBuy milestone timestamps, current physical stock count, and the
