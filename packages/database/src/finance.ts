@@ -633,7 +633,8 @@ export type FinanceTransactionType =
   | 'CAPITAL_CONTRIBUTION'
   | 'OWNER_FUNDED_EXPENSE'
   | 'CAPITAL_WITHDRAWAL'
-  | 'CAPITAL_REVERSAL';
+  | 'CAPITAL_REVERSAL'
+  | 'ASSET_SALE';
 
 export interface FinanceLedgerFilters {
   readonly accountId?: string;
@@ -1606,7 +1607,7 @@ export async function getExpenseDetail(
   organizationId: string,
   expenseId: string,
 ) {
-  const [expense, payments, adjustments, activity] = await Promise.all([
+  const [expense, payments, adjustments, activity, linkedAssets] = await Promise.all([
     sql<FinanceExpenseRow>`select e.id,e.expense_number,e.description,e.amount::text,e.currency_code,
       e.expense_date::text,e.status,c.id as category_id,c.name as category_name,
       c.classification as category_classification,e.source_domain,e.source_id,
@@ -1666,6 +1667,21 @@ export async function getExpenseDetail(
       from audit.audit_events where organization_id=${organizationId}
         and target_type='finance.expense' and target_id=${expenseId}
       order by created_at desc,id desc`.execute(db),
+    sql<{
+      id: string;
+      asset_code: string;
+      name: string;
+      status: string;
+      link_type: 'ACQUISITION' | 'MAINTENANCE';
+    }>`select id::text,asset_code,name,status,'ACQUISITION' as link_type
+      from assets.assets
+      where organization_id=${organizationId} and finance_expense_id=${expenseId}
+      union all
+      select asset.id::text,asset.asset_code,asset.name,asset.status,'MAINTENANCE' as link_type
+      from assets.maintenance_records record
+      join assets.assets asset on asset.organization_id=record.organization_id and asset.id=record.asset_id
+      where record.organization_id=${organizationId} and record.finance_expense_id=${expenseId}
+      order by asset_code`.execute(db),
   ]);
   const row = expense.rows[0];
   if (!row) throw new FinanceDomainError('NOT_FOUND', 'Expense was not found.');
@@ -1699,6 +1715,13 @@ export async function getExpenseDetail(
       reason: event.reason,
       occurredAt: event.created_at,
       actorId: event.actor_id,
+    })),
+    linkedAssets: linkedAssets.rows.map((a) => ({
+      id: a.id,
+      assetCode: a.asset_code,
+      name: a.name,
+      status: a.status,
+      linkType: a.link_type,
     })),
   };
 }

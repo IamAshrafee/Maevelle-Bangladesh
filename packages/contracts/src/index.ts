@@ -160,12 +160,21 @@ export interface AssetOptionsDto {
     readonly description: string;
     readonly amount: string;
     readonly currencyCode: string;
+    readonly paymentSource?: 'BUSINESS_ACCOUNT' | 'OWNER_CAPITAL' | null;
+    readonly contributorName?: string | null;
   }[];
   readonly purchases: readonly {
     readonly id: string;
     readonly number: string;
     readonly supplierName: string;
     readonly currencyCode: string;
+    readonly totalAmount?: string;
+    readonly lines?: readonly {
+      readonly id: string;
+      readonly title: string;
+      readonly sku: string;
+      readonly cost: string;
+    }[];
   }[];
   readonly accounts: readonly {
     readonly id: string;
@@ -1855,6 +1864,13 @@ export interface FinanceExpenseDetailDto extends FinanceExpenseDto {
     readonly occurredAt: string;
     readonly actorId: string | null;
   }[];
+  readonly linkedAssets?: readonly {
+    readonly id: string;
+    readonly assetCode: string;
+    readonly name: string;
+    readonly status: string;
+    readonly linkType: 'ACQUISITION' | 'MAINTENANCE';
+  }[];
 }
 
 export type FinanceTransactionTypeDto =
@@ -1868,7 +1884,8 @@ export type FinanceTransactionTypeDto =
   | 'CAPITAL_CONTRIBUTION'
   | 'OWNER_FUNDED_EXPENSE'
   | 'CAPITAL_WITHDRAWAL'
-  | 'CAPITAL_REVERSAL';
+  | 'CAPITAL_REVERSAL'
+  | 'ASSET_SALE';
 
 export interface CapitalContributorDto {
   readonly id: string;

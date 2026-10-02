@@ -1,9 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Boxes, CircleDollarSign, Plus, Search, TriangleAlert, Wrench } from 'lucide-react';
+import {
+  Boxes,
+  BriefcaseBusiness,
+  CircleDollarSign,
+  Info,
+  Package,
+  Plus,
+  ReceiptText,
+  Search,
+  TriangleAlert,
+  Wrench,
+} from 'lucide-react';
 import type {
   AssetCategoryDto,
   AssetListItemDto,
@@ -65,6 +76,7 @@ const conditions = ['GOOD', 'FAIR', 'NEEDS_REPAIR', 'DAMAGED'] as const;
 const today = () => new Date().toISOString().slice(0, 10);
 
 export function AssetConsole() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const canManage = useAdminCapability('assets.manage');
   const [items, setItems] = useState<readonly AssetListItemDto[]>([]);
@@ -87,6 +99,17 @@ export function AssetConsole() {
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState('');
+
+  // Controlled form state for registration
+  const [acquisitionSource, setAcquisitionSource] = useState('EXISTING');
+  const [expenseId, setExpenseId] = useState('');
+  const [purchaseId, setPurchaseId] = useState('');
+  const [purchaseLineId, setPurchaseLineId] = useState('');
+  const [acquisitionCost, setAcquisitionCost] = useState('');
+  const [currencyCode, setCurrencyCode] = useState('');
+  const [assetName, setAssetName] = useState('');
+  const [assetNotes, setAssetNotes] = useState('');
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -112,37 +135,92 @@ export function AssetConsole() {
       setLoading(false);
     }
   }, [categoryId, page, search, status]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), search ? 250 : 0);
     return () => window.clearTimeout(timer);
   }, [load, search]);
+
   useEffect(() => {
-    if (searchParams.get('create') === 'asset' && canManage) setCreateOpen(true);
+    if (searchParams.get('create') === 'asset' && canManage) {
+      setCreateOpen(true);
+      const s = searchParams.get('source');
+      if (s && ['EXISTING', 'EXPENSE', 'PURCHASE', 'GIFT'].includes(s)) {
+        setAcquisitionSource(s);
+      }
+      if (searchParams.get('expenseId')) setExpenseId(searchParams.get('expenseId')!);
+      if (searchParams.get('purchaseId')) setPurchaseId(searchParams.get('purchaseId')!);
+      if (searchParams.get('cost')) setAcquisitionCost(searchParams.get('cost')!);
+      if (searchParams.get('currency')) setCurrencyCode(searchParams.get('currency')!);
+      if (searchParams.get('name')) setAssetName(searchParams.get('name')!);
+      if (searchParams.get('description')) setAssetNotes(searchParams.get('description')!);
+    }
   }, [canManage, searchParams]);
+
+  useEffect(() => {
+    if (options && !currencyCode) {
+      setCurrencyCode(options.defaultCurrency || 'BDT');
+    }
+  }, [options, currencyCode]);
+
+  function onExpenseChange(selectedId: string) {
+    setExpenseId(selectedId);
+    const exp = options?.expenses.find((e) => e.id === selectedId);
+    if (exp) {
+      setAcquisitionCost(exp.amount);
+      setCurrencyCode(exp.currencyCode);
+      if (!assetName) setAssetName(exp.description);
+    }
+  }
+
+  function onPurchaseChange(selectedId: string) {
+    setPurchaseId(selectedId);
+    setPurchaseLineId('');
+    const pur = options?.purchases.find((p) => p.id === selectedId);
+    if (pur) {
+      setCurrencyCode(pur.currencyCode);
+      if (pur.totalAmount && Number(pur.totalAmount) > 0) {
+        setAcquisitionCost(pur.totalAmount);
+      }
+    }
+  }
+
+  function onPurchaseLineChange(selectedLineId: string) {
+    setPurchaseLineId(selectedLineId);
+    const pur = options?.purchases.find((p) => p.id === purchaseId);
+    const line = pur?.lines?.find((l) => l.id === selectedLineId);
+    if (line) {
+      setAcquisitionCost(line.cost);
+      if (!assetName) setAssetName(line.title);
+    } else if (pur?.totalAmount) {
+      setAcquisitionCost(pur.totalAmount);
+    }
+  }
+
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError('');
     const form = new FormData(event.currentTarget);
-    const source = String(form.get('acquisitionSource'));
     const body = {
-      name: String(form.get('name')),
+      name: assetName.trim(),
       categoryId: String(form.get('categoryId')) || undefined,
       brand: String(form.get('brand')) || undefined,
       model: String(form.get('model')) || undefined,
       serialNumber: String(form.get('serialNumber')) || undefined,
       condition: String(form.get('condition')),
-      acquisitionSource: source,
+      acquisitionSource,
       acquisitionDate: String(form.get('acquisitionDate')),
-      acquisitionCost: String(form.get('acquisitionCost')) || undefined,
-      currencyCode: String(form.get('currencyCode')),
-      expenseId: source === 'EXPENSE' ? String(form.get('expenseId')) || undefined : undefined,
-      purchaseId: source === 'PURCHASE' ? String(form.get('purchaseId')) || undefined : undefined,
+      acquisitionCost: acquisitionCost.trim() || undefined,
+      currencyCode: currencyCode.trim() || options?.defaultCurrency || 'BDT',
+      expenseId: acquisitionSource === 'EXPENSE' ? expenseId || undefined : undefined,
+      purchaseId: acquisitionSource === 'PURCHASE' ? purchaseId || undefined : undefined,
+      purchaseLineId: acquisitionSource === 'PURCHASE' ? purchaseLineId || undefined : undefined,
       locationId: String(form.get('locationId')) || undefined,
       customLocation: String(form.get('customLocation')) || undefined,
       custodianMembershipId: String(form.get('custodianMembershipId')) || undefined,
       warrantyExpiresOn: String(form.get('warrantyExpiresOn')) || undefined,
-      notes: String(form.get('notes')) || undefined,
+      notes: assetNotes.trim() || undefined,
       idempotencyKey: newIdempotencyKey('asset-create'),
     };
     try {
@@ -153,7 +231,7 @@ export function AssetConsole() {
       setCreateOpen(false);
       setFeedback('Asset registered. Financial records remain authoritative in Finance.');
       await load();
-      window.location.assign(`/admin/assets/${created.id}`);
+      router.push(`/assets/${created.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Asset could not be created.');
     } finally {
@@ -427,13 +505,21 @@ export function AssetConsole() {
           <DialogHeader>
             <DialogTitle>Register Asset</DialogTitle>
             <DialogDescription>
-              Register existing property or link an acquisition to the authoritative Expense or
-              Purchase. This action never creates a duplicate financial charge.
+              Register existing durable property or connect an acquisition directly to the
+              authoritative Expense or Purchase. This action never creates a duplicate financial
+              charge.
             </DialogDescription>
           </DialogHeader>
           <form className="grid gap-4" onSubmit={submitCreate}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Asset name" name="name" required />
+              <Field
+                label="Asset name"
+                name="name"
+                value={assetName}
+                onChange={(e) => setAssetName(e.target.value)}
+                placeholder="e.g. Office Laser Printer, Reception Desk"
+                required
+              />
               <SelectField label="Category" name="categoryId">
                 <option value="">Uncategorized</option>
                 {options?.categories.map((c) => (
@@ -442,9 +528,9 @@ export function AssetConsole() {
                   </option>
                 ))}
               </SelectField>
-              <Field label="Brand" name="brand" />
-              <Field label="Model" name="model" />
-              <Field label="Serial number" name="serialNumber" />
+              <Field label="Brand" name="brand" placeholder="e.g. HP, Dell, IKEA" />
+              <Field label="Model" name="model" placeholder="e.g. LaserJet Pro M404dn" />
+              <Field label="Serial number" name="serialNumber" placeholder="e.g. VNB3K01923" />
               <SelectField label="Condition" name="condition">
                 {conditions.map((c) => (
                   <option key={c} value={c}>
@@ -452,13 +538,27 @@ export function AssetConsole() {
                   </option>
                 ))}
               </SelectField>
-              <SelectField label="Acquisition source" name="acquisitionSource">
-                {['EXISTING', 'EXPENSE', 'PURCHASE', 'GIFT'].map((s) => (
-                  <option key={s} value={s}>
-                    {humanizeAssetCode(s)}
-                  </option>
-                ))}
+
+              <SelectField
+                label="Acquisition source"
+                name="acquisitionSource"
+                value={acquisitionSource}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAcquisitionSource(val);
+                  if (val === 'EXISTING' || val === 'GIFT') {
+                    setExpenseId('');
+                    setPurchaseId('');
+                    setPurchaseLineId('');
+                  }
+                }}
+              >
+                <option value="EXISTING">Existing property (already owned)</option>
+                <option value="EXPENSE">Finance Expense (business or owner-funded)</option>
+                <option value="PURCHASE">Procurement Purchase (supplier order)</option>
+                <option value="GIFT">Gift / zero-cost property</option>
               </SelectField>
+
               <Field
                 label="Acquisition date"
                 name="acquisitionDate"
@@ -466,35 +566,137 @@ export function AssetConsole() {
                 defaultValue={today()}
                 required
               />
+            </div>
+
+            {/* Dynamic acquisition details based on chosen source */}
+            {acquisitionSource === 'EXPENSE' ? (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <ReceiptText className="size-4" />
+                  <span>Linked Finance Expense</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select the recorded Expense. Funding from a business account or owner capital is
+                  automatically derived from its payment records without duplicate accounting.
+                </p>
+                <SelectField
+                  label="Recorded Expense"
+                  name="expenseId"
+                  value={expenseId}
+                  onChange={(e) => onExpenseChange(e.target.value)}
+                  required
+                >
+                  <option value="">Select Expense…</option>
+                  {options?.expenses.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.number} · {e.description} ({formatAssetMoney(e.amount, e.currencyCode)}
+                      {e.paymentSource === 'OWNER_CAPITAL'
+                        ? ` · Owner funded by ${e.contributorName ?? 'Owner'}`
+                        : ''}
+                      )
+                    </option>
+                  ))}
+                </SelectField>
+              </div>
+            ) : null}
+
+            {acquisitionSource === 'PURCHASE' ? (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Package className="size-4" />
+                  <span>Linked Procurement Purchase</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Connect to a placed or closed purchase order. Sourcing and supplier history remain
+                  authoritative in Supply.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SelectField
+                    label="Purchase Order"
+                    name="purchaseId"
+                    value={purchaseId}
+                    onChange={(e) => onPurchaseChange(e.target.value)}
+                    required
+                  >
+                    <option value="">Select Purchase…</option>
+                    {options?.purchases.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.number} · {p.supplierName} ({p.currencyCode})
+                      </option>
+                    ))}
+                  </SelectField>
+
+                  {purchaseId &&
+                  options?.purchases.find((p) => p.id === purchaseId)?.lines?.length ? (
+                    <SelectField
+                      label="Purchase Line Item (optional)"
+                      name="purchaseLineId"
+                      value={purchaseLineId}
+                      onChange={(e) => onPurchaseLineChange(e.target.value)}
+                    >
+                      <option value="">
+                        Whole Purchase (
+                        {formatAssetMoney(
+                          options?.purchases.find((p) => p.id === purchaseId)?.totalAmount || '0',
+                          options?.purchases.find((p) => p.id === purchaseId)?.currencyCode || 'BDT',
+                        )}
+                        )
+                      </option>
+                      {options?.purchases
+                        .find((p) => p.id === purchaseId)
+                        ?.lines?.map((line) => (
+                          <option key={line.id} value={line.id}>
+                            {line.title} ({line.sku}) —{' '}
+                            {formatAssetMoney(
+                              line.cost,
+                              options?.purchases.find((p) => p.id === purchaseId)?.currencyCode ||
+                                'BDT',
+                            )}
+                          </option>
+                        ))}
+                    </SelectField>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {acquisitionSource === 'EXISTING' || acquisitionSource === 'GIFT' ? (
+              <div className="rounded-xl border border-muted bg-muted/40 p-4 space-y-1">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Info className="size-4 text-muted-foreground" />
+                  <span>No financial transaction created</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Existing durable equipment and gifted items are registered into physical lifecycle
+                  management without fabricating historical financial charges or distorting cash
+                  balances.
+                </p>
+              </div>
+            ) : null}
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field
-                label="Historical cost (optional for existing/gift)"
+                label="Historical cost"
                 name="acquisitionCost"
                 type="number"
                 min="0"
                 step="0.0001"
+                value={acquisitionCost}
+                onChange={(e) => setAcquisitionCost(e.target.value)}
+                placeholder={
+                  acquisitionSource === 'EXISTING' || acquisitionSource === 'GIFT'
+                    ? 'Optional historical cost'
+                    : 'Acquisition cost'
+                }
+                required={acquisitionSource === 'EXPENSE' || (acquisitionSource === 'PURCHASE' && !purchaseLineId)}
               />
               <Field
                 label="Currency"
                 name="currencyCode"
-                defaultValue={options?.defaultCurrency ?? 'BDT'}
+                value={currencyCode || options?.defaultCurrency || 'BDT'}
+                onChange={(e) => setCurrencyCode(e.target.value.toUpperCase())}
                 required
               />
-              <SelectField label="Linked Expense (used when source is Expense)" name="expenseId">
-                <option value="">Choose Expense</option>
-                {options?.expenses.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.number} · {e.description}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField label="Linked Purchase (used when source is Purchase)" name="purchaseId">
-                <option value="">Choose Purchase</option>
-                {options?.purchases.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.number} · {p.supplierName}
-                  </option>
-                ))}
-              </SelectField>
               <SelectField label="Business location" name="locationId">
                 <option value="">No structured location</option>
                 {options?.locations.map((l) => (
@@ -503,7 +705,11 @@ export function AssetConsole() {
                   </option>
                 ))}
               </SelectField>
-              <Field label="Custom location (instead of business location)" name="customLocation" />
+              <Field
+                label="Custom location (instead of business location)"
+                name="customLocation"
+                placeholder="e.g. Reception Desk, Stall #4"
+              />
               <SelectField label="Custodian" name="custodianMembershipId">
                 <option value="">Unassigned</option>
                 {options?.custodians.map((c) => (
@@ -516,7 +722,13 @@ export function AssetConsole() {
             </div>
             <label className="grid gap-2 text-sm font-medium">
               Notes
-              <Textarea name="notes" rows={3} />
+              <Textarea
+                name="notes"
+                rows={3}
+                value={assetNotes}
+                onChange={(e) => setAssetNotes(e.target.value)}
+                placeholder="Add any relevant physical identifiers, accessories, or acquisition remarks…"
+              />
             </label>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>

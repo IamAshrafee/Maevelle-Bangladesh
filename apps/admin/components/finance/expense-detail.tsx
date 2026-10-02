@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   Ban,
+  BriefcaseBusiness,
   CreditCard,
   ExternalLink,
   HandCoins,
@@ -45,6 +46,7 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
   const canAdjust = useAdminCapability('finance.expenses.create');
   const canViewAccounts = useAdminCapability('finance.accounts.view');
   const canManageCapital = useAdminCapability('finance.capital.manage');
+  const canManageAssets = useAdminCapability('assets.manage');
   const [expense, setExpense] = useState<FinanceExpenseDetailDto>();
   const [accounts, setAccounts] = useState<readonly FinancialAccountDto[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -209,6 +211,20 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
                 <PencilLine /> Adjust
               </Button>
             ) : null}
+            {canManageAssets &&
+            expense.status === 'RECORDED' &&
+            (!expense.linkedAssets || expense.linkedAssets.length === 0) ? (
+              <Button
+                variant="outline"
+                render={
+                  <Link
+                    href={`/assets?create=asset&source=EXPENSE&expenseId=${expense.id}&cost=${expense.amount}&currency=${expense.currency_code}&description=${encodeURIComponent(expense.description)}`}
+                  />
+                }
+              >
+                <BriefcaseBusiness /> Register as Asset
+              </Button>
+            ) : null}
             {canCancelCurrent ? (
               <Button variant="outline" onClick={() => setCancelOpen(true)}>
                 <Ban /> Cancel Expense
@@ -283,6 +299,32 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
               ) : null}
               {expense.notes ? (
                 <Detail className="sm:col-span-2" label="Notes" value={expense.notes} />
+              ) : null}
+              {expense.linkedAssets && expense.linkedAssets.length > 0 ? (
+                <div className="sm:col-span-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                  <span className="text-xs font-semibold text-primary">Connected Business Asset</span>
+                  <div className="mt-2 space-y-1.5">
+                    {expense.linkedAssets.map((asset) => (
+                      <div key={asset.id} className="flex items-center justify-between text-sm">
+                        <Link
+                          href={`/assets/${asset.id}`}
+                          className="flex items-center gap-1.5 font-medium text-primary hover:underline"
+                        >
+                          <BriefcaseBusiness className="size-3.5" />
+                          <span>
+                            {asset.assetCode} · {asset.name}
+                          </span>
+                          <ExternalLink className="size-3" />
+                        </Link>
+                        <span className="text-xs text-muted-foreground">
+                          {asset.linkType === 'ACQUISITION'
+                            ? 'Acquired property'
+                            : 'Maintenance expense'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ) : null}
             </CardContent>
           </Card>

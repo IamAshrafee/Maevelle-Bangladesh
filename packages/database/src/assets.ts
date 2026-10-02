@@ -293,7 +293,7 @@ export async function updateAssetCategory(
 }
 
 export async function getAssetOptions(db: Kysely<DatabaseSchema>, organizationId: string) {
-  const [categories, locations, custodians, expenses, purchases, accounts, organization] =
+  const [categories, locations, custodians, expenses, purchases, purchaseLines, accounts, organization] =
     await Promise.all([
       listAssetCategories(db, organizationId),
       sql<{
@@ -315,7 +315,20 @@ export async function getAssetOptions(db: Kysely<DatabaseSchema>, organizationId
         description: string;
         amount: string;
         currency: string;
-      }>`select id,expense_number as number,description,amount::text,currency_code as currency from finance.expenses where organization_id=${organizationId} and status='RECORDED' order by expense_date desc,id desc limit 200`.execute(
+        payment_source: 'BUSINESS_ACCOUNT' | 'OWNER_CAPITAL' | null;
+        contributor_name: string | null;
+      }>`select e.id,e.expense_number as number,e.description,e.amount::text,e.currency_code as currency,
+        p.payment_source,c.display_name as contributor_name
+        from finance.expenses e
+        left join lateral (
+          select payment_source, capital_contributor_id
+          from finance.expense_payments
+          where organization_id=e.organization_id and expense_id=e.id
+          order by paid_at desc limit 1
+        ) p on true
+        left join finance.capital_contributors c on c.organization_id=e.organization_id and c.id=p.capital_contributor_id
+        where e.organization_id=${organizationId} and e.status='RECORDED'
+        order by e.expense_date desc,e.id desc limit 200`.execute(
         db,
       ),
       sql<{
@@ -323,7 +336,27 @@ export async function getAssetOptions(db: Kysely<DatabaseSchema>, organizationId
         number: string;
         supplier: string;
         currency: string;
-      }>`select purchase.id,purchase.purchase_number as number,supplier.name as supplier,purchase.currency_code as currency from procurement.purchases purchase join procurement.suppliers supplier on supplier.id=purchase.supplier_id where purchase.organization_id=${organizationId} and purchase.status<>'CANCELLED' order by purchase.created_at desc limit 200`.execute(
+        total_amount: string;
+      }>`select purchase.id,purchase.purchase_number as number,supplier.name as supplier,purchase.currency_code as currency,
+        coalesce((select sum(quantity*unit_price)::numeric(20,4)::text from procurement.purchase_lines where organization_id=purchase.organization_id and purchase_id=purchase.id),'0') as total_amount
+        from procurement.purchases purchase
+        join procurement.suppliers supplier on supplier.id=purchase.supplier_id
+        where purchase.organization_id=${organizationId} and purchase.status in ('PLACED','CLOSED')
+        order by purchase.created_at desc limit 200`.execute(
+        db,
+      ),
+      sql<{
+        id: string;
+        purchase_id: string;
+        title: string;
+        sku: string;
+        cost: string;
+      }>`select line.id,line.purchase_id,line.product_title_snapshot as title,line.sku_snapshot as sku,
+        (line.quantity*line.unit_price)::numeric(20,4)::text as cost
+        from procurement.purchase_lines line
+        join procurement.purchases purchase on purchase.organization_id=line.organization_id and purchase.id=line.purchase_id
+        where line.organization_id=${organizationId} and purchase.status in ('PLACED','CLOSED')
+        order by line.id`.execute(
         db,
       ),
       sql<{
@@ -349,12 +382,18 @@ export async function getAssetOptions(db: Kysely<DatabaseSchema>, organizationId
       description: r.description,
       amount: r.amount,
       currencyCode: r.currency,
+      paymentSource: r.payment_source,
+      contributorName: r.contributor_name,
     })),
     purchases: purchases.rows.map((r) => ({
       id: r.id,
       number: r.number,
       supplierName: r.supplier,
       currencyCode: r.currency,
+      totalAmount: r.total_amount,
+      lines: purchaseLines.rows
+        .filter((l) => l.purchase_id === r.id)
+        .map((l) => ({ id: l.id, title: l.title, sku: l.sku, cost: l.cost })),
     })),
     accounts: accounts.rows.map((r) => ({ id: r.id, name: r.name, currencyCode: r.currency })),
     defaultCurrency: organization.rows[0]?.currency ?? 'BDT',
@@ -427,10 +466,10 @@ export async function listAssets(
     currency_code: string;
     updated_at: string;
     version: string;
-  }>`select asset.id,asset.asset_code,asset.name,asset.category_id,category.name as category_name,asset.brand,asset.model,asset.serial_number,asset.status,asset.condition,asset.location_id,location.name as location_name,asset.custom_location,asset.custodian_membership_id,coalesce(membership.display_name,user_account.name,user_account.email) as custodian_name,asset.acquisition_date::text,asset.acquisition_cost::text,asset.currency_code,asset.updated_at::text,asset.version::text from assets.assets asset left join assets.categories category on category.id=asset.category_id left join warehouse.locations location on location.id=asset.location_id left join iam.organization_memberships membership on membership.id=asset.custodian_membership_id left join iam.users user_account on user_account.id=membership.user_id where asset.organization_id=${organizationId} and (${pattern}::text is null or asset.asset_code ilike ${pattern} escape '\\' or asset.name ilike ${pattern} escape '\\' or asset.serial_number ilike ${pattern} escape '\\' or asset.model ilike ${pattern} escape '\\') and (${filters.status ?? null}::text is null or asset.status=${filters.status ?? null}) and (${filters.condition ?? null}::text is null or asset.condition=${filters.condition ?? null}) and (${filters.categoryId ?? null}::uuid is null or asset.category_id=${filters.categoryId ?? null}::uuid) and (${filters.locationId ?? null}::uuid is null or asset.location_id=${filters.locationId ?? null}::uuid) and (${filters.custodianId ?? null}::uuid is null or asset.custodian_membership_id=${filters.custodianId ?? null}::uuid) order by asset.updated_at desc,asset.id desc limit ${pageSize} offset ${offset}`;
+  }>`select asset.id,asset.asset_code,asset.name,asset.category_id,category.name as category_name,asset.brand,asset.model,asset.serial_number,asset.status,asset.condition,asset.location_id,location.name as location_name,asset.custom_location,asset.custodian_membership_id,coalesce(membership.display_name,user_account.name,user_account.email) as custodian_name,asset.acquisition_date::text,asset.acquisition_cost::text,asset.currency_code,asset.updated_at::text,asset.version::text from assets.assets asset left join assets.categories category on category.id=asset.category_id left join warehouse.locations location on location.id=asset.location_id left join iam.organization_memberships membership on membership.id=asset.custodian_membership_id left join iam.users user_account on user_account.id=membership.user_id where asset.organization_id=${organizationId} and (${pattern}::text is null or asset.asset_code ilike ${pattern} escape '\\' or asset.name ilike ${pattern} escape '\\' or asset.serial_number ilike ${pattern} escape '\\' or asset.model ilike ${pattern} escape '\\' or asset.brand ilike ${pattern} escape '\\' or asset.custom_location ilike ${pattern} escape '\\' or coalesce(membership.display_name,user_account.name,user_account.email) ilike ${pattern} escape '\\') and (${filters.status ?? null}::text is null or asset.status=${filters.status ?? null}) and (${filters.condition ?? null}::text is null or asset.condition=${filters.condition ?? null}) and (${filters.categoryId ?? null}::uuid is null or asset.category_id=${filters.categoryId ?? null}::uuid) and (${filters.locationId ?? null}::uuid is null or asset.location_id=${filters.locationId ?? null}::uuid) and (${filters.custodianId ?? null}::uuid is null or asset.custodian_membership_id=${filters.custodianId ?? null}::uuid) order by asset.updated_at desc,asset.id desc limit ${pageSize} offset ${offset}`;
   const count = await sql<{
     count: string;
-  }>`select count(*)::text as count from assets.assets asset where asset.organization_id=${organizationId} and (${pattern}::text is null or asset.asset_code ilike ${pattern} escape '\\' or asset.name ilike ${pattern} escape '\\' or asset.serial_number ilike ${pattern} escape '\\' or asset.model ilike ${pattern} escape '\\') and (${filters.status ?? null}::text is null or asset.status=${filters.status ?? null}) and (${filters.condition ?? null}::text is null or asset.condition=${filters.condition ?? null}) and (${filters.categoryId ?? null}::uuid is null or asset.category_id=${filters.categoryId ?? null}::uuid) and (${filters.locationId ?? null}::uuid is null or asset.location_id=${filters.locationId ?? null}::uuid) and (${filters.custodianId ?? null}::uuid is null or asset.custodian_membership_id=${filters.custodianId ?? null}::uuid)`.execute(
+  }>`select count(*)::text as count from assets.assets asset left join iam.organization_memberships membership on membership.id=asset.custodian_membership_id left join iam.users user_account on user_account.id=membership.user_id where asset.organization_id=${organizationId} and (${pattern}::text is null or asset.asset_code ilike ${pattern} escape '\\' or asset.name ilike ${pattern} escape '\\' or asset.serial_number ilike ${pattern} escape '\\' or asset.model ilike ${pattern} escape '\\' or asset.brand ilike ${pattern} escape '\\' or asset.custom_location ilike ${pattern} escape '\\' or coalesce(membership.display_name,user_account.name,user_account.email) ilike ${pattern} escape '\\') and (${filters.status ?? null}::text is null or asset.status=${filters.status ?? null}) and (${filters.condition ?? null}::text is null or asset.condition=${filters.condition ?? null}) and (${filters.categoryId ?? null}::uuid is null or asset.category_id=${filters.categoryId ?? null}::uuid) and (${filters.locationId ?? null}::uuid is null or asset.location_id=${filters.locationId ?? null}::uuid) and (${filters.custodianId ?? null}::uuid is null or asset.custodian_membership_id=${filters.custodianId ?? null}::uuid)`.execute(
     db,
   );
   const rows = await query.execute(db);

@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   Banknote,
+  BriefcaseBusiness,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -721,6 +722,15 @@ function renderBusinessOrigin(entry: FinanceLedgerEntryDto) {
           }
         >
           <Banknote className="size-3.5" /> Owner capital <ExternalLink className="size-3" />
+        </Link>
+      );
+    case 'assets.asset':
+      return (
+        <Link
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          href={`/assets/${entry.source_id}`}
+        >
+          <BriefcaseBusiness className="size-3.5" /> Asset sale <ExternalLink className="size-3" />
         </Link>
       );
     default:

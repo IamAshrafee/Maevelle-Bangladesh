@@ -160,6 +160,21 @@ describe('Asset Management', () => {
       expenseId: repair.id,
       expenseAmount: '2000.0000',
     });
+
+    const expenseDetail = await finance.getExpenseDetail(database.db, organizationId, expense.id);
+    expect(expenseDetail.linkedAssets).toContainEqual(
+      expect.objectContaining({
+        id: created.id,
+        linkType: 'ACQUISITION',
+      }),
+    );
+    const repairDetail = await finance.getExpenseDetail(database.db, organizationId, repair.id);
+    expect(repairDetail.linkedAssets).toContainEqual(
+      expect.objectContaining({
+        id: created.id,
+        linkType: 'MAINTENANCE',
+      }),
+    );
   });
 
   it('posts sale proceeds once and makes sold Assets immutable', async () => {

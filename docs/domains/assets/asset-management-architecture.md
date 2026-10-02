@@ -50,9 +50,17 @@ Sale locks the Asset and receiving Account, creates one `ASSET_SALE` Finance tra
 
 Every API authorizes server-side. Asset documents must be private, ready Media records. Tenant-scoped foreign keys and domain lookups reject guessed IDs from another organization.
 
-## Admin experience
+## Admin experience and cross-module workflows
 
-`/assets` provides server pagination, search, status/category filters, meaningful summary counts, category management, and registration. `/assets/[assetId]` is the operational workspace with Overview, Acquisition & Finance, Maintenance, Files, and Activity sections. Desktop tables become touch-friendly cards on smaller screens. Normal operations are available through focused dialogs; Finance and Purchase records are linked rather than copied as IDs.
+`/assets` provides server pagination, multi-attribute search (asset code, name, serial number, model, brand, custom location, custodian), status/category filters, meaningful summary counts, category management, and registration.
+
+`/assets/[assetId]` is the operational workspace with Overview, Acquisition & Finance, Maintenance, Files, and Activity sections. Desktop tables become touch-friendly cards on smaller screens. Normal operations are available through focused dialogs; Finance and Purchase records are linked rather than copied as IDs.
+
+### Cross-domain navigation:
+- **Finance Expenses (`/finance/expenses/[id]`)**: Shows connected Assets (both acquired property and maintenance records) with clickable links. Unlinked recorded expenses offer a 1-click "Register as Asset" action pre-filling source, expense ID, cost, currency, and description into `/assets?create=asset`.
+- **Procurement Purchases (`/purchases/[id]`)**: Placed and closed purchases offer a 1-click "Register Asset" action pre-filling source, purchase ID, total order cost, and currency into `/assets?create=asset`.
+- **Finance Ledger & Account Ledger**: `ASSET_SALE` transactions render the business origin as a clickable link directly to `/assets/[assetId]`.
+- **Owner Capital (`/finance/capital`)**: Personally funded equipment purchases connect `Owner Capital -> Expense Payment -> Asset Financial Provenance` without duplicated charges.
 
 ## Reporting semantics
 

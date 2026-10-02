@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import {
   ArrowLeft,
+  BriefcaseBusiness,
   Check,
   CheckCheck,
   CheckCircle2,
@@ -308,6 +309,31 @@ export function PurchaseDetailHeader({
             <Badge variant="secondary" className="px-2.5 py-1 text-xs">
               Order Closed
             </Badge>
+          ) : null}
+
+          {(purchase.status === 'PLACED' || purchase.status === 'CLOSED') ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    render={
+                      <Link
+                        href={`/assets?create=asset&source=PURCHASE&purchaseId=${purchase.id}&cost=${purchase.totalAmount}&currency=${purchase.currencyCode}&name=${encodeURIComponent(purchase.purchaseNumber + ' Property')}`}
+                      />
+                    }
+                  />
+                }
+              >
+                <BriefcaseBusiness className="size-3.5" />
+                <span>Register Asset</span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Register durable equipment from this purchase into Asset Management
+              </TooltipContent>
+            </Tooltip>
           ) : null}
 
           {purchase.status === 'CANCELLED' ? (

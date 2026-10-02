@@ -325,6 +325,14 @@ export function AccountLedgerTab({
                               <span>Owner capital</span>
                               <ExternalLink className="size-3" />
                             </Link>
+                          ) : entry.source_domain === 'assets.asset' && entry.source_id ? (
+                            <Link
+                              href={`/assets/${entry.source_id}`}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                            >
+                              <span>Asset sale</span>
+                              <ExternalLink className="size-3" />
+                            </Link>
                           ) : (
                             <span className="text-xs text-muted-foreground">
                               {entry.source_domain

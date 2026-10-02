@@ -20,14 +20,16 @@ location, condition, maintenance, private documents, and terminal lifecycle.
 - Composite organization foreign keys, capability checks, versioning,
   idempotency, Audit, outbox, and private Media rules protect the workflows.
 - Responsive Admin list/detail/create/category/assignment/movement/maintenance/
-  file/lifecycle/sale/disposal workflows are implemented.
+  file/lifecycle/sale/disposal workflows are implemented with progressive disclosure.
+- Cross-module workflows link Expenses, Purchases, Owner Capital, and Finance Ledgers
+  directly to Asset records with prefilled registration and bidirectional links.
 - Database/contracts/API and Admin TypeScript checks pass.
 
 ## Immediate Objective
 
 Start Docker/PostgreSQL, rebuild the disposable database from the checked-in
 baseline, run `packages/database/src/assets.test.ts`, and fix any runtime issue.
-Then conduct owner operational and visual review at `/admin/assets`.
+Then conduct owner operational and visual review at `/assets`.
 
 ## Important Constraints
 
