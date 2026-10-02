@@ -5,7 +5,7 @@
   "active_substage": "ASSET_MANAGEMENT_IMPLEMENTATION_COMPLETE",
   "active_status": "LOCAL_DB_VERIFICATION_BLOCKED",
   "baseline_commit": "a5de03d",
-  "last_checkpoint_commit": "e799499",
+  "last_checkpoint_commit": "044ea35",
   "last_verified_commit": "e799499",
   "last_completed_action": "Implemented the complete Asset Management vertical across physical lifecycle, Finance and Owner Capital provenance, Procurement links, locations, custodians, maintenance, private Media, audit, permissions, APIs, and responsive Admin workflows.",
   "next_action": "Start Docker/PostgreSQL, rebuild the disposable database, run the focused Asset integration test, and conduct owner operational/visual review of /admin/assets.",
