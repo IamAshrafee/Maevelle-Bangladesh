@@ -33,8 +33,11 @@ export interface InvoicePaymentRecord {
   readonly amount: string;
   readonly paidAt: string;
   readonly reference: string | null;
-  readonly accountId: string;
-  readonly accountName: string;
+  readonly paymentSource?: 'BUSINESS_ACCOUNT' | 'OWNER_CAPITAL' | 'REVERSAL';
+  readonly accountId: string | null;
+  readonly accountName: string | null;
+  readonly contributorId?: string | null;
+  readonly contributorName?: string | null;
   readonly financeTransactionId: string;
   readonly transactionNumber: string;
 }

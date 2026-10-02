@@ -310,7 +310,11 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
                         ) : (
                           <Link
                             className="font-medium text-primary hover:underline"
-                            href="/finance/capital"
+                            href={
+                              payment.contributorId
+                                ? `/finance/capital?contributorId=${payment.contributorId}`
+                                : '/finance/capital'
+                            }
                           >
                             {payment.paymentSource === 'REVERSAL'
                               ? `Reversal · ${payment.contributorName ?? 'capital contributor'}`

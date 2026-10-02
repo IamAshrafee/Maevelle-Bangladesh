@@ -147,6 +147,8 @@ export interface CapitalContributorView {
   readonly id: string;
   readonly displayName: string;
   readonly linkedUserId: string | null;
+  readonly linkedUserName?: string | null;
+  readonly linkedUserEmail?: string | null;
   readonly contactNote: string | null;
   readonly status: 'ACTIVE' | 'INACTIVE';
   readonly grossContributed: string;
@@ -162,6 +164,8 @@ export async function listCapitalContributors(db: Kysely<DatabaseSchema>, organi
     id: string;
     display_name: string;
     linked_user_id: string | null;
+    linked_user_name: string | null;
+    linked_user_email: string | null;
     contact_note: string | null;
     status: 'ACTIVE' | 'INACTIVE';
     gross_contributed: string;
@@ -172,6 +176,7 @@ export async function listCapitalContributors(db: Kysely<DatabaseSchema>, organi
     version: string;
   }>`select contributor.id,contributor.display_name,contributor.linked_user_id,contributor.contact_note,
       contributor.status,contributor.version::text,
+      u.name as linked_user_name, u.email as linked_user_email,
       coalesce(sum(event.amount_delta) filter (where event.event_type='CONTRIBUTION' and event.currency_code=organization.default_currency),0)::numeric(20,4)::text as gross_contributed,
       coalesce(sum(event.amount_delta) filter (where event.event_type='OWNER_FUNDED_EXPENSE' and event.currency_code=organization.default_currency),0)::numeric(20,4)::text as owner_funded_expenses,
       coalesce(abs(sum(event.amount_delta) filter (where event.event_type='WITHDRAWAL' and event.currency_code=organization.default_currency)),0)::numeric(20,4)::text as withdrawn,
@@ -179,9 +184,10 @@ export async function listCapitalContributors(db: Kysely<DatabaseSchema>, organi
       max(event.occurred_at) filter (where event.currency_code=organization.default_currency)::text as last_activity_at
     from finance.capital_contributors contributor
     join platform.organizations organization on organization.id=contributor.organization_id
+    left join iam.users u on u.id=contributor.linked_user_id
     left join finance.capital_events event on event.organization_id=contributor.organization_id and event.contributor_id=contributor.id
     where contributor.organization_id=${organizationId}
-    group by contributor.id,organization.id order by contributor.display_name,contributor.id`.execute(
+    group by contributor.id,organization.id,u.name,u.email order by contributor.display_name,contributor.id`.execute(
     db,
   );
   return result.rows.map(
@@ -190,6 +196,8 @@ export async function listCapitalContributors(db: Kysely<DatabaseSchema>, organi
         id: row.id,
         displayName: row.display_name,
         linkedUserId: row.linked_user_id,
+        linkedUserName: row.linked_user_name,
+        linkedUserEmail: row.linked_user_email,
         contactNote: row.contact_note,
         status: row.status,
         grossContributed: row.gross_contributed,
@@ -267,6 +275,7 @@ export async function updateCapitalContributor(
     actorId: string;
     contributorId: string;
     displayName: string;
+    linkedUserId?: string | null;
     contactNote?: string | null;
     status: 'ACTIVE' | 'INACTIVE';
     expectedVersion: number;
@@ -278,10 +287,11 @@ export async function updateCapitalContributor(
   return db.transaction().execute(async (tx) => {
     const current = await sql<{
       display_name: string;
+      linked_user_id: string | null;
       contact_note: string | null;
       status: 'ACTIVE' | 'INACTIVE';
       version: string;
-    }>`select display_name,contact_note,status,version::text from finance.capital_contributors
+    }>`select display_name,linked_user_id,contact_note,status,version::text from finance.capital_contributors
       where organization_id=${input.organizationId} and id=${input.contributorId} for update`.execute(
       tx,
     );
@@ -293,8 +303,9 @@ export async function updateCapitalContributor(
         'Capital contributor changed before this update completed.',
       );
     const contactNote = input.contactNote?.trim() || null;
+    const linkedUserId = input.linkedUserId !== undefined ? input.linkedUserId : before.linked_user_id;
     const updated = await sql<{ version: string }>`update finance.capital_contributors
-      set display_name=${displayName},contact_note=${contactNote},status=${input.status},
+      set display_name=${displayName},linked_user_id=${linkedUserId},contact_note=${contactNote},status=${input.status},
         version=version+1,updated_at=now()
       where organization_id=${input.organizationId} and id=${input.contributorId}
         and version=${input.expectedVersion} returning version::text`.execute(tx);
@@ -313,11 +324,12 @@ export async function updateCapitalContributor(
       targetId: input.contributorId,
       beforeDiff: {
         displayName: before.display_name,
+        linkedUserId: before.linked_user_id,
         contactNote: before.contact_note,
         status: before.status,
         version: Number(before.version),
       },
-      afterDiff: { displayName, contactNote, status: input.status, version },
+      afterDiff: { displayName, linkedUserId, contactNote, status: input.status, version },
     });
     return { id: input.contributorId, version };
   });
@@ -353,6 +365,10 @@ export interface CapitalEventView {
   readonly note: string | null;
   readonly reversalOfEventId: string | null;
   readonly isReversed: boolean;
+  readonly reversalEventId?: string | null;
+  readonly reversalTransactionNumber?: string | null;
+  readonly reversalReason?: string | null;
+  readonly reversalOfTransactionNumber?: string | null;
 }
 
 const capitalEventSelect = sql<CapitalEventView>`select event.id,event.event_type as "eventType",
@@ -363,14 +379,22 @@ const capitalEventSelect = sql<CapitalEventView>`select event.id,event.event_typ
   purchase.purchase_number as "purchaseNumber",transaction.id as "financeTransactionId",
   transaction.transaction_number as "transactionNumber",event.reference,event.note,
   event.reversal_of_event_id as "reversalOfEventId",
-  exists(select 1 from finance.capital_events reversal where reversal.organization_id=event.organization_id and reversal.reversal_of_event_id=event.id) as "isReversed"
+  reversal.id as "reversalEventId",
+  reversal_tx.transaction_number as "reversalTransactionNumber",
+  reversal_tx.description as "reversalReason",
+  original_tx.transaction_number as "reversalOfTransactionNumber",
+  (reversal.id is not null) as "isReversed"
   from finance.capital_events event
   join finance.capital_contributors contributor on contributor.organization_id=event.organization_id and contributor.id=event.contributor_id
   join finance.finance_transactions transaction on transaction.organization_id=event.organization_id and transaction.id=event.finance_transaction_id
   left join finance.financial_accounts account on account.organization_id=event.organization_id and account.id=event.financial_account_id
   left join finance.expense_payments expense_payment on expense_payment.organization_id=event.organization_id and expense_payment.id=event.expense_payment_id
   left join finance.expenses expense on expense.organization_id=event.organization_id and expense.id=expense_payment.expense_id
-  left join procurement.purchases purchase on purchase.organization_id=expense.organization_id and expense.source_domain='procurement.purchase' and purchase.id=expense.source_id`;
+  left join procurement.purchases purchase on purchase.organization_id=expense.organization_id and expense.source_domain='procurement.purchase' and purchase.id=expense.source_id
+  left join finance.capital_events reversal on reversal.organization_id=event.organization_id and reversal.reversal_of_event_id=event.id
+  left join finance.finance_transactions reversal_tx on reversal_tx.organization_id=event.organization_id and reversal_tx.id=reversal.finance_transaction_id
+  left join finance.capital_events original on original.organization_id=event.organization_id and original.id=event.reversal_of_event_id
+  left join finance.finance_transactions original_tx on original_tx.organization_id=event.organization_id and original_tx.id=original.finance_transaction_id`;
 
 export async function getCapitalOverview(db: Kysely<DatabaseSchema>, organizationId: string) {
   const [summary, recent] = await Promise.all([
@@ -410,10 +434,11 @@ export async function listCapitalEvents(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   filters: {
-    contributorId?: string;
-    eventType?: CapitalEventView['eventType'] | 'ALL';
-    page?: number;
-    pageSize?: number;
+    contributorId?: string | undefined;
+    eventType?: CapitalEventView['eventType'] | 'ALL' | undefined;
+    search?: string | undefined;
+    page?: number | undefined;
+    pageSize?: number | undefined;
   } = {},
 ) {
   const page = Math.max(1, Math.trunc(filters.page ?? 1));
@@ -421,21 +446,50 @@ export async function listCapitalEvents(
   const offset = (page - 1) * pageSize;
   const contributorId = filters.contributorId ?? null;
   const eventType = filters.eventType ?? 'ALL';
+  const search = filters.search?.trim() || null;
+  const searchPattern = search ? `%${search}%` : null;
   const where = sql`event.organization_id=${organizationId}
     and (${contributorId}::uuid is null or event.contributor_id=${contributorId}::uuid)
-    and (${eventType}::text='ALL' or event.event_type=${eventType}::text)`;
+    and (${eventType}::text='ALL' or event.event_type=${eventType}::text)
+    and (${searchPattern}::text is null or (
+      transaction.transaction_number ilike ${searchPattern}
+      or contributor.display_name ilike ${searchPattern}
+      or coalesce(event.reference, '') ilike ${searchPattern}
+      or coalesce(event.note, '') ilike ${searchPattern}
+      or coalesce(account.name, '') ilike ${searchPattern}
+      or coalesce(expense.expense_number, '') ilike ${searchPattern}
+      or coalesce(purchase.purchase_number, '') ilike ${searchPattern}
+    ))`;
   const [events, count] = await Promise.all([
     sql<CapitalEventView>`${capitalEventSelect} where ${where}
       order by event.occurred_at desc,event.id desc limit ${pageSize} offset ${offset}`.execute(db),
     sql<{
       total: string;
-    }>`select count(*)::text as total from finance.capital_events event where ${where}`.execute(db),
+    }>`select count(*)::text as total
+      from finance.capital_events event
+      join finance.capital_contributors contributor on contributor.organization_id=event.organization_id and contributor.id=event.contributor_id
+      join finance.finance_transactions transaction on transaction.organization_id=event.organization_id and transaction.id=event.finance_transaction_id
+      left join finance.financial_accounts account on account.organization_id=event.organization_id and account.id=event.financial_account_id
+      left join finance.expense_payments expense_payment on expense_payment.organization_id=event.organization_id and expense_payment.id=event.expense_payment_id
+      left join finance.expenses expense on expense.organization_id=event.organization_id and expense.id=expense_payment.expense_id
+      left join procurement.purchases purchase on purchase.organization_id=expense.organization_id and expense.source_domain='procurement.purchase' and purchase.id=expense.source_id
+      where ${where}`.execute(db),
   ]);
   const totalItems = Number(count.rows[0]?.total ?? 0);
   return {
     items: events.rows,
     pagination: { page, pageSize, totalItems, totalPages: Math.ceil(totalItems / pageSize) },
   };
+}
+
+export async function getCapitalEvent(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  eventId: string,
+) {
+  const result = await sql<CapitalEventView>`${capitalEventSelect}
+    where event.organization_id=${organizationId} and event.id=${eventId}::uuid`.execute(db);
+  return result.rows[0];
 }
 
 export async function recordCapitalAccountMovement(

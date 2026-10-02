@@ -315,7 +315,11 @@ export function AccountLedgerTab({
                             <span className="text-xs text-muted-foreground">Account transfer</span>
                           ) : entry.source_domain === 'finance.capital_event' ? (
                             <Link
-                              href="/finance/capital"
+                              href={
+                                entry.source_id
+                                  ? `/finance/capital?eventId=${entry.source_id}`
+                                  : '/finance/capital'
+                              }
                               className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                             >
                               <span>Owner capital</span>

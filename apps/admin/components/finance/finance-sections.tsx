@@ -714,7 +714,11 @@ function renderBusinessOrigin(entry: FinanceLedgerEntryDto) {
       return (
         <Link
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-          href="/finance/capital"
+          href={
+            entry.source_id
+              ? `/finance/capital?eventId=${entry.source_id}`
+              : '/finance/capital'
+          }
         >
           <Banknote className="size-3.5" /> Owner capital <ExternalLink className="size-3" />
         </Link>

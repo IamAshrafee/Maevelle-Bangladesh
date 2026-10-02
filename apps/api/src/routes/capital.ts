@@ -105,6 +105,7 @@ export function registerCapitalRoutes(
       schema: {
         body: Type.Object({
           displayName: Type.String({ minLength: 1, maxLength: 200 }),
+          linkedUserId: Type.Optional(Type.Union([Type.String({ format: 'uuid' }), Type.Null()])),
           contactNote: Type.Optional(Type.Union([Type.String({ maxLength: 1000 }), Type.Null()])),
           status: Type.Union([Type.Literal('ACTIVE'), Type.Literal('INACTIVE')]),
           expectedVersion: Type.Integer({ minimum: 1 }),
@@ -139,6 +140,7 @@ export function registerCapitalRoutes(
     {
       schema: {
         querystring: Type.Object({
+          q: Type.Optional(Type.String()),
           contributorId: Type.Optional(Type.String({ format: 'uuid' })),
           eventType: Type.Optional(
             Type.Union([
@@ -158,15 +160,38 @@ export function registerCapitalRoutes(
       const context = await authorize(database, auth, request.headers, 'finance.capital.view');
       if (!context)
         return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const query = request.query as {
+        q?: string;
+        contributorId?: string;
+        eventType?: 'ALL' | 'CONTRIBUTION' | 'OWNER_FUNDED_EXPENSE' | 'WITHDRAWAL' | 'REVERSAL';
+        page?: number;
+        pageSize?: number;
+      };
       return {
-        data: await capital.listCapitalEvents(
-          database.db,
-          context.organizationId,
-          request.query as Parameters<typeof capital.listCapitalEvents>[2],
-        ),
+        data: await capital.listCapitalEvents(database.db, context.organizationId, {
+          contributorId: query.contributorId,
+          eventType: query.eventType,
+          search: query.q,
+          page: query.page,
+          pageSize: query.pageSize,
+        }),
       };
     },
   );
+
+  app.get('/admin/finance/capital/events/:id', async (request, reply) => {
+    const context = await authorize(database, auth, request.headers, 'finance.capital.view');
+    if (!context)
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    const event = await capital.getCapitalEvent(
+      database.db,
+      context.organizationId,
+      (request.params as { id: string }).id,
+    );
+    if (!event)
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Capital event was not found.' } });
+    return { data: event };
+  });
 
   app.post(
     '/admin/finance/capital/account-movements',

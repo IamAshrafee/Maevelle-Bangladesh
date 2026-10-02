@@ -1,16 +1,22 @@
 'use client';
 
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Plus,
+  ExternalLink,
+  HandCoins,
+  Landmark,
   PencilLine,
+  Plus,
   ReceiptText,
   RotateCcw,
+  ShieldCheck,
+  ShoppingBag,
+  User,
   UserPlus,
 } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+
 import type {
   CapitalContributorDto,
   CapitalEventDto,
@@ -19,6 +25,7 @@ import type {
   FinancialAccountDto,
   PaginatedResultDto,
 } from '@maevelle/contracts';
+
 import { useAdminCapability } from '@/components/admin-capabilities';
 import {
   OperationalEmptyState,
@@ -26,19 +33,12 @@ import {
   OperationalPageHeader,
 } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
+import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
+import { SearchInput } from '@/components/ui/search-input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
 import {
@@ -49,62 +49,68 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
 import { fetchApiData } from '@/lib/api';
 import { formatFinanceDate, formatMoney, humanizeFinanceCode } from '@/lib/finance/types';
 
-type CapitalDialog =
-  | { kind: 'contributor' }
-  | { kind: 'edit-contributor'; contributor: CapitalContributorDto }
-  | { kind: 'movement'; movementType: 'CONTRIBUTION' | 'WITHDRAWAL' }
-  | { kind: 'owner-expense' }
-  | { kind: 'reversal'; event: CapitalEventDto };
+import { CapitalContributorDetailSheet } from './capital/capital-contributor-detail-sheet';
+import { CapitalTransactionDetailSheet } from './capital/capital-transaction-detail-sheet';
+import { CapitalContributorDialog } from './capital/capital-contributor-dialog';
+import { CapitalMovementDialog } from './capital/capital-movement-dialog';
+import { CapitalOwnerExpenseDialog } from './capital/capital-owner-expense-dialog';
+import { CapitalReversalDialog } from './capital/capital-reversal-dialog';
+import {
+  type CapitalDialog,
+  type CapitalSheet,
+  signedMoney,
+} from './capital/types';
 
 const emptyPagination = { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 };
-
-function localDateTime(): string {
-  const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function signedMoney(amount: string, currency: string) {
-  const value = Number(amount);
-  return `${value > 0 ? '+' : ''}${formatMoney(value, currency)}`;
-}
 
 export function CapitalConsole() {
   const searchParams = useSearchParams();
   const requestedExpenseId = searchParams.get('expenseId') ?? '';
+  const requestedContributorId = searchParams.get('contributorId') ?? '';
+  const requestedEventId = searchParams.get('eventId') ?? '';
+  const requestedAction = searchParams.get('action') ?? '';
+
   const canView = useAdminCapability('finance.capital.view');
   const canManage = useAdminCapability('finance.capital.manage');
   const canViewAccounts = useAdminCapability('finance.accounts.view');
   const canViewExpenses = useAdminCapability('finance.expenses.view');
+
   const [overview, setOverview] = useState<CapitalOverviewDto>();
   const [contributors, setContributors] = useState<readonly CapitalContributorDto[]>([]);
   const [events, setEvents] = useState<readonly CapitalEventDto[]>([]);
   const [pagination, setPagination] = useState(emptyPagination);
   const [accounts, setAccounts] = useState<readonly FinancialAccountDto[]>([]);
   const [expenses, setExpenses] = useState<readonly FinanceExpenseDto[]>([]);
+
+  // Filtering state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [contributorFilter, setContributorFilter] = useState('');
+  const [eventTypeFilter, setEventTypeFilter] = useState<'ALL' | CapitalEventDto['eventType']>('ALL');
   const [page, setPage] = useState(1);
+
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [dialog, setDialog] = useState<CapitalDialog>();
+  const [sheet, setSheet] = useState<CapitalSheet>();
+  const [singleEventDetail, setSingleEventDetail] = useState<CapitalEventDto>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [tone, setTone] = useState<'success' | 'danger'>('success');
 
-  const load = useCallback(async () => {
+  const defaultCurrency = overview?.currency || 'BDT';
+
+  // Load overview, contributors, accounts, and expenses
+  const loadBaseData = useCallback(async () => {
     if (!canView) {
       setState('ready');
       return;
     }
-    setState('loading');
     try {
-      const [summary, people, history, financialAccounts, outstandingExpenses] = await Promise.all([
+      const [summary, people, financialAccounts, outstandingExpenses] = await Promise.all([
         fetchApiData<CapitalOverviewDto>('/admin/finance/capital/overview'),
         fetchApiData<readonly CapitalContributorDto[]>('/admin/finance/capital/contributors'),
-        fetchApiData<PaginatedResultDto<CapitalEventDto>>(
-          `/admin/finance/capital/events?page=${page}&pageSize=25`,
-        ),
         canViewAccounts
           ? fetchApiData<readonly FinancialAccountDto[]>('/admin/finance/accounts')
           : Promise.resolve([]),
@@ -116,41 +122,103 @@ export function CapitalConsole() {
       ]);
       setOverview(summary);
       setContributors(people);
-      setEvents(history.items);
-      setPagination(history.pagination);
       setAccounts(financialAccounts);
       setExpenses(outstandingExpenses.items);
-      setState('ready');
-      if (
-        requestedExpenseId &&
-        canManage &&
-        outstandingExpenses.items.some((item) => item.id === requestedExpenseId)
-      ) {
-        setDialog((current) => current ?? { kind: 'owner-expense' });
-      }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Owner capital could not be loaded.');
+      setMessage(error instanceof Error ? error.message : 'Owner capital data could not be loaded.');
       setTone('danger');
       setState('error');
     }
-  }, [canManage, canView, canViewAccounts, canViewExpenses, page, requestedExpenseId]);
+  }, [canView, canViewAccounts, canViewExpenses]);
 
+  // Load ledger events with filters
+  const loadEvents = useCallback(async () => {
+    if (!canView) return;
+    try {
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('pageSize', '25');
+      if (searchQuery.trim()) params.set('q', searchQuery.trim());
+      if (contributorFilter) params.set('contributorId', contributorFilter);
+      if (eventTypeFilter !== 'ALL') params.set('eventType', eventTypeFilter);
+
+      const history = await fetchApiData<PaginatedResultDto<CapitalEventDto>>(
+        `/admin/finance/capital/events?${params.toString()}`,
+      );
+      setEvents(history.items);
+      setPagination(history.pagination);
+      setState('ready');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Capital ledger could not be loaded.');
+      setTone('danger');
+      setState('error');
+    }
+  }, [canView, contributorFilter, eventTypeFilter, page, searchQuery]);
+
+  // Initial load
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadBaseData();
+  }, [loadBaseData]);
 
-  async function submit(path: string, body: Record<string, unknown>, successMessage: string) {
+  // Fetch events whenever filters change
+  useEffect(() => {
+    void loadEvents();
+  }, [loadEvents]);
+
+  // Handle URL parameters for cross-module workflows
+  useEffect(() => {
+    if (requestedExpenseId && canManage) {
+      setDialog({ kind: 'owner-expense', preselectedExpenseId: requestedExpenseId });
+    } else if (requestedContributorId) {
+      setSheet({ kind: 'contributor-detail', contributorId: requestedContributorId });
+    } else if (requestedEventId) {
+      setSheet({ kind: 'transaction-detail', eventId: requestedEventId });
+    } else if (requestedAction === 'contribution' && canManage) {
+      setDialog({ kind: 'movement', movementType: 'CONTRIBUTION' });
+    } else if (requestedAction === 'withdrawal' && canManage) {
+      setDialog({ kind: 'movement', movementType: 'WITHDRAWAL' });
+    }
+  }, [canManage, requestedAction, requestedContributorId, requestedEventId, requestedExpenseId]);
+
+  // Fetch individual event for transaction sheet if opened
+  useEffect(() => {
+    if (sheet?.kind === 'transaction-detail') {
+      const existing = events.find((e) => e.id === sheet.eventId);
+      if (existing) {
+        setSingleEventDetail(existing);
+      } else {
+        void fetchApiData<CapitalEventDto>(`/admin/finance/capital/events/${sheet.eventId}`)
+          .then((data) => setSingleEventDetail(data))
+          .catch(() => {});
+      }
+    } else {
+      setSingleEventDetail(undefined);
+    }
+  }, [events, sheet]);
+
+  // Reset filters
+  function handleResetFilters() {
+    setSearchQuery('');
+    setContributorFilter('');
+    setEventTypeFilter('ALL');
+    setPage(1);
+  }
+
+  const hasActiveFilters = Boolean(searchQuery.trim()) || Boolean(contributorFilter) || eventTypeFilter !== 'ALL';
+
+  // Command execution helper
+  async function submitCommand(path: string, method: string, body: Record<string, unknown>, successMessage: string) {
     setBusy(true);
     setMessage('');
     try {
       await fetchApiData(path, {
-        method: 'POST',
-        body: JSON.stringify({ ...body, idempotencyKey: crypto.randomUUID() }),
+        method,
+        body: JSON.stringify(body),
       });
       setDialog(undefined);
       setMessage(successMessage);
       setTone('success');
-      await load();
+      await Promise.all([loadBaseData(), loadEvents()]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'The capital operation was rejected.');
       setTone('danger');
@@ -159,62 +227,43 @@ export function CapitalConsole() {
     }
   }
 
-  async function updateContributor(
-    contributor: CapitalContributorDto,
-    body: Record<string, unknown>,
-  ) {
-    setBusy(true);
-    setMessage('');
-    try {
-      await fetchApiData(`/admin/finance/capital/contributors/${contributor.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ ...body, expectedVersion: contributor.version }),
-      });
-      setDialog(undefined);
-      setMessage('Capital contributor updated. Existing financial history remains intact.');
-      setTone('success');
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Contributor update was rejected.');
-      setTone('danger');
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Selected contributor for detail sheet
+  const activeSheetContributor = useMemo(() => {
+    if (sheet?.kind !== 'contributor-detail') return undefined;
+    return contributors.find((c) => c.id === sheet.contributorId);
+  }, [contributors, sheet]);
 
   if (!canView) {
     return (
       <main className="px-4 py-5 sm:px-6 lg:px-8">
         <OperationalFeedback tone="danger">
-          You do not have permission to view owner capital.
-        </OperationalFeedback>
-      </main>
-    );
-  }
-  if (state === 'loading' && !overview) {
-    return (
-      <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-36 rounded-xl" />
-        <Skeleton className="h-72 rounded-xl" />
-      </main>
-    );
-  }
-  if (!overview) {
-    return (
-      <main className="px-4 py-5 sm:px-6 lg:px-8">
-        <OperationalFeedback tone="danger">
-          {message || 'Owner capital is unavailable.'}
+          You do not have permission to view owner capital. Contact your organization administrator.
         </OperationalFeedback>
       </main>
     );
   }
 
-  const activeContributors = contributors.filter((item) => item.status === 'ACTIVE');
-  const activeAccounts = accounts.filter(
-    (item) => item.status === 'ACTIVE' && item.currency_code === overview.currency,
-  );
-  const capitalExpenses = expenses.filter((item) => item.currency_code === overview.currency);
+  if (state === 'loading' && !overview) {
+    return (
+      <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
+        <Skeleton className="h-16 rounded-xl" />
+        <Skeleton className="h-28 rounded-xl" />
+        <Skeleton className="h-64 rounded-xl" />
+        <Skeleton className="h-80 rounded-xl" />
+      </main>
+    );
+  }
+
+  if (!overview) {
+    return (
+      <main className="px-4 py-5 sm:px-6 lg:px-8">
+        <OperationalFeedback tone="danger">
+          {message || 'Owner capital is currently unavailable.'}
+        </OperationalFeedback>
+      </main>
+    );
+  }
+
   return (
     <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-[1500px] gap-6">
@@ -225,588 +274,627 @@ export function CapitalConsole() {
             { label: 'Owner capital', current: true },
           ]}
         />
+
         <OperationalPageHeader
           eyebrow="Finance"
-          title="Owner capital"
-          description="Track money contributors put into the business and costs they pay personally. Capital changes cash and funding position, never sales revenue."
+          title="Owner capital & funding"
+          description="Track money contributed into business accounts and commercial costs paid directly with personal funds. Owner capital updates cash and funding positions without distorting sales revenue."
           actions={
             canManage ? (
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => setDialog({ kind: 'contributor' })}>
-                  <UserPlus /> Add contributor
+                  <UserPlus className="size-4 mr-1.5" />
+                  <span>Add contributor</span>
                 </Button>
                 <Button variant="outline" onClick={() => setDialog({ kind: 'owner-expense' })}>
-                  <ReceiptText /> Personal payment
+                  <HandCoins className="size-4 mr-1.5 text-emerald-600" />
+                  <span>Personal payment</span>
                 </Button>
                 <Button
                   onClick={() => setDialog({ kind: 'movement', movementType: 'CONTRIBUTION' })}
                 >
-                  <Plus /> Record capital
+                  <Plus className="size-4 mr-1.5" />
+                  <span>Record capital</span>
                 </Button>
               </div>
             ) : undefined
           }
         />
+
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
 
+        {/* Financial Position Overview Stats */}
         <Stats aria-label="Owner capital summary">
           <StatsCard>
             <StatsTitle>Capital contributed</StatsTitle>
             <StatsValue>{formatMoney(overview.totalContributed, overview.currency)}</StatsValue>
-            <StatsDescription>Cash deposited into business Accounts</StatsDescription>
+            <StatsDescription>Cash deposited into business bank & cash accounts</StatsDescription>
           </StatsCard>
           <StatsCard>
             <StatsTitle>Personally funded costs</StatsTitle>
             <StatsValue>{formatMoney(overview.ownerFundedExpenses, overview.currency)}</StatsValue>
-            <StatsDescription>Business Expenses paid outside business Accounts</StatsDescription>
+            <StatsDescription>Business expenses & supplier bills paid outside accounts</StatsDescription>
           </StatsCard>
           <StatsCard>
             <StatsTitle>Withdrawn</StatsTitle>
             <StatsValue>{formatMoney(overview.totalWithdrawn, overview.currency)}</StatsValue>
-            <StatsDescription>Capital returned from business Accounts</StatsDescription>
+            <StatsDescription>Permanent capital returned from business accounts</StatsDescription>
           </StatsCard>
           <StatsCard>
             <StatsTitle>Net capital position</StatsTitle>
-            <StatsValue>{formatMoney(overview.netCapital, overview.currency)}</StatsValue>
+            <StatsValue className="text-primary font-bold">
+              {formatMoney(overview.netCapital, overview.currency)}
+            </StatsValue>
             <StatsDescription>
-              Contributions and personal costs, less withdrawals and reversals
+              Contributions & personal costs less withdrawals and reversals
             </StatsDescription>
           </StatsCard>
         </Stats>
 
-        <Card>
+        {/* Contributors Section */}
+        <Card className="border-border/80 shadow-2xs">
           <CardHeader className="flex flex-row items-start justify-between gap-4">
             <div>
-              <CardTitle>Contributors</CardTitle>
-              <CardDescription>
-                People are independent of Team access and do not imply ownership percentages.
+              <CardTitle className="text-base font-semibold">Capital contributors</CardTitle>
+              <CardDescription className="text-xs">
+                Individuals providing permanent capital or funding costs personally. Independent of team membership or cap-table shares.
               </CardDescription>
             </div>
-            <span className="text-sm text-muted-foreground">{overview.contributorCount} total</span>
+            <span className="text-xs text-muted-foreground font-medium shrink-0">
+              {overview.contributorCount} registered {overview.contributorCount === 1 ? 'person' : 'people'}
+            </span>
           </CardHeader>
           <CardContent>
             {contributors.length ? (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {contributors.map((person) => (
-                  <div key={person.id} className="rounded-xl border p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <strong>{person.displayName}</strong>
-                      <div className="flex items-center gap-1">
-                        <StatusBadge status={person.status} />
-                        {canManage ? (
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={`Edit ${person.displayName}`}
-                            onClick={() =>
-                              setDialog({ kind: 'edit-contributor', contributor: person })
-                            }
-                          >
-                            <PencilLine />
-                          </Button>
-                        ) : null}
+                  <div
+                    key={person.id}
+                    className="group rounded-xl border border-border/70 bg-card p-4 transition-all hover:border-primary/40 hover:shadow-xs flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <strong className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                            {person.displayName}
+                          </strong>
+                          {person.linkedUserId ? (
+                            <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <ShieldCheck className="size-3 text-primary" />
+                              <span>{person.linkedUserName || 'Team Account'}</span>
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <StatusBadge status={person.status} />
+                          {canManage ? (
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              aria-label={`Edit ${person.displayName}`}
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                setDialog({ kind: 'edit-contributor', contributor: person })
+                              }
+                            >
+                              <PencilLine className="size-3.5" />
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
+
+                      {person.contactNote ? (
+                        <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
+                          {person.contactNote}
+                        </p>
+                      ) : null}
+
+                      {/* 4-Metric Mini Summary Grid */}
+                      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs border-t border-border/40 pt-2.5">
+                        <div>
+                          <dt className="text-[10px] text-muted-foreground">Contributed cash</dt>
+                          <dd className="font-medium tabular-nums text-foreground">
+                            {formatMoney(person.grossContributed, defaultCurrency)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] text-muted-foreground">Personally funded</dt>
+                          <dd className="font-medium tabular-nums text-foreground">
+                            {formatMoney(person.ownerFundedExpenses, defaultCurrency)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] text-muted-foreground">Withdrawn</dt>
+                          <dd className="font-medium tabular-nums text-foreground">
+                            {formatMoney(person.withdrawn, defaultCurrency)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] font-medium text-primary">Net capital</dt>
+                          <dd className="font-bold tabular-nums text-primary">
+                            {formatMoney(person.netCapital, defaultCurrency)}
+                          </dd>
+                        </div>
+                      </dl>
                     </div>
-                    {person.contactNote ? (
-                      <p className="mt-1 text-sm text-muted-foreground">{person.contactNote}</p>
-                    ) : null}
-                    <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <dt className="text-xs text-muted-foreground">Net capital</dt>
-                        <dd className="font-semibold">
-                          {formatMoney(person.netCapital, overview.currency)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs text-muted-foreground">Last activity</dt>
-                        <dd>
-                          {person.lastActivityAt
-                            ? formatFinanceDate(person.lastActivityAt)
-                            : 'None'}
-                        </dd>
-                      </div>
-                    </dl>
+
+                    <div className="mt-3 pt-2.5 border-t border-border/40 flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground">
+                        {person.lastActivityAt
+                          ? `Active ${formatFinanceDate(person.lastActivityAt, false)}`
+                          : 'No recorded activity'}
+                      </span>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        className="text-xs text-primary hover:underline gap-1 p-0 h-auto font-medium"
+                        onClick={() => setSheet({ kind: 'contributor-detail', contributorId: person.id })}
+                      >
+                        <span>View details & ledger</span>
+                        <ExternalLink className="size-3" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
               <OperationalEmptyState
-                title="No capital contributors"
-                description="Add the first person who contributes funds or personally pays a business cost."
+                title="No capital contributors registered"
+                description="Add the first owner or investor who contributes funds or personally covers business expenses."
+                action={
+                  canManage ? (
+                    <Button onClick={() => setDialog({ kind: 'contributor' })}>
+                      <UserPlus className="size-4 mr-1.5" />
+                      <span>Add contributor</span>
+                    </Button>
+                  ) : undefined
+                }
               />
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Capital ledger</CardTitle>
-            <CardDescription>
-              Append-only history connected to the authoritative Finance transaction, Account,
-              Expense, and Purchase records.
-            </CardDescription>
+        {/* Capital Ledger Section */}
+        <Card className="border-border/80 shadow-2xs">
+          <CardHeader className="gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <CardTitle className="text-base font-semibold">Capital ledger</CardTitle>
+                <CardDescription className="text-xs">
+                  Authoritative, append-only history tracing contributions, personal payments, withdrawals, and corrections.
+                </CardDescription>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {pagination.totalItems} total transactions
+              </span>
+            </div>
+
+            {/* Filter and Search Toolbar */}
+            <div className="mt-2 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between border-t border-border/40 pt-3">
+              <div className="flex-1 max-w-sm">
+                <SearchInput
+                  placeholder="Search transaction #, ref, note, person, account..."
+                  value={searchQuery}
+                  onChange={(val) => {
+                    setSearchQuery(val);
+                    setPage(1);
+                  }}
+                  onClear={() => {
+                    setSearchQuery('');
+                    setPage(1);
+                  }}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Contributor Filter */}
+                <NativeSelect
+                  value={contributorFilter}
+                  onChange={(e) => {
+                    setContributorFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="h-8 text-xs w-[160px]"
+                  aria-label="Filter by contributor"
+                >
+                  <option value="">All contributors</option>
+                  {contributors.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayName}
+                    </option>
+                  ))}
+                </NativeSelect>
+
+                {/* Event Type Filter */}
+                <NativeSelect
+                  value={eventTypeFilter}
+                  onChange={(e) => {
+                    setEventTypeFilter(e.target.value as typeof eventTypeFilter);
+                    setPage(1);
+                  }}
+                  className="h-8 text-xs w-[170px]"
+                  aria-label="Filter by activity type"
+                >
+                  <option value="ALL">All activity types</option>
+                  <option value="CONTRIBUTION">Capital contributions</option>
+                  <option value="OWNER_FUNDED_EXPENSE">Personally funded costs</option>
+                  <option value="WITHDRAWAL">Capital withdrawals</option>
+                  <option value="REVERSAL">Reversals & corrections</option>
+                </NativeSelect>
+
+                {hasActiveFilters ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleResetFilters}
+                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <RotateCcw className="size-3 mr-1" />
+                    Reset
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           </CardHeader>
+
           <CardContent className="grid gap-4">
             {events.length ? (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Contributor</TableHead>
-                      <TableHead>Activity</TableHead>
-                      <TableHead>Connection</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead className="text-right">Capital impact</TableHead>
-                      <TableHead />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {events.map((event) => (
-                      <TableRow key={event.id}>
-                        <TableCell className="whitespace-nowrap">
-                          {formatFinanceDate(event.occurredAt, true)}
-                        </TableCell>
-                        <TableCell className="font-medium">{event.contributorName}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={humanizeFinanceCode(event.eventType)} />
-                          {event.isReversed ? (
-                            <small className="ml-2 text-muted-foreground">Reversed</small>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          {event.accountName ??
-                            event.purchaseNumber ??
-                            event.expenseNumber ??
-                            'Capital record'}
-                        </TableCell>
-                        <TableCell>
-                          <span className="block">{event.transactionNumber}</span>
-                          {event.reference ? (
-                            <small className="text-muted-foreground">{event.reference}</small>
-                          ) : null}
-                        </TableCell>
-                        <TableCell
-                          className={`text-right font-semibold ${Number(event.amountDelta) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}
-                        >
-                          {signedMoney(event.amountDelta, event.currencyCode)}
-                        </TableCell>
-                        <TableCell>
-                          {canManage && !event.isReversed && event.eventType !== 'REVERSAL' ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setDialog({ kind: 'reversal', event })}
-                            >
-                              <RotateCcw /> Reverse
-                            </Button>
-                          ) : null}
-                        </TableCell>
+              <div className="rounded-xl border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-[14%]">Date</TableHead>
+                        <TableHead className="w-[18%]">Contributor</TableHead>
+                        <TableHead className="w-[16%]">Activity</TableHead>
+                        <TableHead className="w-[18%]">Connection</TableHead>
+                        <TableHead className="w-[16%]">Reference & Trx #</TableHead>
+                        <TableHead className="w-[12%] text-right">Capital impact</TableHead>
+                        <TableHead className="w-[6%] text-right" />
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {events.map((event) => {
+                        const isNeg = Number(event.amountDelta) < 0;
+                        return (
+                          <TableRow
+                            key={event.id}
+                            className="cursor-pointer hover:bg-muted/40 transition-colors"
+                            onClick={() => setSheet({ kind: 'transaction-detail', eventId: event.id })}
+                          >
+                            {/* Date */}
+                            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                              {formatFinanceDate(event.occurredAt, true)}
+                            </TableCell>
+
+                            {/* Contributor */}
+                            <TableCell>
+                              <button
+                                type="button"
+                                className="font-semibold text-xs text-foreground hover:text-primary hover:underline flex items-center gap-1.5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSheet({ kind: 'contributor-detail', contributorId: event.contributorId });
+                                }}
+                              >
+                                <User className="size-3.5 text-muted-foreground" />
+                                <span>{event.contributorName}</span>
+                              </button>
+                            </TableCell>
+
+                            {/* Activity Badge */}
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <StatusBadge status={humanizeFinanceCode(event.eventType)} />
+                                {event.isReversed ? (
+                                  <Badge variant="destructive" className="text-[9px] px-1 py-0">
+                                    Reversed
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            </TableCell>
+
+                            {/* Connection */}
+                            <TableCell>
+                              {event.accountId && event.accountName ? (
+                                <Link
+                                  href={`/finance/accounts/${event.accountId}`}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Landmark className="size-3.5 text-emerald-600 shrink-0" />
+                                  <span className="truncate max-w-[140px]">{event.accountName}</span>
+                                </Link>
+                              ) : event.expenseId && event.expenseNumber ? (
+                                <Link
+                                  href={`/finance/expenses/${event.expenseId}`}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ReceiptText className="size-3.5 text-primary shrink-0" />
+                                  <span>{event.expenseNumber}</span>
+                                </Link>
+                              ) : event.purchaseId && event.purchaseNumber ? (
+                                <Link
+                                  href={`/purchases/${event.purchaseId}`}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ShoppingBag className="size-3.5 text-blue-600 shrink-0" />
+                                  <span>{event.purchaseNumber}</span>
+                                </Link>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Direct record</span>
+                              )}
+                            </TableCell>
+
+                            {/* Reference */}
+                            <TableCell>
+                              <span className="block font-mono text-xs text-foreground">
+                                {event.transactionNumber}
+                              </span>
+                              {event.reference ? (
+                                <span className="block text-[11px] text-muted-foreground truncate max-w-[150px]">
+                                  {event.reference}
+                                </span>
+                              ) : null}
+                            </TableCell>
+
+                            {/* Capital Impact */}
+                            <TableCell
+                              className={`text-right text-xs font-semibold tabular-nums ${
+                                isNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                              }`}
+                            >
+                              {signedMoney(event.amountDelta, event.currencyCode || defaultCurrency, formatMoney)}
+                            </TableCell>
+
+                            {/* Actions */}
+                            <TableCell className="text-right">
+                              {canManage && !event.isReversed && event.eventType !== 'REVERSAL' ? (
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDialog({ kind: 'reversal', event });
+                                  }}
+                                >
+                                  <RotateCcw className="size-3" />
+                                  <span>Reverse</span>
+                                </Button>
+                              ) : null}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             ) : (
               <OperationalEmptyState
-                title="No capital activity"
-                description="Contributions, withdrawals, and personally funded Expenses will appear here."
+                title={hasActiveFilters ? 'No matching capital transactions' : 'No capital activity recorded yet'}
+                description={
+                  hasActiveFilters
+                    ? 'No transactions matched the search query or selected filters. Try clearing or relaxing filters.'
+                    : 'Contributions, personal expense funding, and withdrawals will appear here in chronological order.'
+                }
+                action={
+                  hasActiveFilters ? (
+                    <Button variant="outline" size="sm" onClick={handleResetFilters}>
+                      Clear filters
+                    </Button>
+                  ) : canManage ? (
+                    <Button onClick={() => setDialog({ kind: 'movement', movementType: 'CONTRIBUTION' })}>
+                      <Plus className="size-4 mr-1.5" />
+                      <span>Record first contribution</span>
+                    </Button>
+                  ) : undefined
+                }
               />
             )}
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                {pagination.totalItems} entries · Page {pagination.page} of{' '}
-                {Math.max(1, pagination.totalPages)}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page <= 1 || state === 'loading'}
-                  onClick={() => setPage((value) => value - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page >= pagination.totalPages || state === 'loading'}
-                  onClick={() => setPage((value) => value + 1)}
-                >
-                  Next
-                </Button>
+
+            {/* Pagination Controls */}
+            {pagination.totalPages > 1 ? (
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
+                <span>
+                  Showing {(pagination.page - 1) * pagination.pageSize + 1}–
+                  {Math.min(pagination.page * pagination.pageSize, pagination.totalItems)} of{' '}
+                  {pagination.totalItems} entries
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page <= 1 || state === 'loading'}
+                    onClick={() => setPage((val) => val - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page >= pagination.totalPages || state === 'loading'}
+                    onClick={() => setPage((val) => val + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
-            </div>
+            ) : null}
           </CardContent>
         </Card>
 
-        <Dialog
+        {/* Contributor Detail Sheet */}
+        <CapitalContributorDetailSheet
+          contributor={activeSheetContributor}
+          defaultCurrency={defaultCurrency}
+          open={sheet?.kind === 'contributor-detail'}
+          canManage={canManage}
+          onClose={() => setSheet(undefined)}
+          onEditContributor={(c) => {
+            setSheet(undefined);
+            setDialog({ kind: 'edit-contributor', contributor: c });
+          }}
+          onRecordContribution={(cId) => {
+            setSheet(undefined);
+            setDialog({ kind: 'movement', movementType: 'CONTRIBUTION', preselectedContributorId: cId });
+          }}
+          onRecordPersonalPayment={(cId) => {
+            setSheet(undefined);
+            setDialog({ kind: 'owner-expense', preselectedContributorId: cId });
+          }}
+          onRecordWithdrawal={(cId) => {
+            setSheet(undefined);
+            setDialog({ kind: 'movement', movementType: 'WITHDRAWAL', preselectedContributorId: cId });
+          }}
+          onOpenTransaction={(eId) => {
+            setSheet({ kind: 'transaction-detail', eventId: eId });
+          }}
+          onReverse={(ev) => {
+            setSheet(undefined);
+            setDialog({ kind: 'reversal', event: ev });
+          }}
+        />
+
+        {/* Transaction Detail Sheet */}
+        <CapitalTransactionDetailSheet
+          event={singleEventDetail}
+          defaultCurrency={defaultCurrency}
+          open={sheet?.kind === 'transaction-detail'}
+          canManage={canManage}
+          onClose={() => setSheet(undefined)}
+          onOpenContributor={(cId) => {
+            setSheet({ kind: 'contributor-detail', contributorId: cId });
+          }}
+          onOpenTransaction={(eId) => {
+            setSheet({ kind: 'transaction-detail', eventId: eId });
+          }}
+          onReverse={(ev) => {
+            setSheet(undefined);
+            setDialog({ kind: 'reversal', event: ev });
+          }}
+        />
+
+        {/* Add Contributor Dialog */}
+        <CapitalContributorDialog
+          mode="create"
           open={dialog?.kind === 'contributor'}
-          onOpenChange={(open) => !open && setDialog(undefined)}
-        >
-          <DialogContent>
-            <form
-              className="grid gap-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const data = new FormData(event.currentTarget);
-                void submit(
-                  '/admin/finance/capital/contributors',
-                  {
-                    displayName: data.get('displayName'),
-                    contactNote: data.get('contactNote') || undefined,
-                  },
-                  'Capital contributor added.',
-                );
-              }}
-            >
-              <DialogHeader>
-                <DialogTitle>Add capital contributor</DialogTitle>
-                <DialogDescription>
-                  This person does not receive Team access or an ownership percentage.
-                </DialogDescription>
-              </DialogHeader>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Name
-                <Input name="displayName" maxLength={200} required autoFocus />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Contact or identity note
-                <Textarea name="contactNote" maxLength={1000} />
-              </label>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialog(undefined)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={busy}>
-                  Add contributor
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+          busy={busy}
+          onClose={() => setDialog(undefined)}
+          onSubmit={async (data) => {
+            await submitCommand(
+              '/admin/finance/capital/contributors',
+              'POST',
+              {
+                displayName: data.displayName,
+                contactNote: data.contactNote,
+                linkedUserId: data.linkedUserId || undefined,
+                idempotencyKey: crypto.randomUUID(),
+              },
+              `Capital contributor "${data.displayName}" added successfully.`,
+            );
+          }}
+        />
 
-        <Dialog
+        {/* Edit Contributor Dialog */}
+        <CapitalContributorDialog
+          mode="edit"
+          contributor={dialog?.kind === 'edit-contributor' ? dialog.contributor : undefined}
           open={dialog?.kind === 'edit-contributor'}
-          onOpenChange={(open) => !open && setDialog(undefined)}
-        >
-          <DialogContent>
-            {dialog?.kind === 'edit-contributor' ? (
-              <form
-                className="grid gap-4"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const data = new FormData(event.currentTarget);
-                  void updateContributor(dialog.contributor, {
-                    displayName: data.get('displayName'),
-                    contactNote: data.get('contactNote') || null,
-                    status: data.get('status'),
-                  });
-                }}
-              >
-                <DialogHeader>
-                  <DialogTitle>Edit capital contributor</DialogTitle>
-                  <DialogDescription>
-                    Identity changes are audited. Deactivation prevents new capital activity but
-                    preserves the ledger.
-                  </DialogDescription>
-                </DialogHeader>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Name
-                  <Input
-                    name="displayName"
-                    defaultValue={dialog.contributor.displayName}
-                    maxLength={200}
-                    required
-                    autoFocus
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Contact or identity note
-                  <Textarea
-                    name="contactNote"
-                    defaultValue={dialog.contributor.contactNote ?? ''}
-                    maxLength={1000}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Status
-                  <NativeSelect name="status" defaultValue={dialog.contributor.status}>
-                    <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive</option>
-                  </NativeSelect>
-                </label>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setDialog(undefined)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={busy}>
-                    Save contributor
-                  </Button>
-                </DialogFooter>
-              </form>
-            ) : null}
-          </DialogContent>
-        </Dialog>
+          busy={busy}
+          onClose={() => setDialog(undefined)}
+          onSubmit={async (data) => {
+            if (dialog?.kind !== 'edit-contributor') return;
+            await submitCommand(
+              `/admin/finance/capital/contributors/${dialog.contributor.id}`,
+              'PATCH',
+              {
+                displayName: data.displayName,
+                contactNote: data.contactNote,
+                status: data.status,
+                linkedUserId: data.linkedUserId,
+                expectedVersion: dialog.contributor.version,
+              },
+              `Contributor "${data.displayName}" updated. Existing ledger history remains intact.`,
+            );
+          }}
+        />
 
-        <Dialog
+        {/* Record Capital Movement (Contribution or Withdrawal) Dialog */}
+        <CapitalMovementDialog
+          initialType={dialog?.kind === 'movement' ? dialog.movementType : 'CONTRIBUTION'}
+          preselectedContributorId={dialog?.kind === 'movement' ? dialog.preselectedContributorId : undefined}
+          contributors={contributors}
+          accounts={accounts}
+          defaultCurrency={defaultCurrency}
           open={dialog?.kind === 'movement'}
-          onOpenChange={(open) => !open && setDialog(undefined)}
-        >
-          <DialogContent>
-            <form
-              className="grid gap-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (dialog?.kind !== 'movement') return;
-                const data = new FormData(event.currentTarget);
-                void submit(
-                  '/admin/finance/capital/account-movements',
-                  {
-                    type: dialog.movementType,
-                    contributorId: data.get('contributorId'),
-                    accountId: data.get('accountId'),
-                    amount: data.get('amount'),
-                    occurredAt: new Date(String(data.get('occurredAt'))).toISOString(),
-                    reference: data.get('reference') || undefined,
-                    note: data.get('note') || undefined,
-                  },
-                  dialog.movementType === 'CONTRIBUTION'
-                    ? 'Capital contribution recorded. The Account balance now includes the funds.'
-                    : 'Capital withdrawal recorded. The Account balance has been reduced.',
-                );
-              }}
-            >
-              <DialogHeader>
-                <DialogTitle>
-                  {dialog?.kind === 'movement' && dialog.movementType === 'WITHDRAWAL'
-                    ? 'Record capital withdrawal'
-                    : 'Record capital contribution'}
-                </DialogTitle>
-                <DialogDescription>
-                  {dialog?.kind === 'movement' && dialog.movementType === 'WITHDRAWAL'
-                    ? 'This returns capital from a real business Account and is not an Expense.'
-                    : 'This records real money entering a business Account and does not count as Revenue.'}
-                </DialogDescription>
-              </DialogHeader>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Contributor
-                <NativeSelect name="contributorId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose contributor
-                  </option>
-                  {activeContributors.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.displayName}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Business Account
-                <NativeSelect name="accountId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose Account
-                  </option>
-                  {activeAccounts.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} · {formatMoney(item.ledger_balance, item.currency_code)}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Amount
-                  <Input name="amount" inputMode="decimal" required />
-                </label>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Date and time
-                  <Input
-                    name="occurredAt"
-                    type="datetime-local"
-                    defaultValue={localDateTime()}
-                    required
-                  />
-                </label>
-              </div>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Reference
-                <Input name="reference" maxLength={200} />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Note
-                <Textarea name="note" maxLength={2000} />
-              </label>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialog(undefined)}>
-                  Cancel
-                </Button>
-                {dialog?.kind === 'movement' && dialog.movementType === 'CONTRIBUTION' ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setDialog({ kind: 'movement', movementType: 'WITHDRAWAL' })}
-                  >
-                    <ArrowUpFromLine /> Switch to withdrawal
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setDialog({ kind: 'movement', movementType: 'CONTRIBUTION' })}
-                  >
-                    <ArrowDownToLine /> Switch to contribution
-                  </Button>
-                )}
-                <Button
-                  type="submit"
-                  disabled={busy || !activeContributors.length || !activeAccounts.length}
-                >
-                  Record
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+          busy={busy}
+          onClose={() => setDialog(undefined)}
+          onSubmit={async (data) => {
+            await submitCommand(
+              '/admin/finance/capital/account-movements',
+              'POST',
+              {
+                ...data,
+                idempotencyKey: crypto.randomUUID(),
+              },
+              data.type === 'CONTRIBUTION'
+                ? 'Capital contribution recorded. Destination account balance and contributor capital position updated.'
+                : 'Capital withdrawal recorded. Source account balance and contributor capital position updated.',
+            );
+          }}
+        />
 
-        <Dialog
+        {/* Record Personal Payment (Owner-Funded Expense) Dialog */}
+        <CapitalOwnerExpenseDialog
+          preselectedExpenseId={dialog?.kind === 'owner-expense' ? dialog.preselectedExpenseId : undefined}
+          preselectedContributorId={dialog?.kind === 'owner-expense' ? dialog.preselectedContributorId : undefined}
+          contributors={contributors}
+          expenses={expenses}
+          defaultCurrency={defaultCurrency}
           open={dialog?.kind === 'owner-expense'}
-          onOpenChange={(open) => !open && setDialog(undefined)}
-        >
-          <DialogContent>
-            <form
-              className="grid gap-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const data = new FormData(event.currentTarget);
-                const expenseId = String(data.get('expenseId'));
-                void submit(
-                  `/admin/finance/expenses/${expenseId}/owner-funded-payments`,
-                  {
-                    contributorId: data.get('contributorId'),
-                    amount: data.get('amount'),
-                    occurredAt: new Date(String(data.get('occurredAt'))).toISOString(),
-                    reference: data.get('reference') || undefined,
-                    note: data.get('note') || undefined,
-                  },
-                  'Personal payment recorded. The Expense is paid without changing a business Account balance.',
-                );
-              }}
-            >
-              <DialogHeader>
-                <DialogTitle>Record personally funded Expense</DialogTitle>
-                <DialogDescription>
-                  The contributor paid a real business cost with personal money. This increases
-                  their capital position without inventing cash in a business Account.
-                </DialogDescription>
-              </DialogHeader>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Contributor
-                <NativeSelect name="contributorId" required defaultValue="">
-                  <option value="" disabled>
-                    Choose contributor
-                  </option>
-                  {activeContributors.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.displayName}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Outstanding Expense or supplier invoice
-                <NativeSelect name="expenseId" required defaultValue={requestedExpenseId}>
-                  <option value="" disabled>
-                    Choose Expense
-                  </option>
-                  {capitalExpenses.map((expense) => (
-                    <option key={expense.id} value={expense.id}>
-                      {expense.expense_number}
-                      {expense.source_reference ? ` · ${expense.source_reference}` : ''} · due{' '}
-                      {formatMoney(expense.outstanding, expense.currency_code)}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Amount
-                  <Input name="amount" inputMode="decimal" required />
-                </label>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Paid at
-                  <Input
-                    name="occurredAt"
-                    type="datetime-local"
-                    defaultValue={localDateTime()}
-                    required
-                  />
-                </label>
-              </div>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Receipt or payment reference
-                <Input name="reference" maxLength={200} />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Note
-                <Textarea name="note" maxLength={2000} />
-              </label>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialog(undefined)}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={busy || !activeContributors.length || !capitalExpenses.length}
-                >
-                  Record personal payment
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+          busy={busy}
+          onClose={() => setDialog(undefined)}
+          onSubmit={async (data) => {
+            await submitCommand(
+              `/admin/finance/expenses/${data.expenseId}/owner-funded-payments`,
+              'POST',
+              {
+                contributorId: data.contributorId,
+                amount: data.amount,
+                occurredAt: data.occurredAt,
+                reference: data.reference,
+                note: data.note,
+                idempotencyKey: crypto.randomUUID(),
+              },
+              'Personally funded expense payment recorded. The obligation is settled without changing business account cash balances.',
+            );
+          }}
+        />
 
-        <Dialog
+        {/* Reversal Confirmation Dialog */}
+        <CapitalReversalDialog
+          event={dialog?.kind === 'reversal' ? dialog.event : undefined}
+          defaultCurrency={defaultCurrency}
           open={dialog?.kind === 'reversal'}
-          onOpenChange={(open) => !open && setDialog(undefined)}
-        >
-          <DialogContent>
-            <form
-              className="grid gap-4"
-              onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                event.preventDefault();
-                if (dialog?.kind !== 'reversal') return;
-                const reason = new FormData(event.currentTarget).get('reason');
-                void submit(
-                  `/admin/finance/capital/events/${dialog.event.id}/reversal`,
-                  { reason },
-                  'Capital event reversed with a compensating Finance record.',
-                );
-              }}
-            >
-              <DialogHeader>
-                <DialogTitle>Reverse capital event</DialogTitle>
-                <DialogDescription>
-                  This preserves the original entry and adds an equal opposite event. Account cash
-                  or Expense payment state will be corrected atomically.
-                </DialogDescription>
-              </DialogHeader>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Reason
-                <Textarea name="reason" minLength={4} maxLength={1000} required autoFocus />
-              </label>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialog(undefined)}>
-                  Keep entry
-                </Button>
-                <Button type="submit" variant="destructive" disabled={busy}>
-                  <RotateCcw /> Reverse entry
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+          busy={busy}
+          onClose={() => setDialog(undefined)}
+          onSubmit={async (reason) => {
+            if (dialog?.kind !== 'reversal') return;
+            await submitCommand(
+              `/admin/finance/capital/events/${dialog.event.id}/reversal`,
+              'POST',
+              {
+                reason,
+                idempotencyKey: crypto.randomUUID(),
+              },
+              `Transaction ${dialog.event.transactionNumber} reversed with compensating accounting record.`,
+            );
+          }}
+        />
       </div>
     </main>
   );

@@ -1874,6 +1874,8 @@ export interface CapitalContributorDto {
   readonly id: string;
   readonly displayName: string;
   readonly linkedUserId: string | null;
+  readonly linkedUserName?: string | null;
+  readonly linkedUserEmail?: string | null;
   readonly contactNote: string | null;
   readonly status: 'ACTIVE' | 'INACTIVE';
   readonly grossContributed: string;
@@ -1907,6 +1909,10 @@ export interface CapitalEventDto {
   readonly note: string | null;
   readonly reversalOfEventId: string | null;
   readonly isReversed: boolean;
+  readonly reversalEventId?: string | null;
+  readonly reversalTransactionNumber?: string | null;
+  readonly reversalReason?: string | null;
+  readonly reversalOfTransactionNumber?: string | null;
 }
 
 export interface CapitalOverviewDto {

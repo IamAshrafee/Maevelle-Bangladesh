@@ -4,14 +4,10 @@ import Link from 'next/link';
 import {
   AlertCircle,
   Ban,
-  CheckCircle2,
-  Clock,
   CreditCard,
-  DollarSign,
   ExternalLink,
   FileEdit,
-  FileText,
-  HelpCircle,
+  HandCoins,
   Receipt,
   Wallet,
 } from 'lucide-react';
@@ -21,7 +17,6 @@ import type { ApiEnvelope } from '@maevelle/contracts';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
   Sheet,
@@ -262,10 +257,28 @@ export function PurchaseInvoiceDetailSheet({
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <span className="font-semibold text-foreground flex items-center gap-1.5">
-                              <Wallet className="size-3.5 text-muted-foreground" />
-                              {payment.accountName}
-                            </span>
+                            {payment.paymentSource === 'OWNER_CAPITAL' ? (
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <HandCoins className="size-3.5 text-emerald-600" />
+                                <Link
+                                  href={payment.contributorId ? `/finance/capital?contributorId=${payment.contributorId}` : '/finance/capital'}
+                                  className="hover:underline text-primary"
+                                >
+                                  Paid personally · {payment.contributorName ?? 'Owner Capital'}
+                                </Link>
+                              </span>
+                            ) : (
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <Wallet className="size-3.5 text-muted-foreground" />
+                                {payment.accountId ? (
+                                  <Link href={`/finance/accounts/${payment.accountId}`} className="hover:underline">
+                                    {payment.accountName ?? 'Business Account'}
+                                  </Link>
+                                ) : (
+                                  payment.accountName ?? 'Business Account'
+                                )}
+                              </span>
+                            )}
                             <span className="text-[11px] text-muted-foreground block mt-0.5">
                               Trx: <code className="font-mono text-[10px]">{payment.transactionNumber}</code> ·{' '}
                               {formatSupplyDate(payment.paidAt)}
