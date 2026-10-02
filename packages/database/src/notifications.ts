@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { sql, type Kysely } from 'kysely';
@@ -29,8 +29,11 @@ export class NotificationDomainError extends Error {
   }
 }
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
-const retryAt = (attempt: number) =>
-  new Date(Date.now() + Math.min(60 * 60_000, 1_000 * 2 ** attempt));
+const retryAt = (attempt: number) => {
+  const baseDelay = Math.min(60 * 60_000, 1_000 * 2 ** attempt);
+  const jitterLimit = Math.max(1, Math.min(30_000, Math.floor(baseDelay * 0.2)));
+  return new Date(Date.now() + Math.min(60 * 60_000, baseDelay + randomInt(jitterLimit)));
+};
 const supportedEvents: Record<string, { type: string; required: boolean }> = {
   'orders.order.placed': { type: 'ORDER_PLACED', required: true },
   'orders.order.confirmed': { type: 'ORDER_CONFIRMED', required: true },
@@ -687,10 +690,19 @@ export async function deliverPendingEmails(
     recipient: string;
   }>`with candidates as (
       select n.id from notifications.notifications n
-      where n.channel='EMAIL' and n.status in ('QUEUED','FAILED')
+      where n.channel='EMAIL' and (
+          n.status='QUEUED'
+          or (
+            n.status='FAILED' and exists(
+              select 1 from notifications.delivery_attempts latest
+              where latest.notification_id=n.id and latest.retryable
+                and latest.attempt_number=(select max(candidate.attempt_number) from notifications.delivery_attempts candidate where candidate.notification_id=n.id)
+                and latest.next_retry_at<=now()
+            )
+          )
+        )
         and (${organizationId ?? null}::uuid is null or n.organization_id=${organizationId ?? null}::uuid)
         and not exists(select 1 from platform.operational_controls control where control.organization_id=n.organization_id and control.control_key='email_delivery_enabled' and not control.enabled)
-        and coalesce((select max(a.next_retry_at) from notifications.delivery_attempts a where a.notification_id=n.id),now())<=now()
         and not exists(select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.status='SENT')
       order by n.created_at for update skip locked limit ${limit}
     )
