@@ -14,6 +14,7 @@ const success = new Set([
   'SUCCEEDED',
   'READY',
   'MATCHED',
+  'SENT',
 ]);
 const warning = new Set([
   'PENDING',
@@ -34,6 +35,10 @@ const warning = new Set([
   'UNRECONCILED',
   'OPEN',
   'EXCEPTION',
+  'QUEUED',
+  'PROCESSING',
+  'PENDING_MANUAL',
+  'DELIVERY_DELAYED',
 ]);
 const danger = new Set([
   'FAILED',
@@ -44,6 +49,9 @@ const danger = new Set([
   'CRITICAL',
   'DISABLED',
   'BLOCKED',
+  'BOUNCED',
+  'COMPLAINED',
+  'SUPPRESSED',
 ]);
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

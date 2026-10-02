@@ -22,6 +22,7 @@ import { CorrectDeliveryAddressDialog } from './correct-delivery-address-dialog'
 import { CompleteOrderDialog } from './complete-order-dialog';
 import { CorrectCustomerContactDialog } from './correct-customer-contact-dialog';
 import { ManageOrderTagsDialog } from './manage-order-tags-dialog';
+import { OrderEmailStatus } from './order-email-status';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
@@ -658,6 +659,8 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
               </div>
             </section>
           ) : null}
+
+          <OrderEmailStatus orderId={order.id} hasEmail={Boolean(order.customerEmail)} />
 
           <section className="rounded-xl border bg-card shadow-sm">
             <div className="border-b px-6 py-4">

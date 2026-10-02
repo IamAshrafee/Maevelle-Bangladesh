@@ -22,6 +22,7 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  Mail,
   Menu,
   PackageCheck,
   PackageOpen,
@@ -267,6 +268,13 @@ const navigation: readonly NavGroup[] = [
         href: '/notifications',
         icon: Bell,
         capability: 'notifications.view',
+      },
+      {
+        label: 'Email operations',
+        href: '/email',
+        icon: Mail,
+        capability: 'notifications.view',
+        keywords: 'resend transactional delivery templates policies suppressions diagnostics',
       },
       {
         label: 'Integrations',

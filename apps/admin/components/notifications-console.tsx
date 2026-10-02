@@ -227,7 +227,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
         (filter === 'UNREAD'
           ? !item.read_at
           : filter === 'REQUIRED'
-            ? item.status === 'PENDING' || item.status === 'FAILED'
+            ? ['QUEUED', 'PROCESSING', 'PENDING_MANUAL', 'FAILED'].includes(item.status)
             : item.status === filter || item.channel === filter);
       return (
         matchesFilter &&
@@ -833,7 +833,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
             <StatsCard>
               <StatsTitle>Pending</StatsTitle>
               <StatsValue>
-                {notifications.filter((item) => item.status === 'PENDING').length}
+                {notifications.filter((item) => item.status === 'QUEUED').length}
               </StatsValue>
             </StatsCard>
             <StatsCard>
