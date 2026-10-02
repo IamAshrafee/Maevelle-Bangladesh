@@ -79,4 +79,24 @@ describe('parseConfig', () => {
       expect((error as Error).message).toContain('DATABASE_URL');
     }
   });
+
+  it('populates storefrontInternalApiUrl with fallback when omitted', () => {
+    const config = parseConfig(validEnvironment);
+    expect(config.storefrontInternalApiUrl).toBe('http://127.0.0.1:3000');
+  });
+
+  it('boots cleanly with Category A deployment variables only without requiring business settings', () => {
+    const minimalCategoryAEnv = {
+      NODE_ENV: 'development',
+      DATABASE_URL: 'postgresql://maevelle_dev:dev@localhost:5434/maevelle_dev',
+      BETTER_AUTH_SECRET: 'k'.repeat(32),
+      AUTH_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    };
+
+    const config = parseConfig(minimalCategoryAEnv);
+    expect(config.databaseUrl).toBe(minimalCategoryAEnv.DATABASE_URL);
+    expect(config.emailEnabled).toBe(false); // safe default; DB settings govern
+    expect(config.mediaMaxUploadBytes).toBe(10 * 1024 * 1024);
+    expect(config.mediaUploadExpirySeconds).toBe(900);
+  });
 });

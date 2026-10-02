@@ -36,6 +36,7 @@ import {
 } from '@maevelle/database/media';
 import { authorizeReviewMediaUpload, ReviewDomainError } from '@maevelle/database/reviews';
 import { findActiveAdminContext } from '@maevelle/database/platform';
+import { resolveMediaSettings } from '@maevelle/database/settings';
 import {
   createMediaObjectKey,
   sha256,
@@ -171,7 +172,11 @@ export function registerMediaRoutes(
           ...body,
           enforceUploadLimit: true,
         });
-        const expiresAt = new Date(Date.now() + options.uploadExpirySeconds * 1_000);
+        const mediaSettings = await resolveMediaSettings(database.db, body.organizationId, {
+          mediaDefaultMaxUploadBytes: options.maxUploadBytes,
+          mediaDefaultUploadExpirySeconds: options.uploadExpirySeconds,
+        });
+        const expiresAt = new Date(Date.now() + mediaSettings.uploadExpirySeconds * 1_000);
         const session = await createMediaUploadSession(database.db, {
           organizationId: body.organizationId,
           uploadSource: 'CUSTOMER_REVIEW',
@@ -190,11 +195,11 @@ export function registerMediaRoutes(
               purpose: 'original',
             }),
           expiresAt,
-          maximumBytes: Math.min(options.maxUploadBytes, 5 * 1024 * 1024),
+          maximumBytes: Math.min(mediaSettings.maxUploadBytes, 5 * 1024 * 1024),
         });
         const authorization = await storage.createSignedUpload(
           { provider: session.provider, bucket: session.bucket, key: session.objectKey },
-          { contentType: session.mimeType, expiresInSeconds: options.uploadExpirySeconds },
+          { contentType: session.mimeType, expiresInSeconds: mediaSettings.uploadExpirySeconds },
         );
         return reply.code(201).send({
           data: {
@@ -686,7 +691,11 @@ export function registerMediaRoutes(
           title?: string | null;
           altText?: string | null;
         };
-        const expiresAt = new Date(Date.now() + options.uploadExpirySeconds * 1_000);
+        const mediaSettings = await resolveMediaSettings(database.db, context.organizationId, {
+          mediaDefaultMaxUploadBytes: options.maxUploadBytes,
+          mediaDefaultUploadExpirySeconds: options.uploadExpirySeconds,
+        });
+        const expiresAt = new Date(Date.now() + mediaSettings.uploadExpirySeconds * 1_000);
         const session = await createMediaUploadSession(database.db, {
           organizationId: context.organizationId,
           actorId: context.actorId,
@@ -706,7 +715,7 @@ export function registerMediaRoutes(
               purpose: 'original',
             }),
           expiresAt,
-          maximumBytes: options.maxUploadBytes,
+          maximumBytes: mediaSettings.maxUploadBytes,
         });
         const locator = {
           provider: session.provider,
@@ -715,7 +724,7 @@ export function registerMediaRoutes(
         };
         const authorization = await storage.createSignedUpload(locator, {
           contentType: session.mimeType,
-          expiresInSeconds: options.uploadExpirySeconds,
+          expiresInSeconds: mediaSettings.uploadExpirySeconds,
         });
         return reply.code(201).send({
           data: {

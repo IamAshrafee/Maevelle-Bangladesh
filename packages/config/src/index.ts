@@ -29,6 +29,7 @@ export interface RuntimeConfig {
   /** Public Storefront tenant resolved by the API; customers never enter an organization UUID. */
   readonly storefrontOrganizationCode: string;
   readonly storefrontBaseUrl: string;
+  readonly storefrontInternalApiUrl: string;
   readonly emailEnabled: boolean;
   readonly emailProvider: 'local' | 'resend';
   readonly emailEnvironment: 'development' | 'test' | 'production';
@@ -301,6 +302,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
       environment.STOREFRONT_BASE_URL ?? 'http://localhost:3000',
       'STOREFRONT_BASE_URL',
     ),
+    storefrontInternalApiUrl: environment.STOREFRONT_INTERNAL_API_URL?.trim() || 'http://127.0.0.1:3000',
     emailEnabled,
     emailProvider,
     emailEnvironment,

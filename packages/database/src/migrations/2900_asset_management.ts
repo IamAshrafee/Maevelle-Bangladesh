@@ -11,6 +11,22 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     alter table finance.finance_transactions add constraint finance_transactions_transaction_type_check
       check (transaction_type in ('OPENING_BALANCE','EXPENSE_PAYMENT','INTERNAL_TRANSFER','EXTERNAL_ADJUSTMENT','PAYMENT_SOURCE_POSTING','REFUND_SOURCE_POSTING','COD_SETTLEMENT','CAPITAL_CONTRIBUTION','OWNER_FUNDED_EXPENSE','CAPITAL_WITHDRAWAL','CAPITAL_REVERSAL','ASSET_SALE'));
 
+    do $$
+    begin
+      if not exists (
+        select 1 from pg_constraint
+        where conrelid = 'iam.organization_memberships'::regclass
+          and contype = 'u'
+          and conkey = array[2, 1]::smallint[]
+      ) and not exists (
+        select 1 from pg_constraint
+        where conrelid = 'iam.organization_memberships'::regclass
+          and conname = 'organization_memberships_organization_id_id_key'
+      ) then
+        alter table iam.organization_memberships add constraint organization_memberships_organization_id_id_key unique (organization_id, id);
+      end if;
+    end $$;
+
     create table assets.categories (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),

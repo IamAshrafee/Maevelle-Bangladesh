@@ -32,6 +32,7 @@ import { registerSteadfastRoutes } from './steadfast.js';
 import { registerCourierWebhookRoutes } from './courier-webhooks.js';
 import { registerTeamAccessRoutes } from './team-access.js';
 import { registerAssetRoutes } from './assets.js';
+import { registerSettingsRoutes } from './settings.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -113,4 +114,5 @@ export function registerAuthRoutes(
   registerAdminOperationsRoutes(app, database, auth);
   registerTeamAccessRoutes(app, database, auth, config);
   registerAssetRoutes(app, database, auth);
+  registerSettingsRoutes(app, database, auth, config);
 }

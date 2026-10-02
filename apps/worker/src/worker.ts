@@ -108,7 +108,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
             ? { environmentLabel: options.emailEnvironmentLabel }
             : {}),
         }),
-        options.emailEnabled
+        options.emailEnabled !== false
           ? deliverPendingEmails(options.database.db, emailAdapter)
           : Promise.resolve(0),
         createWebhookEventsFromOutbox(options.database.db),
@@ -131,7 +131,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         options.encryptionKey
           ? deliverPendingWebhooks(options.database.db, options.encryptionKey)
           : Promise.resolve(0),
-        options.emailEnabled && options.encryptionKey && options.adminBaseUrl
+        options.emailEnabled !== false && options.encryptionKey && options.adminBaseUrl
           ? deliverPendingInvitationEmails(
               options.database.db,
               invitationEmailAdapter,

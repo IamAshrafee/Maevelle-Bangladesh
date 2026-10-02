@@ -3302,3 +3302,136 @@ export interface OrderEmailEligibilityDto {
   readonly events: readonly OrderEmailEventEligibilityDto[];
 }
 
+// ---------------------------------------------------------------------------
+// Centralized Runtime Configuration & Settings Domain Contracts
+// ---------------------------------------------------------------------------
+
+export type SettingScope = 'ORGANIZATION' | 'SYSTEM';
+export type SettingDataType = 'string' | 'number' | 'boolean' | 'json' | 'string_list';
+export type SettingSource = 'DEFAULT' | 'DATABASE' | 'DEPLOYMENT_OVERRIDE';
+
+export type SettingsReadinessStatus =
+  | 'ready'
+  | 'needs_configuration'
+  | 'disabled'
+  | 'restricted'
+  | 'error';
+
+export interface SettingMetadataDto {
+  readonly key: string;
+  readonly module: string;
+  readonly label: string;
+  readonly description: string;
+  readonly type: SettingDataType;
+  readonly defaultValue: unknown;
+  readonly sensitive: boolean;
+  readonly runtimeMutable: boolean;
+  readonly requiresRestart: boolean;
+  readonly allowedValues?: readonly string[];
+}
+
+export interface SettingEntryDto {
+  readonly key: string;
+  readonly module: string;
+  readonly label: string;
+  readonly description: string;
+  readonly type: SettingDataType;
+  readonly value: unknown;
+  readonly effectiveValue: unknown;
+  readonly defaultValue: unknown;
+  readonly source: SettingSource;
+  readonly sensitive: boolean;
+  readonly runtimeMutable: boolean;
+  readonly requiresRestart: boolean;
+  readonly updatedAt?: string | null;
+  readonly updatedBy?: string | null;
+}
+
+export interface EmailSettingsDto {
+  readonly enabled: boolean;
+  readonly provider: 'local' | 'resend';
+  readonly fromName: string;
+  readonly fromAddress: string;
+  readonly replyTo: string;
+  readonly testRecipientOverride: string | null;
+  readonly allowedTestRecipients: readonly string[];
+}
+
+export interface EmailReadinessDto {
+  readonly status: SettingsReadinessStatus;
+  readonly provider: 'local' | 'resend';
+  readonly environment: 'development' | 'test' | 'production';
+  readonly enabled: boolean;
+  readonly effectiveEnabled: boolean;
+  readonly providerConfigured: boolean;
+  readonly webhookConfigured: boolean;
+  readonly reasons: readonly string[];
+}
+
+export interface MediaSettingsDto {
+  readonly maxUploadBytes: number;
+  readonly uploadExpirySeconds: number;
+}
+
+export interface StorefrontSettingsDto {
+  readonly publicBaseUrl: string;
+  readonly storeName: string;
+  readonly supportEmail: string;
+  readonly supportPhone: string;
+}
+
+export interface GeneralSettingsDto {
+  readonly storeName: string;
+  readonly supportEmail: string;
+  readonly timezone: string;
+  readonly defaultCurrency: string;
+  readonly lowStockThreshold: number;
+  readonly sessionTimeoutMinutes: number;
+}
+
+export interface ModuleSettingsSummaryDto {
+  readonly module: string;
+  readonly label: string;
+  readonly description: string;
+  readonly settingCount: number;
+  readonly readinessStatus?: SettingsReadinessStatus;
+}
+
+export interface SettingsListResponseDto {
+  readonly modules: readonly ModuleSettingsSummaryDto[];
+  readonly settings: readonly SettingEntryDto[];
+}
+
+export interface ModuleSettingsResponseDto<T = Record<string, unknown>> {
+  readonly module: string;
+  readonly settings: T;
+  readonly effective: T;
+  readonly readiness?: {
+    readonly status: SettingsReadinessStatus;
+    readonly reasons: readonly string[];
+  };
+  readonly schema: readonly SettingMetadataDto[];
+  readonly version: number;
+  readonly updatedAt?: string | null;
+}
+
+export interface IntegrationSecretStatusDto {
+  readonly providerCode: string;
+  readonly keyName: string;
+  readonly configured: boolean;
+  readonly updatedAt?: string | null;
+}
+
+export interface UpdateSettingInputDto {
+  readonly key: string;
+  readonly value: unknown;
+  readonly reason?: string;
+  readonly expectedVersion?: number;
+}
+
+export interface UpdateModuleSettingsInputDto {
+  readonly settings: Record<string, unknown>;
+  readonly reason?: string;
+  readonly expectedVersion?: number;
+}
+

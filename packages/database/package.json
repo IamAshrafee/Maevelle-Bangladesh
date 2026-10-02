@@ -148,6 +148,10 @@
       "types": "./src/admin-operations.ts",
       "default": "./dist/src/admin-operations.js"
     },
+    "./settings": {
+      "types": "./src/settings.ts",
+      "default": "./dist/src/settings.js"
+    },
     "./storefront": {
       "types": "./src/storefront.ts",
       "default": "./dist/src/storefront.js"

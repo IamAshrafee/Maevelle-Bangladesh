@@ -33,6 +33,7 @@ const config: RuntimeConfig = {
   mediaUploadExpirySeconds: 900,
   storefrontOrganizationCode: 'maevelle',
   storefrontBaseUrl: 'http://localhost:3001',
+  storefrontInternalApiUrl: 'http://127.0.0.1:3000',
   emailEnabled: false,
   emailProvider: 'local',
   emailEnvironment: 'test',

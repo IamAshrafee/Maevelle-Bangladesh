@@ -707,6 +707,12 @@ export async function deliverPendingEmails(
         )
         and (${organizationId ?? null}::uuid is null or n.organization_id=${organizationId ?? null}::uuid)
         and not exists(select 1 from platform.operational_controls control where control.organization_id=n.organization_id and control.control_key='email_delivery_enabled' and not control.enabled)
+        and not exists(
+          select 1 from settings.runtime_settings s
+          where s.organization_id=n.organization_id
+            and s.key='email.enabled'
+            and s.value_json='false'::jsonb
+        )
         and not exists(select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.status='SENT')
       order by n.created_at for update skip locked limit ${limit}
     )
@@ -727,7 +733,17 @@ export async function deliverPendingEmails(
       processed++;
       continue;
     }
-    const effectiveRecipient = adapter.effectiveRecipient(item.recipient);
+    const emailSettingsRow = await sql<{ value_json: unknown }>`
+      select value_json from settings.runtime_settings
+      where organization_id = ${item.organization_id} and key = 'email.testRecipientOverride'
+      limit 1
+    `.execute(db);
+    const dynamicOverride =
+      typeof emailSettingsRow.rows[0]?.value_json === 'string' &&
+      emailSettingsRow.rows[0].value_json.trim() !== ''
+        ? emailSettingsRow.rows[0].value_json.trim()
+        : undefined;
+    const effectiveRecipient = dynamicOverride ?? adapter.effectiveRecipient(item.recipient);
     await sql`update notifications.notifications set effective_recipient=${effectiveRecipient},updated_at=now() where id=${item.id}::uuid`.execute(db);
     await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,source,metadata) values(${item.organization_id},${item.id}::uuid,'PROCESSING','APPLICATION',${JSON.stringify({ intendedRecipient: item.recipient, effectiveRecipient })}::jsonb)`.execute(db);
     let result: DeliveryResult;

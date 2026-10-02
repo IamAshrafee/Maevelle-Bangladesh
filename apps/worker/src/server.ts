@@ -49,7 +49,7 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
             forcePathStyle: config.mediaStorageForcePathStyle,
           },
     ),
-    emailEnabled: config.emailEnabled,
+    ...(process.env.EMAIL_ENABLED !== undefined ? { emailEnabled: config.emailEnabled } : {}),
     ...(config.emailProvider === 'resend' && config.resendApiKey
       ? {
           emailAdapter: createResendEmailProvider({

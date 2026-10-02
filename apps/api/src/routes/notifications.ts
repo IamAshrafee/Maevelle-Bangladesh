@@ -3,6 +3,7 @@ import { Type } from 'typebox';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import * as notifications from '@maevelle/database/notifications';
+import { resolveEmailSettings, resolveStorefrontSettings } from '@maevelle/database/settings';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 import type { createAuth } from '../auth/auth.js';
 import { Resend } from 'resend';
@@ -239,14 +240,18 @@ export function registerNotificationRoutes(
     },
   );
 
-  const renderOptions = {
-    storefrontBaseUrl: config.storefrontBaseUrl ?? 'http://localhost:3000',
-    supportEmail: emailReplyTo,
-    senderFrom: `${emailFromName} <${emailFromAddress}>`,
-    ...(emailEnvironment !== 'production'
-      ? { environmentLabel: emailEnvironment.toUpperCase() }
-      : {}),
-  };
+  async function getRenderOptions(organizationId: string) {
+    const emailRes = await resolveEmailSettings(database.db, organizationId, config);
+    const storefront = await resolveStorefrontSettings(database.db, organizationId, config);
+    return {
+      storefrontBaseUrl: storefront.publicBaseUrl,
+      supportEmail: emailRes.settings.replyTo,
+      senderFrom: `${emailRes.settings.fromName} <${emailRes.settings.fromAddress}>`,
+      ...(emailRes.readiness.environment !== 'production'
+        ? { environmentLabel: emailRes.readiness.environment.toUpperCase() }
+        : {}),
+    };
+  }
 
   app.get(
     '/admin/email/operations',
@@ -389,7 +394,7 @@ export function registerNotificationRoutes(
             ...(reqOrderId ? { orderId: reqOrderId } : {}),
             ...(reqFixtureKey ? { fixtureKey: reqFixtureKey } : {}),
             notificationType: (req.params as { notificationType: string }).notificationType,
-            options: renderOptions,
+            options: await getRenderOptions(a.organizationId),
           }),
         };
       } catch (error) {
@@ -403,12 +408,13 @@ export function registerNotificationRoutes(
     async (req, reply) => {
       const a = await admin(database, auth, req.headers, 'notifications.view');
       if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const emailRes = await resolveEmailSettings(database.db, a.organizationId, config);
       try {
         return {
           data: await notifications.getOrderEmailEligibility(database.db, {
             organizationId: a.organizationId,
             orderId: (req.params as { orderId: string }).orderId,
-            globalEnabled: config.emailEnabled ?? false,
+            globalEnabled: emailRes.settings.enabled,
           }),
         };
       } catch (error) {
@@ -439,10 +445,14 @@ export function registerNotificationRoutes(
         fixtureKey?: string;
         reason?: string;
       };
+      const emailRes = await resolveEmailSettings(database.db, a.organizationId, config);
       const testRecipient = body.testRecipient.trim().toLowerCase();
+      const allowedRecipients = emailRes.settings.allowedTestRecipients.length > 0
+        ? emailRes.settings.allowedTestRecipients
+        : (config.emailAllowedTestRecipients ?? []);
       if (
-        emailEnvironment === 'production' ||
-        !(config.emailAllowedTestRecipients ?? []).includes(testRecipient)
+        emailRes.readiness.environment === 'production' ||
+        !allowedRecipients.includes(testRecipient)
       ) {
         return reply.code(422).send({
           error: {
@@ -460,7 +470,7 @@ export function registerNotificationRoutes(
           ...(body.fixtureKey?.trim() ? { fixtureKey: body.fixtureKey.trim() } : {}),
           testRecipient,
           ...(body.reason?.trim() ? { reason: body.reason.trim() } : {}),
-          options: renderOptions,
+          options: await getRenderOptions(a.organizationId),
         });
         return reply.code(201).send({ data: result });
       } catch (error) {
@@ -512,7 +522,7 @@ export function registerNotificationRoutes(
           reason: body.reason,
           triggerType: testRecipient ? 'TEST' : 'MANUAL',
           ...(testRecipient ? { recipientOverride: testRecipient } : {}),
-          options: renderOptions,
+          options: await getRenderOptions(a.organizationId),
         });
         return reply.code(result.created ? 201 : 200).send({ data: result });
       } catch (error) {
@@ -575,7 +585,7 @@ export function registerNotificationRoutes(
           reason: body.reason,
           triggerType: 'RESEND',
           parentNotificationId: notificationId,
-          options: renderOptions,
+          options: await getRenderOptions(a.organizationId),
         });
         return reply.code(result.created ? 201 : 200).send({ data: result });
       } catch (error) {
@@ -617,17 +627,20 @@ export function registerNotificationRoutes(
   app.get('/admin/email/diagnostics', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'notifications.view');
     if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    const emailRes = await resolveEmailSettings(database.db, a.organizationId, config);
     return {
       data: {
-        provider: config.emailProvider ?? 'local',
-        environment: emailEnvironment,
-        enabled: config.emailEnabled ?? false,
-        from: `${emailFromName} <${emailFromAddress}>`,
-        replyTo: emailReplyTo,
-        providerConfigured: (config.emailProvider ?? 'local') === 'local' || Boolean(config.resendApiKey),
-        webhookConfigured: Boolean(config.resendWebhookSecret),
-        testRecipientOverride: config.emailTestRecipientOverride ?? null,
-        allowedTestRecipients: config.emailAllowedTestRecipients ?? [],
+        provider: emailRes.settings.provider,
+        environment: emailRes.readiness.environment,
+        enabled: emailRes.settings.enabled,
+        from: `${emailRes.settings.fromName} <${emailRes.settings.fromAddress}>`,
+        replyTo: emailRes.settings.replyTo,
+        providerConfigured: emailRes.readiness.providerConfigured,
+        webhookConfigured: emailRes.readiness.webhookConfigured,
+        testRecipientOverride: emailRes.settings.testRecipientOverride,
+        allowedTestRecipients: emailRes.settings.allowedTestRecipients.length > 0
+          ? emailRes.settings.allowedTestRecipients
+          : (config.emailAllowedTestRecipients ?? []),
         ...(await notifications.emailOperationalSummary(database.db, a.organizationId)),
       },
     };
