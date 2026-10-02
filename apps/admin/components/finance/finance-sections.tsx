@@ -12,6 +12,7 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
+  HandCoins,
   Landmark,
   Link2,
   Package,
@@ -437,6 +438,52 @@ export function FinanceOverview({
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <HandCoins className="size-4 text-emerald-600" aria-hidden="true" />
+              Owner capital & funding
+            </span>
+            <Link
+              href="/finance/capital"
+              className="text-xs font-normal text-primary hover:underline"
+            >
+              Open workspace →
+            </Link>
+          </CardTitle>
+          <CardDescription>
+            Permanent capital contributions, owner-paid business expenses, and withdrawals.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <Link
+            href="/finance/capital"
+            className="rounded-lg border p-3 transition-colors hover:bg-muted/50"
+          >
+            <span className="text-xs text-muted-foreground">Capital Ledger</span>
+            <strong className="mt-1 block text-sm font-semibold">Immutable History</strong>
+            <span className="text-xs text-muted-foreground">Traceable contribution ledger</span>
+          </Link>
+          <Link
+            href="/finance/capital"
+            className="rounded-lg border p-3 transition-colors hover:bg-muted/50"
+          >
+            <span className="text-xs text-muted-foreground">Personally Funded Costs</span>
+            <strong className="mt-1 block text-sm font-semibold">Zero Cash Disruption</strong>
+            <span className="text-xs text-muted-foreground">Legitimate business expenses</span>
+          </Link>
+          <Link
+            href="/finance/capital"
+            className="rounded-lg border p-3 transition-colors hover:bg-muted/50"
+          >
+            <span className="text-xs text-muted-foreground">Contributors</span>
+            <strong className="mt-1 block text-sm font-semibold">Tracked Positions</strong>
+            <span className="text-xs text-muted-foreground">Multi-owner ledger support</span>
+          </Link>
+        </CardContent>
+      </Card>
     </div>
   );
 }

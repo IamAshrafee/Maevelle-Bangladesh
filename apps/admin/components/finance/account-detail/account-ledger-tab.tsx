@@ -124,6 +124,9 @@ export function AccountLedgerTab({
                 aria-label="Filter by transaction type"
               >
                 <option value="ALL">All transaction types</option>
+                <option value="CAPITAL_CONTRIBUTION">Capital Contribution</option>
+                <option value="CAPITAL_WITHDRAWAL">Capital Withdrawal</option>
+                <option value="CAPITAL_REVERSAL">Capital Reversal</option>
                 <option value="PAYMENT_SOURCE_POSTING">Customer Payment</option>
                 <option value="REFUND_SOURCE_POSTING">Customer Refund</option>
                 <option value="EXPENSE_PAYMENT">Expense Payment</option>

@@ -1187,6 +1187,7 @@ export async function createExpense(
     externalReference?: string;
     notes?: string;
     accountId?: string;
+    capitalContributorId?: string;
     paymentReference?: string;
     sourceDomain?: string;
     sourceId?: string;
@@ -1198,10 +1199,15 @@ export async function createExpense(
     const description = input.description.trim();
     if (!description)
       throw new FinanceDomainError('VALIDATION_FAILED', 'Expense description is required.');
-    if (input.paymentReference && !input.accountId)
+    if (input.accountId && input.capitalContributorId)
       throw new FinanceDomainError(
         'VALIDATION_FAILED',
-        'A payment reference requires an account-backed expense payment.',
+        'An expense cannot be funded by both a business account and owner capital on creation.',
+      );
+    if (input.paymentReference && !input.accountId && !input.capitalContributorId)
+      throw new FinanceDomainError(
+        'VALIDATION_FAILED',
+        'A payment reference requires an account or owner-funded expense payment.',
       );
     if (Boolean(input.sourceDomain) !== Boolean(input.sourceId))
       throw new FinanceDomainError(
@@ -1305,15 +1311,97 @@ export async function createExpense(
       });
       await outbox(tx, input.organizationId, 'finance.expense.paid', financeTransactionId);
     }
-    await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='finance.expense',result_entity_id=${id}::uuid,safe_response=${JSON.stringify({ expenseId: id, financeTransactionId: financeTransactionId ?? null })}::jsonb,completed_at=now() where id=${claimResult.id}`.execute(
+    let capitalEventId: string | undefined;
+    if (input.capitalContributorId) {
+      const contributorResult = await sql<{ id: string; display_name: string; status: string }>`
+        select id, display_name, status from finance.capital_contributors
+        where organization_id=${input.organizationId} and id=${input.capitalContributorId}`.execute(
+        tx,
+      );
+      const contributor = contributorResult.rows[0];
+      if (!contributor)
+        throw new FinanceDomainError('NOT_FOUND', 'Capital contributor was not found.');
+      if (contributor.status !== 'ACTIVE')
+        throw new FinanceDomainError('CONFLICT', 'Capital contributor is inactive.');
+      const org = await sql<{ default_currency: string }>`
+        select default_currency::text as default_currency from platform.organizations where id=${input.organizationId}`.execute(
+        tx,
+      );
+      if (org.rows[0]?.default_currency !== input.currencyCode)
+        throw new FinanceDomainError(
+          'VALIDATION_FAILED',
+          `Owner capital is reported in the organisation default currency (${org.rows[0]?.default_currency}).`,
+        );
+      const txnNumber = await nextNumber(tx, input.organizationId, 'FIN');
+      const txn = await sql<{ id: string }>`insert into finance.finance_transactions
+        (organization_id,transaction_number,transaction_type,occurred_at,description,source_domain,source_id,created_by)
+        values (${input.organizationId},${txnNumber},'OWNER_FUNDED_EXPENSE',${input.expenseDate}::timestamptz,
+          ${`Owner-funded payment for ${n}`},'finance.expense',${id}::uuid,${input.actorId ?? null}::uuid) returning id`.execute(
+        tx,
+      );
+      financeTransactionId = txn.rows[0]?.id;
+      if (!financeTransactionId) throw new Error('Finance transaction was not created.');
+      const payment = await sql<{ id: string }>`insert into finance.expense_payments
+        (organization_id,expense_id,finance_transaction_id,amount,payment_source,capital_contributor_id,reference,paid_at,created_by)
+        values (${input.organizationId},${id}::uuid,${financeTransactionId}::uuid,${amount}::numeric,
+          'OWNER_CAPITAL',${input.capitalContributorId}::uuid,${input.paymentReference?.trim() || null},${input.expenseDate}::timestamptz,
+          ${input.actorId ?? null}::uuid) returning id`.execute(tx);
+      const expensePaymentId = payment.rows[0]?.id;
+      if (!expensePaymentId) throw new Error('Expense payment was not created.');
+      const event = await sql<{ id: string }>`insert into finance.capital_events
+        (organization_id,contributor_id,finance_transaction_id,event_type,amount_delta,currency_code,
+          expense_payment_id,reference,note,occurred_at,created_by)
+        values (${input.organizationId},${input.capitalContributorId}::uuid,${financeTransactionId}::uuid,
+          'OWNER_FUNDED_EXPENSE',${amount}::numeric,${input.currencyCode},${expensePaymentId}::uuid,
+          ${input.paymentReference?.trim() || null},${input.notes?.trim() || null},${input.expenseDate}::timestamptz,
+          ${input.actorId ?? null}::uuid) returning id`.execute(tx);
+      capitalEventId = event.rows[0]?.id;
+      if (!capitalEventId) throw new Error('Capital event was not created.');
+      await appendAuditEvent(tx, {
+        organizationId: input.organizationId,
+        actorType: 'USER',
+        actorId: input.actorId,
+        action: 'finance.capital.owner_funded_expense_recorded',
+        targetType: 'finance.capital_event',
+        targetId: capitalEventId,
+        metadata: {
+          contributorId: input.capitalContributorId,
+          expenseId: id,
+          expensePaymentId,
+          amount,
+          currency: input.currencyCode,
+        },
+      });
+      await appendAuditEvent(tx, {
+        organizationId: input.organizationId,
+        actorType: 'USER',
+        actorId: input.actorId,
+        action: 'finance.expense.paid_by_owner',
+        targetType: 'finance.expense',
+        targetId: id,
+        metadata: {
+          contributorId: input.capitalContributorId,
+          capitalEventId,
+          amount,
+          currency: input.currencyCode,
+        },
+      });
+      await outbox(
+        tx,
+        input.organizationId,
+        'finance.capital.owner_funded_expense_recorded',
+        financeTransactionId,
+      );
+    }
+    await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='finance.expense',result_entity_id=${id}::uuid,safe_response=${JSON.stringify({ expenseId: id, financeTransactionId: financeTransactionId ?? null, capitalEventId: capitalEventId ?? null })}::jsonb,completed_at=now() where id=${claimResult.id}`.execute(
       tx,
     );
     await sql`insert into platform.outbox_events
       (organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
-      values (${input.organizationId},'finance.expense.created',1,'finance.expense',${id}::uuid,1,${JSON.stringify({ expenseId: id, financeTransactionId: financeTransactionId ?? null })}::jsonb,now())`.execute(
+      values (${input.organizationId},'finance.expense.created',1,'finance.expense',${id}::uuid,1,${JSON.stringify({ expenseId: id, financeTransactionId: financeTransactionId ?? null, capitalEventId: capitalEventId ?? null })}::jsonb,now())`.execute(
       tx,
     );
-    return { id, financeTransactionId };
+    return { id, financeTransactionId, capitalEventId };
   });
 }
 export interface FinanceExpenseView {

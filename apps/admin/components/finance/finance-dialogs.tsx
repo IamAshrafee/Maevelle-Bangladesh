@@ -1,13 +1,15 @@
 'use client';
 
-import { type FormEvent, type ReactNode } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 
 import type {
+  CapitalContributorDto,
   FinanceExpenseDto,
   FinanceReconciliationDto,
   FinancialAccountDto,
 } from '@maevelle/contracts';
 
+import { useAdminCapability } from '@/components/admin-capabilities';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
+import { fetchApiData } from '@/lib/api';
 import { formatMoney, type ExpenseCategoryDto } from '@/lib/finance/types';
 import {
   CreateFinancialAccountDialog,
@@ -79,7 +82,23 @@ export function FinanceCommandDialog({
   readonly onClose: () => void;
   readonly onCommand: Command;
 }) {
+  const canViewCapital = useAdminCapability('finance.capital.view');
+  const canManageCapital = useAdminCapability('finance.capital.manage');
+  const [contributors, setContributors] = useState<readonly CapitalContributorDto[]>([]);
+  const [expenseFundingSource, setExpenseFundingSource] = useState<
+    'UNPAID' | 'ACCOUNT' | 'OWNER_CAPITAL'
+  >('UNPAID');
+  const [paymentMethod, setPaymentMethod] = useState<'ACCOUNT' | 'OWNER_CAPITAL'>('ACCOUNT');
+
+  useEffect(() => {
+    if (!canViewCapital) return;
+    void fetchApiData<readonly CapitalContributorDto[]>('/admin/finance/capital/contributors')
+      .then(setContributors)
+      .catch(() => {});
+  }, [canViewCapital]);
+
   const activeAccounts = accounts.filter((account) => account.status === 'ACTIVE');
+  const activeContributors = contributors.filter((contributor) => contributor.status === 'ACTIVE');
   const submit =
     (path: string, map: (data: Record<string, FormDataEntryValue>) => Record<string, unknown>) =>
     async (event: FormEvent<HTMLFormElement>) => {
@@ -134,7 +153,6 @@ export function FinanceCommandDialog({
   return (
     <Dialog open={Boolean(state)} onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
-
         {state?.kind === 'expense' ? (
           <form
             className="grid gap-4"
@@ -144,7 +162,14 @@ export function FinanceCommandDialog({
               amount: data.amount,
               currencyCode: String(data.currencyCode).toUpperCase(),
               expenseDate: data.expenseDate,
-              accountId: data.accountId || undefined,
+              accountId:
+                expenseFundingSource === 'ACCOUNT'
+                  ? (data.accountId as string) || undefined
+                  : undefined,
+              capitalContributorId:
+                expenseFundingSource === 'OWNER_CAPITAL'
+                  ? (data.capitalContributorId as string) || undefined
+                  : undefined,
               payeeName: data.payeeName || undefined,
               externalReference: data.externalReference || undefined,
               paymentReference: data.paymentReference || undefined,
@@ -154,14 +179,14 @@ export function FinanceCommandDialog({
             <DialogHeader>
               <DialogTitle>Record expense</DialogTitle>
               <DialogDescription>
-                Record the obligation first. Pay it from an account now or later without losing the
-                original expense history.
+                Record the obligation first. Pay it from a business account now, mark it personally
+                funded by an owner, or leave it unpaid.
               </DialogDescription>
             </DialogHeader>
             <Field label="Description">
               <Textarea
                 name="description"
-                placeholder="Facebook advertising for September"
+                placeholder="Facebook advertising, equipment, supplies..."
                 required
                 autoFocus
               />
@@ -202,18 +227,65 @@ export function FinanceCommandDialog({
                 />
               </Field>
               <Field
-                label="Account used"
-                hint="Choose an account to record the full payment now, or leave unpaid."
+                label="Payment status"
+                hint="Choose how this expense was paid, or leave unpaid."
               >
-                <NativeSelect className="w-full" name="accountId" defaultValue="">
-                  <option value="">Record as unpaid</option>
-                  {activeAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} · {formatMoney(account.ledger_balance, account.currency_code)}
-                    </option>
-                  ))}
+                <NativeSelect
+                  className="w-full"
+                  value={expenseFundingSource}
+                  onChange={(e) =>
+                    setExpenseFundingSource(
+                      e.target.value as 'UNPAID' | 'ACCOUNT' | 'OWNER_CAPITAL',
+                    )
+                  }
+                >
+                  <option value="UNPAID">Record as unpaid</option>
+                  <option value="ACCOUNT">Pay from business account</option>
+                  {canManageCapital ? (
+                    <option value="OWNER_CAPITAL">Paid personally (Owner / Contributor)</option>
+                  ) : null}
                 </NativeSelect>
               </Field>
+              {expenseFundingSource === 'ACCOUNT' ? (
+                <Field
+                  label="Account used"
+                  hint="Choose the business account that paid this expense."
+                >
+                  <NativeSelect className="w-full" name="accountId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose account
+                    </option>
+                    {activeAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name} ·{' '}
+                        {formatMoney(account.ledger_balance, account.currency_code)}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              ) : null}
+              {expenseFundingSource === 'OWNER_CAPITAL' ? (
+                <Field
+                  label="Capital contributor"
+                  hint="The owner or investor who paid with personal money."
+                >
+                  <NativeSelect
+                    className="w-full"
+                    name="capitalContributorId"
+                    required
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      Choose contributor
+                    </option>
+                    {activeContributors.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.displayName}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              ) : null}
             </div>
             <details className="rounded-lg border px-3 py-2">
               <summary className="cursor-pointer text-sm font-medium">Optional details</summary>
@@ -285,33 +357,80 @@ export function FinanceCommandDialog({
         {state?.kind === 'expense-payment' ? (
           <form
             className="grid gap-4"
-            onSubmit={submit(`/admin/finance/expenses/${state.expense.id}/pay`, (data) => ({
-              accountId: data.accountId,
-              amount: data.amount,
-              reference: data.reference || undefined,
-            }))}
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const formValues = values(event.currentTarget);
+              if (paymentMethod === 'OWNER_CAPITAL') {
+                await onCommand(
+                  `/admin/finance/expenses/${state.expense.id}/owner-funded-payments`,
+                  {
+                    contributorId: formValues.contributorId,
+                    amount: formValues.amount,
+                    reference: formValues.reference || undefined,
+                    occurredAt: new Date().toISOString(),
+                  },
+                );
+              } else {
+                await onCommand(`/admin/finance/expenses/${state.expense.id}/pay`, {
+                  accountId: formValues.accountId,
+                  amount: formValues.amount,
+                  reference: formValues.reference || undefined,
+                });
+              }
+            }}
           >
             <DialogHeader>
               <DialogTitle>Pay {state.expense.expense_number}</DialogTitle>
               <DialogDescription>
                 Outstanding {formatMoney(state.expense.outstanding, state.expense.currency_code)}.
-                This payment creates an immutable money-out ledger entry.
+                Choose whether a business account or an owner personally paid this expense.
               </DialogDescription>
             </DialogHeader>
-            <Field label="Account used">
-              <NativeSelect className="w-full" name="accountId" required defaultValue="">
-                <option value="" disabled>
-                  Choose account
-                </option>
-                {activeAccounts
-                  .filter((account) => account.currency_code === state.expense.currency_code)
-                  .map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} · {formatMoney(account.ledger_balance, account.currency_code)}
-                    </option>
-                  ))}
+            <Field label="Payment method">
+              <NativeSelect
+                className="w-full"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as 'ACCOUNT' | 'OWNER_CAPITAL')}
+              >
+                <option value="ACCOUNT">Pay from business account</option>
+                {canManageCapital ? (
+                  <option value="OWNER_CAPITAL">Paid personally (Owner / Contributor)</option>
+                ) : null}
               </NativeSelect>
             </Field>
+            {paymentMethod === 'ACCOUNT' ? (
+              <Field label="Account used">
+                <NativeSelect className="w-full" name="accountId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose account
+                  </option>
+                  {activeAccounts
+                    .filter((account) => account.currency_code === state.expense.currency_code)
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name} ·{' '}
+                        {formatMoney(account.ledger_balance, account.currency_code)}
+                      </option>
+                    ))}
+                </NativeSelect>
+              </Field>
+            ) : (
+              <Field
+                label="Capital contributor"
+                hint="The owner or investor who paid with personal money."
+              >
+                <NativeSelect className="w-full" name="contributorId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose contributor
+                  </option>
+                  {activeContributors.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.displayName}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
+            )}
             <Field label="Amount">
               <Input
                 name="amount"
@@ -322,7 +441,7 @@ export function FinanceCommandDialog({
             </Field>
             <Field
               label="Payment reference"
-              hint="Optional bank, wallet, invoice, or receipt reference."
+              hint="Optional bank, wallet, invoice, receipt, or personal voucher reference."
             >
               <Input name="reference" maxLength={200} />
             </Field>
@@ -330,7 +449,14 @@ export function FinanceCommandDialog({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={busy || activeAccounts.length === 0}>
+              <Button
+                type="submit"
+                disabled={
+                  busy ||
+                  (paymentMethod === 'ACCOUNT' && activeAccounts.length === 0) ||
+                  (paymentMethod === 'OWNER_CAPITAL' && activeContributors.length === 0)
+                }
+              >
                 Record payment
               </Button>
             </DialogFooter>
@@ -358,7 +484,9 @@ export function FinanceCommandDialog({
                 className="w-full"
                 name="accountId"
                 required
-                defaultValue={state?.kind === 'cash-adjustment' ? (state.defaultAccountId ?? '') : ''}
+                defaultValue={
+                  state?.kind === 'cash-adjustment' ? (state.defaultAccountId ?? '') : ''
+                }
               >
                 <option value="" disabled>
                   Choose account
@@ -386,7 +514,6 @@ export function FinanceCommandDialog({
             </DialogFooter>
           </form>
         ) : null}
-
 
         {state?.kind === 'reconciliation-resolution' ? (
           <form

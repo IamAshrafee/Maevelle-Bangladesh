@@ -44,9 +44,19 @@ creates no Account entry. Therefore:
 - business cash is unchanged; and
 - partial owner funding can coexist with ordinary Account-backed payments.
 
+Owner-funded expenses can be recorded in two ways:
+1. **Single-step direct recording**: When recording an expense (such as an owner buying
+   equipment with personal money), the operator can directly select "Paid personally
+   (Owner / Contributor)" and the contributor. The expense, finance transaction,
+   expense payment, and capital event are created atomically in a single operation.
+2. **Post-recording disbursement**: When paying an already recorded expense or
+   supplier invoice, the operator can choose "Paid personally" right from the payment
+   dialog or workspace.
+
 Purchase invoices use the existing Finance Expense linked to the Purchase, so
 Procurement retains supplier and Purchase authority while Finance retains payment
-authority.
+authority. Supplier invoice payment dialogs support both business account
+disbursements and personal owner funding directly.
 
 ### Withdrawal
 

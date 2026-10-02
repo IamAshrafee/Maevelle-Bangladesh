@@ -400,6 +400,7 @@ export function registerFinanceRoutes(
           externalReference: Type.Optional(Type.String({ maxLength: 200 })),
           notes: Type.Optional(Type.String({ maxLength: 2000 })),
           accountId: Type.Optional(Type.String({ format: 'uuid' })),
+          capitalContributorId: Type.Optional(Type.String({ format: 'uuid' })),
           paymentReference: Type.Optional(Type.String({ maxLength: 200 })),
           sourceDomain: Type.Optional(Type.Literal('procurement.purchase')),
           sourceId: Type.Optional(Type.String()),
@@ -414,6 +415,10 @@ export function registerFinanceRoutes(
         const p = body<
           Omit<Parameters<typeof finance.createExpense>[1], 'organizationId' | 'actorId'>
         >(req.body);
+        if (p.capitalContributorId) {
+          const capitalAdmin = await admin(database, auth, req.headers, 'finance.capital.manage');
+          if (!capitalAdmin) return reply.code(403).send({ error: 'FORBIDDEN' });
+        }
         return reply.code(201).send({
           data: await finance.createExpense(database.db, {
             ...p,

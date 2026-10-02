@@ -20,7 +20,10 @@ export type LedgerTransactionTypeFilter =
   | 'EXTERNAL_ADJUSTMENT'
   | 'PAYMENT_SOURCE_POSTING'
   | 'REFUND_SOURCE_POSTING'
-  | 'COD_SETTLEMENT';
+  | 'COD_SETTLEMENT'
+  | 'CAPITAL_CONTRIBUTION'
+  | 'CAPITAL_WITHDRAWAL'
+  | 'CAPITAL_REVERSAL';
 
 export interface LedgerFilterState {
   readonly query: string;

@@ -19,6 +19,8 @@ import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { formatSupplyMoney } from '@/lib/supply/api';
+import type { CapitalContributorDto } from '@maevelle/contracts';
+import { fetchApiData } from '@/lib/api';
 import type { FinancialAccount, SupplierInvoice } from '../types';
 
 export interface PurchasePayDialogProps {
@@ -28,7 +30,8 @@ export interface PurchasePayDialogProps {
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onPostPayment: (data: {
-    accountId: string;
+    accountId?: string;
+    contributorId?: string;
     amount: string;
     reference?: string | undefined;
   }) => void;
@@ -42,9 +45,25 @@ export function PurchasePayDialog({
   onClose,
   onPostPayment,
 }: PurchasePayDialogProps) {
+  const [paymentMethod, setPaymentMethod] = useState<'ACCOUNT' | 'OWNER_CAPITAL'>('ACCOUNT');
   const [accountId, setAccountId] = useState('');
+  const [contributorId, setContributorId] = useState('');
+  const [contributors, setContributors] = useState<readonly CapitalContributorDto[]>([]);
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
+
+  useEffect(() => {
+    if (!canManageCapital) return;
+    void fetchApiData<readonly CapitalContributorDto[]>('/admin/finance/capital/contributors')
+      .then((data) => {
+        setContributors(data);
+        const firstActive = data.find((c) => c.status === 'ACTIVE');
+        if (firstActive) setContributorId(firstActive.id);
+      })
+      .catch(() => {});
+  }, [canManageCapital]);
+
+  const activeContributors = contributors.filter((c) => c.status === 'ACTIVE');
 
   // Sync state whenever invoice changes
   useEffect(() => {
@@ -75,12 +94,22 @@ export function PurchasePayDialog({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!accountId || !amount) return;
-    onPostPayment({
-      accountId,
-      amount,
-      reference: reference.trim() || undefined,
-    });
+    if (!amount) return;
+    if (paymentMethod === 'ACCOUNT') {
+      if (!accountId) return;
+      onPostPayment({
+        accountId,
+        amount,
+        reference: reference.trim() || undefined,
+      });
+    } else {
+      if (!contributorId) return;
+      onPostPayment({
+        contributorId,
+        amount,
+        reference: reference.trim() || undefined,
+      });
+    }
   }
 
   function handleSetFullOutstanding() {
@@ -134,55 +163,108 @@ export function PurchasePayDialog({
             </div>
           </div>
 
-          {/* Account Selector */}
-          <Field>
-            <div className="flex items-center justify-between">
-              <FieldLabel htmlFor="pay-account">Disburse From Account</FieldLabel>
-              {selectedAccount ? (
-                <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
-                  <Wallet className="size-3" />
-                  Bal:{' '}
-                  {formatSupplyMoney(selectedAccount.ledger_balance, selectedAccount.currency_code)}
-                </span>
-              ) : null}
-            </div>
-            <NativeSelect
-              id="pay-account"
-              name="accountId"
-              value={accountId}
-              required
-              disabled={busy || !eligibleAccounts.length}
-              className="w-full"
-              onChange={(e) => setAccountId(e.target.value)}
-            >
-              <NativeSelectOption value="" disabled>
-                {eligibleAccounts.length
-                  ? `Choose an active ${invoice.currency_code} account`
-                  : `No active ${invoice.currency_code} accounts found`}
-              </NativeSelectOption>
-              {eligibleAccounts.map((acc) => (
-                <NativeSelectOption key={acc.id} value={acc.id}>
-                  {acc.name} (Bal: {formatSupplyMoney(acc.ledger_balance, acc.currency_code)})
+          {/* Payment Method Selector */}
+          {canManageCapital ? (
+            <Field>
+              <FieldLabel htmlFor="pay-method">Payment Source</FieldLabel>
+              <NativeSelect
+                id="pay-method"
+                value={paymentMethod}
+                disabled={busy}
+                className="w-full"
+                onChange={(e) => setPaymentMethod(e.target.value as 'ACCOUNT' | 'OWNER_CAPITAL')}
+              >
+                <NativeSelectOption value="ACCOUNT">
+                  Disburse From Business Account
                 </NativeSelectOption>
-              ))}
-            </NativeSelect>
+                <NativeSelectOption value="OWNER_CAPITAL">
+                  Paid personally (Owner / Contributor)
+                </NativeSelectOption>
+              </NativeSelect>
+            </Field>
+          ) : null}
 
-            {!eligibleAccounts.length ? (
-              <p className="text-xs text-amber-600 mt-1">
-                No active financial accounts found for {invoice.currency_code}. Set one up in{' '}
-                <Link href="/finance/accounts" className="underline font-medium">
-                  Finance → Accounts
-                </Link>
-                .
-              </p>
-            ) : hasInsufficientFunds ? (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
-                <AlertCircle className="size-3 shrink-0" />
-                Selected account balance is lower than disbursement. Account will incur negative
-                balance.
-              </p>
-            ) : null}
-          </Field>
+          {/* Account Selector */}
+          {paymentMethod === 'ACCOUNT' ? (
+            <Field>
+              <div className="flex items-center justify-between">
+                <FieldLabel htmlFor="pay-account">Disburse From Account</FieldLabel>
+                {selectedAccount ? (
+                  <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
+                    <Wallet className="size-3" />
+                    Bal:{' '}
+                    {formatSupplyMoney(
+                      selectedAccount.ledger_balance,
+                      selectedAccount.currency_code,
+                    )}
+                  </span>
+                ) : null}
+              </div>
+              <NativeSelect
+                id="pay-account"
+                name="accountId"
+                value={accountId}
+                required
+                disabled={busy || !eligibleAccounts.length}
+                className="w-full"
+                onChange={(e) => setAccountId(e.target.value)}
+              >
+                <NativeSelectOption value="" disabled>
+                  {eligibleAccounts.length
+                    ? `Choose an active ${invoice.currency_code} account`
+                    : `No active ${invoice.currency_code} accounts found`}
+                </NativeSelectOption>
+                {eligibleAccounts.map((acc) => (
+                  <NativeSelectOption key={acc.id} value={acc.id}>
+                    {acc.name} (Bal: {formatSupplyMoney(acc.ledger_balance, acc.currency_code)})
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+
+              {!eligibleAccounts.length ? (
+                <p className="text-xs text-amber-600 mt-1">
+                  No active financial accounts found for {invoice.currency_code}. Set one up in{' '}
+                  <Link href="/finance/accounts" className="underline font-medium">
+                    Finance → Accounts
+                  </Link>
+                  .
+                </p>
+              ) : hasInsufficientFunds ? (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                  <AlertCircle className="size-3 shrink-0" />
+                  Selected account balance is lower than disbursement. Account will incur negative
+                  balance.
+                </p>
+              ) : null}
+            </Field>
+          ) : (
+            <Field>
+              <FieldLabel htmlFor="pay-contributor">Capital Contributor</FieldLabel>
+              <NativeSelect
+                id="pay-contributor"
+                name="contributorId"
+                value={contributorId}
+                required
+                disabled={busy || !activeContributors.length}
+                className="w-full"
+                onChange={(e) => setContributorId(e.target.value)}
+              >
+                <NativeSelectOption value="" disabled>
+                  {activeContributors.length
+                    ? 'Choose contributor'
+                    : 'No active capital contributors found'}
+                </NativeSelectOption>
+                {activeContributors.map((c) => (
+                  <NativeSelectOption key={c.id} value={c.id}>
+                    {c.displayName}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <FieldDescription>
+                The owner or investor who personally paid this supplier obligation.
+              </FieldDescription>
+            </Field>
+          )}
 
           {/* Payment Amount */}
           <Field>
@@ -241,21 +323,18 @@ export function PurchasePayDialog({
           </Field>
 
           <DialogFooter className="pt-2">
-            {canManageCapital ? (
-              <Button
-                variant="outline"
-                render={<Link href={`/finance/capital?expenseId=${invoice.id}`} />}
-              >
-                <Wallet className="size-4" /> Paid personally
-              </Button>
-            ) : null}
             <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
               Cancel
             </DialogClose>
             <Button
               type="submit"
               disabled={
-                busy || !accountId || !amount || paymentAmount <= 0 || !eligibleAccounts.length
+                busy ||
+                !amount ||
+                paymentAmount <= 0 ||
+                (paymentMethod === 'ACCOUNT' && (!accountId || !eligibleAccounts.length)) ||
+                (paymentMethod === 'OWNER_CAPITAL' &&
+                  (!contributorId || !activeContributors.length))
               }
             >
               {busy ? (

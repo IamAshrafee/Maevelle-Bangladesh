@@ -321,17 +321,38 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
   }
 
   function handlePostPayment(data: {
-    accountId: string;
+    accountId?: string;
+    contributorId?: string;
     amount: string;
     reference?: string | undefined;
   }) {
     if (!payingInvoice) return;
+    if (data.contributorId) {
+      void run(
+        () =>
+          supplyRequest(`/admin/finance/expenses/${payingInvoice.id}/owner-funded-payments`, {
+            method: 'POST',
+            body: JSON.stringify({
+              contributorId: data.contributorId,
+              amount: data.amount,
+              reference: data.reference,
+              occurredAt: new Date().toISOString(),
+              idempotencyKey: crypto.randomUUID(),
+            }),
+          }),
+        'Personal payment posted to Finance ledger.',
+        () => setPayingInvoice(undefined),
+      );
+      return;
+    }
     void run(
       () =>
         supplyRequest(`/admin/finance/expenses/${payingInvoice.id}/pay`, {
           method: 'POST',
           body: JSON.stringify({
-            ...data,
+            accountId: data.accountId!,
+            amount: data.amount,
+            reference: data.reference,
             idempotencyKey: crypto.randomUUID(),
           }),
         }),

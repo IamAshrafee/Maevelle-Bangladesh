@@ -75,7 +75,10 @@ function resolveTreasurySection(tab?: string | null): FinanceSection {
   return 'accounts';
 }
 
-function sectionCopy(section: FinanceSection, mode: FinanceConsoleMode): { title: string; description: string } {
+function sectionCopy(
+  section: FinanceSection,
+  mode: FinanceConsoleMode,
+): { title: string; description: string } {
   if (mode === 'overview') {
     return {
       title: 'Finance overview',
@@ -101,7 +104,8 @@ function sectionCopy(section: FinanceSection, mode: FinanceConsoleMode): { title
     case 'accounts':
       return {
         title: 'Financial accounts',
-        description: 'Where company money is held across banks, mobile wallets, cash drawers, and holding accounts.',
+        description:
+          'Where company money is held across banks, mobile wallets, cash drawers, and holding accounts.',
       };
     case 'movements':
     case 'transfers':
@@ -125,7 +129,8 @@ function sectionCopy(section: FinanceSection, mode: FinanceConsoleMode): { title
     default:
       return {
         title: 'Accounts & treasury',
-        description: 'Manage company financial accounts, activity ledger, courier COD settlements, and balance checks.',
+        description:
+          'Manage company financial accounts, activity ledger, courier COD settlements, and balance checks.',
       };
   }
 }
@@ -233,11 +238,15 @@ export function FinanceConsole({
         ].includes(activeSection);
       const needsExpenses = isOverview || isExpenses;
       const needsLedger =
-        !isExpenses && (isOverview || activeSection === 'movements' || activeSection === 'transfers');
+        !isExpenses &&
+        (isOverview || activeSection === 'movements' || activeSection === 'transfers');
       const needsCategories = isExpenses;
-      const needsChecks = isOverview || (!isExpenses && !isCodSettlements && activeSection === 'reconciliation');
+      const needsChecks =
+        isOverview || (!isExpenses && !isCodSettlements && activeSection === 'reconciliation');
       const needsCodSettlements =
-        isCodSettlements || (mode === 'treasury' && (activeSection === 'cod-settlements' || activeSection === 'accounts'));
+        isCodSettlements ||
+        (mode === 'treasury' &&
+          (activeSection === 'cod-settlements' || activeSection === 'accounts'));
       const expenseParameters = new URLSearchParams({
         page: String(expensePage),
         pageSize: '25',
@@ -256,7 +265,8 @@ export function FinanceConsole({
       });
       if (appliedLedgerQuery) ledgerParameters.set('q', appliedLedgerQuery);
       if (ledgerDirection !== 'ALL') ledgerParameters.set('direction', ledgerDirection);
-      if (ledgerTransactionType !== 'ALL') ledgerParameters.set('transactionType', ledgerTransactionType);
+      if (ledgerTransactionType !== 'ALL')
+        ledgerParameters.set('transactionType', ledgerTransactionType);
       if (ledgerAccountId) ledgerParameters.set('accountId', ledgerAccountId);
       if (ledgerFrom) ledgerParameters.set('from', ledgerFrom);
       if (ledgerTo) ledgerParameters.set('to', ledgerTo);
@@ -325,12 +335,9 @@ export function FinanceConsole({
             : prev.expenses,
         expensePagination: expenseResult.pagination,
         ledger:
-          ledgerResult.items.length > 0 || !prev.ledger.length
-            ? ledgerResult.items
-            : prev.ledger,
+          ledgerResult.items.length > 0 || !prev.ledger.length ? ledgerResult.items : prev.ledger,
         ledgerPagination: ledgerResult.pagination,
-        categories:
-          categories.length > 0 || !prev.categories.length ? categories : prev.categories,
+        categories: categories.length > 0 || !prev.categories.length ? categories : prev.categories,
         reconciliations:
           reconciliations.length > 0 || !prev.reconciliations.length
             ? reconciliations
@@ -387,7 +394,10 @@ export function FinanceConsole({
     setBusy(true);
     setMessage('');
     try {
-      const requiresKey = idempotentPaths.has(path) || path.endsWith('/pay');
+      const requiresKey =
+        idempotentPaths.has(path) ||
+        path.endsWith('/pay') ||
+        path.endsWith('/owner-funded-payments');
       await fetchApiData(path, {
         method: 'POST',
         body: JSON.stringify({
@@ -500,9 +510,8 @@ export function FinanceConsole({
       label: 'Balance checks',
       icon: Scale,
       badge:
-        data.reconciliations.filter(
-          (r) => r.status === 'OPEN' && Number(r.difference_amount) !== 0,
-        ).length || undefined,
+        data.reconciliations.filter((r) => r.status === 'OPEN' && Number(r.difference_amount) !== 0)
+          .length || undefined,
     },
   ];
 
@@ -735,7 +744,8 @@ export function FinanceConsole({
         ) : null}
 
         {state === 'ready' &&
-        (mode === 'cod-settlements' || (mode === 'treasury' && activeSection === 'cod-settlements')) ? (
+        (mode === 'cod-settlements' ||
+          (mode === 'treasury' && activeSection === 'cod-settlements')) ? (
           <CodSettlementSection
             outstanding={data.outstandingCodPayments}
             settlements={data.codSettlements}

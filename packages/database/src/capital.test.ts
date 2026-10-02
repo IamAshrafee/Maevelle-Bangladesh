@@ -266,4 +266,84 @@ describe('Owner capital finance integration', () => {
     ).toBe('1000.0000');
     expect((await capital.listCapitalEvents(database.db, organizationId)).items).toHaveLength(2);
   });
+
+  it('supports single-step creation of owner-funded expenses and prevents conflicting account and capital funding', async () => {
+    const organizationId = await organization('direct-expense');
+    const contributor = await capital.createCapitalContributor(database.db, {
+      organizationId,
+      actorId: actor,
+      displayName: 'Owner Direct',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const category = await finance.createExpenseCategory(database.db, {
+      organizationId,
+      code: 'EQUIPMENT-DIRECT',
+      name: 'Direct Equipment',
+    });
+    const businessAccount = await finance.createFinancialAccount(database.db, {
+      organizationId,
+      actorId: actor,
+      accountNumber: 'CASH-DIR',
+      name: 'Business Cash Direct',
+      accountType: 'CASH',
+      currencyCode: 'BDT',
+      openingBalance: '500',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    // Cannot fund with both account and owner capital on creation
+    await expect(
+      finance.createExpense(database.db, {
+        organizationId,
+        actorId: actor,
+        categoryId: category!.id,
+        amount: '100',
+        currencyCode: 'BDT',
+        description: 'Office printer with conflicting funding',
+        expenseDate: '2026-10-02',
+        accountId: businessAccount.id,
+        capitalContributorId: contributor.id,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    // Creates owner-funded expense atomically
+    const created = await finance.createExpense(database.db, {
+      organizationId,
+      actorId: actor,
+      categoryId: category!.id,
+      amount: '250',
+      currencyCode: 'BDT',
+      description: 'Office printer paid personally by owner',
+      expenseDate: '2026-10-02',
+      capitalContributorId: contributor.id,
+      paymentReference: 'PERSONAL-RECEIPT-99',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(created.capitalEventId).toBeDefined();
+    expect(created.financeTransactionId).toBeDefined();
+
+    // Account balance remains untouched
+    expect(
+      decimal(
+        (await finance.listFinancialAccounts(database.db, organizationId))[0]?.ledger_balance,
+      ),
+    ).toBe('500.0000');
+
+    // Expense is fully paid
+    const detail = await finance.getExpenseDetail(database.db, organizationId, created.id);
+    expect(decimal(detail.paid)).toBe('250.0000');
+    expect(decimal(detail.outstanding)).toBe('0.0000');
+    expect(detail.payments[0]).toMatchObject({
+      paymentSource: 'OWNER_CAPITAL',
+      contributorName: 'Owner Direct',
+      reference: 'PERSONAL-RECEIPT-99',
+    });
+
+    // Capital overview reflects the personally funded expense
+    const summary = await capital.getCapitalOverview(database.db, organizationId);
+    expect(decimal(summary.ownerFundedExpenses)).toBe('250.0000');
+    expect(decimal(summary.netCapital)).toBe('250.0000');
+  });
 });
