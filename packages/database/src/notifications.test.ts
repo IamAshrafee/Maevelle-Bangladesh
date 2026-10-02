@@ -539,6 +539,8 @@ describe('notifications and integrations', () => {
     const operations = await notifications.listEmailNotifications(database.db, {
       organizationId: data.organizationId,
       sourceId: data.orderId,
+      page: 1,
+      pageSize: 10,
     });
     expect(operations.data.length).toBe(0);
   });
