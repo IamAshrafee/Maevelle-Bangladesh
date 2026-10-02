@@ -6,6 +6,6 @@ export const metadata: Metadata = {
   description: 'Manage external service connections, courier credentials, email providers, and storage.',
 };
 
-export default function IntegrationsPage() {
+export default function IntegrationsSettingsPage() {
   return <IntegrationsHub />;
 }

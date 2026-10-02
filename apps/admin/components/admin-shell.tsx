@@ -296,12 +296,46 @@ const navigation: readonly NavGroup[] = [
         capability: 'admin.operations.view',
       },
       { label: 'Team & access', href: '/team', icon: UserRoundCog, capability: 'admin.team.view' },
-      { label: 'Settings', href: '/settings', icon: Settings, capability: 'settings.view' },
+      {
+        label: 'Settings',
+        href: '/settings',
+        icon: Settings,
+        capability: 'settings.view',
+        keywords: 'general organization security integrations health system configuration',
+      },
     ],
   },
 ];
 
 const quickCommands: readonly NavItem[] = [
+  {
+    label: 'Configure email settings',
+    href: '/email?tab=settings',
+    icon: Mail,
+    capability: 'settings.email.manage',
+    keywords: 'email settings transactional resend sender replyto configuration',
+  },
+  {
+    label: 'Check configuration health',
+    href: '/settings/health',
+    icon: Settings,
+    capability: 'settings.view',
+    keywords: 'health configuration diagnostics readiness issues',
+  },
+  {
+    label: 'Manage Resend credentials',
+    href: '/settings/integrations/resend',
+    icon: Plug,
+    capability: 'settings.integrations.manage',
+    keywords: 'resend api key secret webhook token credentials integration',
+  },
+  {
+    label: 'Media upload settings',
+    href: '/media/settings',
+    icon: Image,
+    capability: 'settings.media.manage',
+    keywords: 'upload size limit megabytes media storage expiry',
+  },
   {
     label: 'Register an Asset',
     href: '/assets?create=asset',

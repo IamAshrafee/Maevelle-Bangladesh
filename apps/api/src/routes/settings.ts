@@ -6,12 +6,17 @@ import type { DatabaseClient } from '@maevelle/database';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 import {
   deleteIntegrationSecret,
+  getConfigurationHealth,
   getModuleSettings,
+  getSettingsAuditEvents,
+  getSystemStatus,
   listAllSettings,
+  listIntegrationSummaries,
   resetModuleSettings,
   resetSingleSetting,
   saveIntegrationSecret,
   SettingsDomainError,
+  testIntegrationConnection,
   updateModuleSettings,
   updateSingleSetting,
 } from '@maevelle/database/settings';
@@ -98,6 +103,141 @@ export function registerSettingsRoutes(
 
     try {
       const data = await listAllSettings(database.db, active.organizationId, config);
+      return { data };
+    } catch (error) {
+      return failure(reply, error);
+    }
+  });
+
+  // GET /admin/settings/health - Configuration health status & action items
+  app.get('/admin/settings/health', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'settings.view');
+    if (!active) {
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    }
+
+    try {
+      const data = await getConfigurationHealth(database.db, active.organizationId, config);
+      return { data };
+    } catch (error) {
+      return failure(reply, error);
+    }
+  });
+
+  // GET /admin/settings/integrations - List supported integration services & secret statuses
+  app.get('/admin/settings/integrations', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'settings.view');
+    if (!active) {
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    }
+
+    try {
+      const data = await listIntegrationSummaries(database.db, active.organizationId, config);
+      return { data };
+    } catch (error) {
+      return failure(reply, error);
+    }
+  });
+
+  // GET /admin/settings/integrations/:provider - Detail for a single integration provider
+  app.get(
+    '/admin/settings/integrations/:provider',
+    {
+      schema: {
+        params: Type.Object({
+          provider: Type.String({ minLength: 1, maxLength: 50 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'settings.view');
+      if (!active) {
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      }
+
+      const { provider } = request.params as { provider: string };
+      try {
+        const integrations = await listIntegrationSummaries(database.db, active.organizationId, config);
+        const item = integrations.find((i) => i.providerCode.toLowerCase() === provider.toLowerCase());
+        if (!item) {
+          return reply.code(404).send({ error: { code: 'NOT_FOUND', message: `Integration provider not found: ${provider}` } });
+        }
+        return { data: item };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+
+  // POST /admin/settings/integrations/:provider/test - Live connection test
+  app.post(
+    '/admin/settings/integrations/:provider/test',
+    {
+      schema: {
+        params: Type.Object({
+          provider: Type.String({ minLength: 1, maxLength: 50 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'settings.integrations.manage');
+      if (!active) {
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      }
+
+      const { provider } = request.params as { provider: string };
+      try {
+        const data = await testIntegrationConnection(database.db, {
+          organizationId: active.organizationId,
+          providerCode: provider,
+          deployment: config,
+          encryptionKey,
+        });
+        return { data };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+
+  // GET /admin/settings/audit - Settings change history audit events
+  app.get(
+    '/admin/settings/audit',
+    {
+      schema: {
+        querystring: Type.Optional(
+          Type.Object({
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+            module: Type.Optional(Type.String({ maxLength: 50 })),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'settings.view');
+      if (!active) {
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      }
+
+      const query = (request.query ?? {}) as { limit?: number; module?: string };
+      try {
+        const data = await getSettingsAuditEvents(database.db, active.organizationId, query);
+        return { data };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+
+  // GET /admin/settings/system - System diagnostics, infrastructure status & version
+  app.get('/admin/settings/system', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'settings.view');
+    if (!active) {
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    }
+
+    try {
+      const data = await getSystemStatus(database.db, active.organizationId, config);
       return { data };
     } catch (error) {
       return failure(reply, error);

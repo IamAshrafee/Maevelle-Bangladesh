@@ -13,6 +13,7 @@ import {
   RotateCw,
   Mail,
   AlertTriangle,
+  Settings,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ import { EmailTestLabTab } from './email-test-lab-tab';
 import { EmailPoliciesTab } from './email-policies-tab';
 import { EmailSuppressionsTab } from './email-suppressions-tab';
 import { EmailDiagnosticsTab } from './email-diagnostics-tab';
+import { EmailSettingsTab } from './email-settings-tab';
 import { EmailDetailDrawer } from './email-detail-drawer';
 import {
   type EmailTabKey,
@@ -226,7 +228,7 @@ export function EmailOperationsConsole() {
 
       {/* Primary Navigation Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 h-auto p-1 bg-muted/60">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 h-auto p-1 bg-muted/60">
           <TabsTrigger value="overview" className="flex items-center gap-1.5 py-2 text-xs">
             <LayoutDashboard className="size-3.5" />
             <span>Overview</span>
@@ -264,6 +266,10 @@ export function EmailOperationsConsole() {
           <TabsTrigger value="diagnostics" className="flex items-center gap-1.5 py-2 text-xs">
             <ShieldCheck className="size-3.5" />
             <span>Diagnostics</span>
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="flex items-center gap-1.5 py-2 text-xs">
+            <Settings className="size-3.5" />
+            <span>Settings</span>
           </TabsTrigger>
         </TabsList>
 
@@ -345,6 +351,11 @@ export function EmailOperationsConsole() {
         {/* Tab 7: Diagnostics & Setup Checklist */}
         <TabsContent value="diagnostics" className="mt-6">
           <EmailDiagnosticsTab diagnostic={diagnostic} onRefresh={reload} />
+        </TabsContent>
+
+        {/* Tab 8: Runtime Email Settings */}
+        <TabsContent value="settings" className="mt-6">
+          <EmailSettingsTab />
         </TabsContent>
       </Tabs>
 

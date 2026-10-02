@@ -3435,3 +3435,105 @@ export interface UpdateModuleSettingsInputDto {
   readonly expectedVersion?: number;
 }
 
+export type HealthSeverity = 'HEALTHY' | 'INFO' | 'WARNING' | 'BLOCKING';
+
+export interface ConfigurationHealthIssueDto {
+  readonly id: string;
+  readonly module: string;
+  readonly severity: HealthSeverity;
+  readonly title: string;
+  readonly description: string;
+  readonly actionLabel?: string;
+  readonly actionHref?: string;
+}
+
+export interface ConfigurationHealthResponseDto {
+  readonly overallStatus: 'HEALTHY' | 'NEEDS_ATTENTION' | 'CRITICAL';
+  readonly issues: readonly ConfigurationHealthIssueDto[];
+  readonly moduleStatuses: Record<string, {
+    readonly status: SettingsReadinessStatus;
+    readonly label: string;
+    readonly settingCount: number;
+    readonly issueCount: number;
+  }>;
+  readonly checkedAt: string;
+}
+
+export type IntegrationStatus = 'CONNECTED' | 'NEEDS_CONFIGURATION' | 'RESTRICTED' | 'DEPLOYMENT_MANAGED';
+
+export interface IntegrationSecretItemDto {
+  readonly keyName: string;
+  readonly label: string;
+  readonly configured: boolean;
+  readonly source: 'DATABASE' | 'DEPLOYMENT';
+  readonly updatedAt?: string | null;
+}
+
+export interface IntegrationSummaryDto {
+  readonly providerCode: string;
+  readonly name: string;
+  readonly category: 'EMAIL' | 'COURIER' | 'STORAGE' | 'PAYMENTS';
+  readonly status: IntegrationStatus;
+  readonly usedByModules: readonly string[];
+  readonly description: string;
+  readonly secrets: readonly IntegrationSecretItemDto[];
+  readonly isDeploymentManaged: boolean;
+  readonly docsUrl?: string;
+  readonly details?: Record<string, unknown>;
+}
+
+export interface IntegrationTestResultDto {
+  readonly success: boolean;
+  readonly message: string;
+  readonly latencyMs?: number;
+  readonly checkedAt: string;
+}
+
+export interface SettingsAuditItemDto {
+  readonly id: string;
+  readonly action: string;
+  readonly targetType: string;
+  readonly targetId: string;
+  readonly actorId: string | null;
+  readonly actorName?: string | null;
+  readonly reason?: string | null;
+  readonly beforeDiff?: Record<string, unknown> | null;
+  readonly afterDiff?: Record<string, unknown> | null;
+  readonly createdAt: string;
+}
+
+export interface SettingsAuditListResponseDto {
+  readonly items: readonly SettingsAuditItemDto[];
+  readonly totalCount: number;
+}
+
+export interface SystemStatusDto {
+  readonly environment: string;
+  readonly nodeVersion: string;
+  readonly uptimeSeconds: number;
+  readonly memoryUsageMb: number;
+  readonly database: {
+    readonly status: 'CONNECTED' | 'DEGRADED' | 'DISCONNECTED';
+    readonly latencyMs?: number;
+    readonly managedBy: 'DEPLOYMENT';
+  };
+  readonly api: {
+    readonly status: 'HEALTHY' | 'WARNING';
+    readonly version: string;
+  };
+  readonly worker: {
+    readonly status: 'HEALTHY' | 'UNKNOWN';
+    readonly isRunning: boolean;
+  };
+  readonly storage: {
+    readonly provider: string;
+    readonly status: 'CONNECTED' | 'CONFIGURED';
+    readonly managedBy: 'DEPLOYMENT';
+  };
+  readonly email: {
+    readonly provider: string;
+    readonly status: SettingsReadinessStatus;
+  };
+  readonly activeRevision: number;
+}
+

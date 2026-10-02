@@ -33,7 +33,8 @@ export type EmailTabKey =
   | 'test-lab'
   | 'policies'
   | 'suppressions'
-  | 'diagnostics';
+  | 'diagnostics'
+  | 'settings';
 
 export interface EmailTemplateSummary {
   readonly key: string;

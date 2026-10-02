@@ -106,4 +106,56 @@ describe('Settings API route authentication and RBAC', () => {
     expect([403, 404]).toContain(response.statusCode);
     await app.close();
   });
+
+  it('rejects unauthenticated requests to GET /admin/settings/health with 403', async () => {
+    const app = fastify();
+    const database = createMockDatabase();
+    const mockAuth = {
+      api: {
+        getSession: vi.fn().mockResolvedValue(null),
+      },
+    } as any;
+    const config = parseConfig({
+      ...process.env,
+      DATABASE_URL: 'postgresql://maevelle_dev:maevelle_dev_password@localhost:5434/maevelle_dev',
+      BETTER_AUTH_SECRET: 'a'.repeat(32),
+      AUTH_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    });
+
+    registerSettingsRoutes(app, database, mockAuth, config);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/admin/settings/health',
+    });
+
+    expect(response.statusCode).toBe(403);
+    await app.close();
+  });
+
+  it('rejects unauthenticated requests to GET /admin/settings/integrations with 403', async () => {
+    const app = fastify();
+    const database = createMockDatabase();
+    const mockAuth = {
+      api: {
+        getSession: vi.fn().mockResolvedValue(null),
+      },
+    } as any;
+    const config = parseConfig({
+      ...process.env,
+      DATABASE_URL: 'postgresql://maevelle_dev:maevelle_dev_password@localhost:5434/maevelle_dev',
+      BETTER_AUTH_SECRET: 'a'.repeat(32),
+      AUTH_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    });
+
+    registerSettingsRoutes(app, database, mockAuth, config);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/admin/settings/integrations',
+    });
+
+    expect(response.statusCode).toBe(403);
+    await app.close();
+  });
 });
