@@ -629,7 +629,11 @@ export type FinanceTransactionType =
   | 'EXTERNAL_ADJUSTMENT'
   | 'PAYMENT_SOURCE_POSTING'
   | 'REFUND_SOURCE_POSTING'
-  | 'COD_SETTLEMENT';
+  | 'COD_SETTLEMENT'
+  | 'CAPITAL_CONTRIBUTION'
+  | 'OWNER_FUNDED_EXPENSE'
+  | 'CAPITAL_WITHDRAWAL'
+  | 'CAPITAL_REVERSAL';
 
 export interface FinanceLedgerFilters {
   readonly accountId?: string;
@@ -756,7 +760,10 @@ export async function changeFinancialAccountStatus(
       returning version::text`.execute(tx);
     const version = Number(updated.rows[0]?.version);
     if (!version)
-      throw new FinanceDomainError('CONFLICT', 'Financial account changed before update completed.');
+      throw new FinanceDomainError(
+        'CONFLICT',
+        'Financial account changed before update completed.',
+      );
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
       actorType: 'USER',
@@ -792,7 +799,7 @@ export async function updateFinancialAccount(
 ) {
   const name = input.name?.trim();
   const referenceLabel =
-    input.referenceLabel !== undefined ? (input.referenceLabel?.trim() || null) : undefined;
+    input.referenceLabel !== undefined ? input.referenceLabel?.trim() || null : undefined;
 
   if (input.name !== undefined && !name) {
     throw new FinanceDomainError('VALIDATION_FAILED', 'Account name cannot be empty.');
@@ -1532,17 +1539,24 @@ export async function getExpenseDetail(
       amount: string;
       paid_at: string;
       reference: string | null;
-      account_id: string;
-      account_name: string;
+      payment_source: 'BUSINESS_ACCOUNT' | 'OWNER_CAPITAL' | 'REVERSAL';
+      account_id: string | null;
+      account_name: string | null;
+      contributor_id: string | null;
+      contributor_name: string | null;
+      reversal_of_payment_id: string | null;
+      reversal_reason: string | null;
       finance_transaction_id: string;
       transaction_number: string;
-    }>`select payment.id,payment.amount::text,payment.paid_at::text,payment.reference,
+    }>`select payment.id,payment.amount::text,payment.paid_at::text,payment.reference,payment.payment_source,
       account.id as account_id,account.name as account_name,payment.finance_transaction_id,
-      transaction.transaction_number
+      contributor.id as contributor_id,contributor.display_name as contributor_name,
+      payment.reversal_of_payment_id,payment.reversal_reason,transaction.transaction_number
       from finance.expense_payments payment
       join finance.finance_transactions transaction on transaction.id=payment.finance_transaction_id
-      join finance.financial_account_entries entry on entry.organization_id=payment.organization_id and entry.finance_transaction_id=payment.finance_transaction_id
-      join finance.financial_accounts account on account.organization_id=entry.organization_id and account.id=entry.financial_account_id
+      left join finance.financial_account_entries entry on entry.organization_id=payment.organization_id and entry.finance_transaction_id=payment.finance_transaction_id
+      left join finance.financial_accounts account on account.organization_id=entry.organization_id and account.id=entry.financial_account_id
+      left join finance.capital_contributors contributor on contributor.organization_id=payment.organization_id and contributor.id=payment.capital_contributor_id
       where payment.organization_id=${organizationId} and payment.expense_id=${expenseId}
       order by payment.paid_at desc,payment.id desc`.execute(db),
     sql<{
@@ -1574,8 +1588,13 @@ export async function getExpenseDetail(
       amount: payment.amount,
       paidAt: payment.paid_at,
       reference: payment.reference,
+      paymentSource: payment.payment_source,
       accountId: payment.account_id,
       accountName: payment.account_name,
+      contributorId: payment.contributor_id,
+      contributorName: payment.contributor_name,
+      reversalOfPaymentId: payment.reversal_of_payment_id,
+      reversalReason: payment.reversal_reason,
       financeTransactionId: payment.finance_transaction_id,
       transactionNumber: payment.transaction_number,
     })),

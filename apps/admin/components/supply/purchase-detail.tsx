@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Box, DollarSign, FileText, Package, Ship } from 'lucide-react';
+import { ArrowLeft, DollarSign, FileText, Package, Ship } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type {
   ApiEnvelope,
@@ -40,7 +40,12 @@ import { PurchaseInvoiceDialog } from './purchase-detail/dialogs/purchase-invoic
 import { PurchasePayDialog } from './purchase-detail/dialogs/purchase-pay-dialog';
 import { PurchaseInvoiceDetailSheet } from './purchase-detail/sheets/purchase-invoice-detail-sheet';
 import { PlanShipmentDialog } from './plan-shipment-dialog';
-import type { ExpenseCategory, FinancialAccount, PurchaseLine, SupplierInvoice } from './purchase-detail/types';
+import type {
+  ExpenseCategory,
+  FinancialAccount,
+  PurchaseLine,
+  SupplierInvoice,
+} from './purchase-detail/types';
 
 export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
   const canManage = useAdminCapability('procurement.manage');
@@ -50,6 +55,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
   const canCreateInvoiceCapability = useAdminCapability('finance.expenses.create');
   const canPayInvoice = useAdminCapability('finance.expenses.pay');
   const canViewAccounts = useAdminCapability('finance.accounts.view');
+  const canManageCapital = useAdminCapability('finance.capital.manage');
 
   const [purchase, setPurchase] = useState<PurchaseDto>();
   const [shipments, setShipments] = useState<readonly InboundShipmentDto[]>([]);
@@ -577,6 +583,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
         <PurchasePayDialog
           invoice={payingInvoice}
           accounts={accounts}
+          canManageCapital={canManageCapital}
           busy={busy}
           onClose={() => setPayingInvoice(undefined)}
           onPostPayment={handlePostPayment}

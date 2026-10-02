@@ -2,9 +2,9 @@
 
 ## Active Area
 
-Team & Access: identity/membership boundaries, organization context, capability
-authorization, permission presets, location scopes, invitations, membership
-lifecycle, ownership, sessions, audit, and security notifications.
+Payments & Finance: Owner Capital contributors, capital Account movements,
+personally funded Expenses and supplier payments, reversals, permissions, audit,
+and finance reporting semantics.
 
 ## Current Status / Substage
 
@@ -12,37 +12,37 @@ lifecycle, ownership, sessions, audit, and security notifications.
 
 ## Evidence Already Known
 
-- Better Auth remains the identity/session authority; active organization membership
-  and capabilities are resolved dynamically for authorization.
-- Owner is a structural membership type with one-Owner database protection and an
-  atomic, recent-MFA ownership transfer command.
-- Invitations are hashed at rest, encrypted only for asynchronous delivery,
-  expiring, revocable, resendable, idempotent, and consumable exactly once.
-- Permission presets are organization-scoped grant templates. Runtime access uses
-  direct additive capability grants with delegation ceilings and optional LOCATION scopes.
-- Explicit lifecycle commands replace the MVP generic mutation; suspend/remove
-  deny access immediately and trigger Better Auth session cleanup.
-- Organization context is propagated across Admin routes; ambiguous multi-org
-  identities must select an organization that they actively belong to.
-- Warehouse and inventory resource paths enforce capability-specific location scope;
-  operations overview and search no longer disclose unauthorized domain summaries.
-- All sensitive Team changes emit audit/outbox evidence and relevant security notices.
-- Focused IAM, notification, and Admin operation tests and TypeScript checks pass.
+- Account balances remain derived exclusively from immutable Account entries.
+- Cash contributions and withdrawals post real Account entries and never become Revenue or Expense.
+- Personally funded costs create real Expense payments and capital events without
+  fabricating a business Account movement; Purchase payments reuse the linked Expense.
+- Partial personal and Account-backed payments share the existing Expense payment
+  source of truth, so paid and outstanding totals cannot diverge.
+- Corrections use one-time compensating capital events; personal-payment reversals
+  append signed Expense-payment facts and restore the outstanding obligation.
+- Contributors are organization-scoped Finance identities, optionally linkable to a
+  user, but independent of Team membership and ownership percentages.
+- Dedicated view/manage capabilities, composite tenant foreign keys, database shape
+  checks, idempotency, audit, and outbox evidence protect the workflow.
+- Clean migration, focused capital integration tests, database/API builds, Admin
+  production build, and focused lint pass.
 
 ## Immediate Objective
 
-Conduct owner operational review of the minimal Team workflows and verify external
-invitation email delivery in the configured environment.
+Conduct owner operational review of `/finance/capital`, including cash contribution,
+withdrawal, personal Expense payment, supplier invoice payment, mixed partial funding,
+and reversal outcomes in Accounts, Expense/Purchase detail, and Finance Overview.
 
 ## Important Constraints
 
-- Authentication never grants authorization by itself.
-- Unknown capabilities, inactive memberships, ambiguous organization context, and
-  resources outside the verified organization/location scope deny by default.
-- Invitation/session/MFA secrets never appear in Team DTOs, audit, outbox, or logs.
-- Membership removal preserves business history and actor attribution.
-- Presets do not remain linked runtime roles; applying one snapshots its grants.
+- Capital is not Revenue, a customer Payment, an Expense, or an ownership percentage.
+- Owner-funded costs settle Expenses without changing business cash.
+- Account and Expense truth must remain in their existing immutable ledgers; the
+  capital ledger supplies contributor meaning rather than duplicating balances.
+- Cross-organization Account, contributor, Expense, and reversal links deny by default.
+- Financial history is corrected with compensating facts, never silent deletion.
 
 ## Blockers / Owner Review
 
-No code blocker. Owner operational review and external-provider verification remain pending.
+No code blocker. Owner operational review remains pending. The earlier Team & Access
+operational review and external-provider verification are still pending separately.

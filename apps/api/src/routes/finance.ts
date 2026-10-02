@@ -97,6 +97,10 @@ export function registerFinanceRoutes(
               Type.Literal('PAYMENT_SOURCE_POSTING'),
               Type.Literal('REFUND_SOURCE_POSTING'),
               Type.Literal('COD_SETTLEMENT'),
+              Type.Literal('CAPITAL_CONTRIBUTION'),
+              Type.Literal('OWNER_FUNDED_EXPENSE'),
+              Type.Literal('CAPITAL_WITHDRAWAL'),
+              Type.Literal('CAPITAL_REVERSAL'),
             ]),
           ),
           direction: Type.Optional(

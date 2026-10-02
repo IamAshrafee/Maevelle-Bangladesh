@@ -22,6 +22,7 @@ import { registerProcurementRoutes } from './procurement.js';
 import { registerCostingRoutes } from './costing.js';
 import { registerReturnRoutes } from './returns.js';
 import { registerFinanceRoutes } from './finance.js';
+import { registerCapitalRoutes } from './capital.js';
 import { registerReviewRoutes } from './reviews.js';
 import { registerNotificationRoutes } from './notifications.js';
 import { registerAnalyticsRoutes } from './analytics.js';
@@ -101,6 +102,7 @@ export function registerAuthRoutes(
   registerCostingRoutes(app, database, auth);
   registerReturnRoutes(app, database, auth);
   registerFinanceRoutes(app, database, auth);
+  registerCapitalRoutes(app, database, auth);
   registerReviewRoutes(app, database, auth);
   registerNotificationRoutes(app, database, auth, config);
   registerPathaoRoutes(app, database, auth, config);

@@ -124,6 +124,10 @@
       "types": "./src/finance.ts",
       "default": "./dist/src/finance.js"
     },
+    "./capital": {
+      "types": "./src/capital.ts",
+      "default": "./dist/src/capital.js"
+    },
     "./reviews": {
       "types": "./src/reviews.ts",
       "default": "./dist/src/reviews.js"

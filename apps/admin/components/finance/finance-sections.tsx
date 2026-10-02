@@ -123,7 +123,9 @@ export function FinanceOverview({
         <StatsCard>
           <StatsTitle>Paid expenses</StatsTitle>
           <StatsValue>{formatMoney(overview.metrics.paidExpenses, overview.currency)}</StatsValue>
-          <StatsDescription>{overview.period.label} · account-backed money out</StatsDescription>
+          <StatsDescription>
+            {overview.period.label} · business costs paid from Accounts or owner capital
+          </StatsDescription>
         </StatsCard>
         <StatsCard>
           <StatsTitle>Net account movement</StatsTitle>
@@ -661,6 +663,15 @@ function renderBusinessOrigin(entry: FinanceLedgerEntryDto) {
           <Landmark className="size-3.5" /> Account <ExternalLink className="size-3" />
         </Link>
       );
+    case 'finance.capital_event':
+      return (
+        <Link
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          href="/finance/capital"
+        >
+          <Banknote className="size-3.5" /> Owner capital <ExternalLink className="size-3" />
+        </Link>
+      );
     default:
       return (
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -705,12 +716,7 @@ export function ActivitySection({
   };
 
   const hasFilters = Boolean(
-    query.trim() ||
-      direction !== 'ALL' ||
-      transactionType !== 'ALL' ||
-      accountId ||
-      from ||
-      to,
+    query.trim() || direction !== 'ALL' || transactionType !== 'ALL' || accountId || from || to,
   );
 
   const presets = [
@@ -734,8 +740,7 @@ export function ActivitySection({
     return { from: toStr(start), to: toStr(end) };
   }
 
-  const startItem =
-    pagination.totalItems > 0 ? (pagination.page - 1) * pagination.pageSize + 1 : 0;
+  const startItem = pagination.totalItems > 0 ? (pagination.page - 1) * pagination.pageSize + 1 : 0;
   const endItem = Math.min(pagination.page * pagination.pageSize, pagination.totalItems);
   const totalPages = Math.max(1, pagination.totalPages);
 
@@ -764,7 +769,7 @@ export function ActivitySection({
         </div>
 
         <form
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_repeat(3,minmax(8rem,11rem))_auto] xl:items-end"
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_repeat(5,minmax(8rem,11rem))_auto] xl:items-end"
           onSubmit={onApply}
         >
           <label className="grid gap-1 text-sm font-medium sm:col-span-2 xl:col-span-1">
@@ -828,7 +833,24 @@ export function ActivitySection({
               <option value="COD_SETTLEMENT">COD courier settlements</option>
               <option value="EXTERNAL_ADJUSTMENT">Adjustments</option>
               <option value="OPENING_BALANCE">Opening balances</option>
+              <option value="CAPITAL_CONTRIBUTION">Capital contributions</option>
+              <option value="CAPITAL_WITHDRAWAL">Capital withdrawals</option>
+              <option value="CAPITAL_REVERSAL">Capital reversals</option>
             </NativeSelect>
+          </label>
+
+          <label className="grid gap-1 text-sm font-medium">
+            From
+            <Input
+              type="date"
+              value={from}
+              onChange={(event) => onFromChange(event.target.value)}
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm font-medium">
+            To
+            <Input type="date" value={to} onChange={(event) => onToChange(event.target.value)} />
           </label>
 
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-1">
@@ -928,7 +950,9 @@ export function ActivitySection({
                     </TableCell>
                     <TableCell
                       className={`text-right font-semibold ${
-                        incoming ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                        incoming
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-rose-600 dark:text-rose-400'
                       }`}
                     >
                       {incoming ? '+' : ''}

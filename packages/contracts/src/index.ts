@@ -1659,8 +1659,13 @@ export interface FinanceExpenseDetailDto extends FinanceExpenseDto {
     readonly amount: string;
     readonly paidAt: string;
     readonly reference: string | null;
-    readonly accountId: string;
-    readonly accountName: string;
+    readonly paymentSource: 'BUSINESS_ACCOUNT' | 'OWNER_CAPITAL' | 'REVERSAL';
+    readonly accountId: string | null;
+    readonly accountName: string | null;
+    readonly contributorId: string | null;
+    readonly contributorName: string | null;
+    readonly reversalOfPaymentId: string | null;
+    readonly reversalReason: string | null;
     readonly financeTransactionId: string;
     readonly transactionNumber: string;
   }[];
@@ -1687,7 +1692,60 @@ export type FinanceTransactionTypeDto =
   | 'EXTERNAL_ADJUSTMENT'
   | 'PAYMENT_SOURCE_POSTING'
   | 'REFUND_SOURCE_POSTING'
-  | 'COD_SETTLEMENT';
+  | 'COD_SETTLEMENT'
+  | 'CAPITAL_CONTRIBUTION'
+  | 'OWNER_FUNDED_EXPENSE'
+  | 'CAPITAL_WITHDRAWAL'
+  | 'CAPITAL_REVERSAL';
+
+export interface CapitalContributorDto {
+  readonly id: string;
+  readonly displayName: string;
+  readonly linkedUserId: string | null;
+  readonly contactNote: string | null;
+  readonly status: 'ACTIVE' | 'INACTIVE';
+  readonly grossContributed: string;
+  readonly ownerFundedExpenses: string;
+  readonly withdrawn: string;
+  readonly netCapital: string;
+  readonly lastActivityAt: string | null;
+  readonly version: number;
+}
+
+export type CapitalEventTypeDto =
+  'CONTRIBUTION' | 'OWNER_FUNDED_EXPENSE' | 'WITHDRAWAL' | 'REVERSAL';
+
+export interface CapitalEventDto {
+  readonly id: string;
+  readonly eventType: CapitalEventTypeDto;
+  readonly amountDelta: string;
+  readonly currencyCode: string;
+  readonly occurredAt: string;
+  readonly contributorId: string;
+  readonly contributorName: string;
+  readonly accountId: string | null;
+  readonly accountName: string | null;
+  readonly expenseId: string | null;
+  readonly expenseNumber: string | null;
+  readonly purchaseId: string | null;
+  readonly purchaseNumber: string | null;
+  readonly financeTransactionId: string;
+  readonly transactionNumber: string;
+  readonly reference: string | null;
+  readonly note: string | null;
+  readonly reversalOfEventId: string | null;
+  readonly isReversed: boolean;
+}
+
+export interface CapitalOverviewDto {
+  readonly currency: string;
+  readonly totalContributed: string;
+  readonly ownerFundedExpenses: string;
+  readonly totalWithdrawn: string;
+  readonly netCapital: string;
+  readonly contributorCount: number;
+  readonly recentEvents: readonly CapitalEventDto[];
+}
 
 export interface FinanceLedgerEntryDto {
   readonly id: string;

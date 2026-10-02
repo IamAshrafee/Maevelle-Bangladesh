@@ -1,6 +1,14 @@
 'use client';
 
-import { ArrowLeft, Ban, CreditCard, ExternalLink, PencilLine, ReceiptText } from 'lucide-react';
+import {
+  ArrowLeft,
+  Ban,
+  CreditCard,
+  ExternalLink,
+  HandCoins,
+  PencilLine,
+  ReceiptText,
+} from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 
@@ -36,6 +44,7 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
   const canCancel = useAdminCapability('finance.expenses.create');
   const canAdjust = useAdminCapability('finance.expenses.create');
   const canViewAccounts = useAdminCapability('finance.accounts.view');
+  const canManageCapital = useAdminCapability('finance.capital.manage');
   const [expense, setExpense] = useState<FinanceExpenseDetailDto>();
   const [accounts, setAccounts] = useState<readonly FinancialAccountDto[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -210,6 +219,16 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
                 <CreditCard /> Pay Expense
               </Button>
             ) : null}
+            {canManageCapital &&
+            expense.status === 'RECORDED' &&
+            Number(expense.outstanding) > 0 ? (
+              <Button
+                variant="outline"
+                render={<Link href={`/finance/capital?expenseId=${expense.id}`} />}
+              >
+                <HandCoins /> Paid personally
+              </Button>
+            ) : null}
           </div>
         </header>
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
@@ -271,7 +290,9 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
           <Card>
             <CardHeader>
               <CardTitle>Payment history</CardTitle>
-              <CardDescription>Immutable account-backed money movement.</CardDescription>
+              <CardDescription>
+                Immutable payments from business Accounts or owner capital.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               {expense.payments.length ? (
@@ -279,12 +300,23 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
                   <div key={payment.id} className="rounded-lg border p-3 text-sm">
                     <div className="flex items-start justify-between gap-3">
                       <span>
-                        <Link
-                          className="font-medium text-primary hover:underline"
-                          href={`/finance/accounts/${payment.accountId}`}
-                        >
-                          {payment.accountName}
-                        </Link>
+                        {payment.accountId && payment.accountName ? (
+                          <Link
+                            className="font-medium text-primary hover:underline"
+                            href={`/finance/accounts/${payment.accountId}`}
+                          >
+                            {payment.accountName}
+                          </Link>
+                        ) : (
+                          <Link
+                            className="font-medium text-primary hover:underline"
+                            href="/finance/capital"
+                          >
+                            {payment.paymentSource === 'REVERSAL'
+                              ? `Reversal · ${payment.contributorName ?? 'capital contributor'}`
+                              : `Paid personally · ${payment.contributorName ?? 'capital contributor'}`}
+                          </Link>
+                        )}
                         <small className="block text-muted-foreground">
                           {payment.transactionNumber} · {formatFinanceDate(payment.paidAt, true)}
                         </small>
@@ -299,9 +331,7 @@ export function ExpenseDetail({ expenseId }: { readonly expenseId: string }) {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  No account payment has been recorded.
-                </p>
+                <p className="text-sm text-muted-foreground">No payment has been recorded.</p>
               )}
             </CardContent>
           </Card>

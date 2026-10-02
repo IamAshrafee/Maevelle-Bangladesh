@@ -1,5 +1,9 @@
 # Maevelle Ecommerce — Finance Operations & Expense Architecture
 
+> Current owner-funded Expense payment behavior is defined in
+> [Owner Capital Architecture](../finance/owner-capital-architecture.md). These
+> payments settle a real Expense without fabricating a business Account movement.
+
 **Document:** `docs/domains/finance/finance-operations-architecture.md`
 **Status:** Initial Domain Design / Living Document
 **Version:** 0.1

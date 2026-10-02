@@ -27,12 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatFinanceDate, formatMoney, humanizeFinanceCode } from '@/lib/finance/types';
 import type {
   AccountLedgerData,
@@ -80,8 +75,7 @@ export function AccountLedgerTab({
     Boolean(filters.from) ||
     Boolean(filters.to);
 
-  const startItem =
-    pagination.totalItems > 0 ? (pagination.page - 1) * pagination.pageSize + 1 : 0;
+  const startItem = pagination.totalItems > 0 ? (pagination.page - 1) * pagination.pageSize + 1 : 0;
   const endItem = Math.min(pagination.page * pagination.pageSize, pagination.totalItems);
 
   return (
@@ -315,9 +309,15 @@ export function AccountLedgerTab({
                               Opening balance float
                             </span>
                           ) : entry.source_domain === 'finance.transfer' ? (
-                            <span className="text-xs text-muted-foreground">
-                              Account transfer
-                            </span>
+                            <span className="text-xs text-muted-foreground">Account transfer</span>
+                          ) : entry.source_domain === 'finance.capital_event' ? (
+                            <Link
+                              href="/finance/capital"
+                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                            >
+                              <span>Owner capital</span>
+                              <ExternalLink className="size-3" />
+                            </Link>
                           ) : (
                             <span className="text-xs text-muted-foreground">
                               {entry.source_domain
@@ -372,9 +372,7 @@ export function AccountLedgerTab({
                   <span>Per page:</span>
                   <NativeSelect
                     value={String(filters.pageSize)}
-                    onChange={(e) =>
-                      onFiltersChange({ pageSize: Number(e.target.value), page: 1 })
-                    }
+                    onChange={(e) => onFiltersChange({ pageSize: Number(e.target.value), page: 1 })}
                     className="h-7 text-xs w-[65px]"
                   >
                     <option value="10">10</option>

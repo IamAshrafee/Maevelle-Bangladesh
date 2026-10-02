@@ -24,6 +24,7 @@ import type { FinancialAccount, SupplierInvoice } from '../types';
 export interface PurchasePayDialogProps {
   readonly invoice?: SupplierInvoice | undefined;
   readonly accounts: readonly FinancialAccount[];
+  readonly canManageCapital: boolean;
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onPostPayment: (data: {
@@ -36,6 +37,7 @@ export interface PurchasePayDialogProps {
 export function PurchasePayDialog({
   invoice,
   accounts,
+  canManageCapital,
   busy,
   onClose,
   onPostPayment,
@@ -53,8 +55,10 @@ export function PurchasePayDialog({
       const matching = accounts.filter(
         (acc) => acc.status === 'ACTIVE' && acc.currency_code === invoice.currency_code,
       );
-      const withFunds = matching.find((acc) => Number(acc.ledger_balance) >= Number(invoice.outstanding));
-      setAccountId(withFunds ? withFunds.id : matching[0]?.id ?? '');
+      const withFunds = matching.find(
+        (acc) => Number(acc.ledger_balance) >= Number(invoice.outstanding),
+      );
+      setAccountId(withFunds ? withFunds.id : (matching[0]?.id ?? ''));
     }
   }, [invoice, accounts]);
 
@@ -94,7 +98,9 @@ export function PurchasePayDialog({
               <CreditCard className="size-4" />
             </div>
             <div>
-              <DialogTitle className="text-base">Record Payment for {invoice.expense_number}</DialogTitle>
+              <DialogTitle className="text-base">
+                Record Payment for {invoice.expense_number}
+              </DialogTitle>
               <DialogDescription className="text-xs">
                 Immutable cash disbursement debited from Finance cash accounts.
               </DialogDescription>
@@ -135,7 +141,8 @@ export function PurchasePayDialog({
               {selectedAccount ? (
                 <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
                   <Wallet className="size-3" />
-                  Bal: {formatSupplyMoney(selectedAccount.ledger_balance, selectedAccount.currency_code)}
+                  Bal:{' '}
+                  {formatSupplyMoney(selectedAccount.ledger_balance, selectedAccount.currency_code)}
                 </span>
               ) : null}
             </div>
@@ -171,7 +178,8 @@ export function PurchasePayDialog({
             ) : hasInsufficientFunds ? (
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
                 <AlertCircle className="size-3 shrink-0" />
-                Selected account balance is lower than disbursement. Account will incur negative balance.
+                Selected account balance is lower than disbursement. Account will incur negative
+                balance.
               </p>
             ) : null}
           </Field>
@@ -179,9 +187,7 @@ export function PurchasePayDialog({
           {/* Payment Amount */}
           <Field>
             <div className="flex items-center justify-between">
-              <FieldLabel htmlFor="pay-amount">
-                Payment Amount ({invoice.currency_code})
-              </FieldLabel>
+              <FieldLabel htmlFor="pay-amount">Payment Amount ({invoice.currency_code})</FieldLabel>
               {paymentAmount !== Number(invoice.outstanding) ? (
                 <Button
                   type="button"
@@ -191,7 +197,9 @@ export function PurchasePayDialog({
                   onClick={handleSetFullOutstanding}
                 >
                   <Sparkles className="size-3" />
-                  <span>Pay full ({formatSupplyMoney(invoice.outstanding, invoice.currency_code)})</span>
+                  <span>
+                    Pay full ({formatSupplyMoney(invoice.outstanding, invoice.currency_code)})
+                  </span>
                 </Button>
               ) : null}
             </div>
@@ -208,7 +216,8 @@ export function PurchasePayDialog({
               onChange={(e) => setAmount(e.target.value)}
             />
             <FieldDescription>
-              Maximum payment amount is {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}.
+              Maximum payment amount is{' '}
+              {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}.
             </FieldDescription>
           </Field>
 
@@ -232,14 +241,28 @@ export function PurchasePayDialog({
           </Field>
 
           <DialogFooter className="pt-2">
+            {canManageCapital ? (
+              <Button
+                variant="outline"
+                render={<Link href={`/finance/capital?expenseId=${invoice.id}`} />}
+              >
+                <Wallet className="size-4" /> Paid personally
+              </Button>
+            ) : null}
             <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
               Cancel
             </DialogClose>
             <Button
               type="submit"
-              disabled={busy || !accountId || !amount || paymentAmount <= 0 || !eligibleAccounts.length}
+              disabled={
+                busy || !accountId || !amount || paymentAmount <= 0 || !eligibleAccounts.length
+              }
             >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <CreditCard className="size-4" />
+              )}
               <span>Post payment</span>
             </Button>
           </DialogFooter>

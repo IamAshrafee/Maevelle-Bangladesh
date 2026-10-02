@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
-  Banknote,
   Bell,
   Boxes,
   Building2,
@@ -190,7 +189,12 @@ const navigation: readonly NavGroup[] = [
       { label: 'Fulfillments', href: '/fulfillments', icon: Boxes, capability: 'fulfillment.view' },
       { label: 'Deliveries', href: '/deliveries', icon: Truck, capability: 'delivery.view' },
       { label: 'Returns & RTO', href: '/returns', icon: RotateCcw, capability: 'returns.view' },
-      { label: 'Couriers', href: '/delivery/couriers', icon: Plug, capability: 'integrations.view' },
+      {
+        label: 'Couriers',
+        href: '/delivery/couriers',
+        icon: Plug,
+        capability: 'integrations.view',
+      },
     ],
   },
   {
@@ -208,21 +212,31 @@ const navigation: readonly NavGroup[] = [
         href: '/payments',
         icon: CreditCard,
         capability: 'payments.view',
-        keywords: 'collections refunds verification gateways methods queue transactions manual bkash nagad cod',
+        keywords:
+          'collections refunds verification gateways methods queue transactions manual bkash nagad cod',
       },
       {
         label: 'Accounts & treasury',
         href: '/finance/accounts',
         icon: Landmark,
         capability: 'finance.accounts.view',
-        keywords: 'banks wallets cash financial accounts ledger balances provenance transfers reconciliation cod courier settlements',
+        keywords:
+          'banks wallets cash financial accounts ledger balances provenance transfers reconciliation cod courier settlements',
       },
       {
         label: 'Expenses',
         href: '/finance/expenses',
         icon: ReceiptText,
         capability: 'finance.expenses.view',
-        keywords: 'operational expenses bills pay categories adjustments obligations receipts procurement',
+        keywords:
+          'operational expenses bills pay categories adjustments obligations receipts procurement',
+      },
+      {
+        label: 'Owner capital',
+        href: '/finance/capital',
+        icon: HandCoins,
+        capability: 'finance.capital.view',
+        keywords: 'owners investors contributors investment personal funded equity drawings',
       },
     ],
   },
