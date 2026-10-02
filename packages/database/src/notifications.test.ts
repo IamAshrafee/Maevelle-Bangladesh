@@ -77,7 +77,7 @@ describe('notifications and integrations', () => {
       data.organizationId,
     )) as NotificationRow[];
     expect(rows).toHaveLength(2);
-    expect(rows.every((row) => row.status === 'PENDING')).toBe(true);
+    expect(rows.every((row) => row.status === 'QUEUED')).toBe(true);
     await notifications.recordNotificationAttempt(database.db, {
       organizationId: data.organizationId,
       notificationId: rows[0]!.id,
@@ -97,7 +97,7 @@ describe('notifications and integrations', () => {
       recipientType: 'CUSTOMER',
       recipientId: data.customerId,
       notificationType: 'ORDER_CANCELLED',
-      channel: 'EMAIL',
+      channel: 'IN_APP',
       enabled: false,
     });
     await sql`update platform.outbox_events set event_type='orders.order.cancelled' where id=${data.eventId}`.execute(
@@ -194,7 +194,7 @@ describe('notifications and integrations', () => {
     const template = await notifications.createNotificationTemplate(database.db, {
       organizationId: data.organizationId,
       notificationType: 'ORDER_PLACED',
-      channel: 'EMAIL',
+      channel: 'IN_APP',
       name: 'Order email',
     });
     const first = await notifications.createTemplateRevision(database.db, {
@@ -232,7 +232,7 @@ describe('notifications and integrations', () => {
     const rendered = await sql<{
       rendered_body: string;
       revision_number: number;
-    }>`select n.rendered_body,r.revision_number from notifications.notifications n join notifications.template_revisions r on r.id=n.template_revision_id where n.organization_id=${data.organizationId} and n.channel='EMAIL' order by n.created_at`.execute(
+    }>`select n.rendered_body,r.revision_number from notifications.notifications n join notifications.template_revisions r on r.id=n.template_revision_id where n.organization_id=${data.organizationId} and n.channel='IN_APP' order by n.created_at`.execute(
       database.db,
     );
     expect(rendered.rows.map((row) => [row.rendered_body, row.revision_number])).toEqual([
@@ -246,6 +246,7 @@ describe('notifications and integrations', () => {
     let calls = 0;
     const adapter: notifications.EmailAdapter = {
       name: 'test',
+      effectiveRecipient: (recipient) => recipient,
       async send() {
         calls++;
         return { status: 'SENT', providerReference: 'provider-one' };
@@ -290,5 +291,57 @@ describe('notifications and integrations', () => {
         '8.8.8.8',
       ]),
     ).resolves.toBeInstanceOf(URL);
+  });
+
+  it('records missing email without retrying and makes automatic policy disablement visible', async () => {
+    const missing = await fixture('missing-email');
+    await sql`update orders.order_customer_snapshots set email=null where order_id=${missing.orderId}::uuid`.execute(database.db);
+    await notifications.createNotificationFromOutbox(database.db, missing.eventId);
+    const missingEmail = await sql<{ status: string; skip_reason: string }>`select status,skip_reason from notifications.notifications where organization_id=${missing.organizationId} and channel='EMAIL'`.execute(database.db);
+    expect(missingEmail.rows[0]).toEqual({ status: 'SKIPPED_NO_EMAIL', skip_reason: 'CUSTOMER_EMAIL_MISSING' });
+
+    const manual = await fixture('manual-policy');
+    const policyEmail = `policy-${crypto.randomUUID()}@example.test`;
+    const policyActor = await sql<{ id: string }>`insert into iam.users(name,email,email_normalized) values('Policy owner',${policyEmail},${policyEmail}) returning id`.execute(database.db);
+    await notifications.updateEmailPolicy(database.db, {
+      organizationId: manual.organizationId,
+      notificationType: 'ORDER_PLACED',
+      enabled: true,
+      automaticEnabled: false,
+      manualAllowed: true,
+      actorId: policyActor.rows[0]!.id,
+      reason: 'Test automatic disablement',
+    });
+    await notifications.createNotificationFromOutbox(database.db, manual.eventId);
+    const pendingManual = await sql<{ status: string; skip_reason: string }>`select status,skip_reason from notifications.notifications where organization_id=${manual.organizationId} and channel='EMAIL'`.execute(database.db);
+    expect(pendingManual.rows[0]).toEqual({ status: 'PENDING_MANUAL', skip_reason: 'AUTOMATIC_SENDING_DISABLED' });
+  });
+
+  it('deduplicates Resend webhooks, guards out-of-order state, and suppresses complaints', async () => {
+    const data = await fixture('resend-webhook');
+    await notifications.createNotificationFromOutbox(database.db, data.eventId);
+    const email = await sql<{ id: string }>`update notifications.notifications set provider='resend',provider_message_id='resend-message-1',status='SENT' where organization_id=${data.organizationId} and channel='EMAIL' returning id`.execute(database.db);
+    const delivered = {
+      providerEventId: 'resend-event-delivered',
+      type: 'email.delivered',
+      createdAt: new Date().toISOString(),
+      data: { email_id: 'resend-message-1', to: ['buyer@example.test'] },
+      rawPayload: { type: 'email.delivered', data: { email_id: 'resend-message-1' } },
+    };
+    expect(await notifications.ingestResendWebhook(database.db, delivered)).toMatchObject({ created: true, processed: true });
+    expect(await notifications.ingestResendWebhook(database.db, delivered)).toMatchObject({ created: false, processed: false });
+    await notifications.ingestResendWebhook(database.db, {
+      ...delivered,
+      providerEventId: 'resend-event-delayed-late',
+      type: 'email.delivery_delayed',
+    });
+    expect((await sql<{ status: string }>`select status from notifications.notifications where id=${email.rows[0]!.id}::uuid`.execute(database.db)).rows[0]?.status).toBe('DELIVERED');
+    await notifications.ingestResendWebhook(database.db, {
+      ...delivered,
+      providerEventId: 'resend-event-complaint',
+      type: 'email.complained',
+    });
+    expect((await sql<{ status: string }>`select status from notifications.notifications where id=${email.rows[0]!.id}::uuid`.execute(database.db)).rows[0]?.status).toBe('COMPLAINED');
+    expect((await sql<{ count: string }>`select count(*)::text count from notifications.email_suppressions where organization_id=${data.organizationId} and active`.execute(database.db)).rows[0]?.count).toBe('1');
   });
 });

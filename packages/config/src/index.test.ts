@@ -23,7 +23,35 @@ describe('parseConfig', () => {
       apiPort: 3000,
       logLevel: 'info',
       storefrontOrganizationCode: 'maevelle',
+      emailEnabled: false,
+      emailProvider: 'local',
+      emailReplyTo: 'maevellebangladesh@gmail.com',
     });
+  });
+
+  it('rejects a production test-recipient override', () => {
+    expect(() =>
+      parseConfig({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        EMAIL_ENVIRONMENT: 'production',
+        EMAIL_TEST_RECIPIENT_OVERRIDE: 'developer@example.test',
+        EMAIL_ALLOWED_TEST_RECIPIENTS: 'developer@example.test',
+      }),
+    ).toThrow(/EMAIL_TEST_RECIPIENT_OVERRIDE/);
+  });
+
+  it('requires Resend secrets when production sending is enabled', () => {
+    expect(() =>
+      parseConfig({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        EMAIL_ENVIRONMENT: 'production',
+        EMAIL_ENABLED: 'true',
+        EMAIL_PROVIDER: 'resend',
+        EMAIL_FROM_ADDRESS: 'orders@maevelle.example',
+      }),
+    ).toThrow(/RESEND_API_KEY/);
   });
 
   it('selects the distinct test database when NODE_ENV is test', () => {

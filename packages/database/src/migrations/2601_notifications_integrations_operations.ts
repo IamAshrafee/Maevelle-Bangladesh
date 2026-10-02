@@ -31,21 +31,23 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index webhook_events_org_created
       on integrations.webhook_events(organization_id,created_at desc);
 
-    insert into notifications.notification_policies(notification_type,delivery_requirement,channels) values
-      ('ORDER_PLACED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('ORDER_CANCELLED','OPTIONAL',array['IN_APP','EMAIL']),
-      ('PAYMENT_VERIFIED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('ORDER_DISPATCHED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('DELIVERY_COMPLETED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('DELIVERY_ATTEMPT_FAILED','OPTIONAL',array['IN_APP','EMAIL']),
-      ('DELIVERY_FAILED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('DELIVERY_RTO_INITIATED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('RETURN_AUTHORIZED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('RETURN_REJECTED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('RETURN_RECEIVED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('REFUND_COMPLETED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL']),
-      ('REVIEW_VISIBLE','OPTIONAL',array['IN_APP','EMAIL'])
-      on conflict(notification_type) do update set delivery_requirement=excluded.delivery_requirement,channels=excluded.channels,updated_at=now();
+    insert into notifications.notification_policies(notification_type,delivery_requirement,channels,automatic_enabled,manual_allowed,template_key) values
+      ('ORDER_PLACED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL'],true,true,'order-received'),
+      ('ORDER_CONFIRMED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL'],true,true,'order-confirmed'),
+      ('ORDER_CANCELLED','OPTIONAL',array['IN_APP','EMAIL'],true,true,'order-cancelled'),
+      ('ORDER_COMPLETED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL'],true,true,'order-delivered'),
+      ('PAYMENT_VERIFIED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL'],true,true,'payment-confirmed'),
+      ('ORDER_DISPATCHED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL'],true,true,'order-shipped'),
+      ('DELIVERY_COMPLETED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL'],true,true,'order-delivered'),
+      ('DELIVERY_ATTEMPT_FAILED','OPTIONAL',array['IN_APP'],true,false,null),
+      ('DELIVERY_FAILED','REQUIRED_OPERATIONAL',array['IN_APP'],true,false,null),
+      ('DELIVERY_RTO_INITIATED','REQUIRED_OPERATIONAL',array['IN_APP'],true,false,null),
+      ('RETURN_AUTHORIZED','REQUIRED_OPERATIONAL',array['IN_APP'],true,false,null),
+      ('RETURN_REJECTED','REQUIRED_OPERATIONAL',array['IN_APP'],true,false,null),
+      ('RETURN_RECEIVED','REQUIRED_OPERATIONAL',array['IN_APP'],true,false,null),
+      ('REFUND_COMPLETED','REQUIRED_OPERATIONAL',array['IN_APP','EMAIL'],true,true,'refund-completed'),
+      ('REVIEW_VISIBLE','OPTIONAL',array['IN_APP'],true,false,null)
+      on conflict(notification_type) do update set delivery_requirement=excluded.delivery_requirement,channels=excluded.channels,automatic_enabled=excluded.automatic_enabled,manual_allowed=excluded.manual_allowed,template_key=excluded.template_key,updated_at=now();
   `.execute(db);
 }
 

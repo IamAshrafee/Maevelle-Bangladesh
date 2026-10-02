@@ -33,9 +33,11 @@ export function buildApi(options: BuildApiOptions) {
   // Auth is bridged through Better Auth's Fetch handler; retaining JSON as text
   // prevents Fastify from consuming and reserializing credential payloads.
   app.removeContentTypeParser('application/json');
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
+    const rawBody = String(body);
+    (request as typeof request & { rawBody?: string }).rawBody = rawBody;
     try {
-      done(null, JSON.parse(String(body)));
+      done(null, rawBody.trim() ? JSON.parse(rawBody) : undefined);
     } catch {
       done(new Error('Request body must be valid JSON.'));
     }
@@ -74,6 +76,8 @@ export function buildApi(options: BuildApiOptions) {
       { prefix: '/storefront/v1/reviews', maximum: 15 },
       { prefix: '/storefront/v1/orders/confirmation', maximum: 60 },
       { prefix: '/integrations/', maximum: 120 },
+      { prefix: '/webhooks/resend', maximum: 240 },
+      { prefix: '/admin/email/', maximum: 120 },
     ];
     const policy = limits.find((candidate) => request.url.startsWith(candidate.prefix));
     if (!policy) return;
@@ -89,19 +93,6 @@ export function buildApi(options: BuildApiOptions) {
       return reply
         .code(429)
         .send({ error: { code: 'RATE_LIMITED', message: 'Too many attempts.' } });
-    }
-  });
-
-  app.removeContentTypeParser('application/json');
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
-    if (typeof body !== 'string' || body.trim() === '') {
-      done(null, undefined);
-      return;
-    }
-    try {
-      done(null, JSON.parse(body));
-    } catch (err) {
-      done(err as Error, undefined);
     }
   });
 

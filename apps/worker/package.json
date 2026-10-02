@@ -12,6 +12,7 @@
     "@maevelle/database": "workspace:*",
     "@maevelle/media": "workspace:*",
     "@maevelle/observability": "workspace:*",
-    "@maevelle/security": "workspace:*"
+    "@maevelle/security": "workspace:*",
+    "resend": "6.32.0"
   }
 }

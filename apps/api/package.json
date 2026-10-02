@@ -14,6 +14,7 @@
     "@maevelle/security": "workspace:*",
     "better-auth": "1.6.25",
     "fastify": "5.12.1",
+    "resend": "6.32.0",
     "typebox": "1.3.16"
   },
   "scripts": {

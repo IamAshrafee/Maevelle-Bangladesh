@@ -4,6 +4,7 @@ import {
   createLocalEmailAdapter,
   createWebhookEventsFromOutbox,
   deliverPendingEmails,
+  type EmailAdapter,
   deliverPendingWebhooks,
   processNotificationOutbox,
 } from '@maevelle/database/notifications';
@@ -31,6 +32,12 @@ export interface WorkerOptions {
   readonly adminBaseUrl?: string;
   readonly courierProviderResolver?: CourierProviderResolver;
   readonly mediaStorage?: ObjectStoragePort;
+  readonly emailEnabled?: boolean;
+  readonly emailAdapter?: EmailAdapter;
+  readonly emailStorefrontBaseUrl?: string;
+  readonly emailSupportAddress?: string;
+  readonly emailSenderFrom?: string;
+  readonly emailEnvironmentLabel?: string;
 }
 
 export interface WorkerRuntime {
@@ -48,6 +55,25 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
   let started = false;
   let closePromise: Promise<void> | undefined;
   let tickRunning = false;
+  const emailAdapter = options.emailAdapter ?? createLocalEmailAdapter();
+  const invitationEmailAdapter = {
+    name: emailAdapter.name,
+    send: (request: {
+      notificationId: string;
+      recipient: string;
+      subject: string;
+      body: string;
+      idempotencyKey: string;
+    }) =>
+      emailAdapter.send({
+        notificationId: request.notificationId,
+        recipient: emailAdapter.effectiveRecipient(request.recipient),
+        subject: request.subject,
+        html: `<pre>${request.body.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`,
+        text: request.body,
+        idempotencyKey: request.idempotencyKey,
+      }),
+  };
 
   const runTick = async (): Promise<void> => {
     if (tickRunning) return;
@@ -72,8 +98,19 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         invitationEmails,
       ] = await Promise.all([
         reclaimExpiredJobs(options.database.db),
-        processNotificationOutbox(options.database.db),
-        deliverPendingEmails(options.database.db, createLocalEmailAdapter()),
+        processNotificationOutbox(options.database.db, 20, {
+          ...(options.emailStorefrontBaseUrl
+            ? { storefrontBaseUrl: options.emailStorefrontBaseUrl }
+            : {}),
+          ...(options.emailSupportAddress ? { supportEmail: options.emailSupportAddress } : {}),
+          ...(options.emailSenderFrom ? { senderFrom: options.emailSenderFrom } : {}),
+          ...(options.emailEnvironmentLabel
+            ? { environmentLabel: options.emailEnvironmentLabel }
+            : {}),
+        }),
+        options.emailEnabled
+          ? deliverPendingEmails(options.database.db, emailAdapter)
+          : Promise.resolve(0),
         createWebhookEventsFromOutbox(options.database.db),
         processAnalyticsOutbox(options.database.db),
         processCatalogImports(options.database.db),
@@ -94,10 +131,10 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         options.encryptionKey
           ? deliverPendingWebhooks(options.database.db, options.encryptionKey)
           : Promise.resolve(0),
-        options.encryptionKey && options.adminBaseUrl
+        options.emailEnabled && options.encryptionKey && options.adminBaseUrl
           ? deliverPendingInvitationEmails(
               options.database.db,
-              createLocalEmailAdapter(),
+              invitationEmailAdapter,
               options.encryptionKey,
               options.adminBaseUrl,
             )

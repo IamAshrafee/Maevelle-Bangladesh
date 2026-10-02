@@ -28,6 +28,17 @@ export interface RuntimeConfig {
   readonly mediaUploadExpirySeconds: number;
   /** Public Storefront tenant resolved by the API; customers never enter an organization UUID. */
   readonly storefrontOrganizationCode: string;
+  readonly storefrontBaseUrl: string;
+  readonly emailEnabled: boolean;
+  readonly emailProvider: 'local' | 'resend';
+  readonly emailEnvironment: 'development' | 'test' | 'production';
+  readonly emailFromName: string;
+  readonly emailFromAddress: string;
+  readonly emailReplyTo: string;
+  readonly emailTestRecipientOverride?: string;
+  readonly emailAllowedTestRecipients: readonly string[];
+  readonly resendApiKey?: string;
+  readonly resendWebhookSecret?: string;
 }
 
 type Environment = Record<string, string | undefined>;
@@ -127,6 +138,23 @@ function boolean(environment: Environment, variableName: string, defaultValue: b
   throw new ConfigurationError(`${variableName} must be true or false.`);
 }
 
+function emailAddress(value: string, variableName: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))
+    throw new ConfigurationError(`${variableName} must be a valid email address.`);
+  return normalized;
+}
+
+function httpUrl(value: string, variableName: string): string {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Unsupported protocol.');
+    return url.origin;
+  } catch {
+    throw new ConfigurationError(`${variableName} must be a valid HTTP(S) URL.`);
+  }
+}
+
 /**
  * Parses only runtime configuration needed by the current foundation. Error
  * messages deliberately name variables without echoing their values.
@@ -178,6 +206,52 @@ export function parseConfig(environment: Environment): RuntimeConfig {
       'S3 media storage requires MEDIA_STORAGE_ENDPOINT, MEDIA_STORAGE_ACCESS_KEY_ID, and MEDIA_STORAGE_SECRET_ACCESS_KEY.',
     );
 
+  const emailProvider = environment.EMAIL_PROVIDER?.trim().toLowerCase() || 'local';
+  if (emailProvider !== 'local' && emailProvider !== 'resend')
+    throw new ConfigurationError('EMAIL_PROVIDER must be local or resend.');
+  const emailEnabled = boolean(environment, 'EMAIL_ENABLED', false);
+  const emailEnvironment = (environment.EMAIL_ENVIRONMENT?.trim().toLowerCase() || nodeEnv) as
+    | 'development'
+    | 'test'
+    | 'production';
+  if (!nodeEnvironments.has(emailEnvironment))
+    throw new ConfigurationError('EMAIL_ENVIRONMENT must be development, test, or production.');
+  const emailTestRecipientOverride = environment.EMAIL_TEST_RECIPIENT_OVERRIDE?.trim();
+  const emailAllowedTestRecipients = (environment.EMAIL_ALLOWED_TEST_RECIPIENTS ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => emailAddress(value, 'EMAIL_ALLOWED_TEST_RECIPIENTS'));
+  if (emailEnvironment === 'production' && emailTestRecipientOverride)
+    throw new ConfigurationError(
+      'EMAIL_TEST_RECIPIENT_OVERRIDE must not be configured when EMAIL_ENVIRONMENT is production.',
+    );
+  if (emailTestRecipientOverride) {
+    const override = emailAddress(emailTestRecipientOverride, 'EMAIL_TEST_RECIPIENT_OVERRIDE');
+    if (!emailAllowedTestRecipients.includes(override))
+      throw new ConfigurationError(
+        'EMAIL_TEST_RECIPIENT_OVERRIDE must also appear in EMAIL_ALLOWED_TEST_RECIPIENTS.',
+      );
+  }
+  const resendApiKey = environment.RESEND_API_KEY?.trim();
+  const resendWebhookSecret = environment.RESEND_WEBHOOK_SECRET?.trim();
+  if (emailEnabled && emailProvider === 'resend' && !resendApiKey)
+    throw new ConfigurationError('RESEND_API_KEY is required when Resend email is enabled.');
+  if (nodeEnv === 'production' && emailEnabled && emailProvider === 'resend') {
+    if (!resendWebhookSecret)
+      throw new ConfigurationError('RESEND_WEBHOOK_SECRET is required for production email.');
+    if (emailEnvironment !== 'production')
+      throw new ConfigurationError('EMAIL_ENVIRONMENT must be production in NODE_ENV=production.');
+  }
+  if (nodeEnv === 'production' && emailEnabled && emailProvider !== 'resend')
+    throw new ConfigurationError('EMAIL_PROVIDER must be resend when production email is enabled.');
+  const configuredFromAddress = emailAddress(
+    environment.EMAIL_FROM_ADDRESS ?? 'orders@example.invalid',
+    'EMAIL_FROM_ADDRESS',
+  );
+  if (nodeEnv === 'production' && emailEnabled && configuredFromAddress.endsWith('.invalid'))
+    throw new ConfigurationError('EMAIL_FROM_ADDRESS must use a verified production domain.');
+
   return Object.freeze({
     nodeEnv,
     databaseUrl,
@@ -223,6 +297,30 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     ),
     mediaUploadExpirySeconds: integer(environment, 'MEDIA_UPLOAD_EXPIRY_SECONDS', 900, 60, 3_600),
     storefrontOrganizationCode: environment.STOREFRONT_ORGANIZATION_CODE?.trim() || 'maevelle',
+    storefrontBaseUrl: httpUrl(
+      environment.STOREFRONT_BASE_URL ?? 'http://localhost:3000',
+      'STOREFRONT_BASE_URL',
+    ),
+    emailEnabled,
+    emailProvider,
+    emailEnvironment,
+    emailFromName: environment.EMAIL_FROM_NAME?.trim() || 'Maevelle',
+    emailFromAddress: configuredFromAddress,
+    emailReplyTo: emailAddress(
+      environment.EMAIL_REPLY_TO ?? 'maevelleBangladesh@gmail.com',
+      'EMAIL_REPLY_TO',
+    ),
+    ...(emailTestRecipientOverride
+      ? {
+          emailTestRecipientOverride: emailAddress(
+            emailTestRecipientOverride,
+            'EMAIL_TEST_RECIPIENT_OVERRIDE',
+          ),
+        }
+      : {}),
+    emailAllowedTestRecipients,
+    ...(resendApiKey ? { resendApiKey } : {}),
+    ...(resendWebhookSecret ? { resendWebhookSecret } : {}),
   });
 }
 

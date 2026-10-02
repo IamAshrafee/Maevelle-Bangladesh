@@ -7,6 +7,7 @@ import { resolveCourierProvider } from '@maevelle/database/courier-resolver';
 import { createObjectStorage } from '@maevelle/media';
 
 import { createWorker, type WorkerRuntime } from './worker.js';
+import { createResendEmailProvider } from './resend-email-provider.js';
 
 export async function startWorker(config: RuntimeConfig = loadConfig()): Promise<WorkerRuntime> {
   const database = createDatabase({
@@ -48,6 +49,26 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
             forcePathStyle: config.mediaStorageForcePathStyle,
           },
     ),
+    emailEnabled: config.emailEnabled,
+    ...(config.emailProvider === 'resend' && config.resendApiKey
+      ? {
+          emailAdapter: createResendEmailProvider({
+            apiKey: config.resendApiKey,
+            fromName: config.emailFromName,
+            fromAddress: config.emailFromAddress,
+            replyTo: config.emailReplyTo,
+            ...(config.emailTestRecipientOverride
+              ? { testRecipientOverride: config.emailTestRecipientOverride }
+              : {}),
+          }),
+        }
+      : {}),
+    emailStorefrontBaseUrl: config.storefrontBaseUrl,
+    emailSupportAddress: config.emailReplyTo,
+    emailSenderFrom: `${config.emailFromName} <${config.emailFromAddress}>`,
+    ...(config.emailEnvironment !== 'production'
+      ? { emailEnvironmentLabel: config.emailEnvironment.toUpperCase() }
+      : {}),
   });
 
   try {

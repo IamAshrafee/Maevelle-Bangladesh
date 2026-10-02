@@ -5,6 +5,7 @@ import type { DatabaseClient } from '@maevelle/database';
 import * as notifications from '@maevelle/database/notifications';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 import type { createAuth } from '../auth/auth.js';
+import { Resend } from 'resend';
 
 type Auth = ReturnType<typeof createAuth>;
 function headers(input: Record<string, string | string[] | undefined>) {
@@ -36,6 +37,18 @@ function failure(
     return reply
       .code(error.code === 'NOT_FOUND' ? 404 : error.code === 'CONFLICT' ? 409 : 422)
       .send({ error: { code: error.code, message: error.message } });
+  if (error instanceof notifications.EmailNotificationError)
+    return reply
+      .code(
+        error.code === 'NOT_FOUND'
+          ? 404
+          : error.code === 'CONFLICT'
+            ? 409
+            : error.code === 'FORBIDDEN'
+              ? 403
+              : 422,
+      )
+      .send({ error: { code: error.code, message: error.message } });
   throw error;
 }
 
@@ -45,6 +58,10 @@ export function registerNotificationRoutes(
   auth: Auth,
   config: RuntimeConfig,
 ) {
+  const emailEnvironment = config.emailEnvironment ?? config.nodeEnv;
+  const emailReplyTo = config.emailReplyTo ?? 'maevelleBangladesh@gmail.com';
+  const emailFromName = config.emailFromName ?? 'Maevelle';
+  const emailFromAddress = config.emailFromAddress ?? 'orders@example.invalid';
   app.get('/admin/notifications', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'notifications.view');
     if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -52,7 +69,7 @@ export function registerNotificationRoutes(
   });
   app.post(
     '/admin/notifications/:notificationId/read',
-    { schema: { params: Type.Object({ notificationId: Type.String() }) } },
+    { schema: { params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }) } },
     async (req, reply) => {
       const a = await admin(database, auth, req.headers, 'notifications.view');
       if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
@@ -221,4 +238,345 @@ export function registerNotificationRoutes(
       }
     },
   );
+
+  const renderOptions = {
+    storefrontBaseUrl: config.storefrontBaseUrl ?? 'http://localhost:3000',
+    supportEmail: emailReplyTo,
+    senderFrom: `${emailFromName} <${emailFromAddress}>`,
+    ...(emailEnvironment !== 'production'
+      ? { environmentLabel: emailEnvironment.toUpperCase() }
+      : {}),
+  };
+
+  app.get(
+    '/admin/email/operations',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          status: Type.Optional(Type.String()),
+          notificationType: Type.Optional(Type.String()),
+          search: Type.Optional(Type.String({ maxLength: 200 })),
+          sourceId: Type.Optional(Type.String({ format: 'uuid' })),
+          provider: Type.Optional(Type.String({ maxLength: 80 })),
+          createdAfter: Type.Optional(Type.String({ format: 'date-time' })),
+          createdBefore: Type.Optional(Type.String({ format: 'date-time' })),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const query = req.query as {
+        page?: number;
+        pageSize?: number;
+        status?: string;
+        notificationType?: string;
+        search?: string;
+        sourceId?: string;
+        provider?: string;
+        createdAfter?: string;
+        createdBefore?: string;
+      };
+      return notifications.listEmailNotifications(database.db, {
+        organizationId: a.organizationId,
+        page: query.page ?? 1,
+        pageSize: query.pageSize ?? 25,
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.notificationType ? { notificationType: query.notificationType } : {}),
+        ...(query.search ? { search: query.search } : {}),
+        ...(query.sourceId ? { sourceId: query.sourceId } : {}),
+        ...(query.provider ? { provider: query.provider } : {}),
+        ...(query.createdAfter ? { createdAfter: query.createdAfter } : {}),
+        ...(query.createdBefore ? { createdBefore: query.createdBefore } : {}),
+      });
+    },
+  );
+  app.get(
+    '/admin/email/operations/:notificationId',
+    { schema: { params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }) } },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        return {
+          data: await notifications.getEmailNotification(
+            database.db,
+            a.organizationId,
+            (req.params as { notificationId: string }).notificationId,
+          ),
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.get('/admin/email/policies', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return { data: await notifications.listEmailPolicies(database.db, a.organizationId) };
+  });
+  app.patch(
+    '/admin/email/policies/:notificationType',
+    {
+      schema: {
+        params: Type.Object({ notificationType: Type.String() }),
+        body: Type.Object({
+          enabled: Type.Boolean(),
+          automaticEnabled: Type.Boolean(),
+          manualAllowed: Type.Boolean(),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.manage');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        await notifications.updateEmailPolicy(database.db, {
+          organizationId: a.organizationId,
+          notificationType: (req.params as { notificationType: string }).notificationType,
+          actorId: a.actorId,
+          ...(req.body as {
+            enabled: boolean;
+            automaticEnabled: boolean;
+            manualAllowed: boolean;
+            reason: string;
+          }),
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.get('/admin/email/templates', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return { data: notifications.listTransactionalEmailTemplates() };
+  });
+  app.post(
+    '/admin/email/templates/:notificationType/preview',
+    {
+      schema: {
+        params: Type.Object({ notificationType: Type.String() }),
+        body: Type.Object({ orderId: Type.String({ format: 'uuid' }) }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        return {
+          data: await notifications.previewOrderEmail(database.db, {
+            organizationId: a.organizationId,
+            orderId: (req.body as { orderId: string }).orderId,
+            notificationType: (req.params as { notificationType: string }).notificationType,
+            options: renderOptions,
+          }),
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/email/orders/:orderId/send',
+    {
+      schema: {
+        params: Type.Object({ orderId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          notificationType: Type.String(),
+          idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+          testRecipient: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.send');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const body = req.body as {
+        notificationType: string;
+        idempotencyKey: string;
+        reason: string;
+        testRecipient?: string;
+      };
+      const testRecipient = body.testRecipient?.trim().toLowerCase();
+      if (
+        testRecipient &&
+        (emailEnvironment === 'production' ||
+          !(config.emailAllowedTestRecipients ?? []).includes(testRecipient))
+      )
+        return reply.code(422).send({
+          error: {
+            code: 'UNSAFE_TEST_RECIPIENT',
+            message: 'The test recipient is not in the deployment allow-list.',
+          },
+        });
+      try {
+        const result = await notifications.createManualOrderEmail(database.db, {
+          organizationId: a.organizationId,
+          orderId: (req.params as { orderId: string }).orderId,
+          notificationType: body.notificationType,
+          actorId: a.actorId,
+          idempotencyKey: body.idempotencyKey,
+          reason: body.reason,
+          triggerType: testRecipient ? 'TEST' : 'MANUAL',
+          ...(testRecipient ? { recipientOverride: testRecipient } : {}),
+          options: renderOptions,
+        });
+        return reply.code(result.created ? 201 : 200).send({ data: result });
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/email/operations/:notificationId/retry',
+    {
+      schema: {
+        params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({ reason: Type.String({ minLength: 3, maxLength: 500 }) }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.retry');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        await notifications.retryEmailNotification(database.db, {
+          organizationId: a.organizationId,
+          notificationId: (req.params as { notificationId: string }).notificationId,
+          actorId: a.actorId,
+          reason: (req.body as { reason: string }).reason,
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/email/operations/:notificationId/resend',
+    {
+      schema: {
+        params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.send');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        const notificationId = (req.params as { notificationId: string }).notificationId;
+        const original = (await notifications.getEmailNotification(
+          database.db,
+          a.organizationId,
+          notificationId,
+        )) as { source_id: string; notification_type: string };
+        const body = req.body as { idempotencyKey: string; reason: string };
+        const result = await notifications.createManualOrderEmail(database.db, {
+          organizationId: a.organizationId,
+          orderId: original.source_id,
+          notificationType: original.notification_type,
+          actorId: a.actorId,
+          idempotencyKey: body.idempotencyKey,
+          reason: body.reason,
+          triggerType: 'RESEND',
+          parentNotificationId: notificationId,
+          options: renderOptions,
+        });
+        return reply.code(result.created ? 201 : 200).send({ data: result });
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.get('/admin/email/suppressions', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return { data: await notifications.listEmailSuppressions(database.db, a.organizationId) };
+  });
+  app.post(
+    '/admin/email/suppressions',
+    {
+      schema: {
+        body: Type.Object({
+          email: Type.String(),
+          active: Type.Boolean(),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.suppressions.manage');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        await notifications.setEmailSuppression(database.db, {
+          organizationId: a.organizationId,
+          actorId: a.actorId,
+          ...(req.body as { email: string; active: boolean; reason: string }),
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.get('/admin/email/diagnostics', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return {
+      data: {
+        provider: config.emailProvider ?? 'local',
+        environment: emailEnvironment,
+        enabled: config.emailEnabled ?? false,
+        from: `${emailFromName} <${emailFromAddress}>`,
+        replyTo: emailReplyTo,
+        providerConfigured: (config.emailProvider ?? 'local') === 'local' || Boolean(config.resendApiKey),
+        webhookConfigured: Boolean(config.resendWebhookSecret),
+        testRecipientOverride: config.emailTestRecipientOverride ?? null,
+        ...(await notifications.emailOperationalSummary(database.db, a.organizationId)),
+      },
+    };
+  });
+
+  app.post('/webhooks/resend', async (req, reply) => {
+    if (!config.resendWebhookSecret)
+      return reply.code(503).send({ error: { code: 'WEBHOOK_NOT_CONFIGURED', message: 'Webhook is not configured.' } });
+    const rawBody = (req as typeof req & { rawBody?: string }).rawBody;
+    const id = req.headers['svix-id'];
+    const timestamp = req.headers['svix-timestamp'];
+    const signature = req.headers['svix-signature'];
+    if (!rawBody || typeof id !== 'string' || typeof timestamp !== 'string' || typeof signature !== 'string')
+      return reply.code(400).send({ error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature headers are missing.' } });
+    let event: { type: string; created_at?: string; data: Record<string, unknown> };
+    try {
+      const resend = new Resend(config.resendApiKey ?? 're_webhook_verification_only');
+      event = resend.webhooks.verify({
+        payload: rawBody,
+        headers: { id, timestamp, signature },
+        webhookSecret: config.resendWebhookSecret,
+      }) as unknown as { type: string; created_at?: string; data: Record<string, unknown> };
+    } catch {
+      return reply.code(400).send({ error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature is invalid.' } });
+    }
+    try {
+      await notifications.ingestResendWebhook(database.db, {
+        providerEventId: id,
+        type: event.type,
+        ...(event.created_at ? { createdAt: event.created_at } : {}),
+        data: event.data,
+        rawPayload: JSON.parse(rawBody) as Record<string, unknown>,
+      });
+      return reply.code(204).send();
+    } catch (error) {
+      req.log.error({ err: error, providerEventId: id }, 'Verified Resend webhook could not be persisted.');
+      return reply.code(500).send({ error: { code: 'WEBHOOK_PROCESSING_FAILED', message: 'Webhook could not be processed.' } });
+    }
+  });
 }
