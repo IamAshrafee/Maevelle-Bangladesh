@@ -3,6 +3,178 @@ export interface ApiEnvelope<T> {
   readonly data: T;
 }
 
+export type AssetStatusDto =
+  'ACTIVE' | 'IN_STORAGE' | 'UNDER_REPAIR' | 'DAMAGED' | 'LOST' | 'SOLD' | 'DISPOSED';
+export type AssetConditionDto = 'GOOD' | 'FAIR' | 'NEEDS_REPAIR' | 'DAMAGED';
+export type AssetAcquisitionSourceDto = 'EXISTING' | 'EXPENSE' | 'PURCHASE' | 'GIFT';
+
+export interface AssetCategoryDto {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly status: 'ACTIVE' | 'ARCHIVED';
+  readonly assetCount: number;
+  readonly version: number;
+}
+
+export interface AssetListItemDto {
+  readonly id: string;
+  readonly assetCode: string;
+  readonly name: string;
+  readonly categoryId: string | null;
+  readonly categoryName: string | null;
+  readonly brand: string | null;
+  readonly model: string | null;
+  readonly serialNumber: string | null;
+  readonly status: AssetStatusDto;
+  readonly condition: AssetConditionDto;
+  readonly locationId: string | null;
+  readonly locationName: string | null;
+  readonly customLocation: string | null;
+  readonly custodianMembershipId: string | null;
+  readonly custodianName: string | null;
+  readonly acquisitionDate: string;
+  readonly acquisitionCost: string | null;
+  readonly currencyCode: string;
+  readonly updatedAt: string;
+  readonly version: number;
+}
+
+export interface AssetFinancialProvenanceDto {
+  readonly acquisitionSource: AssetAcquisitionSourceDto;
+  readonly expense: {
+    readonly id: string;
+    readonly number: string;
+    readonly amount: string;
+    readonly status: string;
+  } | null;
+  readonly purchase: {
+    readonly id: string;
+    readonly number: string;
+    readonly supplierName: string;
+    readonly status: string;
+  } | null;
+  readonly purchaseLine: {
+    readonly id: string;
+    readonly title: string;
+    readonly sku: string;
+  } | null;
+  readonly payments: readonly {
+    readonly id: string;
+    readonly amount: string;
+    readonly source: 'BUSINESS_ACCOUNT' | 'OWNER_CAPITAL' | 'REVERSAL';
+    readonly accountId: string | null;
+    readonly accountName: string | null;
+    readonly contributorId: string | null;
+    readonly contributorName: string | null;
+    readonly paidAt: string;
+  }[];
+  readonly sale: {
+    readonly transactionId: string;
+    readonly amount: string;
+    readonly currencyCode: string;
+    readonly accountId: string;
+    readonly accountName: string;
+    readonly occurredAt: string;
+  } | null;
+}
+
+export interface AssetMaintenanceDto {
+  readonly id: string;
+  readonly type: 'INSPECTION' | 'SERVICE' | 'REPAIR' | 'PART_REPLACEMENT';
+  readonly occurredOn: string;
+  readonly issue: string | null;
+  readonly workPerformed: string;
+  readonly serviceProvider: string | null;
+  readonly expenseId: string | null;
+  readonly expenseNumber: string | null;
+  readonly expenseAmount: string | null;
+  readonly nextServiceOn: string | null;
+  readonly notes: string | null;
+  readonly createdAt: string;
+  readonly status: 'ACTIVE' | 'VOIDED';
+  readonly voidReason: string | null;
+}
+
+export interface AssetMediaDto {
+  readonly id: string;
+  readonly mediaAssetId: string;
+  readonly role:
+    | 'PHOTO'
+    | 'PURCHASE_RECEIPT'
+    | 'INVOICE'
+    | 'WARRANTY'
+    | 'REPAIR_RECEIPT'
+    | 'SERIAL_PHOTO'
+    | 'OTHER';
+  readonly label: string | null;
+  readonly filename: string;
+  readonly assetType: 'IMAGE' | 'DOCUMENT';
+  readonly createdAt: string;
+}
+
+export interface AssetEventDto {
+  readonly id: string;
+  readonly type: string;
+  readonly summary: string;
+  readonly beforeState: Record<string, unknown> | null;
+  readonly afterState: Record<string, unknown> | null;
+  readonly occurredAt: string;
+  readonly actorName: string | null;
+}
+
+export interface AssetDetailDto extends AssetListItemDto {
+  readonly description: string | null;
+  readonly acquisitionSource: AssetAcquisitionSourceDto;
+  readonly warrantyExpiresOn: string | null;
+  readonly notes: string | null;
+  readonly createdAt: string;
+  readonly financial: AssetFinancialProvenanceDto;
+  readonly maintenance: readonly AssetMaintenanceDto[];
+  readonly media: readonly AssetMediaDto[];
+  readonly history: readonly AssetEventDto[];
+}
+
+export interface AssetSummaryDto {
+  readonly total: number;
+  readonly active: number;
+  readonly inStorage: number;
+  readonly underRepair: number;
+  readonly attention: number;
+  readonly disposed: number;
+  readonly totalAcquisitionCost: string;
+  readonly currencyCode: string;
+}
+
+export interface AssetOptionsDto {
+  readonly categories: readonly AssetCategoryDto[];
+  readonly locations: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly code: string;
+  }[];
+  readonly custodians: readonly { readonly id: string; readonly name: string }[];
+  readonly expenses: readonly {
+    readonly id: string;
+    readonly number: string;
+    readonly description: string;
+    readonly amount: string;
+    readonly currencyCode: string;
+  }[];
+  readonly purchases: readonly {
+    readonly id: string;
+    readonly number: string;
+    readonly supplierName: string;
+    readonly currencyCode: string;
+  }[];
+  readonly accounts: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly currencyCode: string;
+  }[];
+  readonly defaultCurrency: string;
+}
+
 export interface CatalogProductSummaryDto {
   readonly id: string;
   readonly handle: string;

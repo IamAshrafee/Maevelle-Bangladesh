@@ -1,0 +1,18 @@
+import { Suspense } from 'react';
+import { AssetConsole } from '@/components/assets/asset-console';
+import { Skeleton } from '@/components/ui/skeleton';
+
+export default function AssetsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="grid gap-5 px-4 py-5 sm:px-6 lg:px-8">
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-80 rounded-xl" />
+        </main>
+      }
+    >
+      <AssetConsole />
+    </Suspense>
+  );
+}

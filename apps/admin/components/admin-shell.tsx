@@ -7,6 +7,7 @@ import {
   Bell,
   Boxes,
   Building2,
+  BriefcaseBusiness,
   ChartNoAxesCombined,
   ChevronRight,
   CircleDollarSign,
@@ -198,6 +199,18 @@ const navigation: readonly NavGroup[] = [
     ],
   },
   {
+    label: 'Business operations',
+    items: [
+      {
+        label: 'Assets',
+        href: '/assets',
+        icon: BriefcaseBusiness,
+        capability: 'assets.view',
+        keywords: 'equipment property computers furniture maintenance custodian',
+      },
+    ],
+  },
+  {
     label: 'Payments & finance',
     items: [
       {
@@ -285,6 +298,13 @@ const navigation: readonly NavGroup[] = [
 ];
 
 const quickCommands: readonly NavItem[] = [
+  {
+    label: 'Register an Asset',
+    href: '/assets?create=asset',
+    icon: BriefcaseBusiness,
+    capability: 'assets.manage',
+    keywords: 'equipment property existing asset',
+  },
   {
     label: 'Create a product',
     href: '/products/new',

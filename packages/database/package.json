@@ -128,6 +128,10 @@
       "types": "./src/capital.ts",
       "default": "./dist/src/capital.js"
     },
+    "./assets": {
+      "types": "./src/assets.ts",
+      "default": "./dist/src/assets.js"
+    },
     "./reviews": {
       "types": "./src/reviews.ts",
       "default": "./dist/src/reviews.js"

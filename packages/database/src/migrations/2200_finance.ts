@@ -15,7 +15,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create table finance.finance_transactions (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
-      transaction_number text not null, transaction_type text not null check (transaction_type in ('OPENING_BALANCE','EXPENSE_PAYMENT','INTERNAL_TRANSFER','EXTERNAL_ADJUSTMENT','PAYMENT_SOURCE_POSTING','REFUND_SOURCE_POSTING','COD_SETTLEMENT','CAPITAL_CONTRIBUTION','OWNER_FUNDED_EXPENSE','CAPITAL_WITHDRAWAL','CAPITAL_REVERSAL')),
+      transaction_number text not null, transaction_type text not null check (transaction_type in ('OPENING_BALANCE','EXPENSE_PAYMENT','INTERNAL_TRANSFER','EXTERNAL_ADJUSTMENT','PAYMENT_SOURCE_POSTING','REFUND_SOURCE_POSTING','COD_SETTLEMENT','CAPITAL_CONTRIBUTION','OWNER_FUNDED_EXPENSE','CAPITAL_WITHDRAWAL','CAPITAL_REVERSAL','ASSET_SALE')),
       occurred_at timestamptz not null default now(), description text not null, source_domain text null, source_id uuid null, created_by uuid null references iam.users(id), created_at timestamptz not null default now(),
       unique (organization_id, transaction_number), unique (organization_id, id)
     );

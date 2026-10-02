@@ -41,7 +41,8 @@ export interface AssetPickerDialogProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly onSelect: (assets: readonly SelectedMediaAsset[]) => void;
   readonly multiple?: boolean;
-  readonly initialSelectedIds?: readonly string[];
+  readonly visibility?: 'PUBLIC' | 'PRIVATE';
+  readonly assetType?: 'IMAGE' | 'DOCUMENT' | 'ALL';
 }
 
 export function AssetPickerDialog({
@@ -49,7 +50,8 @@ export function AssetPickerDialog({
   onOpenChange,
   onSelect,
   multiple = true,
-  initialSelectedIds = [],
+  visibility = 'PUBLIC',
+  assetType = 'IMAGE',
 }: AssetPickerDialogProps) {
   const [activeTab, setActiveTab] = useState<'library' | 'upload'>('library');
   const [items, setItems] = useState<readonly MediaLibraryItemDto[]>([]);
@@ -72,7 +74,8 @@ export function AssetPickerDialog({
         listMediaLibrary({
           pageSize: 48,
           status: 'READY',
-          assetType: 'IMAGE',
+          ...(assetType === 'ALL' ? {} : { assetType }),
+          visibility,
           ...(searchQuery.trim() ? { query: searchQuery.trim() } : {}),
           ...(selectedFolderId !== 'all'
             ? { folderId: selectedFolderId === 'unfiled' ? 'unfiled' : selectedFolderId }
@@ -87,7 +90,7 @@ export function AssetPickerDialog({
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedFolderId]);
+  }, [assetType, searchQuery, selectedFolderId, visibility]);
 
   useEffect(() => {
     if (open) {
@@ -135,7 +138,7 @@ export function AssetPickerDialog({
         if (!file) continue;
 
         const uploaded = await uploadMediaFile(file, {
-          visibility: 'PUBLIC',
+          visibility,
           title: file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
           onProgress: (p) => setUploadProgress(p),
         });
@@ -286,14 +289,21 @@ export function AssetPickerDialog({
                             : 'hover:border-primary/50 bg-background'
                         }`}
                       >
-                        <div className="aspect-square relative w-full overflow-hidden bg-muted">
-                          <Image
-                            src={getAdminMediaUrl(item.id, { rendition: 'thumbnail' })}
-                            alt={item.altText || item.originalFilename}
-                            fill
-                            className="object-cover transition-transform group-hover:scale-105"
-                            sizes="(max-width: 768px) 50vw, 20vw"
-                          />
+                        <div className="aspect-square relative flex w-full items-center justify-center overflow-hidden bg-muted">
+                          {item.assetType === 'IMAGE' ? (
+                            <Image
+                              src={getAdminMediaUrl(item.id, { rendition: 'thumbnail' })}
+                              alt={item.altText || item.originalFilename}
+                              fill
+                              className="object-cover transition-transform group-hover:scale-105"
+                              sizes="(max-width: 768px) 50vw, 20vw"
+                            />
+                          ) : (
+                            <FolderIcon
+                              className="size-10 text-muted-foreground"
+                              aria-label="Document"
+                            />
+                          )}
 
                           {isSelected && (
                             <div className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xs">

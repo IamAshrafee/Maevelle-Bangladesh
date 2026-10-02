@@ -2,47 +2,45 @@
 
 ## Active Area
 
-Payments & Finance: Owner Capital contributors, capital Account movements,
-personally funded Expenses and supplier payments, reversals, permissions, audit,
-and finance reporting semantics.
+Asset Management: durable business property, acquisition provenance, custody,
+location, condition, maintenance, private documents, and terminal lifecycle.
 
 ## Current Status / Substage
 
-`IMPLEMENTATION_COMPLETE / READY_FOR_OWNER_REVIEW`
+`IMPLEMENTATION_COMPLETE / LOCAL_DB_VERIFICATION_BLOCKED`
 
 ## Evidence Already Known
 
-- Account balances remain derived exclusively from immutable Account entries.
-- Cash contributions and withdrawals post real Account entries and never become Revenue or Expense.
-- Personally funded costs create real Expense payments and capital events without
-  fabricating a business Account movement; Purchase payments reuse the linked Expense.
-- Partial personal and Account-backed payments share the existing Expense payment
-  source of truth, so paid and outstanding totals cannot diverge.
-- Corrections use one-time compensating capital events; personal-payment reversals
-  append signed Expense-payment facts and restore the outstanding obligation.
-- Contributors are organization-scoped Finance identities, optionally linkable to a
-  user, but independent of Team membership and ownership percentages.
-- Dedicated view/manage capabilities, composite tenant foreign keys, database shape
-  checks, idempotency, audit, and outbox evidence protect the workflow.
-- Clean migration, focused capital integration tests, database/API builds, Admin
-  production build, and focused lint pass.
+- Asset identity and physical lifecycle are separate from saleable Inventory.
+- Finance/Expense/Purchase/Owner Capital facts are referenced and derived rather
+  than duplicated.
+- Existing and gifted Assets require no fake financial history.
+- Sale posts one idempotent Finance transaction and Account entry atomically with
+  the final Asset lifecycle change.
+- Composite organization foreign keys, capability checks, versioning,
+  idempotency, Audit, outbox, and private Media rules protect the workflows.
+- Responsive Admin list/detail/create/category/assignment/movement/maintenance/
+  file/lifecycle/sale/disposal workflows are implemented.
+- Database/contracts/API and Admin TypeScript checks pass.
 
 ## Immediate Objective
 
-Conduct owner operational review of `/finance/capital`, including cash contribution,
-withdrawal, personal Expense payment, supplier invoice payment, mixed partial funding,
-and reversal outcomes in Accounts, Expense/Purchase detail, and Finance Overview.
+Start Docker/PostgreSQL, rebuild the disposable database from the checked-in
+baseline, run `packages/database/src/assets.test.ts`, and fix any runtime issue.
+Then conduct owner operational and visual review at `/admin/assets`.
 
 ## Important Constraints
 
-- Capital is not Revenue, a customer Payment, an Expense, or an ownership percentage.
-- Owner-funded costs settle Expenses without changing business cash.
-- Account and Expense truth must remain in their existing immutable ledgers; the
-  capital ledger supplies contributor meaning rather than duplicating balances.
-- Cross-organization Account, contributor, Expense, and reversal links deny by default.
-- Financial history is corrected with compensating facts, never silent deletion.
+- Acquisition cost is historical cost, not book or market value.
+- No formal depreciation exists; do not imply accounting precision.
+- Expense payments and Account entries remain Finance authority.
+- Purchase and supplier truth remains Procurement authority.
+- Asset location/custody history never mutates Inventory quantities.
+- Sold and disposed Assets are historical records, not deletable operational data.
 
 ## Blockers / Owner Review
 
-No code blocker. Owner operational review remains pending. The earlier Team & Access
-operational review and external-provider verification are still pending separately.
+Docker Desktop was unavailable on 2026-10-02, so clean migration and focused
+PostgreSQL integration execution remain pending. Browser/responsive and owner
+workflow review also remain pending. Earlier Owner Capital and Team & Access
+owner-review items remain open separately.

@@ -45,6 +45,7 @@ import * as adminOperationsComplete from './2603_admin_operations_complete.js';
 import * as storefrontSearch from './2700_storefront_search.js';
 import * as operationalControls from './2701_operational_controls.js';
 import * as supplyOperations from './2800_supply_operations.js';
+import * as assetManagement from './2900_asset_management.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -96,6 +97,7 @@ export const migrations = {
   '2700_storefront_search': storefrontSearch,
   '2701_operational_controls': operationalControls,
   '2800_supply_operations': supplyOperations,
+  '2900_asset_management': assetManagement,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {
