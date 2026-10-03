@@ -24,16 +24,27 @@ import {
   type TeamAuditItemDto,
 } from './team-types';
 
-export function TeamAuditTimeline() {
+export function TeamAuditTimeline({
+  initialSearch = '',
+}: {
+  readonly initialSearch?: string;
+} = {}) {
   const { request } = useTeam();
   const [events, setEvents] = useState<readonly TeamAuditItemDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [selectedAction, setSelectedAction] = useState('ALL');
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [expandedDiffs, setExpandedDiffs] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (initialSearch) {
+      setSearch(initialSearch);
+      setPage(1);
+    }
+  }, [initialSearch]);
 
   const toggleDiff = (id: string) => {
     setExpandedDiffs((prev) => ({ ...prev, [id]: !prev[id] }));

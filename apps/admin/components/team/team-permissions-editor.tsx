@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 import { useTeam } from './team-context';
 import {
@@ -35,11 +36,13 @@ export function TeamPermissionsEditor({
   onChange,
   readOnly = false,
   showPresetSelector = true,
+  maxHeightClassName = 'max-h-[500px]',
 }: {
   readonly value: PermissionsEditorValue;
   readonly onChange: (next: PermissionsEditorValue) => void;
   readonly readOnly?: boolean;
   readonly showPresetSelector?: boolean;
+  readonly maxHeightClassName?: string;
 }) {
   const { groupedDomains, presets, locations } = useTeam();
   const [search, setSearch] = useState('');
@@ -191,7 +194,12 @@ export function TeamPermissionsEditor({
       </div>
 
       {/* Domain Groups Accordion */}
-      <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1 rounded-lg border border-border p-2 bg-card/40">
+      <div
+        className={cn(
+          'space-y-2 overflow-y-auto pr-1 rounded-lg border border-border/70 p-2 bg-card/30',
+          maxHeightClassName,
+        )}
+      >
         {filteredGroupedDomains.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
             No capabilities match your search query.

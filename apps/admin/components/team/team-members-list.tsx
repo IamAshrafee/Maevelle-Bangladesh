@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ChevronLeft,
   ChevronRight,
@@ -29,7 +30,6 @@ import { Input } from '@/components/ui/input';
 
 import { StatusBadge } from '../status-badge';
 import { useTeam } from './team-context';
-import { TeamMemberDetailSheet } from './team-member-detail-sheet';
 import {
   getRoleSummary,
   type TeamMemberListItemDto,
@@ -61,8 +61,8 @@ export function TeamMembersList({
   readonly onPageChange: (page: number) => void;
   readonly onRefresh: () => Promise<void>;
 }) {
+  const router = useRouter();
   const { activeActor, presets } = useTeam();
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -140,7 +140,7 @@ export function TeamMembersList({
                   return (
                     <tr
                       key={member.id}
-                      onClick={() => setSelectedMemberId(member.id)}
+                      onClick={() => router.push(`/team/${member.id}`)}
                       className="hover:bg-muted/40 transition-colors cursor-pointer group"
                     >
                       {/* Name & Email */}
@@ -219,11 +219,10 @@ export function TeamMembersList({
                       {/* Actions */}
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <Button
-                          type="button"
+                          render={<Link href={`/team/${member.id}`} />}
                           variant="ghost"
                           size="sm"
                           className="h-8 px-2 text-xs"
-                          onClick={() => setSelectedMemberId(member.id)}
                         >
                           View & manage
                         </Button>
@@ -268,16 +267,6 @@ export function TeamMembersList({
           </div>
         ) : null}
       </div>
-
-      {/* Member Detail Slide-over Sheet */}
-      <TeamMemberDetailSheet
-        memberId={selectedMemberId}
-        open={Boolean(selectedMemberId)}
-        onOpenChange={(open) => !open && setSelectedMemberId(null)}
-        onUpdated={async () => {
-          await onRefresh();
-        }}
-      />
     </div>
   );
 }
