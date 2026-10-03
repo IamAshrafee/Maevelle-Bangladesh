@@ -22,6 +22,7 @@ import type {
   CatalogVocabularyItemDto,
   CatalogVocabularyListDto,
   SizeGuideSummaryDto,
+  WarehouseLocationDto,
 } from '@maevelle/contracts';
 
 import {
@@ -36,6 +37,7 @@ import type {
   FaqEntry,
   InfoHighlightEntry,
   OptionAxisState,
+  OptionValueState,
   ProductCreatorDraft,
   ProductCreatorReferences,
   ReadinessChecklistItem,
@@ -43,6 +45,7 @@ import type {
   SizingReferenceData,
   StagedMediaItem,
   VariantMatrixRow,
+  VariantStockEntry,
 } from './types';
 import type { SelectedMediaAsset } from '@/components/media/asset-picker-dialog';
 import type { MediaCardScopeOption } from './media-card';
@@ -155,6 +158,7 @@ export function useProductCreatorState({
     collections: [],
     sizingData: { systems: [], sizeDefinitions: [] },
     sizeGuides: [],
+    locations: [],
   });
 
   // Draft Autosave state
@@ -189,17 +193,19 @@ export function useProductCreatorState({
   const [priceAmount, setPriceAmount] = useState('');
   const [compareAtAmount, setCompareAtAmount] = useState('');
   const [costAmount, setCostAmount] = useState('');
+  const [estimatedCostAmount, setEstimatedCostAmount] = useState('');
 
   // Variant Mode: Single SKU vs Multi-Variant
   const [variantMode, setVariantMode] = useState<'simple' | 'variants'>('simple');
   const [sku, setSku] = useState('');
   const [skuEdited, setSkuEdited] = useState(false);
   const [barcode, setBarcode] = useState('');
+  const [simpleInitialStock, setSimpleInitialStock] = useState<VariantStockEntry[]>([]);
 
   // Multi-Variant Axes & Dynamic Matrix
   const [optionAxes, setOptionAxes] = useState<OptionAxisState[]>([
-    { name: 'Color', values: [] },
-    { name: 'Size', values: [] },
+    { id: 'opt-color', name: 'Color', isVisual: true, values: [] },
+    { id: 'opt-size', name: 'Size', isVisual: false, values: [] },
   ]);
   const [matrixRows, setMatrixRows] = useState<VariantMatrixRow[]>([]);
 
@@ -264,6 +270,9 @@ export function useProductCreatorState({
       catalogData<readonly SizeGuideSummaryDto[]>('/admin/sizing/guides', {
         signal: controller.signal,
       }).catch(() => []),
+      catalogData<readonly WarehouseLocationDto[]>('/admin/warehouse/locations', {
+        signal: controller.signal,
+      }).catch(() => []),
       isEditMode && productId
         ? catalogData<CatalogProductWorkspaceDto>(`/admin/catalog/products/${productId}`, {
             signal: controller.signal,
@@ -280,6 +289,7 @@ export function useProductCreatorState({
           collData,
           sizing,
           guidesData,
+          locationsData,
           workspace,
         ]) => {
           if (controller.signal.aborted) return;
@@ -292,6 +302,7 @@ export function useProductCreatorState({
             collections: collData.items,
             sizingData: sizing,
             sizeGuides: guidesData,
+            locations: locationsData || [],
           });
 
           if (workspace) {
@@ -333,11 +344,30 @@ export function useProductCreatorState({
               })),
             );
 
+            // Product-level shipping defaults
+            if (workspace.shipping?.weight) {
+              setWeightValue(workspace.shipping.weight.value);
+              setWeightUnit((workspace.shipping.weight.unit as 'G' | 'KG') || 'G');
+            }
+            if (workspace.shipping?.dimensions) {
+              setLengthValue(workspace.shipping.dimensions.length);
+              setWidthValue(workspace.shipping.dimensions.width);
+              setHeightValue(workspace.shipping.dimensions.height);
+              setDimensionUnit((workspace.shipping.dimensions.unit as 'CM' | 'MM' | 'IN') || 'CM');
+            }
+
             // Reconstruct variant selections
-            const valToSelection = new Map<string, { axisName: string; valueDisplay: string }>();
+            const valToSelection = new Map<
+              string,
+              { axisName: string; valueDisplay: string; valueRef: string }
+            >();
             for (const opt of workspace.options || []) {
               for (const val of opt.values || []) {
-                valToSelection.set(val.id, { axisName: opt.name, valueDisplay: val.label });
+                valToSelection.set(val.id, {
+                  axisName: opt.name,
+                  valueDisplay: val.label,
+                  valueRef: val.id,
+                });
               }
             }
 
@@ -345,8 +375,17 @@ export function useProductCreatorState({
               setVariantMode('variants');
               setOptionAxes(
                 workspace.options.map((opt) => ({
+                  id: opt.id,
                   name: opt.name,
-                  values: opt.values.map((v) => v.label),
+                  isVisual: opt.isVisual,
+                  values: opt.values.map((v) => ({
+                    id: v.id,
+                    label: v.label,
+                    isPrimary: v.isPrimary,
+                    colorId: v.color?.id ?? null,
+                    colorHex: v.color?.hexValue ?? null,
+                    sizeDefinitionId: v.sizeDefinitionId ?? null,
+                  })),
                 })),
               );
               setMatrixRows(
@@ -356,21 +395,30 @@ export function useProductCreatorState({
                   title: v.title || v.sku,
                   optionSelections: (v.optionValueIds || [])
                     .map((valId) => valToSelection.get(valId))
-                    .filter((sel): sel is { axisName: string; valueDisplay: string } =>
-                      Boolean(sel),
+                    .filter(
+                      (sel): sel is { axisName: string; valueDisplay: string; valueRef: string } =>
+                        Boolean(sel),
                     ),
                   sku: v.sku,
                   barcode: v.barcode || '',
                   priceAmount: v.currentPrice?.amount || '',
                   compareAtAmount: v.currentPrice?.compareAtAmount || '',
-                  costAmount: '',
+                  costAmount: v.estimatedCostAmount || '',
+                  estimatedCostAmount: v.estimatedCostAmount || '',
+                  initialStock: [],
                   primaryColorId: v.primaryColor?.id || null,
-                  weightValue: v.weight?.value || '400',
-                  weightUnit: (v.weight?.unit as 'G' | 'KG') || 'G',
-                  lengthValue: v.dimensions?.length || '30',
-                  widthValue: v.dimensions?.width || '25',
-                  heightValue: v.dimensions?.height || '4',
-                  dimensionUnit: (v.dimensions?.unit as 'CM' | 'MM' | 'IN') || 'CM',
+                  weightValue: v.shipping?.weight?.value || v.weight?.value || '400',
+                  weightUnit:
+                    (v.shipping?.weight?.unit as 'G' | 'KG') ||
+                    (v.weight?.unit as 'G' | 'KG') ||
+                    'G',
+                  lengthValue: v.shipping?.dimensions?.length || v.dimensions?.length || '30',
+                  widthValue: v.shipping?.dimensions?.width || v.dimensions?.width || '25',
+                  heightValue: v.shipping?.dimensions?.height || v.dimensions?.height || '4',
+                  dimensionUnit:
+                    (v.shipping?.dimensions?.unit as 'CM' | 'MM' | 'IN') ||
+                    (v.dimensions?.unit as 'CM' | 'MM' | 'IN') ||
+                    'CM',
                 })),
               );
             } else {
@@ -381,15 +429,23 @@ export function useProductCreatorState({
                 setBarcode(firstV.barcode || '');
                 setPriceAmount(firstV.currentPrice?.amount || '');
                 setCompareAtAmount(firstV.currentPrice?.compareAtAmount || '');
-                if (firstV.weight) {
-                  setWeightValue(firstV.weight.value);
-                  setWeightUnit((firstV.weight.unit as 'G' | 'KG') || 'G');
+                setCostAmount(firstV.estimatedCostAmount || '');
+                setEstimatedCostAmount(firstV.estimatedCostAmount || '');
+                if (firstV.shipping?.weight || firstV.weight) {
+                  const w = firstV.shipping?.weight || firstV.weight;
+                  if (w) {
+                    setWeightValue(w.value);
+                    setWeightUnit((w.unit as 'G' | 'KG') || 'G');
+                  }
                 }
-                if (firstV.dimensions) {
-                  setLengthValue(firstV.dimensions.length);
-                  setWidthValue(firstV.dimensions.width);
-                  setHeightValue(firstV.dimensions.height);
-                  setDimensionUnit((firstV.dimensions.unit as 'CM' | 'MM' | 'IN') || 'CM');
+                if (firstV.shipping?.dimensions || firstV.dimensions) {
+                  const d = firstV.shipping?.dimensions || firstV.dimensions;
+                  if (d) {
+                    setLengthValue(d.length);
+                    setWidthValue(d.width);
+                    setHeightValue(d.height);
+                    setDimensionUnit((d.unit as 'CM' | 'MM' | 'IN') || 'CM');
+                  }
                 }
               }
             }
@@ -490,6 +546,8 @@ export function useProductCreatorState({
         priceAmount,
         compareAtAmount,
         costAmount,
+        estimatedCostAmount: estimatedCostAmount || costAmount,
+        initialStock: simpleInitialStock,
         sku,
         barcode,
         optionAxes,
@@ -533,6 +591,8 @@ export function useProductCreatorState({
     priceAmount,
     compareAtAmount,
     costAmount,
+    estimatedCostAmount,
+    simpleInitialStock,
     sku,
     barcode,
     optionAxes,
@@ -572,6 +632,8 @@ export function useProductCreatorState({
       setPriceAmount(d.priceAmount || '');
       setCompareAtAmount(d.compareAtAmount || '');
       setCostAmount(d.costAmount || '');
+      setEstimatedCostAmount(d.estimatedCostAmount || d.costAmount || '');
+      setSimpleInitialStock((d.initialStock as VariantStockEntry[]) || []);
       setSku(d.sku || '');
       setBarcode(d.barcode || '');
       if (d.optionAxes && d.optionAxes.length > 0) setOptionAxes(d.optionAxes as OptionAxisState[]);
@@ -659,15 +721,49 @@ export function useProductCreatorState({
   // --------------------------------------------------------------------------
   // Media Uploads
   // --------------------------------------------------------------------------
-  const handleFilesSelected = async (files: FileList | null) => {
+  const handleFilesSelected = async (
+    files: FileList | null,
+    targetScope?: {
+      role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+      optionValueRef?: string | null;
+      optionValueId?: string | null;
+      variantRef?: string | null;
+      variantId?: string | null;
+    },
+  ) => {
     if (!files || files.length === 0) return;
     setIsDirty(true);
+
+    const visualAxis = optionAxes.find((a) => a.isVisual && a.values.length > 0);
+    const primaryVisualVal = visualAxis?.values.find((v) => v.isPrimary) || visualAxis?.values[0];
+
+    const resolvedRole =
+      targetScope?.role || (visualAxis ? 'COLOR_GALLERY' : 'GALLERY');
+    const resolvedOptionValueRef =
+      targetScope?.optionValueRef !== undefined
+        ? targetScope.optionValueRef
+        : visualAxis
+          ? primaryVisualVal?.id || null
+          : null;
+    const resolvedOptionValueId =
+      targetScope?.optionValueId !== undefined
+        ? targetScope.optionValueId
+        : isEditMode && primaryVisualVal && !primaryVisualVal.id.startsWith('optval-')
+          ? primaryVisualVal.id
+          : null;
+    const resolvedVariantRef = targetScope?.variantRef ?? null;
+    const resolvedVariantId = targetScope?.variantId ?? null;
 
     const newItems: StagedMediaItem[] = Array.from(files).map((file, idx) => ({
       id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
       file,
       previewUrl: URL.createObjectURL(file),
       isPrimary: mediaItems.length === 0 && idx === 0,
+      role: resolvedRole,
+      optionValueRef: resolvedOptionValueRef,
+      optionValueId: resolvedOptionValueId,
+      variantRef: resolvedVariantRef,
+      variantId: resolvedVariantId,
       altText: title || file.name.replace(/\.[^/.]+$/, ''),
       isUploading: true,
       uploadProgress: 0,
@@ -775,6 +871,8 @@ export function useProductCreatorState({
       role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
       variantId?: string | null;
       optionValueId?: string | null;
+      variantRef?: string | null;
+      optionValueRef?: string | null;
     },
   ) => {
     setMediaItems((prev) =>
@@ -785,6 +883,8 @@ export function useProductCreatorState({
               ...(scope.role !== undefined ? { role: scope.role } : {}),
               ...(scope.variantId !== undefined ? { variantId: scope.variantId } : {}),
               ...(scope.optionValueId !== undefined ? { optionValueId: scope.optionValueId } : {}),
+              ...(scope.variantRef !== undefined ? { variantRef: scope.variantRef } : {}),
+              ...(scope.optionValueRef !== undefined ? { optionValueRef: scope.optionValueRef } : {}),
             }
           : m,
       ),
@@ -792,13 +892,45 @@ export function useProductCreatorState({
     setIsDirty(true);
   };
 
-  const handleAddExistingAssets = (assets: readonly SelectedMediaAsset[]) => {
+  const handleAddExistingAssets = (
+    assets: readonly SelectedMediaAsset[],
+    targetScope?: {
+      role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+      optionValueRef?: string | null;
+      optionValueId?: string | null;
+      variantRef?: string | null;
+      variantId?: string | null;
+    },
+  ) => {
     if (assets.length === 0) return;
+    const visualAxis = optionAxes.find((a) => a.isVisual && a.values.length > 0);
+    const primaryVisualVal = visualAxis?.values.find((v) => v.isPrimary) || visualAxis?.values[0];
+
+    const resolvedRole =
+      targetScope?.role || (visualAxis ? 'COLOR_GALLERY' : 'GALLERY');
+    const resolvedOptionValueRef =
+      targetScope?.optionValueRef !== undefined
+        ? targetScope.optionValueRef
+        : visualAxis
+          ? primaryVisualVal?.id || null
+          : null;
+    const resolvedOptionValueId =
+      targetScope?.optionValueId !== undefined
+        ? targetScope.optionValueId
+        : isEditMode && primaryVisualVal && !primaryVisualVal.id.startsWith('optval-')
+          ? primaryVisualVal.id
+          : null;
+
     const newItems: StagedMediaItem[] = assets.map((asset, idx) => ({
       id: `${Date.now()}-${idx}-${asset.id.slice(0, 8)}`,
       assetId: asset.id,
       previewUrl: asset.previewUrl,
       isPrimary: mediaItems.length === 0 && idx === 0,
+      role: resolvedRole,
+      optionValueRef: resolvedOptionValueRef,
+      optionValueId: resolvedOptionValueId,
+      variantRef: targetScope?.variantRef ?? null,
+      variantId: targetScope?.variantId ?? null,
       altText: asset.altText || asset.filename.replace(/\.[^.]+$/, ''),
       isUploading: false,
     }));
@@ -841,21 +973,26 @@ export function useProductCreatorState({
   // --------------------------------------------------------------------------
   const activeAxes = useMemo(() => optionAxes.filter((a) => a.values.length > 0), [optionAxes]);
 
-  const scopeOptions = useMemo(() => {
+  const scopeOptions = useMemo<MediaCardScopeOption[]>(() => {
     const options: MediaCardScopeOption[] = [];
-    const colorAxis = activeAxes.find((a) => a.name.toLowerCase() === 'color');
-    if (colorAxis) {
-      for (const val of colorAxis.values) {
-        const optionVal = workspaceData?.options
-          ?.find((o) => o.name.toLowerCase() === 'color')
-          ?.values?.find((v) => v.label.toLowerCase() === val.toLowerCase());
+    const visualAxis = activeAxes.find((a) => a.isVisual);
+    if (visualAxis) {
+      for (const val of visualAxis.values) {
         options.push({
-          id: `color-${val}`,
-          label: `Color Gallery: ${val}`,
+          id: `color-${val.id}`,
+          label: `${visualAxis.name}: ${val.label}${val.isPrimary ? ' (Cover)' : ''}`,
           type: 'COLOR',
-          optionValueId: optionVal?.id,
+          optionValueRef: val.id,
+          optionValueId: isEditMode && !val.id.startsWith('optval-') ? val.id : undefined,
+          isPrimary: Boolean(val.isPrimary),
         });
       }
+    } else {
+      options.push({
+        id: 'general-product',
+        label: 'Shared Product Gallery (Uniform Photography)',
+        type: 'GENERAL',
+      });
     }
     if (variantMode === 'variants') {
       for (const row of matrixRows) {
@@ -864,6 +1001,7 @@ export function useProductCreatorState({
             id: `variant-${row.id}`,
             label: `Variant: ${row.sku} (${row.optionSelections.map((s) => s.valueDisplay).join(' / ') || row.title})`,
             type: 'VARIANT',
+            variantRef: row.id,
             variantId:
               isEditMode && workspaceData?.variants.some((v) => v.id === row.id)
                 ? row.id
@@ -882,10 +1020,10 @@ export function useProductCreatorState({
       return;
     }
 
-    const combinations: { axisName: string; valueDisplay: string }[][] = [];
+    const combinations: { axisName: string; valueDisplay: string; valueRef: string }[][] = [];
 
     function generateCombos(
-      current: { axisName: string; valueDisplay: string }[],
+      current: { axisName: string; valueDisplay: string; valueRef: string }[],
       axisIndex: number,
     ) {
       if (axisIndex === validAxes.length) {
@@ -896,7 +1034,10 @@ export function useProductCreatorState({
       const axis = validAxes[axisIndex];
       if (!axis) return;
       for (const val of axis.values) {
-        generateCombos([...current, { axisName: axis.name, valueDisplay: val }], axisIndex + 1);
+        generateCombos(
+          [...current, { axisName: axis.name, valueDisplay: val.label, valueRef: val.id }],
+          axisIndex + 1,
+        );
       }
     }
 
@@ -913,7 +1054,12 @@ export function useProductCreatorState({
             signature,
         );
 
-        if (existing) return existing;
+        if (existing) {
+          return {
+            ...existing,
+            optionSelections: selections,
+          };
+        }
 
         const rowTitle = selections.map((s) => s.valueDisplay).join(' / ');
         const rowSku = generateVariantSku(prefix, selections);
@@ -935,6 +1081,8 @@ export function useProductCreatorState({
           priceAmount: priceAmount || '',
           compareAtAmount: compareAtAmount || '',
           costAmount: costAmount || '',
+          estimatedCostAmount: estimatedCostAmount || costAmount || '',
+          initialStock: [],
           primaryColorId: matchedColor ? matchedColor.id : null,
           weightValue: weightValue || '400',
           weightUnit: weightUnit || 'G',
@@ -953,6 +1101,7 @@ export function useProductCreatorState({
     priceAmount,
     compareAtAmount,
     costAmount,
+    estimatedCostAmount,
     weightValue,
     weightUnit,
     lengthValue,
@@ -967,16 +1116,36 @@ export function useProductCreatorState({
     }
   }, [optionAxes, variantMode, regenerateMatrix]);
 
-  const addOptionValue = (axisName: string, value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return;
+  const addOptionValue = (
+    axisName: string,
+    valInput:
+      | string
+      | {
+          label: string;
+          colorId?: string | null;
+          colorHex?: string | null;
+          sizeDefinitionId?: string | null;
+        },
+  ) => {
+    const label = typeof valInput === 'string' ? valInput.trim() : valInput.label.trim();
+    if (!label) return;
     setOptionAxes((prev) =>
       prev.map((axis) => {
         if (axis.name.toLowerCase() === axisName.toLowerCase()) {
-          if (axis.values.some((v) => v.toLowerCase() === trimmed.toLowerCase())) {
+          if (axis.values.some((v) => v.label.toLowerCase() === label.toLowerCase())) {
             return axis;
           }
-          return { ...axis, values: [...axis.values, trimmed] };
+          const isFirstOnVisual = axis.isVisual && axis.values.length === 0;
+          const valObj: OptionValueState = {
+            id: `optval-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            label,
+            isPrimary: isFirstOnVisual,
+            colorId: typeof valInput === 'object' ? valInput.colorId ?? null : null,
+            colorHex: typeof valInput === 'object' ? valInput.colorHex ?? null : null,
+            sizeDefinitionId:
+              typeof valInput === 'object' ? valInput.sizeDefinitionId ?? null : null,
+          };
+          return { ...axis, values: [...axis.values, valObj] };
         }
         return axis;
       }),
@@ -984,15 +1153,108 @@ export function useProductCreatorState({
     setIsDirty(true);
   };
 
-  const removeOptionValue = (axisName: string, value: string) => {
+  const removeOptionValue = (axisName: string, valueIdOrLabel: string) => {
     setOptionAxes((prev) =>
       prev.map((axis) => {
         if (axis.name.toLowerCase() === axisName.toLowerCase()) {
-          return { ...axis, values: axis.values.filter((v) => v !== value) };
+          const filtered = axis.values.filter(
+            (v) => v.id !== valueIdOrLabel && v.label !== valueIdOrLabel,
+          );
+          if (axis.isVisual && filtered.length > 0 && !filtered.some((v) => v.isPrimary)) {
+            filtered[0] = { ...filtered[0]!, isPrimary: true };
+          }
+          return { ...axis, values: filtered };
         }
         return axis;
       }),
     );
+    setIsDirty(true);
+  };
+
+  const setPrimaryVisualValue = (axisName: string, valueId: string) => {
+    setOptionAxes((prev) =>
+      prev.map((axis) => {
+        if (axis.name.toLowerCase() === axisName.toLowerCase()) {
+          return {
+            ...axis,
+            values: axis.values.map((v) => ({
+              ...v,
+              isPrimary: v.id === valueId,
+            })),
+          };
+        }
+        return axis;
+      }),
+    );
+    setIsDirty(true);
+  };
+
+  const toggleAxisVisual = (axisName: string) => {
+    setOptionAxes((prev) => {
+      const targetAxis = prev.find((a) => a.name.toLowerCase() === axisName.toLowerCase());
+      const willBeVisual = !targetAxis?.isVisual;
+      return prev.map((axis) => {
+        if (axis.name.toLowerCase() === axisName.toLowerCase()) {
+          const values = willBeVisual
+            ? axis.values.map((v, idx) => ({ ...v, isPrimary: idx === 0 }))
+            : axis.values.map((v) => ({ ...v, isPrimary: false }));
+          return { ...axis, isVisual: willBeVisual, values };
+        }
+        return willBeVisual
+          ? {
+              ...axis,
+              isVisual: false,
+              values: axis.values.map((v) => ({ ...v, isPrimary: false })),
+            }
+          : axis;
+      });
+    });
+    setIsDirty(true);
+  };
+
+  const addOptionAxis = (name: string, isVisual = false) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (optionAxes.some((a) => a.name.toLowerCase() === trimmed.toLowerCase())) return;
+    const hasVisual = optionAxes.some((a) => a.isVisual);
+    const allowVisual = isVisual && !hasVisual;
+    setOptionAxes((prev) => [
+      ...prev,
+      {
+        id: `axis-${slugify(trimmed)}-${Date.now()}`,
+        name: trimmed,
+        isVisual: allowVisual,
+        values: [],
+      },
+    ]);
+    setIsDirty(true);
+  };
+
+  const removeOptionAxis = (axisIdOrName: string) => {
+    setOptionAxes((prev) =>
+      prev.filter(
+        (a) => a.id !== axisIdOrName && a.name.toLowerCase() !== axisIdOrName.toLowerCase(),
+      ),
+    );
+    setIsDirty(true);
+  };
+
+  const applyPresetStructure = (
+    preset: 'COLOR_AND_SIZE' | 'SIZE_ONLY' | 'SIMPLE' | 'color-size' | 'size-only' | 'single',
+  ) => {
+    if (preset === 'SIMPLE' || preset === 'single') {
+      setVariantMode('simple');
+      setOptionAxes([]);
+    } else if (preset === 'COLOR_AND_SIZE' || preset === 'color-size') {
+      setVariantMode('variants');
+      setOptionAxes([
+        { id: 'opt-color', name: 'Color', isVisual: true, values: [] },
+        { id: 'opt-size', name: 'Size', isVisual: false, values: [] },
+      ]);
+    } else if (preset === 'SIZE_ONLY' || preset === 'size-only') {
+      setVariantMode('variants');
+      setOptionAxes([{ id: 'opt-size', name: 'Size', isVisual: false, values: [] }]);
+    }
     setIsDirty(true);
   };
 
@@ -1000,18 +1262,28 @@ export function useProductCreatorState({
     const system = references.sizingData.systems.find((s) => s.id === systemId);
     if (!system) return;
 
-    const sizes = references.sizingData.sizeDefinitions
+    const sizeDefs = references.sizingData.sizeDefinitions
       .filter((sd) => sd.sizeSystemId === systemId)
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((sd) => sd.code);
+      .sort((a, b) => a.sortOrder - b.sortOrder);
 
-    if (sizes.length === 0) return;
+    if (sizeDefs.length === 0) return;
 
     setOptionAxes((prev) =>
       prev.map((axis) => {
         if (axis.name.toLowerCase() === 'size') {
-          const merged = [...new Set([...axis.values, ...sizes])];
-          return { ...axis, values: merged };
+          const existingLabels = new Set(axis.values.map((v) => v.label.toLowerCase()));
+          const newValues: OptionValueState[] = [
+            ...axis.values,
+            ...sizeDefs
+              .filter((sd) => !existingLabels.has(sd.code.toLowerCase()))
+              .map((sd) => ({
+                id: `optval-size-${sd.id}`,
+                label: sd.code,
+                isPrimary: false,
+                sizeDefinitionId: sd.id,
+              })),
+          ];
+          return { ...axis, values: newValues };
         }
         return axis;
       }),
@@ -1584,29 +1856,36 @@ export function useProductCreatorState({
       const optionsPayload =
         variantMode === 'variants' && activeAxes.length > 0
           ? activeAxes.map((axis, idx) => ({
+              clientRef: axis.id,
               name: axis.name,
               code: slugify(axis.name),
               position: idx,
+              isVisual: axis.isVisual,
               values: axis.values.map((v, vIdx) => {
                 const matchedColor =
-                  axis.name.toLowerCase() === 'color'
-                    ? references.colors.find((c) => c.name.toLowerCase() === v.toLowerCase())
-                    : null;
+                  v.colorId ||
+                  (axis.name.toLowerCase() === 'color'
+                    ? references.colors.find((c) => c.name.toLowerCase() === v.label.toLowerCase())
+                        ?.id
+                    : null);
                 const matchedSize =
-                  axis.name.toLowerCase() === 'size'
+                  v.sizeDefinitionId ||
+                  (axis.name.toLowerCase() === 'size'
                     ? references.sizingData.sizeDefinitions.find(
                         (s) =>
-                          s.code.toLowerCase() === v.toLowerCase() &&
+                          s.code.toLowerCase() === v.label.toLowerCase() &&
                           s.sizeSystemId === sizeSystemId,
-                      )
-                    : null;
+                      )?.id
+                    : null);
 
                 return {
-                  displayValue: v,
-                  code: slugify(v),
+                  clientRef: v.id,
+                  displayValue: v.label,
+                  code: slugify(v.label),
                   position: vIdx,
-                  ...(matchedColor ? { colorId: matchedColor.id } : {}),
-                  ...(matchedSize ? { sizeDefinitionId: matchedSize.id } : {}),
+                  isPrimary: Boolean(v.isPrimary),
+                  ...(matchedColor ? { colorId: matchedColor } : {}),
+                  ...(matchedSize ? { sizeDefinitionId: matchedSize } : {}),
                 };
               }),
             }))
@@ -1617,20 +1896,33 @@ export function useProductCreatorState({
       const variantsPayload =
         enabledVariants.length > 0
           ? enabledVariants.map((v) => ({
+              clientRef: v.id,
               sku: v.sku.trim().toUpperCase(),
               title: v.title.trim() || null,
               barcode: v.barcode.trim() || null,
               priceAmount: v.priceAmount.trim() || null,
               compareAtAmount: v.compareAtAmount.trim() || null,
               currency: 'BDT',
+              estimatedCostAmount: (v.estimatedCostAmount || v.costAmount || '').trim() || null,
+              initialStock: (v.initialStock || [])
+                .filter((s) => Number(s.quantity) > 0)
+                .map((s) => ({
+                  locationId: s.locationId,
+                  quantity: Math.round(Number(s.quantity)),
+                })),
+              optionValueRefs: v.optionSelections
+                .map((sel) => sel.valueRef)
+                .filter((ref): ref is string => Boolean(ref)),
+              optionSelections: v.optionSelections.map((s) => ({
+                axisName: s.axisName,
+                valueDisplay: s.valueDisplay,
+              })),
               weight: v.weightValue.trim()
                 ? {
                     value: v.weightValue.trim(),
                     unit: v.weightUnit,
                   }
-                : weightValue.trim()
-                  ? { value: weightValue.trim(), unit: weightUnit }
-                  : null,
+                : null,
               dimensions:
                 v.lengthValue.trim() && v.widthValue.trim() && v.heightValue.trim()
                   ? {
@@ -1639,18 +1931,12 @@ export function useProductCreatorState({
                       height: v.heightValue.trim(),
                       unit: v.dimensionUnit,
                     }
-                  : lengthValue.trim() && widthValue.trim() && heightValue.trim()
-                    ? {
-                        length: lengthValue.trim(),
-                        width: widthValue.trim(),
-                        height: heightValue.trim(),
-                        unit: dimensionUnit,
-                      }
-                    : null,
+                  : null,
               primaryColorId: v.primaryColorId || null,
-              optionSelections: v.optionSelections,
             }))
           : undefined;
+
+      const validMedia = mediaItems.filter((m) => m.assetId);
 
       // 3. Main Product Create DTO
       const payload: CatalogProductCreateDto = {
@@ -1666,6 +1952,18 @@ export function useProductCreatorState({
         ...(sizeSystemId ? { sizeSystemId } : {}),
         ...(sizeGuideId ? { sizeGuideId } : {}),
         ...(attributesPayload.length > 0 ? { attributes: attributesPayload } : {}),
+        shipping: {
+          weight: weightValue.trim() ? { value: weightValue.trim(), unit: weightUnit } : null,
+          dimensions:
+            lengthValue.trim() && widthValue.trim() && heightValue.trim()
+              ? {
+                  length: lengthValue.trim(),
+                  width: widthValue.trim(),
+                  height: heightValue.trim(),
+                  unit: dimensionUnit,
+                }
+              : null,
+        },
         ...(variantMode === 'simple' && sku.trim()
           ? {
               initialVariant: {
@@ -1673,12 +1971,31 @@ export function useProductCreatorState({
                 barcode: barcode.trim() || null,
                 compareAtAmount: compareAtAmount.trim() || null,
                 currency: 'BDT',
+                estimatedCostAmount: (estimatedCostAmount || costAmount || '').trim() || null,
+                initialStock: simpleInitialStock
+                  .filter((s) => Number(s.quantity) > 0)
+                  .map((s) => ({
+                    locationId: s.locationId,
+                    quantity: Math.round(Number(s.quantity)),
+                  })),
                 ...(priceAmount.trim() ? { priceAmount: priceAmount.trim() } : {}),
               },
             }
           : {}),
         ...(optionsPayload ? { options: optionsPayload } : {}),
         ...(variantsPayload ? { variants: variantsPayload } : {}),
+        ...(validMedia.length > 0
+          ? {
+              media: validMedia.map((m) => ({
+                assetId: m.assetId!,
+                role: m.role || (m.isPrimary ? 'THUMBNAIL' : 'GALLERY'),
+                isPrimary: Boolean(m.isPrimary),
+                optionValueRef: m.optionValueRef || m.optionValueId || null,
+                variantRef: m.variantRef || m.variantId || null,
+                altTextOverride: m.altText || null,
+              })),
+            }
+          : {}),
         ...(seoTitle.trim() ? { seoTitle: seoTitle.trim() } : {}),
         ...(seoDescription.trim() ? { seoDescription: seoDescription.trim() } : {}),
       };
@@ -1688,24 +2005,6 @@ export function useProductCreatorState({
         body: JSON.stringify(payload),
       });
 
-      // 4. Attach and sequence uploaded media items atomically
-      const validMedia = mediaItems.filter((m) => m.assetId);
-      if (validMedia.length > 0) {
-        setSavingStatusText('Attaching and sequencing gallery images…');
-        const placements = validMedia.map((media, index) => ({
-          assetId: media.assetId!,
-          role: media.role || (media.isPrimary ? 'THUMBNAIL' : 'GALLERY'),
-          position: index,
-          variantId: media.variantId || null,
-          optionValueId: media.optionValueId || null,
-          isPrimary: Boolean(media.isPrimary),
-          altTextOverride: media.altText || null,
-        }));
-        await catalogData(`/admin/catalog/products/${created.id}/media`, {
-          method: 'PUT',
-          body: JSON.stringify({ placements }),
-        }).catch(() => null);
-      }
 
       // 5. Save Customer Content (FAQs and Highlights)
       const validFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
@@ -1818,6 +2117,10 @@ export function useProductCreatorState({
     priceAmount,
     compareAtAmount,
     costAmount,
+    estimatedCostAmount,
+    setEstimatedCostAmount,
+    simpleInitialStock,
+    setSimpleInitialStock,
     variantMode,
     sku,
     barcode,
@@ -1882,6 +2185,11 @@ export function useProductCreatorState({
     handleSelectPrimaryCategory,
     addOptionValue,
     removeOptionValue,
+    setPrimaryVisualValue,
+    toggleAxisVisual,
+    addOptionAxis,
+    removeOptionAxis,
+    applyPresetStructure,
     importSizesFromSystem,
     handleApplyPriceToAll,
     handleApplyCostToAll,

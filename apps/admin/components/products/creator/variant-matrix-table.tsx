@@ -2,28 +2,28 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Layers,
-  Sparkles,
-  CheckSquare,
-  Square,
-  RefreshCw,
-  Tag,
-  DollarSign,
-  Palette,
+  Boxes,
   Check,
+  CheckSquare,
   ChevronDown,
+  DollarSign,
+  HelpCircle,
+  Layers,
+  Palette,
+  RefreshCw,
+  Sparkles,
+  Square,
+  Tag,
+  Warehouse,
 } from 'lucide-react';
-import type { CatalogColorDto } from '@maevelle/contracts';
+import type { CatalogColorDto, WarehouseLocationDto } from '@maevelle/contracts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import type { VariantMatrixRow } from './types';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import type { VariantMatrixRow, VariantStockEntry } from './types';
 
 interface VariantMatrixTableProps {
   readonly matrix: readonly VariantMatrixRow[];
@@ -33,7 +33,9 @@ interface VariantMatrixTableProps {
   readonly basePrice: string;
   readonly baseCompareAt: string;
   readonly baseCost: string;
+  readonly baseEstimatedCost?: string;
   readonly colors: readonly CatalogColorDto[];
+  readonly locations?: readonly WarehouseLocationDto[];
   readonly onRegenerateSkus: () => void;
 }
 
@@ -45,16 +47,41 @@ export function VariantMatrixTable({
   basePrice,
   baseCompareAt,
   baseCost,
+  baseEstimatedCost,
   colors,
+  locations = [],
   onRegenerateSkus,
 }: VariantMatrixTableProps) {
   const enabledCount = useMemo(() => matrix.filter((r) => r.enabled).length, [matrix]);
   const allEnabled = enabledCount === matrix.length && matrix.length > 0;
+  const effectiveBaseCost = baseEstimatedCost || baseCost;
+
+  const [bulkStockQuantity, setBulkStockQuantity] = useState('');
+  const [showBulkStockPopover, setShowBulkStockPopover] = useState(false);
 
   // Active color lookup
   const colorMap = useMemo(() => {
     return new Map(colors.map((c) => [c.id, c]));
   }, [colors]);
+
+  const handleApplyBulkStock = (qtyString: string) => {
+    const qty = parseInt(qtyString, 10);
+    if (isNaN(qty) || qty < 0 || locations.length === 0) return;
+    const defaultLocation = locations[0]!;
+    onBulkUpdate(
+      {
+        initialStock: [
+          {
+            locationId: defaultLocation.id,
+            locationName: defaultLocation.name,
+            quantity: String(qty),
+          },
+        ],
+      },
+      true,
+    );
+    setShowBulkStockPopover(false);
+  };
 
   return (
     <div className="space-y-3">
@@ -107,16 +134,59 @@ export function VariantMatrixTable({
             </Button>
           )}
 
-          {baseCost && (
+          {effectiveBaseCost && (
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              onClick={() => onBulkUpdate({ costAmount: baseCost }, true)}
+              onClick={() =>
+                onBulkUpdate(
+                  { costAmount: effectiveBaseCost, estimatedCostAmount: effectiveBaseCost },
+                  true,
+                )
+              }
             >
-              Apply Cost (৳{baseCost})
+              Apply Est. Cost (৳{effectiveBaseCost})
             </Button>
+          )}
+
+          {locations.length > 0 && (
+            <Popover open={showBulkStockPopover} onOpenChange={setShowBulkStockPopover}>
+              <PopoverTrigger
+                render={
+                  <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs">
+                    <Boxes className="size-3 text-primary" />
+                    <span>Apply Opening Stock</span>
+                  </Button>
+                }
+              />
+              <PopoverContent className="w-64 space-y-2 p-3 text-xs" align="end">
+                <p className="font-semibold text-foreground">Bulk Opening Stock</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Apply units to {locations[0]?.name ?? 'primary warehouse'} for all enabled
+                  variants.
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 20"
+                    value={bulkStockQuantity}
+                    onChange={(e) => setBulkStockQuantity(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => handleApplyBulkStock(bulkStockQuantity)}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           )}
 
           <Button
@@ -140,10 +210,26 @@ export function VariantMatrixTable({
               <th className="py-2.5 pl-3 pr-2 w-10 text-center font-medium">Use</th>
               <th className="py-2.5 px-3 min-w-[140px] font-medium">Variant Combination</th>
               <th className="py-2.5 px-3 min-w-[140px] font-medium">Color Swatch</th>
-              <th className="py-2.5 px-3 min-w-[140px] font-medium">SKU (Required)</th>
-              <th className="py-2.5 px-3 min-w-[110px] font-medium">Price (BDT)</th>
-              <th className="py-2.5 px-3 min-w-[110px] font-medium">Compare-at</th>
-              <th className="py-2.5 px-3 min-w-[100px] font-medium">Cost / Margin</th>
+              <th className="py-2.5 px-3 min-w-[130px] font-medium">SKU (Required)</th>
+              <th className="py-2.5 px-3 min-w-[100px] font-medium">Price (BDT)</th>
+              <th className="py-2.5 px-3 min-w-[100px] font-medium">Compare-at</th>
+              <th className="py-2.5 px-3 min-w-[130px] font-medium">
+                <span className="flex items-center gap-1">
+                  <span>Est. Cost / Margin</span>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={<span tabIndex={0} className="inline-flex cursor-help" />}
+                    >
+                      <HelpCircle className="size-3 text-muted-foreground" aria-hidden="true" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Internal merchandising estimated cost used for gross margin calculations. Not
+                      used for accounting FIFO COGS.
+                    </TooltipContent>
+                  </Tooltip>
+                </span>
+              </th>
+              <th className="py-2.5 px-3 min-w-[120px] font-medium">Opening Stock</th>
               <th className="py-2.5 px-3 min-w-[110px] font-medium">Barcode (GTIN)</th>
             </tr>
           </thead>
@@ -151,11 +237,17 @@ export function VariantMatrixTable({
             {matrix.map((row) => {
               const matchedColor = row.primaryColorId ? colorMap.get(row.primaryColorId) : null;
               const priceNum = parseFloat(row.priceAmount);
-              const costNum = parseFloat(row.costAmount);
+              const costAmount = row.estimatedCostAmount || row.costAmount;
+              const costNum = parseFloat(costAmount);
               const margin =
                 !isNaN(priceNum) && priceNum > 0 && !isNaN(costNum) && costNum > 0
                   ? Math.round(((priceNum - costNum) / priceNum) * 100)
                   : null;
+
+              const totalStock = (row.initialStock || []).reduce(
+                (sum, entry) => sum + (parseInt(entry.quantity, 10) || 0),
+                0,
+              );
 
               return (
                 <tr
@@ -179,26 +271,38 @@ export function VariantMatrixTable({
                     <div className="flex flex-col">
                       <span className="font-semibold text-foreground">{row.title}</span>
                       <span className="text-[10px] text-muted-foreground">
-                        {row.optionSelections.map((s) => `${s.axisName}: ${s.valueDisplay}`).join(', ')}
+                        {row.optionSelections
+                          .map((s) => `${s.axisName}: ${s.valueDisplay}`)
+                          .join(', ')}
                       </span>
                     </div>
                   </td>
 
                   {/* Color Swatch Picker */}
                   <td className="py-2 px-3 align-middle">
-                    <select
-                      value={row.primaryColorId || ''}
-                      onChange={(e) => onUpdateRow(row.id, { primaryColorId: e.target.value || null })}
-                      disabled={!row.enabled}
-                      className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed"
-                    >
-                      <option value="">No Color Swatch</option>
-                      {colors.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} {c.code ? `(${c.code})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-1.5">
+                      {matchedColor?.hexValue && (
+                        <span
+                          className="size-3 rounded-full border border-black/20 shrink-0"
+                          style={{ backgroundColor: matchedColor.hexValue }}
+                        />
+                      )}
+                      <select
+                        value={row.primaryColorId || ''}
+                        onChange={(e) =>
+                          onUpdateRow(row.id, { primaryColorId: e.target.value || null })
+                        }
+                        disabled={!row.enabled}
+                        className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed"
+                      >
+                        <option value="">No Color Swatch</option>
+                        {colors.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} {c.code ? `(${c.code})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </td>
 
                   {/* SKU Input */}
@@ -208,9 +312,7 @@ export function VariantMatrixTable({
                       placeholder="SKU-001"
                       disabled={!row.enabled}
                       className="h-7 font-mono text-xs uppercase"
-                      onChange={(e) =>
-                        onUpdateRow(row.id, { sku: e.target.value.toUpperCase() })
-                      }
+                      onChange={(e) => onUpdateRow(row.id, { sku: e.target.value.toUpperCase() })}
                     />
                   </td>
 
@@ -247,9 +349,7 @@ export function VariantMatrixTable({
                         value={row.compareAtAmount}
                         disabled={!row.enabled}
                         className="h-7 pl-5 text-xs"
-                        onChange={(e) =>
-                          onUpdateRow(row.id, { compareAtAmount: e.target.value })
-                        }
+                        onChange={(e) => onUpdateRow(row.id, { compareAtAmount: e.target.value })}
                       />
                     </div>
                   </td>
@@ -266,10 +366,15 @@ export function VariantMatrixTable({
                           step="1"
                           min="0"
                           placeholder="Cost"
-                          value={row.costAmount}
+                          value={costAmount}
                           disabled={!row.enabled}
                           className="h-7 pl-4 text-xs"
-                          onChange={(e) => onUpdateRow(row.id, { costAmount: e.target.value })}
+                          onChange={(e) =>
+                            onUpdateRow(row.id, {
+                              costAmount: e.target.value,
+                              estimatedCostAmount: e.target.value,
+                            })
+                          }
                         />
                       </div>
                       {margin !== null && (
@@ -287,6 +392,98 @@ export function VariantMatrixTable({
                         </Badge>
                       )}
                     </div>
+                  </td>
+
+                  {/* Opening Stock Column */}
+                  <td className="py-2 px-3 align-middle">
+                    {locations.length <= 1 ? (
+                      <div className="relative w-20">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="0"
+                          disabled={!row.enabled}
+                          value={row.initialStock?.[0]?.quantity || ''}
+                          className="h-7 text-xs tabular-nums text-center"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const locId = locations[0]?.id || 'default-location';
+                            const locName = locations[0]?.name || 'Main Warehouse';
+                            onUpdateRow(row.id, {
+                              initialStock: val
+                                ? [{ locationId: locId, locationName: locName, quantity: val }]
+                                : [],
+                            });
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <Popover>
+                        <PopoverTrigger
+                          render={
+                            <button
+                              type="button"
+                              disabled={!row.enabled}
+                              className="flex items-center gap-1.5 rounded border bg-background px-2 py-1 text-xs hover:bg-muted font-medium tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Warehouse className="size-3 text-muted-foreground" />
+                              <span>{totalStock} units</span>
+                            </button>
+                          }
+                        />
+                        <PopoverContent className="w-72 space-y-2 p-3 text-xs" align="start">
+                          <p className="font-semibold text-foreground">
+                            Opening Stock: {row.title}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Allocate opening inventory units per location.
+                          </p>
+                          <div className="space-y-2 pt-1">
+                            {locations.map((loc) => {
+                              const existingQty =
+                                (row.initialStock || []).find((s) => s.locationId === loc.id)
+                                  ?.quantity || '';
+                              return (
+                                <div
+                                  key={loc.id}
+                                  className="flex items-center justify-between gap-2"
+                                >
+                                  <Label className="text-xs truncate max-w-[150px]">
+                                    {loc.name}
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={existingQty}
+                                    className="h-7 w-20 text-xs tabular-nums text-right"
+                                    onChange={(e) => {
+                                      const newQty = e.target.value;
+                                      const currentList = row.initialStock || [];
+                                      const withoutLoc = currentList.filter(
+                                        (s) => s.locationId !== loc.id,
+                                      );
+                                      const updatedList: VariantStockEntry[] = newQty
+                                        ? [
+                                            ...withoutLoc,
+                                            {
+                                              locationId: loc.id,
+                                              locationName: loc.name,
+                                              quantity: newQty,
+                                            },
+                                          ]
+                                        : withoutLoc;
+                                      onUpdateRow(row.id, { initialStock: updatedList });
+                                    }}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </td>
 
                   {/* Barcode */}

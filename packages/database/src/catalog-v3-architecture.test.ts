@@ -307,8 +307,8 @@ describe('V3 Catalog Architecture & Integrity', () => {
           sku: 'ATOMIC-001',
           priceAmount: '990.00',
           initialStock: [
-            { locationId: fx.locationAId, quantity: '25' },
-            { locationId: fx.locationBId, quantity: '15' },
+            { locationId: fx.locationAId, quantity: 25 },
+            { locationId: fx.locationBId, quantity: 15 },
           ],
         },
       ],

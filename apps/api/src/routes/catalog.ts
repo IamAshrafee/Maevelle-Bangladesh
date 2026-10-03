@@ -855,6 +855,42 @@ export function registerCatalogRoutes(
             ),
             description: Type.Optional(Type.Union([Type.String({ maxLength: 5000 }), Type.Null()])),
             productTypeId: Type.Optional(organizationIdParameter),
+            shipping: Type.Optional(
+              Type.Union([
+                Type.Object({
+                  weight: Type.Optional(
+                    Type.Union([
+                      Type.Object({
+                        value: Type.String({ minLength: 1 }),
+                        unit: Type.Union([
+                          Type.Literal('G'),
+                          Type.Literal('KG'),
+                          Type.Literal('OZ'),
+                          Type.Literal('LB'),
+                        ]),
+                      }),
+                      Type.Null(),
+                    ]),
+                  ),
+                  dimensions: Type.Optional(
+                    Type.Union([
+                      Type.Object({
+                        length: Type.String({ minLength: 1 }),
+                        width: Type.String({ minLength: 1 }),
+                        height: Type.String({ minLength: 1 }),
+                        unit: Type.Union([
+                          Type.Literal('MM'),
+                          Type.Literal('CM'),
+                          Type.Literal('IN'),
+                        ]),
+                      }),
+                      Type.Null(),
+                    ]),
+                  ),
+                }),
+                Type.Null(),
+              ]),
+            ),
           },
           { minProperties: 1 },
         ),
@@ -1023,6 +1059,9 @@ export function registerCatalogRoutes(
             weight: Type.Optional(Type.Union([variantWriteSchema.properties.weight, Type.Null()])),
             dimensions: Type.Optional(
               Type.Union([variantWriteSchema.properties.dimensions, Type.Null()]),
+            ),
+            estimatedCostAmount: Type.Optional(
+              Type.Union([Type.String({ pattern: '^-?[0-9]+(?:\\.[0-9]+)?$' }), Type.Null()]),
             ),
           },
           { minProperties: 2 },

@@ -1983,6 +1983,15 @@ export async function updateCatalogProduct(
     handle?: string;
     description?: string | null;
     productTypeId?: string;
+    shipping?: {
+      weight?: { value: string; unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+      dimensions?: {
+        length: string;
+        width: string;
+        height: string;
+        unit: 'MM' | 'CM' | 'IN';
+      } | null;
+    } | null;
   },
 ): Promise<ProductSummary> {
   return db.transaction().execute(async (transaction) => {
@@ -1990,7 +1999,8 @@ export async function updateCatalogProduct(
       input.title === undefined &&
       input.handle === undefined &&
       input.description === undefined &&
-      input.productTypeId === undefined
+      input.productTypeId === undefined &&
+      input.shipping === undefined
     )
       throw new CatalogDomainError('VALIDATION_FAILED', 'Provide at least one Product change.');
     const before = await sql<{ handle: string }>`
@@ -2018,6 +2028,17 @@ export async function updateCatalogProduct(
           'Choose an active Product Type from this organization.',
         );
     }
+    const hasShipping = input.shipping !== undefined;
+    const baseWeightVal = input.shipping?.weight?.value ? Number(input.shipping.weight.value) : null;
+    const baseWeightUnit = baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
+    const baseLenVal = input.shipping?.dimensions?.length ? Number(input.shipping.dimensions.length) : null;
+    const baseWidthVal = input.shipping?.dimensions?.width ? Number(input.shipping.dimensions.width) : null;
+    const baseHeightVal = input.shipping?.dimensions?.height ? Number(input.shipping.dimensions.height) : null;
+    const baseDimUnit =
+      baseLenVal && baseWidthVal && baseHeightVal && input.shipping?.dimensions?.unit
+        ? input.shipping.dimensions.unit
+        : null;
+
     const updated = await sql<{
       id: string;
       handle: string;
@@ -2031,6 +2052,12 @@ export async function updateCatalogProduct(
           handle = coalesce(${handle ?? null}, handle),
           description = case when ${input.description === undefined} then description else ${input.description ?? null} end,
           product_type_id = coalesce(${input.productTypeId ?? null}::uuid, product_type_id),
+          weight_value = case when ${hasShipping} then ${baseWeightVal} else weight_value end,
+          weight_unit = case when ${hasShipping} then ${baseWeightUnit} else weight_unit end,
+          length_value = case when ${hasShipping} then ${baseLenVal} else length_value end,
+          width_value = case when ${hasShipping} then ${baseWidthVal} else width_value end,
+          height_value = case when ${hasShipping} then ${baseHeightVal} else height_value end,
+          dimension_unit = case when ${hasShipping} then ${baseDimUnit} else dimension_unit end,
           version = version + 1,
           updated_at = now()
       where id = ${input.productId} and organization_id = ${input.organizationId} and version = ${input.expectedVersion}
@@ -2963,6 +2990,7 @@ export async function updateCatalogVariant(
       readonly height: string;
       readonly unit: 'MM' | 'CM' | 'IN';
     } | null;
+    estimatedCostAmount?: string | null;
     actorId?: string;
   },
 ): Promise<{ id: string; sku: string; version: number }> {
@@ -3043,6 +3071,9 @@ export async function updateCatalogVariant(
         width_value=case when ${input.dimensions !== undefined} then ${input.dimensions?.width ?? null} else width_value end,
         height_value=case when ${input.dimensions !== undefined} then ${input.dimensions?.height ?? null} else height_value end,
         dimension_unit=case when ${input.dimensions !== undefined} then ${input.dimensions?.unit ?? null} else dimension_unit end,
+        estimated_cost_amount=case when ${input.estimatedCostAmount !== undefined}
+          then ${input.estimatedCostAmount ? String(input.estimatedCostAmount) : null}::numeric
+          else estimated_cost_amount end,
         version=version+1,updated_at=now()
       where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
         and id=${input.variantId}::uuid and version=${input.expectedVersion}

@@ -61,20 +61,26 @@ export function ProductPageClient() {
             ? ((await guideResponse.json()) as ApiEnvelope<PublicSizeGuideDto | null>).data
             : null,
         );
-        const first =
-          catalog.data.variants.find((variant) => variant.available && variant.price) ??
-          catalog.data.variants.find((variant) => variant.price) ??
-          catalog.data.variants[0];
-        if (first) {
-          const initial: Record<string, string> = {};
-          for (const axis of catalog.data.options) {
-            const value = axis.values.find((candidate) =>
-              first.optionValueIds.includes(candidate.id),
-            );
-            if (value) initial[axis.id] = value.id;
+        const visualAxis = catalog.data.options.find((opt) => opt.isVisual);
+        const initial: Record<string, string> = {};
+
+        if (visualAxis) {
+          // Pre-select the primary cover value, or the first available value on the visual axis
+          const primaryVal =
+            visualAxis.values.find((val) => val.isPrimary) ||
+            visualAxis.values.find((val) =>
+              catalog.data.variants.some(
+                (v) => v.optionValueIds.includes(val.id) && v.available,
+              ),
+            ) ||
+            visualAxis.values[0];
+
+          if (primaryVal) {
+            initial[visualAxis.id] = primaryVal.id;
           }
-          setSelected(initial);
         }
+        // Non-visual axes (such as Size) remain unselected initially
+        setSelected(initial);
         setState('ready');
       })
       .catch(() => {
@@ -83,33 +89,102 @@ export function ProductPageClient() {
     return () => controller.abort();
   }, [context, parameters.handle]);
 
-  const selectedVariant = useMemo(
-    () =>
-      product?.variants.find((variant) =>
-        product.options.every((axis) => variant.optionValueIds.includes(selected[axis.id] ?? '')),
+  const selectedVariant = useMemo(() => {
+    if (!product) return undefined;
+    const allSelected = product.options.every((axis) => Boolean(selected[axis.id]));
+    if (!allSelected) return undefined;
+    return product.variants.find((variant) =>
+      product.options.every((axis) => variant.optionValueIds.includes(selected[axis.id]!)),
+    );
+  }, [product, selected]);
+
+  const matchingVariants = useMemo(() => {
+    if (!product) return [];
+    return product.variants.filter((variant) =>
+      product.options.every(
+        (axis) => !selected[axis.id] || variant.optionValueIds.includes(selected[axis.id]!),
       ),
-    [product, selected],
-  );
+    );
+  }, [product, selected]);
+
+  const priceDisplay = useMemo(() => {
+    if (selectedVariant?.price) {
+      return {
+        type: 'exact' as const,
+        amount: selectedVariant.price.amount,
+        compareAtAmount: selectedVariant.price.compareAtAmount,
+        currency: selectedVariant.price.currency,
+      };
+    }
+    if (matchingVariants.length > 0) {
+      const prices = matchingVariants
+        .map((v) => (v.price ? parseFloat(v.price.amount) : null))
+        .filter((p): p is number => p !== null && !isNaN(p));
+      if (prices.length > 0) {
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+        const currency = matchingVariants.find((v) => v.price)?.price?.currency ?? 'BDT';
+        return {
+          type: 'range' as const,
+          min: String(min),
+          max: String(max),
+          currency,
+          isSinglePrice: min === max,
+        };
+      }
+    }
+    return null;
+  }, [selectedVariant, matchingVariants]);
+
+  const unselectedAxes = useMemo(() => {
+    if (!product) return [];
+    return product.options.filter((axis) => !selected[axis.id]);
+  }, [product, selected]);
+
   const shownMedia = useMemo(() => {
     if (!product) return [];
-    const exact = selectedVariant
-      ? product.media.filter((asset) => asset.variantId === selectedVariant.id)
-      : [];
-    const option = selectedVariant
-      ? product.media.filter(
-          (asset) =>
-            asset.variantId === null &&
-            asset.optionValueId !== null &&
-            selectedVariant.optionValueIds.includes(asset.optionValueId),
-        )
-      : [];
+    const visualAxis = product.options.find((opt) => opt.isVisual);
+    const selectedVisualValueId = visualAxis ? selected[visualAxis.id] : null;
+
+    // 1. Exact SKU override if variant selected
+    if (selectedVariant) {
+      const exact = product.media.filter((asset) => asset.variantId === selectedVariant.id);
+      if (exact.length > 0) {
+        return exact.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+      }
+    }
+
+    // 2. Visual presentation value gallery (e.g. Color)
+    if (selectedVisualValueId) {
+      const optionMedia = product.media.filter(
+        (asset) =>
+          asset.optionValueId === selectedVisualValueId && asset.variantId === null,
+      );
+      if (optionMedia.length > 0) {
+        return optionMedia.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+      }
+    }
+
+    // 3. General product gallery (for uniform photography or size-only products)
     const general = product.media.filter(
       (asset) => asset.variantId === null && asset.optionValueId === null,
     );
-    const resolved = exact.length > 0 ? exact : option.length > 0 ? option : general;
-    return resolved.toSorted((left, right) => Number(right.isPrimary) - Number(left.isPrimary));
-  }, [product, selectedVariant]);
-  useEffect(() => setActiveMedia(0), [selectedVariant?.id]);
+    if (general.length > 0) {
+      return general.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+    }
+
+    // 4. Fallback to all media
+    return product.media.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+  }, [product, selected, selectedVariant]);
+
+  const visualSelectionKey = useMemo(() => {
+    const visualAxis = product?.options.find((opt) => opt.isVisual);
+    return visualAxis ? selected[visualAxis.id] ?? '' : '';
+  }, [product, selected]);
+
+  useEffect(() => {
+    setActiveMedia(0);
+  }, [visualSelectionKey, selectedVariant?.id]);
 
   function valuePossible(axisId: string, valueId: string) {
     if (!product) return false;
@@ -124,21 +199,34 @@ export function ProductPageClient() {
         ),
     );
   }
+
   function choose(axisId: string, valueId: string) {
     if (!product) return;
     const next = { ...selected, [axisId]: valueId };
-    const exact = product.variants.find((variant) =>
-      product.options.every((axis) => variant.optionValueIds.includes(next[axis.id] ?? '')),
+    const compatible = product.variants.some((variant) =>
+      product.options.every(
+        (axis) => !next[axis.id] || variant.optionValueIds.includes(next[axis.id]!),
+      ),
     );
-    if (exact) return setSelected(next);
-    const compatible = product.variants.find((variant) => variant.optionValueIds.includes(valueId));
-    if (!compatible) return;
-    const corrected: Record<string, string> = {};
-    for (const axis of product.options) {
-      const match = axis.values.find((value) => compatible.optionValueIds.includes(value.id));
-      if (match) corrected[axis.id] = match.id;
+    if (compatible) {
+      setSelected(next);
+      return;
     }
-    setSelected(corrected);
+
+    // If newly selected value conflicts with other axes, keep current value and visual axis if compatible
+    const visualAxis = product.options.find((a) => a.isVisual);
+    const fallback: Record<string, string> = { [axisId]: valueId };
+    if (visualAxis && axisId !== visualAxis.id && selected[visualAxis.id]) {
+      const matchesVisual = product.variants.some(
+        (v) =>
+          v.optionValueIds.includes(valueId) &&
+          v.optionValueIds.includes(selected[visualAxis.id]!),
+      );
+      if (matchesVisual) {
+        fallback[visualAxis.id] = selected[visualAxis.id]!;
+      }
+    }
+    setSelected(fallback);
   }
   async function loadOrCreateCart(): Promise<CartView> {
     const current = await fetch('/api/storefront/v1/carts/current', { credentials: 'include' });
@@ -284,22 +372,38 @@ export function ProductPageClient() {
               <a href="#reviews">Verified customer reviews</a>
             </p>
             <div className="pdp-price" aria-live="polite">
-              {price ? (
+              {priceDisplay?.type === 'exact' ? (
                 <>
-                  {price.compareAtAmount ? (
-                    <del>{money(price.compareAtAmount, price.currency)}</del>
+                  {priceDisplay.compareAtAmount ? (
+                    <del>{money(priceDisplay.compareAtAmount, priceDisplay.currency)}</del>
                   ) : null}
-                  <strong>{money(price.amount, price.currency)}</strong>
-                  {price.compareAtAmount && Number(price.compareAtAmount) > Number(price.amount) ? (
+                  <strong>{money(priceDisplay.amount, priceDisplay.currency)}</strong>
+                  {priceDisplay.compareAtAmount &&
+                  Number(priceDisplay.compareAtAmount) > Number(priceDisplay.amount) ? (
                     <span>
                       Save{' '}
                       {money(
-                        String(Number(price.compareAtAmount) - Number(price.amount)),
-                        price.currency,
+                        String(Number(priceDisplay.compareAtAmount) - Number(priceDisplay.amount)),
+                        priceDisplay.currency,
                       )}
                     </span>
                   ) : null}
                 </>
+              ) : priceDisplay?.type === 'range' ? (
+                priceDisplay.isSinglePrice ? (
+                  <strong>{money(priceDisplay.min, priceDisplay.currency)}</strong>
+                ) : (
+                  <div className="flex items-baseline gap-2">
+                    <strong>
+                      {money(priceDisplay.min, priceDisplay.currency)} – {money(priceDisplay.max, priceDisplay.currency)}
+                    </strong>
+                    {unselectedAxes.length > 0 && (
+                      <span className="text-xs text-muted-foreground font-normal">
+                        (Select {unselectedAxes[0]?.name.toLowerCase()} for price)
+                      </span>
+                    )}
+                  </div>
+                )
               ) : (
                 <strong>Choose an option to see price</strong>
               )}
@@ -347,21 +451,40 @@ export function ProductPageClient() {
               ))}
             </div>
             <p
-              className={`availability ${selectedVariant?.available ? 'available' : 'unavailable'}`}
+              className={`availability ${
+                unselectedAxes.length > 0
+                  ? 'unavailable'
+                  : selectedVariant?.available
+                    ? 'available'
+                    : 'unavailable'
+              }`}
             >
-              {selectedVariant
-                ? selectedVariant.available
-                  ? 'In stock and ready to order'
-                  : 'This option is currently out of stock'
-                : 'Choose your options'}
+              {unselectedAxes.length > 0
+                ? `Please select your ${unselectedAxes.map((a) => a.name.toLowerCase()).join(' and ')}`
+                : selectedVariant
+                  ? selectedVariant.available
+                    ? 'In stock and ready to order'
+                    : 'This option is currently out of stock'
+                  : 'Choose your options'}
             </p>
             <button
               className="add-to-cart"
               type="button"
-              disabled={busy || !price || !selectedVariant?.available}
+              disabled={
+                busy ||
+                unselectedAxes.length > 0 ||
+                !selectedVariant?.price ||
+                !selectedVariant.available
+              }
               onClick={() => void addToCart()}
             >
-              {busy ? 'Adding…' : selectedVariant?.available ? 'Add to bag' : 'Unavailable'}
+              {busy
+                ? 'Adding…'
+                : unselectedAxes.length > 0
+                  ? `Select ${unselectedAxes[0]?.name ?? 'Option'}`
+                  : selectedVariant?.available
+                    ? 'Add to bag'
+                    : 'Unavailable'}
             </button>
             {cartMessage ? (
               <div className="cart-feedback" role="status">

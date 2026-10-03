@@ -202,6 +202,18 @@ export interface CatalogProductUpdateDto {
   readonly handle?: string;
   readonly description?: string | null;
   readonly productTypeId?: string;
+  readonly shipping?: {
+    readonly weight?: {
+      readonly value: string;
+      readonly unit: 'G' | 'KG' | 'OZ' | 'LB';
+    } | null;
+    readonly dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
+  } | null;
 }
 
 export interface CatalogProductCreateDto {
@@ -374,6 +386,7 @@ export interface CatalogVariantUpdateDto {
     readonly height: string;
     readonly unit: 'MM' | 'CM' | 'IN';
   } | null;
+  readonly estimatedCostAmount?: string | null;
 }
 
 export type CatalogReadinessState = 'READY' | 'BLOCKED' | 'PUBLISHED' | 'ATTENTION';

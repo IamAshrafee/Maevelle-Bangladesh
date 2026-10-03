@@ -112,7 +112,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               mediaItems={state.mediaItems}
               isDraggingOver={state.isDraggingOver}
               fileInputRef={state.fileInputRef}
-              onFilesSelected={(files) => void state.handleFilesSelected(files)}
+              onFilesSelected={(files, targetScope) => void state.handleFilesSelected(files, targetScope)}
               onSetDraggingOver={state.setIsDraggingOver}
               onSetPrimaryMedia={state.handleSetPrimaryMedia}
               onRemoveMedia={state.handleRemoveMedia}
@@ -151,10 +151,13 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               optionAxes={state.optionAxes}
               matrixRows={state.matrixRows}
               colors={state.references.colors}
+              locations={state.references.locations}
               sizeSystemId={state.sizeSystemId}
               priceAmount={state.priceAmount}
               compareAtAmount={state.compareAtAmount}
               costAmount={state.costAmount}
+              estimatedCostAmount={state.estimatedCostAmount}
+              simpleInitialStock={state.simpleInitialStock}
               fieldErrors={state.fieldErrors}
               onVariantModeChange={(mode) => {
                 state.setVariantMode(mode);
@@ -169,8 +172,27 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                 state.setBarcode(val);
                 state.setIsDirty(true);
               }}
+              onEstimatedCostChange={(val) => {
+                state.setEstimatedCostAmount(val);
+                state.setIsDirty(true);
+              }}
+              onSimpleInitialStockChange={(locationId, quantity) => {
+                state.setSimpleInitialStock((prev) => {
+                  const existing = prev.find((s) => s.locationId === locationId);
+                  if (existing) {
+                    return prev.map((s) => (s.locationId === locationId ? { ...s, quantity } : s));
+                  }
+                  return [...prev, { locationId, quantity }];
+                });
+                state.setIsDirty(true);
+              }}
               onAddOptionValue={state.addOptionValue}
               onRemoveOptionValue={state.removeOptionValue}
+              onSetPrimaryVisualValue={state.setPrimaryVisualValue}
+              onToggleAxisVisual={state.toggleAxisVisual}
+              onAddOptionAxis={state.addOptionAxis}
+              onRemoveOptionAxis={state.removeOptionAxis}
+              onApplyPresetStructure={state.applyPresetStructure}
               onImportSizesFromSystem={state.importSizesFromSystem}
               onUpdateMatrixRow={state.handleUpdateMatrixRow}
               onBulkUpdateMatrix={state.handleBulkUpdateMatrix}

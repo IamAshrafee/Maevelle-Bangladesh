@@ -4,6 +4,7 @@ import {
   Archive,
   ArrowLeft,
   Boxes,
+  Camera,
   CheckCircle2,
   Edit3,
   EyeOff,
@@ -11,6 +12,7 @@ import {
   ImageIcon,
   PackageOpen,
   RotateCcw,
+  Star,
   Tags,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -524,31 +526,53 @@ export function ProductDetails({ productId }: { productId: string }) {
               <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {workspace.options.map((axis) => (
                   <div className="rounded-lg border bg-background p-3" key={axis.id}>
-                    <div className="flex items-center justify-between gap-3">
-                      <strong className="text-sm">{axis.name}</strong>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <strong className="text-sm">{axis.name}</strong>
+                        {axis.isVisual ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                            <Camera className="size-3" /> Visual Axis
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                            Specification
+                          </span>
+                        )}
+                      </div>
                       <StatusBadge status={axis.status} />
                     </div>
                     <p className="mt-0.5 font-mono text-xs text-muted-foreground">{axis.code}</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {axis.values.map((value) => (
                         <span
-                          className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs"
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs',
+                            value.isPrimary
+                              ? 'bg-primary/15 font-semibold text-foreground ring-1 ring-primary/40 shadow-xs'
+                              : 'bg-muted',
+                          )}
                           key={value.id}
                           title={
-                            value.sizeDefinitionId
-                              ? 'Linked to a normalized Size definition'
-                              : value.color
-                                ? `Linked to ${value.color.name}`
-                                : undefined
+                            value.isPrimary
+                              ? 'Primary Catalog Cover Presentation'
+                              : value.sizeDefinitionId
+                                ? 'Linked to a normalized Size definition'
+                                : value.color
+                                  ? `Linked to ${value.color.name}`
+                                  : undefined
                           }
                         >
                           {value.color ? (
                             <span
-                              className="size-3 rounded-full border"
+                              className="size-3 rounded-full border shrink-0"
                               style={{ backgroundColor: value.color.hexValue ?? 'transparent' }}
                             />
                           ) : null}
-                          {value.label}
+                          {value.isPrimary ? (
+                            <Star className="size-3 fill-amber-400 text-amber-400 shrink-0" />
+                          ) : null}
+                          <span>{value.label}</span>
+                          {value.isPrimary ? <span className="text-[10px] text-primary">· Cover</span> : null}
                           {value.sizeDefinitionId ? ' · Normalized' : ''}
                         </span>
                       ))}
@@ -565,92 +589,141 @@ export function ProductDetails({ productId }: { productId: string }) {
                   <th className="px-4 py-2.5">Variant</th>
                   <th className="px-4 py-2.5">Options</th>
                   <th className="px-4 py-2.5">Colors</th>
-                  <th className="px-4 py-2.5">Price</th>
-                  <th className="px-4 py-2.5">Physical</th>
+                  <th className="px-4 py-2.5">Price & Margin</th>
+                  <th className="px-4 py-2.5">Physical (Shipping)</th>
                   <th className="px-4 py-2.5">Available</th>
                   <th className="px-4 py-2.5">Media</th>
                   <th className="px-4 py-2.5">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {workspace.variants.map((variant) => (
-                  <tr key={variant.id}>
-                    <td className="px-4 py-3">
-                      <strong className="block font-medium">{variant.title ?? variant.sku}</strong>
-                      <span className="font-mono text-xs text-muted-foreground">{variant.sku}</span>
-                      {variant.barcode ? (
-                        <span className="block font-mono text-xs text-muted-foreground">
-                          Barcode {variant.barcode}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3">
-                      {optionSummary(workspace, variant.optionValueIds)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        {[
-                          ...(variant.primaryColor ? [variant.primaryColor] : []),
-                          ...variant.associatedColors,
-                        ].map((color) => (
-                          <span
-                            className="size-5 rounded-full border"
-                            key={color.id}
-                            style={{ backgroundColor: color.hexValue ?? 'transparent' }}
-                            title={color.name}
-                          />
-                        ))}
-                        {!variant.primaryColor && variant.associatedColors.length === 0
-                          ? '—'
-                          : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-medium tabular-nums">
-                      {variant.currentPrice
-                        ? formatCatalogMoney(
-                            variant.currentPrice.amount,
-                            variant.currentPrice.currency,
-                          )
-                        : 'Not priced'}
-                      {variant.currentPrice?.compareAtAmount ? (
-                        <span className="block text-xs font-normal text-muted-foreground line-through">
-                          {formatCatalogMoney(
-                            variant.currentPrice.compareAtAmount,
-                            variant.currentPrice.currency,
+                {workspace.variants.map((variant) => {
+                  const priceNum = variant.currentPrice ? parseFloat(variant.currentPrice.amount) : null;
+                  const costNum = variant.estimatedCostAmount ? parseFloat(variant.estimatedCostAmount) : null;
+                  const marginPercent =
+                    priceNum !== null && costNum !== null && priceNum > 0
+                      ? Math.round(((priceNum - costNum) / priceNum) * 1000) / 10
+                      : null;
+
+                  return (
+                    <tr key={variant.id}>
+                      <td className="px-4 py-3">
+                        <strong className="block font-medium">{variant.title ?? variant.sku}</strong>
+                        <span className="font-mono text-xs text-muted-foreground">{variant.sku}</span>
+                        {variant.barcode ? (
+                          <span className="block font-mono text-xs text-muted-foreground">
+                            Barcode {variant.barcode}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        {optionSummary(workspace, variant.optionValueIds)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          {[
+                            ...(variant.primaryColor ? [variant.primaryColor] : []),
+                            ...variant.associatedColors,
+                          ].map((color) => (
+                            <span
+                              className="size-5 rounded-full border"
+                              key={color.id}
+                              style={{ backgroundColor: color.hexValue ?? 'transparent' }}
+                              title={color.name}
+                            />
+                          ))}
+                          {!variant.primaryColor && variant.associatedColors.length === 0
+                            ? '—'
+                            : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        <div className="font-medium">
+                          {variant.currentPrice
+                            ? formatCatalogMoney(
+                                variant.currentPrice.amount,
+                                variant.currentPrice.currency,
+                              )
+                            : 'Not priced'}
+                          {variant.currentPrice?.compareAtAmount ? (
+                            <span className="block text-xs font-normal text-muted-foreground line-through">
+                              {formatCatalogMoney(
+                                variant.currentPrice.compareAtAmount,
+                                variant.currentPrice.currency,
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
+                        {variant.estimatedCostAmount ? (
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <span>Cost: ৳{parseFloat(variant.estimatedCostAmount).toLocaleString('en-BD')}</span>
+                            {marginPercent !== null && (
+                              <span
+                                className={`font-mono text-[10px] font-semibold px-1 rounded ${
+                                  marginPercent >= 40
+                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : marginPercent >= 20
+                                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                                      : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
+                                }`}
+                              >
+                                {marginPercent}%
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <span className="block">
+                          {variant.weight ? (
+                            <span>
+                              {formatMeasurement(variant.weight.value)} {variant.weight.unit.toLowerCase()}{' '}
+                              <span className="text-[10px] text-primary font-medium">(Override)</span>
+                            </span>
+                          ) : workspace.shipping?.weight ? (
+                            <span className="text-muted-foreground">
+                              {formatMeasurement(workspace.shipping.weight.value)} {workspace.shipping.weight.unit.toLowerCase()}{' '}
+                              <span className="text-[10px] text-muted-foreground/70">(Inherited)</span>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">No weight</span>
                           )}
                         </span>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      <span className="block">
-                        {variant.weight
-                          ? `${formatMeasurement(variant.weight.value)} ${variant.weight.unit.toLowerCase()}`
-                          : 'No weight'}
-                      </span>
-                      <span className="block text-muted-foreground">
-                        {variant.dimensions
-                          ? `${formatMeasurement(variant.dimensions.length)} × ${formatMeasurement(variant.dimensions.width)} × ${formatMeasurement(variant.dimensions.height)} ${variant.dimensions.unit.toLowerCase()}`
-                          : 'No dimensions'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">{variant.sellableQuantity}</td>
-                    <td className="px-4 py-3 text-xs">
-                      {variant.media.length > 0
-                        ? `${variant.media.length} SKU-specific`
-                        : variant.optionValueIds.reduce(
-                              (total, valueId) => total + (optionMediaCounts.get(valueId) ?? 0),
-                              0,
-                            ) > 0
-                          ? 'Option gallery'
-                          : mediaScopeCounts.product > 0
-                            ? 'Product fallback'
-                            : 'No image'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={variant.status} />
-                    </td>
-                  </tr>
-                ))}
+                        <span className="block text-muted-foreground">
+                          {variant.dimensions ? (
+                            <span>
+                              {formatMeasurement(variant.dimensions.length)} × {formatMeasurement(variant.dimensions.width)} × {formatMeasurement(variant.dimensions.height)} {variant.dimensions.unit.toLowerCase()}{' '}
+                              <span className="text-[10px] text-primary font-medium">(Override)</span>
+                            </span>
+                          ) : workspace.shipping?.dimensions ? (
+                            <span className="text-muted-foreground/80">
+                              {formatMeasurement(workspace.shipping.dimensions.length)} × {formatMeasurement(workspace.shipping.dimensions.width)} × {formatMeasurement(workspace.shipping.dimensions.height)} {workspace.shipping.dimensions.unit.toLowerCase()}{' '}
+                              <span className="text-[10px] text-muted-foreground/70">(Inherited)</span>
+                            </span>
+                          ) : (
+                            <span>No dimensions</span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">{variant.sellableQuantity}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {variant.media.length > 0
+                          ? `${variant.media.length} SKU-specific`
+                          : variant.optionValueIds.reduce(
+                                (total, valueId) => total + (optionMediaCounts.get(valueId) ?? 0),
+                                0,
+                              ) > 0
+                            ? 'Option gallery'
+                            : mediaScopeCounts.product > 0
+                              ? 'Product fallback'
+                              : 'No image'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={variant.status} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
