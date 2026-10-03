@@ -17,6 +17,7 @@ import { CustomerIdentityActions } from './customer-identity-actions';
 import { AddNoteDialog } from './add-note-dialog';
 import { ManageTagsDialog } from './manage-tags-dialog';
 import { CustomerEmailCommunications } from './customer-email-communications';
+import { CustomerSmsCommunications } from './customer-sms-communications';
 
 interface DeliveryHistory {
   eligibleDeliveries: number;
@@ -352,12 +353,19 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                               type="button"
                               onClick={async () => {
                                 try {
-                                  await fetchApiData(`/admin/customers/${customer.id}/emails/${email.id}/primary`, {
-                                    method: 'POST',
-                                  });
+                                  await fetchApiData(
+                                    `/admin/customers/${customer.id}/emails/${email.id}/primary`,
+                                    {
+                                      method: 'POST',
+                                    },
+                                  );
                                   void load();
                                 } catch (err) {
-                                  alert(err instanceof Error ? err.message : 'Failed to update primary email');
+                                  alert(
+                                    err instanceof Error
+                                      ? err.message
+                                      : 'Failed to update primary email',
+                                  );
                                 }
                               }}
                               className="text-[11px] text-muted-foreground hover:text-foreground underline"
@@ -391,12 +399,19 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
                               type="button"
                               onClick={async () => {
                                 try {
-                                  await fetchApiData(`/admin/customers/${customer.id}/phones/${phone.id}/primary`, {
-                                    method: 'POST',
-                                  });
+                                  await fetchApiData(
+                                    `/admin/customers/${customer.id}/phones/${phone.id}/primary`,
+                                    {
+                                      method: 'POST',
+                                    },
+                                  );
                                   void load();
                                 } catch (err) {
-                                  alert(err instanceof Error ? err.message : 'Failed to update primary phone');
+                                  alert(
+                                    err instanceof Error
+                                      ? err.message
+                                      : 'Failed to update primary phone',
+                                  );
                                 }
                               }}
                               className="text-[11px] text-muted-foreground hover:text-foreground underline"
@@ -412,12 +427,19 @@ export function CustomerDetailConsole({ customerId }: { readonly customerId: str
               </div>
             </div>
           </section>
-          
+
           <CustomerEmailCommunications
             customerId={customer.id}
             primaryEmail={
-              customer.emails.find((e) => e.isPrimary)?.email ??
-              customer.emails[0]?.email ??
+              customer.emails.find((e) => e.isPrimary)?.email ?? customer.emails[0]?.email ?? null
+            }
+          />
+
+          <CustomerSmsCommunications
+            customerId={customer.id}
+            primaryPhone={
+              customer.phones.find((phone) => phone.isPrimary)?.phone ??
+              customer.phones[0]?.phone ??
               null
             }
           />

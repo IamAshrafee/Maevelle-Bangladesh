@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Type } from 'typebox';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
@@ -52,7 +52,15 @@ function failure(
       .send({ error: { code: error.code, message: error.message } });
   if (error instanceof notifications.SmsNotificationError)
     return reply
-      .code(error.code === 'NOT_FOUND' ? 404 : error.code === 'CONFLICT' ? 409 : error.code === 'FORBIDDEN' ? 403 : 422)
+      .code(
+        error.code === 'NOT_FOUND'
+          ? 404
+          : error.code === 'CONFLICT'
+            ? 409
+            : error.code === 'FORBIDDEN'
+              ? 403
+              : 422,
+      )
       .send({ error: { code: error.code, message: error.message } });
   throw error;
 }
@@ -64,10 +72,8 @@ export function registerNotificationRoutes(
   config: RuntimeConfig,
 ) {
   const emailEnvironment = config.emailEnvironment ?? config.nodeEnv;
-  const emailReplyTo = config.emailReplyTo ?? 'maevelleBangladesh@gmail.com';
-  const emailFromName = config.emailFromName ?? 'Maevelle';
-  const emailFromAddress = config.emailFromAddress ?? 'orders@example.invalid';
-  const smsProvider = config.smsProvider === 'mock' ? notifications.createMockSmsProvider() : undefined;
+  const smsProvider =
+    config.smsProvider === 'mock' ? notifications.createMockSmsProvider() : undefined;
   const smsRegistry = new notifications.SmsProviderRegistry();
   if (smsProvider) smsRegistry.register(smsProvider);
   const smsRuntime: notifications.SmsRuntimeOptions = {
@@ -78,6 +84,7 @@ export function registerNotificationRoutes(
     senderType: config.smsSenderType,
     ...(config.smsSenderId ? { senderId: config.smsSenderId } : {}),
     ...(config.smsRecipientOverride ? { recipientOverride: config.smsRecipientOverride } : {}),
+    allowedTestRecipients: config.smsAllowedTestRecipients,
     environment: config.smsEnvironment,
   };
   app.get('/admin/notifications', async (req, reply) => {
@@ -464,9 +471,10 @@ export function registerNotificationRoutes(
       };
       const emailRes = await resolveEmailSettings(database.db, a.organizationId, config);
       const testRecipient = body.testRecipient.trim().toLowerCase();
-      const allowedRecipients = emailRes.settings.allowedTestRecipients.length > 0
-        ? emailRes.settings.allowedTestRecipients
-        : (config.emailAllowedTestRecipients ?? []);
+      const allowedRecipients =
+        emailRes.settings.allowedTestRecipients.length > 0
+          ? emailRes.settings.allowedTestRecipients
+          : (config.emailAllowedTestRecipients ?? []);
       if (
         emailRes.readiness.environment === 'production' ||
         !allowedRecipients.includes(testRecipient)
@@ -655,9 +663,10 @@ export function registerNotificationRoutes(
         providerConfigured: emailRes.readiness.providerConfigured,
         webhookConfigured: emailRes.readiness.webhookConfigured,
         testRecipientOverride: emailRes.settings.testRecipientOverride,
-        allowedTestRecipients: emailRes.settings.allowedTestRecipients.length > 0
-          ? emailRes.settings.allowedTestRecipients
-          : (config.emailAllowedTestRecipients ?? []),
+        allowedTestRecipients:
+          emailRes.settings.allowedTestRecipients.length > 0
+            ? emailRes.settings.allowedTestRecipients
+            : (config.emailAllowedTestRecipients ?? []),
         ...(await notifications.emailOperationalSummary(database.db, a.organizationId)),
       },
     };
@@ -666,20 +675,76 @@ export function registerNotificationRoutes(
   app.get('/admin/sms/operations', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'notifications.sms.view');
     if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    const query = req.query as { status?: string; sourceId?: string; page?: string; pageSize?: string };
-    return { data: await notifications.listSmsNotifications(database.db, {
-      organizationId: a.organizationId,
-      ...(query.status ? { status: query.status } : {}), ...(query.sourceId ? { sourceId: query.sourceId } : {}),
-      ...(query.page ? { page: Number(query.page) } : {}), ...(query.pageSize ? { pageSize: Number(query.pageSize) } : {}),
-    }) };
+    const query = req.query as {
+      status?: string;
+      sourceId?: string;
+      customerId?: string;
+      notificationType?: string;
+      templateKey?: string;
+      triggerType?: string;
+      encoding?: string;
+      provider?: string;
+      search?: string;
+      createdFrom?: string;
+      createdTo?: string;
+      page?: string;
+      pageSize?: string;
+    };
+    return {
+      data: await notifications.listSmsNotifications(database.db, {
+        organizationId: a.organizationId,
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.sourceId ? { sourceId: query.sourceId } : {}),
+        ...(query.customerId ? { customerId: query.customerId } : {}),
+        ...(query.notificationType ? { notificationType: query.notificationType } : {}),
+        ...(query.templateKey ? { templateKey: query.templateKey } : {}),
+        ...(query.triggerType ? { triggerType: query.triggerType } : {}),
+        ...(query.encoding ? { encoding: query.encoding } : {}),
+        ...(query.provider ? { provider: query.provider } : {}),
+        ...(query.search ? { search: query.search } : {}),
+        ...(query.createdFrom ? { createdFrom: query.createdFrom } : {}),
+        ...(query.createdTo ? { createdTo: query.createdTo } : {}),
+        ...(query.page ? { page: Number(query.page) } : {}),
+        ...(query.pageSize ? { pageSize: Number(query.pageSize) } : {}),
+      }),
+    };
   });
 
-  app.get('/admin/sms/operations/:notificationId', { schema: { params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }) } }, async (req, reply) => {
-    const a = await admin(database, auth, req.headers, 'notifications.sms.view');
-    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    try { return { data: await notifications.getSmsNotification(database.db, a.organizationId, (req.params as { notificationId: string }).notificationId) }; }
-    catch (error) { return failure(reply, error); }
-  });
+  app.get(
+    '/admin/sms/operations/:notificationId',
+    { schema: { params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }) } },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.sms.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        const detail = await notifications.getSmsNotification(
+          database.db,
+          a.organizationId,
+          (req.params as { notificationId: string }).notificationId,
+        );
+        const capabilities = new Set(a.capabilities);
+        const stateActions = detail.availableActions;
+        return {
+          data: {
+            ...detail,
+            permissions: {
+              canRetry: capabilities.has('notifications.sms.retry'),
+              canResend: capabilities.has('notifications.sms.resend'),
+              canPreview: capabilities.has('notifications.sms.preview'),
+            },
+            availableActions: {
+              ...stateActions,
+              canRetry: stateActions.canRetry && capabilities.has('notifications.sms.retry'),
+              canResend: stateActions.canResend && capabilities.has('notifications.sms.resend'),
+              canPreview: stateActions.canPreview && capabilities.has('notifications.sms.preview'),
+            },
+          },
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
 
   app.get('/admin/sms/policies', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'notifications.sms.view');
@@ -687,12 +752,40 @@ export function registerNotificationRoutes(
     return { data: await notifications.listSmsPolicies(database.db, a.organizationId) };
   });
 
-  app.patch('/admin/sms/policies/:notificationType', { schema: { params: Type.Object({ notificationType: Type.String() }), body: Type.Object({ enabled: Type.Boolean(), automaticEnabled: Type.Boolean(), manualAllowed: Type.Boolean(), reason: Type.String({ minLength: 3, maxLength: 500 }) }) } }, async (req, reply) => {
-    const a = await admin(database, auth, req.headers, 'notifications.sms.configure_policy');
-    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    try { await notifications.updateSmsPolicy(database.db, { organizationId: a.organizationId, actorId: a.actorId, notificationType: (req.params as { notificationType: string }).notificationType, ...(req.body as { enabled: boolean; automaticEnabled: boolean; manualAllowed: boolean; reason: string }) }); return reply.code(204).send(); }
-    catch (error) { return failure(reply, error); }
-  });
+  app.patch(
+    '/admin/sms/policies/:notificationType',
+    {
+      schema: {
+        params: Type.Object({ notificationType: Type.String() }),
+        body: Type.Object({
+          enabled: Type.Boolean(),
+          automaticEnabled: Type.Boolean(),
+          manualAllowed: Type.Boolean(),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.sms.configure_policy');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        await notifications.updateSmsPolicy(database.db, {
+          organizationId: a.organizationId,
+          actorId: a.actorId,
+          notificationType: (req.params as { notificationType: string }).notificationType,
+          ...(req.body as {
+            enabled: boolean;
+            automaticEnabled: boolean;
+            manualAllowed: boolean;
+            reason: string;
+          }),
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
 
   app.get('/admin/sms/templates', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'notifications.sms.view');
@@ -700,99 +793,451 @@ export function registerNotificationRoutes(
     return { data: notifications.listTransactionalSmsTemplates() };
   });
 
-  app.post('/admin/sms/templates/:notificationType/preview', { schema: { params: Type.Object({ notificationType: Type.String() }), body: Type.Object({ orderId: Type.Optional(Type.String()), orderNumber: Type.Optional(Type.String()), totalAmount: Type.Optional(Type.String()), phone: Type.Optional(Type.String()) }) } }, async (req, reply) => {
-    const a = await admin(database, auth, req.headers, 'notifications.sms.preview');
-    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    const body = req.body as { orderId?: string; orderNumber?: string; totalAmount?: string; phone?: string };
-    try { return { data: await notifications.previewOrderSms(database.db, { organizationId: a.organizationId, notificationType: (req.params as { notificationType: string }).notificationType, ...(body.orderId ? { orderId: body.orderId } : {}), fixture: body, storefrontBaseUrl: config.storefrontBaseUrl }) }; }
-    catch (error) { return failure(reply, error); }
-  });
+  app.post(
+    '/admin/sms/templates/:notificationType/preview',
+    {
+      schema: {
+        params: Type.Object({ notificationType: Type.String() }),
+        body: Type.Object({
+          orderId: Type.Optional(Type.String()),
+          orderNumber: Type.Optional(Type.String()),
+          totalAmount: Type.Optional(Type.String()),
+          phone: Type.Optional(Type.String()),
+          customerName: Type.Optional(Type.String()),
+          trackingUrl: Type.Optional(Type.String()),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.sms.preview');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const body = req.body as {
+        orderId?: string;
+        orderNumber?: string;
+        totalAmount?: string;
+        phone?: string;
+        customerName?: string;
+        trackingUrl?: string;
+      };
+      try {
+        return {
+          data: await notifications.previewOrderSms(database.db, {
+            organizationId: a.organizationId,
+            notificationType: (req.params as { notificationType: string }).notificationType,
+            ...(body.orderId ? { orderId: body.orderId } : {}),
+            fixture: body,
+            storefrontBaseUrl: config.storefrontBaseUrl,
+          }),
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
 
-  app.get('/admin/sms/orders/:orderId/eligibility', { schema: { params: Type.Object({ orderId: Type.String() }) } }, async (req, reply) => {
-    const a = await admin(database, auth, req.headers, 'notifications.sms.view');
-    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    try { return { data: await notifications.getOrderSmsEligibility(database.db, { organizationId: a.organizationId, orderId: (req.params as { orderId: string }).orderId, runtime: smsRuntime }) }; }
-    catch (error) { return failure(reply, error); }
-  });
+  app.get(
+    '/admin/sms/orders/:orderId/eligibility',
+    { schema: { params: Type.Object({ orderId: Type.String() }) } },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.sms.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        const eligibility = await notifications.getOrderSmsEligibility(database.db, {
+          organizationId: a.organizationId,
+          orderId: (req.params as { orderId: string }).orderId,
+          runtime: smsRuntime,
+        });
+        const capabilities = new Set(a.capabilities);
+        return {
+          data: {
+            ...eligibility,
+            permissions: {
+              canManualSend: capabilities.has('notifications.sms.manual_send'),
+              canPreview: capabilities.has('notifications.sms.preview'),
+              canRetry: capabilities.has('notifications.sms.retry'),
+              canResend: capabilities.has('notifications.sms.resend'),
+            },
+            events: eligibility.events.map((event) => ({
+              ...event,
+              canSendManually:
+                event.canSendManually && capabilities.has('notifications.sms.manual_send'),
+            })),
+          },
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
 
-  const sendSms = async (req: any, reply: any, capability: string, triggerType: 'MANUAL' | 'TEST' | 'RESEND' = 'MANUAL') => {
+  const sendSms = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+    capability: string,
+    triggerType: 'MANUAL' | 'TEST' | 'RESEND' = 'MANUAL',
+  ) => {
     const a = await admin(database, auth, req.headers, capability);
     if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    const body = req.body as { notificationType: string; idempotencyKey: string; reason: string; testRecipient?: string; parentNotificationId?: string };
-    if (body.testRecipient && (!config.smsTestMode || !config.smsAllowedTestRecipients.includes(body.testRecipient)))
-      return reply.code(422).send({ error: { code: 'UNSAFE_TEST_RECIPIENT', message: 'The SMS test recipient is not in the deployment allow-list.' } });
+    const body = req.body as {
+      notificationType: string;
+      idempotencyKey: string;
+      reason: string;
+      testRecipient?: string;
+      parentNotificationId?: string;
+    };
+    if (
+      body.testRecipient &&
+      (!config.smsTestMode || !config.smsAllowedTestRecipients.includes(body.testRecipient))
+    )
+      return reply
+        .code(422)
+        .send({
+          error: {
+            code: 'UNSAFE_TEST_RECIPIENT',
+            message: 'The SMS test recipient is not in the deployment allow-list.',
+          },
+        });
     try {
-      const result = await notifications.createManualOrderSms(database.db, { organizationId: a.organizationId, actorId: a.actorId,
-        orderId: req.params.orderId, notificationType: body.notificationType, idempotencyKey: body.idempotencyKey, reason: body.reason,
-        triggerType, ...(body.testRecipient ? { recipientOverride: body.testRecipient } : {}), ...(body.parentNotificationId ? { parentNotificationId: body.parentNotificationId } : {}), runtime: smsRuntime });
+      const result = await notifications.createManualOrderSms(database.db, {
+        organizationId: a.organizationId,
+        actorId: a.actorId,
+        orderId: (req.params as { orderId: string }).orderId,
+        notificationType: body.notificationType,
+        idempotencyKey: body.idempotencyKey,
+        reason: body.reason,
+        triggerType,
+        ...(body.testRecipient ? { recipientOverride: body.testRecipient } : {}),
+        ...(body.parentNotificationId ? { parentNotificationId: body.parentNotificationId } : {}),
+        runtime: smsRuntime,
+      });
       return reply.code(result.created ? 201 : 200).send({ data: result });
-    } catch (error) { return failure(reply, error); }
+    } catch (error) {
+      return failure(reply, error);
+    }
   };
 
-  app.post('/admin/sms/orders/:orderId/send', { schema: { params: Type.Object({ orderId: Type.String() }), body: Type.Object({ notificationType: Type.String(), idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }), reason: Type.String({ minLength: 3, maxLength: 500 }) }) } }, (req, reply) => sendSms(req, reply, 'notifications.sms.manual_send'));
-  app.post('/admin/sms/orders/:orderId/test', { schema: { params: Type.Object({ orderId: Type.String() }), body: Type.Object({ notificationType: Type.String(), testRecipient: Type.String(), idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }), reason: Type.String({ minLength: 3, maxLength: 500 }) }) } }, (req, reply) => sendSms(req, reply, 'notifications.sms.test_send', 'TEST'));
+  app.post(
+    '/admin/sms/orders/:orderId/send',
+    {
+      schema: {
+        params: Type.Object({ orderId: Type.String() }),
+        body: Type.Object({
+          notificationType: Type.String(),
+          idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    (req, reply) => sendSms(req, reply, 'notifications.sms.manual_send'),
+  );
+  app.post(
+    '/admin/sms/orders/:orderId/test',
+    {
+      schema: {
+        params: Type.Object({ orderId: Type.String() }),
+        body: Type.Object({
+          notificationType: Type.String(),
+          testRecipient: Type.String(),
+          idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    (req, reply) => sendSms(req, reply, 'notifications.sms.test_send', 'TEST'),
+  );
 
-  app.post('/admin/sms/operations/:notificationId/retry', { schema: { params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }), body: Type.Object({ reason: Type.String({ minLength: 3, maxLength: 500 }) }) } }, async (req, reply) => {
-    const a = await admin(database, auth, req.headers, 'notifications.sms.retry');
-    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    try { await notifications.retrySmsNotification(database.db, { organizationId: a.organizationId, actorId: a.actorId, notificationId: (req.params as { notificationId: string }).notificationId, reason: (req.body as { reason: string }).reason }); return reply.code(204).send(); }
-    catch (error) { return failure(reply, error); }
-  });
+  app.post(
+    '/admin/sms/test-lab',
+    {
+      schema: {
+        body: Type.Object({
+          orderId: Type.String(),
+          notificationType: Type.String(),
+          testRecipient: Type.String(),
+          scenario: Type.Union([
+            Type.Literal('ACCEPTED'),
+            Type.Literal('DELIVERED'),
+            Type.Literal('DELAYED'),
+            Type.Literal('TRANSIENT_FAILURE'),
+            Type.Literal('PERMANENT_FAILURE'),
+            Type.Literal('RATE_LIMITED'),
+            Type.Literal('UNKNOWN_OUTCOME'),
+            Type.Literal('UNDELIVERABLE'),
+          ]),
+          idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.sms.test_send');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const body = req.body as {
+        orderId: string;
+        notificationType: string;
+        testRecipient: string;
+        scenario: notifications.MockSmsMode;
+        idempotencyKey: string;
+        reason: string;
+      };
+      const normalized = notifications.normalizeBangladeshPhone(body.testRecipient);
+      if (
+        config.smsEnvironment === 'production' ||
+        !config.smsTestMode ||
+        config.smsProvider !== 'mock'
+      )
+        return reply
+          .code(409)
+          .send({
+            error: {
+              code: 'MOCK_LAB_UNAVAILABLE',
+              message:
+                'Mock lifecycle scenarios are available only with SMS_PROVIDER=mock in a non-production test environment.',
+            },
+          });
+      if (!normalized.valid || !config.smsAllowedTestRecipients.includes(normalized.normalized))
+        return reply
+          .code(422)
+          .send({
+            error: {
+              code: 'UNSAFE_TEST_RECIPIENT',
+              message:
+                'Choose a valid Bangladesh mobile from the deployment test-recipient allow-list.',
+            },
+          });
+      try {
+        const result = await notifications.createManualOrderSms(database.db, {
+          organizationId: a.organizationId,
+          actorId: a.actorId,
+          orderId: body.orderId,
+          notificationType: body.notificationType,
+          idempotencyKey: body.idempotencyKey,
+          reason: body.reason,
+          triggerType: 'TEST',
+          recipientOverride: normalized.normalized,
+          runtime: smsRuntime,
+        });
+        if (result.created)
+          await notifications.runSmsTestScenario(database.db, {
+            organizationId: a.organizationId,
+            notificationId: result.id,
+            scenario: body.scenario,
+          });
+        const detail = await notifications.getSmsNotification(
+          database.db,
+          a.organizationId,
+          result.id,
+        );
+        const capabilities = new Set(a.capabilities);
+        return reply
+          .code(result.created ? 201 : 200)
+          .send({
+            data: {
+              ...detail,
+              permissions: {
+                canRetry: capabilities.has('notifications.sms.retry'),
+                canResend: capabilities.has('notifications.sms.resend'),
+                canPreview: capabilities.has('notifications.sms.preview'),
+              },
+              availableActions: {
+                ...detail.availableActions,
+                canRetry:
+                  detail.availableActions.canRetry && capabilities.has('notifications.sms.retry'),
+                canResend:
+                  detail.availableActions.canResend && capabilities.has('notifications.sms.resend'),
+                canPreview:
+                  detail.availableActions.canPreview &&
+                  capabilities.has('notifications.sms.preview'),
+              },
+            },
+          });
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
 
-  app.post('/admin/sms/operations/:notificationId/resend', { schema: { params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }), body: Type.Object({ idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }), reason: Type.String({ minLength: 3, maxLength: 500 }) }) } }, async (req, reply) => {
-    const a = await admin(database, auth, req.headers, 'notifications.sms.resend');
-    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    try {
-      const id = (req.params as { notificationId: string }).notificationId;
-      const original = await notifications.getSmsNotification(database.db, a.organizationId, id) as unknown as { source_id: string; notification_type: string };
-      const body = req.body as { idempotencyKey: string; reason: string };
-      const result = await notifications.createManualOrderSms(database.db, { organizationId: a.organizationId, actorId: a.actorId, orderId: original.source_id, notificationType: original.notification_type, idempotencyKey: body.idempotencyKey, reason: body.reason, triggerType: 'RESEND', parentNotificationId: id, runtime: smsRuntime });
-      return reply.code(result.created ? 201 : 200).send({ data: result });
-    } catch (error) { return failure(reply, error); }
-  });
+  app.post(
+    '/admin/sms/operations/:notificationId/retry',
+    {
+      schema: {
+        params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({ reason: Type.String({ minLength: 3, maxLength: 500 }) }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.sms.retry');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        await notifications.retrySmsNotification(database.db, {
+          organizationId: a.organizationId,
+          actorId: a.actorId,
+          notificationId: (req.params as { notificationId: string }).notificationId,
+          reason: (req.body as { reason: string }).reason,
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/sms/operations/:notificationId/resend',
+    {
+      schema: {
+        params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          idempotencyKey: Type.String({ minLength: 8, maxLength: 200 }),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.sms.resend');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        const id = (req.params as { notificationId: string }).notificationId;
+        const original = (await notifications.getSmsNotification(
+          database.db,
+          a.organizationId,
+          id,
+        )) as unknown as { source_id: string; notification_type: string };
+        const body = req.body as { idempotencyKey: string; reason: string };
+        const result = await notifications.createManualOrderSms(database.db, {
+          organizationId: a.organizationId,
+          actorId: a.actorId,
+          orderId: original.source_id,
+          notificationType: original.notification_type,
+          idempotencyKey: body.idempotencyKey,
+          reason: body.reason,
+          triggerType: 'RESEND',
+          parentNotificationId: id,
+          runtime: smsRuntime,
+        });
+        return reply.code(result.created ? 201 : 200).send({ data: result });
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
 
   app.get('/admin/sms/suppressions', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'notifications.sms.suppression.view');
     if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
     return { data: await notifications.listSmsSuppressions(database.db, a.organizationId) };
   });
-  app.post('/admin/sms/suppressions', { schema: { body: Type.Object({ phone: Type.String(), active: Type.Boolean(), reason: Type.String({ minLength: 3, maxLength: 500 }) }) } }, async (req, reply) => {
-    const a = await admin(database, auth, req.headers, 'notifications.sms.suppression.manage');
-    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    try { await notifications.setSmsSuppression(database.db, { organizationId: a.organizationId, actorId: a.actorId, ...(req.body as { phone: string; active: boolean; reason: string }) }); return reply.code(204).send(); }
-    catch (error) { return failure(reply, error); }
-  });
+  app.post(
+    '/admin/sms/suppressions',
+    {
+      schema: {
+        body: Type.Object({
+          phone: Type.String(),
+          active: Type.Boolean(),
+          reason: Type.String({ minLength: 3, maxLength: 500 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.sms.suppression.manage');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        await notifications.setSmsSuppression(database.db, {
+          organizationId: a.organizationId,
+          actorId: a.actorId,
+          ...(req.body as { phone: string; active: boolean; reason: string }),
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
 
   app.get('/admin/sms/diagnostics', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'notifications.sms.diagnostics');
     if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
-    return { data: await notifications.smsOperationalSummary(database.db, a.organizationId, smsRuntime, smsProvider) };
+    return {
+      data: await notifications.smsOperationalSummary(
+        database.db,
+        a.organizationId,
+        smsRuntime,
+        smsProvider,
+      ),
+    };
   });
 
-  app.post('/webhooks/sms/:provider', { schema: { params: Type.Object({ provider: Type.String({ maxLength: 80 }) }) } }, async (req, reply) => {
-    const provider = smsRegistry.get((req.params as { provider: string }).provider);
-    if (!provider || !provider.capabilities.has('DELIVERY_CALLBACK') || !provider.verifyAndParseWebhook)
-      return reply.code(404).send({ error: { code: 'SMS_WEBHOOK_UNAVAILABLE', message: 'This SMS provider has no registered callback handler.' } });
-    const rawBody = (req as typeof req & { rawBody?: string }).rawBody;
-    if (!rawBody) return reply.code(400).send({ error: { code: 'INVALID_WEBHOOK', message: 'A raw callback body is required.' } });
-    try {
-      const parsed = await provider.verifyAndParseWebhook({ rawBody, headers: Object.fromEntries(Object.entries(req.headers).map(([key, value]) => [key, typeof value === 'string' ? value : undefined])) });
-      for (const event of parsed) await notifications.applySmsDeliveryEvent(database.db, provider.name, event);
-      return reply.code(204).send();
-    } catch {
-      return reply.code(400).send({ error: { code: 'INVALID_WEBHOOK', message: 'SMS callback authentication or payload validation failed.' } });
-    }
-  });
+  app.post(
+    '/webhooks/sms/:provider',
+    { schema: { params: Type.Object({ provider: Type.String({ maxLength: 80 }) }) } },
+    async (req, reply) => {
+      const provider = smsRegistry.get((req.params as { provider: string }).provider);
+      if (
+        !provider ||
+        !provider.capabilities.has('DELIVERY_CALLBACK') ||
+        !provider.verifyAndParseWebhook
+      )
+        return reply
+          .code(404)
+          .send({
+            error: {
+              code: 'SMS_WEBHOOK_UNAVAILABLE',
+              message: 'This SMS provider has no registered callback handler.',
+            },
+          });
+      const rawBody = (req as typeof req & { rawBody?: string }).rawBody;
+      if (!rawBody)
+        return reply
+          .code(400)
+          .send({
+            error: { code: 'INVALID_WEBHOOK', message: 'A raw callback body is required.' },
+          });
+      try {
+        const parsed = await provider.verifyAndParseWebhook({
+          rawBody,
+          headers: Object.fromEntries(
+            Object.entries(req.headers).map(([key, value]) => [
+              key,
+              typeof value === 'string' ? value : undefined,
+            ]),
+          ),
+        });
+        for (const event of parsed)
+          await notifications.applySmsDeliveryEvent(database.db, provider.name, event);
+        return reply.code(204).send();
+      } catch {
+        return reply
+          .code(400)
+          .send({
+            error: {
+              code: 'INVALID_WEBHOOK',
+              message: 'SMS callback authentication or payload validation failed.',
+            },
+          });
+      }
+    },
+  );
 
   app.post('/webhooks/resend', async (req, reply) => {
     if (!config.resendWebhookSecret)
-      return reply.code(503).send({ error: { code: 'WEBHOOK_NOT_CONFIGURED', message: 'Webhook is not configured.' } });
+      return reply
+        .code(503)
+        .send({ error: { code: 'WEBHOOK_NOT_CONFIGURED', message: 'Webhook is not configured.' } });
     const rawBody = (req as typeof req & { rawBody?: string }).rawBody;
     const id = req.headers['svix-id'];
     const timestamp = req.headers['svix-timestamp'];
     const signature = req.headers['svix-signature'];
-    if (!rawBody || typeof id !== 'string' || typeof timestamp !== 'string' || typeof signature !== 'string')
-      return reply.code(400).send({ error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature headers are missing.' } });
+    if (
+      !rawBody ||
+      typeof id !== 'string' ||
+      typeof timestamp !== 'string' ||
+      typeof signature !== 'string'
+    )
+      return reply
+        .code(400)
+        .send({
+          error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature headers are missing.' },
+        });
     let event: { type: string; created_at?: string; data: Record<string, unknown> };
     try {
       const resend = new Resend(config.resendApiKey ?? 're_webhook_verification_only');
@@ -802,7 +1247,9 @@ export function registerNotificationRoutes(
         webhookSecret: config.resendWebhookSecret,
       }) as unknown as { type: string; created_at?: string; data: Record<string, unknown> };
     } catch {
-      return reply.code(400).send({ error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature is invalid.' } });
+      return reply
+        .code(400)
+        .send({ error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature is invalid.' } });
     }
     try {
       await notifications.ingestResendWebhook(database.db, {
@@ -814,8 +1261,15 @@ export function registerNotificationRoutes(
       });
       return reply.code(204).send();
     } catch (error) {
-      req.log.error({ err: error, providerEventId: id }, 'Verified Resend webhook could not be persisted.');
-      return reply.code(500).send({ error: { code: 'WEBHOOK_PROCESSING_FAILED', message: 'Webhook could not be processed.' } });
+      req.log.error(
+        { err: error, providerEventId: id },
+        'Verified Resend webhook could not be persisted.',
+      );
+      return reply
+        .code(500)
+        .send({
+          error: { code: 'WEBHOOK_PROCESSING_FAILED', message: 'Webhook could not be processed.' },
+        });
     }
   });
 }

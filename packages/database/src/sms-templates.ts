@@ -24,7 +24,7 @@ const definitions: Readonly<Record<TransactionalSmsTemplateKey, {
   readonly render: (model: TransactionalSmsModel) => string;
 }>> = {
   'order-received': { version: 1, event: 'ORDER_PLACED', description: 'Confirms Maevelle received the order.', render: (m) => `Maevelle: Order ${m.orderNumber} received. Total ${m.currencyCode} ${m.totalAmount}. We will confirm it shortly.` },
-  'order-confirmed': { version: 1, event: 'ORDER_CONFIRMED', description: 'Confirms the order is approved for preparation.', render: (m) => `Maevelle: Order ${m.orderNumber} confirmed. Total ${m.currencyCode} ${m.totalAmount}.${track(m)}` },
+  'order-confirmed': { version: 1, event: 'ORDER_CONFIRMED', description: 'Confirms the order is approved for preparation.', render: (m) => `Maevelle: Order ${m.orderNumber} confirmed. Total ${m.currencyCode} ${m.totalAmount}.${m.customerName ? ` Customer: ${m.customerName}.` : ''}${track(m)}` },
   'payment-confirmed': { version: 1, event: 'PAYMENT_VERIFIED', description: 'Confirms verified payment.', render: (m) => `Maevelle: Payment confirmed for order ${m.orderNumber}. Amount ${m.currencyCode} ${m.totalAmount}.` },
   'order-shipped': { version: 1, event: 'ORDER_DISPATCHED', description: 'Confirms authoritative fulfillment dispatch.', render: (m) => `Maevelle: Order ${m.orderNumber} has been dispatched.${track(m)}` },
   'order-delivered': { version: 1, event: 'DELIVERY_COMPLETED', description: 'Confirms authoritative delivery completion.', render: (m) => `Maevelle: Order ${m.orderNumber} was delivered. Thank you for shopping with us.` },

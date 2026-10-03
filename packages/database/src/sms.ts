@@ -86,7 +86,8 @@ export class SmsProviderRegistry {
   readonly #providers = new Map<string, SmsProvider>();
 
   public register(provider: SmsProvider): this {
-    if (this.#providers.has(provider.name)) throw new Error(`SMS provider ${provider.name} is already registered.`);
+    if (this.#providers.has(provider.name))
+      throw new Error(`SMS provider ${provider.name} is already registered.`);
     this.#providers.set(provider.name, provider);
     return this;
   }
@@ -110,9 +111,12 @@ export type MockSmsMode =
   | 'TRANSIENT_FAILURE'
   | 'PERMANENT_FAILURE'
   | 'RATE_LIMITED'
-  | 'UNKNOWN_OUTCOME';
+  | 'UNKNOWN_OUTCOME'
+  | 'UNDELIVERABLE';
 
-export function createMockSmsProvider(options: { readonly mode?: MockSmsMode; readonly webhookToken?: string } = {}): SmsProvider {
+export function createMockSmsProvider(
+  options: { readonly mode?: MockSmsMode; readonly webhookToken?: string } = {},
+): SmsProvider {
   const sent = new Map<string, { id: string; status: NormalizedSmsDeliveryStatus }>();
   const mode = options.mode ?? 'ACCEPTED';
   return {
@@ -131,16 +135,46 @@ export function createMockSmsProvider(options: { readonly mode?: MockSmsMode; re
       if (existing) return { outcome: 'ACCEPTED', providerMessageId: existing.id };
       const id = `mock_${createHash('sha256').update(request.idempotencyKey).digest('hex').slice(0, 24)}`;
       if (mode === 'TRANSIENT_FAILURE')
-        return { outcome: 'FAILED', category: 'TRANSIENT', errorCode: 'MOCK_TEMPORARY_FAILURE', retryable: true };
+        return {
+          outcome: 'FAILED',
+          category: 'TRANSIENT',
+          errorCode: 'MOCK_TEMPORARY_FAILURE',
+          retryable: true,
+        };
       if (mode === 'PERMANENT_FAILURE')
-        return { outcome: 'FAILED', category: 'PERMANENT', errorCode: 'MOCK_PERMANENT_FAILURE', retryable: false };
+        return {
+          outcome: 'FAILED',
+          category: 'PERMANENT',
+          errorCode: 'MOCK_PERMANENT_FAILURE',
+          retryable: false,
+        };
       if (mode === 'RATE_LIMITED')
-        return { outcome: 'FAILED', category: 'RATE_LIMITED', errorCode: 'MOCK_RATE_LIMITED', retryable: true };
+        return {
+          outcome: 'FAILED',
+          category: 'RATE_LIMITED',
+          errorCode: 'MOCK_RATE_LIMITED',
+          retryable: true,
+        };
       if (mode === 'UNKNOWN_OUTCOME')
-        return { outcome: 'UNKNOWN', errorCode: 'MOCK_TIMEOUT_AFTER_REQUEST', providerMessageId: id };
-      const status = mode === 'DELIVERED' ? 'DELIVERED' : mode === 'DELAYED' ? 'DELIVERY_DELAYED' : 'ACCEPTED';
+        return {
+          outcome: 'UNKNOWN',
+          errorCode: 'MOCK_TIMEOUT_AFTER_REQUEST',
+          providerMessageId: id,
+        };
+      const status =
+        mode === 'DELIVERED'
+          ? 'DELIVERED'
+          : mode === 'DELAYED'
+            ? 'DELIVERY_DELAYED'
+            : mode === 'UNDELIVERABLE'
+              ? 'UNDELIVERABLE'
+              : 'ACCEPTED';
       sent.set(request.idempotencyKey, { id, status });
-      return { outcome: 'ACCEPTED', providerMessageId: id, providerReportedSegments: request.estimatedSegments };
+      return {
+        outcome: 'ACCEPTED',
+        providerMessageId: id,
+        providerReportedSegments: request.estimatedSegments,
+      };
     },
     async getMessageStatus(providerMessageId) {
       const entry = [...sent.values()].find((candidate) => candidate.id === providerMessageId);
@@ -157,9 +191,24 @@ export function createMockSmsProvider(options: { readonly mode?: MockSmsMode; re
       if (input.headers['x-mock-sms-token'] !== (options.webhookToken ?? 'mock-webhook-secret'))
         throw new Error('Invalid mock SMS webhook token.');
       const value = JSON.parse(input.rawBody) as Partial<NormalizedSmsDeliveryEvent>;
-      if (!value.providerEventId || !value.providerMessageId || !value.providerStatus || !value.status)
+      if (
+        !value.providerEventId ||
+        !value.providerMessageId ||
+        !value.providerStatus ||
+        !value.status
+      )
         throw new Error('Invalid mock SMS webhook payload.');
-      if (!['ACCEPTED','DELIVERY_DELAYED','DELIVERED','FAILED','REJECTED','EXPIRED','UNDELIVERABLE'].includes(value.status))
+      if (
+        ![
+          'ACCEPTED',
+          'DELIVERY_DELAYED',
+          'DELIVERED',
+          'FAILED',
+          'REJECTED',
+          'EXPIRED',
+          'UNDELIVERABLE',
+        ].includes(value.status)
+      )
         throw new Error('Invalid mock SMS delivery status.');
       return [value as NormalizedSmsDeliveryEvent];
     },
@@ -174,7 +223,9 @@ export type PhoneNormalizationResult =
       readonly reason: 'MISSING' | 'MALFORMED' | 'NOT_BANGLADESH_MOBILE';
     };
 
-export function normalizeBangladeshPhone(value: string | null | undefined): PhoneNormalizationResult {
+export function normalizeBangladeshPhone(
+  value: string | null | undefined,
+): PhoneNormalizationResult {
   const raw = value?.trim() ?? '';
   if (!raw) return { valid: false, raw, reason: 'MISSING' };
   if (!/^[+\d\s().-]+$/.test(raw)) return { valid: false, raw, reason: 'MALFORMED' };
@@ -186,9 +237,9 @@ export function normalizeBangladeshPhone(value: string | null | undefined): Phon
   return { valid: true, raw, normalized: parsed.number };
 }
 
-const GSM_BASIC = new Set(
-  [..."@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà"],
-);
+const GSM_BASIC = new Set([
+  ...'@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà',
+]);
 const GSM_EXTENDED = new Set(['\f', '^', '{', '}', '\\', '[', '~', ']', '|', '€']);
 
 export interface SmsLengthEstimate {
@@ -198,31 +249,62 @@ export interface SmsLengthEstimate {
   readonly segmentCount: number;
   readonly perSegmentLimit: number;
   readonly warnings: readonly string[];
+  readonly unicodeTriggerCharacters?: readonly string[];
 }
 
 export function estimateSmsLength(text: string): SmsLengthEstimate {
   const characters = [...text];
   let gsmUnits = 0;
-  let gsmCompatible = true;
+  const nonGsmCharacters: string[] = [];
   for (const character of characters) {
-    if (GSM_BASIC.has(character)) gsmUnits += 1;
-    else if (GSM_EXTENDED.has(character)) gsmUnits += 2;
-    else {
-      gsmCompatible = false;
-      break;
+    if (GSM_BASIC.has(character)) {
+      gsmUnits += 1;
+    } else if (GSM_EXTENDED.has(character)) {
+      gsmUnits += 2;
+    } else {
+      nonGsmCharacters.push(character);
     }
   }
+  const gsmCompatible = nonGsmCharacters.length === 0;
   const encoding = gsmCompatible ? 'GSM_7' : 'UNICODE';
   const encodingUnitCount = gsmCompatible ? gsmUnits : text.length;
   const singleLimit = gsmCompatible ? 160 : 70;
   const concatenatedLimit = gsmCompatible ? 153 : 67;
-  const segmentCount = encodingUnitCount === 0 ? 0 : encodingUnitCount <= singleLimit ? 1 : Math.ceil(encodingUnitCount / concatenatedLimit);
+  const segmentCount =
+    encodingUnitCount === 0
+      ? 0
+      : encodingUnitCount <= singleLimit
+        ? 1
+        : Math.ceil(encodingUnitCount / concatenatedLimit);
+
+  const warnings: string[] = [];
+  if (segmentCount > 1) {
+    warnings.push(`This message is estimated to use ${segmentCount} billable SMS segments.`);
+  }
+
+  const uniqueNonGsm = [...new Set(nonGsmCharacters)];
+  if (uniqueNonGsm.length > 0) {
+    const sample = uniqueNonGsm.slice(0, 3).map((c) => `“${c}”`).join(', ');
+    warnings.push(
+      `Unicode triggered by character: ${sample}${uniqueNonGsm.length > 3 ? '…' : ''}. Capacity is reduced to 70 characters per segment.`,
+    );
+  }
+
+  const capacity = segmentCount <= 1 ? singleLimit : concatenatedLimit * segmentCount;
+  const remainingInSegment = capacity - encodingUnitCount;
+  if (remainingInSegment <= 10 && remainingInSegment > 0 && encodingUnitCount > 0) {
+    warnings.push(
+      `${remainingInSegment} character${remainingInSegment === 1 ? '' : 's'} remaining before an additional segment may be required.`,
+    );
+  }
+
   return {
     encoding,
     characterCount: characters.length,
     encodingUnitCount,
     segmentCount,
     perSegmentLimit: segmentCount <= 1 ? singleLimit : concatenatedLimit,
-    warnings: segmentCount > 1 ? [`This message is estimated to use ${segmentCount} SMS segments.`] : [],
+    warnings,
+    ...(uniqueNonGsm.length > 0 ? { unicodeTriggerCharacters: uniqueNonGsm.slice(0, 5) } : {}),
   };
 }

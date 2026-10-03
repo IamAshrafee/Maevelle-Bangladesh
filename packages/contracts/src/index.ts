@@ -3262,9 +3262,20 @@ export interface EmailDiagnosticsDto {
 }
 
 export type SmsNotificationStatus =
-  | 'NOT_APPLICABLE' | 'SKIPPED_NO_PHONE' | 'PENDING_MANUAL' | 'QUEUED' | 'PROCESSING'
-  | 'ACCEPTED' | 'DELIVERED' | 'DELIVERY_DELAYED' | 'FAILED' | 'REJECTED' | 'EXPIRED'
-  | 'UNDELIVERABLE' | 'UNKNOWN_PROVIDER_OUTCOME' | 'SUPPRESSED';
+  | 'NOT_APPLICABLE'
+  | 'SKIPPED_NO_PHONE'
+  | 'PENDING_MANUAL'
+  | 'QUEUED'
+  | 'PROCESSING'
+  | 'ACCEPTED'
+  | 'DELIVERED'
+  | 'DELIVERY_DELAYED'
+  | 'FAILED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'UNDELIVERABLE'
+  | 'UNKNOWN_PROVIDER_OUTCOME'
+  | 'SUPPRESSED';
 
 export type SmsTriggerType = 'AUTOMATIC' | 'MANUAL' | 'TEST' | 'RESEND';
 
@@ -3298,6 +3309,33 @@ export interface SmsNotificationRowDto {
   readonly provider_cost_currency: string | null;
   readonly sender_type: 'MASKING' | 'NON_MASKING' | 'PROVIDER_DEFAULT';
   readonly sender_id: string | null;
+  readonly order_number: string | null;
+  readonly customer_name: string | null;
+  readonly latest_attempt_status: string | null;
+  readonly next_retry_at: string | null;
+}
+
+export interface SmsProviderEventDto {
+  readonly id: number;
+  readonly provider: string;
+  readonly provider_event_id: string;
+  readonly provider_message_id: string | null;
+  readonly provider_status: string;
+  readonly normalized_status: string;
+  readonly provider_occurred_at: string | null;
+  readonly received_at: string;
+  readonly processed_at: string | null;
+  readonly processing_result: string | null;
+  readonly safe_metadata: Record<string, unknown>;
+}
+
+export interface SmsAuditEventDto {
+  readonly id: number;
+  readonly action: string;
+  readonly actor_name: string | null;
+  readonly reason: string | null;
+  readonly metadata: Record<string, unknown> | null;
+  readonly created_at: string;
 }
 
 export interface SmsNotificationDetailDto extends SmsNotificationRowDto {
@@ -3308,15 +3346,39 @@ export interface SmsNotificationDetailDto extends SmsNotificationRowDto {
   readonly reconcile_after: string | null;
   readonly attempts: readonly EmailDeliveryAttemptDto[];
   readonly timeline: readonly EmailTimelineEventDto[];
-  readonly availableActions: { readonly canRetry: boolean; readonly canResend: boolean; readonly canPreview: boolean };
+  readonly providerEvents: readonly SmsProviderEventDto[];
+  readonly auditEvents: readonly SmsAuditEventDto[];
+  readonly relatedNotifications: readonly SmsNotificationRowDto[];
+  readonly recommendedAction: {
+    readonly code: string;
+    readonly label: string;
+    readonly explanation: string;
+  };
+  readonly permissions: {
+    readonly canRetry: boolean;
+    readonly canResend: boolean;
+    readonly canPreview: boolean;
+  };
+  readonly availableActions: {
+    readonly canRetry: boolean;
+    readonly canResend: boolean;
+    readonly canPreview: boolean;
+    readonly retryReason: string;
+    readonly resendReason: string;
+  };
 }
 
-export interface SmsPolicyDto extends EmailPolicyDto {}
+export type SmsPolicyDto = EmailPolicyDto;
 
 export interface SmsSuppressionDto {
   readonly id: string;
   readonly normalized_phone: string;
-  readonly reason: 'INVALID_NUMBER' | 'PERMANENT_DELIVERY_FAILURE' | 'CUSTOMER_REQUEST' | 'ADMIN_SUPPRESSION' | 'PROVIDER_BLOCK';
+  readonly reason:
+    | 'INVALID_NUMBER'
+    | 'PERMANENT_DELIVERY_FAILURE'
+    | 'CUSTOMER_REQUEST'
+    | 'ADMIN_SUPPRESSION'
+    | 'PROVIDER_BLOCK';
   readonly source: string;
   readonly provider: string | null;
   readonly active: boolean;
@@ -3342,8 +3404,13 @@ export interface SmsPreviewDto {
   readonly encodingUnitCount: number;
   readonly segmentCount: number;
   readonly perSegmentLimit: number;
+  readonly segmentCapacity: number;
+  readonly unitsRemainingInSegment: number;
   readonly warnings: readonly string[];
+  readonly unicodeTriggerCharacters?: readonly string[];
   readonly intendedRecipient: string | null;
+  readonly normalizedRecipient: string | null;
+  readonly phoneValidation: 'VALID' | 'MISSING' | 'INVALID';
   readonly isSampleFixture: boolean;
 }
 
@@ -3357,18 +3424,60 @@ export interface SmsDiagnosticsDto {
   readonly recipientOverride: string | null;
   readonly capabilities: readonly string[];
   readonly credentialsConfigured: boolean;
+  readonly mode: 'DISABLED' | 'MOCK' | 'PRODUCTION';
+  readonly allowedTestRecipients: readonly string[];
+  readonly callbackSupported: boolean;
+  readonly pollingSupported: boolean;
+  readonly callbackConfigured: boolean;
   readonly queued: number;
   readonly processing: number;
   readonly failed: number;
   readonly accepted: number;
   readonly delivered: number;
+  readonly skipped: number;
+  readonly suppressed: number;
+  readonly activeSuppressions: number;
+  readonly estimatedSegments: number;
+  readonly unicodeMessages: number;
+  readonly gsm7Messages: number;
+  readonly retriesScheduled: number;
+  readonly today: {
+    readonly created: number;
+    readonly queued: number;
+    readonly accepted: number;
+    readonly delivered: number;
+    readonly failed: number;
+    readonly skipped: number;
+    readonly suppressed: number;
+    readonly estimatedSegments: number;
+  };
+  readonly last7Days: {
+    readonly created: number;
+    readonly delivered: number;
+    readonly failed: number;
+    readonly deliveryRate: number | null;
+  };
   readonly oldestQueuedAt: string | null;
   readonly lastDeliveryCallbackAt: string | null;
-  readonly workerStatus: 'HEALTHY' | 'BACKLOG';
+  readonly lastWorkerActivityAt: string | null;
+  readonly workerStatus: 'HEALTHY' | 'BACKLOG' | 'IDLE' | 'UNAVAILABLE';
+  readonly readiness: readonly {
+    readonly key: string;
+    readonly label: string;
+    readonly state: 'READY' | 'PENDING' | 'UNAVAILABLE';
+    readonly explanation: string;
+  }[];
 }
 
-export type OrderSmsEligibilityCode = 'ELIGIBLE' | 'NO_PHONE' | 'INVALID_PHONE' | 'SMS_GLOBALLY_DISABLED'
-  | 'EVENT_POLICY_DISABLED' | 'PROVIDER_NOT_CONFIGURED' | 'RECIPIENT_SUPPRESSED' | 'WAITING_FOR_ORDER_STATE'
+export type OrderSmsEligibilityCode =
+  | 'ELIGIBLE'
+  | 'NO_PHONE'
+  | 'INVALID_PHONE'
+  | 'SMS_GLOBALLY_DISABLED'
+  | 'EVENT_POLICY_DISABLED'
+  | 'PROVIDER_NOT_CONFIGURED'
+  | 'RECIPIENT_SUPPRESSED'
+  | 'WAITING_FOR_ORDER_STATE'
   | SmsNotificationStatus;
 
 export interface OrderSmsEligibilityDto {
@@ -3381,16 +3490,45 @@ export interface OrderSmsEligibilityDto {
   readonly suppressionReason: string | null;
   readonly globalSmsEnabled: boolean;
   readonly providerConfigured: boolean;
+  readonly providerName: string;
+  readonly recipientOverride: string | null;
+  readonly phoneValidation: 'VALID' | 'MISSING' | 'INVALID';
+  readonly permissions: {
+    readonly canManualSend: boolean;
+    readonly canPreview: boolean;
+    readonly canRetry: boolean;
+    readonly canResend: boolean;
+  };
   readonly events: readonly {
     readonly notificationType: string;
     readonly templateKey: string | null;
-    readonly policy: { readonly enabled: boolean; readonly automaticEnabled: boolean; readonly manualAllowed: boolean };
+    readonly policy: {
+      readonly enabled: boolean;
+      readonly automaticEnabled: boolean;
+      readonly manualAllowed: boolean;
+    };
     readonly orderReachedState: boolean;
     readonly canSendManually: boolean;
     readonly eligibilityCode: OrderSmsEligibilityCode;
+    readonly decisionSteps: readonly {
+      readonly key: string;
+      readonly label: string;
+      readonly passed: boolean;
+      readonly explanation: string;
+    }[];
     readonly latestNotification: SmsNotificationRowDto | null;
   }[];
 }
+
+export type SmsMockScenario =
+  | 'ACCEPTED'
+  | 'DELIVERED'
+  | 'DELAYED'
+  | 'TRANSIENT_FAILURE'
+  | 'PERMANENT_FAILURE'
+  | 'RATE_LIMITED'
+  | 'UNKNOWN_OUTCOME'
+  | 'UNDELIVERABLE';
 
 export type OrderEmailEligibilityCode =
   | 'DELIVERED'
@@ -3442,11 +3580,7 @@ export type SettingDataType = 'string' | 'number' | 'boolean' | 'json' | 'string
 export type SettingSource = 'DEFAULT' | 'DATABASE' | 'DEPLOYMENT_OVERRIDE';
 
 export type SettingsReadinessStatus =
-  | 'ready'
-  | 'needs_configuration'
-  | 'disabled'
-  | 'restricted'
-  | 'error';
+  'ready' | 'needs_configuration' | 'disabled' | 'restricted' | 'error';
 
 export interface SettingMetadataDto {
   readonly key: string;
@@ -3581,16 +3715,20 @@ export interface ConfigurationHealthIssueDto {
 export interface ConfigurationHealthResponseDto {
   readonly overallStatus: 'HEALTHY' | 'NEEDS_ATTENTION' | 'CRITICAL';
   readonly issues: readonly ConfigurationHealthIssueDto[];
-  readonly moduleStatuses: Record<string, {
-    readonly status: SettingsReadinessStatus;
-    readonly label: string;
-    readonly settingCount: number;
-    readonly issueCount: number;
-  }>;
+  readonly moduleStatuses: Record<
+    string,
+    {
+      readonly status: SettingsReadinessStatus;
+      readonly label: string;
+      readonly settingCount: number;
+      readonly issueCount: number;
+    }
+  >;
   readonly checkedAt: string;
 }
 
-export type IntegrationStatus = 'CONNECTED' | 'NEEDS_CONFIGURATION' | 'RESTRICTED' | 'DEPLOYMENT_MANAGED';
+export type IntegrationStatus =
+  'CONNECTED' | 'NEEDS_CONFIGURATION' | 'RESTRICTED' | 'DEPLOYMENT_MANAGED';
 
 export interface IntegrationSecretItemDto {
   readonly keyName: string;

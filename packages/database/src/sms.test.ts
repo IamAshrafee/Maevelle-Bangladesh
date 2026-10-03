@@ -22,9 +22,33 @@ describe('SMS encoding and segment estimates', () => {
     ['Hello বাংলা', 'UNICODE', 1],
   ] as const)('estimates %s', (text, encoding, segments) => expect(estimateSmsLength(text)).toMatchObject({ encoding, segmentCount: segments }));
 
+  it('identifies non-GSM trigger characters and boundary warnings', () => {
+    const unicodeEstimate = estimateSmsLength('Special em-dash — in text');
+    expect(unicodeEstimate.encoding).toBe('UNICODE');
+    expect(unicodeEstimate.unicodeTriggerCharacters).toContain('—');
+    expect(unicodeEstimate.warnings.some((w) => w.includes('Unicode triggered by character'))).toBe(true);
+
+    const boundaryEstimate = estimateSmsLength('A'.repeat(155));
+    expect(boundaryEstimate.encoding).toBe('GSM_7');
+    expect(boundaryEstimate.segmentCount).toBe(1);
+    expect(boundaryEstimate.warnings).toContain('5 characters remaining before an additional segment may be required.');
+  });
+
   it('renders a versioned channel-specific template with metrics', () => {
     expect(renderTransactionalSms('order-confirmed', { orderNumber: 'MV10248', currencyCode: 'BDT', totalAmount: '680', trackingUrl: 'https://maevelle.test/orders/track' }))
       .toMatchObject({ templateKey: 'order-confirmed', templateVersion: 1, event: 'ORDER_CONFIRMED', encoding: 'GSM_7' });
+
+    // With Bangla customer name, template shifts to UNICODE and reflects in metrics
+    const banglaRender = renderTransactionalSms('order-confirmed', {
+      customerName: 'আশরাফী রহমান',
+      orderNumber: 'MV10248',
+      currencyCode: 'BDT',
+      totalAmount: '680',
+      trackingUrl: 'https://maevelle.test/orders/track',
+    });
+    expect(banglaRender.encoding).toBe('UNICODE');
+    expect(banglaRender.segmentCount).toBe(2);
+    expect(banglaRender.renderedText).toContain('আশরাফী রহমান');
   });
 });
 

@@ -11,7 +11,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import type { OrderDetailDto } from '@maevelle/contracts';
+import type { OrderDetailDto, OrderSmsEligibilityDto } from '@maevelle/contracts';
 
 import { CancelOrderDialog } from './cancel-order-dialog';
 import { CreateFulfillmentDialog } from './create-fulfillment-dialog';
@@ -78,12 +78,60 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
   const [deliveryRisk, setDeliveryRisk] = useState<DeliveryRiskHistory>();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
+  const [transitionFeedback, setTransitionFeedback] = useState<{
+    orderMessage: string;
+    smsEffect: string;
+    tone: 'success' | 'warning' | 'info';
+  } | null>(null);
 
   async function confirmOrder() {
     try {
       await fetchApiData(`/admin/orders/${order!.id}/status`, {
         method: 'POST',
         body: JSON.stringify({ version: order!.version, status: 'CONFIRMED' }),
+      });
+
+      let smsEffect = 'SMS effect checked';
+      let tone: 'success' | 'warning' | 'info' = 'success';
+      try {
+        const smsEligibility = await fetchApiData<OrderSmsEligibilityDto>(
+          `/admin/sms/orders/${order!.id}/eligibility`,
+        );
+        const confirmedEvent = smsEligibility.events.find(
+          (e) => e.notificationType === 'ORDER_CONFIRMED',
+        );
+        if (confirmedEvent?.latestNotification?.status === 'QUEUED') {
+          smsEffect = 'SMS Queued';
+          tone = 'success';
+        } else if (!smsEligibility.providerConfigured) {
+          smsEffect = 'SMS Not sent — production provider not configured';
+          tone = 'info';
+        } else if (!smsEligibility.globalSmsEnabled) {
+          smsEffect = 'SMS Automatic sending disabled';
+          tone = 'warning';
+        } else if (smsEligibility.phoneValidation === 'MISSING') {
+          smsEffect = 'SMS Customer phone missing';
+          tone = 'warning';
+        } else if (smsEligibility.phoneValidation === 'INVALID') {
+          smsEffect = 'SMS Customer phone number is invalid';
+          tone = 'warning';
+        } else if (smsEligibility.isSuppressed) {
+          smsEffect = 'SMS Recipient is suppressed';
+          tone = 'warning';
+        } else if (!confirmedEvent?.policy.automaticEnabled) {
+          smsEffect = 'SMS Automatic sending disabled for Order Confirmed policy';
+          tone = 'info';
+        } else {
+          smsEffect = `SMS ${confirmedEvent?.eligibilityCode.replaceAll('_', ' ').toLowerCase() ?? 'checked'}`;
+        }
+      } catch {
+        smsEffect = 'SMS state can be inspected in the Customer Communications section below';
+      }
+
+      setTransitionFeedback({
+        orderMessage: 'Order confirmed successfully',
+        smsEffect,
+        tone,
       });
       await load();
     } catch (error) {
@@ -220,6 +268,38 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
           </div>
         </div>
       </header>
+
+      {transitionFeedback ? (
+        <div
+          role="status"
+          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border p-4 text-sm ${
+            transitionFeedback.tone === 'success'
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-950 dark:bg-emerald-950 dark:text-emerald-100'
+              : transitionFeedback.tone === 'info'
+                ? 'border-blue-300 bg-blue-50 text-blue-950 dark:bg-blue-950 dark:text-blue-100'
+                : 'border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950 dark:text-amber-100'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <div>
+              <p className="font-semibold">{transitionFeedback.orderMessage}</p>
+              <p className="mt-0.5 text-xs">
+                <span className="font-medium text-foreground">Separate SMS outcome:</span>{' '}
+                {transitionFeedback.smsEffect}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setTransitionFeedback(null)}
+            className="text-xs self-end sm:self-auto"
+          >
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left Column - Main Details */}
