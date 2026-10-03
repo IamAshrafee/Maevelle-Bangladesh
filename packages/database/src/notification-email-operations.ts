@@ -103,28 +103,32 @@ async function policy(
     enabled: boolean;
     automatic_enabled: boolean;
     manual_allowed: boolean;
-  }>`select policy.notification_type,policy.template_key,
-      coalesce(override.enabled,true) enabled,
-      coalesce(override.automatic_enabled,policy.automatic_enabled) automatic_enabled,
-      coalesce(override.manual_allowed,policy.manual_allowed) manual_allowed
+  }>`select policy.notification_type,channel_policy.template_key,
+      coalesce(override.enabled,channel_policy.enabled) enabled,
+      coalesce(override.automatic_enabled,channel_policy.automatic_enabled) automatic_enabled,
+      coalesce(override.manual_allowed,channel_policy.manual_allowed) manual_allowed
     from notifications.notification_policies policy
+    join notifications.notification_channel_policies channel_policy
+      on channel_policy.notification_type=policy.notification_type and channel_policy.channel='EMAIL'
     left join notifications.organization_policy_overrides override
-      on override.organization_id=${organizationId} and override.notification_type=policy.notification_type
-    where policy.notification_type=${notificationType} and 'EMAIL'=any(policy.channels)`.execute(db);
+      on override.organization_id=${organizationId} and override.notification_type=policy.notification_type and override.channel='EMAIL'
+    where policy.notification_type=${notificationType}`.execute(db);
   return result.rows[0];
 }
 
 export async function listEmailPolicies(db: Kysely<DatabaseSchema>, organizationId: string) {
   return (
-    await sql`select policy.notification_type,policy.delivery_requirement,policy.template_key,
-      coalesce(override.enabled,true) enabled,
-      coalesce(override.automatic_enabled,policy.automatic_enabled) automatic_enabled,
-      coalesce(override.manual_allowed,policy.manual_allowed) manual_allowed,
+    await sql`select policy.notification_type,policy.delivery_requirement,channel_policy.template_key,
+      coalesce(override.enabled,channel_policy.enabled) enabled,
+      coalesce(override.automatic_enabled,channel_policy.automatic_enabled) automatic_enabled,
+      coalesce(override.manual_allowed,channel_policy.manual_allowed) manual_allowed,
       override.updated_at::text
     from notifications.notification_policies policy
+    join notifications.notification_channel_policies channel_policy
+      on channel_policy.notification_type=policy.notification_type and channel_policy.channel='EMAIL'
     left join notifications.organization_policy_overrides override
-      on override.organization_id=${organizationId} and override.notification_type=policy.notification_type
-    where 'EMAIL'=any(policy.channels) order by policy.notification_type`.execute(db)
+      on override.organization_id=${organizationId} and override.notification_type=policy.notification_type and override.channel='EMAIL'
+    order by policy.notification_type`.execute(db)
   ).rows;
 }
 
@@ -146,9 +150,9 @@ export async function updateEmailPolicy(
     const existing = await policy(tx, input.organizationId, input.notificationType);
     if (!existing) throw new EmailNotificationError('NOT_FOUND', 'Email policy was not found.');
     await sql`insert into notifications.organization_policy_overrides(
-      organization_id,notification_type,enabled,automatic_enabled,manual_allowed,updated_by_actor_id
-    ) values(${input.organizationId},${input.notificationType},${input.enabled},${input.automaticEnabled},${input.manualAllowed},${input.actorId})
-    on conflict(organization_id,notification_type) do update set enabled=excluded.enabled,automatic_enabled=excluded.automatic_enabled,manual_allowed=excluded.manual_allowed,updated_by_actor_id=excluded.updated_by_actor_id,updated_at=now()`.execute(tx);
+      organization_id,notification_type,channel,enabled,automatic_enabled,manual_allowed,updated_by_actor_id
+    ) values(${input.organizationId},${input.notificationType},'EMAIL',${input.enabled},${input.automaticEnabled},${input.manualAllowed},${input.actorId})
+    on conflict(organization_id,notification_type,channel) do update set enabled=excluded.enabled,automatic_enabled=excluded.automatic_enabled,manual_allowed=excluded.manual_allowed,updated_by_actor_id=excluded.updated_by_actor_id,updated_at=now()`.execute(tx);
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
       actorType: 'USER',
@@ -192,12 +196,12 @@ export const sampleFixtures: Record<string, SampleFixture> = {
     label: 'Multi-item Fashion Order',
     description: '2 apparel items with size/color variants and delivery address',
     data: {
-      display_name: 'Fatema Tuz Zohra',
+      display_name: 'Ayesha Rahman',
       order_number: 'MV-10248',
       currency_code: 'BDT',
       total_amount: '4250.00',
       delivery_address: 'House 12, Road 4, Dhanmondi, Dhaka 1205',
-      email: 'fatema.zohra@example.com',
+      email: 'ayesha.rahman@example.com',
       items: [
         { title: 'Embroidered Silk Kurti', variant: 'Plum / M', quantity: '1', amount: '2850.00' },
         { title: 'Matching Organza Dupatta', variant: 'Plum', quantity: '1', amount: '1400.00' },
@@ -833,7 +837,7 @@ export async function getEmailNotification(
   notificationId: string,
 ): Promise<Record<string, any>> {
   const row = await sql<Record<string, any>>`select n.*,
-      u.display_name triggered_by_actor_name,
+      u.name triggered_by_actor_name,
       coalesce((select jsonb_agg(to_jsonb(a) order by a.attempt_number) from notifications.delivery_attempts a where a.notification_id=n.id),'[]'::jsonb) attempts,
       coalesce((select jsonb_agg(
         jsonb_build_object(
@@ -1065,4 +1069,3 @@ export async function emailOperationalSummary(db: Kysely<DatabaseSchema>, organi
     },
   };
 }
-

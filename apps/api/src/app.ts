@@ -78,6 +78,8 @@ export function buildApi(options: BuildApiOptions) {
       { prefix: '/integrations/', maximum: 120 },
       { prefix: '/webhooks/resend', maximum: 240 },
       { prefix: '/admin/email/', maximum: 120 },
+      { prefix: '/admin/sms/', maximum: 60 },
+      { prefix: '/webhooks/sms/', maximum: 240 },
     ];
     const policy = limits.find((candidate) => request.url.startsWith(candidate.prefix));
     if (!policy) return;

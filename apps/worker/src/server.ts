@@ -5,6 +5,7 @@ import { createDatabase } from '@maevelle/database';
 import { createLogger } from '@maevelle/observability';
 import { resolveCourierProvider } from '@maevelle/database/courier-resolver';
 import { createObjectStorage } from '@maevelle/media';
+import { createMockSmsProvider } from '@maevelle/database/notifications';
 
 import { createWorker, type WorkerRuntime } from './worker.js';
 import { createResendEmailProvider } from './resend-email-provider.js';
@@ -69,6 +70,18 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
     ...(config.emailEnvironment !== 'production'
       ? { emailEnvironmentLabel: config.emailEnvironment.toUpperCase() }
       : {}),
+    ...(config.smsProvider === 'mock' ? { smsProvider: createMockSmsProvider() } : {}),
+    smsRuntime: {
+      enabled: config.smsEnabled,
+      providerConfigured: config.smsProvider !== 'none',
+      providerName: config.smsProvider,
+      storefrontBaseUrl: config.storefrontBaseUrl,
+      senderType: config.smsSenderType,
+      ...(config.smsSenderId ? { senderId: config.smsSenderId } : {}),
+      ...(config.smsRecipientOverride ? { recipientOverride: config.smsRecipientOverride } : {}),
+      environment: config.smsEnvironment,
+    },
+    smsMaxPerTick: config.smsMaxPerTick,
   });
 
   try {

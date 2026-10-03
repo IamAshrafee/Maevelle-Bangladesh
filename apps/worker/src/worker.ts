@@ -2,9 +2,13 @@ import type { DatabaseClient } from '@maevelle/database';
 import { reclaimExpiredJobs } from '@maevelle/database/platform';
 import {
   createLocalEmailAdapter,
+  deliverPendingSms,
+  pollSmsDeliveryStatuses,
   createWebhookEventsFromOutbox,
   deliverPendingEmails,
   type EmailAdapter,
+  type SmsProvider,
+  type SmsRuntimeOptions,
   deliverPendingWebhooks,
   processNotificationOutbox,
 } from '@maevelle/database/notifications';
@@ -38,6 +42,9 @@ export interface WorkerOptions {
   readonly emailSupportAddress?: string;
   readonly emailSenderFrom?: string;
   readonly emailEnvironmentLabel?: string;
+  readonly smsProvider?: SmsProvider;
+  readonly smsRuntime?: SmsRuntimeOptions;
+  readonly smsMaxPerTick?: number;
 }
 
 export interface WorkerRuntime {
@@ -83,6 +90,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         reclaimed,
         notifications,
         emailDeliveries,
+        smsDeliveries,
+        smsPolls,
         webhookEvents,
         analytics,
         imports,
@@ -107,9 +116,21 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           ...(options.emailEnvironmentLabel
             ? { environmentLabel: options.emailEnvironmentLabel }
             : {}),
+          smsEnabled: options.smsRuntime?.enabled ?? false,
+          smsProviderConfigured: options.smsRuntime?.providerConfigured ?? false,
+          smsProviderName: options.smsRuntime?.providerName ?? 'none',
+          ...(options.smsRuntime?.recipientOverride ? { smsRecipientOverride: options.smsRuntime.recipientOverride } : {}),
+          smsSenderType: options.smsRuntime?.senderType ?? 'PROVIDER_DEFAULT',
+          ...(options.smsRuntime?.senderId ? { smsSenderId: options.smsRuntime.senderId } : {}),
         }),
         options.emailEnabled !== false
           ? deliverPendingEmails(options.database.db, emailAdapter)
+          : Promise.resolve(0),
+        options.smsProvider && options.smsRuntime
+          ? deliverPendingSms(options.database.db, options.smsProvider, options.smsRuntime, options.smsMaxPerTick ?? 20)
+          : Promise.resolve(0),
+        options.smsProvider
+          ? pollSmsDeliveryStatuses(options.database.db, options.smsProvider, options.smsMaxPerTick ?? 20)
           : Promise.resolve(0),
         createWebhookEventsFromOutbox(options.database.db),
         processAnalyticsOutbox(options.database.db),
@@ -145,6 +166,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           reclaimed,
           notifications,
           emailDeliveries,
+          smsDeliveries,
+          smsPolls,
           webhookEvents,
           analytics,
           imports,

@@ -26,6 +26,9 @@ describe('parseConfig', () => {
       emailEnabled: false,
       emailProvider: 'local',
       emailReplyTo: 'maevellebangladesh@gmail.com',
+      smsEnabled: false,
+      smsProvider: 'none',
+      smsTestMode: true,
     });
   });
 
@@ -52,6 +55,14 @@ describe('parseConfig', () => {
         EMAIL_FROM_ADDRESS: 'orders@maevelle.example',
       }),
     ).toThrow(/RESEND_API_KEY/);
+  });
+
+  it('rejects unsafe production SMS test configuration', () => {
+    expect(() => parseConfig({ ...validEnvironment, NODE_ENV: 'production', SMS_ENVIRONMENT: 'production', SMS_TEST_MODE: 'true' })).toThrow(/SMS_TEST_MODE/);
+  });
+
+  it('requires an SMS provider when sending is enabled', () => {
+    expect(() => parseConfig({ ...validEnvironment, SMS_ENABLED: 'true', SMS_PROVIDER: 'none' })).toThrow(/SMS_PROVIDER/);
   });
 
   it('selects the distinct test database when NODE_ENV is test', () => {

@@ -77,8 +77,8 @@ describe('notifications and integrations', () => {
       database.db,
       data.organizationId,
     )) as NotificationRow[];
-    expect(rows).toHaveLength(2);
-    expect(rows.every((row) => row.status === 'QUEUED')).toBe(true);
+    expect(rows).toHaveLength(3);
+    expect(rows.filter((row: NotificationRow & { channel?: string }) => row.channel !== 'SMS').every((row) => row.status === 'QUEUED')).toBe(true);
     await notifications.recordNotificationAttempt(database.db, {
       organizationId: data.organizationId,
       notificationId: rows[0]!.id,
@@ -553,10 +553,12 @@ describe('notifications and integrations', () => {
       senderFrom: 'Maevelle <orders@maevelle.com>',
     };
     const testRecipient = 'qa-dev@example.test';
+    const actorEmail = `tester-${crypto.randomUUID()}@example.test`;
+    const actor = await sql<{ id: string }>`insert into iam.users(name,email,email_normalized) values('SMS and email tester',${actorEmail},${actorEmail}) returning id`.execute(database.db);
 
     const testSendResult = await notifications.sendTestEmail(database.db, {
       organizationId: data.organizationId,
-      actorId: crypto.randomUUID(),
+      actorId: actor.rows[0]!.id,
       notificationType: 'ORDER_CONFIRMED',
       testRecipient,
       orderId: data.orderId,

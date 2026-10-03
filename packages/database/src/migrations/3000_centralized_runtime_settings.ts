@@ -45,6 +45,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     values
       ('settings.manage', 'settings', 'Manage general application settings.', 'HIGH'),
       ('settings.email.manage', 'settings', 'Manage transactional email configuration and provider policies.', 'HIGH'),
+      ('settings.sms.manage', 'settings', 'Manage transactional SMS business settings and sender preferences.', 'HIGH'),
       ('settings.media.manage', 'settings', 'Manage media upload size, storage policies, and asset retention.', 'HIGH'),
       ('settings.storefront.manage', 'settings', 'Manage storefront public branding, URLs, and communication metadata.', 'INTERNAL'),
       ('settings.integrations.manage', 'settings', 'Manage external service integration secrets and credentials.', 'CRITICAL')
@@ -59,6 +60,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
         values
           ('settings.manage'),
           ('settings.email.manage'),
+          ('settings.sms.manage'),
           ('settings.media.manage'),
           ('settings.storefront.manage'),
           ('settings.integrations.manage')

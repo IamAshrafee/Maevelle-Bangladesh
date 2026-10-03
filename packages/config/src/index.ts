@@ -40,6 +40,15 @@ export interface RuntimeConfig {
   readonly emailAllowedTestRecipients: readonly string[];
   readonly resendApiKey?: string;
   readonly resendWebhookSecret?: string;
+  readonly smsEnabled: boolean;
+  readonly smsProvider: 'none' | 'mock';
+  readonly smsEnvironment: 'development' | 'test' | 'production';
+  readonly smsTestMode: boolean;
+  readonly smsRecipientOverride?: string;
+  readonly smsAllowedTestRecipients: readonly string[];
+  readonly smsSenderType: 'MASKING' | 'NON_MASKING' | 'PROVIDER_DEFAULT';
+  readonly smsSenderId?: string;
+  readonly smsMaxPerTick: number;
 }
 
 type Environment = Record<string, string | undefined>;
@@ -143,6 +152,13 @@ function emailAddress(value: string, variableName: string): string {
   const normalized = value.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))
     throw new ConfigurationError(`${variableName} must be a valid email address.`);
+  return normalized;
+}
+
+function smsPhone(value: string, variableName: string): string {
+  const normalized = value.trim();
+  if (!/^\+8801\d{9}$/.test(normalized))
+    throw new ConfigurationError(`${variableName} entries must be normalized Bangladesh mobile numbers such as +8801712345678.`);
   return normalized;
 }
 
@@ -253,6 +269,33 @@ export function parseConfig(environment: Environment): RuntimeConfig {
   if (nodeEnv === 'production' && emailEnabled && configuredFromAddress.endsWith('.invalid'))
     throw new ConfigurationError('EMAIL_FROM_ADDRESS must use a verified production domain.');
 
+  const smsProvider = environment.SMS_PROVIDER?.trim().toLowerCase() || 'none';
+  if (smsProvider !== 'none' && smsProvider !== 'mock')
+    throw new ConfigurationError('SMS_PROVIDER must be none or mock until a production adapter is installed.');
+  const smsEnabled = boolean(environment, 'SMS_ENABLED', false);
+  const smsEnvironment = (environment.SMS_ENVIRONMENT?.trim().toLowerCase() || nodeEnv) as NodeEnvironment;
+  if (!nodeEnvironments.has(smsEnvironment))
+    throw new ConfigurationError('SMS_ENVIRONMENT must be development, test, or production.');
+  const smsTestMode = boolean(environment, 'SMS_TEST_MODE', smsEnvironment !== 'production');
+  const smsRecipientOverride = environment.SMS_RECIPIENT_OVERRIDE?.trim();
+  const smsAllowedTestRecipients = (environment.SMS_ALLOWED_TEST_RECIPIENTS ?? '').split(',').map((v) => v.trim()).filter(Boolean).map((v) => smsPhone(v, 'SMS_ALLOWED_TEST_RECIPIENTS'));
+  if (smsEnvironment === 'production' && (smsRecipientOverride || smsTestMode))
+    throw new ConfigurationError('SMS_RECIPIENT_OVERRIDE and SMS_TEST_MODE are not allowed in the production SMS environment.');
+  if (smsRecipientOverride) {
+    const normalizedOverride = smsPhone(smsRecipientOverride, 'SMS_RECIPIENT_OVERRIDE');
+    if (!smsAllowedTestRecipients.includes(normalizedOverride))
+      throw new ConfigurationError('SMS_RECIPIENT_OVERRIDE must also appear in SMS_ALLOWED_TEST_RECIPIENTS.');
+  }
+  if (nodeEnv === 'production' && smsEnabled)
+    throw new ConfigurationError('Production SMS cannot be enabled until a real SMS provider adapter is installed.');
+  if (smsEnabled && smsProvider === 'none')
+    throw new ConfigurationError('SMS_PROVIDER must be configured when SMS_ENABLED is true.');
+  const smsSenderType = (environment.SMS_SENDER_TYPE?.trim().toUpperCase() || 'PROVIDER_DEFAULT') as RuntimeConfig['smsSenderType'];
+  if (!['MASKING', 'NON_MASKING', 'PROVIDER_DEFAULT'].includes(smsSenderType))
+    throw new ConfigurationError('SMS_SENDER_TYPE must be MASKING, NON_MASKING, or PROVIDER_DEFAULT.');
+  const smsSenderId = environment.SMS_SENDER_ID?.trim();
+  if (smsSenderId && smsSenderId.length > 32) throw new ConfigurationError('SMS_SENDER_ID must not exceed 32 characters.');
+
   return Object.freeze({
     nodeEnv,
     databaseUrl,
@@ -323,6 +366,15 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     emailAllowedTestRecipients,
     ...(resendApiKey ? { resendApiKey } : {}),
     ...(resendWebhookSecret ? { resendWebhookSecret } : {}),
+    smsEnabled,
+    smsProvider,
+    smsEnvironment,
+    smsTestMode,
+    ...(smsRecipientOverride ? { smsRecipientOverride: smsPhone(smsRecipientOverride, 'SMS_RECIPIENT_OVERRIDE') } : {}),
+    smsAllowedTestRecipients,
+    smsSenderType,
+    ...(smsSenderId ? { smsSenderId } : {}),
+    smsMaxPerTick: integer(environment, 'SMS_MAX_PER_TICK', 20, 1, 500),
   });
 }
 

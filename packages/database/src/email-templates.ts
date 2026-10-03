@@ -92,7 +92,7 @@ function escapeHtml(value: string): string {
 }
 
 function subject(template: string, orderNumber: string): string {
-  return template.replace('{{orderNumber}}', orderNumber);
+  return `Maevelle: ${template.replace('{{orderNumber}}', orderNumber)}`;
 }
 
 export function listTransactionalEmailTemplates() {
@@ -125,12 +125,13 @@ export function renderTransactionalEmail(
   const address = model.deliveryAddress
     ? `<p style="margin:20px 0 0;color:#444"><strong>Delivery address</strong><br>${escapeHtml(model.deliveryAddress)}</p>`
     : '';
-  const html = `<!doctype html><html><body style="margin:0;background:#f6f3ee;color:#25211d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#fff;border:1px solid #e8e1d8;border-radius:12px;overflow:hidden">${environmentBanner}<tr><td style="padding:28px 32px 12px;font:700 22px Georgia,serif;color:#6d1f36">Maevelle</td></tr><tr><td style="padding:8px 32px 32px;font:16px/1.55 Arial,sans-serif"><p>Hello ${safeName},</p><h1 style="font:700 28px/1.2 Georgia,serif;margin:18px 0">${escapeHtml(template.heading)}</h1><p>${escapeHtml(template.message)}</p><table role="presentation" width="100%" style="margin:24px 0;border-collapse:collapse"><tr><td><strong>Order</strong><br>${safeOrder}</td><td style="text-align:right"><strong>Total</strong><br>${safeTotal}</td></tr>${itemRows ? `<tr><td colspan="2"><table role="presentation" width="100%" style="margin-top:16px;border-collapse:collapse">${itemRows}</table></td></tr>` : ''}</table>${address}<p style="margin:28px 0"><a href="${safeTrackingUrl}" style="display:inline-block;background:#6d1f36;color:#fff;text-decoration:none;padding:13px 20px;border-radius:8px;font-weight:700">${escapeHtml(template.cta)}</a></p><p style="color:#555">Need help with your order? Reply to this email or contact <a href="mailto:${safeSupport}">${safeSupport}</a>.</p></td></tr><tr><td style="padding:20px 32px;background:#f8f5f1;color:#706860;font:13px/1.5 Arial,sans-serif">This is a transactional message about order ${safeOrder}.</td></tr></table></td></tr></table></body></html>`;
+  const html = `<!DOCTYPE html><html><body style="margin:0;background:#f6f3ee;color:#25211d"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#fff;border:1px solid #e8e1d8;border-radius:12px;overflow:hidden">${environmentBanner}<tr><td style="padding:28px 32px 12px;font:700 22px Georgia,serif;color:#6d1f36">Maevelle</td></tr><tr><td style="padding:8px 32px 32px;font:16px/1.55 Arial,sans-serif"><p>Hello ${safeName},</p><h1 style="font:700 28px/1.2 Georgia,serif;margin:18px 0">${escapeHtml(template.heading)}</h1><p>${escapeHtml(template.message)}</p><table role="presentation" width="100%" style="margin:24px 0;border-collapse:collapse"><tr><td><strong>Order</strong><br>${safeOrder}</td><td style="text-align:right"><strong>Total</strong><br>${safeTotal}</td></tr>${itemRows ? `<tr><td colspan="2"><table role="presentation" width="100%" style="margin-top:16px;border-collapse:collapse">${itemRows}</table></td></tr>` : ''}</table>${address}<p style="margin:28px 0"><a href="${safeTrackingUrl}" style="display:inline-block;background:#6d1f36;color:#fff;text-decoration:none;padding:13px 20px;border-radius:8px;font-weight:700">${escapeHtml(template.cta)}</a></p><p style="color:#555">Need help with your order? Reply to this email or contact <a href="mailto:${safeSupport}">${safeSupport}</a>.</p></td></tr><tr><td style="padding:20px 32px;background:#f8f5f1;color:#706860;font:13px/1.5 Arial,sans-serif">This is a transactional message about order ${safeOrder}.</td></tr></table></td></tr></table></body></html>`;
   const itemText = (model.items ?? [])
     .map((item) => `- ${item.title}${item.variant ? ` (${item.variant})` : ''} × ${item.quantity}: ${model.currencyCode} ${item.amount}`)
     .join('\n');
   const text = [
     model.environmentLabel ? `${model.environmentLabel} EMAIL - Intended for testing only` : '',
+    'Maevelle',
     `Hello ${model.customerName || 'Customer'},`,
     template.heading,
     template.message,

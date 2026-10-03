@@ -3261,6 +3261,137 @@ export interface EmailDiagnosticsDto {
   };
 }
 
+export type SmsNotificationStatus =
+  | 'NOT_APPLICABLE' | 'SKIPPED_NO_PHONE' | 'PENDING_MANUAL' | 'QUEUED' | 'PROCESSING'
+  | 'ACCEPTED' | 'DELIVERED' | 'DELIVERY_DELAYED' | 'FAILED' | 'REJECTED' | 'EXPIRED'
+  | 'UNDELIVERABLE' | 'UNKNOWN_PROVIDER_OUTCOME' | 'SUPPRESSED';
+
+export type SmsTriggerType = 'AUTOMATIC' | 'MANUAL' | 'TEST' | 'RESEND';
+
+export interface SmsNotificationRowDto {
+  readonly id: string;
+  readonly notification_type: string;
+  readonly status: SmsNotificationStatus;
+  readonly intended_recipient: string | null;
+  readonly effective_recipient: string | null;
+  readonly source_id: string;
+  readonly source_domain: string;
+  readonly provider: string | null;
+  readonly provider_message_id: string | null;
+  readonly trigger_type: SmsTriggerType;
+  readonly created_at: string;
+  readonly queued_at: string | null;
+  readonly sent_at: string | null;
+  readonly delivered_at: string | null;
+  readonly skip_reason: string | null;
+  readonly failure_code: string | null;
+  readonly failure_message: string | null;
+  readonly customer_id: string | null;
+  readonly parent_notification_id: string | null;
+  readonly template_key: string | null;
+  readonly template_version: number | null;
+  readonly encoding: 'GSM_7' | 'UNICODE';
+  readonly character_count: number;
+  readonly estimated_segments: number;
+  readonly provider_reported_segments: number | null;
+  readonly provider_reported_cost: string | null;
+  readonly provider_cost_currency: string | null;
+  readonly sender_type: 'MASKING' | 'NON_MASKING' | 'PROVIDER_DEFAULT';
+  readonly sender_id: string | null;
+}
+
+export interface SmsNotificationDetailDto extends SmsNotificationRowDto {
+  readonly rendered_body: string;
+  readonly original_recipient: string | null;
+  readonly normalized_recipient: string | null;
+  readonly encoding_unit_count: number;
+  readonly reconcile_after: string | null;
+  readonly attempts: readonly EmailDeliveryAttemptDto[];
+  readonly timeline: readonly EmailTimelineEventDto[];
+  readonly availableActions: { readonly canRetry: boolean; readonly canResend: boolean; readonly canPreview: boolean };
+}
+
+export interface SmsPolicyDto extends EmailPolicyDto {}
+
+export interface SmsSuppressionDto {
+  readonly id: string;
+  readonly normalized_phone: string;
+  readonly reason: 'INVALID_NUMBER' | 'PERMANENT_DELIVERY_FAILURE' | 'CUSTOMER_REQUEST' | 'ADMIN_SUPPRESSION' | 'PROVIDER_BLOCK';
+  readonly source: string;
+  readonly provider: string | null;
+  readonly active: boolean;
+  readonly created_at: string;
+  readonly cleared_at: string | null;
+  readonly clear_reason: string | null;
+}
+
+export interface SmsTemplateDto {
+  readonly key: string;
+  readonly version: number;
+  readonly event: string;
+  readonly description: string;
+}
+
+export interface SmsPreviewDto {
+  readonly templateKey: string;
+  readonly templateVersion: number;
+  readonly event: string;
+  readonly renderedText: string;
+  readonly encoding: 'GSM_7' | 'UNICODE';
+  readonly characterCount: number;
+  readonly encodingUnitCount: number;
+  readonly segmentCount: number;
+  readonly perSegmentLimit: number;
+  readonly warnings: readonly string[];
+  readonly intendedRecipient: string | null;
+  readonly isSampleFixture: boolean;
+}
+
+export interface SmsDiagnosticsDto {
+  readonly enabled: boolean;
+  readonly provider: string;
+  readonly providerConfigured: boolean;
+  readonly environment: string;
+  readonly senderType: string;
+  readonly senderId: string | null;
+  readonly recipientOverride: string | null;
+  readonly capabilities: readonly string[];
+  readonly credentialsConfigured: boolean;
+  readonly queued: number;
+  readonly processing: number;
+  readonly failed: number;
+  readonly accepted: number;
+  readonly delivered: number;
+  readonly oldestQueuedAt: string | null;
+  readonly lastDeliveryCallbackAt: string | null;
+  readonly workerStatus: 'HEALTHY' | 'BACKLOG';
+}
+
+export type OrderSmsEligibilityCode = 'ELIGIBLE' | 'NO_PHONE' | 'INVALID_PHONE' | 'SMS_GLOBALLY_DISABLED'
+  | 'EVENT_POLICY_DISABLED' | 'PROVIDER_NOT_CONFIGURED' | 'RECIPIENT_SUPPRESSED' | 'WAITING_FOR_ORDER_STATE'
+  | SmsNotificationStatus;
+
+export interface OrderSmsEligibilityDto {
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly orderStatus: string;
+  readonly customerPhone: string | null;
+  readonly normalizedPhone: string | null;
+  readonly isSuppressed: boolean;
+  readonly suppressionReason: string | null;
+  readonly globalSmsEnabled: boolean;
+  readonly providerConfigured: boolean;
+  readonly events: readonly {
+    readonly notificationType: string;
+    readonly templateKey: string | null;
+    readonly policy: { readonly enabled: boolean; readonly automaticEnabled: boolean; readonly manualAllowed: boolean };
+    readonly orderReachedState: boolean;
+    readonly canSendManually: boolean;
+    readonly eligibilityCode: OrderSmsEligibilityCode;
+    readonly latestNotification: SmsNotificationRowDto | null;
+  }[];
+}
+
 export type OrderEmailEligibilityCode =
   | 'DELIVERED'
   | 'ACCEPTED'
@@ -3536,4 +3667,3 @@ export interface SystemStatusDto {
   };
   readonly activeRevision: number;
 }
-

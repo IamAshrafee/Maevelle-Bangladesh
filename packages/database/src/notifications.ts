@@ -16,9 +16,12 @@ import {
   renderTransactionalEmail,
   type TransactionalEmailTemplateKey,
 } from './email-templates.js';
+import { normalizeBangladeshPhone } from './sms.js';
+import { renderTransactionalSms, type TransactionalSmsTemplateKey } from './sms-templates.js';
 
 export { listTransactionalEmailTemplates, renderTransactionalEmail } from './email-templates.js';
 export * from './notification-email-operations.js';
+export * from './notification-sms-operations.js';
 
 export class NotificationDomainError extends Error {
   public constructor(
@@ -135,7 +138,7 @@ export async function createNotificationTemplate(
   input: {
     organizationId: string;
     notificationType: string;
-    channel: 'IN_APP' | 'EMAIL';
+    channel: 'IN_APP' | 'EMAIL' | 'SMS';
     name: string;
   },
 ) {
@@ -205,7 +208,7 @@ async function currentTemplateRevision(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   notificationType: string,
-  channel: 'IN_APP' | 'EMAIL',
+  channel: 'IN_APP' | 'EMAIL' | 'SMS',
 ) {
   return (
     await sql<{
@@ -223,7 +226,7 @@ async function ensureCurrentTemplate(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   notificationType: string,
-  channel: 'IN_APP' | 'EMAIL',
+  channel: 'IN_APP' | 'EMAIL' | 'SMS',
 ) {
   const existing = await currentTemplateRevision(db, organizationId, notificationType, channel);
   if (existing) return existing;
@@ -359,6 +362,12 @@ export interface NotificationRuntimeOptions {
   readonly supportEmail?: string;
   readonly senderFrom?: string;
   readonly environmentLabel?: string;
+  readonly smsEnabled?: boolean;
+  readonly smsProviderConfigured?: boolean;
+  readonly smsProviderName?: string;
+  readonly smsRecipientOverride?: string;
+  readonly smsSenderType?: 'MASKING' | 'NON_MASKING' | 'PROVIDER_DEFAULT';
+  readonly smsSenderId?: string;
 }
 
 export async function createNotificationFromOutbox(
@@ -405,6 +414,8 @@ export async function createNotificationFromOutbox(
       order_number: string;
       display_name: string;
       email: string | null;
+      phone: string | null;
+      normalized_phone: string | null;
       currency_code: string;
       total_amount: string;
       delivery_address: string | null;
@@ -434,6 +445,8 @@ export async function createNotificationFromOutbox(
       select orders.id as order_id, orders.customer_id, orders.order_number,
         coalesce(snapshot.display_name, customer.display_name, 'Customer') as display_name,
         case when snapshot.order_id is not null then snapshot.email else customer_email.normalized_value end as email,
+        case when snapshot.order_id is not null then snapshot.phone else customer_phone.raw_value end as phone,
+        case when snapshot.order_id is not null then snapshot.normalized_phone else customer_phone.normalized_value end as normalized_phone,
         orders.currency_code, orders.total_amount::text,
         concat_ws(', ', address.address_line_1, address.address_line_2, address.area, address.city, address.district, address.postal_code) delivery_address
       from candidate_orders candidate
@@ -442,6 +455,7 @@ export async function createNotificationFromOutbox(
       left join orders.order_customer_snapshots snapshot on snapshot.order_id = orders.id
       left join customers.customers customer on customer.id = orders.customer_id
       left join customers.customer_emails customer_email on customer_email.customer_id = orders.customer_id and customer_email.is_primary
+      left join customers.customer_phones customer_phone on customer_phone.customer_id = orders.customer_id and customer_phone.is_primary
       left join orders.order_addresses address on address.order_id = orders.id and address.address_type = 'DELIVERY'
       where orders.customer_id is not null
       limit 1
@@ -454,20 +468,20 @@ export async function createNotificationFromOutbox(
       return { created: false };
     }
     const policy = await sql<{
-      channels: readonly string[];
+      channel: 'IN_APP' | 'EMAIL' | 'SMS';
       enabled: boolean;
       automatic_enabled: boolean;
-      template_key: TransactionalEmailTemplateKey | null;
-    }>`select policy.channels,
-      coalesce(override.enabled,true) enabled,
-      coalesce(override.automatic_enabled,policy.automatic_enabled) automatic_enabled,
-      policy.template_key
+      template_key: TransactionalEmailTemplateKey | TransactionalSmsTemplateKey | null;
+    }>`select channel_policy.channel,
+      coalesce(override.enabled,channel_policy.enabled) enabled,
+      coalesce(override.automatic_enabled,channel_policy.automatic_enabled) automatic_enabled,
+      channel_policy.template_key
       from notifications.notification_policies policy
+      join notifications.notification_channel_policies channel_policy on channel_policy.notification_type=policy.notification_type
       left join notifications.organization_policy_overrides override
-        on override.organization_id=${event.organization_id} and override.notification_type=policy.notification_type
+        on override.organization_id=${event.organization_id} and override.notification_type=policy.notification_type and override.channel=channel_policy.channel
       where policy.notification_type=${rule.type}`.execute(tx);
-    const effectivePolicy = policy.rows[0];
-    if (!effectivePolicy) {
+    if (policy.rows.length === 0) {
       await sql`update platform.event_consumer_receipts set status='COMPLETED',processed_at=now() where id=${receipt.rows[0].id}::bigint`.execute(tx);
       return { created: false };
     }
@@ -488,9 +502,12 @@ export async function createNotificationFromOutbox(
           ).rows[0],
         )
       : false;
-    for (const channel of effectivePolicy.channels.filter(
-      (candidate): candidate is 'IN_APP' | 'EMAIL' => candidate === 'IN_APP' || candidate === 'EMAIL',
-    )) {
+    const normalizedPhone = normalizeBangladeshPhone(context.normalized_phone ?? context.phone);
+    const isSmsSuppressed = normalizedPhone.valid
+      ? Boolean((await sql`select 1 from notifications.sms_suppressions where organization_id=${event.organization_id} and normalized_phone=${normalizedPhone.normalized} and active limit 1`.execute(tx)).rows[0])
+      : false;
+    for (const effectivePolicy of policy.rows) {
+      const channel = effectivePolicy.channel;
       const preference = await sql<{
         enabled: boolean;
       }>`select enabled from notifications.preferences where organization_id=${event.organization_id} and recipient_type='CUSTOMER' and recipient_id=${context.customer_id}::uuid and notification_type=${rule.type} and channel=${channel}`.execute(
@@ -515,6 +532,24 @@ export async function createNotificationFromOutbox(
       } else if (channel === 'EMAIL' && !effectivePolicy.automatic_enabled) {
         status = 'PENDING_MANUAL';
         skipReason = 'AUTOMATIC_SENDING_DISABLED';
+      } else if (channel === 'SMS' && !normalizedPhone.valid && normalizedPhone.reason === 'MISSING') {
+        status = 'SKIPPED_NO_PHONE';
+        skipReason = 'CUSTOMER_PHONE_MISSING';
+      } else if (channel === 'SMS' && !normalizedPhone.valid) {
+        status = 'NOT_APPLICABLE';
+        skipReason = 'INVALID_PHONE';
+      } else if (channel === 'SMS' && isSmsSuppressed) {
+        status = 'SUPPRESSED';
+        skipReason = 'ACTIVE_SMS_SUPPRESSION';
+      } else if (channel === 'SMS' && options.smsEnabled !== true) {
+        status = 'NOT_APPLICABLE';
+        skipReason = 'SMS_GLOBALLY_DISABLED';
+      } else if (channel === 'SMS' && options.smsProviderConfigured !== true) {
+        status = 'NOT_APPLICABLE';
+        skipReason = 'PROVIDER_NOT_CONFIGURED';
+      } else if (channel === 'SMS' && !effectivePolicy.automatic_enabled) {
+        status = 'PENDING_MANUAL';
+        skipReason = 'AUTOMATIC_SENDING_DISABLED';
       }
 
       let revisionId: string | null = null;
@@ -523,6 +558,7 @@ export async function createNotificationFromOutbox(
       let renderedSubject: string | null;
       let renderedBody: string;
       let renderedHtml: string | null = null;
+      let smsMetrics: ReturnType<typeof renderTransactionalSms> | undefined;
       if (channel === 'EMAIL' && effectivePolicy.template_key) {
         const rendered = renderTransactionalEmail(effectivePolicy.template_key, {
           customerName: context.display_name,
@@ -545,6 +581,19 @@ export async function createNotificationFromOutbox(
         renderedSubject = rendered.subject;
         renderedBody = rendered.text;
         renderedHtml = rendered.html;
+      } else if (channel === 'SMS' && effectivePolicy.template_key) {
+        const rendered = renderTransactionalSms(effectivePolicy.template_key as TransactionalSmsTemplateKey, {
+          customerName: context.display_name,
+          orderNumber: context.order_number,
+          currencyCode: context.currency_code,
+          totalAmount: context.total_amount,
+          trackingUrl: `${options.storefrontBaseUrl ?? 'http://localhost:3000'}/orders/track`,
+        });
+        smsMetrics = rendered;
+        templateKey = rendered.templateKey;
+        templateVersion = rendered.templateVersion;
+        renderedSubject = null;
+        renderedBody = rendered.renderedText;
       } else {
         const revision = await ensureCurrentTemplate(tx, event.organization_id, rule.type, channel);
         revisionId = revision.id;
@@ -559,10 +608,14 @@ export async function createNotificationFromOutbox(
         idempotency_key,queued_at,source_event_id,source_domain,source_id
       ) values(
         ${event.organization_id},${rule.type},'CUSTOMER',${context.customer_id}::uuid,${channel},${revisionId}::uuid,${templateKey},${templateVersion},
-        ${renderedSubject},${renderedBody},${renderedHtml},${channel === 'EMAIL' ? normalizedEmail : null},${channel === 'EMAIL' ? normalizedEmail : null},${channel === 'EMAIL' ? (options.senderFrom ?? null) : null},${channel === 'EMAIL' ? (options.supportEmail ?? null) : null},${status},${skipReason},
+        ${renderedSubject},${renderedBody},${renderedHtml},${channel === 'EMAIL' ? normalizedEmail : channel === 'SMS' && normalizedPhone.valid ? normalizedPhone.normalized : null},${channel === 'EMAIL' ? normalizedEmail : channel === 'SMS' && normalizedPhone.valid ? (options.smsRecipientOverride ?? normalizedPhone.normalized) : null},${channel === 'EMAIL' ? (options.senderFrom ?? null) : channel === 'SMS' ? (options.smsSenderId ?? null) : null},${channel === 'EMAIL' ? (options.supportEmail ?? null) : null},${status},${skipReason},
         ${`notification:v1:${event.event_id}:${context.customer_id}:${channel}`},${status === 'QUEUED' ? new Date() : null},${event.event_id}::uuid,${event.aggregate_type},${context.order_id}::uuid
       ) on conflict(source_event_id,recipient_type,coalesce(customer_id,membership_id),channel) where source_event_id is not null do nothing returning id`.execute(tx);
       if (inserted.rows[0]) {
+        if (channel === 'SMS' && smsMetrics) {
+          await sql`insert into notifications.sms_delivery_details(notification_id,organization_id,original_recipient,normalized_recipient,encoding,character_count,encoding_unit_count,estimated_segments,sender_type,sender_id)
+            values(${inserted.rows[0].id}::uuid,${event.organization_id},${context.phone},${normalizedPhone.valid ? normalizedPhone.normalized : null},${smsMetrics.encoding},${smsMetrics.characterCount},${smsMetrics.encodingUnitCount},${smsMetrics.segmentCount},${options.smsSenderType ?? 'PROVIDER_DEFAULT'},${options.smsSenderId ?? null})`.execute(tx);
+        }
         await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,source,metadata) values(${event.organization_id},${inserted.rows[0].id}::uuid,${status},'APPLICATION',${JSON.stringify({ reason: skipReason, automatic: effectivePolicy.automatic_enabled })}::jsonb)`.execute(tx);
       }
     }
@@ -710,7 +763,7 @@ export async function deliverPendingEmails(
         and not exists(
           select 1 from settings.runtime_settings s
           where s.organization_id=n.organization_id
-            and s.key='email.enabled'
+            and s.setting_key='email.enabled'
             and s.value_json='false'::jsonb
         )
         and not exists(select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.status='SENT')
@@ -735,7 +788,7 @@ export async function deliverPendingEmails(
     }
     const emailSettingsRow = await sql<{ value_json: unknown }>`
       select value_json from settings.runtime_settings
-      where organization_id = ${item.organization_id} and key = 'email.testRecipientOverride'
+      where organization_id = ${item.organization_id} and setting_key = 'email.testRecipientOverride'
       limit 1
     `.execute(db);
     const dynamicOverride =
@@ -786,7 +839,7 @@ export async function setNotificationPreference(
     recipientType: 'MEMBERSHIP' | 'CUSTOMER';
     recipientId: string;
     notificationType: string;
-    channel: 'IN_APP' | 'EMAIL';
+    channel: 'IN_APP' | 'EMAIL' | 'SMS';
     enabled: boolean;
   },
 ) {

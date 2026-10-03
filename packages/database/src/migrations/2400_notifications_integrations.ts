@@ -10,26 +10,35 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table notifications.notification_policies (
       notification_type text primary key,
       delivery_requirement text not null check (delivery_requirement in ('REQUIRED_OPERATIONAL','OPTIONAL')),
-      channels text[] not null check (cardinality(channels)>0),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+    create table notifications.notification_channel_policies (
+      notification_type text not null references notifications.notification_policies(notification_type),
+      channel text not null check(channel in ('IN_APP','EMAIL','SMS')),
+      enabled boolean not null default true,
       automatic_enabled boolean not null default true,
       manual_allowed boolean not null default true,
       template_key text,
       created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
+      updated_at timestamptz not null default now(),
+      primary key(notification_type,channel)
     );
     create table notifications.organization_policy_overrides (
       organization_id uuid not null references platform.organizations(id),
       notification_type text not null references notifications.notification_policies(notification_type),
+      channel text not null check(channel in ('IN_APP','EMAIL','SMS')),
       enabled boolean not null default true,
       automatic_enabled boolean not null default true,
       manual_allowed boolean not null default true,
       updated_by_actor_id uuid references iam.users(id),
       updated_at timestamptz not null default now(),
-      primary key (organization_id, notification_type)
+      primary key (organization_id, notification_type, channel),
+      foreign key(notification_type,channel) references notifications.notification_channel_policies(notification_type,channel)
     );
     create table notifications.notification_templates (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
-      notification_type text not null, channel text not null check(channel in ('IN_APP','EMAIL')), name text not null,
+      notification_type text not null, channel text not null check(channel in ('IN_APP','EMAIL','SMS')), name text not null,
       status text not null default 'DRAFT' check(status in ('DRAFT','ACTIVE','ARCHIVED')), current_revision_id uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1,
       unique(organization_id, notification_type, channel, name), unique(organization_id,id)
     );
@@ -43,19 +52,19 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     alter table notifications.notification_templates add constraint notification_templates_current_revision_fk foreign key(current_revision_id) references notifications.template_revisions(id);
     create table notifications.preferences (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), recipient_type text not null check(recipient_type in ('MEMBERSHIP','CUSTOMER')), recipient_id uuid not null,
-      notification_type text not null, channel text not null check(channel in ('IN_APP','EMAIL')), enabled boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      notification_type text not null, channel text not null check(channel in ('IN_APP','EMAIL','SMS')), enabled boolean not null default true, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
       unique(organization_id,recipient_type,recipient_id,notification_type,channel)
     );
     create table notifications.notifications (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), notification_type text not null,
       recipient_type text not null check(recipient_type in ('MEMBERSHIP','CUSTOMER')), customer_id uuid references customers.customers(id), membership_id uuid references iam.organization_memberships(id),
-      channel text not null check(channel in ('IN_APP','EMAIL')), template_revision_id uuid references notifications.template_revisions(id),
+      channel text not null check(channel in ('IN_APP','EMAIL','SMS')), template_revision_id uuid references notifications.template_revisions(id),
       template_key text, template_version integer, rendered_subject text, rendered_body text not null, rendered_html text,
       intended_recipient text, effective_recipient text, sender_from text, reply_to text, provider text, provider_message_id text,
-      status text not null check(status in ('NOT_APPLICABLE','SKIPPED_NO_EMAIL','PENDING_MANUAL','QUEUED','PROCESSING','SENT','DELIVERED','DELIVERY_DELAYED','FAILED','BOUNCED','COMPLAINED','SUPPRESSED','READ')),
+      status text not null check(status in ('NOT_APPLICABLE','SKIPPED_NO_EMAIL','SKIPPED_NO_PHONE','PENDING_MANUAL','QUEUED','PROCESSING','SENT','ACCEPTED','DELIVERED','DELIVERY_DELAYED','FAILED','REJECTED','EXPIRED','UNDELIVERABLE','UNKNOWN_PROVIDER_OUTCOME','BOUNCED','COMPLAINED','SUPPRESSED','READ')),
       trigger_type text not null default 'AUTOMATIC' check(trigger_type in ('AUTOMATIC','MANUAL','TEST','RESEND')),
       triggered_by_actor_id uuid references iam.users(id), parent_notification_id uuid references notifications.notifications(id),
-      idempotency_key text not null default uuidv7()::text, skip_reason text, failure_code text, failure_message text,
+      idempotency_key text not null default uuidv7()::text, request_fingerprint text, skip_reason text, failure_code text, failure_message text,
       source_event_id uuid references platform.outbox_events(event_id), source_domain text not null, source_id uuid not null,
       created_at timestamptz not null default now(), queued_at timestamptz, processing_started_at timestamptz, read_at timestamptz, sent_at timestamptz, delivered_at timestamptz, updated_at timestamptz not null default now(),
       check((recipient_type='CUSTOMER' and customer_id is not null and membership_id is null) or (recipient_type='MEMBERSHIP' and membership_id is not null and customer_id is null)),
@@ -68,10 +77,29 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index notifications_customer on notifications.notifications(organization_id, customer_id, created_at desc);
     create index notifications_provider_message on notifications.notifications(provider, provider_message_id) where provider_message_id is not null;
     create index notifications_intended_recipient on notifications.notifications(organization_id, lower(intended_recipient));
+    create table notifications.sms_delivery_details (
+      notification_id uuid primary key references notifications.notifications(id) on delete cascade,
+      organization_id uuid not null references platform.organizations(id),
+      original_recipient text,
+      normalized_recipient text,
+      encoding text not null check(encoding in ('GSM_7','UNICODE')),
+      character_count integer not null check(character_count>=0),
+      encoding_unit_count integer not null check(encoding_unit_count>=0),
+      estimated_segments integer not null check(estimated_segments>=0),
+      provider_reported_segments integer check(provider_reported_segments>0),
+      provider_reported_cost numeric(20,4) check(provider_reported_cost>=0),
+      provider_cost_currency text check(provider_cost_currency is null or provider_cost_currency ~ '^[A-Z]{3}$'),
+      sender_type text not null check(sender_type in ('MASKING','NON_MASKING','PROVIDER_DEFAULT')),
+      sender_id text,
+      reconcile_after timestamptz,
+      last_polled_at timestamptz,
+      foreign key(organization_id,notification_id) references notifications.notifications(organization_id,id)
+    );
+    create index sms_delivery_reconciliation on notifications.sms_delivery_details(reconcile_after,notification_id) where reconcile_after is not null;
     create table notifications.delivery_attempts (
       id bigint generated always as identity primary key, organization_id uuid not null references platform.organizations(id), notification_id uuid not null references notifications.notifications(id),
-      attempt_number integer not null check(attempt_number>0), provider text not null, provider_message_id text, status text not null check(status in ('PENDING','SENT','FAILED','RETRY_WAIT','PERMANENT_FAILURE')),
-      started_at timestamptz not null default now(), completed_at timestamptz, next_retry_at timestamptz, error_code text, error_metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(error_metadata)='object'), unique(notification_id,attempt_number)
+      attempt_number integer not null check(attempt_number>0), provider text not null, provider_message_id text, status text not null check(status in ('PENDING','SENT','ACCEPTED','FAILED','RETRY_WAIT','PERMANENT_FAILURE','UNKNOWN_OUTCOME')),
+      started_at timestamptz not null default now(), completed_at timestamptz, next_retry_at timestamptz, error_code text, error_category text, error_metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(error_metadata)='object'), unique(notification_id,attempt_number)
     );
     create table notifications.delivery_events (
       id bigint generated always as identity primary key,
@@ -100,6 +128,37 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       unique(organization_id, normalized_email, reason)
     );
     create index email_suppressions_active_lookup on notifications.email_suppressions(organization_id,normalized_email) where active;
+    create table notifications.sms_suppressions (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      normalized_phone text not null,
+      reason text not null check(reason in ('INVALID_NUMBER','PERMANENT_DELIVERY_FAILURE','CUSTOMER_REQUEST','ADMIN_SUPPRESSION','PROVIDER_BLOCK')),
+      source text not null,
+      provider text,
+      active boolean not null default true,
+      created_at timestamptz not null default now(),
+      cleared_at timestamptz,
+      cleared_by_actor_id uuid references iam.users(id),
+      clear_reason text,
+      unique(organization_id, normalized_phone, reason)
+    );
+    create index sms_suppressions_active_lookup on notifications.sms_suppressions(organization_id,normalized_phone) where active;
+    create table notifications.sms_provider_events (
+      id bigint generated always as identity primary key,
+      provider text not null,
+      provider_event_id text not null,
+      provider_message_id text,
+      notification_id uuid references notifications.notifications(id),
+      provider_status text not null,
+      normalized_status text not null,
+      safe_metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(safe_metadata)='object'),
+      provider_occurred_at timestamptz,
+      received_at timestamptz not null default now(),
+      processed_at timestamptz,
+      processing_result text,
+      unique(provider,provider_event_id)
+    );
+    create index sms_provider_events_message on notifications.sms_provider_events(provider,provider_message_id,received_at desc);
     create table notifications.provider_events (
       id bigint generated always as identity primary key,
       provider text not null,
@@ -269,11 +328,23 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('notifications.send','notifications','Send and resend eligible transactional notifications.','HIGH'),
       ('notifications.retry','notifications','Retry failed transactional notification delivery.','HIGH'),
       ('notifications.suppressions.manage','notifications','Manage transactional email suppressions.','HIGH'),
+      ('notifications.sms.view','notifications','View transactional SMS activity and diagnostics.','INTERNAL'),
+      ('notifications.sms.preview','notifications','Preview transactional SMS templates.','INTERNAL'),
+      ('notifications.sms.test_send','notifications','Send protected transactional SMS tests.','HIGH'),
+      ('notifications.sms.manual_send','notifications','Manually send eligible transactional SMS.','HIGH'),
+      ('notifications.sms.retry','notifications','Retry confirmed failed transactional SMS delivery.','HIGH'),
+      ('notifications.sms.resend','notifications','Create an intentional audited transactional SMS resend.','HIGH'),
+      ('notifications.sms.configure_policy','notifications','Configure transactional SMS channel policies.','HIGH'),
+      ('notifications.sms.suppression.view','notifications','View transactional SMS suppressions.','INTERNAL'),
+      ('notifications.sms.suppression.manage','notifications','Manage transactional SMS suppressions.','HIGH'),
+      ('notifications.sms.diagnostics','notifications','View SMS provider and worker diagnostics.','INTERNAL'),
       ('integrations.view','integrations','View integration health and reconciliation state.','INTERNAL'),
       ('integrations.manage','integrations','Manage integration accounts and reconciliation.','HIGH'),
       ('webhooks.manage','integrations','Manage signed outbound webhook endpoints.','HIGH') on conflict(capability_code) do nothing;
     insert into iam.membership_capability_grants(membership_id,capability_code)
-      select m.id,c.capability_code from iam.organization_memberships m cross join(values('notifications.view'),('notifications.manage'),('notifications.send'),('notifications.retry'),('notifications.suppressions.manage'),('integrations.view'),('integrations.manage'),('webhooks.manage')) c(capability_code)
+      select m.id,c.capability_code from iam.organization_memberships m cross join(values('notifications.view'),('notifications.manage'),('notifications.send'),('notifications.retry'),('notifications.suppressions.manage'),
+        ('notifications.sms.view'),('notifications.sms.preview'),('notifications.sms.test_send'),('notifications.sms.manual_send'),('notifications.sms.retry'),('notifications.sms.resend'),('notifications.sms.configure_policy'),('notifications.sms.suppression.view'),('notifications.sms.suppression.manage'),('notifications.sms.diagnostics'),
+        ('integrations.view'),('integrations.manage'),('webhooks.manage')) c(capability_code)
       where m.membership_type='OWNER' and m.status='ACTIVE' on conflict do nothing;
   `.execute(db);
 }
