@@ -1006,6 +1006,7 @@ export default function MediaPage() {
                               src={getAdminMediaUrl(asset.id, { rendition: 'card' })}
                               alt={asset.altText || asset.title || asset.originalFilename}
                               fill
+                              unoptimized
                               className="object-cover transition-transform group-hover:scale-105"
                               sizes="(max-width: 768px) 50vw, 25vw"
                             />
@@ -1110,6 +1111,7 @@ export default function MediaPage() {
                                   src={getAdminMediaUrl(asset.id, { rendition: 'thumbnail' })}
                                   alt=""
                                   fill
+                                  unoptimized
                                   className="object-cover"
                                 />
                               ) : (
@@ -1210,6 +1212,7 @@ export default function MediaPage() {
                       src={getAdminMediaUrl(selectedAsset.id, { rendition: 'pdp' })}
                       alt={selectedAsset.altText || ''}
                       fill
+                      unoptimized
                       className="object-contain"
                     />
                   ) : (
