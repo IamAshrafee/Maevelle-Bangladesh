@@ -4,6 +4,7 @@ import type {
   CatalogProductTypeDefinitionDto,
   CatalogVocabularyItemDto,
   SizeGuideSummaryDto,
+  WarehouseLocationDto,
 } from '@maevelle/contracts';
 
 export interface SizingReferenceData {
@@ -22,19 +23,44 @@ export interface SizingReferenceData {
   }[];
 }
 
+export interface OptionValueState {
+  readonly id: string; // clientRef or existing id
+  readonly label: string;
+  readonly isPrimary?: boolean;
+  readonly colorId?: string | null;
+  readonly colorHex?: string | null;
+  readonly sizeDefinitionId?: string | null;
+}
+
+export interface OptionAxisState {
+  readonly id: string; // clientRef or existing id
+  readonly name: string;
+  readonly isVisual: boolean;
+  readonly values: readonly OptionValueState[];
+}
+
+export interface VariantStockEntry {
+  locationId: string;
+  locationName?: string;
+  quantity: string;
+}
+
 export interface VariantMatrixRow {
-  readonly id: string;
+  readonly id: string; // clientRef
   enabled: boolean;
   title: string;
   optionSelections: readonly {
     readonly axisName: string;
     readonly valueDisplay: string;
+    readonly valueRef?: string;
   }[];
   sku: string;
   barcode: string;
   priceAmount: string;
   compareAtAmount: string;
-  costAmount: string;
+  costAmount: string; // backward compat
+  estimatedCostAmount: string;
+  initialStock: VariantStockEntry[];
   primaryColorId: string | null;
   weightValue: string;
   weightUnit: 'G' | 'KG' | 'OZ' | 'LB';
@@ -53,6 +79,8 @@ export interface StagedMediaItem {
   role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
   variantId?: string | null;
   optionValueId?: string | null;
+  variantRef?: string | null;
+  optionValueRef?: string | null;
   position?: number;
   altText: string;
   isUploading: boolean;
@@ -84,11 +112,6 @@ export interface InfoHighlightEntry {
   value: string;
 }
 
-export interface OptionAxisState {
-  readonly name: string;
-  readonly values: readonly string[];
-}
-
 export interface ReadinessChecklistItem {
   readonly id: string;
   readonly label: string;
@@ -104,6 +127,7 @@ export interface ProductCreatorReferences {
   readonly collections: readonly CatalogVocabularyItemDto[];
   readonly sizingData: SizingReferenceData;
   readonly sizeGuides: readonly SizeGuideSummaryDto[];
+  readonly locations: readonly WarehouseLocationDto[];
 }
 
 export interface ProductCreatorDraft {
@@ -124,6 +148,8 @@ export interface ProductCreatorDraft {
   readonly priceAmount: string;
   readonly compareAtAmount: string;
   readonly costAmount: string;
+  readonly estimatedCostAmount: string;
+  readonly initialStock: VariantStockEntry[];
   readonly sku: string;
   readonly barcode: string;
   readonly optionAxes: readonly OptionAxisState[];
