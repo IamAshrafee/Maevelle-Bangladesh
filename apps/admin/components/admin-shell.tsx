@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  MessageSquareText,
   Menu,
   PackageCheck,
   PackageOpen,
@@ -271,6 +272,13 @@ const navigation: readonly NavGroup[] = [
         icon: Mail,
         capability: 'notifications.view',
         keywords: 'resend transactional delivery templates policies suppressions diagnostics',
+      },
+      {
+        label: 'SMS operations',
+        href: '/sms',
+        icon: MessageSquareText,
+        capability: 'notifications.sms.view',
+        keywords: 'sms transactional mobile provider templates policies suppressions diagnostics',
       },
       {
         label: 'Integrations',

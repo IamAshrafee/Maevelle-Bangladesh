@@ -105,6 +105,13 @@ describe('API hardening foundation', () => {
         emailFromAddress: 'notifications@maevelle.example',
         emailReplyTo: 'support@maevelle.example',
         emailAllowedTestRecipients: [],
+        smsEnabled: false,
+        smsProvider: 'none',
+        smsEnvironment: 'test',
+        smsTestMode: true,
+        smsAllowedTestRecipients: [],
+        smsSenderType: 'PROVIDER_DEFAULT',
+        smsMaxPerTick: 20,
       },
     });
     const productId = '018f1f77-6b10-7cc0-9b11-4fefab124000';
@@ -275,6 +282,13 @@ describe('API hardening foundation', () => {
         emailFromAddress: 'notifications@maevelle.example',
         emailReplyTo: 'support@maevelle.example',
         emailAllowedTestRecipients: [],
+        smsEnabled: false,
+        smsProvider: 'none',
+        smsEnvironment: 'test',
+        smsTestMode: true,
+        smsAllowedTestRecipients: [],
+        smsSenderType: 'PROVIDER_DEFAULT',
+        smsMaxPerTick: 20,
       },
     });
     const publicResponse = await app.inject({ method: 'GET', url: '/health/live' });
@@ -341,6 +355,13 @@ describe('API hardening foundation', () => {
       emailFromAddress: 'orders@maevelle.example',
       emailReplyTo: 'maevelleBangladesh@gmail.com',
       emailAllowedTestRecipients: [],
+      smsEnabled: false,
+      smsProvider: 'none' as const,
+      smsEnvironment: 'test' as const,
+      smsTestMode: true,
+      smsAllowedTestRecipients: [],
+      smsSenderType: 'PROVIDER_DEFAULT' as const,
+      smsMaxPerTick: 20,
     };
 
     const unconfiguredApp = buildApi({

@@ -36,4 +36,11 @@ describe('mock SMS provider contract', () => {
     const result = await createMockSmsProvider({ mode }).send({ notificationId: crypto.randomUUID(), recipient: '+8801712345678', text: 'test', encoding: 'GSM_7', estimatedSegments: 1, senderType: 'PROVIDER_DEFAULT', idempotencyKey: crypto.randomUUID() });
     expect(result.outcome).toBe(outcome);
   });
+
+  it('authenticates and normalizes mock callback events', async () => {
+    const provider = createMockSmsProvider({ webhookToken: 'test-secret' });
+    const rawBody = JSON.stringify({ providerEventId: 'evt-1', providerMessageId: 'msg-1', providerStatus: 'delivered', status: 'DELIVERED' });
+    await expect(provider.verifyAndParseWebhook?.({ rawBody, headers: { 'x-mock-sms-token': 'wrong' } })).rejects.toThrow(/Invalid/);
+    await expect(provider.verifyAndParseWebhook?.({ rawBody, headers: { 'x-mock-sms-token': 'test-secret' } })).resolves.toEqual([expect.objectContaining({ status: 'DELIVERED' })]);
+  });
 });

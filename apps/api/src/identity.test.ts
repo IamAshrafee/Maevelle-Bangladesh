@@ -41,6 +41,13 @@ const config: RuntimeConfig = {
   emailFromAddress: 'notifications@maevelle.example',
   emailReplyTo: 'support@maevelle.example',
   emailAllowedTestRecipients: [],
+  smsEnabled: false,
+  smsProvider: 'none',
+  smsEnvironment: 'test',
+  smsTestMode: true,
+  smsAllowedTestRecipients: [],
+  smsSenderType: 'PROVIDER_DEFAULT',
+  smsMaxPerTick: 20,
 };
 
 function cookieHeader(setCookie: string | string[] | undefined): string {
