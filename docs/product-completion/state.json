@@ -1,19 +1,16 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "transactional-sms-notifications",
-  "active_substage": "PROVIDER_AGNOSTIC_PLATFORM_WITH_BASIC_ADMIN_VERIFIED",
+  "active_area": "catalog-presentation-variants-media-pricing",
+  "active_substage": "PHASE_1_BACKEND_SCHEMA_AND_INTEGRITY_VERIFIED",
   "active_status": "LOCAL_VERIFICATION_COMPLETE",
   "baseline_commit": "0e2e8f5",
   "last_checkpoint_commit": "1832b4d",
   "last_verified_commit": "1832b4d",
-  "last_completed_action": "Implemented and locally verified a provider-agnostic transactional SMS platform: normalized Bangladesh recipients, GSM-7/Unicode segmentation, seven event templates, independent channel policies, immutable notification history, attempts, suppressions, idempotent callbacks, bounded retry and reconciliation, none/mock provider adapters, granular RBAC, Admin SMS operations, and Order detail controls. Clean database rebuild, 60 focused tests, full TypeScript build, and an 80-route Admin production build passed.",
-  "next_action": "Complete owner operational and responsive visual review, select a Bangladesh SMS provider using the checked-in checklist, then implement its adapter, credentials, approved sender identity, callback authentication, reconciliation, and production delivery tests.",
+  "last_completed_action": "Completed Phase 1 backend baseline: unified visual presentation groups (at most 1 visual axis with partial unique index), eliminated redundant primary SKU, implemented shared gallery for no-visual products, hardened shipping group constraints with runtime inheritance, atomic opening inventory with caller transaction sharing, isolated merchandising cost estimation, write-time option value validation, database-enforced primary media uniqueness, composite FK integrity, and automated product_id triggers. Migrations, seeds, contracts, APIs, and 33 unit/integration tests verified.",
+  "next_action": "Proceed to Phase 2: Frontend Surfaces (Admin Product Creator, Product Workspace, and Storefront PDP & Cards).",
   "interrupted": false,
-  "blocked_by": [
-    "No real SMS provider has been selected or integrated; production sending remains disabled by design.",
-    "Commercial onboarding, credentials, approved sender identity, callback configuration, regulatory compliance confirmation, real-device delivery tests, and owner visual review require business-owner action."
-  ],
+  "blocked_by": [],
   "owner_review_status": "PENDING",
   "verified_complete_areas": []
 }

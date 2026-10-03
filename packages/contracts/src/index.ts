@@ -220,32 +220,74 @@ export interface CatalogProductCreateDto {
     readonly attributeDefinitionId: string;
     readonly value: string | boolean | null;
   }[];
+  readonly shipping?: {
+    readonly weight?: {
+      readonly value: string;
+      readonly unit: 'G' | 'KG' | 'OZ' | 'LB';
+    } | null;
+    readonly dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
+  } | null;
   readonly initialVariant?: {
     readonly sku: string;
     readonly barcode?: string | null;
     readonly priceAmount?: string;
     readonly compareAtAmount?: string | null;
     readonly currency?: string;
+    readonly estimatedCostAmount?: string | null;
+    readonly initialStock?: readonly {
+      readonly locationId: string;
+      readonly quantity: number;
+    }[];
+    readonly weight?: {
+      readonly value: string;
+      readonly unit: 'G' | 'KG' | 'OZ' | 'LB';
+    } | null;
+    readonly dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
   };
   readonly options?: readonly {
+    readonly clientRef?: string;
     readonly code?: string;
     readonly name: string;
     readonly position?: number;
+    readonly isVisual?: boolean;
     readonly values: readonly {
+      readonly clientRef?: string;
       readonly code?: string;
       readonly displayValue: string;
       readonly position?: number;
       readonly colorId?: string | null;
       readonly sizeDefinitionId?: string | null;
+      readonly isPrimary?: boolean;
     }[];
   }[];
   readonly variants?: readonly {
+    readonly clientRef?: string;
     readonly sku: string;
     readonly title?: string | null;
     readonly barcode?: string | null;
+    readonly optionValueRefs?: readonly string[];
+    readonly optionSelections?: readonly {
+      readonly axisName: string;
+      readonly valueDisplay: string;
+    }[];
     readonly priceAmount?: string | null;
     readonly compareAtAmount?: string | null;
     readonly currency?: string;
+    readonly estimatedCostAmount?: string | null;
+    readonly initialStock?: readonly {
+      readonly locationId: string;
+      readonly quantity: number;
+    }[];
     readonly weight?: {
       readonly value: string;
       readonly unit: 'G' | 'KG' | 'OZ' | 'LB';
@@ -258,10 +300,15 @@ export interface CatalogProductCreateDto {
     } | null;
     readonly primaryColorId?: string | null;
     readonly associatedColorIds?: readonly string[];
-    readonly optionSelections?: readonly {
-      readonly axisName: string;
-      readonly valueDisplay: string;
-    }[];
+  }[];
+  readonly media?: readonly {
+    readonly assetId: string;
+    readonly optionValueRef?: string | null;
+    readonly variantRef?: string | null;
+    readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+    readonly altTextOverride?: string | null;
+    readonly isPrimary?: boolean;
+    readonly position?: number;
   }[];
   readonly seoTitle?: string | null;
   readonly seoDescription?: string | null;
@@ -551,10 +598,20 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   readonly productTypeId: string;
   readonly sizeSystemId: string | null;
   readonly sizeGuideId: string | null;
+  readonly shipping: {
+    readonly weight: { readonly value: string; readonly unit: string } | null;
+    readonly dimensions: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: string;
+    } | null;
+  } | null;
   readonly options: readonly {
     readonly id: string;
     readonly code: string;
     readonly name: string;
+    readonly isVisual: boolean;
     readonly status: 'ACTIVE' | 'ARCHIVED';
     readonly position: number;
     readonly version: number;
@@ -562,6 +619,7 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
       readonly id: string;
       readonly code: string;
       readonly label: string;
+      readonly isPrimary: boolean;
       readonly status: 'ACTIVE' | 'ARCHIVED';
       readonly position: number;
       readonly version: number;
@@ -586,6 +644,16 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
       readonly height: string;
       readonly unit: string;
     } | null;
+    readonly shipping?: {
+      readonly weight: { readonly value: string; readonly unit: string } | null;
+      readonly dimensions: {
+        readonly length: string;
+        readonly width: string;
+        readonly height: string;
+        readonly unit: string;
+      } | null;
+    } | null;
+    readonly estimatedCostAmount: string | null;
     readonly currentPrice: {
       readonly amount: string;
       readonly compareAtAmount: string | null;
@@ -704,11 +772,27 @@ export interface StorefrontProductDto {
   readonly description: string | null;
   readonly seoTitle: string | null;
   readonly seoDescription: string | null;
+  readonly shipping?: {
+    readonly weight: { readonly value: string; readonly unit: string } | null;
+    readonly dimensions: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: string;
+    } | null;
+  } | null;
   readonly options: readonly {
     id: string;
     code: string;
     name: string;
-    values: readonly { id: string; code: string; label: string; colorHex?: string }[];
+    isVisual: boolean;
+    values: readonly {
+      id: string;
+      code: string;
+      label: string;
+      colorHex?: string;
+      isPrimary?: boolean;
+    }[];
   }[];
   readonly variants: readonly {
     id: string;
@@ -716,6 +800,16 @@ export interface StorefrontProductDto {
     optionValueIds: readonly string[];
     price?: { amount: string; compareAtAmount: string | null; currency: string };
     available: boolean;
+    stockStatus?: 'AVAILABLE' | 'OUT_OF_STOCK' | 'UNAVAILABLE';
+    shipping?: {
+      readonly weight: { readonly value: string; readonly unit: string } | null;
+      readonly dimensions: {
+        readonly length: string;
+        readonly width: string;
+        readonly height: string;
+        readonly unit: string;
+      } | null;
+    } | null;
   }[];
   readonly media: readonly {
     id: string;

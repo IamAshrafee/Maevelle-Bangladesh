@@ -2,40 +2,43 @@
 
 ## Active Area
 
-Transactional SMS Notifications: provider-agnostic delivery infrastructure and a basic functional Admin operations layer for authoritative Order, Payment, Fulfillment, Delivery, Cancellation, and Refund business events.
+Catalog V3 Unified Presentation Groups, Sellable SKUs, Media, Pricing & Inventory.
 
 ## Current Status / Substage
 
-`PROVIDER_AGNOSTIC_PLATFORM_WITH_BASIC_ADMIN_VERIFIED`
+`PHASE_1_BACKEND_SCHEMA_AND_INTEGRITY_VERIFIED`
 
 ## Evidence Already Known
 
-- **Event-driven isolation**: Existing canonical business events feed the shared notification outbox. SMS failure, delay, suppression, or provider uncertainty never rolls back or stalls Order, Payment, Fulfillment, Delivery, Refund, or Email truth.
-- **Bangladesh recipient safety**: `libphonenumber-js` normalizes common Bangladesh mobile formats to E.164 and rejects malformed, non-Bangladesh, or non-mobile recipients before provider submission.
-- **Encoding-aware templates**: Seven lifecycle templates expose variable definitions, fixture or real-order preview, SMS-specific length guidance, GSM-7/extension-table septet accounting, Unicode counting, and provider-neutral segment estimates.
-- **Provider abstraction**: `SmsProvider` and `SmsProviderRegistry` advertise capabilities explicitly. `none` safely disables sending, while the deterministic `mock` adapter covers accepted, delivered, delayed, transient, permanent, rate-limited, and unknown-outcome paths.
-- **Durable delivery state**: Immutable notification facts, SMS delivery details, append-only attempts, stable idempotency keys, provider events, suppressions, retry scheduling, and reconciliation state are persisted separately from provider credentials.
-- **Safe worker behavior**: The worker atomically claims due notifications, uses bounded jittered retry for confirmed transient failures, does not blindly resend unknown outcomes, polls only when supported, and records callback events idempotently with out-of-order protection.
-- **Operational controls**: Granular SMS RBAC capabilities guard view, policy management, send, test, retry, resend, suppression, and diagnostic operations. Automatic SMS policies default disabled.
-- **Admin surfaces**: `/sms` provides functional Overview, Activity, Templates, Policies, Test Send, Suppressions, and Diagnostics views. Order detail includes server-authoritative eligibility, lifecycle status, and manual send controls.
-- **Clean database evidence**: The disposable Docker database was rebuilt from the checked-in mutable migration baseline with `docker compose down --volumes` and `docker compose up -d --build`; test migrations also applied cleanly.
+- **One Media-Driving Visual Axis**: Strictly enforced at DB level via partial unique index `(organization_id, product_id) WHERE is_visual`.
+- **Elimination of Primary Sellable SKU**: Removed redundant `is_primary` and `is_default` on `catalog.product_variants`. Simple products use `option_signature = 'default'`. Configurable products have no primary sellable SKU.
+- **Shared Gallery for No-Visual Products**:
+  - `HAS visual axis`: Merchandising photography (`GALLERY`, `THUMBNAIL`, `COLOR_GALLERY`) MUST attach to a visual presentation option value (`option_value_id IS NOT NULL`) or SKU override (`variant_id IS NOT NULL`).
+  - `NO visual axis` (Size-only configurable or simple products): Merchandising photography attaches to the product's shared presentation gallery (`variant_id IS NULL AND option_value_id IS NULL`).
+  - Informational media (`SIZE_DIAGRAM`) is allowed at product level (`variant_id IS NULL AND option_value_id IS NULL`) in all configurations.
+- **Write-Time Option Value Validation**: Immediate rejection (`VALIDATION_FAILED`) when attempting to set `is_primary = true` on a non-visual option axis.
+- **Shipping Group Constraints & Inheritance**:
+  - 3-valued boolean logic hardened constraints: `(weight_value is null) = (weight_unit is null)` and dimensions 4-tuple all present or all null.
+  - Variants cleanly inherit base product shipping at runtime when overrides are NULL.
+- **Atomic Opening Stock via Inventory Transaction**: Passed caller's transaction directly into `inventory.adjustInventory`, posting real append-only ledger movements (`OPENING_BALANCE` in `inventory.inventory_transactions` and `inventory.inventory_movement_lines`).
+- **Database-Enforced Primary Media Uniqueness**: Partial unique index on primary media in `catalog.product_media`.
+- **Composite Foreign Keys & Automated Trigger**: `(organization_id, product_id, id)` composite foreign keys ensure media cannot reference mismatched products; `set_product_option_value_product_id` trigger guarantees automated `product_id` population.
 - **Verification evidence**:
-  - 60 focused worker/database/config/API tests passed.
-  - `pnpm exec tsc --build --pretty false` passed across the monorepo.
-  - `pnpm --filter @maevelle/admin build` compiled and generated all 80 routes.
+  - 33 focused database/catalog/media/integrity/storefront tests passed (`catalog-v3-architecture.test.ts`, `catalog.test.ts`, `catalog-variants.test.ts`, `catalog-variant-integrity.test.ts`, `storefront.test.ts`, `media.test.ts`).
+  - Monorepo contracts, database, and API TypeScript builds passed with 0 errors.
+  - Clean PostgreSQL baseline rebuild and migrations passed. Seed script populated 503 records cleanly.
 
 ## Immediate Objective
 
-Conduct owner operational and responsive visual review of `/sms` and the Order detail SMS panel. Then use `docs/sms-notifications/provider-selection-checklist.md` to select a Bangladesh provider and implement its adapter, credentials, approved sender identity, callback verification, reconciliation behavior, and real-device delivery validation.
-
-## Important Constraints
-
-- No real provider is selected or integrated; production sending is intentionally unavailable.
-- Provider acceptance is not delivery. Delivery requires authoritative callbacks or polling evidence.
-- SMS remains operationally independent from business truth and from Email delivery.
-- Automatic SMS policies are disabled by default until commercial and operational readiness is confirmed.
-- Marketing campaigns, OTP/authentication SMS, WhatsApp, arbitrary freeform composer sends, and generic bulk messaging remain outside this transactional capability.
-
-## Blockers / Owner Review
-
-Provider commercial onboarding, production credentials, sender-ID approval, callback registration, regulatory and consent review, provider cost/balance semantics, real-device delivery tests, and owner responsive/operational review remain pending. The checked-in mock adapter and diagnostics support local verification without pretending these external gates are complete.
+Proceed to **Phase 2: Frontend Surfaces**:
+1. Admin Product Creator (`apps/admin/components/products/creator/*`):
+   - Refactor UI to 1 Visual Axis + N Secondary Axes.
+   - Size-only / No-visual mode: Shared gallery uploader at product level.
+   - Visual mode: Option-value galleries for each visual value (e.g. Black gallery, White gallery) with primary visual presentation selector.
+   - Variant Matrix Table: Variant combinations with SKU, barcode, price, cost estimate, multi-location initial stock, and optional shipping overrides.
+   - Pricing & Margin calculator using `estimatedCostAmount` without touching accounting FIFO layers.
+2. Admin Product Details / Workspace (`apps/admin/components/products/product-details.tsx`).
+3. Storefront PDP & Cards (`apps/storefront/components/*`):
+   - PDP displays primary visual value gallery by default (or shared gallery when no visual axis). Swatch click switches active gallery smoothly.
+   - Unselected size by default.
+   - Dynamic price range display across active variants.

@@ -240,26 +240,36 @@ export function createProductsSeedModule(
           : undefined;
 
         // Map Option Axes & Values
-        const mappedOptions = item.options.map((axis, axisIdx) => ({
-          name: axis.name,
-          code: axis.code ?? slugify(axis.name),
-          position: axis.position ?? axisIdx,
-          values: axis.values.map((val, valIdx) => {
-            const colorId = val.colorCode ? colorsByCode.get(val.colorCode.toLowerCase()) : undefined;
-            const sizeDefinitionId =
-              sizeSystemId && val.sizeCode
-                ? sizeDefsBySystemAndCode.get(`${sizeSystemId}:::${val.sizeCode.toLowerCase()}`)
-                : undefined;
+        let visualAxisFound = false;
+        const mappedOptions = item.options.map((axis, axisIdx) => {
+          const isColorOrVisual =
+            axis.name.toLowerCase().includes('color') || axis.name.toLowerCase().includes('shade');
+          const isVisual = isColorOrVisual && !visualAxisFound;
+          if (isVisual) visualAxisFound = true;
 
-            return {
-              displayValue: val.displayValue,
-              code: val.code ?? slugify(val.displayValue),
-              position: val.position ?? valIdx,
-              ...(colorId ? { colorId } : {}),
-              ...(sizeDefinitionId ? { sizeDefinitionId } : {}),
-            };
-          }),
-        }));
+          return {
+            name: axis.name,
+            code: axis.code ?? slugify(axis.name),
+            position: axis.position ?? axisIdx,
+            isVisual,
+            values: axis.values.map((val, valIdx) => {
+              const colorId = val.colorCode ? colorsByCode.get(val.colorCode.toLowerCase()) : undefined;
+              const sizeDefinitionId =
+                sizeSystemId && val.sizeCode
+                  ? sizeDefsBySystemAndCode.get(`${sizeSystemId}:::${val.sizeCode.toLowerCase()}`)
+                  : undefined;
+
+              return {
+                displayValue: val.displayValue,
+                code: val.code ?? slugify(val.displayValue),
+                position: val.position ?? valIdx,
+                isPrimary: isVisual && valIdx === 0,
+                ...(colorId ? { colorId } : {}),
+                ...(sizeDefinitionId ? { sizeDefinitionId } : {}),
+              };
+            }),
+          };
+        });
 
         // Map Variants
         const mappedVariants = item.variants.map((v) => {
@@ -315,18 +325,34 @@ export function createProductsSeedModule(
         const variantMap = new Map(createdVariants.rows.map((r) => [r.sku.toUpperCase(), r.id]));
 
         // 4. Query created option values to link color gallery media if applicable
-        const createdOptionValues = await sql<{ id: string; color_code: string | null }>`
-          select val.id::text, c.code as color_code
+        const createdOptionValues = await sql<{
+          id: string;
+          code: string;
+          display_value: string;
+          color_code: string | null;
+          is_primary: boolean;
+        }>`
+          select val.id::text, val.code, val.display_value, c.code as color_code, val.is_primary
           from catalog.product_option_values val
           join catalog.product_option_axes ax on ax.id = val.option_axis_id
           left join catalog.colors c on c.id = val.color_id
           where ax.product_id = ${createdProduct.id}::uuid and ax.organization_id = ${context.organizationId}
+            and ax.is_visual
         `.execute(context.db);
         const optionValuesByColorCode = new Map<string, string>();
+        let primaryVisualOptionValueId: string | undefined;
         for (const optVal of createdOptionValues.rows) {
           if (optVal.color_code) {
-            optionValuesByColorCode.set(optVal.color_code.toLowerCase(), optVal.id);
+            optionValuesByColorCode.set(optVal.color_code.toLowerCase().trim(), optVal.id);
           }
+          optionValuesByColorCode.set(optVal.code.toLowerCase().trim(), optVal.id);
+          optionValuesByColorCode.set(optVal.display_value.toLowerCase().trim(), optVal.id);
+          if (optVal.is_primary) {
+            primaryVisualOptionValueId = optVal.id;
+          }
+        }
+        if (!primaryVisualOptionValueId && createdOptionValues.rows[0]) {
+          primaryVisualOptionValueId = createdOptionValues.rows[0].id;
         }
 
         // 5. Attach product media
@@ -339,15 +365,21 @@ export function createProductsSeedModule(
               title: `${item.title} - ${m.role}`,
             });
 
-            const optionValueId = m.colorCode
-              ? optionValuesByColorCode.get(m.colorCode.toLowerCase())
+            let optionValueId = m.colorCode
+              ? optionValuesByColorCode.get(m.colorCode.toLowerCase().trim())
               : undefined;
+
+            if (!optionValueId && primaryVisualOptionValueId && m.role !== 'SIZE_DIAGRAM') {
+              optionValueId = primaryVisualOptionValueId;
+            }
+
+            const role = !optionValueId && m.role === 'COLOR_GALLERY' ? 'GALLERY' : m.role;
 
             await attachMediaToProduct(context.db, {
               organizationId: context.organizationId,
               productId: createdProduct.id,
               assetId: asset.id,
-              role: m.role,
+              role,
               isPrimary: m.isPrimary ?? false,
               position: m.position ?? 0,
               ...(optionValueId ? { optionValueId } : {}),

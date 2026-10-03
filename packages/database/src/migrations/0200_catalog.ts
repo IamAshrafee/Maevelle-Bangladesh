@@ -161,6 +161,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       published_at timestamptz,
       seo_title text,
       seo_description text,
+      weight_value numeric(20,6),
+      weight_unit text,
+      length_value numeric(20,6),
+      width_value numeric(20,6),
+      height_value numeric(20,6),
+      dimension_unit text,
       version bigint not null default 1,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
@@ -170,7 +176,16 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
         references catalog.product_types(organization_id, id),
       foreign key (organization_id, primary_category_id) references catalog.categories(organization_id, id),
       check (handle ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
-      check ((publication_status = 'PUBLISHED' and status = 'ACTIVE' and published_at is not null) or (publication_status = 'UNPUBLISHED'))
+      check ((publication_status = 'PUBLISHED' and status = 'ACTIVE' and published_at is not null) or (publication_status = 'UNPUBLISHED')),
+      check (weight_value is null or weight_value > 0),
+      constraint products_shipping_weight_group check ((weight_value is null) = (weight_unit is null)),
+      check (weight_unit is null or weight_unit in ('G', 'KG', 'OZ', 'LB')),
+      constraint products_shipping_dimensions_group check (
+        (length_value is null and width_value is null and height_value is null and dimension_unit is null)
+        or (length_value is not null and width_value is not null and height_value is not null and dimension_unit is not null
+          and length_value > 0 and width_value > 0 and height_value > 0
+          and dimension_unit in ('MM', 'CM', 'IN'))
+      )
     );
     create index products_storefront_lookup on catalog.products (organization_id, handle) where status = 'ACTIVE' and publication_status = 'PUBLISHED';
     create index products_admin_list on catalog.products (organization_id, status, publication_status, updated_at desc);
@@ -201,6 +216,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       product_id uuid not null,
       code text not null check (code ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
       name text not null check (length(trim(name)) > 0),
+      is_visual boolean not null default false,
       position integer not null default 0,
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
       version bigint not null default 1,
@@ -208,10 +224,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       updated_at timestamptz not null default now(),
       check (position >= 0),
       unique (organization_id, id),
+      unique (organization_id, product_id, id),
       unique (product_id, code),
       foreign key (organization_id, product_id) references catalog.products(organization_id, id)
     );
     create index product_option_axes_product_position on catalog.product_option_axes (product_id, position, id);
+    create unique index product_option_axes_one_visual on catalog.product_option_axes (organization_id, product_id) where is_visual;
 
     create table catalog.colors (
       id uuid primary key default uuidv7(),
@@ -234,11 +252,13 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table catalog.product_option_values (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
+      product_id uuid not null,
       option_axis_id uuid not null,
       code text not null check (code ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'),
       display_value text not null check (length(trim(display_value)) > 0),
       color_id uuid references catalog.colors(id),
       size_definition_id uuid,
+      is_primary boolean not null default false,
       position integer not null default 0,
       status text not null default 'ACTIVE' check (status in ('ACTIVE', 'ARCHIVED')),
       version bigint not null default 1,
@@ -246,12 +266,32 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       updated_at timestamptz not null default now(),
       check (position >= 0),
       unique (organization_id, id),
+      unique (organization_id, product_id, id),
       unique (organization_id, option_axis_id, id),
       unique (option_axis_id, code),
-      foreign key (organization_id, option_axis_id)
-        references catalog.product_option_axes(organization_id, id)
+      foreign key (organization_id, product_id)
+        references catalog.products(organization_id, id),
+      foreign key (organization_id, product_id, option_axis_id)
+        references catalog.product_option_axes(organization_id, product_id, id)
     );
     create index product_option_values_axis_position on catalog.product_option_values (option_axis_id, position, id);
+    create unique index product_option_values_one_primary on catalog.product_option_values (organization_id, option_axis_id) where is_primary;
+
+    create or replace function catalog.set_product_option_value_product_id()
+    returns trigger language plpgsql as $$
+    begin
+      if NEW.product_id is null then
+        select product_id into NEW.product_id
+        from catalog.product_option_axes
+        where id = NEW.option_axis_id and organization_id = NEW.organization_id;
+      end if;
+      return NEW;
+    end;
+    $$;
+
+    create trigger product_option_values_set_product_id
+      before insert on catalog.product_option_values
+      for each row execute function catalog.set_product_option_value_product_id();
 
     create table catalog.product_variants (
       id uuid primary key default uuidv7(),
@@ -268,6 +308,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       width_value numeric(20,6),
       height_value numeric(20,6),
       dimension_unit text,
+      estimated_cost_amount numeric(20,4),
       option_signature text not null,
       version bigint not null default 1,
       created_at timestamptz not null default now(),
@@ -277,13 +318,18 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       check (sku_normalized=upper(trim(sku))),
       check (barcode is null or length(trim(barcode)) > 0),
       check (weight_value is null or weight_value > 0),
-      check ((weight_value is null)=(weight_unit is null)),
+      constraint product_variants_shipping_weight_group check ((weight_value is null)=(weight_unit is null)),
       check (weight_unit is null or weight_unit in ('G', 'KG', 'OZ', 'LB')),
-      check ((length_value is null and width_value is null and height_value is null and dimension_unit is null)
-        or (length_value > 0 and width_value > 0 and height_value > 0
-          and dimension_unit in ('MM', 'CM', 'IN'))),
+      constraint product_variants_shipping_dimensions_group check (
+        (length_value is null and width_value is null and height_value is null and dimension_unit is null)
+        or (length_value is not null and width_value is not null and height_value is not null and dimension_unit is not null
+          and length_value > 0 and width_value > 0 and height_value > 0
+          and dimension_unit in ('MM', 'CM', 'IN'))
+      ),
+      check (estimated_cost_amount is null or estimated_cost_amount >= 0),
       check (length(option_signature) > 0),
       unique (organization_id, id),
+      unique (organization_id, product_id, id),
       unique (organization_id, sku_normalized),
       unique (product_id, option_signature),
       foreign key (organization_id, product_id) references catalog.products(organization_id, id)

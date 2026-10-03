@@ -272,6 +272,7 @@ describe('media tenant ownership', () => {
       productId: product.id,
       code: 'color',
       name: 'Color',
+      isVisual: true,
     });
     const red = await createProductOptionValue(database.db, {
       organizationId: owner.id,

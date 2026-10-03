@@ -501,6 +501,38 @@ export function registerCatalogRoutes(
               }),
             ),
           ),
+          shipping: Type.Optional(
+            Type.Union([
+              Type.Object({
+                weight: Type.Optional(
+                  Type.Union([
+                    Type.Object({
+                      value: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+                      unit: Type.Union([
+                        Type.Literal('G'),
+                        Type.Literal('KG'),
+                        Type.Literal('OZ'),
+                        Type.Literal('LB'),
+                      ]),
+                    }),
+                    Type.Null(),
+                  ]),
+                ),
+                dimensions: Type.Optional(
+                  Type.Union([
+                    Type.Object({
+                      length: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+                      width: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+                      height: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
+                      unit: Type.Union([Type.Literal('MM'), Type.Literal('CM'), Type.Literal('IN')]),
+                    }),
+                    Type.Null(),
+                  ]),
+                ),
+              }),
+              Type.Null(),
+            ]),
+          ),
           initialVariant: Type.Optional(
             Type.Object({
               sku: Type.String({ minLength: 1, maxLength: 120 }),
@@ -510,19 +542,26 @@ export function registerCatalogRoutes(
                 Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
               ),
               currency: Type.Optional(Type.String({ pattern: '^[A-Z]{3}$' })),
+              estimatedCostAmount: Type.Optional(
+                Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
+              ),
             }),
           ),
           options: Type.Optional(
             Type.Array(
               Type.Object({
+                clientRef: Type.Optional(Type.String({ minLength: 1 })),
                 name: Type.String({ minLength: 1 }),
                 code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
                 position: Type.Optional(Type.Integer({ minimum: 0 })),
+                isVisual: Type.Optional(Type.Boolean()),
                 values: Type.Array(
                   Type.Object({
+                    clientRef: Type.Optional(Type.String({ minLength: 1 })),
                     displayValue: Type.String({ minLength: 1 }),
                     code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
                     position: Type.Optional(Type.Integer({ minimum: 0 })),
+                    isPrimary: Type.Optional(Type.Boolean()),
                     colorId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
                     sizeDefinitionId: Type.Optional(
                       Type.Union([organizationIdParameter, Type.Null()]),
@@ -536,6 +575,7 @@ export function registerCatalogRoutes(
           variants: Type.Optional(
             Type.Array(
               Type.Object({
+                clientRef: Type.Optional(Type.String({ minLength: 1 })),
                 sku: Type.String({ minLength: 1, maxLength: 120 }),
                 title: Type.Optional(Type.Union([Type.String({ maxLength: 180 }), Type.Null()])),
                 barcode: Type.Optional(Type.Union([Type.String({ maxLength: 120 }), Type.Null()])),
@@ -546,6 +586,9 @@ export function registerCatalogRoutes(
                   Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
                 ),
                 currency: Type.Optional(Type.String({ pattern: '^[A-Z]{3}$' })),
+                estimatedCostAmount: Type.Optional(
+                  Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
+                ),
                 weight: Type.Optional(
                   Type.Union([
                     Type.Object({
@@ -583,6 +626,37 @@ export function registerCatalogRoutes(
                     }),
                   ),
                 ),
+                optionValueRefs: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+                initialStock: Type.Optional(
+                  Type.Array(
+                    Type.Object({
+                      locationId: organizationIdParameter,
+                      quantity: Type.String({ pattern: '^\\d+$' }),
+                    }),
+                  ),
+                ),
+              }),
+            ),
+          ),
+          media: Type.Optional(
+            Type.Array(
+              Type.Object({
+                assetId: organizationIdParameter,
+                role: Type.Optional(
+                  Type.Union([
+                    Type.Literal('GALLERY'),
+                    Type.Literal('THUMBNAIL'),
+                    Type.Literal('COLOR_GALLERY'),
+                    Type.Literal('SIZE_DIAGRAM'),
+                  ]),
+                ),
+                optionValueRef: Type.Optional(Type.String()),
+                variantRef: Type.Optional(Type.String()),
+                isPrimary: Type.Optional(Type.Boolean()),
+                position: Type.Optional(Type.Integer({ minimum: 0 })),
+                altTextOverride: Type.Optional(
+                  Type.Union([Type.String({ maxLength: 255 }), Type.Null()]),
+                ),
               }),
             ),
           ),
@@ -616,6 +690,7 @@ export function registerCatalogRoutes(
           code: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
           name: Type.String({ minLength: 1 }),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
+          isVisual: Type.Optional(Type.Boolean()),
         }),
       },
     },
@@ -628,7 +703,7 @@ export function registerCatalogRoutes(
             organizationId: context.organizationId,
             actorId: context.actorId,
             productId: (request.params as { productId: string }).productId,
-            ...(request.body as { code: string; name: string; position?: number }),
+            ...(request.body as { code: string; name: string; position?: number; isVisual?: boolean }),
           }),
         });
       } catch (error) {
@@ -645,6 +720,7 @@ export function registerCatalogRoutes(
           code: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
           displayValue: Type.String({ minLength: 1 }),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
+          isPrimary: Type.Optional(Type.Boolean()),
           colorId: Type.Optional(Type.String()),
           sizeDefinitionId: Type.Optional(Type.String()),
         }),
@@ -663,6 +739,7 @@ export function registerCatalogRoutes(
               code: string;
               displayValue: string;
               position?: number;
+              isPrimary?: boolean;
               colorId?: string;
               sizeDefinitionId?: string;
             }),
@@ -683,6 +760,7 @@ export function registerCatalogRoutes(
           code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
           name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
+          isVisual: Type.Optional(Type.Boolean()),
           status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')])),
         }),
       },
@@ -696,6 +774,7 @@ export function registerCatalogRoutes(
           code?: string;
           name?: string;
           position?: number;
+          isVisual?: boolean;
           status?: 'ACTIVE' | 'ARCHIVED';
         };
         const { version, ...changes } = body;
@@ -724,6 +803,7 @@ export function registerCatalogRoutes(
           code: Type.Optional(Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' })),
           displayValue: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
           position: Type.Optional(Type.Integer({ minimum: 0 })),
+          isPrimary: Type.Optional(Type.Boolean()),
           status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')])),
           colorId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
           sizeDefinitionId: Type.Optional(Type.Union([organizationIdParameter, Type.Null()])),
@@ -739,6 +819,7 @@ export function registerCatalogRoutes(
           code?: string;
           displayValue?: string;
           position?: number;
+          isPrimary?: boolean;
           status?: 'ACTIVE' | 'ARCHIVED';
           colorId?: string | null;
           sizeDefinitionId?: string | null;

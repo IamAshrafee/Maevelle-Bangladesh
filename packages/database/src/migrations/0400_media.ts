@@ -205,13 +205,21 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       unique (organization_id, id),
       foreign key (organization_id, product_id)
         references catalog.products(organization_id, id),
-      foreign key (organization_id, variant_id)
-        references catalog.product_variants(organization_id, id),
-      foreign key (organization_id, option_value_id)
-        references catalog.product_option_values(organization_id, id),
+      foreign key (organization_id, product_id, variant_id)
+        references catalog.product_variants(organization_id, product_id, id),
+      foreign key (organization_id, product_id, option_value_id)
+        references catalog.product_option_values(organization_id, product_id, id),
       foreign key (organization_id, asset_id)
         references media.media_assets(organization_id, id),
-      check (num_nonnulls(variant_id, option_value_id) <= 1),
+      check (
+        (role in ('GALLERY', 'THUMBNAIL', 'COLOR_GALLERY') and variant_id is null and option_value_id is not null)
+        or
+        (role in ('GALLERY', 'THUMBNAIL', 'COLOR_GALLERY') and variant_id is not null and option_value_id is null)
+        or
+        (role in ('GALLERY', 'THUMBNAIL') and variant_id is null and option_value_id is null)
+        or
+        (role = 'SIZE_DIAGRAM' and variant_id is null and option_value_id is null)
+      ),
       check (position >= 0),
       check (crop_json is null or jsonb_typeof(crop_json) = 'object')
     );

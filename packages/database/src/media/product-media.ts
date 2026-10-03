@@ -52,10 +52,26 @@ export async function attachMediaToProduct(
       transaction,
     );
     if (!product.rows[0]) throw new MediaDomainError('NOT_FOUND', 'Product was not found.');
+
+    const visualAxis = await sql<{ id: string; name: string }>`
+      select id::text, name from catalog.product_option_axes
+      where organization_id=${input.organizationId}
+        and product_id=${input.productId}::uuid
+        and status='ACTIVE' and is_visual
+    `.execute(transaction);
+    const hasVisualAxis = Boolean(visualAxis.rows[0]);
+
+    if (hasVisualAxis && !input.variantId && !input.optionValueId && input.role !== 'SIZE_DIAGRAM') {
+      throw new MediaDomainError(
+        'VALIDATION_FAILED',
+        'Products with a visual presentation axis must attach merchandising media to an option value or SKU override.',
+      );
+    }
+
     if (input.variantId) {
       const variant = await sql<{ id: string }>`select id::text from catalog.product_variants
         where id=${input.variantId}::uuid and product_id=${input.productId}::uuid
-          and organization_id=${input.organizationId}`.execute(transaction);
+        and organization_id=${input.organizationId}`.execute(transaction);
       if (!variant.rows[0])
         throw new MediaDomainError(
           'VALIDATION_FAILED',
@@ -65,10 +81,12 @@ export async function attachMediaToProduct(
     if (input.optionValueId) {
       const value = await sql<{
         id: string;
-      }>`select value.id::text from catalog.product_option_values value
+        is_visual: boolean;
+      }>`select value.id::text, axis.is_visual from catalog.product_option_values value
         join catalog.product_option_axes axis on axis.organization_id=value.organization_id
           and axis.id=value.option_axis_id where value.organization_id=${input.organizationId}
-          and value.id=${input.optionValueId}::uuid and axis.product_id=${input.productId}::uuid`.execute(
+          and value.id=${input.optionValueId}::uuid and axis.product_id=${input.productId}::uuid
+          and axis.status='ACTIVE' and value.status='ACTIVE'`.execute(
         transaction,
       );
       if (!value.rows[0])
@@ -76,12 +94,18 @@ export async function attachMediaToProduct(
           'VALIDATION_FAILED',
           'Option value is not available for this Product.',
         );
+      if (!value.rows[0].is_visual) {
+        throw new MediaDomainError(
+          'VALIDATION_FAILED',
+          'Option-value media galleries are only supported for the visual presentation axis.',
+        );
+      }
     }
     if (input.isPrimary)
       await sql`update catalog.product_media set is_primary=false,updated_at=now()
         where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
-          and variant_id is not distinct from ${input.variantId ?? null}::uuid
-          and option_value_id is not distinct from ${input.optionValueId ?? null}::uuid`.execute(
+        and variant_id is not distinct from ${input.variantId ?? null}::uuid
+        and option_value_id is not distinct from ${input.optionValueId ?? null}::uuid`.execute(
         transaction,
       );
     const placement = await sql<{ id: string }>`insert into catalog.product_media(
@@ -138,6 +162,23 @@ export async function syncProductMediaPlacements(
       transaction,
     );
     if (!product.rows[0]) throw new MediaDomainError('NOT_FOUND', 'Product was not found.');
+
+    const visualAxis = await sql<{ id: string; name: string }>`
+      select id::text, name from catalog.product_option_axes
+      where organization_id=${input.organizationId}
+        and product_id=${input.productId}::uuid
+        and status='ACTIVE' and is_visual
+    `.execute(transaction);
+    const hasVisualAxis = Boolean(visualAxis.rows[0]);
+
+    for (const p of input.placements) {
+      if (hasVisualAxis && !p.variantId && !p.optionValueId && p.role !== 'SIZE_DIAGRAM') {
+        throw new MediaDomainError(
+          'VALIDATION_FAILED',
+          'Products with a visual presentation axis must attach merchandising media to an option value or SKU override.',
+        );
+      }
+    }
 
     const uniqueAssetIds = [...new Set(input.placements.map((p) => p.assetId))];
     if (uniqueAssetIds.length > 0) {
@@ -196,16 +237,24 @@ export async function syncProductMediaPlacements(
       const optList = sql.join(uniqueOptionValueIds.map((id) => sql`${id}::uuid`));
       const validOptions = await sql<{
         id: string;
-      }>`select value.id::text from catalog.product_option_values value
+        is_visual: boolean;
+      }>`select value.id::text, axis.is_visual from catalog.product_option_values value
         join catalog.product_option_axes axis on axis.organization_id=value.organization_id
           and axis.id=value.option_axis_id where value.organization_id=${input.organizationId}
-          and axis.product_id=${input.productId}::uuid and value.id in (${optList})`.execute(
+          and axis.product_id=${input.productId}::uuid and value.id in (${optList})
+          and axis.status='ACTIVE' and value.status='ACTIVE'`.execute(
         transaction,
       );
       if (validOptions.rows.length !== uniqueOptionValueIds.length) {
         throw new MediaDomainError(
           'VALIDATION_FAILED',
           'One or more Option Values do not belong to this Product.',
+        );
+      }
+      if (validOptions.rows.some((v) => !v.is_visual)) {
+        throw new MediaDomainError(
+          'VALIDATION_FAILED',
+          'Option-value media galleries are only supported for the visual presentation axis.',
         );
       }
     }

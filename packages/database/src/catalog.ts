@@ -5,6 +5,7 @@ import {
   catalogProductHasCoherentActiveVariants,
   catalogVariantIsStructurallyValid,
 } from './catalog-variant-integrity.js';
+import { adjustInventory } from './inventory.js';
 import { appendAuditEvent } from './platform.js';
 
 export class CatalogDomainError extends Error {
@@ -57,10 +58,15 @@ export interface CatalogProductWorkspace extends ProductSummary {
   readonly sizeGuideId: string | null;
   readonly description: string | null;
   readonly productTypeId: string;
+  readonly shipping: {
+    readonly weight: { value: string; unit: string } | null;
+    readonly dimensions: { length: string; width: string; height: string; unit: string } | null;
+  } | null;
   readonly options: readonly {
     id: string;
     code: string;
     name: string;
+    isVisual: boolean;
     status: 'ACTIVE' | 'ARCHIVED';
     position: number;
     version: number;
@@ -68,6 +74,7 @@ export interface CatalogProductWorkspace extends ProductSummary {
       id: string;
       code: string;
       label: string;
+      isPrimary: boolean;
       status: 'ACTIVE' | 'ARCHIVED';
       position: number;
       version: number;
@@ -87,6 +94,11 @@ export interface CatalogProductWorkspace extends ProductSummary {
     associatedColors: readonly CatalogColor[];
     weight: { value: string; unit: string } | null;
     dimensions: { length: string; width: string; height: string; unit: string } | null;
+    shipping?: {
+      weight: { value: string; unit: string } | null;
+      dimensions: { length: string; width: string; height: string; unit: string } | null;
+    } | null;
+    estimatedCostAmount: string | null;
     currentPrice: { amount: string; compareAtAmount: string | null; currency: string } | null;
     sellableQuantity: string;
     media: readonly CatalogProductMedia[];
@@ -210,6 +222,10 @@ interface CatalogProductFacts {
   readonly publicMediaCount: number;
   readonly availableVariantCount: number;
   readonly categoryCount: number;
+  readonly hasVisualAxis: boolean;
+  readonly visualPrimaryValueCount: number;
+  readonly visualPrimaryMediaCount: number;
+  readonly sharedGalleryMediaCount: number;
 }
 
 export interface CatalogProductWorkItem extends ProductSummary {
@@ -458,6 +474,7 @@ export async function createProductOptionAxis(
     code: string;
     name: string;
     position?: number;
+    isVisual?: boolean;
     actorId?: string;
   },
 ): Promise<{ id: string }> {
@@ -471,9 +488,22 @@ export async function createProductOptionAxis(
         'Unpublish the Product before adding a new option. Every active Variant must be updated with a value for the new option before the Product can be published again.',
         { recoveryAction: 'UNPUBLISH_AND_RECONFIGURE' },
       );
+    if (input.isVisual) {
+      const existingVisual = await sql<{ id: string }>`
+        select id::text from catalog.product_option_axes
+        where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+          and is_visual and status='ACTIVE'
+      `.execute(transaction);
+      if (existingVisual.rows[0]) {
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'A product can have at most one visual option axis.',
+        );
+      }
+    }
     const result = await sql<{ id: string }>`
-      insert into catalog.product_option_axes (organization_id, product_id, code, name, position)
-      values (${input.organizationId}, ${input.productId}, ${input.code}, ${input.name}, ${input.position ?? 0}) returning id
+      insert into catalog.product_option_axes (organization_id, product_id, code, name, is_visual, position)
+      values (${input.organizationId}, ${input.productId}, ${input.code}, ${input.name}, ${input.isVisual ?? false}, ${input.position ?? 0}) returning id
     `.execute(transaction);
     const row = result.rows[0];
     if (!row) throw new Error('Option axis creation did not return an id.');
@@ -484,7 +514,7 @@ export async function createProductOptionAxis(
         actorId: input.actorId,
         eventType: 'catalog.product.option_structure_updated',
         auditAction: 'catalog.product.option_axis_created',
-        metadata: { optionAxisId: row.id },
+        metadata: { optionAxisId: row.id, isVisual: input.isVisual },
       });
     return row;
   });
@@ -498,6 +528,7 @@ export async function createProductOptionValue(
     code: string;
     displayValue: string;
     position?: number;
+    isPrimary?: boolean;
     colorId?: string;
     sizeDefinitionId?: string;
     actorId?: string;
@@ -506,18 +537,41 @@ export async function createProductOptionValue(
   return db.transaction().execute(async (transaction) => {
     const axis = await sql<{
       product_id: string;
-    }>`select product_id::text from catalog.product_option_axes
+      is_visual: boolean;
+    }>`select product_id::text, is_visual from catalog.product_option_axes
       where organization_id=${input.organizationId} and id=${input.optionAxisId}::uuid`.execute(
       transaction,
     );
-    const productId = axis.rows[0]?.product_id;
-    if (!productId) throw new CatalogDomainError('NOT_FOUND', 'Product option was not found.');
+    const axisRow = axis.rows[0];
+    if (!axisRow) throw new CatalogDomainError('NOT_FOUND', 'Product option was not found.');
+    const productId = axisRow.product_id;
     const product = await lockCatalogProduct(transaction, input.organizationId, productId);
     if (!product || product.status === 'ARCHIVED')
       throw new CatalogDomainError('NOT_FOUND', 'Product was not found or is archived.');
+
+    if (input.isPrimary) {
+      if (!axisRow.is_visual) {
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Only values on a visual option axis can be designated as primary.',
+        );
+      }
+      await sql`
+        update catalog.product_option_values
+        set is_primary = false, updated_at = now()
+        where organization_id = ${input.organizationId}
+          and option_axis_id = ${input.optionAxisId}::uuid
+          and is_primary
+      `.execute(transaction);
+    }
+
     const result = await sql<{ id: string }>`
-      insert into catalog.product_option_values (organization_id, option_axis_id, code, display_value, position, color_id, size_definition_id)
-      values (${input.organizationId}, ${input.optionAxisId}, ${input.code}, ${input.displayValue}, ${input.position ?? 0}, ${input.colorId ?? null}, ${input.sizeDefinitionId ?? null}) returning id
+      insert into catalog.product_option_values (
+        organization_id, product_id, option_axis_id, code, display_value, is_primary, position, color_id, size_definition_id
+      ) values (
+        ${input.organizationId}, ${productId}::uuid, ${input.optionAxisId}, ${input.code}, ${input.displayValue},
+        ${input.isPrimary ?? false}, ${input.position ?? 0}, ${input.colorId ?? null}, ${input.sizeDefinitionId ?? null}
+      ) returning id
     `.execute(transaction);
     const row = result.rows[0];
     if (!row) throw new Error('Option value creation did not return an id.');
@@ -528,7 +582,7 @@ export async function createProductOptionValue(
         actorId: input.actorId,
         eventType: 'catalog.product.option_structure_updated',
         auditAction: 'catalog.product.option_value_created',
-        metadata: { optionAxisId: input.optionAxisId, optionValueId: row.id },
+        metadata: { optionAxisId: input.optionAxisId, optionValueId: row.id, isPrimary: input.isPrimary },
       });
     return row;
   });
@@ -544,6 +598,7 @@ export async function updateProductOptionAxis(
     name?: string;
     code?: string;
     position?: number;
+    isVisual?: boolean;
     status?: 'ACTIVE' | 'ARCHIVED';
     actorId?: string;
   },
@@ -560,8 +615,8 @@ export async function updateProductOptionAxis(
   await db.transaction().execute(async (transaction) => {
     const product = await lockCatalogProduct(transaction, input.organizationId, input.productId);
     if (!product) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
-    const axis = await sql<{ name: string; status: 'ACTIVE' | 'ARCHIVED'; version: string }>`
-      select name,status,version::text from catalog.product_option_axes
+    const axis = await sql<{ name: string; is_visual: boolean; status: 'ACTIVE' | 'ARCHIVED'; version: string }>`
+      select name,is_visual,status,version::text from catalog.product_option_axes
       where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
         and id=${input.axisId}::uuid
     `.execute(transaction);
@@ -572,6 +627,26 @@ export async function updateProductOptionAxis(
         'STALE_VERSION',
         'Product option changed while you were editing.',
       );
+    if (input.isVisual) {
+      const existingVisual = await sql<{ id: string }>`
+        select id::text from catalog.product_option_axes
+        where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
+          and is_visual and status='ACTIVE' and id <> ${input.axisId}::uuid
+      `.execute(transaction);
+      if (existingVisual.rows[0]) {
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'A product can have at most one visual option axis.',
+        );
+      }
+    }
+    if (input.isVisual === false && current.is_visual) {
+      await sql`
+        update catalog.product_option_values
+        set is_primary = false, updated_at = now()
+        where organization_id=${input.organizationId} and option_axis_id=${input.axisId}::uuid
+      `.execute(transaction);
+    }
     if (
       input.status === 'ARCHIVED' &&
       current.status === 'ACTIVE' &&
@@ -586,7 +661,9 @@ export async function updateProductOptionAxis(
     }
     const result = await sql`update catalog.product_option_axes set
         name=coalesce(${name ?? null},name),code=coalesce(${code ?? null},code),
-        position=coalesce(${input.position ?? null},position),status=coalesce(${input.status ?? null},status),
+        position=coalesce(${input.position ?? null},position),
+        is_visual=coalesce(${input.isVisual ?? null},is_visual),
+        status=coalesce(${input.status ?? null},status),
         version=version+1,updated_at=now()
       where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
         and id=${input.axisId}::uuid and version=${input.expectedVersion}`.execute(transaction);
@@ -604,7 +681,7 @@ export async function updateProductOptionAxis(
         actorId: input.actorId,
         eventType: 'catalog.product.option_structure_updated',
         auditAction: 'catalog.product.option_axis_updated',
-        metadata: { optionAxisId: input.axisId, status: input.status },
+        metadata: { optionAxisId: input.axisId, isVisual: input.isVisual, status: input.status },
       });
   });
 }
@@ -619,6 +696,7 @@ export async function updateProductOptionValue(
     displayValue?: string;
     code?: string;
     position?: number;
+    isPrimary?: boolean;
     status?: 'ACTIVE' | 'ARCHIVED';
     colorId?: string | null;
     sizeDefinitionId?: string | null;
@@ -640,7 +718,10 @@ export async function updateProductOptionValue(
       status: 'ACTIVE' | 'ARCHIVED';
       version: string;
       product_id: string;
-    }>`select value.display_value,value.status,value.version::text,axis.product_id::text
+      is_visual: boolean;
+      is_primary: boolean;
+    }>`select value.display_value,value.status,value.version::text,axis.product_id::text,
+        axis.is_visual,value.is_primary
       from catalog.product_option_values value
       join catalog.product_option_axes axis
         on axis.organization_id=value.organization_id and axis.id=value.option_axis_id
@@ -652,6 +733,24 @@ export async function updateProductOptionValue(
     if (!product) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
     if (Number(current.version) !== input.expectedVersion)
       throw new CatalogDomainError('STALE_VERSION', 'Option value changed while you were editing.');
+
+    if (input.isPrimary) {
+      if (!current.is_visual) {
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Only values on a visual option axis can be designated as primary.',
+        );
+      }
+      await sql`
+        update catalog.product_option_values
+        set is_primary = false, updated_at = now()
+        where organization_id = ${input.organizationId}
+          and option_axis_id = ${input.axisId}::uuid
+          and id <> ${input.valueId}::uuid
+          and is_primary
+      `.execute(transaction);
+    }
+
     if (input.colorId) {
       const color = await sql<{ id: string }>`select id::text from catalog.colors
         where organization_id=${input.organizationId} and id=${input.colorId}::uuid
@@ -676,6 +775,7 @@ export async function updateProductOptionValue(
     const result = await sql`update catalog.product_option_values set
         display_value=coalesce(${displayValue ?? null},display_value),
         code=coalesce(${code ?? null},code),position=coalesce(${input.position ?? null},position),
+        is_primary=coalesce(${input.isPrimary ?? null},is_primary),
         status=coalesce(${input.status ?? null},status),
         color_id=case when ${input.colorId !== undefined} then ${input.colorId ?? null}::uuid else color_id end,
         size_definition_id=case when ${input.sizeDefinitionId !== undefined}
@@ -695,6 +795,7 @@ export async function updateProductOptionValue(
         metadata: {
           optionAxisId: input.axisId,
           optionValueId: input.valueId,
+          isPrimary: input.isPrimary,
           status: input.status,
         },
       });
@@ -938,6 +1039,10 @@ async function getCatalogProductFacts(
     public_media_count: string;
     available_variant_count: string;
     category_count: string;
+    has_visual_axis: boolean;
+    visual_primary_value_count: string;
+    visual_primary_media_count: string;
+    shared_gallery_media_count: string;
   }>`
     select product.title,product.description,product.publication_status,
       (product_type.status='ACTIVE') as product_type_active,
@@ -993,7 +1098,59 @@ async function getCatalogProductFacts(
           and category.organization_id=product_category.organization_id
         where product_category.organization_id=product.organization_id
           and product_category.product_id=product.id and category.status='ACTIVE'
-      ) as category_count
+      ) as category_count,
+      (select exists (
+        select 1 from catalog.product_option_axes axis
+        where axis.organization_id = product.organization_id
+          and axis.product_id = product.id
+          and axis.status = 'ACTIVE'
+          and axis.is_visual
+      )) as has_visual_axis,
+      (select count(*)::text
+        from catalog.product_option_values val
+        join catalog.product_option_axes axis
+          on axis.id = val.option_axis_id
+          and axis.organization_id = val.organization_id
+        where val.organization_id = product.organization_id
+          and val.product_id = product.id
+          and axis.status = 'ACTIVE'
+          and axis.is_visual
+          and val.status = 'ACTIVE'
+          and val.is_primary
+      ) as visual_primary_value_count,
+      (select count(*)::text
+        from catalog.product_media product_media
+        join media.media_assets asset
+          on asset.id = product_media.asset_id
+          and asset.organization_id = product_media.organization_id
+        join catalog.product_option_values val
+          on val.id = product_media.option_value_id
+          and val.organization_id = product_media.organization_id
+        join catalog.product_option_axes axis
+          on axis.id = val.option_axis_id
+          and axis.organization_id = val.organization_id
+        where product_media.organization_id = product.organization_id
+          and product_media.product_id = product.id
+          and axis.status = 'ACTIVE'
+          and axis.is_visual
+          and val.status = 'ACTIVE'
+          and val.is_primary
+          and asset.status in ('READY','ARCHIVED')
+          and asset.visibility_class = 'PUBLIC'
+      ) as visual_primary_media_count,
+      (select count(*)::text
+        from catalog.product_media product_media
+        join media.media_assets asset
+          on asset.id = product_media.asset_id
+          and asset.organization_id = product_media.organization_id
+        where product_media.organization_id = product.organization_id
+          and product_media.product_id = product.id
+          and product_media.variant_id is null
+          and product_media.option_value_id is null
+          and product_media.role in ('GALLERY', 'THUMBNAIL', 'COLOR_GALLERY')
+          and asset.status in ('READY','ARCHIVED')
+          and asset.visibility_class = 'PUBLIC'
+      ) as shared_gallery_media_count
     from catalog.products product
     join platform.organizations organization on organization.id=product.organization_id
     join catalog.product_types product_type
@@ -1016,6 +1173,10 @@ async function getCatalogProductFacts(
     publicMediaCount: Number(row.public_media_count),
     availableVariantCount: Number(row.available_variant_count),
     categoryCount: Number(row.category_count),
+    hasVisualAxis: Boolean(row.has_visual_axis),
+    visualPrimaryValueCount: Number(row.visual_primary_value_count),
+    visualPrimaryMediaCount: Number(row.visual_primary_media_count),
+    sharedGalleryMediaCount: Number(row.shared_gallery_media_count),
   };
 }
 
@@ -1078,12 +1239,30 @@ function readinessFromFacts(facts: CatalogProductFacts): {
     },
     {
       code: 'PUBLIC_MEDIA',
-      label: 'Public Product media',
-      state: facts.publicMediaCount > 0 ? 'PASS' : 'WARNING',
-      message:
-        facts.publicMediaCount > 0
-          ? `${facts.publicMediaCount} public-ready media asset${facts.publicMediaCount === 1 ? '' : 's'} attached.`
-          : 'Attach at least one public-ready Product image for customer confidence.',
+      label: 'Primary presentation media',
+      state: (() => {
+        if (facts.hasVisualAxis) {
+          if (facts.visualPrimaryValueCount !== 1) return 'BLOCKER';
+          return facts.visualPrimaryMediaCount > 0 ? 'PASS' : 'WARNING';
+        }
+        return facts.sharedGalleryMediaCount > 0 ? 'PASS' : 'WARNING';
+      })(),
+      message: (() => {
+        if (facts.hasVisualAxis) {
+          if (facts.visualPrimaryValueCount === 0) {
+            return 'Select a primary option value for the visual presentation axis.';
+          }
+          if (facts.visualPrimaryValueCount > 1) {
+            return 'Only one option value on the visual presentation axis may be primary.';
+          }
+          return facts.visualPrimaryMediaCount > 0
+            ? 'Primary visual presentation value has public media attached.'
+            : 'Primary visual presentation value has no public media attached yet.';
+        }
+        return facts.sharedGalleryMediaCount > 0
+          ? 'Shared product gallery has public media attached.'
+          : 'Product shared gallery has no public media attached yet.';
+      })(),
       actionHref: '/media',
     },
     {
@@ -1177,32 +1356,68 @@ export async function createCatalogProduct(
     sizeSystemId?: string | null;
     sizeGuideId?: string | null;
     attributes?: readonly { attributeDefinitionId: string; value: string | boolean | null }[];
+    shipping?: {
+      weight?: { value: string; unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+      dimensions?: {
+        length: string;
+        width: string;
+        height: string;
+        unit: 'MM' | 'CM' | 'IN';
+      } | null;
+    } | null;
     initialVariant?: {
       sku: string;
       barcode?: string | null;
       priceAmount?: string;
       compareAtAmount?: string | null;
       currency?: string;
+      estimatedCostAmount?: string | null;
+      initialStock?: readonly {
+        locationId: string;
+        quantity: number;
+      }[];
+      weight?: { value: string; unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+      dimensions?: {
+        length: string;
+        width: string;
+        height: string;
+        unit: 'MM' | 'CM' | 'IN';
+      } | null;
     };
     options?: readonly {
+      clientRef?: string;
       code?: string;
       name: string;
       position?: number;
+      isVisual?: boolean;
       values: readonly {
+        clientRef?: string;
         code?: string;
         displayValue: string;
         position?: number;
         colorId?: string | null;
         sizeDefinitionId?: string | null;
+        isPrimary?: boolean;
       }[];
     }[];
     variants?: readonly {
+      clientRef?: string;
       sku: string;
       title?: string | null;
       barcode?: string | null;
+      optionValueRefs?: readonly string[];
+      optionSelections?: readonly {
+        axisName: string;
+        valueDisplay: string;
+      }[];
       priceAmount?: string | null;
       compareAtAmount?: string | null;
       currency?: string;
+      estimatedCostAmount?: string | null;
+      initialStock?: readonly {
+        locationId: string;
+        quantity: number;
+      }[];
       weight?: { value: string; unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
       dimensions?: {
         length: string;
@@ -1212,10 +1427,15 @@ export async function createCatalogProduct(
       } | null;
       primaryColorId?: string | null;
       associatedColorIds?: readonly string[];
-      optionSelections?: readonly {
-        axisName: string;
-        valueDisplay: string;
-      }[];
+    }[];
+    media?: readonly {
+      assetId: string;
+      optionValueRef?: string | null;
+      variantRef?: string | null;
+      role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+      altTextOverride?: string | null;
+      isPrimary?: boolean;
+      position?: number;
     }[];
     seoTitle?: string | null;
     seoDescription?: string | null;
@@ -1275,6 +1495,17 @@ export async function createCatalogProduct(
           `Every selected ${table.slice(0, -1)} must be active.`,
         );
     }
+
+    const baseWeightVal = input.shipping?.weight?.value ? Number(input.shipping.weight.value) : null;
+    const baseWeightUnit = baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
+    const baseLenVal = input.shipping?.dimensions?.length ? Number(input.shipping.dimensions.length) : null;
+    const baseWidthVal = input.shipping?.dimensions?.width ? Number(input.shipping.dimensions.width) : null;
+    const baseHeightVal = input.shipping?.dimensions?.height ? Number(input.shipping.dimensions.height) : null;
+    const baseDimUnit =
+      baseLenVal && baseWidthVal && baseHeightVal && input.shipping?.dimensions?.unit
+        ? input.shipping.dimensions.unit
+        : null;
+
     const created = await sql<{
       id: string;
       handle: string;
@@ -1284,10 +1515,13 @@ export async function createCatalogProduct(
       version: string;
     }>`
       insert into catalog.products
-        (organization_id,product_type_id,handle,title,description,primary_category_id,seo_title,seo_description)
+        (organization_id,product_type_id,handle,title,description,primary_category_id,seo_title,seo_description,
+         weight_value,weight_unit,length_value,width_value,height_value,dimension_unit)
       values (${input.organizationId},${input.productTypeId},${input.handle},${input.title},
         ${input.description ?? null},${input.primaryCategoryId ?? null}::uuid,
-        ${input.seoTitle ?? null},${input.seoDescription ?? null})
+        ${input.seoTitle ?? null},${input.seoDescription ?? null},
+        ${baseWeightVal},${baseWeightUnit},
+        ${baseLenVal},${baseWidthVal},${baseHeightVal},${baseDimUnit})
       returning id, handle, title, status, publication_status, version::text
     `.execute(transaction);
     const product = created.rows[0];
@@ -1392,9 +1626,39 @@ export async function createCatalogProduct(
       }
     }
 
+    const createdValuesByRef = new Map<string, { id: string; axisId: string }>();
+    const createdValuesByKey = new Map<string, { id: string; axisId: string }>();
+    const createdValuesById = new Map<string, { id: string; axisId: string }>();
+    const createdVariantsByRef = new Map<string, string>();
+
     if (input.options && input.options.length > 0) {
-      const createdValues = new Map<string, { id: string; axisId: string }>();
+      const visualAxesCount = input.options.filter((axis) => axis.isVisual).length;
+      if (visualAxesCount > 1) {
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'At most one option axis may be designated as visual.',
+        );
+      }
+
       for (const [axisIdx, axis] of input.options.entries()) {
+        if (axis.isVisual) {
+          const primaryValuesCount = axis.values.filter((val) => val.isPrimary).length;
+          if (primaryValuesCount > 1) {
+            throw new CatalogDomainError(
+              'VALIDATION_FAILED',
+              'A visual option axis can have at most one primary presentation value.',
+            );
+          }
+        } else {
+          const primaryOnNonVisual = axis.values.some((val) => val.isPrimary);
+          if (primaryOnNonVisual) {
+            throw new CatalogDomainError(
+              'VALIDATION_FAILED',
+              'Only values on a visual option axis can be designated as primary.',
+            );
+          }
+        }
+
         const rawCode = (axis.code || axis.name)
           .toLowerCase()
           .trim()
@@ -1402,8 +1666,8 @@ export async function createCatalogProduct(
           .replace(/^-+|-+$/g, '');
         const axisCode = rawCode || `opt-${axisIdx + 1}`;
         const axisResult = await sql<{ id: string }>`
-          insert into catalog.product_option_axes (organization_id, product_id, code, name, position)
-          values (${input.organizationId}, ${product.id}::uuid, ${axisCode}, ${axis.name.trim()}, ${axis.position ?? axisIdx})
+          insert into catalog.product_option_axes (organization_id, product_id, code, name, is_visual, position)
+          values (${input.organizationId}, ${product.id}::uuid, ${axisCode}, ${axis.name.trim()}, ${axis.isVisual ?? false}, ${axis.position ?? axisIdx})
           returning id::text
         `.execute(transaction);
         const axisId = axisResult.rows[0]?.id;
@@ -1418,18 +1682,22 @@ export async function createCatalogProduct(
           const valCode = rawValCode || `val-${valIdx + 1}`;
           const valResult = await sql<{ id: string }>`
             insert into catalog.product_option_values (
-              organization_id, option_axis_id, code, display_value, position, color_id, size_definition_id
+              organization_id, product_id, option_axis_id, code, display_value, is_primary, position, color_id, size_definition_id
             ) values (
-              ${input.organizationId}, ${axisId}::uuid, ${valCode}, ${val.displayValue.trim()},
-              ${val.position ?? valIdx}, ${val.colorId ?? null}::uuid, ${val.sizeDefinitionId ?? null}::uuid
+              ${input.organizationId}, ${product.id}::uuid, ${axisId}::uuid, ${valCode}, ${val.displayValue.trim()},
+              ${val.isPrimary ?? false}, ${val.position ?? valIdx}, ${val.colorId ?? null}::uuid, ${val.sizeDefinitionId ?? null}::uuid
             ) returning id::text
           `.execute(transaction);
           const valId = valResult.rows[0]?.id;
           if (valId) {
-            createdValues.set(
+            if (val.clientRef) {
+              createdValuesByRef.set(val.clientRef, { id: valId, axisId });
+            }
+            createdValuesByKey.set(
               `${axis.name.toLowerCase().trim()}:::${val.displayValue.toLowerCase().trim()}`,
               { id: valId, axisId },
             );
+            createdValuesById.set(valId, { id: valId, axisId });
           }
         }
       }
@@ -1440,10 +1708,21 @@ export async function createCatalogProduct(
           if (!normalizedSku) continue;
 
           const matchedValues: { axisId: string; valueId: string }[] = [];
-          if (v.optionSelections) {
+          if (v.optionValueRefs && v.optionValueRefs.length > 0) {
+            for (const ref of v.optionValueRefs) {
+              const match = createdValuesByRef.get(ref) ?? createdValuesById.get(ref);
+              if (!match) {
+                throw new CatalogDomainError(
+                  'VALIDATION_FAILED',
+                  `Option value reference '${ref}' could not be resolved.`,
+                );
+              }
+              matchedValues.push({ axisId: match.axisId, valueId: match.id });
+            }
+          } else if (v.optionSelections) {
             for (const sel of v.optionSelections) {
               const key = `${sel.axisName.toLowerCase().trim()}:::${sel.valueDisplay.toLowerCase().trim()}`;
-              const match = createdValues.get(key);
+              const match = createdValuesByKey.get(key);
               if (match) {
                 matchedValues.push({ axisId: match.axisId, valueId: match.id });
               }
@@ -1460,21 +1739,27 @@ export async function createCatalogProduct(
           const heightVal = v.dimensions?.height ? Number(v.dimensions.height) : null;
           const dimUnit =
             lenVal && widthVal && heightVal && v.dimensions?.unit ? v.dimensions.unit : null;
+          const estimatedCost = v.estimatedCostAmount ? Number(v.estimatedCostAmount) : null;
 
           const variantResult = await sql<{ id: string }>`
             insert into catalog.product_variants (
               organization_id, product_id, title, sku, sku_normalized, barcode, option_signature,
-              weight_value, weight_unit, length_value, width_value, height_value, dimension_unit, status
+              weight_value, weight_unit, length_value, width_value, height_value, dimension_unit,
+              estimated_cost_amount, status
             ) values (
               ${input.organizationId}, ${product.id}::uuid, ${v.title?.trim() || null}, ${v.sku.trim()},
               ${normalizedSku}, ${v.barcode?.trim() || null}, ${signature},
               ${weightVal}, ${weightUnit},
               ${lenVal}, ${widthVal}, ${heightVal}, ${dimUnit},
-              'ACTIVE'
+              ${estimatedCost}, 'ACTIVE'
             ) returning id::text
           `.execute(transaction);
           const variantId = variantResult.rows[0]?.id;
           if (!variantId) continue;
+
+          if (v.clientRef) {
+            createdVariantsByRef.set(v.clientRef, variantId);
+          }
 
           for (const item of matchedValues) {
             await sql`
@@ -1497,11 +1782,29 @@ export async function createCatalogProduct(
             `.execute(transaction);
           }
 
-          await sql`
-            insert into inventory.inventory_items (organization_id, variant_id)
-            values (${input.organizationId}, ${variantId}::uuid)
-            on conflict (variant_id) do nothing
-          `.execute(transaction);
+          if (v.initialStock && v.initialStock.length > 0) {
+            for (const stock of v.initialStock) {
+              if (stock.quantity > 0) {
+                await adjustInventory(transaction, {
+                  organizationId: input.organizationId,
+                  actorId: input.actorId,
+                  variantId,
+                  locationId: stock.locationId,
+                  condition: 'SELLABLE',
+                  quantityDelta: String(stock.quantity),
+                  reasonCode: 'OPENING_BALANCE',
+                  note: 'Opening inventory recorded during product creation',
+                  idempotencyKey: `init-stock-${variantId}-${stock.locationId}-${Date.now()}`,
+                });
+              }
+            }
+          } else {
+            await sql`
+              insert into inventory.inventory_items (organization_id, variant_id)
+              values (${input.organizationId}, ${variantId}::uuid)
+              on conflict (variant_id) do nothing
+            `.execute(transaction);
+          }
 
           if (v.priceAmount) {
             const currency = v.currency || 'BDT';
@@ -1519,20 +1822,60 @@ export async function createCatalogProduct(
     } else if (input.initialVariant && input.initialVariant.sku) {
       const normalizedSku = input.initialVariant.sku.trim().toUpperCase();
       if (normalizedSku) {
+        const weightVal = input.initialVariant.weight?.value ? Number(input.initialVariant.weight.value) : null;
+        const weightUnit = weightVal && input.initialVariant.weight?.unit ? input.initialVariant.weight.unit : null;
+        const lenVal = input.initialVariant.dimensions?.length ? Number(input.initialVariant.dimensions.length) : null;
+        const widthVal = input.initialVariant.dimensions?.width ? Number(input.initialVariant.dimensions.width) : null;
+        const heightVal = input.initialVariant.dimensions?.height ? Number(input.initialVariant.dimensions.height) : null;
+        const dimUnit =
+          lenVal && widthVal && heightVal && input.initialVariant.dimensions?.unit ? input.initialVariant.dimensions.unit : null;
+        const estimatedCost = input.initialVariant.estimatedCostAmount
+          ? Number(input.initialVariant.estimatedCostAmount)
+          : null;
+
         const variantResult = await sql<{ id: string }>`
           insert into catalog.product_variants (
-            organization_id, product_id, sku, barcode, status
+            organization_id, product_id, sku, sku_normalized, barcode, option_signature,
+            weight_value, weight_unit, length_value, width_value, height_value, dimension_unit,
+            estimated_cost_amount, status
           ) values (
-            ${input.organizationId}, ${product.id}::uuid, ${normalizedSku}, ${input.initialVariant.barcode?.trim() || null}, 'ACTIVE'
+            ${input.organizationId}, ${product.id}::uuid, ${input.initialVariant.sku.trim()},
+            ${normalizedSku}, ${input.initialVariant.barcode?.trim() || null}, 'default',
+            ${weightVal}, ${weightUnit}, ${lenVal}, ${widthVal}, ${heightVal}, ${dimUnit},
+            ${estimatedCost}, 'ACTIVE'
           ) returning id::text
         `.execute(transaction);
         const createdVariant = variantResult.rows[0];
         if (createdVariant) {
-          await sql`
-            insert into inventory.inventory_items (organization_id, variant_id)
-            values (${input.organizationId}, ${createdVariant.id}::uuid)
-            on conflict (variant_id) do nothing
-          `.execute(transaction);
+          const initialStocks =
+            input.initialVariant.initialStock && input.initialVariant.initialStock.length > 0
+              ? input.initialVariant.initialStock
+              : input.variants && input.variants.length > 0 && input.variants[0]?.initialStock
+                ? input.variants[0].initialStock
+                : null;
+          if (initialStocks && initialStocks.length > 0) {
+            for (const stock of initialStocks) {
+              if (Number(stock.quantity) > 0) {
+                await adjustInventory(transaction, {
+                  organizationId: input.organizationId,
+                  actorId: input.actorId,
+                  variantId: createdVariant.id,
+                  locationId: stock.locationId,
+                  condition: 'SELLABLE',
+                  quantityDelta: String(stock.quantity),
+                  reasonCode: 'OPENING_BALANCE',
+                  note: 'Opening inventory recorded during product creation',
+                  idempotencyKey: `init-stock-${createdVariant.id}-${stock.locationId}-${Date.now()}`,
+                });
+              }
+            }
+          } else {
+            await sql`
+              insert into inventory.inventory_items (organization_id, variant_id)
+              values (${input.organizationId}, ${createdVariant.id}::uuid)
+              on conflict (variant_id) do nothing
+            `.execute(transaction);
+          }
           if (input.initialVariant.priceAmount) {
             const currency = input.initialVariant.currency || 'BDT';
             const amount = input.initialVariant.priceAmount;
@@ -1546,6 +1889,74 @@ export async function createCatalogProduct(
               )
             `.execute(transaction);
           }
+        }
+      }
+    }
+
+    if (input.media && input.media.length > 0) {
+      const hasVisualAxis = (input.options ?? []).some((opt) => opt.isVisual);
+
+      for (const [pos, m] of input.media.entries()) {
+        const optionValueId = m.optionValueRef
+          ? (createdValuesByRef.get(m.optionValueRef)?.id ?? createdValuesById.get(m.optionValueRef)?.id ?? null)
+          : null;
+        const variantId = m.variantRef
+          ? (createdVariantsByRef.get(m.variantRef) ?? null)
+          : null;
+
+        if (hasVisualAxis) {
+          if (m.role !== 'SIZE_DIAGRAM' && !optionValueId && !variantId) {
+            throw new CatalogDomainError(
+              'VALIDATION_FAILED',
+              'Products with a visual option axis must attach merchandising media to an option value or variant.',
+            );
+          }
+        }
+
+        if (m.isPrimary) {
+          await sql`
+            update catalog.product_media set is_primary = false, updated_at = now()
+            where organization_id = ${input.organizationId} and product_id = ${product.id}::uuid
+              and variant_id is not distinct from ${variantId}::uuid
+              and option_value_id is not distinct from ${optionValueId}::uuid
+          `.execute(transaction);
+        }
+
+        const placement = await sql<{ id: string }>`
+          insert into catalog.product_media (
+            organization_id, product_id, variant_id, option_value_id, asset_id, role,
+            alt_text_override, is_primary, position
+          ) values (
+            ${input.organizationId}, ${product.id}::uuid, ${variantId}::uuid, ${optionValueId}::uuid,
+            ${m.assetId}::uuid, ${m.role}, ${m.altTextOverride ?? null},
+            ${m.isPrimary ?? false}, ${m.position ?? pos}
+          )
+          on conflict (organization_id, product_id, coalesce(variant_id, '00000000-0000-0000-0000-000000000000'::uuid),
+            coalesce(option_value_id, '00000000-0000-0000-0000-000000000000'::uuid), asset_id, role)
+          do update set position = excluded.position, is_primary = excluded.is_primary,
+            alt_text_override = excluded.alt_text_override, updated_at = now()
+          returning id::text
+        `.execute(transaction);
+
+        const placementId = placement.rows[0]?.id;
+        if (placementId) {
+          await sql`
+            insert into media.media_usage_projection (
+              organization_id, asset_id, domain, usage_type, entity_id, relationship_id, label
+            ) values (
+              ${input.organizationId}, ${m.assetId}::uuid, 'catalog', 'PRODUCT_MEDIA',
+              ${product.id}::uuid, ${placementId}::uuid, ${input.title}
+            ) on conflict do nothing
+          `.execute(transaction);
+
+          await sql`
+            insert into media.media_usage_history (
+              organization_id, asset_id, action, domain, usage_type, entity_id, relationship_id, actor_id
+            ) values (
+              ${input.organizationId}, ${m.assetId}::uuid, 'ATTACHED', 'catalog', 'PRODUCT_MEDIA',
+              ${product.id}::uuid, ${placementId}::uuid, ${input.actorId}::uuid
+            )
+          `.execute(transaction);
         }
       }
     }
@@ -2756,6 +3167,10 @@ export async function listCatalogProductWorkItems(
       minimum_price: string | null;
       maximum_price: string | null;
       available_quantity: string;
+      has_visual_axis: boolean;
+      visual_primary_value_count: number;
+      visual_primary_media_count: number;
+      shared_gallery_media_count: number;
     }>`
       with facts as (
         select product.id,product.handle,product.title,product.description,product.status,
@@ -2857,7 +3272,59 @@ export async function listCatalogProductWorkItems(
               and category.organization_id=product_category.organization_id
             where product_category.organization_id=product.organization_id
               and product_category.product_id=product.id and category.status='ACTIVE'
-          ) as category_count
+          ) as category_count,
+          (select exists (
+            select 1 from catalog.product_option_axes axis
+            where axis.organization_id = product.organization_id
+              and axis.product_id = product.id
+              and axis.status = 'ACTIVE'
+              and axis.is_visual
+          )) as has_visual_axis,
+          (select count(*)::integer
+            from catalog.product_option_values val
+            join catalog.product_option_axes axis
+              on axis.id = val.option_axis_id
+              and axis.organization_id = val.organization_id
+            where val.organization_id = product.organization_id
+              and val.product_id = product.id
+              and axis.status = 'ACTIVE'
+              and axis.is_visual
+              and val.status = 'ACTIVE'
+              and val.is_primary
+          ) as visual_primary_value_count,
+          (select count(*)::integer
+            from catalog.product_media product_media
+            join media.media_assets asset
+              on asset.id = product_media.asset_id
+              and asset.organization_id = product_media.organization_id
+            join catalog.product_option_values val
+              on val.id = product_media.option_value_id
+              and val.organization_id = product_media.organization_id
+            join catalog.product_option_axes axis
+              on axis.id = val.option_axis_id
+              and axis.organization_id = val.organization_id
+            where product_media.organization_id = product.organization_id
+              and product_media.product_id = product.id
+              and axis.status = 'ACTIVE'
+              and axis.is_visual
+              and val.status = 'ACTIVE'
+              and val.is_primary
+              and asset.status in ('READY','ARCHIVED')
+              and asset.visibility_class = 'PUBLIC'
+          ) as visual_primary_media_count,
+          (select count(*)::integer
+            from catalog.product_media product_media
+            join media.media_assets asset
+              on asset.id = product_media.asset_id
+              and asset.organization_id = product_media.organization_id
+            where product_media.organization_id = product.organization_id
+              and product_media.product_id = product.id
+              and product_media.variant_id is null
+              and product_media.option_value_id is null
+              and product_media.role in ('GALLERY', 'THUMBNAIL', 'COLOR_GALLERY')
+              and asset.status in ('READY','ARCHIVED')
+              and asset.visibility_class = 'PUBLIC'
+          ) as shared_gallery_media_count
         from catalog.products product
         join platform.organizations organization on organization.id=product.organization_id
         join catalog.product_types product_type
@@ -2880,9 +3347,10 @@ export async function listCatalogProductWorkItems(
           ((case when length(trim(title))=0 or product_type_status<>'ACTIVE' then 1 else 0 end)
             + (case when active_variant_count=0 then 1 else 0 end)
             + (case when required_attribute_missing_count>0 then 1 else 0 end)
-            + (case when incomplete_variant_count>0 then 1 else 0 end))::integer as blocker_count,
+            + (case when incomplete_variant_count>0 then 1 else 0 end)
+            + (case when has_visual_axis and (visual_primary_value_count<>1 or visual_primary_media_count=0) then 1
+                    when not has_visual_axis and shared_gallery_media_count=0 then 1 else 0 end))::integer as blocker_count,
           ((case when active_variant_count=0 or priced_variant_count<active_variant_count then 1 else 0 end)
-            + (case when public_media_count=0 then 1 else 0 end)
             + (case when category_count=0 then 1 else 0 end)
             + (case when available_variant_count=0 then 1 else 0 end)
             + (case when nullif(trim(description),'') is null then 1 else 0 end))::integer as warning_count
@@ -2906,6 +3374,7 @@ export async function listCatalogProductWorkItems(
         public_media_count,available_variant_count,category_count,required_attribute_missing_count,
         incomplete_variant_count,blocker_count,warning_count,
         readiness_state,primary_media_id,minimum_price,maximum_price,available_quantity,
+        has_visual_axis,visual_primary_value_count,visual_primary_media_count,shared_gallery_media_count,
         count(*) over()::text as filtered_total
       from filtered
       order by
@@ -2960,6 +3429,10 @@ export async function listCatalogProductWorkItems(
         publicMediaCount: row.public_media_count,
         availableVariantCount: row.available_variant_count,
         categoryCount: row.category_count,
+        hasVisualAxis: row.has_visual_axis,
+        visualPrimaryValueCount: row.visual_primary_value_count,
+        visualPrimaryMediaCount: row.visual_primary_media_count,
+        sharedGalleryMediaCount: row.shared_gallery_media_count,
       }).readiness;
       return {
         ...asProduct({
@@ -3070,6 +3543,12 @@ export async function getCatalogProductWorkspace(
     primary_category_id: string | null;
     seo_title: string | null;
     seo_description: string | null;
+    weight_value: string | null;
+    weight_unit: string | null;
+    length_value: string | null;
+    width_value: string | null;
+    height_value: string | null;
+    dimension_unit: string | null;
     updated_at: string;
     size_system_id: string | null;
     size_guide_id: string | null;
@@ -3078,6 +3557,9 @@ export async function getCatalogProductWorkspace(
       product.publication_status,product.version::text,product.product_type_id::text,
       product_type.name as product_type_name,product.primary_category_id::text,
       product.seo_title,product.seo_description,
+      product.weight_value::text as weight_value,product.weight_unit,
+      product.length_value::text as length_value,product.width_value::text as width_value,
+      product.height_value::text as height_value,product.dimension_unit,
       product.updated_at::text,
       sc.size_system_id::text as size_system_id, sc.size_guide_id::text as size_guide_id
     from catalog.products product
@@ -3108,11 +3590,12 @@ export async function getCatalogProductWorkspace(
       id: string;
       code: string;
       name: string;
+      is_visual: boolean;
       status: 'ACTIVE' | 'ARCHIVED';
       position: number;
       version: string;
     }>`
-      select id::text,code,name,status,position,version::text from catalog.product_option_axes
+      select id::text,code,name,is_visual,status,position,version::text from catalog.product_option_axes
       where organization_id=${organizationId} and product_id=${productId}::uuid
       order by status,position,id
     `.execute(db),
@@ -3121,6 +3604,7 @@ export async function getCatalogProductWorkspace(
       option_axis_id: string;
       code: string;
       label: string;
+      is_primary: boolean;
       size_definition_id: string | null;
       color_id: string | null;
       color_code: string | null;
@@ -3133,7 +3617,7 @@ export async function getCatalogProductWorkspace(
       version: string;
     }>`
       select value.id::text,value.option_axis_id::text,value.code,value.display_value as label,
-        value.size_definition_id::text,color.id::text color_id,color.code color_code,
+        value.is_primary,value.size_definition_id::text,color.id::text color_id,color.code color_code,
         color.name color_name,color.hex_value color_hex,color.status color_status,
         color.version::text color_version,value.status,value.position,value.version::text
       from catalog.product_option_values value
@@ -3158,6 +3642,7 @@ export async function getCatalogProductWorkspace(
       width_value: string | null;
       height_value: string | null;
       dimension_unit: string | null;
+      estimated_cost_amount: string | null;
       current_price_amount: string | null;
       current_compare_at_amount: string | null;
       default_currency: string;
@@ -3175,7 +3660,8 @@ export async function getCatalogProductWorkspace(
       select variant.id::text,variant.title,variant.sku,variant.barcode,variant.status,
         variant.version::text,variant.weight_value::text,variant.weight_unit,
         variant.length_value::text,variant.width_value::text,variant.height_value::text,
-        variant.dimension_unit,organization.default_currency,
+        variant.dimension_unit,variant.estimated_cost_amount::text as estimated_cost_amount,
+        organization.default_currency,
         coalesce((select array_agg(link.option_value_id::text order by link.option_value_id)
           from catalog.variant_option_values link where link.organization_id=variant.organization_id
             and link.variant_id=variant.id),'{}') option_value_ids,
@@ -3341,6 +3827,31 @@ export async function getCatalogProductWorkspace(
     productTypeName: row.product_type_name,
     sizeSystemId: row.size_system_id,
     sizeGuideId: row.size_guide_id,
+    shipping:
+      row.weight_value && row.weight_unit
+        ? {
+            weight: { value: row.weight_value, unit: row.weight_unit },
+            dimensions:
+              row.length_value && row.width_value && row.height_value && row.dimension_unit
+                ? {
+                    length: row.length_value,
+                    width: row.width_value,
+                    height: row.height_value,
+                    unit: row.dimension_unit,
+                  }
+                : null,
+          }
+        : row.length_value && row.width_value && row.height_value && row.dimension_unit
+          ? {
+              weight: null,
+              dimensions: {
+                length: row.length_value,
+                width: row.width_value,
+                height: row.height_value,
+                unit: row.dimension_unit,
+              },
+            }
+          : null,
     variantCount: variants.rows.length,
     skuPreview: variants.rows[0]?.sku ?? null,
     updatedAt: row.updated_at,
@@ -3348,6 +3859,7 @@ export async function getCatalogProductWorkspace(
       id: axis.id,
       code: axis.code,
       name: axis.name,
+      isVisual: axis.is_visual,
       status: axis.status,
       position: axis.position,
       version: Number(axis.version),
@@ -3357,6 +3869,7 @@ export async function getCatalogProductWorkspace(
           id: value.id,
           code: value.code,
           label: value.label,
+          isPrimary: value.is_primary,
           status: value.status,
           position: value.position,
           version: Number(value.version),
@@ -3387,7 +3900,9 @@ export async function getCatalogProductWorkspace(
       weight:
         variant.weight_value && variant.weight_unit
           ? { value: variant.weight_value, unit: variant.weight_unit }
-          : null,
+          : row.weight_value && row.weight_unit
+            ? { value: row.weight_value, unit: row.weight_unit }
+            : null,
       dimensions:
         variant.length_value &&
         variant.width_value &&
@@ -3399,7 +3914,54 @@ export async function getCatalogProductWorkspace(
               height: variant.height_value,
               unit: variant.dimension_unit,
             }
+          : row.length_value &&
+              row.width_value &&
+              row.height_value &&
+              row.dimension_unit
+            ? {
+                length: row.length_value,
+                width: row.width_value,
+                height: row.height_value,
+                unit: row.dimension_unit,
+              }
+            : null,
+      shipping:
+        (variant.weight_value && variant.weight_unit) ||
+        (row.weight_value && row.weight_unit) ||
+        (variant.length_value && variant.width_value && variant.height_value && variant.dimension_unit) ||
+        (row.length_value && row.width_value && row.height_value && row.dimension_unit)
+          ? {
+              weight:
+                variant.weight_value && variant.weight_unit
+                  ? { value: variant.weight_value, unit: variant.weight_unit }
+                  : row.weight_value && row.weight_unit
+                    ? { value: row.weight_value, unit: row.weight_unit }
+                    : null,
+              dimensions:
+                variant.length_value &&
+                variant.width_value &&
+                variant.height_value &&
+                variant.dimension_unit
+                  ? {
+                      length: variant.length_value,
+                      width: variant.width_value,
+                      height: variant.height_value,
+                      unit: variant.dimension_unit,
+                    }
+                  : row.length_value &&
+                      row.width_value &&
+                      row.height_value &&
+                      row.dimension_unit
+                    ? {
+                        length: row.length_value,
+                        width: row.width_value,
+                        height: row.height_value,
+                        unit: row.dimension_unit,
+                      }
+                    : null,
+            }
           : null,
+      estimatedCostAmount: variant.estimated_cost_amount ?? null,
       currentPrice: variant.current_price_amount
         ? {
             amount: variant.current_price_amount,
@@ -3490,17 +4052,43 @@ export interface StorefrontProduct {
   readonly description: string | null;
   readonly seoTitle: string | null;
   readonly seoDescription: string | null;
+  readonly shipping?: {
+    readonly weight: { readonly value: string; readonly unit: string } | null;
+    readonly dimensions: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: string;
+    } | null;
+  } | null;
   readonly options: readonly {
     id: string;
     code: string;
     name: string;
-    values: readonly { id: string; code: string; label: string; colorHex?: string }[];
+    isVisual: boolean;
+    values: readonly {
+      id: string;
+      code: string;
+      label: string;
+      colorHex?: string;
+      isPrimary?: boolean;
+    }[];
   }[];
   readonly variants: readonly {
     id: string;
     sku: string;
     optionValueIds: readonly string[];
     available: boolean;
+    stockStatus?: 'AVAILABLE' | 'OUT_OF_STOCK' | 'UNAVAILABLE';
+    shipping?: {
+      readonly weight: { readonly value: string; readonly unit: string } | null;
+      readonly dimensions: {
+        readonly length: string;
+        readonly width: string;
+        readonly height: string;
+        readonly unit: string;
+      } | null;
+    } | null;
   }[];
   readonly media: readonly {
     id: string;
@@ -3509,6 +4097,8 @@ export interface StorefrontProduct {
     role: string;
     altText: string | null;
     isPrimary: boolean;
+    width?: number | null;
+    height?: number | null;
   }[];
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
@@ -3555,8 +4145,16 @@ export async function getStorefrontCatalogProduct(
     description: string | null;
     seo_title: string | null;
     seo_description: string | null;
+    weight_value: string | null;
+    weight_unit: string | null;
+    length_value: string | null;
+    width_value: string | null;
+    height_value: string | null;
+    dimension_unit: string | null;
   }>`
-    select product.id,product.handle,product.title,product.description,product.seo_title,product.seo_description
+    select product.id,product.handle,product.title,product.description,product.seo_title,product.seo_description,
+      product.weight_value::text,product.weight_unit,product.length_value::text,product.width_value::text,
+      product.height_value::text,product.dimension_unit
     from catalog.products product
     where product.organization_id = ${organizationId} and product.handle = ${handle}
       and product.status = 'ACTIVE' and product.publication_status = 'PUBLISHED'
@@ -3567,8 +4165,28 @@ export async function getStorefrontCatalogProduct(
   `.execute(db);
   const row = product.rows[0];
   if (!row) return undefined;
-  const axes = await sql<{ id: string; code: string; name: string }>`
-    select id, code, name from catalog.product_option_axes
+
+  const baseShipping =
+    row.weight_value || row.length_value
+      ? {
+          weight:
+            row.weight_value && row.weight_unit
+              ? { value: row.weight_value, unit: row.weight_unit }
+              : null,
+          dimensions:
+            row.length_value && row.width_value && row.height_value && row.dimension_unit
+              ? {
+                  length: row.length_value,
+                  width: row.width_value,
+                  height: row.height_value,
+                  unit: row.dimension_unit,
+                }
+              : null,
+        }
+      : null;
+
+  const axes = await sql<{ id: string; code: string; name: string; is_visual: boolean }>`
+    select id, code, name, is_visual from catalog.product_option_axes
     where organization_id=${organizationId} and product_id=${row.id}
       and status='ACTIVE' order by position,id
   `.execute(db);
@@ -3579,8 +4197,9 @@ export async function getStorefrontCatalogProduct(
         code: string;
         display_value: string;
         hex_value: string | null;
+        is_primary: boolean;
       }>`
-        select value.id, value.code, value.display_value, color.hex_value
+        select value.id, value.code, value.display_value, color.hex_value, value.is_primary
         from catalog.product_option_values value left join catalog.colors color on color.id = value.color_id
         where value.organization_id=${organizationId} and value.option_axis_id=${axis.id}
           and value.status='ACTIVE' order by value.position,value.id
@@ -3589,10 +4208,12 @@ export async function getStorefrontCatalogProduct(
         id: axis.id,
         code: axis.code,
         name: axis.name,
+        isVisual: Boolean(axis.is_visual),
         values: values.rows.map((value) => ({
           id: value.id,
           code: value.code,
           label: value.display_value,
+          isPrimary: Boolean(value.is_primary),
           ...(value.hex_value ? { colorHex: value.hex_value } : {}),
         })),
       };
@@ -3603,8 +4224,16 @@ export async function getStorefrontCatalogProduct(
     sku: string;
     option_value_ids: string[];
     available: boolean;
+    weight_value: string | null;
+    weight_unit: string | null;
+    length_value: string | null;
+    width_value: string | null;
+    height_value: string | null;
+    dimension_unit: string | null;
   }>`
     select variant.id,variant.sku,
+      variant.weight_value::text,variant.weight_unit,variant.length_value::text,variant.width_value::text,
+      variant.height_value::text,variant.dimension_unit,
       coalesce(array_agg(link.option_value_id order by link.option_value_id)
         filter (where link.option_value_id is not null),'{}') as option_value_ids,
       coalesce(bool_or(level.sellable_quantity-level.reserved_quantity>0),false) as available
@@ -3615,7 +4244,8 @@ export async function getStorefrontCatalogProduct(
     left join inventory.inventory_levels level on level.inventory_item_id=item.id and level.organization_id=variant.organization_id
     where variant.organization_id=${organizationId} and variant.product_id=${row.id}
       and variant.status='ACTIVE'
-    group by variant.id, variant.sku order by variant.sku
+    group by variant.id, variant.sku, variant.weight_value, variant.weight_unit, variant.length_value, variant.width_value, variant.height_value, variant.dimension_unit
+    order by variant.sku
   `.execute(db);
   const media = await sql<{
     id: string;
@@ -3659,13 +4289,42 @@ export async function getStorefrontCatalogProduct(
     description: row.description,
     seoTitle: row.seo_title,
     seoDescription: row.seo_description,
+    shipping: baseShipping,
     options,
-    variants: variants.rows.map((variant) => ({
-      id: variant.id,
-      sku: variant.sku,
-      optionValueIds: variant.option_value_ids,
-      available: variant.available,
-    })),
+    variants: variants.rows.map((variant) => {
+      const effectiveWeight =
+        variant.weight_value && variant.weight_unit
+          ? { value: variant.weight_value, unit: variant.weight_unit }
+          : baseShipping?.weight ?? null;
+      const effectiveDimensions =
+        variant.length_value &&
+        variant.width_value &&
+        variant.height_value &&
+        variant.dimension_unit
+          ? {
+              length: variant.length_value,
+              width: variant.width_value,
+              height: variant.height_value,
+              unit: variant.dimension_unit,
+            }
+          : baseShipping?.dimensions ?? null;
+      const effectiveShipping =
+        effectiveWeight || effectiveDimensions
+          ? {
+              weight: effectiveWeight,
+              dimensions: effectiveDimensions,
+            }
+          : null;
+
+      return {
+        id: variant.id,
+        sku: variant.sku,
+        optionValueIds: variant.option_value_ids,
+        available: variant.available,
+        stockStatus: variant.available ? 'AVAILABLE' : 'OUT_OF_STOCK',
+        shipping: effectiveShipping,
+      };
+    }),
     media: media.rows.map((asset) => ({
       id: asset.id,
       variantId: asset.variant_id,

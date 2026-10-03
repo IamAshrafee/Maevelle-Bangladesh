@@ -236,8 +236,48 @@ export async function searchStorefront(
       matched.minimum_price::text,matched.currency_code,matched.available,matched.rank,
       facets.total::text,facets.facet_min::text,facets.facet_max::text,
       facets.in_stock_count::text,facets.out_of_stock_count::text,
-      (select link.asset_id::text from catalog.product_media link join media.media_assets asset on asset.id=link.asset_id where link.organization_id=${input.organizationId} and link.product_id=matched.product_id and link.variant_id is null and link.option_value_id is null and asset.status in ('READY','ARCHIVED') and asset.visibility_class='PUBLIC' order by link.is_primary desc,link.position,link.id limit 1) as primary_media_asset_id,
-      (select link.asset_id::text from catalog.product_media link join media.media_assets asset on asset.id=link.asset_id where link.organization_id=${input.organizationId} and link.product_id=matched.product_id and link.variant_id is null and link.option_value_id is null and asset.status in ('READY','ARCHIVED') and asset.visibility_class='PUBLIC' order by link.is_primary desc,link.position,link.id offset 1 limit 1) as secondary_media_asset_id,
+      (select link.asset_id::text
+        from catalog.product_media link
+        join media.media_assets asset on asset.id=link.asset_id and asset.organization_id=link.organization_id
+        left join catalog.product_option_values pov on pov.id=link.option_value_id and pov.organization_id=link.organization_id
+        left join catalog.product_option_axes poa on poa.id=pov.option_axis_id and poa.organization_id=link.organization_id
+        where link.organization_id=${input.organizationId}
+          and link.product_id=matched.product_id
+          and asset.status in ('READY','ARCHIVED')
+          and asset.visibility_class='PUBLIC'
+          and link.role in ('GALLERY', 'THUMBNAIL', 'COLOR_GALLERY')
+          and (
+            (poa.is_visual and pov.is_primary and link.variant_id is null)
+            or (link.variant_id is null and link.option_value_id is null)
+          )
+        order by
+          case when poa.is_visual and pov.is_primary then 0 else 1 end,
+          link.is_primary desc,
+          link.position,
+          link.id
+        limit 1
+      ) as primary_media_asset_id,
+      (select link.asset_id::text
+        from catalog.product_media link
+        join media.media_assets asset on asset.id=link.asset_id and asset.organization_id=link.organization_id
+        left join catalog.product_option_values pov on pov.id=link.option_value_id and pov.organization_id=link.organization_id
+        left join catalog.product_option_axes poa on poa.id=pov.option_axis_id and poa.organization_id=link.organization_id
+        where link.organization_id=${input.organizationId}
+          and link.product_id=matched.product_id
+          and asset.status in ('READY','ARCHIVED')
+          and asset.visibility_class='PUBLIC'
+          and link.role in ('GALLERY', 'THUMBNAIL', 'COLOR_GALLERY')
+          and (
+            (poa.is_visual and pov.is_primary and link.variant_id is null)
+            or (link.variant_id is null and link.option_value_id is null)
+          )
+        order by
+          case when poa.is_visual and pov.is_primary then 0 else 1 end,
+          link.is_primary desc,
+          link.position,
+          link.id
+        offset 1 limit 1
+      ) as secondary_media_asset_id,
       rating.average_rating::text,rating.rating_count::text as review_count
     from matched cross join facets
     left join lateral (
