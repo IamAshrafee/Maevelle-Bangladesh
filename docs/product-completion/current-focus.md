@@ -2,42 +2,40 @@
 
 ## Active Area
 
-Transactional Email Notifications: Full-stack operational control center and asynchronous customer email delivery across Order, Payment, Fulfillment, Delivery, Cancellation, and Refund business events.
+Transactional SMS Notifications: provider-agnostic delivery infrastructure and a basic functional Admin operations layer for authoritative Order, Payment, Fulfillment, Delivery, Cancellation, and Refund business events.
 
 ## Current Status / Substage
 
-`FRONTEND_FOCUSED_FULL_STACK_COMPLETION_VERIFIED`
+`PROVIDER_AGNOSTIC_PLATFORM_WITH_BASIC_ADMIN_VERIFIED`
 
 ## Evidence Already Known
 
-- **Architectural Decoupling**: Canonical business events remain in the transactional outbox; domain services never import Resend. Orders progress regardless of email delivery states.
-- **Worker & Outbox Delivery**: Background worker atomically claims email delivery using `FOR UPDATE SKIP LOCKED`, records attempts with retry scheduling, and passes stable idempotency keys to Resend.
-- **Server-Authoritative Eligibility**: `getOrderEmailEligibility` calculates `canSendManually` and `eligibilityCode` on the server across global status, event policies, business state prerequisites, customer email availability, and suppression status.
-- **Authoritative History Snapshot**: Recipient, subject, rendered HTML snapshot, plain text fallback, template version, and Reply-To facts are persisted in `notifications.notifications`.
-- **Signed Webhook Ingestion**: Webhook verification uses exact raw body bytes and Svix headers to record provider events (`email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`).
-- **Reputation Protection**: Hard bounces, spam complaints, and administrator suppressions block future sends to protected addresses.
-- **Admin Email Operations Console (`/email`)**: 7 modular, URL-synchronized tabs (Overview, Activity, Templates Gallery with multi-device preview and real order rendering, Test Lab with allow-list safeguards, Policies Matrix, Suppressions, Diagnostics with Setup Checklist).
-- **Order Detail Customer Communications (`/orders/[id]`)**: Full lifecycle communication timeline, server eligibility explanations, real-order preview modal, manual send confirmation, retry technical failure dialog, intentional resend dialog, and auto-polling during in-flight deliveries.
-- **Customer Detail Communications (`/customers/[id]`)**: Primary mailbox deliverability indicator (`Usable`, `Suppressed` with root-cause reason, or `Missing`) and full transactional dispatch history with order navigation.
-- **Verification Evidence**:
-  - `pnpm exec tsc --build --pretty false` compiles with **0 errors** across all packages.
-  - `@maevelle/database` test suite passes (21/21 tests, including new eligibility, preview, and test-send suites).
-  - `@maevelle/api` test suite passes.
-  - Next.js Admin production build (`pnpm --filter @maevelle/admin build`) compiles and statically generates all **68 routes** with 0 errors.
+- **Event-driven isolation**: Existing canonical business events feed the shared notification outbox. SMS failure, delay, suppression, or provider uncertainty never rolls back or stalls Order, Payment, Fulfillment, Delivery, Refund, or Email truth.
+- **Bangladesh recipient safety**: `libphonenumber-js` normalizes common Bangladesh mobile formats to E.164 and rejects malformed, non-Bangladesh, or non-mobile recipients before provider submission.
+- **Encoding-aware templates**: Seven lifecycle templates expose variable definitions, fixture or real-order preview, SMS-specific length guidance, GSM-7/extension-table septet accounting, Unicode counting, and provider-neutral segment estimates.
+- **Provider abstraction**: `SmsProvider` and `SmsProviderRegistry` advertise capabilities explicitly. `none` safely disables sending, while the deterministic `mock` adapter covers accepted, delivered, delayed, transient, permanent, rate-limited, and unknown-outcome paths.
+- **Durable delivery state**: Immutable notification facts, SMS delivery details, append-only attempts, stable idempotency keys, provider events, suppressions, retry scheduling, and reconciliation state are persisted separately from provider credentials.
+- **Safe worker behavior**: The worker atomically claims due notifications, uses bounded jittered retry for confirmed transient failures, does not blindly resend unknown outcomes, polls only when supported, and records callback events idempotently with out-of-order protection.
+- **Operational controls**: Granular SMS RBAC capabilities guard view, policy management, send, test, retry, resend, suppression, and diagnostic operations. Automatic SMS policies default disabled.
+- **Admin surfaces**: `/sms` provides functional Overview, Activity, Templates, Policies, Test Send, Suppressions, and Diagnostics views. Order detail includes server-authoritative eligibility, lifecycle status, and manual send controls.
+- **Clean database evidence**: The disposable Docker database was rebuilt from the checked-in mutable migration baseline with `docker compose down --volumes` and `docker compose up -d --build`; test migrations also applied cleanly.
+- **Verification evidence**:
+  - 60 focused worker/database/config/API tests passed.
+  - `pnpm exec tsc --build --pretty false` passed across the monorepo.
+  - `pnpm --filter @maevelle/admin build` compiled and generated all 80 routes.
 
 ## Immediate Objective
 
-Follow `docs/email-notifications/resend-setup-guide.md` to configure the production Resend account, add Namecheap DNS records (SPF, DKIM, DMARC), set server deployment environment variables, configure the signed webhook endpoint, and conduct owner operational review at `/email`.
+Conduct owner operational and responsive visual review of `/sms` and the Order detail SMS panel. Then use `docs/sms-notifications/provider-selection-checklist.md` to select a Bangladesh provider and implement its adapter, credentials, approved sender identity, callback verification, reconciliation behavior, and real-device delivery validation.
 
 ## Important Constraints
 
-- Email state never alters, rolls back, or stalls Order, Payment, Delivery, or Refund truth.
-- Production sending requires Resend, a verified sender domain, and deployment-managed secrets.
-- `maevelleBangladesh@gmail.com` is strictly Reply-To/human support, not the automated sender.
-- Production refuses test recipient redirection; non-production redirection is strictly allow-listed.
-- Technical Retry reuses the same logical delivery; intentional Resend creates a new audited notification.
-- Marketing campaigns, Gmail inbox syncing, and bulk newsletters are strictly outside this capability.
+- No real provider is selected or integrated; production sending is intentionally unavailable.
+- Provider acceptance is not delivery. Delivery requires authoritative callbacks or polling evidence.
+- SMS remains operationally independent from business truth and from Email delivery.
+- Automatic SMS policies are disabled by default until commercial and operational readiness is confirmed.
+- Marketing campaigns, OTP/authentication SMS, WhatsApp, arbitrary freeform composer sends, and generic bulk messaging remain outside this transactional capability.
 
 ## Blockers / Owner Review
 
-External Resend account/domain setup, Namecheap DNS records, API key, webhook registration, real mailbox delivery, Reply-To validation, and owner operational/visual review are pending business owner action.
+Provider commercial onboarding, production credentials, sender-ID approval, callback registration, regulatory and consent review, provider cost/balance semantics, real-device delivery tests, and owner responsive/operational review remain pending. The checked-in mock adapter and diagnostics support local verification without pretending these external gates are complete.

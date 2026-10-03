@@ -1,17 +1,18 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "transactional-email-notifications",
-  "active_substage": "FRONTEND_FOCUSED_FULL_STACK_COMPLETION_VERIFIED",
+  "active_area": "transactional-sms-notifications",
+  "active_substage": "PROVIDER_AGNOSTIC_PLATFORM_WITH_BASIC_ADMIN_VERIFIED",
   "active_status": "LOCAL_VERIFICATION_COMPLETE",
-  "baseline_commit": "a5de03d",
-  "last_checkpoint_commit": "6f72c2f",
-  "last_verified_commit": "6f72c2f",
-  "last_completed_action": "Completed deep frontend-focused full-stack implementation: 7-tab Email Operations Console (/email), interactive template previews with sample fixtures & authentic orders, safe Test Lab, audited policies & suppressions, Order detail lifecycle communication matrix with server eligibility & retry/resend, and Customer detail deliverability status. Full typecheck, 24 test cases, and Next.js 68-route Admin build passed.",
-  "next_action": "Complete external Resend account, Namecheap DNS records, deployment API key/webhook configuration, and owner operational review of /email.",
+  "baseline_commit": "0e2e8f5",
+  "last_checkpoint_commit": "1832b4d",
+  "last_verified_commit": "1832b4d",
+  "last_completed_action": "Implemented and locally verified a provider-agnostic transactional SMS platform: normalized Bangladesh recipients, GSM-7/Unicode segmentation, seven event templates, independent channel policies, immutable notification history, attempts, suppressions, idempotent callbacks, bounded retry and reconciliation, none/mock provider adapters, granular RBAC, Admin SMS operations, and Order detail controls. Clean database rebuild, 60 focused tests, full TypeScript build, and an 80-route Admin production build passed.",
+  "next_action": "Complete owner operational and responsive visual review, select a Bangladesh SMS provider using the checked-in checklist, then implement its adapter, credentials, approved sender identity, callback authentication, reconciliation, and production delivery tests.",
   "interrupted": false,
   "blocked_by": [
-    "External Resend account, verified sender-domain DNS in Namecheap, deployment API key, and webhook registration require business-owner setup."
+    "No real SMS provider has been selected or integrated; production sending remains disabled by design.",
+    "Commercial onboarding, credentials, approved sender identity, callback configuration, regulatory compliance confirmation, real-device delivery tests, and owner visual review require business-owner action."
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": []
