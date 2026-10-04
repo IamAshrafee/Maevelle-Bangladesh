@@ -8,7 +8,7 @@ const Stats = React.forwardRef<
   <section
     ref={ref}
     className={cn(
-      "grid grid-cols-2 md:grid-cols-4 rounded-[0.55rem] border bg-border gap-px overflow-hidden shadow-[0_1px_2px_rgb(16_42_34_/_4%)]",
+      "grid grid-cols-2 md:grid-cols-4 rounded-xl border border-border bg-border gap-px overflow-hidden shadow-sm",
       className
     )}
     {...props}
@@ -23,7 +23,7 @@ const StatsCard = React.forwardRef<
   <article
     ref={ref}
     className={cn(
-      "min-w-0 py-[0.85rem] px-[1rem] bg-card",
+      "min-w-0 py-4 px-5 bg-card hover:bg-slate-50/50 transition-colors",
       className
     )}
     {...props}
@@ -37,7 +37,7 @@ const StatsTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <span
     ref={ref}
-    className={cn("block text-[0.65rem] text-muted-foreground", className)}
+    className={cn("block text-[0.68rem] font-semibold text-muted-foreground uppercase tracking-wider", className)}
     {...props}
   />
 ))
@@ -49,7 +49,7 @@ const StatsValue = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <strong
     ref={ref}
-    className={cn("block mt-[0.2rem] mb-[0.12rem] text-[clamp(1.05rem,2vw,1.42rem)] tracking-[-0.035em] font-bold truncate", className)}
+    className={cn("block mt-1 mb-1 text-[clamp(1.25rem,2.2vw,1.6rem)] tracking-tight font-bold text-foreground font-mono tabular-nums truncate", className)}
     {...props}
   />
 ))
@@ -61,7 +61,7 @@ const StatsDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <small
     ref={ref}
-    className={cn("block text-[0.65rem] text-muted-foreground", className)}
+    className={cn("block text-[0.72rem] text-muted-foreground/90 font-normal", className)}
     {...props}
   />
 ))

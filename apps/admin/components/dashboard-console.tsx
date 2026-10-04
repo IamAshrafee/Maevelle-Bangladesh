@@ -268,9 +268,11 @@ export function DashboardConsole() {
               {orders.map((order) => (
                 <tr key={order.id}>
                   <td>
-                    <strong>{order.orderNumber}</strong>
+                    <strong className="font-mono font-semibold text-foreground">{order.orderNumber}</strong>
                   </td>
-                  <td>{order.customerName || 'Guest customer'}</td>
+                  <td>
+                    <span className="font-medium text-foreground">{order.customerName || 'Guest customer'}</span>
+                  </td>
                   <td>
                     <StatusBadge status={order.status} />
                   </td>
