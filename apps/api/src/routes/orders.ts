@@ -658,6 +658,14 @@ export function registerOrderRoutes(
           to: Type.Optional(Type.String({ format: 'date-time' })),
           customerId: Type.Optional(Type.String()),
           tagId: Type.Optional(Type.String()),
+          riskLevel: Type.Optional(
+            Type.Union([
+              Type.Literal('INSUFFICIENT_HISTORY'),
+              Type.Literal('LOW'),
+              Type.Literal('MODERATE'),
+              Type.Literal('ELEVATED'),
+            ]),
+          ),
         }),
       },
     },

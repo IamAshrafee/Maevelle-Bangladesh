@@ -2242,6 +2242,16 @@ export interface OrderSummaryDto {
   readonly customerPhone?: string;
   readonly customerEmail?: string | null;
   readonly tags?: readonly OrderTagDto[];
+  readonly riskLevel?: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED' | null;
+}
+
+export interface CustomerDeliveryHistoryDto {
+  readonly ordersCount: number;
+  readonly deliveredCount: number;
+  readonly rtoCount: number;
+  readonly cancelledCount: number;
+  readonly rtoRate: number | null;
+  readonly totalDeliveredSpend: string;
 }
 
 export interface OrderCapabilitiesDto {
@@ -2327,7 +2337,7 @@ export interface OrderDeliveryRiskAssessmentDto {
     | 'REQUIRE_PREPAYMENT'
     | 'REJECT_SUSPICIOUS';
   readonly signals: readonly OrderRiskSignalDto[];
-  readonly internalHistory: unknown;
+  readonly internalHistory: CustomerDeliveryHistoryDto;
   readonly providerHistory: {
     readonly steadfast?: {
       readonly available: boolean;

@@ -2,49 +2,68 @@
 
 ## Active Area
 
-Catalog V3 Unified Presentation Groups, Sellable SKUs, Media, Pricing & Inventory.
+Orders Module — Complete Operational Management Frontend & Delivery Intelligence Console.
 
 ## Current Status / Substage
 
-`PHASE_2_FRONTEND_SURFACES_COMPLETE`
+`ORDERS_FRONTEND_OPERATIONAL_COMPLETE`
 
-## Evidence Already Known
+## Implementation Overview
 
-### Phase 1: Backend Baseline & Integrity
-- **One Media-Driving Visual Axis**: Strictly enforced at DB level via partial unique index `(organization_id, product_id) WHERE is_visual`.
-- **Elimination of Primary Sellable SKU**: Removed redundant `is_primary` and `is_default` on `catalog.product_variants`. Simple products use `option_signature = 'default'`. Configurable products have no primary sellable SKU.
-- **Shared Gallery for No-Visual Products**:
-  - `HAS visual axis`: Merchandising photography (`GALLERY`, `THUMBNAIL`, `COLOR_GALLERY`) attaches to a visual presentation option value (`option_value_id IS NOT NULL`) or SKU override (`variant_id IS NOT NULL`). Product-level merchandising media is rejected by schema.
-  - `NO visual axis` (Size-only configurable or simple products): Merchandising photography attaches to the product's shared presentation gallery (`variant_id IS NULL AND option_value_id IS NULL`).
-  - Informational media (`SIZE_DIAGRAM`) is allowed at product level (`variant_id IS NULL AND option_value_id IS NULL`) in all configurations.
-- **Write-Time Option Value Validation**: Immediate rejection (`VALIDATION_FAILED`) when attempting to set `is_primary = true` on a non-visual option axis.
-- **Shipping Group Constraints & Inheritance**:
-  - 3-valued boolean logic hardened constraints: `(weight_value is null) = (weight_unit is null)` and dimensions 4-tuple all present or all null.
-  - Variants cleanly inherit base product shipping at runtime when overrides are NULL.
-- **Atomic Opening Stock via Inventory Transaction**: Passed caller's transaction directly into `inventory.adjustInventory`, posting real append-only ledger movements (`OPENING_BALANCE` in `inventory.inventory_transactions` and `inventory.inventory_movement_lines`).
-- **Database-Enforced Primary Media Uniqueness**: Partial unique index on primary media in `catalog.product_media`.
-- **Composite Foreign Keys & Automated Trigger**: `(organization_id, product_id, id)` composite foreign keys ensure media cannot reference mismatched products; `set_product_option_value_product_id` trigger guarantees automated `product_id` population.
+Completed a comprehensive frontend-first transition from MVP/partial screens to a production-grade Order Management Workspace. All frontend views reflect backend-authoritative read models and capabilities without client-calculated domain state or unverified assumptions.
 
-### Phase 2: Frontend Surfaces
-- **Admin Product Creator** (`apps/admin/components/products/creator/*`):
-  - Refactored `VariantsCard` for `OptionValueState` objects with single visual axis enforcement, primary cover selector (★) per visual presentation value, quick preset buttons (`Color + Size`, `Size Only`, `Single SKU`), multi-location opening inventory inputs, and unit estimated cost with live gross profit margin badges.
-  - Refactored `VariantMatrixTable` with Cartesian SKU combination generation, catalog swatches, individual prices, unit estimated cost margins, multi-location stock popover/inline inputs, and optional physical shipping overrides.
-  - Refactored `MediaCard` with dual-mode visual presentation grouping galleries, upload tabs for each visual value (`Black (Cover)`, `White`, `Size Diagram`), scoped uploads defaulting to the active tab, and shared gallery fallback for products without a visual axis.
-  - Refactored `useProductCreatorState` to construct atomic creation payloads with shipping, options, variants (with initial stock and estimated cost), and media placements.
-- **Admin Product Details / Workspace** (`apps/admin/components/products/product-details.tsx`):
-  - Option structure card displays Visual Presentation Axis badge and Primary Cover star on option values.
-  - Variants table displays unit cost, live calculated gross profit margins, and inherited product shipping vs custom SKU overrides.
-- **Storefront PDP** (`apps/storefront/components/product-page-client.tsx`):
-  - Non-visual secondary axes (e.g. Size) unselected by default.
-  - Primary visual presentation value (`isPrimary: true`) pre-selected by default.
-  - Immediate gallery switching on color swatch selection without requiring size selection.
-  - Dynamic price range display across active matching variants (`৳2,200 – ৳2,650`).
-  - "Select Size" disabled button state when secondary options remain unselected, transitioning to "Add to bag" once valid options are chosen.
-- **Contracts and APIs**:
-  - Added `shipping` to `CatalogProductUpdateDto`.
-  - Added `estimatedCostAmount` to `CatalogVariantUpdateDto`.
-  - Updated PATCH endpoints in `apps/api/src/routes/catalog.ts`.
+### 1. Contracts & API Alignment
+- **List Orders Read Model**: Added `riskLevel?: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED' | null` to `OrderSummaryDto` in `@maevelle/contracts`.
+- **Database & Query Projection**: Enhanced `packages/database/src/orders/queries.ts` to join and project `overall_risk_level as risk_level` from `orders.order_delivery_risk_evaluations`, and added `riskLevel` query filtering in `OrderListFilters`.
+- **API Querystring Validation**: Added `riskLevel` to `/admin/orders` Fastify schema in `apps/api/src/routes/orders.ts`.
+
+### 2. Operational Orders List & Workspaces (`apps/admin/components/orders/orders-list.tsx`)
+- **6 Attention Queue Tabs**:
+  - `All Orders`: Complete catalog with full filtering and pagination.
+  - `Needs Review`: Captures `SUBMITTED` or `AWAITING_PAYMENT` orders needing merchant attention.
+  - `To Fulfill`: Displays `CONFIRMED` orders ready for inventory allocation and packing.
+  - `In Delivery`: Tracks active consignments (`DISPATCHED`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`).
+  - `Delivery Issues`: Immediate triage for `FAILED_ATTEMPT`, `ON_HOLD`, or `RTO` orders.
+  - `Completed`: Archive view for `DELIVERED` orders.
+- **Delivery Risk Indicators**: Server-evaluated risk badges (`Elevated Risk`, `Moderate Risk`, `Low Risk`, `No History`) right on the order rows for immediate scanability.
+- **Responsive Views**: Full tabular desktop view with copyable phone and order numbers; clean mobile card layout preserving status, payment, fulfillment, and risk chips.
+- **Advanced Filtering & Server Pagination**: Order status, payment status, fulfillment status, delivery status, risk level, sales channel, payment method, order tags, and date ranges.
+
+### 3. Order Command Center (`order-detail-console.tsx` & modular cards)
+- **Status Strip (`order-summary-strip.tsx`)**: 4-dimension operational status (Commercial, Payment & COD, Fulfillment progress, Logistics & Courier state).
+- **Delivery Intelligence & Steadfast Fraud Risk Card (`order-risk-card.tsx`)**:
+  - Steadfast courier network check metrics (total deliveries, success rate, returns/RTO count).
+  - Internal store history (previous completed orders, return rate).
+  - 48-hour duplicate order candidate warnings with direct order links.
+  - Human-explainable advisory signals (e.g. "Elevated RTO rate in courier network", "First time COD buyer").
+  - On-demand refresh action hitting `POST /admin/orders/:orderId/risk-assessment/refresh`.
+- **Customer Verification Workflow (`order-verifications-card.tsx` & `record-verification-dialog.tsx`)**:
+  - Log verification events with channels (`PHONE_CALL`, `WHATSAPP`, `SMS`, `MANUAL_REVIEW`, `FRAUD_ANALYSIS`) and structured outcomes (`CONFIRMED`, `UNREACHABLE`, `ADDRESS_UPDATED`, `SUSPICIOUS_CANCEL_RECOMMENDED`, `OTHER`).
+  - Displays verification timeline entries with operator attribution and notes.
+- **Unified Business Timeline (`order-timeline-card.tsx`)**:
+  - Real event categories (`ORDER`, `PAYMENT`, `FULFILLMENT`, `DELIVERY`, `RETURN`, `VERIFICATION`, `NOTE`).
+  - Color-coded icons, relative time formatting, and actor badges (`Customer`, `Admin`, `System`, `Courier`).
+- **Items & Fulfillment Allocation (`order-items-card.tsx`)**:
+  - Immutable item snapshots (SKU, title, variant option badges, snapshot unit price, discounts).
+  - Fulfilled vs remaining fulfillable quantities displayed per line.
+  - Distinct `Customer Shipping Charge` vs logistics `Courier Cost`.
+- **Financial Summary & COD Collection (`order-payment-card.tsx`)**:
+  - Clear breakdown: Total, Amount Paid, COD Collectible, Outstanding.
+  - Highlights cancellation refund obligations when applicable.
+- **Fulfillment & Logistics (`order-fulfillment-delivery-card.tsx`)**:
+  - Fulfillment allocations with packing status and shipment links.
+  - Courier delivery status, tracking code, consignment references, delivery attempts, and prominent Courier RTO alerts.
+- **Customer Returns & Refunds (`order-returns-refunds-card.tsx`)**:
+  - Strictly separated from courier RTO. Shows RMA cases, return items, inspected conditions, and monetary refunds.
+- **Customer & Pre-Fulfillment Address (`order-customer-address-card.tsx`)**:
+  - Customer contact details, repeat buyer summary, one-click phone copy.
+  - Pre-fulfillment address editor modal with division, city, zone, and delivery instructions.
+- **State-Aware Actions (`order-header-actions.tsx`)**:
+  - `confirm-order-dialog.tsx`: Advisory warning when confirming orders with elevated delivery risk.
+  - `cancel-order-dialog.tsx`: Reason attribution (`CUSTOMER`, `MERCHANT`, `SYSTEM`), operational consequence summary (inventory release, refund required).
+  - Contextual hold, resume, complete, and fulfillment triggers based on server-provided `capabilities`.
 
 ## Verification Evidence
-- Monorepo TypeScript builds passed with 0 errors (`pnpm run typecheck`).
-- Focused test suite passed: 25/25 tests passing across `catalog-v3-architecture.test.ts`, `catalog.test.ts`, `catalog-variants.test.ts`, `catalog-variant-integrity.test.ts`, `catalog-classification.test.ts`, and `catalog-product-types.test.ts`.
+- Monorepo TypeScript check (`pnpm run typecheck`): Passed with 0 errors.
+- Database test suite (`pnpm --filter @maevelle/database test`): All tests passing.
+- Next.js Production Build (`pnpm --filter @maevelle/admin build`): Compiled and generated all 80 static & dynamic routes with 0 errors.

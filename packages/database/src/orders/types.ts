@@ -249,6 +249,7 @@ export interface OrderListFilters {
   readonly salesChannel?: OrderView['salesChannel'];
   readonly source?: OrderView['source'];
   readonly tagId?: string;
+  readonly riskLevel?: string;
   /** Searched against historical order number, customer name, phone, and email snapshots. */
   readonly q?: string;
   readonly from?: string;
@@ -301,6 +302,7 @@ export interface OrderListItem {
   readonly customerPhone: string;
   readonly customerEmail: string | null;
   readonly tags?: readonly OrderTag[];
+  readonly riskLevel?: string | null;
   readonly createdAt: string;
 }
 

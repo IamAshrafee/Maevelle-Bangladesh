@@ -557,6 +557,7 @@ export async function listOrders(
     payment_status: OrderPaymentStatus;
     fulfillment_status: OrderFulfillmentStatus;
     delivery_status: OrderDeliveryStatus;
+    risk_level: string | null;
     total_count: string;
   }>`
     with projected as (
@@ -565,6 +566,7 @@ export async function listOrders(
         o.total_amount::text, o.delivery_amount::text, o.currency_code,
         snap.display_name, snap.customer_id, snap.phone, snap.normalized_phone, snap.email,
         o.created_at,
+        risk.overall_risk_level as risk_level,
         case
           when pay.refunded > 0 and pay.collected - pay.refunded <= 0 then 'REFUNDED'
           when pay.refunded > 0 then 'PARTIALLY_REFUNDED'
@@ -595,6 +597,8 @@ export async function listOrders(
       from orders.orders o
       join orders.order_customer_snapshots snap
         on snap.organization_id = o.organization_id and snap.order_id = o.id
+      left join orders.order_delivery_risk_evaluations risk
+        on risk.organization_id = o.organization_id and risk.order_id = o.id
       left join lateral (
         select
           (select intent.status from payments.payment_intents intent
@@ -654,6 +658,7 @@ export async function listOrders(
       and (${filters?.paymentMethod ?? null}::text is null or payment_method = ${filters?.paymentMethod ?? null})
       and (${filters?.salesChannel ?? null}::text is null or sales_channel = ${filters?.salesChannel ?? null})
       and (${filters?.source ?? null}::text is null or source = ${filters?.source ?? null})
+      and (${filters?.riskLevel ?? null}::text is null or risk_level = ${filters?.riskLevel ?? null})
       and (${filters?.from ?? null}::text is null or created_at >= (${filters?.from ?? null})::timestamptz)
       and (${filters?.to ?? null}::text is null or created_at <= (${filters?.to ?? null})::timestamptz)
       and (
@@ -727,6 +732,7 @@ export async function listOrders(
     customerPhone: row.phone,
     customerEmail: row.email,
     tags: tagsByOrderId.get(row.id) ?? [],
+    riskLevel: row.risk_level ?? null,
     createdAt: row.created_at.toISOString(),
   }));
 

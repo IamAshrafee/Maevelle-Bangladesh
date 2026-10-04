@@ -21,10 +21,12 @@ export function CompleteOrderDialog({
   orderId,
   orderNumber,
   onCompleted,
+  trigger,
 }: {
   readonly orderId: string;
   readonly orderNumber: string;
   readonly onCompleted: () => void;
+  readonly trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [manualReason, setManualReason] = useState('');
@@ -54,8 +56,12 @@ export function CompleteOrderDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="default" />}>
-        <CheckCircle2 className="mr-1.5 size-4" aria-hidden="true" /> Complete Order
+      <DialogTrigger render={trigger ? (trigger as any) : undefined}>
+        {!trigger && (
+          <Button size="sm" variant="default">
+            <CheckCircle2 className="mr-1.5 size-4" aria-hidden="true" /> Complete Order
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
