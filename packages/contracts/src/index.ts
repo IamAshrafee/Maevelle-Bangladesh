@@ -2518,6 +2518,31 @@ export interface CustomerSummaryDto {
   readonly totalSpend?: string;
   readonly lastOrderAt?: string | null;
   readonly createdAt: string;
+  readonly activeRestrictions?: readonly CustomerRestrictionTypeDto[];
+}
+
+export interface CustomerDuplicateCandidateDto {
+  readonly customerId: string;
+  readonly confidence: string;
+  readonly signals: readonly string[];
+  readonly displayName?: string;
+  readonly customerNumber?: string;
+  readonly status?: string;
+  readonly primaryPhone?: string | null;
+  readonly primaryEmail?: string | null;
+  readonly orderCount?: number;
+}
+
+export interface CustomerListFiltersDto {
+  readonly page?: number;
+  readonly pageSize?: number;
+  readonly status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'MERGED' | 'ANONYMIZED';
+  readonly source?: CustomerSourceDto;
+  readonly from?: string;
+  readonly to?: string;
+  readonly q?: string;
+  readonly sortBy?: 'CREATED_DESC' | 'CREATED_ASC' | 'ORDERS_DESC' | 'SPEND_DESC' | 'RECENT_ORDER';
+  readonly minOrders?: number;
 }
 
 export type CustomerSourceDto =

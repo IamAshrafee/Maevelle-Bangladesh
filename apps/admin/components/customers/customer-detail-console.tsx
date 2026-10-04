@@ -1,501 +1,210 @@
 'use client';
 
-import { Mail, MapPin, Phone, RefreshCw, ShoppingBag, XCircle } from 'lucide-react';
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, GitMerge, RefreshCw, XCircle } from 'lucide-react';
+import type { CustomerDetailDto, CustomerDuplicateCandidateDto } from '@maevelle/contracts';
 
-import type { CustomerDetailDto } from '@maevelle/contracts';
-
-import { StatusBadge } from '@/components/status-badge';
-import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { fetchApiData } from '@/lib/api';
-import { EditCustomerDialog } from './edit-customer-dialog';
-import { AddAddressDialog } from './add-address-dialog';
-import { EditAddressDialog } from './edit-address-dialog';
-import { CustomerIdentityActions } from './customer-identity-actions';
-import { AddNoteDialog } from './add-note-dialog';
-import { ManageTagsDialog } from './manage-tags-dialog';
-import { CustomerEmailCommunications } from './customer-email-communications';
-import { CustomerSmsCommunications } from './customer-sms-communications';
+import { CustomerHeader } from './customer-header';
+import { CustomerMetricsStrip } from './customer-metrics-strip';
+import { CustomerOrdersSection } from './customer-orders-section';
+import { CustomerTimelineSection } from './customer-timeline-section';
+import { CustomerCommunicationSection } from './customer-communication-section';
+import { CustomerContactSection } from './customer-contact-section';
+import { CustomerAddressesSection } from './customer-addresses-section';
+import { CustomerDeliveryRiskCard, type CustomerDeliveryHistoryData } from './customer-delivery-risk-card';
+import { CustomerRestrictionsCard } from './customer-restrictions-card';
+import { CustomerAccountCard } from './customer-account-card';
+import { CustomerTagsCard } from './customer-tags-card';
+import { CustomerNotesCard } from './customer-notes-card';
+import { CustomerDuplicateMergeDialog } from './customer-duplicate-merge-dialog';
 
-interface DeliveryHistory {
-  eligibleDeliveries: number;
-  deliveredCount: number;
-  failedDeliveryCount: number;
-  rtoCount: number;
-  successRate: number | null;
-  rtoRate: number | null;
-  risk: {
-    level: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
-    reasons: readonly { code: string; explanation: string }[];
-  };
-  recentOutcomes: readonly {
-    deliveryId: string;
-    deliveryNumber: string;
-    providerCode?: string;
-    outcome: string;
-    occurredAt: string;
-  }[];
+interface CustomerDetailConsoleProps {
+  readonly customerId: string;
 }
 
-export function CustomerDetailConsole({ customerId }: { readonly customerId: string }) {
-  const [customer, setCustomer] = useState<CustomerDetailDto>();
-  const [orders, setOrders] = useState<
-    readonly {
-      id: string;
-      orderNumber: string;
-      status: string;
-      totalAmount: string;
-      currencyCode: string;
-      createdAt: string;
-    }[]
-  >([]);
+export function CustomerDetailConsole({ customerId }: CustomerDetailConsoleProps) {
+  const [customer, setCustomer] = useState<CustomerDetailDto | null>(null);
+  const [deliveryHistory, setDeliveryHistory] = useState<CustomerDeliveryHistoryData | null>(null);
+  const [duplicateCandidates, setDuplicateCandidates] = useState<readonly CustomerDuplicateCandidateDto[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
-  const [deliveryHistory, setDeliveryHistory] = useState<DeliveryHistory>();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  async function load() {
-    setState('loading');
-    try {
-      const [data, recentOrders, history] = await Promise.all([
-        fetchApiData<CustomerDetailDto>(`/admin/customers/${customerId}`),
-        fetchApiData<typeof orders>(`/admin/customers/${customerId}/orders?limit=10`),
-        fetchApiData<DeliveryHistory>(`/admin/customers/${customerId}/delivery-history`),
-      ]);
-      setCustomer(data);
-      setOrders(recentOrders);
-      setDeliveryHistory(history);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setState('loading');
+      else setIsRefreshing(true);
       setMessage('');
-      setState('ready');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Customer could not be loaded.');
-      setState('error');
-    }
-  }
+
+      try {
+        const [customerData, historyData, duplicatesData] = await Promise.all([
+          fetchApiData<CustomerDetailDto>(`/admin/customers/${customerId}`),
+          fetchApiData<CustomerDeliveryHistoryData>(`/admin/customers/${customerId}/delivery-history`).catch(
+            () => null,
+          ),
+          fetchApiData<readonly CustomerDuplicateCandidateDto[]>(
+            `/admin/customers/${customerId}/duplicate-candidates`,
+          ).catch(() => []),
+        ]);
+
+        setCustomer(customerData);
+        setDeliveryHistory(historyData);
+        setDuplicateCandidates(duplicatesData);
+        setState('ready');
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Customer could not be loaded.');
+        setState('error');
+      } finally {
+        setIsRefreshing(false);
+      }
+    },
+    [customerId],
+  );
 
   useEffect(() => {
     void load();
-  }, [customerId]);
+  }, [load]);
 
   if (state === 'loading') {
     return (
-      <main className="px-8 py-12 text-sm text-muted-foreground">
-        <RefreshCw className="mr-2 inline size-4 animate-spin" /> Loading customer {customerId}...
+      <main className="px-4 py-16 sm:px-6 lg:px-8 text-center text-sm text-muted-foreground">
+        <RefreshCw className="mr-2 inline size-5 animate-spin text-primary" /> Loading customer workspace...
       </main>
     );
   }
 
   if (state === 'error' || !customer) {
     return (
-      <main className="px-8 py-12 text-sm text-red-500">
-        <XCircle className="mr-2 inline size-4" /> {message || 'Customer not found.'}
+      <main className="px-4 py-16 sm:px-6 lg:px-8 max-w-xl mx-auto text-center space-y-4">
+        <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-6 text-rose-900">
+          <XCircle className="mx-auto size-8 text-rose-600 mb-2" />
+          <h2 className="text-base font-semibold">Failed to Load Customer</h2>
+          <p className="mt-1 text-xs text-rose-700">{message || 'Customer profile was not found.'}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void load()}
+            className="mt-4 border-rose-300 text-rose-900 hover:bg-rose-100"
+          >
+            Try Again
+          </Button>
+        </div>
       </main>
     );
   }
 
+  const isReadOnly = customer.status === 'MERGED' || customer.status === 'ANONYMIZED';
+  const primarySearchPhone =
+    customer.phones.find((p) => p.isPrimary)?.phone ?? customer.phones[0]?.phone ?? customer.displayName;
+
   return (
     <main className="min-w-0 space-y-6 px-4 py-5 sm:px-6 lg:px-8">
-      <header className="flex flex-col gap-4 border-b pb-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <Breadcrumb
-              items={[
-                { label: 'Customers', href: '/customers' },
-                { label: customer.displayName, current: true },
-              ]}
-              className="mb-2"
-            />
-            <h1 className="flex items-center gap-3 text-balance text-2xl font-semibold tracking-tight">
-              {customer.displayName}
-              <StatusBadge status={customer.status} />
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Customer since{' '}
-              {new Intl.DateTimeFormat('en-BD', { dateStyle: 'long' }).format(
-                new Date(customer.createdAt),
-              )}
+      {/* 1. Operational Header */}
+      <CustomerHeader
+        customer={customer}
+        isRefreshing={isRefreshing}
+        onRefresh={() => void load(true)}
+        duplicateCount={duplicateCandidates.length}
+      />
+
+      {/* Duplicate Candidates Alert Callout */}
+      {!isReadOnly && duplicateCandidates.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-amber-300/80 bg-amber-500/10 p-4 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="size-4 shrink-0 text-amber-600" aria-hidden="true" />
+            <p>
+              <span className="font-semibold">
+                {duplicateCandidates.length} potential duplicate customer record(s) detected
+              </span>{' '}
+              sharing verified phone numbers or email addresses.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => void load()}>
-              <RefreshCw className="mr-2 size-4" aria-hidden="true" /> Refresh
-            </Button>
-            {customer.status !== 'MERGED' && customer.status !== 'ANONYMIZED' ? (
-              <EditCustomerDialog customer={customer} onUpdated={() => void load()} />
-            ) : null}
-            <CustomerIdentityActions customer={customer} onCompleted={() => void load()} />
-          </div>
+          <CustomerDuplicateMergeDialog
+            customer={customer}
+            duplicateCount={duplicateCandidates.length}
+            onMerged={() => void load(true)}
+          />
         </div>
-        {customer.status === 'MERGED' && customer.canonicalCustomerId ? (
-          <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            This record is a historical alias.{' '}
-            <Link
-              className="font-medium underline"
-              href={`/customers/${customer.canonicalCustomerId}`}
-            >
-              Open the canonical customer
-            </Link>
-            .
-          </div>
-        ) : null}
-      </header>
+      )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left Column - Addresses & History */}
-        <div className="space-y-6 lg:col-span-2">
-          <section className="rounded-xl border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h2 className="text-lg font-medium text-foreground">Addresses</h2>
-              <AddAddressDialog customerId={customer.id} />
-            </div>
-            <div className="p-6">
-              {customer.addresses.length === 0 ? (
-                <div className="flex flex-col items-center py-6 text-center text-muted-foreground">
-                  <MapPin className="mb-2 size-8 opacity-20" />
-                  <p className="text-sm">No addresses saved.</p>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {customer.addresses.map((address) => (
-                    <div key={address.id} className="relative rounded-lg border p-4">
-                      {address.isDefault && (
-                        <span className="absolute right-4 top-4 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                          Default
-                        </span>
-                      )}
-                      <p className="font-medium text-foreground">{address.addressLine1}</p>
-                      {address.addressLine2 && (
-                        <p className="text-sm text-muted-foreground">{address.addressLine2}</p>
-                      )}
-                      {address.city && (
-                        <p className="text-sm text-muted-foreground">{address.city}</p>
-                      )}
-                      <div className="mt-4 flex">
-                        <EditAddressDialog customerId={customer.id} address={address} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+      {/* 2. Full-Width Metrics Strip */}
+      <CustomerMetricsStrip customer={customer} />
 
-          <section className="rounded-xl border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h2 className="text-lg font-medium text-foreground">Recent orders</h2>
-              <Button
-                render={<Link href={`/orders?customerId=${customer.id}`} />}
-                nativeButton={false}
-                variant="outline"
-                size="sm"
-              >
-                View all
-              </Button>
-            </div>
-            <div className="divide-y">
-              {orders.length === 0 ? (
-                <div className="flex flex-col items-center px-6 py-10 text-center text-muted-foreground">
-                  <ShoppingBag className="mb-2 size-8 opacity-20" aria-hidden="true" />
-                  <p className="text-sm">No orders yet.</p>
-                </div>
-              ) : (
-                orders.map((order) => (
-                  <Link
-                    key={order.id}
-                    href={`/orders/${order.id}`}
-                    className="flex min-h-14 items-center justify-between gap-4 px-6 py-3 hover:bg-muted/50"
-                  >
-                    <div>
-                      <p className="font-medium">{order.orderNumber}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
-                          new Date(order.createdAt),
-                        )}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">
-                        {new Intl.NumberFormat('en-BD', {
-                          style: 'currency',
-                          currency: order.currencyCode,
-                        }).format(Number(order.totalAmount))}
-                      </p>
-                      <StatusBadge status={order.status} />
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-
-        {/* Right Column - Contact & Meta */}
-        <div className="space-y-6">
-          {deliveryHistory ? (
-            <section className="rounded-xl border bg-card shadow-sm">
-              <div className="flex items-center justify-between border-b px-6 py-4">
-                <h2 className="text-lg font-medium">Delivery history</h2>
-                <StatusBadge status={deliveryHistory.risk.level} />
-              </div>
-              <dl className="grid grid-cols-2 gap-4 px-6 py-4 text-sm">
-                <div>
-                  <dt className="text-muted-foreground">Delivered</dt>
-                  <dd className="mt-1 text-lg font-semibold">{deliveryHistory.deliveredCount}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">RTO</dt>
-                  <dd className="mt-1 text-lg font-semibold">{deliveryHistory.rtoCount}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Success rate</dt>
-                  <dd className="mt-1 font-semibold">{deliveryHistory.successRate ?? '—'}%</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">RTO rate</dt>
-                  <dd className="mt-1 font-semibold">{deliveryHistory.rtoRate ?? '—'}%</dd>
-                </div>
-              </dl>
-              {deliveryHistory.risk.reasons[0] ? (
-                <p className="border-t px-6 py-4 text-sm text-muted-foreground">
-                  {deliveryHistory.risk.reasons[0].explanation}
-                </p>
-              ) : null}
-              <div className="border-t px-6 py-3 flex justify-end">
-                <Link
-                  href={`/deliveries?q=${encodeURIComponent(
-                    customer.phones.find((p) => p.isPrimary)?.phone ??
-                      customer.phones[0]?.phone ??
-                      customer.displayName,
-                  )}`}
-                  className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
-                >
-                  View customer deliveries →
-                </Link>
-              </div>
-            </section>
-          ) : null}
-          <section className="rounded-xl border bg-card shadow-sm">
-            <div className="border-b px-6 py-4">
-              <h2 className="text-lg font-medium">Commerce summary</h2>
-            </div>
-            <dl className="grid grid-cols-2 gap-4 px-6 py-4 text-sm">
-              <div>
-                <dt className="text-muted-foreground">Orders</dt>
-                <dd className="mt-1 text-lg font-semibold">
-                  {customer.commerceMetrics.totalOrders}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Cancelled</dt>
-                <dd className="mt-1 text-lg font-semibold">
-                  {customer.commerceMetrics.cancelledOrders}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Ordered value</dt>
-                <dd className="mt-1 font-semibold">
-                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
-                    Number(customer.commerceMetrics.lifetimeOrderValue),
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Collected</dt>
-                <dd className="mt-1 font-semibold text-emerald-700">
-                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
-                    Number(customer.commerceMetrics.collectedAmount),
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Refunded</dt>
-                <dd className="mt-1 font-semibold text-rose-700">
-                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
-                    Number(customer.commerceMetrics.refundedAmount),
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Outstanding</dt>
-                <dd className="mt-1 font-semibold text-amber-700">
-                  {new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT' }).format(
-                    Number(customer.commerceMetrics.outstandingAmount || '0'),
-                  )}
-                </dd>
-              </div>
-            </dl>
-          </section>
-
-          <section className="rounded-xl border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h2 className="text-lg font-medium text-foreground">Contact</h2>
-            </div>
-            <div className="px-6 py-4 text-sm">
-              <div className="space-y-4">
-                <div>
-                  <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
-                    <Mail className="size-4 text-muted-foreground" /> Email Addresses
-                  </div>
-                  {customer.emails.length === 0 ? (
-                    <p className="text-muted-foreground italic">No email on file</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {customer.emails.map((email) => (
-                        <li key={email.id} className="flex items-center justify-between text-xs">
-                          <span>{email.email}</span>
-                          {email.isPrimary ? (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
-                              Primary
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                try {
-                                  await fetchApiData(
-                                    `/admin/customers/${customer.id}/emails/${email.id}/primary`,
-                                    {
-                                      method: 'POST',
-                                    },
-                                  );
-                                  void load();
-                                } catch (err) {
-                                  alert(
-                                    err instanceof Error
-                                      ? err.message
-                                      : 'Failed to update primary email',
-                                  );
-                                }
-                              }}
-                              className="text-[11px] text-muted-foreground hover:text-foreground underline"
-                            >
-                              Make primary
-                            </button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="pt-2 border-t">
-                  <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
-                    <Phone className="size-4 text-muted-foreground" /> Phone Numbers
-                  </div>
-                  {customer.phones.length === 0 ? (
-                    <p className="text-muted-foreground italic">No phone on file</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {customer.phones.map((phone) => (
-                        <li key={phone.id} className="flex items-center justify-between text-xs">
-                          <span>{phone.phone}</span>
-                          {phone.isPrimary ? (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
-                              Primary
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                try {
-                                  await fetchApiData(
-                                    `/admin/customers/${customer.id}/phones/${phone.id}/primary`,
-                                    {
-                                      method: 'POST',
-                                    },
-                                  );
-                                  void load();
-                                } catch (err) {
-                                  alert(
-                                    err instanceof Error
-                                      ? err.message
-                                      : 'Failed to update primary phone',
-                                  );
-                                }
-                              }}
-                              className="text-[11px] text-muted-foreground hover:text-foreground underline"
-                            >
-                              Make primary
-                            </button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <CustomerEmailCommunications
+      {/* 3. Operational Two-Column Grid */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
+        {/* Main Operational Column (Orders, Timeline, Communications) */}
+        <div className="space-y-6 lg:col-span-7">
+          {/* Order & Return History */}
+          <CustomerOrdersSection
             customerId={customer.id}
-            primaryEmail={
-              customer.emails.find((e) => e.isPrimary)?.email ?? customer.emails[0]?.email ?? null
-            }
+            isReadOnly={isReadOnly}
           />
 
-          <CustomerSmsCommunications
-            customerId={customer.id}
-            primaryPhone={
-              customer.phones.find((phone) => phone.isPrimary)?.phone ??
-              customer.phones[0]?.phone ??
-              null
-            }
+          {/* Unified Customer Activity Timeline */}
+          <CustomerTimelineSection customerId={customer.id} />
+
+          {/* Unified Communications Log */}
+          <CustomerCommunicationSection customerId={customer.id} />
+        </div>
+
+        {/* Supporting Column (Delivery Risk, Restrictions, Contacts, Addresses, Account, Tags, Notes) */}
+        <div className="space-y-6 lg:col-span-5">
+          {/* Delivery & RTO Intelligence */}
+          <CustomerDeliveryRiskCard
+            history={deliveryHistory}
+            customerSearchTerm={primarySearchPhone}
           />
 
-          <section className="rounded-xl border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h2 className="text-lg font-medium text-foreground">Tags</h2>
-              <ManageTagsDialog
-                customerId={customer.id}
-                assignedTags={customer.tags}
-                onUpdated={() => void load()}
-              />
-            </div>
-            <div className="px-6 py-4">
-              {customer.tags.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">No tags assigned.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {customer.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-secondary-foreground transition-colors"
-                      style={tag.color ? { backgroundColor: tag.color, color: '#fff' } : undefined}
-                    >
-                      {tag.label}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+          {/* Commercial Restrictions */}
+          <CustomerRestrictionsCard
+            customerId={customer.id}
+            restrictions={customer.restrictions}
+            isReadOnly={isReadOnly}
+            onUpdated={() => void load(true)}
+          />
 
-          <section className="rounded-xl border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h2 className="text-lg font-medium text-foreground">Notes</h2>
-              <AddNoteDialog customerId={customer.id} onAdded={() => void load()} />
-            </div>
-            <div className="px-6 py-4">
-              <ul className="space-y-4">
-                {customer.notes.length === 0 ? (
-                  <li className="text-sm text-muted-foreground italic">No notes recorded.</li>
-                ) : (
-                  customer.notes.map((note) => (
-                    <li key={note.id} className="text-sm">
-                      <p className="text-foreground">{note.body}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
-                          new Date(note.createdAt),
-                        )}
-                      </p>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
-          </section>
+          {/* Contacts (Multi-Phone & Multi-Email) */}
+          <CustomerContactSection
+            customerId={customer.id}
+            phones={customer.phones}
+            emails={customer.emails}
+            isReadOnly={isReadOnly}
+            onUpdated={() => void load(true)}
+          />
+
+          {/* Addresses */}
+          <CustomerAddressesSection
+            customerId={customer.id}
+            addresses={customer.addresses}
+            isReadOnly={isReadOnly}
+            onUpdated={() => void load(true)}
+          />
+
+          {/* Future User Account Link */}
+          <CustomerAccountCard
+            customerId={customer.id}
+            account={customer.account}
+            isReadOnly={isReadOnly}
+            onUpdated={() => void load(true)}
+          />
+
+          {/* Tags */}
+          <CustomerTagsCard
+            customerId={customer.id}
+            tags={customer.tags}
+            isReadOnly={isReadOnly}
+            onUpdated={() => void load(true)}
+          />
+
+          {/* Internal Notes */}
+          <CustomerNotesCard
+            customerId={customer.id}
+            notes={customer.notes}
+            isReadOnly={isReadOnly}
+            onUpdated={() => void load(true)}
+          />
         </div>
       </div>
     </main>

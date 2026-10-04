@@ -285,21 +285,6 @@ export function registerAdminOperationsRoutes(
       data: await operations.listExportJobs(database.db, active.organizationId, active.actorId),
     };
   });
-  app.get(
-    '/admin/orders/:orderId/timeline',
-    { schema: { params: Type.Object({ orderId: Type.String() }) } },
-    async (request, reply) => {
-      const active = await context(database, auth, request.headers, 'admin.operations.view');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-      return {
-        data: await operations.getOrderTimeline(
-          database.db,
-          active.organizationId,
-          (request.params as { orderId: string }).orderId,
-        ),
-      };
-    },
-  );
   app.get('/admin/settings/organization', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'settings.view');
     if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });

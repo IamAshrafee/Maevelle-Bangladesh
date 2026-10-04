@@ -1,12 +1,13 @@
 'use client';
 
-import { CircleAlert, Loader2, Plus, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { CircleAlert, Loader2, Plus, ShieldAlert, Trash2 } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import type {
   CatalogVariantChoiceDto,
   CreateManualOrderInputDto,
+  CustomerDetailDto,
   CustomerSummaryDto,
   OrderDetailDto,
   PaginatedEnvelope,
@@ -40,11 +41,32 @@ function emptyLine(): EditableLine {
 const selectClassName =
   'flex min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
-export function CreateManualOrderDialog() {
+export function CreateManualOrderDialog({
+  initialCustomerId,
+}: {
+  readonly initialCustomerId?: string;
+} = {}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryCustomerId = initialCustomerId ?? searchParams.get('customerId') ?? '';
+
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [customerMode, setCustomerMode] = useState<'existing' | 'inline'>('existing');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(queryCustomerId);
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<CustomerDetailDto | null>(null);
+  const [isLoadingCustomerDetail, setIsLoadingCustomerDetail] = useState(false);
+
+  // Address inputs state (allows prefill from customer profile + custom override per order snapshot)
+  const [recipientName, setRecipientName] = useState('');
+  const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
+  const [area, setArea] = useState('');
+  const [city, setCity] = useState('');
+  const [district, setDistrict] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+
   const [customers, setCustomers] = useState<readonly CustomerSummaryDto[]>([]);
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
   const [variants, setVariants] = useState<readonly CatalogVariantChoiceDto[]>([]);
@@ -52,6 +74,7 @@ export function CreateManualOrderDialog() {
   const [lines, setLines] = useState<readonly EditableLine[]>(() => [emptyLine()]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Load choices
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -85,6 +108,55 @@ export function CreateManualOrderDialog() {
     void load();
     return () => controller.abort();
   }, []);
+
+  // Fetch selected customer detail to auto-fill address and detect restrictions
+  useEffect(() => {
+    if (!selectedCustomerId) {
+      setSelectedCustomerDetail(null);
+      return;
+    }
+    const controller = new AbortController();
+    async function fetchCustomer() {
+      setIsLoadingCustomerDetail(true);
+      try {
+        const res = await fetchApiData<CustomerDetailDto>(`/admin/customers/${selectedCustomerId}`, {
+          signal: controller.signal,
+        });
+        setSelectedCustomerDetail(res);
+
+        // Pre-fill delivery details from default address or customer profile
+        const defAddress = res.addresses?.find((a) => a.isDefault) ?? res.addresses?.[0];
+        const primaryPhone =
+          res.phones?.find((p) => p.isPrimary)?.phone ??
+          res.primaryPhone ??
+          res.phones?.[0]?.phone ??
+          '';
+
+        setRecipientName(defAddress?.recipientName || res.displayName || '');
+        setDeliveryPhone(defAddress?.phone || primaryPhone || '');
+        if (defAddress) {
+          setAddressLine1(defAddress.addressLine1 || '');
+          setAddressLine2(defAddress.addressLine2 || '');
+          setArea(defAddress.area || '');
+          setCity(defAddress.city || '');
+          setDistrict(defAddress.district || '');
+          setPostalCode(defAddress.postalCode || '');
+        }
+
+        // Ensure customer is present in customers dropdown list
+        setCustomers((prev) => {
+          if (prev.some((c) => c.id === res.id)) return prev;
+          return [res, ...prev];
+        });
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingCustomerDetail(false);
+      }
+    }
+    void fetchCustomer();
+    return () => controller.abort();
+  }, [selectedCustomerId]);
 
   function updateLine(key: string, changes: Partial<Omit<EditableLine, 'key'>>) {
     setLines((current) =>
@@ -218,22 +290,57 @@ export function CreateManualOrderDialog() {
 
             {customerMode === 'existing' ? (
               <div className="space-y-2">
-                <select
-                  id="customerId"
-                  name="customerId"
-                  required={customerMode === 'existing'}
-                  disabled={isLoading || busy}
-                  className={selectClassName}
-                >
-                  <option value="">Select an existing customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.displayName} · {customer.primaryPhone ?? customer.customerNumber}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2">
+                  <select
+                    id="customerId"
+                    name="customerId"
+                    required={customerMode === 'existing'}
+                    disabled={isLoading || busy}
+                    value={selectedCustomerId}
+                    onChange={(e) => setSelectedCustomerId(e.target.value)}
+                    className={selectClassName}
+                  >
+                    <option value="">Select an existing customer</option>
+                    {customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.displayName} · {customer.primaryPhone ?? customer.customerNumber}
+                      </option>
+                    ))}
+                  </select>
+                  {isLoadingCustomerDetail && (
+                    <Loader2 className="size-4 animate-spin text-muted-foreground shrink-0" />
+                  )}
+                </div>
+
+                {/* Active Restrictions Alert for Selected Customer */}
+                {selectedCustomerDetail &&
+                  selectedCustomerDetail.restrictions &&
+                  selectedCustomerDetail.restrictions.filter((r) => r.status === 'ACTIVE').length > 0 && (
+                    <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-950 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-200 space-y-1.5">
+                      <div className="flex items-center gap-1.5 font-semibold text-rose-800 dark:text-rose-300">
+                        <ShieldAlert className="size-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                        <span>Commercial Restrictions Active on this Customer</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {selectedCustomerDetail.restrictions
+                          .filter((r) => r.status === 'ACTIVE')
+                          .map((r) => (
+                            <span
+                              key={r.id}
+                              className="rounded bg-rose-200/80 px-2 py-0.5 font-medium text-rose-900 dark:bg-rose-900/50 dark:text-rose-200"
+                            >
+                              {r.restrictionType.replaceAll('_', ' ')}: {r.reason}
+                            </span>
+                          ))}
+                      </div>
+                      <p className="text-[11px] opacity-80">
+                        Fulfillment and payment policies will enforce these restrictions at checkout/confirmation.
+                      </p>
+                    </div>
+                  )}
+
                 <p className="text-xs text-muted-foreground">
-                  Select an existing customer from the database.
+                  Select an existing customer from the database. Default address and contact details will prefill below.
                 </p>
               </div>
             ) : (
@@ -449,38 +556,87 @@ export function CreateManualOrderDialog() {
         </section>
 
         <section className="grid gap-4 border-t pt-5 sm:grid-cols-2">
-          <h2 className="font-medium sm:col-span-2">Delivery address</h2>
+          <div className="sm:col-span-2 space-y-1">
+            <h2 className="font-medium">Delivery address</h2>
+            <p className="text-xs text-muted-foreground">
+              Pre-filled from customer profile when selected. Can be adjusted per order without altering historical records.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="recipientName">Recipient name</Label>
-            <Input id="recipientName" name="recipientName" required />
+            <Input
+              id="recipientName"
+              name="recipientName"
+              required
+              value={recipientName}
+              onChange={(e) => setRecipientName(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Delivery phone</Label>
-            <Input id="phone" name="phone" type="tel" required />
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              required
+              value={deliveryPhone}
+              onChange={(e) => setDeliveryPhone(e.target.value)}
+            />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="addressLine1">Address line 1</Label>
-            <Input id="addressLine1" name="addressLine1" required />
+            <Input
+              id="addressLine1"
+              name="addressLine1"
+              required
+              value={addressLine1}
+              onChange={(e) => setAddressLine1(e.target.value)}
+            />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="addressLine2">Address line 2</Label>
-            <Input id="addressLine2" name="addressLine2" />
+            <Input
+              id="addressLine2"
+              name="addressLine2"
+              value={addressLine2}
+              onChange={(e) => setAddressLine2(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="area">Area</Label>
-            <Input id="area" name="area" />
+            <Input
+              id="area"
+              name="area"
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="city">City</Label>
-            <Input id="city" name="city" />
+            <Input
+              id="city"
+              name="city"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="district">District</Label>
-            <Input id="district" name="district" />
+            <Input
+              id="district"
+              name="district"
+              value={district}
+              onChange={(e) => setDistrict(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="postalCode">Postal code</Label>
-            <Input id="postalCode" name="postalCode" />
+            <Input
+              id="postalCode"
+              name="postalCode"
+              value={postalCode}
+              onChange={(e) => setPostalCode(e.target.value)}
+            />
           </div>
           <label className="flex min-h-11 items-center gap-3 sm:col-span-2">
             <input type="checkbox" name="saveToCustomer" className="size-4" />

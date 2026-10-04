@@ -63,7 +63,7 @@ The SMS frontend is built in `apps/admin/components/sms/` and rendered at `/sms`
 - `sms-diagnostics-tab.tsx`: Platform health, provider capability matrix, sender configuration, and provider onboarding requirements.
 - `sms-detail-sheet.tsx`: Comprehensive drawer displaying immutable message snapshots, encoding/segment analysis, technical attempts vs provider events, lifecycle timeline, and action protections.
 - `apps/admin/components/orders/order-sms-status.tsx`: Order detail Customer Communications card with deliverability checklist, state-transition feedback, and manual send modal.
-- `apps/admin/components/customers/customer-sms-communications.tsx`: Customer detail communications summary and primary phone deliverability status.
+- `apps/admin/components/customers/customer-communication-section.tsx`: Customer detail communications summary, unified Email + SMS history, and primary phone deliverability status.
 
 ### Status Refreshing Strategy
 

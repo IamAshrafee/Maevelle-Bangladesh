@@ -2,68 +2,97 @@
 
 ## Active Area
 
-Customers Module — Production-Complete Customer Identity & Relationship Domain.
+Customers Module — Production-Complete Customer Operations Workspace.
 
 ## Current Status / Substage
 
-`CUSTOMERS_PRODUCTION_DOMAIN_COMPLETE`
+`CUSTOMERS_FRONTEND_WORKSPACE_COMPLETE`
 
 ## Implementation Overview
 
-Completed the dedicated deep completion pass for Maevelle's **Customers module**, transitioning from a basic commerce contact snapshot (`CUSTOMER AS BASIC COMMERCE RECORD`) into a production-complete customer identity and relationship domain (`CUSTOMER AS PRODUCTION-COMPLETE CUSTOMER IDENTITY & RELATIONSHIP DOMAIN`). Today's guest customer data can seamlessly become tomorrow's authenticated customer account history without losing, duplicating, or incorrectly merging historical records.
+Successfully completed the dedicated **Frontend-Completion Phase for Maevelle's Customers module** (`BACKEND CAPABILITY → COMPLETE FRONTEND EXPERIENCE`). Maevelle's customer area is now a cohesive, operations-first customer workspace where staff can understand identity, manage contacts and addresses, audit commercial value and delivery/RTO risk, review duplicate candidates, execute safe guided merges, apply/lift commercial restrictions, inspect unified communication and business timelines, and bridge directly into manual sales order creation.
 
-### 1. Contracts & API Alignment
-- **List Orders Read Model**: Added `riskLevel?: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED' | null` to `OrderSummaryDto` in `@maevelle/contracts`.
-- **Database & Query Projection**: Enhanced `packages/database/src/orders/queries.ts` to join and project `overall_risk_level as risk_level` from `orders.order_delivery_risk_evaluations`, and added `riskLevel` query filtering in `OrderListFilters`.
-- **API Querystring Validation**: Added `riskLevel` to `/admin/orders` Fastify schema in `apps/api/src/routes/orders.ts`.
+### 1. Operations-First Customer List (`apps/admin/components/customers/customers-list.tsx`)
+- **Operational Queue Tabs**:
+  - `All Customers`: Full customer directory with status badges and source tracking.
+  - `Repeat Buyers`: Instant filter for high-value repeat shoppers (`minOrders >= 2`).
+  - `High Spend`: Sorted by total lifetime spend (`sortBy = 'SPEND_DESC'`).
+  - `Restricted & Blocked`: Triage queue for restricted or blocked customers (`status = 'BLOCKED'`).
+  - `Recently Active`: Customers with recent purchase activity (`sortBy = 'RECENT_ORDER'`).
+- **Flexible Bangladesh Search**: Matches full or partial BD phone numbers (`017...` and `+88017...`), emails, and human-facing customer numbers (`CUS-...`).
+- **Responsive Layout**: Full tabular view for desktop with quick copy triggers; compact, touch-friendly card view for mobile/tablet preserving primary phone, tags, order count, spend, and restriction chips.
+- **Server-Side Pagination & CSV Export**: Respects server filters, search queries, and page sizing without client-side data dumps.
 
-### 2. Operational Orders List & Workspaces (`apps/admin/components/orders/orders-list.tsx`)
-- **6 Attention Queue Tabs**:
-  - `All Orders`: Complete catalog with full filtering and pagination.
-  - `Needs Review`: Captures `SUBMITTED` or `AWAITING_PAYMENT` orders needing merchant attention.
-  - `To Fulfill`: Displays `CONFIRMED` orders ready for inventory allocation and packing.
-  - `In Delivery`: Tracks active consignments (`DISPATCHED`, `IN_TRANSIT`, `OUT_FOR_DELIVERY`).
-  - `Delivery Issues`: Immediate triage for `FAILED_ATTEMPT`, `ON_HOLD`, or `RTO` orders.
-  - `Completed`: Archive view for `DELIVERED` orders.
-- **Delivery Risk Indicators**: Server-evaluated risk badges (`Elevated Risk`, `Moderate Risk`, `Low Risk`, `No History`) right on the order rows for immediate scanability.
-- **Responsive Views**: Full tabular desktop view with copyable phone and order numbers; clean mobile card layout preserving status, payment, fulfillment, and risk chips.
-- **Advanced Filtering & Server Pagination**: Order status, payment status, fulfillment status, delivery status, risk level, sales channel, payment method, order tags, and date ranges.
+### 2. Customer Detail Command Center (`customer-detail-console.tsx` & modular components)
+- **Header & Canonical Resolution (`customer-header.tsx`)**:
+  - Customer name, status badge, acquisition source badge, registration date.
+  - Human-facing customer number with one-click copy feedback.
+  - Prominent active commercial restriction indicators.
+  - Merged Customer Banner: Detects canonical aliases and provides a clear link to the surviving customer record.
+  - Actions bar: "Create Order", "Edit Profile", "Manage Tags", "Add Note", "Apply Restriction", "Merge Customer", "Anonymize".
+- **Authoritative Metrics Strip (`customer-metrics-strip.tsx`)**:
+  - Total Orders, Delivered Orders, Cancelled Orders.
+  - Lifetime Order Spend (BDT), Collected Amount, Outstanding Amount, Average Order Value (AOV).
+  - Latest order placement timestamp.
+- **Contact Management (`customer-contact-section.tsx`)**:
+  - Multi-phone & multi-email cards displaying normalized values, raw inputs, and primary badges.
+  - Verification State: `Verified` badges with verification date/source, or `Unverified` chips with a staff verification workflow dialog.
+  - Quick action controls: Copy, `tel:` / `mailto:` quick dial, "Set as Primary", and "Remove Contact" (with protection against deleting the sole primary contact).
+- **Address Book (`customer-addresses-section.tsx`, `add-address-dialog.tsx`, `edit-address-dialog.tsx`)**:
+  - Multi-address cards with Default shipping badges, formatted addresses (Line 1, Line 2, Area, City, District, Postal code), and copy buttons.
+  - "Set as Default" inline trigger.
+  - Order Snapshot Disclaimer: Explicitly informs operators that address book changes apply to future orders and do not mutate historical order snapshots.
+- **Order, Return & Refund History (`customer-orders-section.tsx`)**:
+  - Tabbed sub-navigation for Orders, Returns, and Refunds.
+  - Orders tab: Order number, date, commercial status, delivery status, payment method, BDT total, and direct link to `/orders/[id]`.
+  - Returns tab: Return Case number, order reference, return status, and items returned.
+  - Refunds tab: Refund amount, payment method, settlement status, and reference.
+  - Quick shortcut to "Create Order" with pre-selected customer profile.
+- **Delivery Intelligence & Courier History (`customer-delivery-risk-card.tsx`)**:
+  - Core delivery metrics: Successful deliveries, RTO count, failed attempts, eligible dispatches.
+  - Courier Network Breakdown: Separate, explainable metrics for Internal history, Pathao, and Steadfast.
+  - Explainable Risk Signals: Clear advisory messages explaining risk evaluation without opaque scores or judgmental labels.
+  - Recent consignments list with tracking codes, delivery attempts, and outcomes.
+- **Commercial Restrictions (`customer-restrictions-card.tsx`, `apply-restriction-dialog.tsx`, `lift-restriction-dialog.tsx`)**:
+  - Active restrictions panel detailing restriction type (`COD_RESTRICTED`, `ORDER_REVIEW_REQUIRED`, `ORDERING_BLOCKED`), operational reason, issuer, and expiry.
+  - Clear operational consequences preview (e.g. explains that COD restricted denies cash-on-delivery checkout).
+  - Past restriction history log with lift reasons and operator attribution.
+- **Duplicate Detection & Guided Safe Merge (`customer-duplicate-merge-dialog.tsx`)**:
+  - Live duplicate candidate alert banner when duplicate candidates are detected.
+  - 2-Step Guided Merge Workflow:
+    - Step 1: Select target / master customer (either from detected candidates or live search).
+    - Step 2: Live merge preview via `/admin/customers/:id/merge-preview` displaying side-by-side identity comparison, transferred resources impact (orders, contacts, addresses, tags), blocking conflicts, and warnings.
+    - Explicit Keep vs Merge semantics: "Keep this Customer" vs "Merge duplicate into this Customer".
+    - Mandatory reason and irreversible operation confirmation before execution.
+- **Customer Anonymization (`anonymize-customer-dialog.tsx`)**:
+  - Regulatory GDPR/privacy PII scrubbing requiring explicit customer code typing and reason code.
+- **Future Customer Account Card (`customer-account-card.tsx`)**:
+  - First-class support for guest customers as complete, legitimate customers.
+  - Future-ready account linkage UI showing `No account linked` vs `Active linked account`.
+  - Manual account linking / unlinking dialog for authorized staff.
+- **Internal Staff Notes (`customer-notes-card.tsx`) & Tags (`customer-tags-card.tsx`)**:
+  - Private operator notes with staff attribution and privacy disclaimer confirming notes are strictly admin-only and never exposed to customer-facing apps.
+  - Custom tag assignment with color token rendering.
+- **Unified Cross-Domain Timeline (`customer-timeline-section.tsx`)**:
+  - Consolidates events across Commerce, Delivery, Communications, Restrictions, and Profile changes.
+  - Category filters and load-more pagination.
+- **Unified Email & SMS Communications (`customer-communication-section.tsx`)**:
+  - Consolidated communication history from `/admin/customers/:id/communications`.
+  - Channel filter (All, Email, SMS).
+  - Safe message inspection modal displaying template code, recipient, delivery state, provider status, and sanitized message preview.
 
-### 3. Order Command Center (`order-detail-console.tsx` & modular cards)
-- **Status Strip (`order-summary-strip.tsx`)**: 4-dimension operational status (Commercial, Payment & COD, Fulfillment progress, Logistics & Courier state).
-- **Delivery Intelligence & Steadfast Fraud Risk Card (`order-risk-card.tsx`)**:
-  - Steadfast courier network check metrics (total deliveries, success rate, returns/RTO count).
-  - Internal store history (previous completed orders, return rate).
-  - 48-hour duplicate order candidate warnings with direct order links.
-  - Human-explainable advisory signals (e.g. "Elevated RTO rate in courier network", "First time COD buyer").
-  - On-demand refresh action hitting `POST /admin/orders/:orderId/risk-assessment/refresh`.
-- **Customer Verification Workflow (`order-verifications-card.tsx` & `record-verification-dialog.tsx`)**:
-  - Log verification events with channels (`PHONE_CALL`, `WHATSAPP`, `SMS`, `MANUAL_REVIEW`, `FRAUD_ANALYSIS`) and structured outcomes (`CONFIRMED`, `UNREACHABLE`, `ADDRESS_UPDATED`, `SUSPICIOUS_CANCEL_RECOMMENDED`, `OTHER`).
-  - Displays verification timeline entries with operator attribution and notes.
-- **Unified Business Timeline (`order-timeline-card.tsx`)**:
-  - Real event categories (`ORDER`, `PAYMENT`, `FULFILLMENT`, `DELIVERY`, `RETURN`, `VERIFICATION`, `NOTE`).
-  - Color-coded icons, relative time formatting, and actor badges (`Customer`, `Admin`, `System`, `Courier`).
-- **Items & Fulfillment Allocation (`order-items-card.tsx`)**:
-  - Immutable item snapshots (SKU, title, variant option badges, snapshot unit price, discounts).
-  - Fulfilled vs remaining fulfillable quantities displayed per line.
-  - Distinct `Customer Shipping Charge` vs logistics `Courier Cost`.
-- **Financial Summary & COD Collection (`order-payment-card.tsx`)**:
-  - Clear breakdown: Total, Amount Paid, COD Collectible, Outstanding.
-  - Highlights cancellation refund obligations when applicable.
-- **Fulfillment & Logistics (`order-fulfillment-delivery-card.tsx`)**:
-  - Fulfillment allocations with packing status and shipment links.
-  - Courier delivery status, tracking code, consignment references, delivery attempts, and prominent Courier RTO alerts.
-- **Customer Returns & Refunds (`order-returns-refunds-card.tsx`)**:
-  - Strictly separated from courier RTO. Shows RMA cases, return items, inspected conditions, and monetary refunds.
-- **Customer & Pre-Fulfillment Address (`order-customer-address-card.tsx`)**:
-  - Customer contact details, repeat buyer summary, one-click phone copy.
-  - Pre-fulfillment address editor modal with division, city, zone, and delivery instructions.
-- **State-Aware Actions (`order-header-actions.tsx`)**:
-  - `confirm-order-dialog.tsx`: Advisory warning when confirming orders with elevated delivery risk.
-  - `cancel-order-dialog.tsx`: Reason attribution (`CUSTOMER`, `MERCHANT`, `SYSTEM`), operational consequence summary (inventory release, refund required).
-  - Contextual hold, resume, complete, and fulfillment triggers based on server-provided `capabilities`.
+### 3. Integrated Manual Order Creation (`apps/admin/components/orders/create-manual-order-dialog.tsx`)
+- Reads `?customerId=...` from query parameters when navigated from Customer Header or Orders section.
+- Preselects the customer in the dropdown and fetches their full profile.
+- Auto-populates delivery recipient name, phone, and default address while keeping the order snapshot completely editable.
+- Prominently warns the operator if the selected customer has active commercial restrictions (e.g., COD Restricted or Blocked).
+
+### 4. Verification & Integrity
+- Clean TypeScript compilation across the entire workspace (`pnpm run typecheck` passed with 0 errors).
+- Clean Next.js production build (`pnpm --filter @maevelle/admin build` compiled all 80 routes successfully).
+- Obsolete MVP components (`customer-identity-actions.tsx`, `customer-email-communications.tsx`, `customer-sms-communications.tsx`) removed from the codebase.
 
 ## Verification Evidence
-- Monorepo TypeScript check (`pnpm run typecheck`): Passed with 0 errors.
-- Database test suite (`pnpm --filter @maevelle/database test`): All tests passing.
+- Monorepo TypeScript check (`pnpm run typecheck`): Passed with 0 errors across all packages and apps.
 - Next.js Production Build (`pnpm --filter @maevelle/admin build`): Compiled and generated all 80 static & dynamic routes with 0 errors.
+- Dead Component Cleanup: Removed obsolete prototypes (`customer-identity-actions.tsx`, `customer-email-communications.tsx`, `customer-sms-communications.tsx`).

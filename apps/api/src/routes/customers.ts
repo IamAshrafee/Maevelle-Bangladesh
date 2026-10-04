@@ -137,6 +137,16 @@ export function registerCustomerRoutes(
           to: Type.Optional(Type.String({ format: 'date-time' })),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          sortBy: Type.Optional(
+            Type.Union([
+              Type.Literal('CREATED_DESC'),
+              Type.Literal('CREATED_ASC'),
+              Type.Literal('ORDERS_DESC'),
+              Type.Literal('SPEND_DESC'),
+              Type.Literal('RECENT_ORDER'),
+            ]),
+          ),
+          minOrders: Type.Optional(Type.Integer({ minimum: 0 })),
         }),
       },
     },

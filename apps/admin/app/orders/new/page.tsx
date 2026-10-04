@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { CreateManualOrderDialog } from '@/components/orders/create-manual-order-dialog';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 
@@ -16,7 +17,9 @@ export default function CreateManualOrderPage() {
         className="text-xs"
       />
       <div className="rounded-xl border bg-card p-6 shadow-sm">
-        <CreateManualOrderDialog />
+        <Suspense fallback={<div className="p-8 text-center text-sm text-muted-foreground">Loading order workspace...</div>}>
+          <CreateManualOrderDialog />
+        </Suspense>
       </div>
     </main>
   );

@@ -37,9 +37,9 @@ export function EditCustomerDialog({
 
     const formData = new FormData(e.currentTarget);
     const payload = {
-      version: customer.version,
-      displayName: formData.get('displayName') as string,
-      status: formData.get('status') as string,
+      expectedVersion: customer.version,
+      displayName: (formData.get('displayName') as string).trim(),
+      status: formData.get('status') as 'ACTIVE' | 'INACTIVE' | 'BLOCKED',
     };
 
     try {

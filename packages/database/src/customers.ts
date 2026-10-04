@@ -69,6 +69,7 @@ export interface CustomerSummary {
   readonly orderCount?: number;
   readonly totalSpend?: string;
   readonly lastOrderAt?: string | null;
+  readonly activeRestrictions?: readonly CustomerRestrictionType[];
 }
 
 function identityInput<T>(callback: () => T): T {
@@ -551,6 +552,8 @@ export interface CustomerListFilters {
   readonly from?: string;
   readonly to?: string;
   readonly q?: string;
+  readonly sortBy?: 'CREATED_DESC' | 'CREATED_ASC' | 'ORDERS_DESC' | 'SPEND_DESC' | 'RECENT_ORDER';
+  readonly minOrders?: number;
 }
 
 export interface PaginationMeta {
@@ -592,6 +595,7 @@ export async function listCustomers(
     order_count: string;
     total_spend: string;
     last_order_at: Date | null;
+    active_restrictions: CustomerRestrictionType[] | null;
     total_count: string;
   }>`
     select
@@ -600,6 +604,7 @@ export async function listCustomers(
       (select raw_value from customers.customer_phones p where p.customer_id = c.id order by is_primary desc, created_at, id limit 1) as primary_phone,
       (select raw_value from customers.customer_emails e where e.customer_id = c.id order by is_primary desc, created_at, id limit 1) as primary_email,
       stats.order_count, stats.total_spend, stats.last_order_at,
+      restr.active_restrictions,
       count(*) over ()::text as total_count
     from customers.customers c
     left join lateral (
@@ -614,19 +619,41 @@ export async function listCustomers(
           o.customer_id in (select alias_customer_id from customers.customer_aliases where organization_id = c.organization_id and canonical_customer_id = c.id)
         )
     ) stats on true
+    left join lateral (
+      select array_agg(cr.restriction_type) as active_restrictions
+      from customers.customer_restrictions cr
+      where cr.organization_id = c.organization_id
+        and (
+          cr.customer_id = c.id or
+          cr.customer_id in (select alias_customer_id from customers.customer_aliases where organization_id = c.organization_id and canonical_customer_id = c.id)
+        )
+        and cr.status = 'ACTIVE'
+        and (cr.expires_at is null or cr.expires_at > now())
+    ) restr on true
     where c.organization_id = ${organizationId}
       and (${filters?.status ?? null}::text is null or c.status = ${filters?.status ?? null})
       and (${filters?.source ?? null}::text is null or c.first_source = ${filters?.source ?? null})
       and (${filters?.from ?? null}::text is null or c.created_at >= (${filters?.from ?? null})::timestamptz)
       and (${filters?.to ?? null}::text is null or c.created_at <= (${filters?.to ?? null})::timestamptz)
+      and (${filters?.minOrders ?? null}::int is null or coalesce(stats.order_count::int, 0) >= (${filters?.minOrders ?? null})::int)
       and (
         ${searchTerm ?? null}::text is null
         or lower(c.display_name) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
         or lower(c.customer_number) like ${searchTerm ? `%${searchTerm.toLocaleLowerCase()}%` : ''}
-        or exists (select 1 from customers.customer_phones cp where cp.organization_id = c.organization_id and cp.customer_id = c.id and cp.normalized_value = ${normalizedSearchPhone ?? ''})
-        or exists (select 1 from customers.customer_emails ce where ce.customer_id = c.id and lower(ce.raw_value) = lower(${searchTerm ?? ''}))
+        or exists (select 1 from customers.customer_phones cp where cp.organization_id = c.organization_id and cp.customer_id = c.id and (cp.normalized_value = ${normalizedSearchPhone ?? ''} or cp.raw_value like ${searchTerm ? `%${searchTerm}%` : ''}))
+        or exists (select 1 from customers.customer_emails ce where ce.customer_id = c.id and (lower(ce.raw_value) like lower(${searchTerm ? `%${searchTerm}%` : ''}) or ce.normalized_value like lower(${searchTerm ? `%${searchTerm}%` : ''})))
       )
-    order by c.updated_at desc, c.id desc
+    order by ${
+      filters?.sortBy === 'CREATED_ASC'
+        ? sql`c.created_at asc, c.id asc`
+        : filters?.sortBy === 'ORDERS_DESC'
+          ? sql`coalesce(stats.order_count::int, 0) desc, c.created_at desc`
+          : filters?.sortBy === 'SPEND_DESC'
+            ? sql`coalesce(stats.total_spend::numeric, 0) desc, c.created_at desc`
+            : filters?.sortBy === 'RECENT_ORDER'
+              ? sql`stats.last_order_at desc nulls last, c.created_at desc`
+              : sql`c.updated_at desc, c.id desc`
+    }
     limit ${pageSize} offset ${offset}
   `.execute(db);
 
@@ -647,6 +674,7 @@ export async function listCustomers(
       orderCount: Number(row.order_count ?? 0),
       totalSpend: row.total_spend ?? '0',
       lastOrderAt: row.last_order_at?.toISOString() ?? null,
+      activeRestrictions: (row.active_restrictions ?? []).filter(Boolean) as readonly CustomerRestrictionType[],
     })),
     pagination: {
       page,
@@ -941,8 +969,28 @@ export async function addCustomerAddress(
 export async function findCustomerDuplicateCandidates(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; customerId: string },
-): Promise<readonly { customerId: string; confidence: string; signals: readonly string[] }[]> {
-  const result = await sql<{ customer_id: string; confidence: string; signals: string[] }>`
+): Promise<readonly {
+  customerId: string;
+  confidence: string;
+  signals: readonly string[];
+  displayName?: string;
+  customerNumber?: string;
+  status?: string;
+  primaryPhone?: string | null;
+  primaryEmail?: string | null;
+  orderCount?: number;
+}[]> {
+  const result = await sql<{
+    customer_id: string;
+    confidence: string;
+    signals: string[];
+    display_name: string;
+    customer_number: string;
+    status: string;
+    primary_phone: string | null;
+    primary_email: string | null;
+    order_count: string;
+  }>`
     with phone_matches as (
       select other.customer_id, 'PHONE'::text as signal
       from customers.customer_phones current
@@ -955,15 +1003,32 @@ export async function findCustomerDuplicateCandidates(
       join customers.customer_emails other on other.normalized_value = current.normalized_value
         and other.organization_id = current.organization_id and other.customer_id <> current.customer_id
       where current.organization_id = ${input.organizationId} and current.customer_id = ${input.customerId}
+    ), matched_agg as (
+      select customer_id, (count(*)::numeric / 2)::text as confidence, array_agg(signal order by signal) as signals
+      from (select * from phone_matches union all select * from email_matches) matches
+      group by customer_id
     )
-    select customer_id, (count(*)::numeric / 2)::text as confidence, array_agg(signal order by signal) as signals
-    from (select * from phone_matches union all select * from email_matches) matches
-    group by customer_id order by confidence desc, customer_id
+    select
+      m.customer_id, m.confidence, m.signals,
+      c.display_name, c.customer_number, c.status,
+      (select raw_value from customers.customer_phones p where p.customer_id = c.id order by is_primary desc, created_at, id limit 1) as primary_phone,
+      (select raw_value from customers.customer_emails e where e.customer_id = c.id order by is_primary desc, created_at, id limit 1) as primary_email,
+      (select count(*)::text from orders.orders o where o.organization_id = c.organization_id and o.customer_id = c.id) as order_count
+    from matched_agg m
+    join customers.customers c on c.id = m.customer_id and c.organization_id = ${input.organizationId}
+    where c.status not in ('MERGED', 'ANONYMIZED')
+    order by m.confidence desc, m.customer_id
   `.execute(db);
   return result.rows.map((row) => ({
     customerId: row.customer_id,
     confidence: row.confidence,
     signals: row.signals,
+    displayName: row.display_name,
+    customerNumber: row.customer_number,
+    status: row.status,
+    primaryPhone: row.primary_phone,
+    primaryEmail: row.primary_email,
+    orderCount: Number(row.order_count ?? 0),
   }));
 }
 
