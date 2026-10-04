@@ -8,7 +8,7 @@ const Stats = React.forwardRef<
   <section
     ref={ref}
     className={cn(
-      "grid grid-cols-2 md:grid-cols-4 rounded-xl border border-border bg-border gap-px overflow-hidden shadow-sm",
+      "grid grid-cols-2 md:grid-cols-4 rounded-2xl border border-slate-200/80 bg-slate-200/60 gap-px overflow-hidden backdrop-blur-md shadow-[inset_0_1px_1px_0_rgba(255,255,255,0.95),0_1px_3px_0_rgba(15,23,42,0.04)]",
       className
     )}
     {...props}
@@ -23,7 +23,7 @@ const StatsCard = React.forwardRef<
   <article
     ref={ref}
     className={cn(
-      "min-w-0 py-4 px-5 bg-card hover:bg-slate-50/50 transition-colors",
+      "min-w-0 py-4 px-5 bg-white/85 hover:bg-white/95 transition-all duration-150 relative group",
       className
     )}
     {...props}

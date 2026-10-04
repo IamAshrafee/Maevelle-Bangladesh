@@ -658,7 +658,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
             onClick={() => setPaletteOpen(true)}
           >
             <Search aria-hidden="true" />
-            <span>Search orders, customers, products…</span>
+            <span className="search-desktop-label">Search orders, customers, products…</span>
+            <span className="search-mobile-label">Search…</span>
             <kbd>⌘K</kbd>
           </button>
           <div className="topbar-actions">
@@ -693,6 +694,53 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </AdminCapabilitiesProvider>
         </div>
       </div>
+      <nav className="mobile-floating-island" aria-label="Quick mobile navigation">
+        <button
+          type="button"
+          className={`floating-island-item ${mobileOpen ? 'active' : ''}`}
+          onClick={() => setMobileOpen((value) => !value)}
+          aria-label={mobileOpen ? 'Close navigation drawer' : 'Open navigation drawer'}
+        >
+          <Menu aria-hidden="true" />
+          <span>Menu</span>
+        </button>
+        <button
+          type="button"
+          className={`floating-island-item ${paletteOpen ? 'active' : ''}`}
+          onClick={() => setPaletteOpen(true)}
+          aria-label="Search records"
+        >
+          <Search aria-hidden="true" />
+          <span>Search</span>
+        </button>
+        <Link
+          href="/"
+          className={`floating-island-item ${pathname === '/' ? 'active' : ''}`}
+          onClick={() => setMobileOpen(false)}
+          aria-label="Dashboard"
+        >
+          <LayoutDashboard aria-hidden="true" />
+          <span>Home</span>
+        </Link>
+        <Link
+          href="/orders"
+          className={`floating-island-item ${pathname.startsWith('/orders') ? 'active' : ''}`}
+          onClick={() => setMobileOpen(false)}
+          aria-label="Orders"
+        >
+          <ShoppingBag aria-hidden="true" />
+          <span>Orders</span>
+        </Link>
+        <Link
+          href="/operations"
+          className={`floating-island-item ${pathname.startsWith('/operations') ? 'active' : ''}`}
+          onClick={() => setMobileOpen(false)}
+          aria-label="Operations and Alerts"
+        >
+          <Gauge aria-hidden="true" />
+          <span>Alerts</span>
+        </Link>
+      </nav>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} context={context} />
     </div>
   );
