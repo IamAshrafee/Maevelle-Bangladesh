@@ -1,169 +1,283 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type {
+  ApiEnvelope,
+  ProductRatingSummaryDto,
+  PublicProductReviewsResponseDto,
+  PublicReviewDto,
+} from '@maevelle/contracts';
+import { ProductRatingSummary } from './reviews/product-rating-summary';
+import { ReviewFilters } from './reviews/review-filters';
+import { ReviewCard } from './reviews/review-card';
+import { ReviewMediaLightbox } from './reviews/review-media-lightbox';
+import { ReviewEligibilityCta } from './reviews/review-eligibility-cta';
 
-import type { ApiEnvelope } from '@maevelle/contracts';
-
-type PublicReview = {
-  readonly id: string;
-  readonly rating: number;
-  readonly title: string | null;
-  readonly body: string | null;
-  readonly public_display_name: string;
-  readonly submitted_at: string;
-  readonly verified_purchase?: boolean;
-  readonly purchased_variant_label?: string | null;
-  readonly media_asset_ids: readonly string[];
-  readonly media?: readonly {
-    readonly assetId: string;
-    readonly mediaType: 'IMAGE' | 'VIDEO';
-    readonly url: string;
-    readonly thumbnailUrl?: string;
-  }[];
-  readonly merchant_response: string | null;
-};
-
-type Summary = {
-  readonly rating_count: number;
-  readonly average_rating: string | null;
-  readonly rating_1_count: number;
-  readonly rating_2_count: number;
-  readonly rating_3_count: number;
-  readonly rating_4_count: number;
-  readonly rating_5_count: number;
-  readonly verified_review_count?: number;
-};
+export interface ProductReviewsProps {
+  readonly productId: string;
+  readonly organizationId: string;
+  readonly initialReviews?: readonly PublicReviewDto[] | undefined;
+  readonly initialSummary?: ProductRatingSummaryDto | null | undefined;
+}
 
 export function ProductReviews({
   productId,
   organizationId,
-}: {
-  productId: string;
-  organizationId: string;
-}) {
-  const [reviews, setReviews] = useState<readonly PublicReview[]>([]);
-  const [summary, setSummary] = useState<Summary>();
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  initialReviews,
+  initialSummary,
+}: ProductReviewsProps) {
+  const [reviews, setReviews] = useState<readonly PublicReviewDto[]>(initialReviews ?? []);
+  const [summary, setSummary] = useState<ProductRatingSummaryDto | null | undefined>(initialSummary);
+  const [selectedRating, setSelectedRating] = useState<number | null>(null);
+  const [withMedia, setWithMedia] = useState(false);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [sort, setSort] = useState<'NEWEST' | 'RATING_DESC' | 'RATING_ASC' | 'WITH_PHOTOS'>('NEWEST');
 
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(initialReviews?.length ?? 0);
+  const [loading, setLoading] = useState(!initialReviews);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Lightbox state
+  const [lightbox, setLightbox] = useState<{
+    readonly index: number;
+    readonly review: PublicReviewDto;
+  } | null>(null);
+
+  const isFirstMount = useRef(true);
+
+  const fetchReviews = useCallback(
+    async (
+      targetPage: number,
+      append: boolean = false,
+      ratingFilter: number | null = selectedRating,
+      mediaFilter: boolean = withMedia,
+      verifiedFilter: boolean = verifiedOnly,
+      sortOption: 'NEWEST' | 'RATING_DESC' | 'RATING_ASC' | 'WITH_PHOTOS' = sort,
+    ) => {
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      try {
+        const query = new URLSearchParams({
+          organizationId,
+          page: String(targetPage),
+          pageSize: '10',
+          sort: sortOption,
+        });
+
+        if (ratingFilter) query.set('rating', String(ratingFilter));
+        if (mediaFilter) query.set('withMedia', 'true');
+        if (verifiedFilter) query.set('verifiedOnly', 'true');
+
+        const response = await fetch(
+          `/api/products/${encodeURIComponent(productId)}/reviews?${query}`,
+          { credentials: 'include' },
+        );
+
+        if (!response.ok) {
+          throw new Error('Reviews could not be loaded at this time.');
+        }
+
+        const result = (await response.json()) as ApiEnvelope<PublicProductReviewsResponseDto>;
+        const data = result.data;
+
+        if (append) {
+          setReviews((prev) => [...prev, ...data.reviews]);
+        } else {
+          setReviews(data.reviews);
+        }
+
+        if (data.summary) {
+          setSummary(data.summary);
+        }
+
+        setPage(data.pagination.page);
+        setTotalPages(data.pagination.totalPages);
+        setTotalItems(data.pagination.totalItems);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to load reviews.');
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [organizationId, productId, selectedRating, withMedia, verifiedOnly, sort],
+  );
+
+  // Effect to re-fetch when filters or sort change
   useEffect(() => {
-    const query = new URLSearchParams({ organizationId });
-    void fetch(`/api/products/${encodeURIComponent(productId)}/reviews?${query}`, {
-      credentials: 'include',
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Review data unavailable.');
-        const result = (await response.json()) as ApiEnvelope<{
-          reviews: readonly PublicReview[];
-          summary: Summary | undefined;
-        }>;
-        setReviews(result.data.reviews);
-        setSummary(result.data.summary);
-        setState('ready');
-      })
-      .catch(() => setState('error'));
-  }, [organizationId, productId]);
+    // If we have initialReviews and this is the initial mount with default filters, skip re-fetching
+    if (
+      isFirstMount.current &&
+      initialReviews &&
+      selectedRating === null &&
+      !withMedia &&
+      !verifiedOnly &&
+      sort === 'NEWEST'
+    ) {
+      isFirstMount.current = false;
+      return;
+    }
+    isFirstMount.current = false;
+
+    void fetchReviews(1, false, selectedRating, withMedia, verifiedOnly, sort);
+  }, [selectedRating, withMedia, verifiedOnly, sort, fetchReviews, initialReviews]);
+
+  function handleResetFilters() {
+    setSelectedRating(null);
+    setWithMedia(false);
+    setVerifiedOnly(false);
+    setSort('NEWEST');
+  }
+
+  function handleOpenMedia(index: number, review: PublicReviewDto) {
+    setLightbox({ index, review });
+  }
+
+  const hasFilterActive = Boolean(selectedRating || withMedia || verifiedOnly);
 
   return (
-    <section className="reviews-section" aria-labelledby="reviews-heading">
-      <div className="review-section-heading">
-        <div>
-          <p className="eyebrow">Real customer experience</p>
-          <h2 id="reviews-heading">Verified reviews</h2>
+    <section className="product-reviews-section" aria-labelledby="product-reviews-heading">
+      <div className="reviews-section-header">
+        <div className="section-title-wrap">
+          <p className="section-eyebrow">Real Customer Feedback</p>
+          <h2 id="product-reviews-heading" className="section-heading">
+            Verified Reviews & Ratings
+          </h2>
         </div>
-        {state === 'ready' && summary?.rating_count ? (
-          <div className="review-score">
-            <strong>{Number(summary.average_rating).toFixed(1)}</strong>
-            <span aria-label={`${Number(summary.average_rating).toFixed(1)} out of 5 stars`}>
-              ★★★★★
-            </span>
-            <small>
-              {summary.rating_count} review{summary.rating_count === 1 ? '' : 's'}
-              {summary.verified_review_count
-                ? ` · ${summary.verified_review_count} verified`
-                : ''}
-            </small>
-          </div>
-        ) : null}
       </div>
-      {state === 'loading' ? <p>Loading reviews…</p> : null}
-      {state === 'error' ? <p>Reviews are unavailable right now.</p> : null}
-      {state === 'ready' && reviews.length === 0 ? (
-        <div className="catalog-message">
-          <h3>No reviews yet</h3>
-          <p>Verified customers can review this product through their secure order link.</p>
+
+      {/* Trust & Eligibility Policy CTA */}
+      <ReviewEligibilityCta productId={productId} organizationId={organizationId} />
+
+      {/* Rating Summary & Star Distribution */}
+      <ProductRatingSummary
+        summary={summary}
+        selectedRating={selectedRating}
+        onSelectRating={(r) => setSelectedRating(r)}
+      />
+
+      {/* Filter and Sorting Bar */}
+      {summary && summary.ratingCount > 0 ? (
+        <ReviewFilters
+          selectedRating={selectedRating}
+          onSelectRating={(r) => setSelectedRating(r)}
+          withMedia={withMedia}
+          onToggleWithMedia={(m) => setWithMedia(m)}
+          verifiedOnly={verifiedOnly}
+          onToggleVerifiedOnly={(v) => setVerifiedOnly(v)}
+          sort={sort}
+          onSelectSort={(s) => setSort(s)}
+          totalMatching={totalItems}
+          onResetFilters={handleResetFilters}
+        />
+      ) : null}
+
+      {/* Error Notice */}
+      {error ? (
+        <div className="reviews-error-notice" role="alert">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="reviews-retry-btn"
+            onClick={() => void fetchReviews(page, false)}
+          >
+            Try again
+          </button>
         </div>
       ) : null}
-      <div className="review-list">
-        {reviews.map((review) => (
-          <article className="review-card" key={review.id}>
-            <div className="review-card-header">
-              <p aria-label={`${review.rating} out of 5 stars`}>
-                {'★'.repeat(review.rating)}
-                {'☆'.repeat(5 - review.rating)}
-              </p>
-              {review.verified_purchase ? (
-                <span className="badge badge-verified" title="Verified Purchase">
-                  ✓ Verified Purchase
-                </span>
-              ) : null}
+
+      {/* Loading Skeletons */}
+      {loading && !loadingMore ? (
+        <div className="reviews-skeleton-list" aria-label="Loading reviews">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="review-card-skeleton">
+              <div className="skeleton-line skeleton-stars" />
+              <div className="skeleton-line skeleton-title" />
+              <div className="skeleton-line skeleton-body" />
+              <div className="skeleton-line skeleton-meta" />
             </div>
-            <h3>{review.title ?? 'Customer review'}</h3>
-            {review.purchased_variant_label ? (
-              <p className="review-variant-meta">
-                <small>Purchased: {review.purchased_variant_label}</small>
-              </p>
-            ) : null}
-            {review.body ? <p>{review.body}</p> : null}
-            <p className="review-author-meta">
-              {review.public_display_name} · {new Date(review.submitted_at).toLocaleDateString()}
-            </p>
-            {review.media && review.media.length > 0 ? (
-              <div className="review-media-gallery">
-                {review.media.map((item) =>
-                  item.mediaType === 'VIDEO' ? (
-                    <video
-                      key={item.assetId}
-                      src={item.url}
-                      poster={item.thumbnailUrl}
-                      controls
-                      preload="metadata"
-                      width="320"
-                      height="320"
-                      className="review-video-item"
-                    />
-                  ) : (
-                    <img
-                      key={item.assetId}
-                      src={item.thumbnailUrl ?? item.url}
-                      alt="Customer review media"
-                      width="320"
-                      height="320"
-                      loading="lazy"
-                    />
-                  ),
-                )}
-              </div>
-            ) : (
-              review.media_asset_ids.map((assetId) => (
-                <img
-                  key={assetId}
-                  src={`/api/media/public/${assetId}?rendition=card`}
-                  alt="Customer review media"
-                  width="320"
-                  height="320"
-                  loading="lazy"
-                />
-              ))
-            )}
-            {review.merchant_response ? (
-              <aside className="merchant-response">
-                <strong>Maevelle response</strong>
-                <p>{review.merchant_response}</p>
-              </aside>
-            ) : null}
-          </article>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Reviews List */}
+      {!loading && reviews.length > 0 ? (
+        <div className="reviews-cards-stream">
+          {reviews.map((review) => (
+            <ReviewCard
+              key={review.id}
+              review={review}
+              onOpenMedia={handleOpenMedia}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {/* Empty State when no reviews exist overall */}
+      {!loading && reviews.length === 0 && !hasFilterActive ? (
+        <div className="reviews-zero-state">
+          <div className="zero-state-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+          <h3 className="zero-state-title">No reviews yet</h3>
+          <p className="zero-state-description">
+            Be the first verified buyer to share your thoughts on this piece. Once your order arrives, use your secure delivery link to review.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Empty State when filters yield 0 results */}
+      {!loading && reviews.length === 0 && hasFilterActive ? (
+        <div className="reviews-filtered-empty">
+          <p className="filtered-empty-message">
+            No reviews match the selected filter criteria.
+          </p>
+          <button
+            type="button"
+            className="clear-filters-action-btn"
+            onClick={handleResetFilters}
+          >
+            Clear all filters
+          </button>
+        </div>
+      ) : null}
+
+      {/* Load More Pagination */}
+      {!loading && page < totalPages ? (
+        <div className="reviews-pagination-footer">
+          <button
+            type="button"
+            disabled={loadingMore}
+            className="load-more-reviews-btn"
+            onClick={() => void fetchReviews(page + 1, true)}
+          >
+            {loadingMore ? 'Loading more reviews…' : `Load more reviews (${reviews.length} of ${totalItems})`}
+          </button>
+        </div>
+      ) : null}
+
+      {/* Media Lightbox */}
+      <ReviewMediaLightbox
+        isOpen={Boolean(lightbox)}
+        onClose={() => setLightbox(null)}
+        activeIndex={lightbox?.index ?? 0}
+        onIndexChange={(newIdx) => {
+          if (lightbox) {
+            setLightbox({ index: newIdx, review: lightbox.review });
+          }
+        }}
+        review={lightbox?.review ?? null}
+      />
     </section>
   );
 }

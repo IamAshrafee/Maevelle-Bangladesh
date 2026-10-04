@@ -4,8 +4,15 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { ApiEnvelope, PublicSizeGuideDto, StorefrontProductDto } from '@maevelle/contracts';
+import type {
+  ApiEnvelope,
+  ProductRatingSummaryDto,
+  PublicReviewDto,
+  PublicSizeGuideDto,
+  StorefrontProductDto,
+} from '@maevelle/contracts';
 import { ProductReviews } from '@/components/product-reviews';
+import { StarRating } from '@/components/reviews/star-rating';
 import { SizeGuideDialog } from '@/components/size-guide-dialog';
 import { notifyCartChanged, useStorefrontContext } from '@/components/storefront-context';
 
@@ -23,71 +30,100 @@ function money(amount: string, currency = 'BDT') {
   }).format(Number(amount));
 }
 
-export function ProductPageClient() {
+export interface ProductPageClientProps {
+  readonly initialProduct?: StorefrontProductDto | undefined;
+  readonly initialReviews?: readonly PublicReviewDto[] | undefined;
+  readonly initialSummary?: ProductRatingSummaryDto | undefined;
+}
+
+export function ProductPageClient({
+  initialProduct,
+  initialReviews,
+  initialSummary,
+}: ProductPageClientProps = {}) {
   const parameters = useParams<{ handle: string }>();
   const { context, loading: contextLoading } = useStorefrontContext();
-  const [product, setProduct] = useState<StorefrontProductDto>();
+  const [product, setProduct] = useState<StorefrontProductDto | undefined>(initialProduct);
   const [guide, setGuide] = useState<PublicSizeGuideDto | null>();
-  const [selected, setSelected] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Record<string, string>>(() => {
+    if (!initialProduct) return {};
+    const visualAxis = initialProduct.options.find((opt) => opt.isVisual);
+    if (!visualAxis) return {};
+    const primaryVal =
+      visualAxis.values.find((val) => val.isPrimary) ||
+      visualAxis.values.find((val) =>
+        initialProduct.variants.some(
+          (v) => v.optionValueIds.includes(val.id) && v.available,
+        ),
+      ) ||
+      visualAxis.values[0];
+    return primaryVal ? { [visualAxis.id]: primaryVal.id } : {};
+  });
   const [activeMedia, setActiveMedia] = useState(0);
   const [cart, setCart] = useState<CartView>();
   const [cartMessage, setCartMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>(
+    initialProduct ? 'ready' : 'loading',
+  );
   const sizeDialog = useRef<HTMLDialogElement>(null);
   const galleryDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     if (!context || !parameters.handle) return;
+    if (initialProduct && initialProduct.handle === parameters.handle && guide !== undefined) return;
     const controller = new AbortController();
     const query = `organizationId=${encodeURIComponent(context.organizationId)}`;
-    setState('loading');
+    if (!initialProduct) setState('loading');
     void Promise.all([
-      fetch(`/api/storefront/v1/products/${encodeURIComponent(parameters.handle)}?${query}`, {
-        signal: controller.signal,
-      }),
+      !initialProduct
+        ? fetch(`/api/storefront/v1/products/${encodeURIComponent(parameters.handle)}?${query}`, {
+            signal: controller.signal,
+          })
+        : Promise.resolve(null),
       fetch(
         `/api/storefront/v1/products/${encodeURIComponent(parameters.handle)}/size-guide?${query}`,
         { signal: controller.signal },
       ),
     ])
       .then(async ([catalogResponse, guideResponse]) => {
-        if (catalogResponse.status === 404) return setState('missing');
-        if (!catalogResponse.ok) throw new Error('catalog');
-        const catalog = (await catalogResponse.json()) as ApiEnvelope<StorefrontProductDto>;
-        setProduct(catalog.data);
+        if (catalogResponse) {
+          if (catalogResponse.status === 404) return setState('missing');
+          if (!catalogResponse.ok) throw new Error('catalog');
+          const catalog = (await catalogResponse.json()) as ApiEnvelope<StorefrontProductDto>;
+          setProduct(catalog.data);
+          const visualAxis = catalog.data.options.find((opt) => opt.isVisual);
+          const initial: Record<string, string> = {};
+
+          if (visualAxis) {
+            const primaryVal =
+              visualAxis.values.find((val) => val.isPrimary) ||
+              visualAxis.values.find((val) =>
+                catalog.data.variants.some(
+                  (v) => v.optionValueIds.includes(val.id) && v.available,
+                ),
+              ) ||
+              visualAxis.values[0];
+
+            if (primaryVal) {
+              initial[visualAxis.id] = primaryVal.id;
+            }
+          }
+          setSelected(initial);
+        }
         setGuide(
           guideResponse.ok
             ? ((await guideResponse.json()) as ApiEnvelope<PublicSizeGuideDto | null>).data
             : null,
         );
-        const visualAxis = catalog.data.options.find((opt) => opt.isVisual);
-        const initial: Record<string, string> = {};
-
-        if (visualAxis) {
-          // Pre-select the primary cover value, or the first available value on the visual axis
-          const primaryVal =
-            visualAxis.values.find((val) => val.isPrimary) ||
-            visualAxis.values.find((val) =>
-              catalog.data.variants.some(
-                (v) => v.optionValueIds.includes(val.id) && v.available,
-              ),
-            ) ||
-            visualAxis.values[0];
-
-          if (primaryVal) {
-            initial[visualAxis.id] = primaryVal.id;
-          }
-        }
-        // Non-visual axes (such as Size) remain unselected initially
-        setSelected(initial);
         setState('ready');
       })
       .catch(() => {
-        if (!controller.signal.aborted) setState('error');
+        if (!controller.signal.aborted && !initialProduct) setState('error');
       });
     return () => controller.abort();
-  }, [context, parameters.handle]);
+  }, [context, parameters.handle, initialProduct, guide]);
+
 
   const selectedVariant = useMemo(() => {
     if (!product) return undefined;
@@ -368,9 +404,40 @@ export function ProductPageClient() {
           <section className="pdp-information">
             <p className="eyebrow">Maevelle collection</p>
             <h1>{product.title}</h1>
-            <p className="pdp-rating-link">
-              <a href="#reviews">Verified customer reviews</a>
-            </p>
+            <div className="pdp-rating-link">
+              {product.ratingSummary && product.ratingSummary.ratingCount > 0 ? (
+                <a
+                  href="#reviews"
+                  className="pdp-rating-pill"
+                  aria-label={`Rated ${Number(product.ratingSummary.formattedAverage ?? product.ratingSummary.averageRating ?? 0).toFixed(1)} out of 5 stars from ${product.ratingSummary.ratingCount} reviews. Jump to reviews section.`}
+                >
+                  <StarRating
+                    value={Number(
+                      product.ratingSummary.formattedAverage ??
+                        product.ratingSummary.averageRating ??
+                        0,
+                    )}
+                    size="xs"
+                  />
+                  <span className="pdp-rating-score">
+                    {Number(
+                      product.ratingSummary.formattedAverage ??
+                        product.ratingSummary.averageRating ??
+                        0,
+                    ).toFixed(1)}
+                  </span>
+                  <span className="pdp-rating-count">
+                    ({product.ratingSummary.ratingCount})
+                  </span>
+                </a>
+              ) : (
+                <a href="#reviews" className="pdp-rating-pill is-empty">
+                  <StarRating value={0} size="xs" />
+                  <span className="pdp-rating-count">Be the first to review</span>
+                </a>
+              )}
+            </div>
+
             <div className="pdp-price" aria-live="polite">
               {priceDisplay?.type === 'exact' ? (
                 <>
@@ -546,8 +613,14 @@ export function ProductPageClient() {
           </section>
         </div>
         <div id="reviews">
-          <ProductReviews productId={product.id} organizationId={context.organizationId} />
+          <ProductReviews
+            productId={product.id}
+            organizationId={context.organizationId}
+            initialReviews={initialReviews}
+            initialSummary={initialSummary}
+          />
         </div>
+
       </article>
       <SizeGuideDialog
         guide={guide}

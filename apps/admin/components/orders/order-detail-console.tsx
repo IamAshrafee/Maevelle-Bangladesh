@@ -29,6 +29,7 @@ import { OrderHeaderActions } from './order-header-actions';
 import { OrderItemsCard } from './order-items-card';
 import { OrderPaymentCard } from './order-payment-card';
 import { OrderReturnsRefundsCard } from './order-returns-refunds-card';
+import { OrderReviewStatusCard } from './order-review-status-card';
 import { OrderRiskCard } from './order-risk-card';
 import { OrderSmsStatus } from './order-sms-status';
 import { OrderSummaryStrip } from './order-summary-strip';
@@ -210,6 +211,9 @@ export function OrderDetailConsole({ orderId }: { readonly orderId: string }) {
 
           {/* Customer Returns & Refunds */}
           <OrderReturnsRefundsCard order={order} />
+
+          {/* Customer Reviews State */}
+          <OrderReviewStatusCard orderId={order.id} />
 
           {/* Unified Business Timeline */}
           <OrderTimelineCard timeline={order.timeline} />

@@ -4,6 +4,8 @@ import { cn } from '../lib/utils';
 const success = new Set([
   'ACTIVE',
   'PUBLISHED',
+  'APPROVED',
+  'VISIBLE',
   'PAID',
   'VERIFIED',
   'DELIVERED',

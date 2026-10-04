@@ -2,7 +2,12 @@ import type { Metadata } from 'next';
 
 import { ProductPageClient } from '@/components/product-page-client';
 import { faqJsonLd, productJsonLd, safeJsonLd } from '@/src/seo';
-import { loadPublicProduct, storefrontPublicBaseUrl } from '@/src/server-catalog';
+import {
+  loadPublicProduct,
+  loadPublicProductReviews,
+  loadPublicStorefrontContext,
+  storefrontPublicBaseUrl,
+} from '@/src/server-catalog';
 
 type ProductRoute = { readonly params: Promise<{ handle: string }> };
 
@@ -40,8 +45,26 @@ export async function generateMetadata({ params }: ProductRoute): Promise<Metada
 
 export default async function ProductPage({ params }: ProductRoute) {
   const { handle } = await params;
-  const product = await loadPublicProduct(handle);
+  const [context, product] = await Promise.all([
+    loadPublicStorefrontContext(),
+    loadPublicProduct(handle),
+  ]);
+
+  const reviewsData =
+    product && context
+      ? await loadPublicProductReviews(product.id, context.organizationId, { pageSize: 5 })
+      : undefined;
+
   const canonical = `${storefrontPublicBaseUrl}/products/${encodeURIComponent(handle)}`;
+
+  const publishedReviewsForSeo = reviewsData?.reviews.map((r) => ({
+    authorName: r.publicDisplayName,
+    rating: r.rating,
+    title: r.title,
+    body: r.body,
+    datePublished: r.submittedAt,
+  }));
+
   const breadcrumb = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -58,13 +81,18 @@ export default async function ProductPage({ params }: ProductRoute) {
         : []),
     ],
   };
+
   return (
     <>
       {product ? (
         <>
           <script
             type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: safeJsonLd(productJsonLd(product, canonical)) }}
+            dangerouslySetInnerHTML={{
+              __html: safeJsonLd(
+                productJsonLd(product, canonical, publishedReviewsForSeo),
+              ),
+            }}
           />
           {product.faqs.length > 0 ? (
             <script
@@ -78,7 +106,12 @@ export default async function ProductPage({ params }: ProductRoute) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumb) }}
       />
-      <ProductPageClient />
+      <ProductPageClient
+        initialProduct={product}
+        initialReviews={reviewsData?.reviews}
+        initialSummary={reviewsData?.summary ?? product?.ratingSummary ?? undefined}
+      />
     </>
   );
 }
+

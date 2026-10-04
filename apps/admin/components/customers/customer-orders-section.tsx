@@ -56,6 +56,14 @@ interface CustomerReviewRow {
   readonly submittedAt: string;
 }
 
+interface CustomerReviewMetrics {
+  readonly totalSubmitted: number;
+  readonly totalApproved: number;
+  readonly totalPending: number;
+  readonly totalRejected: number;
+  readonly averageRatingGiven: number | null;
+}
+
 interface CustomerOrdersSectionProps {
   readonly customerId: string;
   readonly isReadOnly?: boolean;
@@ -67,6 +75,7 @@ export function CustomerOrdersSection({ customerId, isReadOnly = false }: Custom
   const [returns, setReturns] = useState<readonly CustomerReturnRow[]>([]);
   const [refunds, setRefunds] = useState<readonly CustomerRefundRow[]>([]);
   const [reviews, setReviews] = useState<readonly CustomerReviewRow[]>([]);
+  const [reviewMetrics, setReviewMetrics] = useState<CustomerReviewMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function loadData() {
@@ -76,12 +85,17 @@ export function CustomerOrdersSection({ customerId, isReadOnly = false }: Custom
         fetchApiData<readonly CustomerOrderRow[]>(`/admin/customers/${customerId}/orders?limit=25`),
         fetchApiData<readonly CustomerReturnRow[]>(`/admin/customers/${customerId}/returns?limit=25`),
         fetchApiData<readonly CustomerRefundRow[]>(`/admin/customers/${customerId}/refunds?limit=25`),
-        fetchApiData<{ items: readonly CustomerReviewRow[] }>(`/admin/customers/${customerId}/reviews?pageSize=25`).catch(() => ({ items: [] })),
+        fetchApiData<{ items?: readonly CustomerReviewRow[]; reviews?: readonly CustomerReviewRow[]; metrics?: CustomerReviewMetrics }>(
+          `/admin/customers/${customerId}/reviews?pageSize=25`,
+        ).catch(() => ({ items: [], reviews: [], metrics: undefined })),
       ]);
       setOrders(ordersRes);
       setReturns(returnsRes);
       setRefunds(refundsRes);
-      setReviews(reviewsRes?.items ?? []);
+      setReviews(reviewsRes?.items ?? reviewsRes?.reviews ?? []);
+      if (reviewsRes?.metrics) {
+        setReviewMetrics(reviewsRes.metrics);
+      }
     } catch {
       // Handled silently
     } finally {
@@ -153,7 +167,7 @@ export function CustomerOrdersSection({ customerId, isReadOnly = false }: Custom
               }`}
             >
               <Star className="size-3.5" aria-hidden="true" />
-              Reviews ({reviews.length})
+              Reviews ({reviewMetrics?.totalSubmitted ?? reviews.length})
             </button>
           </div>
         </div>
@@ -297,65 +311,105 @@ export function CustomerOrdersSection({ customerId, isReadOnly = false }: Custom
         )}
 
         {/* Reviews List */}
-        {activeTab === 'reviews' &&
-          (reviews.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
-              <Star className="size-8 stroke-1 text-muted-foreground/50 mb-2" />
-              <p className="text-sm font-medium">No reviews submitted by this customer</p>
-            </div>
-          ) : (
-            reviews.map((rev) => (
-              <div
-                key={rev.reviewId}
-                className="flex min-h-14 items-center justify-between gap-4 px-6 py-3.5"
-              >
+        {activeTab === 'reviews' && (
+          <div className="space-y-3">
+            {reviewMetrics && reviewMetrics.totalSubmitted > 0 ? (
+              <div className="mx-6 mt-4 p-3 rounded-lg border border-border/70 bg-muted/20 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-foreground">
-                      {rev.productTitle}
-                    </span>
-                    <span className="text-amber-500 text-xs">
-                      {'★'.repeat(rev.rating)}
-                      {'☆'.repeat(5 - rev.rating)}
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] uppercase ${
-                        rev.moderationStatus === 'APPROVED'
-                          ? 'border-emerald-300 text-emerald-700'
-                          : rev.moderationStatus === 'REJECTED'
-                            ? 'border-rose-300 text-rose-700'
-                            : 'border-amber-300 text-amber-700'
-                      }`}
-                    >
-                      {rev.moderationStatus}
-                    </Badge>
-                    {rev.verifiedPurchase ? (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Verified
-                      </Badge>
-                    ) : null}
-                  </div>
-                  {rev.purchasedVariantLabel ? (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Variant: {rev.purchasedVariantLabel}
-                    </p>
-                  ) : null}
-                  {rev.title || rev.body ? (
-                    <p className="text-xs text-foreground/80 mt-1 line-clamp-1">
-                      {rev.title ? <strong>{rev.title}: </strong> : null}
-                      {rev.body}
-                    </p>
-                  ) : null}
+                  <span className="text-muted-foreground block text-[11px]">Submitted</span>
+                  <strong className="text-foreground font-mono tabular-nums">{reviewMetrics.totalSubmitted}</strong>
                 </div>
-                <div className="text-right text-xs text-muted-foreground whitespace-nowrap">
-                  {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
-                    new Date(rev.submittedAt),
-                  )}
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Approved</span>
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">{reviewMetrics.totalApproved}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Awaiting Moderation</span>
+                  <strong className="text-amber-600 dark:text-amber-400 font-mono tabular-nums">{reviewMetrics.totalPending}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Avg Rating Given</span>
+                  <strong className="text-foreground font-mono tabular-nums">
+                    {reviewMetrics.averageRatingGiven ? `★ ${reviewMetrics.averageRatingGiven}` : '—'}
+                  </strong>
                 </div>
               </div>
-            ))
-          ))}
+            ) : null}
+
+            {reviews.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+                <Star className="size-8 stroke-1 text-muted-foreground/50 mb-2" />
+                <p className="text-sm font-medium">No reviews submitted by this customer</p>
+              </div>
+            ) : (
+              reviews.map((rev) => (
+                <div
+                  key={rev.reviewId}
+                  className="flex min-h-14 items-center justify-between gap-4 px-6 py-3.5 hover:bg-muted/20 transition-colors"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link
+                        href={`/products/${rev.productId}`}
+                        className="font-semibold text-sm text-foreground hover:text-primary hover:underline"
+                      >
+                        {rev.productTitle}
+                      </Link>
+                      <span className="text-amber-500 font-mono text-xs">
+                        {'★'.repeat(rev.rating)}
+                        {'☆'.repeat(5 - rev.rating)}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] uppercase ${
+                          rev.moderationStatus === 'APPROVED'
+                            ? 'border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400'
+                            : rev.moderationStatus === 'REJECTED'
+                              ? 'border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-400'
+                              : 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400'
+                        }`}
+                      >
+                        {rev.moderationStatus}
+                      </Badge>
+                      {rev.verifiedPurchase ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Verified
+                        </Badge>
+                      ) : null}
+                    </div>
+                    {rev.purchasedVariantLabel ? (
+                      <p className="text-xs text-muted-foreground">
+                        Variant: <strong className="text-foreground/80">{rev.purchasedVariantLabel}</strong>
+                      </p>
+                    ) : null}
+                    {rev.title || rev.body ? (
+                      <p className="text-xs text-foreground/85 line-clamp-1">
+                        {rev.title ? <strong>{rev.title}: </strong> : null}
+                        {rev.body}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <span className="text-right text-xs text-muted-foreground whitespace-nowrap font-mono tabular-nums">
+                      {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
+                        new Date(rev.submittedAt),
+                      )}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-primary hover:text-primary gap-1 px-2"
+                      render={<Link href={`/reviews?id=${encodeURIComponent(rev.reviewId)}`} />}
+                      nativeButton={false}
+                    >
+                      Inspect <ExternalLink className="size-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </section>
   );
