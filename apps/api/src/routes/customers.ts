@@ -29,6 +29,17 @@ import {
   removeTagFromCustomer,
   mergeCustomers,
   anonymizeCustomer,
+  applyCustomerRestriction,
+  liftCustomerRestriction,
+  listCustomerRestrictions,
+  getCustomerMergePreview,
+  listCustomerCommunications,
+  getCustomerTimeline,
+  getCustomerAccount,
+  linkCustomerAccount,
+  unlinkCustomerAccount,
+  verifyCustomerPhone,
+  verifyCustomerEmail,
 } from '@maevelle/database/customers';
 import { searchGeography } from '@maevelle/database/geography';
 import { getCustomerDeliveryHistory } from '@maevelle/database/delivery-intelligence';
@@ -735,4 +746,340 @@ export function registerCustomerRoutes(
       return sendError(reply, error);
     }
   });
+
+  // ---- Restrictions --------------------------------------------------------
+  app.get('/admin/customers/:customerId/restrictions', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string };
+    return {
+      data: await listCustomerRestrictions(database.db, active.organizationId, params.customerId),
+    };
+  });
+
+  app.post(
+    '/admin/customers/:customerId/restrictions',
+    {
+      schema: {
+        body: Type.Object({
+          restrictionType: Type.Union([
+            Type.Literal('ORDERING_BLOCKED'),
+            Type.Literal('COD_RESTRICTED'),
+            Type.Literal('ORDER_REVIEW_REQUIRED'),
+          ]),
+          reason: Type.String({ minLength: 1 }),
+          notes: Type.Optional(Type.String()),
+          expiresAt: Type.Optional(Type.String({ format: 'date-time' })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.restrict');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string };
+      const body = request.body as {
+        restrictionType: 'ORDERING_BLOCKED' | 'COD_RESTRICTED' | 'ORDER_REVIEW_REQUIRED';
+        reason: string;
+        notes?: string;
+        expiresAt?: string;
+      };
+      try {
+        return reply.code(201).send({
+          data: await applyCustomerRestriction(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            customerId: params.customerId,
+            restrictionType: body.restrictionType,
+            reason: body.reason,
+            ...(body.notes ? { notes: body.notes } : {}),
+            ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}),
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/customers/:customerId/restrictions/:restrictionId/lift',
+    {
+      schema: {
+        body: Type.Object({
+          liftReason: Type.String({ minLength: 1 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.restrict');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string; restrictionId: string };
+      const body = request.body as { liftReason: string };
+      try {
+        return reply.code(200).send({
+          data: await liftCustomerRestriction(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            customerId: params.customerId,
+            restrictionId: params.restrictionId,
+            liftReason: body.liftReason,
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  // ---- Merge Preview -------------------------------------------------------
+  app.get(
+    '/admin/customers/:customerId/merge-preview',
+    {
+      schema: {
+        querystring: Type.Object({
+          targetCustomerId: Type.String({ minLength: 1 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.merge');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string };
+      const query = request.query as { targetCustomerId: string };
+      try {
+        return {
+          data: await getCustomerMergePreview(
+            database.db,
+            active.organizationId,
+            params.customerId,
+            query.targetCustomerId,
+          ),
+        };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  // ---- Communications ------------------------------------------------------
+  app.get(
+    '/admin/customers/:customerId/communications',
+    {
+      schema: {
+        querystring: Type.Object({
+          channel: Type.Optional(Type.Union([Type.Literal('EMAIL'), Type.Literal('SMS')])),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string };
+      const query = request.query as {
+        channel?: 'EMAIL' | 'SMS';
+        page?: number;
+        pageSize?: number;
+      };
+      const pageSize = query.pageSize ?? 25;
+      const offset = ((query.page ?? 1) - 1) * pageSize;
+      return {
+        data: await listCustomerCommunications(
+          database.db,
+          active.organizationId,
+          params.customerId,
+          {
+            ...(query.channel ? { channel: query.channel } : {}),
+            limit: pageSize,
+            offset,
+          },
+        ),
+      };
+    },
+  );
+
+  // ---- Timeline ------------------------------------------------------------
+  app.get(
+    '/admin/customers/:customerId/timeline',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string };
+      const query = request.query as {
+        page?: number;
+        pageSize?: number;
+      };
+      const pageSize = query.pageSize ?? 30;
+      const offset = ((query.page ?? 1) - 1) * pageSize;
+      return {
+        data: await getCustomerTimeline(
+          database.db,
+          active.organizationId,
+          params.customerId,
+          {
+            limit: pageSize,
+            offset,
+          },
+        ),
+      };
+    },
+  );
+
+  // ---- Accounts ------------------------------------------------------------
+  app.get('/admin/customers/:customerId/account', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'customers.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    const params = request.params as { customerId: string };
+    return {
+      data: await getCustomerAccount(database.db, active.organizationId, params.customerId),
+    };
+  });
+
+  app.post(
+    '/admin/customers/:customerId/account/link',
+    {
+      schema: {
+        body: Type.Object({
+          userId: Type.String({ minLength: 1 }),
+          linkType: Type.Optional(
+            Type.Union([
+              Type.Literal('VERIFIED_PHONE'),
+              Type.Literal('VERIFIED_EMAIL'),
+              Type.Literal('MANUAL_CLAIM'),
+              Type.Literal('INVITATION'),
+              Type.Literal('GUEST_CONVERSION'),
+            ]),
+          ),
+          verifiedAt: Type.Optional(Type.String({ format: 'date-time' })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string };
+      const body = request.body as {
+        userId: string;
+        linkType?: 'VERIFIED_PHONE' | 'VERIFIED_EMAIL' | 'MANUAL_CLAIM' | 'INVITATION' | 'GUEST_CONVERSION';
+        verifiedAt?: string;
+      };
+      try {
+        return reply.code(200).send({
+          data: await linkCustomerAccount(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            customerId: params.customerId,
+            userId: body.userId,
+            linkType: body.linkType ?? 'MANUAL_CLAIM',
+            ...(body.verifiedAt ? { verifiedAt: body.verifiedAt } : {}),
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/customers/:customerId/account/unlink',
+    {
+      schema: {
+        body: Type.Object({
+          reason: Type.String({ minLength: 1 }),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string };
+      const body = request.body as { reason: string };
+      try {
+        return reply.code(200).send({
+          data: await unlinkCustomerAccount(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            customerId: params.customerId,
+            reason: body.reason,
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  // ---- Contact Verification ------------------------------------------------
+  app.post(
+    '/admin/customers/:customerId/phones/:phoneId/verify',
+    {
+      schema: {
+        body: Type.Optional(
+          Type.Object({
+            verificationSource: Type.Optional(Type.String()),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string; phoneId: string };
+      const body = request.body as { verificationSource?: string } | undefined;
+      try {
+        return reply.code(200).send({
+          data: await verifyCustomerPhone(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            customerId: params.customerId,
+            phoneId: params.phoneId,
+            ...(body?.verificationSource ? { verificationSource: body.verificationSource } : {}),
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/customers/:customerId/emails/:emailId/verify',
+    {
+      schema: {
+        body: Type.Optional(
+          Type.Object({
+            verificationSource: Type.Optional(Type.String()),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const params = request.params as { customerId: string; emailId: string };
+      const body = request.body as { verificationSource?: string } | undefined;
+      try {
+        return reply.code(200).send({
+          data: await verifyCustomerEmail(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            customerId: params.customerId,
+            emailId: params.emailId,
+            ...(body?.verificationSource ? { verificationSource: body.verificationSource } : {}),
+          }),
+        });
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
 }

@@ -178,6 +178,7 @@ export async function createManualOrder(
 
     let customerId: string;
     let customerDisplayName: string;
+    let customerAddressId: string | undefined;
 
     if (input.customerId) {
       const customerRow = await sql<{ id: string; status: string; display_name: string }>`
@@ -193,6 +194,32 @@ export async function createManualOrder(
           'VALIDATION_FAILED',
           `Manual orders cannot be created for a customer with status ${customer.status}.`,
         );
+
+      const restrictions = await sql<{ restriction_type: string }>`
+        select restriction_type from customers.customer_restrictions
+        where organization_id = ${input.organizationId}
+          and (
+            customer_id = ${customer.id}
+            or customer_id in (
+              select alias_customer_id from customers.customer_aliases
+              where organization_id = ${input.organizationId} and canonical_customer_id = ${customer.id}
+            )
+          )
+          and status = 'ACTIVE' and (expires_at is null or expires_at > now())
+      `.execute(transaction);
+      const activeRestrictions = restrictions.rows.map((r) => r.restriction_type);
+      if (activeRestrictions.includes('ORDERING_BLOCKED')) {
+        throw new OrderDomainError(
+          'VALIDATION_FAILED',
+          'This customer is blocked from placing new orders.',
+        );
+      }
+      if (input.paymentMethod === 'COD' && activeRestrictions.includes('COD_RESTRICTED')) {
+        throw new OrderDomainError(
+          'VALIDATION_FAILED',
+          'Cash on delivery is restricted for this customer.',
+        );
+      }
       customerId = customer.id;
       customerDisplayName = customer.display_name;
     } else {
@@ -205,8 +232,27 @@ export async function createManualOrder(
           phone: input.customer!.phone.trim(),
           ...(input.customer!.email?.trim() ? { email: input.customer!.email.trim() } : {}),
           source: customerSourceByChannel[salesChannel],
+          address: {
+            recipientName: input.deliveryAddress.recipientName.trim(),
+            phone: input.deliveryAddress.phone.trim(),
+            addressLine1: input.deliveryAddress.addressLine1.trim(),
+            addressLine2: input.deliveryAddress.addressLine2?.trim(),
+            geographyNodeId: input.deliveryAddress.geographyNodeId,
+            area: input.deliveryAddress.area?.trim(),
+            city: input.deliveryAddress.city?.trim(),
+            district: input.deliveryAddress.district?.trim(),
+            postalCode: input.deliveryAddress.postalCode?.trim(),
+            countryCode: input.deliveryAddress.countryCode,
+          },
         });
+        if (input.paymentMethod === 'COD' && resolved.activeRestrictions.includes('COD_RESTRICTED')) {
+          throw new OrderDomainError(
+            'VALIDATION_FAILED',
+            'Cash on delivery is restricted for this customer.',
+          );
+        }
         customerId = resolved.customerId;
+        customerAddressId = resolved.customerAddressId;
         customerDisplayName = input.customer!.name.trim();
       } catch (error) {
         if (error instanceof CustomerDomainError) {
@@ -241,9 +287,8 @@ export async function createManualOrder(
         ? { geographyNodeId: input.deliveryAddress.geographyNodeId }
         : {}),
     });
-    const effectiveDeliveryAmount = deliveryOverrideReason
-      ? deliveryAmountRaw!
-      : configuredDeliveryQuote.amount;
+    const effectiveDeliveryAmount =
+      deliveryAmountRaw ?? configuredDeliveryQuote.amount;
 
     // ---- Variant resolution ------------------------------------------------
     // Resolve each variant to its inventory item. Sort by variantId to ensure
@@ -429,11 +474,11 @@ export async function createManualOrder(
     `.execute(transaction);
     await sql`
       insert into orders.order_addresses (
-        organization_id, order_id, address_type,
+        organization_id, order_id, address_type, source_customer_address_id,
         geography_node_id, recipient_name, phone,
         address_line_1, address_line_2, area, city, district, postal_code, country_code
       ) values (
-        ${input.organizationId}, ${orderId}, 'DELIVERY',
+        ${input.organizationId}, ${orderId}, 'DELIVERY', ${customerAddressId ?? null},
         ${input.deliveryAddress.geographyNodeId ?? null},
         ${input.deliveryAddress.recipientName.trim()},
         ${input.deliveryAddress.phone.trim()},

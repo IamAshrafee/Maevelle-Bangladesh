@@ -9,6 +9,22 @@ import {
 } from './customer-identities.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { decimal4Minor, decimal4Text } from './orders/types.js';
+import { getCustomerDeliveryHistory, type CustomerDeliveryHistory } from './delivery-intelligence.js';
+
+export * from './customers/types.js';
+export * from './customers/restrictions.js';
+export * from './customers/accounts.js';
+export * from './customers/communications.js';
+export * from './customers/timeline.js';
+export * from './customers/merge-preview.js';
+
+import type {
+  CustomerRestriction,
+  CustomerRestrictionType,
+  CustomerAccount,
+} from './customers/types.js';
+import { getActiveCustomerRestrictions, listCustomerRestrictions } from './customers/restrictions.js';
+import { getCustomerAccount } from './customers/accounts.js';
 
 export type CustomerSource =
   | 'STOREFRONT'
@@ -29,7 +45,9 @@ export class CustomerDomainError extends Error {
       | 'VALIDATION_FAILED'
       | 'STALE_VERSION'
       | 'CUSTOMER_BLOCKED'
-      | 'IDEMPOTENCY_CONFLICT',
+      | 'IDEMPOTENCY_CONFLICT'
+      | 'RESTRICTION_ACTIVE'
+      | 'ACCOUNT_LINK_CONFLICT',
     message: string,
   ) {
     super(message);
@@ -215,8 +233,25 @@ export async function resolveOrCreateOrderCustomerInTransaction(
     phone: string;
     email?: string;
     source: CustomerSource;
+    address?: {
+      recipientName: string;
+      phone?: string | null | undefined;
+      addressLine1: string;
+      addressLine2?: string | null | undefined;
+      geographyNodeId?: string | null | undefined;
+      area?: string | null | undefined;
+      city?: string | null | undefined;
+      district?: string | null | undefined;
+      postalCode?: string | null | undefined;
+      countryCode: string;
+    };
   },
-): Promise<{ customerId: string; created: boolean }> {
+): Promise<{
+  customerId: string;
+  created: boolean;
+  customerAddressId?: string;
+  activeRestrictions: readonly CustomerRestrictionType[];
+}> {
   const normalizedPhone = identityInput(() => normalizeCustomerPhone(input.phone));
   const normalizedEmail = input.email
     ? identityInput(() => normalizeCustomerEmail(input.email!))
@@ -273,81 +308,236 @@ export async function resolveOrCreateOrderCustomerInTransaction(
     for update of customer
   `.execute(db);
 
-  const strongMatches = candidates.rows.filter(
-    (candidate) =>
-      (candidate.phone_match && normalizeCustomerName(candidate.display_name) === normalizedName) ||
-      (candidate.phone_match && candidate.email_match),
-  );
-  if (strongMatches.length === 1) {
-    const matched = strongMatches[0]!;
-    if (matched.status === 'BLOCKED')
-      throw new CustomerDomainError(
-        'CUSTOMER_BLOCKED',
-        'This customer cannot place new orders. Contact support for assistance.',
-      );
+  const phoneMatches = candidates.rows.filter((c) => c.phone_match);
+  const emailMatches = candidates.rows.filter((c) => c.email_match);
+
+  let matchedCustomerId: string | null = null;
+  let isCreated = false;
+
+  // 1. Both phone and email match the same customer record: strongest match
+  const bothMatch = phoneMatches.find((p) => emailMatches.some((e) => e.id === p.id));
+  if (bothMatch) {
+    matchedCustomerId = bothMatch.id;
+  } else if (phoneMatches.length === 1) {
+    // 2. Exact single phone match in organization
+    const singlePhoneMatch = phoneMatches[0]!;
+    // If order provided an email, but it matched a DIFFERENT customer record
+    if (emailMatches.length > 0 && !emailMatches.some((e) => e.id === singlePhoneMatch.id)) {
+      // Identity conflict: Phone matches Customer A, email matches Customer B!
+      // Queue duplicate candidate / conflict review between A and B
+      for (const emailMatch of emailMatches) {
+        const ids = [singlePhoneMatch.id, emailMatch.id].toSorted();
+        await sql`
+          insert into customers.customer_duplicate_candidates
+            (organization_id, customer_a_id, customer_b_id, confidence, signals)
+          values (${input.organizationId}, ${ids[0]}, ${ids[1]}, 0.8500::numeric,
+            ${JSON.stringify(['PHONE_EMAIL_CONFLICT', 'PHONE', 'EMAIL'])}::jsonb)
+          on conflict (organization_id, customer_a_id, customer_b_id)
+          do update set confidence = greatest(customers.customer_duplicate_candidates.confidence, excluded.confidence),
+            signals = excluded.signals, status = 'OPEN', resolved_at = null
+        `.execute(db);
+      }
+      matchedCustomerId = singlePhoneMatch.id;
+    } else {
+      matchedCustomerId = singlePhoneMatch.id;
+      // Auto-learn email if customer didn't have one and this order provided one
+      if (normalizedEmail) {
+        const hasEmail = await sql<{ id: string }>`
+          select id from customers.customer_emails
+          where organization_id = ${input.organizationId}
+            and customer_id = ${singlePhoneMatch.id}
+            and normalized_value = ${normalizedEmail}
+        `.execute(db);
+        if (!hasEmail.rows[0]) {
+          const hasAnyEmail = await sql<{ count: string }>`
+            select count(*)::text as count from customers.customer_emails
+            where organization_id = ${input.organizationId} and customer_id = ${singlePhoneMatch.id}
+          `.execute(db);
+          const isPrimary = Number(hasAnyEmail.rows[0]?.count ?? 0) === 0;
+          await sql`
+            insert into customers.customer_emails
+              (organization_id, customer_id, raw_value, normalized_value, is_primary)
+            values (${input.organizationId}, ${singlePhoneMatch.id}, ${input.email!.trim()}, ${normalizedEmail}, ${isPrimary})
+            on conflict do nothing
+          `.execute(db);
+        }
+      }
+    }
+  } else if (phoneMatches.length > 1) {
+    // 3. Ambiguous phone matches across multiple customer records
+    // Pick the oldest active customer, queue duplicate candidates among all matches
+    matchedCustomerId = phoneMatches[0]!.id;
+    for (let i = 0; i < phoneMatches.length; i++) {
+      for (let j = i + 1; j < phoneMatches.length; j++) {
+        const ids = [phoneMatches[i]!.id, phoneMatches[j]!.id].toSorted();
+        await sql`
+          insert into customers.customer_duplicate_candidates
+            (organization_id, customer_a_id, customer_b_id, confidence, signals)
+          values (${input.organizationId}, ${ids[0]}, ${ids[1]}, 0.9000::numeric,
+            ${JSON.stringify(['DUPLICATE_PHONE', 'PHONE'])}::jsonb)
+          on conflict (organization_id, customer_a_id, customer_b_id)
+          do update set confidence = greatest(customers.customer_duplicate_candidates.confidence, excluded.confidence),
+            signals = excluded.signals, status = 'OPEN', resolved_at = null
+        `.execute(db);
+      }
+    }
+  }
+
+  let finalCustomerId: string;
+  if (matchedCustomerId) {
+    finalCustomerId = matchedCustomerId;
     await sql`
       update customers.customers
       set latest_source = ${input.source}, updated_at = now(), version = version + 1
-      where organization_id = ${input.organizationId} and id = ${matched.id}
+      where organization_id = ${input.organizationId} and id = ${matchedCustomerId}
     `.execute(db);
-    return { customerId: matched.id, created: false };
+  } else {
+    // 4. Create new customer
+    isCreated = true;
+    const createdResult = await sql<{ id: string }>`
+      insert into customers.customers
+        (organization_id, customer_number, display_name, first_source, latest_source)
+      values (${input.organizationId}, 'CUS-' || upper(replace(uuidv7()::text, '-', '')),
+        ${input.displayName.trim()}, ${input.source}, ${input.source})
+      returning id
+    `.execute(db);
+    const createdId = createdResult.rows[0]?.id;
+    if (!createdId) throw new Error('Customer creation did not return a customer.');
+    finalCustomerId = createdId;
+
+    await sql`
+      insert into customers.customer_phones
+        (organization_id, customer_id, raw_value, normalized_value, country_code, is_primary)
+      values (${input.organizationId}, ${createdId}, ${input.phone.trim()}, ${normalizedPhone},
+        ${normalizedPhone.startsWith('+880') ? 'BD' : null}, true)
+    `.execute(db);
+
+    if (normalizedEmail) {
+      await sql`
+        insert into customers.customer_emails
+          (organization_id, customer_id, raw_value, normalized_value, is_primary)
+        values (${input.organizationId}, ${createdId}, ${input.email!.trim()}, ${normalizedEmail}, true)
+      `.execute(db);
+    }
+
+    await emitCustomerEvent(db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      actorType: input.actorType,
+      customerId: createdId,
+      action: 'customers.customer.created',
+      metadata: { source: input.source, identityResolution: 'NEW_CUSTOMER' },
+    });
+
+    // Check if email matched another customer (candidate duplicate for review)
+    for (const emailMatch of emailMatches) {
+      const ids = [createdId, emailMatch.id].toSorted();
+      await sql`
+        insert into customers.customer_duplicate_candidates
+          (organization_id, customer_a_id, customer_b_id, confidence, signals)
+        values (${input.organizationId}, ${ids[0]}, ${ids[1]}, 0.6000::numeric,
+          ${JSON.stringify(['EMAIL'])}::jsonb)
+        on conflict (organization_id, customer_a_id, customer_b_id)
+        do update set confidence = greatest(customers.customer_duplicate_candidates.confidence, excluded.confidence),
+          signals = excluded.signals, status = 'OPEN', resolved_at = null
+      `.execute(db);
+    }
   }
 
-  const createdResult = await sql<{ id: string }>`
-    insert into customers.customers
-      (organization_id, customer_number, display_name, first_source, latest_source)
-    values (${input.organizationId}, 'CUS-' || upper(replace(uuidv7()::text, '-', '')),
-      ${input.displayName.trim()}, ${input.source}, ${input.source})
-    returning id
+  // Active restrictions check
+  const activeRestrictionsRows = await sql<{ restriction_type: CustomerRestrictionType }>`
+    select restriction_type from customers.customer_restrictions
+    where organization_id = ${input.organizationId}
+      and (
+        customer_id = ${finalCustomerId}
+        or customer_id in (
+          select alias_customer_id from customers.customer_aliases
+          where organization_id = ${input.organizationId} and canonical_customer_id = ${finalCustomerId}
+        )
+      )
+      and status = 'ACTIVE'
+      and (expires_at is null or expires_at > now())
   `.execute(db);
-  const createdId = createdResult.rows[0]?.id;
-  if (!createdId) throw new Error('Customer creation did not return a customer.');
-  await sql`
-    insert into customers.customer_phones
-      (organization_id, customer_id, raw_value, normalized_value, country_code, is_primary)
-    values (${input.organizationId}, ${createdId}, ${input.phone.trim()}, ${normalizedPhone},
-      ${normalizedPhone.startsWith('+880') ? 'BD' : null}, true)
+
+  const activeRestrictions = activeRestrictionsRows.rows.map((r) => r.restriction_type);
+  if (activeRestrictions.includes('ORDERING_BLOCKED')) {
+    throw new CustomerDomainError(
+      'CUSTOMER_BLOCKED',
+      'This customer cannot place new orders. Contact support for assistance.',
+    );
+  }
+
+  // Legacy BLOCKED status check
+  const statusCheck = await sql<{ status: string }>`
+    select status from customers.customers where organization_id = ${input.organizationId} and id = ${finalCustomerId}
   `.execute(db);
-  if (normalizedEmail) {
-    await sql`
-      insert into customers.customer_emails
-        (organization_id, customer_id, raw_value, normalized_value, is_primary)
-      values (${input.organizationId}, ${createdId}, ${input.email!.trim()}, ${normalizedEmail}, true)
-    `.execute(db);
+  if (statusCheck.rows[0]?.status === 'BLOCKED') {
+    throw new CustomerDomainError(
+      'CUSTOMER_BLOCKED',
+      'This customer cannot place new orders. Contact support for assistance.',
+    );
   }
-  await emitCustomerEvent(db, {
-    organizationId: input.organizationId,
-    actorId: input.actorId,
-    actorType: input.actorType,
-    customerId: createdId,
-    action: 'customers.customer.created',
-    metadata: { source: input.source, identityResolution: 'NEW_OR_AMBIGUOUS' },
-  });
-  for (const candidate of candidates.rows) {
-    const ids = [createdId, candidate.id].toSorted();
-    const signals = [
-      ...(candidate.phone_match ? ['PHONE'] : []),
-      ...(candidate.email_match ? ['EMAIL'] : []),
-      ...(normalizeCustomerName(candidate.display_name) === normalizedName ? ['NAME'] : []),
-    ];
-    const confidence = Math.min(1, signals.length * 0.34).toFixed(4);
-    await sql`
-      insert into customers.customer_duplicate_candidates
-        (organization_id, customer_a_id, customer_b_id, confidence, signals)
-      values (${input.organizationId}, ${ids[0]}, ${ids[1]}, ${confidence}::numeric,
-        ${JSON.stringify(signals)}::jsonb)
-      on conflict (organization_id, customer_a_id, customer_b_id)
-      do update set confidence = greatest(customers.customer_duplicate_candidates.confidence, excluded.confidence),
-        signals = excluded.signals, status = 'OPEN', resolved_at = null
+
+  // Auto-learn address if provided
+  let customerAddressId: string | undefined;
+  if (input.address) {
+    const addr = input.address;
+    const existingAddr = await sql<{ id: string }>`
+      select id from customers.customer_addresses
+      where organization_id = ${input.organizationId}
+        and customer_id = ${finalCustomerId}
+        and status = 'ACTIVE'
+        and lower(trim(address_line_1)) = lower(trim(${addr.addressLine1}))
+        and lower(trim(coalesce(city, ''))) = lower(trim(${addr.city ?? ''}))
+        and country_code = ${addr.countryCode}
+      limit 1
     `.execute(db);
+
+    if (existingAddr.rows[0]) {
+      customerAddressId = existingAddr.rows[0].id;
+    } else {
+      const hasDefault = await sql<{ count: string }>`
+        select count(*)::text as count from customers.customer_addresses
+        where organization_id = ${input.organizationId}
+          and customer_id = ${finalCustomerId}
+          and status = 'ACTIVE' and is_default
+      `.execute(db);
+      const isDefault = Number(hasDefault.rows[0]?.count ?? 0) === 0;
+
+      const createdAddr = await sql<{ id: string }>`
+        insert into customers.customer_addresses (
+          organization_id, customer_id, recipient_name, phone,
+          address_line_1, address_line_2, geography_node_id, area,
+          city, district, postal_code, country_code, is_default, status
+        ) values (
+          ${input.organizationId}, ${finalCustomerId}, ${addr.recipientName.trim()},
+          ${addr.phone?.trim() ?? null}, ${addr.addressLine1.trim()}, ${addr.addressLine2?.trim() ?? null},
+          ${addr.geographyNodeId ?? null}, ${addr.area?.trim() ?? null}, ${addr.city?.trim() ?? null},
+          ${addr.district?.trim() ?? null}, ${addr.postalCode?.trim() ?? null}, ${addr.countryCode},
+          ${isDefault}, 'ACTIVE'
+        ) returning id
+      `.execute(db);
+      customerAddressId = createdAddr.rows[0]?.id;
+    }
   }
-  return { customerId: createdId, created: true };
+
+  return {
+    customerId: finalCustomerId,
+    created: isCreated,
+    ...(customerAddressId ? { customerAddressId } : {}),
+    activeRestrictions,
+  };
 }
 
 export async function resolveOrCreateOrderCustomer(
   db: Kysely<DatabaseSchema>,
   input: Parameters<typeof resolveOrCreateOrderCustomerInTransaction>[1],
-): Promise<{ customerId: string; created: boolean }> {
+): Promise<{
+  customerId: string;
+  created: boolean;
+  customerAddressId?: string;
+  activeRestrictions: readonly CustomerRestrictionType[];
+}> {
   return db
     .transaction()
     .execute((transaction) => resolveOrCreateOrderCustomerInTransaction(transaction, input));
@@ -581,6 +771,96 @@ export async function addCustomerEmail(
   });
 }
 
+export async function verifyCustomerPhone(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    customerId: string;
+    phoneId: string;
+    verificationSource?: string;
+  },
+): Promise<{ id: string; verificationStatus: string; verifiedAt: string }> {
+  return db.transaction().execute(async (tx) => {
+    const phone = await sql<{ id: string; verification_status: string }>`
+      select id, verification_status from customers.customer_phones
+      where organization_id = ${input.organizationId}
+        and customer_id = ${input.customerId}
+        and id = ${input.phoneId}
+      for update
+    `.execute(tx);
+    const row = phone.rows[0];
+    if (!row) {
+      throw new CustomerDomainError('NOT_FOUND', 'Customer phone was not found.');
+    }
+    const verifiedAt = new Date();
+    await sql`
+      update customers.customer_phones
+      set verification_status = 'VERIFIED',
+          verified_at = ${verifiedAt},
+          verification_source = ${input.verificationSource ?? 'MANUAL_OPERATOR'},
+          version = version + 1,
+          updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.phoneId}
+    `.execute(tx);
+
+    await emitCustomerEvent(tx, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      customerId: input.customerId,
+      action: 'customers.customer.phone_verified',
+      metadata: { phoneId: input.phoneId, verificationSource: input.verificationSource ?? 'MANUAL_OPERATOR' },
+    });
+
+    return { id: row.id, verificationStatus: 'VERIFIED', verifiedAt: verifiedAt.toISOString() };
+  });
+}
+
+export async function verifyCustomerEmail(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    customerId: string;
+    emailId: string;
+    verificationSource?: string;
+  },
+): Promise<{ id: string; verificationStatus: string; verifiedAt: string }> {
+  return db.transaction().execute(async (tx) => {
+    const email = await sql<{ id: string; verification_status: string }>`
+      select id, verification_status from customers.customer_emails
+      where organization_id = ${input.organizationId}
+        and customer_id = ${input.customerId}
+        and id = ${input.emailId}
+      for update
+    `.execute(tx);
+    const row = email.rows[0];
+    if (!row) {
+      throw new CustomerDomainError('NOT_FOUND', 'Customer email was not found.');
+    }
+    const verifiedAt = new Date();
+    await sql`
+      update customers.customer_emails
+      set verification_status = 'VERIFIED',
+          verified_at = ${verifiedAt},
+          verification_source = ${input.verificationSource ?? 'MANUAL_OPERATOR'},
+          version = version + 1,
+          updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.emailId}
+    `.execute(tx);
+
+    await emitCustomerEvent(tx, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      customerId: input.customerId,
+      action: 'customers.customer.email_verified',
+      metadata: { emailId: input.emailId, verificationSource: input.verificationSource ?? 'MANUAL_OPERATOR' },
+    });
+
+    return { id: row.id, verificationStatus: 'VERIFIED', verifiedAt: verifiedAt.toISOString() };
+  });
+}
+
 export async function addCustomerAddress(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -699,6 +979,8 @@ export interface CustomerDetailView extends CustomerSummary {
     normalizedPhone: string;
     isPrimary: boolean;
     verificationStatus: string;
+    verifiedAt?: string | null;
+    verificationSource?: string | null;
     createdAt: string;
   }[];
   readonly emails: readonly {
@@ -707,6 +989,8 @@ export interface CustomerDetailView extends CustomerSummary {
     normalizedEmail: string;
     isPrimary: boolean;
     verificationStatus: string;
+    verifiedAt?: string | null;
+    verificationSource?: string | null;
     createdAt: string;
   }[];
   readonly addresses: readonly {
@@ -738,20 +1022,39 @@ export interface CustomerDetailView extends CustomerSummary {
     label: string;
     color: string | null;
   }[];
+  readonly restrictions: readonly CustomerRestriction[];
+  readonly account?: CustomerAccount | null;
+  readonly deliveryMetrics?: {
+    readonly totalDeliveries: number;
+    readonly eligibleDeliveries: number;
+    readonly deliveredCount: number;
+    readonly failedDeliveryCount: number;
+    readonly rtoCount: number;
+    readonly successRate: number | null;
+    readonly rtoRate: number | null;
+    readonly lastSuccessfulDelivery?: string | null;
+    readonly lastRto?: string | null;
+    readonly riskLevel: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
+    readonly riskReasons: readonly { readonly code: string; readonly explanation: string }[];
+  } | null;
   readonly commerceMetrics: {
     readonly totalOrders: number;
     readonly activeOrders: number;
     readonly cancelledOrders: number;
+    readonly deliveredOrders?: number;
+    readonly returnedOrders?: number;
     readonly lifetimeOrderValue: string;
     readonly collectedAmount: string;
     readonly refundedAmount: string;
     readonly outstandingAmount: string;
+    readonly averageOrderValue?: string;
     readonly lastOrderAt: string | null;
   };
 }
 
 /**
- * Returns complete customer details including aliases, notes, tags, addresses, and contacts.
+ * Returns complete customer details including aliases, notes, tags, addresses, contacts,
+ * restrictions, account link, delivery metrics, and commerce metrics.
  * If the customer is merged, returns the `canonicalCustomerId` so the caller can redirect.
  */
 export async function getCustomerDetail(
@@ -788,16 +1091,19 @@ export async function getCustomerDetail(
     }
   }
 
-  const [phones, emails, addresses, notes, tags, stats] = await Promise.all([
+  const [phones, emails, addresses, notes, tags] = await Promise.all([
     sql<{
       id: string;
       raw_value: string;
       normalized_value: string;
       is_primary: boolean;
       verification_status: string;
+      verified_at: Date | null;
+      verification_source: string | null;
       created_at: Date;
     }>`
-      select id, raw_value, normalized_value, is_primary, verification_status, created_at from customers.customer_phones
+      select id, raw_value, normalized_value, is_primary, verification_status, verified_at, verification_source, created_at
+      from customers.customer_phones
       where organization_id = ${organizationId} and customer_id = ${customerId} order by is_primary desc, created_at
     `.execute(db),
     sql<{
@@ -806,9 +1112,12 @@ export async function getCustomerDetail(
       normalized_value: string;
       is_primary: boolean;
       verification_status: string;
+      verified_at: Date | null;
+      verification_source: string | null;
       created_at: Date;
     }>`
-      select id, raw_value, normalized_value, is_primary, verification_status, created_at from customers.customer_emails
+      select id, raw_value, normalized_value, is_primary, verification_status, verified_at, verification_source, created_at
+      from customers.customer_emails
       where organization_id = ${organizationId} and customer_id = ${customerId} order by is_primary desc, created_at
     `.execute(db),
     sql<{
@@ -847,11 +1156,16 @@ export async function getCustomerDetail(
       where a.organization_id = ${organizationId} and a.customer_id = ${customerId}
       order by t.label
     `.execute(db),
+  ]);
+
+  const [stats, restrictions, account, deliveryHistory] = await Promise.all([
     // Alias-aware stats
     sql<{
       order_count: string;
       active_order_count: string;
       cancelled_order_count: string;
+      delivered_order_count: string;
+      returned_order_count: string;
       total_spend: string;
       collected_amount: string;
       refunded_amount: string;
@@ -872,6 +1186,8 @@ export async function getCustomerDetail(
         select count(*)::text as order_count,
           count(*) filter (where order_status <> 'CANCELLED')::text as active_order_count,
           count(*) filter (where order_status = 'CANCELLED')::text as cancelled_order_count,
+          count(*) filter (where order_status = 'DELIVERED')::text as delivered_order_count,
+          count(*) filter (where order_status = 'RETURNED')::text as returned_order_count,
           coalesce(sum(total_amount) filter (where order_status <> 'CANCELLED'), 0)::text as total_spend,
           max(created_at) as last_order_at
         from customer_orders
@@ -893,7 +1209,11 @@ export async function getCustomerDetail(
       select order_metrics.*, payment_metrics.collected_amount, refund_metrics.refunded_amount
       from order_metrics cross join payment_metrics cross join refund_metrics
     `.execute(db),
+    listCustomerRestrictions(db, organizationId, customerId),
+    getCustomerAccount(db, organizationId, customerId),
+    getCustomerDeliveryHistory(db, { organizationId, customerId }),
   ]);
+
 
   return {
     id: row.id,
@@ -918,6 +1238,8 @@ export async function getCustomerDetail(
       normalizedPhone: p.normalized_value,
       isPrimary: p.is_primary,
       verificationStatus: p.verification_status,
+      verifiedAt: p.verified_at?.toISOString() ?? null,
+      verificationSource: p.verification_source ?? null,
       createdAt: p.created_at.toISOString(),
     })),
     emails: emails.rows.map((e) => ({
@@ -926,6 +1248,8 @@ export async function getCustomerDetail(
       normalizedEmail: e.normalized_value,
       isPrimary: e.is_primary,
       verificationStatus: e.verification_status,
+      verifiedAt: e.verified_at?.toISOString() ?? null,
+      verificationSource: e.verification_source ?? null,
       createdAt: e.created_at.toISOString(),
     })),
     addresses: addresses.rows.map((a) => ({
@@ -957,21 +1281,43 @@ export async function getCustomerDetail(
       label: t.label,
       color: t.color,
     })),
+    restrictions,
+    account,
+    deliveryMetrics: deliveryHistory
+      ? {
+          totalDeliveries: deliveryHistory.totalDeliveries,
+          eligibleDeliveries: deliveryHistory.eligibleDeliveries,
+          deliveredCount: deliveryHistory.deliveredCount,
+          failedDeliveryCount: deliveryHistory.failedDeliveryCount,
+          rtoCount: deliveryHistory.rtoCount,
+          successRate: deliveryHistory.successRate,
+          rtoRate: deliveryHistory.rtoRate,
+          lastSuccessfulDelivery: deliveryHistory.lastSuccessfulDelivery ?? null,
+          lastRto: deliveryHistory.lastRto ?? null,
+          riskLevel: deliveryHistory.risk.level,
+          riskReasons: deliveryHistory.risk.reasons,
+        }
+      : null,
     commerceMetrics: (() => {
       const totalSpend = stats.rows[0]?.total_spend ?? '0';
       const collectedAmount = stats.rows[0]?.collected_amount ?? '0';
       const refundedAmount = stats.rows[0]?.refunded_amount ?? '0';
+      const activeOrderCount = Number(stats.rows[0]?.active_order_count ?? 0);
       const totalSpendMinor = decimal4Minor(totalSpend);
       const netCollectedMinor = decimal4Minor(collectedAmount) - decimal4Minor(refundedAmount);
       const outstandingMinor = totalSpendMinor > netCollectedMinor ? totalSpendMinor - netCollectedMinor : 0n;
+      const aovMinor = activeOrderCount > 0 ? totalSpendMinor / BigInt(activeOrderCount) : 0n;
       return {
         totalOrders: Number(stats.rows[0]?.order_count ?? 0),
-        activeOrders: Number(stats.rows[0]?.active_order_count ?? 0),
+        activeOrders: activeOrderCount,
         cancelledOrders: Number(stats.rows[0]?.cancelled_order_count ?? 0),
+        deliveredOrders: Number(stats.rows[0]?.delivered_order_count ?? 0),
+        returnedOrders: Number(stats.rows[0]?.returned_order_count ?? 0),
         lifetimeOrderValue: totalSpend,
         collectedAmount,
         refundedAmount,
         outstandingAmount: decimal4Text(outstandingMinor),
+        averageOrderValue: decimal4Text(aovMinor),
         lastOrderAt: stats.rows[0]?.last_order_at?.toISOString() ?? null,
       };
     })(),
@@ -1129,19 +1475,34 @@ export async function mergeCustomers(
         `A ${target.status.toLowerCase()} customer cannot be used as the merge target.`,
       );
 
+    const [sourceAccount, targetAccount] = await Promise.all([
+      getCustomerAccount(transaction, input.organizationId, input.sourceCustomerId),
+      getCustomerAccount(transaction, input.organizationId, input.targetCustomerId),
+    ]);
+    if (sourceAccount?.status === 'ACTIVE' && targetAccount?.status === 'ACTIVE') {
+      if (sourceAccount.userId !== targetAccount.userId) {
+        throw new CustomerDomainError(
+          'ACCOUNT_LINK_CONFLICT',
+          'Cannot merge customers linked to different user accounts.',
+        );
+      }
+    }
+
     const counts = await sql<{
       phones: number;
       emails: number;
       addresses: number;
       notes: number;
       tags: number;
+      restrictions: number;
     }>`
       select
         (select count(*)::int from customers.customer_phones where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}) as phones,
         (select count(*)::int from customers.customer_emails where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}) as emails,
         (select count(*)::int from customers.customer_addresses where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}) as addresses,
         (select count(*)::int from customers.customer_notes where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}) as notes,
-        (select count(*)::int from customers.customer_tag_assignments where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}) as tags
+        (select count(*)::int from customers.customer_tag_assignments where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}) as tags,
+        (select count(*)::int from customers.customer_restrictions where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId} and status = 'ACTIVE') as restrictions
     `.execute(transaction);
     const conflictSnapshot = counts.rows[0] ?? {
       phones: 0,
@@ -1149,6 +1510,7 @@ export async function mergeCustomers(
       addresses: 0,
       notes: 0,
       tags: 0,
+      restrictions: 0,
     };
 
     await sql`
@@ -1253,6 +1615,75 @@ export async function mergeCustomers(
     await sql`delete from customers.customer_tag_assignments where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}`.execute(
       transaction,
     );
+
+    // Transfer or reconcile customer account links
+    if (sourceAccount?.status === 'ACTIVE') {
+      if (targetAccount?.status === 'ACTIVE') {
+        // Both link to the same user: delete the redundant source account row
+        await sql`
+          delete from customers.customer_accounts
+          where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+        `.execute(transaction);
+      } else {
+        // Source has active account, target has none: transfer account to target
+        await sql`
+          delete from customers.customer_accounts
+          where organization_id = ${input.organizationId} and customer_id = ${input.targetCustomerId}
+        `.execute(transaction);
+        await sql`
+          update customers.customer_accounts
+          set customer_id = ${input.targetCustomerId}, version = version + 1, updated_at = now()
+          where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+        `.execute(transaction);
+      }
+    } else {
+      // Clean up any inactive source account records
+      await sql`
+        delete from customers.customer_accounts
+        where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+      `.execute(transaction);
+    }
+
+    // Transfer active restrictions from source to target
+    await sql`
+      update customers.customer_restrictions
+      set customer_id = ${input.targetCustomerId}, version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
+
+    // Update foreign keys in external domain tables
+    await sql`
+      update orders.orders set customer_id = ${input.targetCustomerId}, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
+    await sql`
+      update orders.checkout_sessions set customer_id = ${input.targetCustomerId}, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
+    await sql`
+      update cart.carts set customer_id = ${input.targetCustomerId}, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
+    await sql`
+      update promotions.promotion_usage set customer_id = ${input.targetCustomerId}
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
+    await sql`
+      update returns.return_cases set customer_id = ${input.targetCustomerId}, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
+    await sql`
+      update reviews.reviews set customer_id = ${input.targetCustomerId}, updated_at = now()
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
+    await sql`
+      update reviews.review_access_tokens set customer_id = ${input.targetCustomerId}
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
+    await sql`
+      update notifications.notifications set customer_id = ${input.targetCustomerId}
+      where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
+    `.execute(transaction);
 
     await sql`
       update customers.customer_aliases

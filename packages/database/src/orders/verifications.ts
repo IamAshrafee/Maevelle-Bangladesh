@@ -119,9 +119,8 @@ export async function recordOrderVerification(
 
     // Resolve actor name if available
     const actorRow = await sql<{ display_name: string | null }>`
-      select coalesce(profile.display_name, u.email) as display_name
+      select coalesce(u.name, u.email) as display_name
       from iam.users u
-      left join iam.user_profiles profile on profile.user_id = u.id
       where u.id = ${input.actorId}
     `.execute(transaction);
 
@@ -193,11 +192,10 @@ export async function listOrderVerifications(
     created_at: Date;
   }>`
     select v.id, v.order_id, v.actor_id,
-           coalesce(profile.display_name, u.email) as actor_name,
+           coalesce(u.name, u.email) as actor_name,
            v.verification_type, v.outcome, v.notes, v.risk_snapshot, v.created_at
     from orders.order_verifications v
     left join iam.users u on u.id = v.actor_id
-    left join iam.user_profiles profile on profile.user_id = u.id
     where v.organization_id = ${input.organizationId} and v.order_id = ${input.orderId}
     order by v.created_at desc
   `.execute(db);

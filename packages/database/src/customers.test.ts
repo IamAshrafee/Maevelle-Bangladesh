@@ -12,6 +12,18 @@ import {
   resolveOrCreateOrderCustomer,
   mergeCustomers,
   anonymizeCustomer,
+  applyCustomerRestriction,
+  liftCustomerRestriction,
+  listCustomerRestrictions,
+  linkCustomerAccount,
+  unlinkCustomerAccount,
+  getCustomerAccount,
+  resolveCustomerForAuthenticatedUser,
+  getCustomerMergePreview,
+  getCustomerTimeline,
+  verifyCustomerPhone,
+  verifyCustomerEmail,
+  CustomerDomainError,
 } from './customers.js';
 
 const database = createDatabase({
@@ -128,7 +140,8 @@ describe('Customers Domain', () => {
       phone: '+880 1712-345678',
       source: 'STOREFRONT',
     });
-    expect(resolution).toEqual({ customerId: customer.id, created: false });
+    expect(resolution.customerId).toBe(customer.id);
+    expect(resolution.created).toBe(false);
 
     await expect(
       addCustomerPhone(database.db, {
@@ -316,5 +329,369 @@ describe('Customers Domain', () => {
       idempotencyKey: anonymizeKey,
     });
     expect(replay.status).toBe('ANONYMIZED');
+  });
+
+  it('auto-learns customer address and reuses existing on subsequent guest orders', async () => {
+    const { organizationId, actorId } = await fixture();
+
+    const orderAddress = {
+      recipientName: 'Amina Begum',
+      phone: '+8801712349999',
+      addressLine1: 'House 42, Road 11, Banani',
+      city: 'Dhaka',
+      district: 'Dhaka',
+      postalCode: '1213',
+      countryCode: 'BD',
+    };
+
+    // First guest order creates customer and auto-learns default address
+    const first = await resolveOrCreateOrderCustomer(database.db, {
+      organizationId,
+      actorId,
+      actorType: 'GUEST_CHECKOUT',
+      displayName: 'Amina Begum',
+      phone: '01712349999',
+      source: 'STOREFRONT',
+      address: orderAddress,
+    });
+
+    expect(first.created).toBe(true);
+    expect(first.customerAddressId).toBeDefined();
+
+    const customer = await getCustomerDetail(database.db, organizationId, first.customerId);
+    expect(customer.addresses).toHaveLength(1);
+    expect(customer.addresses[0]?.isDefault).toBe(true);
+    expect(customer.addresses[0]?.addressLine1).toBe('House 42, Road 11, Banani');
+
+    // Second guest order with same address reuses existing address book entry
+    const second = await resolveOrCreateOrderCustomer(database.db, {
+      organizationId,
+      actorId,
+      actorType: 'GUEST_CHECKOUT',
+      displayName: 'Amina Begum',
+      phone: '+8801712349999',
+      source: 'STOREFRONT',
+      address: orderAddress,
+    });
+
+    expect(second.created).toBe(false);
+    expect(second.customerId).toBe(first.customerId);
+    expect(second.customerAddressId).toBe(first.customerAddressId);
+
+    const customerAfterSecond = await getCustomerDetail(database.db, organizationId, first.customerId);
+    expect(customerAfterSecond.addresses).toHaveLength(1);
+  });
+
+  it('commercial restrictions apply, enforce and lift cleanly', async () => {
+    const { organizationId, actorId } = await fixture();
+    const customer = await createCustomer(database.db, {
+      organizationId,
+      actorId,
+      displayName: 'Restricted Customer',
+      phone: '01811223344',
+    });
+
+    // Apply COD restriction
+    const codRestriction = await applyCustomerRestriction(database.db, {
+      organizationId,
+      actorId,
+      customerId: customer.id,
+      restrictionType: 'COD_RESTRICTED',
+      reason: 'Frequent RTO history on COD deliveries',
+      notes: 'Customer refused past 3 deliveries without notice',
+    });
+    expect(codRestriction.status).toBe('ACTIVE');
+    expect(codRestriction.restrictionType).toBe('COD_RESTRICTED');
+
+    // Resolution reflects active COD_RESTRICTED
+    const resolved = await resolveOrCreateOrderCustomer(database.db, {
+      organizationId,
+      actorId,
+      actorType: 'GUEST_CHECKOUT',
+      displayName: 'Restricted Customer',
+      phone: '01811223344',
+      source: 'STOREFRONT',
+    });
+    expect(resolved.activeRestrictions).toContain('COD_RESTRICTED');
+
+    // Apply ORDERING_BLOCKED restriction
+    const blockRestriction = await applyCustomerRestriction(database.db, {
+      organizationId,
+      actorId,
+      customerId: customer.id,
+      restrictionType: 'ORDERING_BLOCKED',
+      reason: 'Fraudulent activity reported',
+    });
+    expect(blockRestriction.status).toBe('ACTIVE');
+
+    // Resolution fails when ordering is blocked
+    await expect(
+      resolveOrCreateOrderCustomer(database.db, {
+        organizationId,
+        actorId,
+        actorType: 'GUEST_CHECKOUT',
+        displayName: 'Restricted Customer',
+        phone: '01811223344',
+        source: 'STOREFRONT',
+      }),
+    ).rejects.toThrow('This customer cannot place new orders');
+
+    // Lift ORDERING_BLOCKED restriction
+    const lifted = await liftCustomerRestriction(database.db, {
+      organizationId,
+      actorId,
+      customerId: customer.id,
+      restrictionId: blockRestriction.id,
+      liftReason: 'Account reviewed and verified by senior operator',
+    });
+    expect(lifted.status).toBe('LIFTED');
+    expect(lifted.liftReason).toBe('Account reviewed and verified by senior operator');
+
+    // Resolution now succeeds again
+    const resolvedAfterLift = await resolveOrCreateOrderCustomer(database.db, {
+      organizationId,
+      actorId,
+      actorType: 'GUEST_CHECKOUT',
+      displayName: 'Restricted Customer',
+      phone: '01811223344',
+      source: 'STOREFRONT',
+    });
+    expect(resolvedAfterLift.customerId).toBe(customer.id);
+  });
+
+  it('authenticated customer accounts link, unbind, and resolve guest history', async () => {
+    const { organizationId, actorId } = await fixture();
+
+    // 1. Guest customer creates order history
+    const guestCustomer = await createCustomer(database.db, {
+      organizationId,
+      actorId,
+      displayName: 'Guest Shopper',
+      phone: '01999887766',
+      email: 'guest@example.com',
+      source: 'STOREFRONT',
+    });
+
+    const testEmail = `guest.${crypto.randomUUID().slice(0, 8)}@example.com`;
+    const userResult = await sql<{ id: string }>`
+      insert into iam.users (email, name)
+      values (${testEmail}, 'Registered Shopper')
+      returning id
+    `.execute(database.db);
+    const userId = userResult.rows[0]!.id;
+
+    // 3. System resolves authenticated user -> securely binds to historical guest customer
+    const resolution = await resolveCustomerForAuthenticatedUser(database.db, {
+      organizationId,
+      userId,
+      userName: 'Registered Shopper',
+      userPhone: '+8801999887766',
+      userEmail: 'guest@example.com',
+    });
+
+    expect(resolution.customerId).toBe(guestCustomer.id);
+    expect(resolution.newlyLinked).toBe(true);
+
+    const account = await getCustomerAccount(database.db, organizationId, guestCustomer.id);
+    expect(account).not.toBeNull();
+    expect(account?.status).toBe('ACTIVE');
+    expect(account?.userId).toBe(userId);
+    expect(account?.linkType).toBe('VERIFIED_PHONE');
+
+    // Customer detail includes account metadata
+    const detail = await getCustomerDetail(database.db, organizationId, guestCustomer.id);
+    expect(detail.account?.userId).toBe(userId);
+
+    // 4. Unlink account
+    const unlinked = await unlinkCustomerAccount(database.db, {
+      organizationId,
+      actorId: userId,
+      customerId: guestCustomer.id,
+      reason: 'User requested account unlinking',
+    });
+    expect(unlinked.status).toBe('UNLINKED');
+    expect(unlinked.unlinkReason).toBe('User requested account unlinking');
+  });
+
+  it('merge preview detects conflicts and merge transfers accounts & restrictions safely', async () => {
+    const { organizationId, actorId } = await fixture();
+
+    const source = await createCustomer(database.db, {
+      organizationId,
+      actorId,
+      displayName: 'Source Customer',
+      phone: '01611000001',
+    });
+
+    const target = await createCustomer(database.db, {
+      organizationId,
+      actorId,
+      displayName: 'Target Customer',
+      phone: '01611000002',
+    });
+
+    // Apply restriction on source
+    await applyCustomerRestriction(database.db, {
+      organizationId,
+      actorId,
+      customerId: source.id,
+      restrictionType: 'COD_RESTRICTED',
+      reason: 'Source has COD issues',
+    });
+
+    // Check merge preview before accounts
+    const preview1 = await getCustomerMergePreview(database.db, organizationId, source.id, target.id);
+    expect(preview1.canMerge).toBe(true);
+    expect(preview1.summary.restrictionsToTransfer).toBe(1);
+
+    // Create 2 auth users and link each to different customers
+    const u1Email = `u1.${crypto.randomUUID().slice(0, 8)}@test.com`;
+    const u2Email = `u2.${crypto.randomUUID().slice(0, 8)}@test.com`;
+    const u1 = (await sql<{ id: string }>`insert into iam.users (email, name) values (${u1Email}, 'User 1') returning id`.execute(database.db)).rows[0]!.id;
+    const u2 = (await sql<{ id: string }>`insert into iam.users (email, name) values (${u2Email}, 'User 2') returning id`.execute(database.db)).rows[0]!.id;
+
+    await linkCustomerAccount(database.db, {
+      organizationId,
+      actorId,
+      customerId: source.id,
+      userId: u1,
+      linkType: 'VERIFIED_PHONE',
+    });
+    await linkCustomerAccount(database.db, {
+      organizationId,
+      actorId,
+      customerId: target.id,
+      userId: u2,
+      linkType: 'VERIFIED_PHONE',
+    });
+
+    // Preview now detects conflict: two different active accounts
+    const preview2 = await getCustomerMergePreview(database.db, organizationId, source.id, target.id);
+    expect(preview2.canMerge).toBe(false);
+    expect(preview2.blockingConflicts).toContain('DIFFERENT_ACTIVE_ACCOUNTS');
+
+    // Attempting merge throws ACCOUNT_LINK_CONFLICT
+    const sDetailBefore = await getCustomerDetail(database.db, organizationId, source.id);
+    const tDetailBefore = await getCustomerDetail(database.db, organizationId, target.id);
+    await expect(
+      mergeCustomers(database.db, {
+        organizationId,
+        actorId,
+        sourceCustomerId: source.id,
+        targetCustomerId: target.id,
+        sourceExpectedVersion: sDetailBefore.version,
+        targetExpectedVersion: tDetailBefore.version,
+        reason: 'Duplicate customer merge',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow('Cannot merge customers linked to different user accounts');
+
+    // Unlink target's account so only source has an active account link
+    await unlinkCustomerAccount(database.db, {
+      organizationId,
+      actorId: u2,
+      customerId: target.id,
+      reason: 'Preparing for canonical merge',
+    });
+
+    // Perform merge
+    const sourceDetail = await getCustomerDetail(database.db, organizationId, source.id);
+    const targetDetail = await getCustomerDetail(database.db, organizationId, target.id);
+
+    const merged = await mergeCustomers(database.db, {
+      organizationId,
+      actorId,
+      sourceCustomerId: source.id,
+      targetCustomerId: target.id,
+      sourceExpectedVersion: sourceDetail.version,
+      targetExpectedVersion: targetDetail.version,
+      reason: 'Duplicate customer merge',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    expect(merged.id).toBe(target.id);
+    // Transferred phone
+    expect(merged.phones.some((p) => p.phone === '01611000001')).toBe(true);
+    // Transferred restriction
+    expect(merged.restrictions.some((r) => r.restrictionType === 'COD_RESTRICTED' && r.status === 'ACTIVE')).toBe(true);
+    // Transferred account link to User 1
+    expect(merged.account?.userId).toBe(u1);
+    expect(merged.account?.status).toBe('ACTIVE');
+  });
+
+  it('unified timeline aggregates multi-domain business events', async () => {
+    const { organizationId, actorId } = await fixture();
+    const customer = await createCustomer(database.db, {
+      organizationId,
+      actorId,
+      displayName: 'Timeline Customer',
+      phone: '01511223344',
+    });
+
+    await applyCustomerRestriction(database.db, {
+      organizationId,
+      actorId,
+      customerId: customer.id,
+      restrictionType: 'ORDER_REVIEW_REQUIRED',
+      reason: 'Verification needed',
+    });
+
+    const timelineEmail = `timeline.${crypto.randomUUID().slice(0, 8)}@test.com`;
+    const user = (await sql<{ id: string }>`insert into iam.users (email, name) values (${timelineEmail}, 'Timeline User') returning id`.execute(database.db)).rows[0]!.id;
+    await linkCustomerAccount(database.db, {
+      organizationId,
+      actorId,
+      customerId: customer.id,
+      userId: user,
+      linkType: 'MANUAL_CLAIM',
+    });
+
+    const timeline = await getCustomerTimeline(database.db, organizationId, customer.id);
+    expect(timeline.totalCount).toBeGreaterThanOrEqual(3);
+    const eventTypes = timeline.items.map((i) => i.eventType);
+    expect(eventTypes).toContain('CUSTOMER_CREATED');
+    expect(eventTypes).toContain('RESTRICTION_APPLIED');
+    expect(eventTypes).toContain('ACCOUNT_LINKED');
+  });
+
+  it('contact verification sets verified_at and verification_source', async () => {
+    const { organizationId, actorId } = await fixture();
+    const customer = await createCustomer(database.db, {
+      organizationId,
+      actorId,
+      displayName: 'Verification Customer',
+      phone: '01700112233',
+      email: 'verify@example.com',
+    });
+
+    const detail = await getCustomerDetail(database.db, organizationId, customer.id);
+    const phoneId = detail.phones[0]!.id;
+    const emailId = detail.emails[0]!.id;
+
+    const verifiedPhone = await verifyCustomerPhone(database.db, {
+      organizationId,
+      actorId,
+      customerId: customer.id,
+      phoneId,
+      verificationSource: 'OTP_SMS',
+    });
+    expect(verifiedPhone.verificationStatus).toBe('VERIFIED');
+    expect(verifiedPhone.verifiedAt).toBeDefined();
+
+    const verifiedEmail = await verifyCustomerEmail(database.db, {
+      organizationId,
+      actorId,
+      customerId: customer.id,
+      emailId,
+      verificationSource: 'MAGIC_LINK',
+    });
+    expect(verifiedEmail.verificationStatus).toBe('VERIFIED');
+    expect(verifiedEmail.verifiedAt).toBeDefined();
+
+    const updated = await getCustomerDetail(database.db, organizationId, customer.id);
+    expect(updated.phones[0]?.verificationStatus).toBe('VERIFIED');
+    expect(updated.phones[0]?.verificationSource).toBe('OTP_SMS');
+    expect(updated.emails[0]?.verificationStatus).toBe('VERIFIED');
+    expect(updated.emails[0]?.verificationSource).toBe('MAGIC_LINK');
   });
 });

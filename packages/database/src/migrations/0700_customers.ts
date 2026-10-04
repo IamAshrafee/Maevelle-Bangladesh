@@ -40,6 +40,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       country_code text,
       is_primary boolean not null default false,
       verification_status text not null default 'UNVERIFIED' check (verification_status in ('UNVERIFIED', 'VERIFIED', 'BOUNCED')),
+      verified_at timestamptz,
+      verification_source text check (verification_source is null or verification_source in ('OTP_SMS', 'MANUAL_STAFF', 'CALL_VERIFIED', 'IMPORT', 'ORDER_DELIVERED')),
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       version bigint not null default 1,
@@ -56,6 +58,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       normalized_value text not null,
       is_primary boolean not null default false,
       verification_status text not null default 'UNVERIFIED' check (verification_status in ('UNVERIFIED', 'VERIFIED', 'BOUNCED')),
+      verified_at timestamptz,
+      verification_source text check (verification_source is null or verification_source in ('MAGIC_LINK', 'OTP_EMAIL', 'MANUAL_STAFF', 'IMPORT')),
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       version bigint not null default 1,
@@ -89,6 +93,48 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index customers_address_customer_index on customers.customer_addresses (organization_id, customer_id, status);
     create index customers_address_geography_index on customers.customer_addresses (geography_node_id) where geography_node_id is not null;
     create unique index customers_one_default_address_index on customers.customer_addresses (customer_id) where is_default and status = 'ACTIVE';
+
+    create table customers.customer_restrictions (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      customer_id uuid not null,
+      restriction_type text not null check (restriction_type in ('ORDERING_BLOCKED', 'COD_RESTRICTED', 'ORDER_REVIEW_REQUIRED')),
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'LIFTED', 'EXPIRED')),
+      reason text not null check (length(trim(reason)) > 0),
+      notes text,
+      created_by uuid not null,
+      expires_at timestamptz,
+      lifted_at timestamptz,
+      lifted_by uuid,
+      lift_reason text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1,
+      foreign key (organization_id, customer_id) references customers.customers(organization_id, id)
+    );
+    create index customer_restrictions_active_idx on customers.customer_restrictions (organization_id, customer_id, restriction_type) where status = 'ACTIVE';
+    create index customer_restrictions_org_status_idx on customers.customer_restrictions (organization_id, status, created_at desc);
+
+    create table customers.customer_accounts (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      customer_id uuid not null,
+      user_id uuid not null references iam.users(id),
+      link_type text not null check (link_type in ('VERIFIED_PHONE', 'VERIFIED_EMAIL', 'MANUAL_CLAIM', 'INVITATION', 'GUEST_CONVERSION')),
+      verified_at timestamptz not null default now(),
+      status text not null default 'ACTIVE' check (status in ('ACTIVE', 'UNLINKED', 'SUSPENDED')),
+      unlinked_at timestamptz,
+      unlinked_by uuid,
+      unlink_reason text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1,
+      foreign key (organization_id, customer_id) references customers.customers(organization_id, id),
+      unique (organization_id, customer_id),
+      unique (organization_id, user_id)
+    );
+    create index customer_accounts_user_idx on customers.customer_accounts (organization_id, user_id, status);
+    create index customer_accounts_customer_idx on customers.customer_accounts (organization_id, customer_id, status);
 
     create table customers.customer_duplicate_candidates (
       id uuid primary key default uuidv7(),
@@ -185,12 +231,13 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('customers.view',   'customers', 'View customer administration data.', 'HIGH'),
       ('customers.manage', 'customers', 'Create and manage commercial customers, contacts, addresses, notes, and tags.', 'HIGH'),
       ('customers.merge', 'customers', 'Merge duplicate customer identities while preserving historical commerce evidence.', 'HIGH'),
+      ('customers.restrict', 'customers', 'Apply and lift commercial restrictions on customers.', 'HIGH'),
       ('customers.anonymize', 'customers', 'Anonymize customer profile data after operational eligibility checks.', 'RESTRICTED')
     on conflict (capability_code) do nothing;
     insert into iam.membership_capability_grants (membership_id, capability_code)
       select membership.id, capability.capability_code
       from iam.organization_memberships membership
-      cross join (values ('customers.view'), ('customers.manage'), ('customers.merge'), ('customers.anonymize')) as capability(capability_code)
+      cross join (values ('customers.view'), ('customers.manage'), ('customers.merge'), ('customers.restrict'), ('customers.anonymize')) as capability(capability_code)
       where membership.membership_type = 'OWNER' and membership.status = 'ACTIVE'
     on conflict do nothing;
   `.execute(db);

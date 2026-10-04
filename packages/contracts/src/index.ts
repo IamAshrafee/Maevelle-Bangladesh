@@ -2531,6 +2531,172 @@ export type CustomerSourceDto =
   | 'ADMIN_CREATED'
   | 'EXTERNAL_API';
 
+export type CustomerRestrictionTypeDto =
+  | 'ORDERING_BLOCKED'
+  | 'COD_RESTRICTED'
+  | 'ORDER_REVIEW_REQUIRED';
+
+export type CustomerRestrictionStatusDto = 'ACTIVE' | 'LIFTED' | 'EXPIRED';
+
+export interface CustomerRestrictionDto {
+  readonly id: string;
+  readonly customerId: string;
+  readonly restrictionType: CustomerRestrictionTypeDto;
+  readonly status: CustomerRestrictionStatusDto;
+  readonly reason: string;
+  readonly notes?: string | null;
+  readonly createdBy: string;
+  readonly createdAt: string;
+  readonly expiresAt?: string | null;
+  readonly liftedAt?: string | null;
+  readonly liftedBy?: string | null;
+  readonly liftReason?: string | null;
+}
+
+export interface ApplyCustomerRestrictionInputDto {
+  readonly restrictionType: CustomerRestrictionTypeDto;
+  readonly reason: string;
+  readonly notes?: string;
+  readonly expiresAt?: string;
+}
+
+export interface LiftCustomerRestrictionInputDto {
+  readonly liftReason: string;
+}
+
+export type CustomerAccountLinkTypeDto =
+  | 'VERIFIED_PHONE'
+  | 'VERIFIED_EMAIL'
+  | 'MANUAL_CLAIM'
+  | 'INVITATION'
+  | 'GUEST_CONVERSION';
+
+export type CustomerAccountStatusDto = 'ACTIVE' | 'UNLINKED' | 'SUSPENDED';
+
+export interface CustomerAccountDto {
+  readonly id: string;
+  readonly customerId: string;
+  readonly userId: string;
+  readonly linkType: CustomerAccountLinkTypeDto;
+  readonly verifiedAt: string;
+  readonly status: CustomerAccountStatusDto;
+  readonly createdAt: string;
+  readonly unlinkedAt?: string | null;
+  readonly unlinkedBy?: string | null;
+  readonly unlinkReason?: string | null;
+  readonly user?: {
+    readonly id: string;
+    readonly name: string;
+    readonly email: string;
+  } | null;
+}
+
+export interface LinkCustomerAccountInputDto {
+  readonly userId: string;
+  readonly linkType: CustomerAccountLinkTypeDto;
+}
+
+export interface UnlinkCustomerAccountInputDto {
+  readonly reason: string;
+}
+
+export interface CustomerCommunicationSummaryDto {
+  readonly id: string;
+  readonly channel: 'IN_APP' | 'EMAIL' | 'SMS';
+  readonly notificationType: string;
+  readonly renderedSubject: string | null;
+  readonly renderedBody: string;
+  readonly intendedRecipient: string | null;
+  readonly effectiveRecipient: string | null;
+  readonly status: string;
+  readonly provider: string | null;
+  readonly providerMessageId: string | null;
+  readonly skipReason: string | null;
+  readonly failureCode: string | null;
+  readonly failureMessage: string | null;
+  readonly sourceDomain: string;
+  readonly sourceId: string;
+  readonly sentAt: string | null;
+  readonly deliveredAt: string | null;
+  readonly createdAt: string;
+  readonly smsDetails?: {
+    readonly originalRecipient: string | null;
+    readonly normalizedRecipient: string | null;
+    readonly encoding: string;
+    readonly characterCount: number;
+    readonly estimatedSegments: number;
+    readonly senderType: string;
+    readonly senderId: string | null;
+  } | null;
+}
+
+export type CustomerTimelineEventTypeDto =
+  | 'CUSTOMER_CREATED'
+  | 'CUSTOMER_UPDATED'
+  | 'ORDER_PLACED'
+  | 'ORDER_CONFIRMED'
+  | 'ORDER_DELIVERED'
+  | 'ORDER_CANCELLED'
+  | 'RETURN_REQUESTED'
+  | 'RETURN_COMPLETED'
+  | 'REFUND_COMPLETED'
+  | 'RESTRICTION_APPLIED'
+  | 'RESTRICTION_LIFTED'
+  | 'NOTE_ADDED'
+  | 'TAG_ASSIGNED'
+  | 'ACCOUNT_LINKED'
+  | 'ACCOUNT_UNLINKED'
+  | 'CUSTOMER_MERGED'
+  | 'COMMUNICATION_SENT';
+
+export interface CustomerTimelineEventDto {
+  readonly id: string;
+  readonly eventType: CustomerTimelineEventTypeDto;
+  readonly title: string;
+  readonly description?: string | null;
+  readonly occurredAt: string;
+  readonly actorType?: string | null;
+  readonly actorId?: string | null;
+  readonly referenceType?: string | null;
+  readonly referenceId?: string | null;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface CustomerMergePreviewDto {
+  readonly sourceCustomer: CustomerSummaryDto;
+  readonly targetCustomer: CustomerSummaryDto;
+  readonly canMerge: boolean;
+  readonly blockingConflicts: readonly string[];
+  readonly warnings: readonly string[];
+  readonly summary: {
+    readonly ordersToMove: number;
+    readonly phonesToCombine: number;
+    readonly duplicatePhones: number;
+    readonly emailsToCombine: number;
+    readonly duplicateEmails: number;
+    readonly addressesToMove: number;
+    readonly notesToMove: number;
+    readonly tagsToMerge: number;
+    readonly restrictionsToTransfer: number;
+    readonly sourceHasAccount: boolean;
+    readonly targetHasAccount: boolean;
+  };
+}
+
+export interface CustomerDeliveryMetricsDto {
+  readonly totalDeliveries: number;
+  readonly eligibleDeliveries: number;
+  readonly deliveredCount: number;
+  readonly failedDeliveryCount: number;
+  readonly rtoCount: number;
+  readonly successRate: number | null;
+  readonly rtoRate: number | null;
+  readonly lastSuccessfulDelivery?: string | null;
+  readonly lastRto?: string | null;
+  readonly riskLevel: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
+  readonly riskReasons: readonly { readonly code: string; readonly explanation: string }[];
+}
+
 export interface CustomerDetailDto extends CustomerSummaryDto {
   readonly canonicalCustomerId?: string;
   readonly addresses: readonly CustomerAddressDto[];
@@ -2538,14 +2704,20 @@ export interface CustomerDetailDto extends CustomerSummaryDto {
   readonly emails: readonly CustomerEmailDto[];
   readonly tags: readonly CustomerTagDto[];
   readonly notes: readonly CustomerNoteDto[];
+  readonly restrictions: readonly CustomerRestrictionDto[];
+  readonly account?: CustomerAccountDto | null;
+  readonly deliveryMetrics?: CustomerDeliveryMetricsDto | null;
   readonly commerceMetrics: {
     readonly totalOrders: number;
     readonly activeOrders: number;
     readonly cancelledOrders: number;
+    readonly deliveredOrders?: number;
+    readonly returnedOrders?: number;
     readonly lifetimeOrderValue: string;
     readonly collectedAmount: string;
     readonly refundedAmount: string;
     readonly outstandingAmount: string;
+    readonly averageOrderValue?: string;
     readonly lastOrderAt: string | null;
   };
 }
@@ -2556,6 +2728,8 @@ export interface CustomerPhoneDto {
   readonly normalizedPhone: string;
   readonly isPrimary: boolean;
   readonly verificationStatus: string;
+  readonly verifiedAt?: string | null;
+  readonly verificationSource?: string | null;
   readonly createdAt: string;
 }
 
@@ -2565,6 +2739,8 @@ export interface CustomerEmailDto {
   readonly normalizedEmail: string;
   readonly isPrimary: boolean;
   readonly verificationStatus: string;
+  readonly verifiedAt?: string | null;
+  readonly verificationSource?: string | null;
   readonly createdAt: string;
 }
 

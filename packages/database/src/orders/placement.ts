@@ -268,19 +268,33 @@ export async function placeOrder(
     const details = await cartOrderLines(transaction, cart);
     if (cart.lines.some((line) => line.availability !== 'AVAILABLE' || !line.unitPrice))
       throw new OrderDomainError('OUT_OF_STOCK', 'One or more items are no longer available.');
-    let customerId: string;
+    let customerResolution: {
+      customerId: string;
+      customerAddressId?: string;
+      activeRestrictions: readonly string[];
+    };
     try {
-      customerId = (
-        await resolveOrCreateOrderCustomerInTransaction(transaction, {
-          organizationId: checkout.organization_id,
-          actorId: checkout.id,
-          actorType: 'GUEST_CHECKOUT',
-          displayName: contact.name,
-          phone: contact.phone,
-          ...(contact.email ? { email: contact.email } : {}),
-          source: 'STOREFRONT',
-        })
-      ).customerId;
+      customerResolution = await resolveOrCreateOrderCustomerInTransaction(transaction, {
+        organizationId: checkout.organization_id,
+        actorId: checkout.id,
+        actorType: 'GUEST_CHECKOUT',
+        displayName: contact.name,
+        phone: contact.phone,
+        ...(contact.email ? { email: contact.email } : {}),
+        source: 'STOREFRONT',
+        address: {
+          recipientName: address.recipientName,
+          phone: address.phone,
+          addressLine1: address.addressLine1,
+          addressLine2: address.addressLine2,
+          geographyNodeId: address.geographyNodeId,
+          area: address.area,
+          city: address.city,
+          district: address.district,
+          postalCode: address.postalCode,
+          countryCode: address.countryCode,
+        },
+      });
     } catch (error) {
       if (error instanceof CustomerDomainError)
         throw new OrderDomainError(
@@ -289,6 +303,18 @@ export async function placeOrder(
         );
       throw error;
     }
+
+    if (
+      checkout.payment_method === 'COD' &&
+      customerResolution.activeRestrictions.includes('COD_RESTRICTED')
+    ) {
+      throw new OrderDomainError(
+        'VALIDATION_FAILED',
+        'Cash on delivery is restricted for this customer. Please choose an alternate payment method.',
+      );
+    }
+
+    const customerId = customerResolution.customerId;
     const number = await nextOrderNumber(transaction, checkout.organization_id);
     const orderCreated = await sql<{ id: string }>`
       insert into orders.orders (organization_id, order_number, checkout_session_id, customer_id, source, currency_code, order_status, payment_method, subtotal_amount, discount_amount, delivery_amount, total_amount)
@@ -300,7 +326,7 @@ export async function placeOrder(
     await sql`insert into orders.order_customer_snapshots (order_id, organization_id, customer_id, display_name, phone, normalized_phone, email) values (${orderId}, ${checkout.organization_id}, ${customerId}, ${contact.name}, ${contact.phone}, ${normalizeCustomerPhone(contact.phone)}, ${contact.email ?? null})`.execute(
       transaction,
     );
-    await sql`insert into orders.order_addresses (organization_id, order_id, address_type, geography_node_id, recipient_name, phone, address_line_1, address_line_2, area, city, district, postal_code, country_code) values (${checkout.organization_id}, ${orderId}, 'DELIVERY', ${address.geographyNodeId ?? null}, ${address.recipientName}, ${address.phone}, ${address.addressLine1}, ${address.addressLine2 ?? null}, ${address.area ?? null}, ${address.city ?? null}, ${address.district ?? null}, ${address.postalCode ?? null}, ${address.countryCode})`.execute(
+    await sql`insert into orders.order_addresses (organization_id, order_id, address_type, source_customer_address_id, geography_node_id, recipient_name, phone, address_line_1, address_line_2, area, city, district, postal_code, country_code) values (${checkout.organization_id}, ${orderId}, 'DELIVERY', ${customerResolution.customerAddressId ?? null}, ${address.geographyNodeId ?? null}, ${address.recipientName}, ${address.phone}, ${address.addressLine1}, ${address.addressLine2 ?? null}, ${address.area ?? null}, ${address.city ?? null}, ${address.district ?? null}, ${address.postalCode ?? null}, ${address.countryCode})`.execute(
       transaction,
     );
     await sql`insert into orders.order_delivery_pricing_snapshots (order_id, organization_id, delivery_pricing_rule_id, rule_name_snapshot, country_code_snapshot, geography_node_id, amount, currency_code) values (${orderId}, ${checkout.organization_id}, ${quote.ruleId}, ${quote.ruleName}, ${address.countryCode}, ${address.geographyNodeId ?? null}, ${quote.amount}::numeric, ${quote.currency})`.execute(

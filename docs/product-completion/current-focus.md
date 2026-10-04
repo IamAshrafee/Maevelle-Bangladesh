@@ -2,15 +2,15 @@
 
 ## Active Area
 
-Orders Module — Complete Operational Management Frontend & Delivery Intelligence Console.
+Customers Module — Production-Complete Customer Identity & Relationship Domain.
 
 ## Current Status / Substage
 
-`ORDERS_FRONTEND_OPERATIONAL_COMPLETE`
+`CUSTOMERS_PRODUCTION_DOMAIN_COMPLETE`
 
 ## Implementation Overview
 
-Completed a comprehensive frontend-first transition from MVP/partial screens to a production-grade Order Management Workspace. All frontend views reflect backend-authoritative read models and capabilities without client-calculated domain state or unverified assumptions.
+Completed the dedicated deep completion pass for Maevelle's **Customers module**, transitioning from a basic commerce contact snapshot (`CUSTOMER AS BASIC COMMERCE RECORD`) into a production-complete customer identity and relationship domain (`CUSTOMER AS PRODUCTION-COMPLETE CUSTOMER IDENTITY & RELATIONSHIP DOMAIN`). Today's guest customer data can seamlessly become tomorrow's authenticated customer account history without losing, duplicating, or incorrectly merging historical records.
 
 ### 1. Contracts & API Alignment
 - **List Orders Read Model**: Added `riskLevel?: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED' | null` to `OrderSummaryDto` in `@maevelle/contracts`.

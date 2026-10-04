@@ -19,6 +19,7 @@ import type {
 } from './types.js';
 import { listOrderVerifications } from './verifications.js';
 import { getOrderTimeline } from './timeline.js';
+import { evaluateOrderDeliveryRisk } from './risk.js';
 
 export async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<OrderView> {
   const order = await sql<{
@@ -394,10 +395,10 @@ export async function getOrderForAdmin(
   const canAddNote = true;
   const canRecordVerification = ['PENDING', 'CONFIRMED', 'ON_HOLD'].includes(baseOrder.status);
   const canComplete =
-    baseOrder.status === 'CONFIRMED' &&
+    ['PENDING', 'CONFIRMED'].includes(baseOrder.status) &&
     (deliveryStatus === 'DELIVERED' || !['CANCELLED', 'COMPLETED'].includes(baseOrder.status));
   const canCreateFulfillment =
-    baseOrder.status === 'CONFIRMED' &&
+    ['PENDING', 'CONFIRMED'].includes(baseOrder.status) &&
     !['FULFILLED', 'CANCELLED'].includes(fulfillmentStatus);
 
   const capabilities: OrderCapabilities = {
@@ -415,13 +416,29 @@ export async function getOrderForAdmin(
   };
 
   const riskRow = riskSummaryQuery.rows[0];
-  const riskSummary = riskRow
+  let riskSummary = riskRow
     ? {
         overallRiskLevel: riskRow.overall_risk_level,
         recommendation: riskRow.recommendation,
         signalCount: Number(riskRow.signal_count),
       }
     : null;
+
+  if (!riskSummary) {
+    try {
+      const evaluation = await evaluateOrderDeliveryRisk(db, {
+        organizationId: input.organizationId,
+        orderId: input.orderId,
+      });
+      riskSummary = {
+        overallRiskLevel: evaluation.overallRiskLevel,
+        recommendation: evaluation.recommendation,
+        signalCount: evaluation.signals.length,
+      };
+    } catch {
+      // Best effort fallback
+    }
+  }
 
   return {
     ...baseOrder,

@@ -112,10 +112,9 @@ export async function getOrderTimeline(
     created_at: Date;
   }>`
     select v.id, v.verification_type, v.outcome, v.notes, v.actor_id,
-           coalesce(profile.display_name, u.email) as actor_name, v.created_at
+           coalesce(u.name, u.email) as actor_name, v.created_at
     from orders.order_verifications v
     left join iam.users u on u.id = v.actor_id
-    left join iam.user_profiles profile on profile.user_id = u.id
     where v.organization_id = ${input.organizationId} and v.order_id = ${input.orderId}
   `.execute(db);
 
@@ -126,7 +125,7 @@ export async function getOrderTimeline(
       id: `verification-${v.id}`,
       category: 'VERIFICATION',
       eventType: `VERIFICATION_${v.outcome}`,
-      title: `Verification (${typeLabel}): ${outcomeLabel}`,
+      title: `Verification: ${v.verification_type} (${v.outcome})`,
       description: v.notes,
       actorType: 'ADMIN',
       actorName: v.actor_name,
@@ -219,7 +218,7 @@ export async function getOrderTimeline(
       id: `order-cancellation-${c.id}`,
       category: 'ORDER',
       eventType: 'ORDER_CANCELLED',
-      title: `Order cancelled (${c.initiated_by ?? 'MERCHANT'})`,
+      title: `Order Cancelled (${c.initiated_by ?? 'MERCHANT'})`,
       description: `Reason: ${c.reason_code}${c.reason_text ? ` - ${c.reason_text}` : ''}`,
       actorType,
       occurredAt: c.created_at.toISOString(),
@@ -263,9 +262,10 @@ export async function getOrderTimeline(
     payment_method: string;
     created_at: Date;
   }>`
-    select p.id, alloc.amount::text, p.status, p.payment_method, p.created_at
+    select p.id, alloc.amount::text, p.status, coalesce(pm.name, pm.code, 'Payment') as payment_method, p.created_at
     from payments.payment_allocations alloc
     join payments.payments p on p.id = alloc.payment_id and p.organization_id = alloc.organization_id
+    left join payments.payment_methods pm on pm.id = p.payment_method_id and pm.organization_id = p.organization_id
     where alloc.organization_id = ${input.organizationId} and alloc.order_id = ${input.orderId}
   `.execute(db);
 
@@ -486,10 +486,9 @@ export async function getOrderTimeline(
     created_at: Date;
   }>`
     select n.id, n.note_type, n.body, n.author_actor_id as actor_id,
-           coalesce(profile.display_name, u.email) as author_name, n.created_at
+           coalesce(u.name, u.email) as author_name, n.created_at
     from orders.order_notes n
     left join iam.users u on u.id = n.author_actor_id
-    left join iam.user_profiles profile on profile.user_id = u.id
     where n.organization_id = ${input.organizationId} and n.order_id = ${input.orderId}
   `.execute(db);
 

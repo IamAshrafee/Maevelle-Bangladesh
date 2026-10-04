@@ -4855,8 +4855,90 @@ Invoice
 Payment Evidence
 ```
 
-That is the right next domain before we move into Access Control and Finance Operations.
 
 ---
 
-**End of Customer Architecture v0.1**
+# 35. Production Domain Implementation Reality (Customer Domain V2)
+
+The Customers module has completed its dedicated deep production pass, elevating Maevelle from a basic commerce contact snapshot to a **production-complete customer identity and relationship domain**.
+
+## 35.1 Customer Identity vs. Auth Account (Dual Identity Architecture)
+A fundamental tenet of Maevelle's customer architecture is the separation of business identity from authentication identity:
+- **`customers.customers` (Business Identity)**: The long-lived, tenant-isolated record representing a commercial buyer. A customer exists from their very first guest order and accumulates order history, addresses, payment records, return cases, and courier delivery intelligence—long before they ever create a password or register an account.
+- **`iam.users` (Authentication Identity)**: Represents a login credential / authenticated principal.
+- **Binding Mechanism (`customers.customer_accounts`)**: A 1:1 per-organization binding table that securely associates a customer record with an authenticated user account. When customer account registration launches, existing guest customer records are linked via verified phone/email (`resolveCustomerForAuthenticatedUser`), immediately exposing their full historical orders without copying rows or duplicating customer entities.
+
+## 35.2 Contact Points & Bangladesh Phone Normalization
+- **Canonical Phone Format**: Normalized via `libphonenumber-js` with default country `BD`. Inputs such as `01712345678`, `+8801712345678`, and `8801712345678` are deterministically normalized to E.164 (`+8801712345678`), while preserving raw input formatting.
+- **Multi-Phone & Multi-Email Support**: Customers support multiple contact points with explicit `is_primary` flags, enforced by partial unique indexes per customer.
+- **Verification State Machine**: Phones and emails feature explicit `verification_status` (`UNVERIFIED`, `PENDING_VERIFICATION`, `VERIFIED`, `REJECTED`), `verified_at`, and `verification_source` (`OTP_SMS`, `MAGIC_LINK`, `STAFF_CALL`, `CHECKOUT_AUTH`). Contact normalization is strictly separated from verification; guest checkout contacts default to `UNVERIFIED`.
+
+## 35.3 Address Book vs. Order Address Snapshots
+- **Customer Address Book (`customers.customer_addresses`)**: Reusable, current addresses (Home, Office, Other) with default flags.
+- **Order Delivery Snapshots (`orders.order_delivery_snapshots`)**: Immutable historical evidence captured at order commitment. Updating a customer's address never mutates past order delivery snapshots.
+- **Auto-Learning**: When a guest order is placed, `resolveOrCreateOrderCustomerInTransaction` idempotently records newly observed delivery addresses into the customer's address book while stamping `source_customer_address_id` on the order for operational lineage.
+
+## 35.4 Centralized Order-to-Customer Resolution
+All order ingress channels (Storefront guest checkout, manual operator orders, social channels) utilize `resolveOrCreateOrderCustomerInTransaction`:
+1. **Normalized Phone Lookup**: Deterministically checks for an existing customer within the organization.
+2. **Deterministic Single-Match Reuse**: If one customer matches, the profile is reused and new contact points/addresses are merged cleanly.
+3. **Conflict Detection**: If phone matches Customer A and email matches Customer B, the system flags an identity conflict review rather than silently corrupting records.
+4. **Concurrency Safety**: Employs PostgreSQL advisory locks (`pg_advisory_xact_lock`) on the tenant and normalized phone hash, preventing duplicate customer creation during simultaneous checkouts.
+5. **Restriction Enforcement**: Instantly rejects order placement if the customer has an active `ORDERING_BLOCKED` restriction.
+
+## 35.5 Commercial Restrictions & Ban Policies (`customer_restrictions`)
+Rather than a crude boolean `is_banned`, Maevelle models granular, auditable business restrictions:
+- **Types**:
+  - `ORDERING_BLOCKED`: Completely halts order creation across storefront and manual channels.
+  - `COD_RESTRICTED`: Forbids Cash on Delivery payment methods; forces prepaid or manual review.
+  - `ORDER_REVIEW_REQUIRED`: Allows placement but holds orders in review before fulfillment.
+- **Lifecycle & Auditing**:
+  - Supports `ACTIVE` and `LIFTED` states with mandatory operator attribution, structured reason codes, and optional expiration dates (`expires_at`).
+  - Lifts require a documented `lift_reason` and operator identity.
+  - Full audit trails logged to `platform.audit_events`.
+
+## 35.6 Customer Deduplication & Merge System
+- **Merge Preview (`getCustomerMergePreview`)**:
+  - Pre-flight validation API for admin review.
+  - Detects blocking conflicts such as `DIFFERENT_ACTIVE_ACCOUNTS` (preventing accidental merging of two distinct registered users) or already merged/anonymized states.
+  - Quantifies moving resources: order count, phones to combine, duplicate contacts, addresses, notes, tags, and active restrictions to transfer.
+- **Transactional Merge (`mergeCustomers`)**:
+  - Optimistic concurrency control on both source and target customer versions.
+  - Atomically reassigns foreign keys across `orders.orders`, `orders.checkout_sessions`, `cart.carts`, `promotions.promotion_usage`, `returns.return_cases`, `reviews.reviews`, `reviews.review_access_tokens`, and `notifications.notifications`.
+  - Re-parents contact points, deduplicating matching phone numbers and email addresses.
+  - Transfers active restrictions and active user account links.
+  - Registers canonical alias in `customers.customer_aliases` (`alias_customer_id -> canonical_customer_id`), ensuring historical links and order lookups resolve seamlessly.
+  - Appends merge record to `customers.customer_merges` and audit trail.
+
+## 35.7 Unified Cross-Domain Timeline (`getCustomerTimeline`)
+A unified business timeline query aggregates events across the commerce ecosystem without data duplication:
+- `CUSTOMER_CREATED` (first-touch acquisition channel)
+- `ORDER_PLACED`, `ORDER_CONFIRMED`, `ORDER_DELIVERED`, `ORDER_CANCELLED`
+- `RETURN_REQUESTED`, `RETURN_COMPLETED`
+- `REFUND_COMPLETED` (amount, currency, reason code)
+- `RESTRICTION_APPLIED`, `RESTRICTION_LIFTED`
+- `NOTE_ADDED` (internal staff notes)
+- `TAG_ASSIGNED` (VIP, Wholesale, etc.)
+- `ACCOUNT_LINKED`, `ACCOUNT_UNLINKED`
+- `CUSTOMER_MERGED`
+- `COMMUNICATION_SENT` (Email/SMS notifications)
+
+## 35.8 Communication History Read Model (`listCustomerCommunications`)
+Queries `notifications.notifications` and `notifications.sms_delivery_details` without duplicating communication infrastructure:
+- Exposes channel (`EMAIL`, `SMS`, `IN_APP`), rendered subject, template key, status (`SENT`, `DELIVERED`, `FAILED`, etc.), provider references, and timestamps.
+- Tenant-scoped and historical alias-aware.
+
+## 35.9 Delivery Metrics & Fraud Risk Summary
+Aggregated via `getCustomerDeliveryHistory`:
+- **Internal Maevelle History**: Lifetime orders, confirmed count, delivered count, cancelled count, RTO count, return count, total net spend, and average order value (AOV).
+- **Courier Network Intelligence**: Integrated with Steadfast and Pathao fraud check adapters to present delivery success rates and courier RTO history for operator review.
+
+## 35.10 Verification & RBAC
+- **Capabilities**: Enforced via `@maevelle/iam` (`customers.view`, `customers.manage`, `customers.restrict`).
+- **Audit Logging**: All mutations (contact verification, address updates, restrictions, account links, customer merges) append structured audit events to `platform.audit_events`.
+- **Test Coverage**: 14 dedicated domain integration tests in `packages/database/src/customers.test.ts` validating complete lifecycle invariants.
+
+---
+
+**End of Customer Architecture v0.2 (Production Complete Domain)**
+
