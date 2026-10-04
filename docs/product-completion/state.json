@@ -5,7 +5,7 @@
   "active_substage": "CUSTOMERS_FRONTEND_WORKSPACE_COMPLETE",
   "active_status": "LOCAL_VERIFICATION_COMPLETE",
   "baseline_commit": "0e2e8f5",
-  "last_checkpoint_commit": "af973b0",
+  "last_checkpoint_commit": "abaa7e0",
   "last_verified_commit": "HEAD",
   "last_completed_action": "Completed Customers Frontend Workspace V2: modernized customer list with operational tabs (All, Repeat, High Spend, Restricted, Recent), flexible BD phone/email search, server-side pagination, customer header with canonical alias banner, metrics strip, multi-phone and multi-email contact section with verification dialogs and primary toggles, address book with BD geography and order-snapshot disclaimer, tabbed orders/returns/refunds, courier delivery & RTO risk intelligence (Pathao/Steadfast/internal), commercial restrictions management with real-time enforcement preview, 2-step guided merge with live conflict preview, customer anonymization with typed confirmation, future-ready IAM account link card, internal staff notes, tag management, unified business timeline, unified email/SMS communications with safe drawer preview, and deep manual order creation integration.",
   "next_action": "Ready for operator review or next chosen module pass.",
