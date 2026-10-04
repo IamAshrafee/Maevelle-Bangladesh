@@ -46,6 +46,7 @@ import {
   type PaymentMethodCode,
 } from '@maevelle/database/payments';
 import { getPublicOrderFulfillmentStatus } from '@maevelle/database/delivery';
+import { getOrderLinesReviewState } from '@maevelle/database/reviews';
 import { findActiveAdminContext, isCheckoutEnabledForToken } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
@@ -692,6 +693,22 @@ export function registerOrderRoutes(
           organizationId: active.organizationId,
           orderId: (request.params as { orderId: string }).orderId,
         }),
+      };
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
+
+  app.get('/admin/orders/:orderId/review-state', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      return {
+        data: await getOrderLinesReviewState(
+          database.db,
+          active.organizationId,
+          (request.params as { orderId: string }).orderId,
+        ),
       };
     } catch (caught) {
       return sendError(reply, caught);

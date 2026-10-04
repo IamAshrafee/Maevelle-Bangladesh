@@ -8,6 +8,7 @@ import {
   RefreshCw,
   RotateCcw,
   ShoppingBag,
+  Star,
   Undo2,
 } from 'lucide-react';
 
@@ -42,29 +43,45 @@ interface CustomerRefundRow {
   readonly createdAt: string;
 }
 
+interface CustomerReviewRow {
+  readonly reviewId: string;
+  readonly productId: string;
+  readonly productTitle: string;
+  readonly rating: number;
+  readonly title: string | null;
+  readonly body: string | null;
+  readonly moderationStatus: string;
+  readonly verifiedPurchase: boolean;
+  readonly purchasedVariantLabel: string | null;
+  readonly submittedAt: string;
+}
+
 interface CustomerOrdersSectionProps {
   readonly customerId: string;
   readonly isReadOnly?: boolean;
 }
 
 export function CustomerOrdersSection({ customerId, isReadOnly = false }: CustomerOrdersSectionProps) {
-  const [activeTab, setActiveTab] = useState<'orders' | 'returns' | 'refunds'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'returns' | 'refunds' | 'reviews'>('orders');
   const [orders, setOrders] = useState<readonly CustomerOrderRow[]>([]);
   const [returns, setReturns] = useState<readonly CustomerReturnRow[]>([]);
   const [refunds, setRefunds] = useState<readonly CustomerRefundRow[]>([]);
+  const [reviews, setReviews] = useState<readonly CustomerReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [ordersRes, returnsRes, refundsRes] = await Promise.all([
+      const [ordersRes, returnsRes, refundsRes, reviewsRes] = await Promise.all([
         fetchApiData<readonly CustomerOrderRow[]>(`/admin/customers/${customerId}/orders?limit=25`),
         fetchApiData<readonly CustomerReturnRow[]>(`/admin/customers/${customerId}/returns?limit=25`),
         fetchApiData<readonly CustomerRefundRow[]>(`/admin/customers/${customerId}/refunds?limit=25`),
+        fetchApiData<{ items: readonly CustomerReviewRow[] }>(`/admin/customers/${customerId}/reviews?pageSize=25`).catch(() => ({ items: [] })),
       ]);
       setOrders(ordersRes);
       setReturns(returnsRes);
       setRefunds(refundsRes);
+      setReviews(reviewsRes?.items ?? []);
     } catch {
       // Handled silently
     } finally {
@@ -125,6 +142,18 @@ export function CustomerOrdersSection({ customerId, isReadOnly = false }: Custom
             >
               <Undo2 className="size-3.5" aria-hidden="true" />
               Refunds ({refunds.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('reviews')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${
+                activeTab === 'reviews'
+                  ? 'bg-background text-foreground shadow-2xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Star className="size-3.5" aria-hidden="true" />
+              Reviews ({reviews.length})
             </button>
           </div>
         </div>
@@ -266,6 +295,67 @@ export function CustomerOrdersSection({ customerId, isReadOnly = false }: Custom
             </div>
           ))
         )}
+
+        {/* Reviews List */}
+        {activeTab === 'reviews' &&
+          (reviews.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+              <Star className="size-8 stroke-1 text-muted-foreground/50 mb-2" />
+              <p className="text-sm font-medium">No reviews submitted by this customer</p>
+            </div>
+          ) : (
+            reviews.map((rev) => (
+              <div
+                key={rev.reviewId}
+                className="flex min-h-14 items-center justify-between gap-4 px-6 py-3.5"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-foreground">
+                      {rev.productTitle}
+                    </span>
+                    <span className="text-amber-500 text-xs">
+                      {'★'.repeat(rev.rating)}
+                      {'☆'.repeat(5 - rev.rating)}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] uppercase ${
+                        rev.moderationStatus === 'APPROVED'
+                          ? 'border-emerald-300 text-emerald-700'
+                          : rev.moderationStatus === 'REJECTED'
+                            ? 'border-rose-300 text-rose-700'
+                            : 'border-amber-300 text-amber-700'
+                      }`}
+                    >
+                      {rev.moderationStatus}
+                    </Badge>
+                    {rev.verifiedPurchase ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        Verified
+                      </Badge>
+                    ) : null}
+                  </div>
+                  {rev.purchasedVariantLabel ? (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Variant: {rev.purchasedVariantLabel}
+                    </p>
+                  ) : null}
+                  {rev.title || rev.body ? (
+                    <p className="text-xs text-foreground/80 mt-1 line-clamp-1">
+                      {rev.title ? <strong>{rev.title}: </strong> : null}
+                      {rev.body}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="text-right text-xs text-muted-foreground whitespace-nowrap">
+                  {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
+                    new Date(rev.submittedAt),
+                  )}
+                </div>
+              </div>
+            ))
+          ))}
       </div>
     </section>
   );

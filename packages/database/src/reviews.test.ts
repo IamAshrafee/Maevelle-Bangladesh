@@ -5,15 +5,21 @@ import { sql } from 'kysely';
 import { createDatabase } from './index.js';
 import { createOrganization } from './platform.js';
 import {
+  formatSafeAuthorName,
+  getCustomerReviewHistory,
+  getOrderLinesReviewState,
   getRatingSummary,
   listAdminReviews,
   listPublicReviews,
   moderateReview,
   rebuildRatingSummary,
   ReviewDomainError,
+  sanitizeReviewText,
   submitReview,
   submitReviewRevision,
+  upsertMerchantResponse,
   verifyReviewIntegrity,
+  withdrawReview,
 } from './reviews.js';
 
 const database = createDatabase({
@@ -212,5 +218,150 @@ describe('Reviews', () => {
     );
     await rebuildRatingSummary(database.db, data.organizationId, data.productId);
     expect(await verifyReviewIntegrity(database.db, data.organizationId)).toEqual([]);
+  });
+
+  it('enforces privacy-safe author name formatting and text sanitization', () => {
+    expect(formatSafeAuthorName('Nusrat Jahan')).toBe('Nusrat J.');
+    expect(formatSafeAuthorName('Ashrafee')).toBe('Ashrafee');
+    expect(formatSafeAuthorName(null)).toBe('Verified customer');
+    expect(formatSafeAuthorName('')).toBe('Verified customer');
+
+    const dirty = '<script>alert("hack")</script>Loved this <b>dress</b>!\x00\x08';
+    expect(sanitizeReviewText(dirty, 100)).toBe('Loved this dress!');
+  });
+
+  it('enforces invariant REV-INV-009: exactly one active review per customer per product', async () => {
+    const data = await fixture('single-active');
+    await submitReview(database.db, {
+      organizationId: data.organizationId,
+      accessToken: data.token,
+      rating: 5,
+      title: 'First review',
+      body: 'Great fit and quality.',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    // Create a second token for the same customer and product
+    const secondToken = crypto.randomUUID();
+    const customer = await sql<{ id: string }>`
+      select customer_id::text from reviews.review_access_tokens
+      where organization_id = ${data.organizationId} and token_hash = ${tokenHash(data.token)}
+    `.execute(database.db);
+    const line = await sql<{ id: string }>`
+      select order_line_id::text from reviews.review_access_tokens
+      where organization_id = ${data.organizationId} and token_hash = ${tokenHash(data.token)}
+    `.execute(database.db);
+
+    await sql`
+      insert into reviews.review_access_tokens (organization_id, customer_id, order_line_id, product_id, token_hash)
+      values (${data.organizationId}, ${customer.rows[0]!.id}::uuid, ${line.rows[0]!.id}::uuid, ${data.productId}::uuid, ${tokenHash(secondToken)})
+    `.execute(database.db);
+
+    // Attempting a second active review must throw CONFLICT
+    await expect(
+      submitReview(database.db, {
+        organizationId: data.organizationId,
+        accessToken: secondToken,
+        rating: 4,
+        title: 'Duplicate review attempt',
+        body: 'Should be rejected by REV-INV-009.',
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('handles customer review withdrawal, unpublishes from rating aggregates, and maintains history', async () => {
+    const data = await fixture('withdrawal');
+    const submitted = await submitReview(database.db, {
+      organizationId: data.organizationId,
+      accessToken: data.token,
+      rating: 5,
+      title: 'To be withdrawn',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await moderateReview(database.db, {
+      organizationId: data.organizationId,
+      actorId: data.actorId,
+      reviewId: submitted.id,
+      revisionId: submitted.revisionId,
+      decision: 'APPROVE',
+    });
+
+    const summaryBefore = await getRatingSummary(database.db, data.organizationId, data.productId);
+    expect(summaryBefore?.ratingCount).toBe(1);
+    expect(summaryBefore?.averageRating).toBe('5.0000');
+
+    // Withdraw the review using customer credentials
+    const withdrawn = await withdrawReview(database.db, {
+      organizationId: data.organizationId,
+      reviewId: submitted.id,
+      accessToken: data.token,
+      reason: 'Customer requested removal',
+    });
+    expect(withdrawn.reviewId).toBe(submitted.id);
+
+    // Summary must immediately update to 0 ratings
+    const summaryAfter = await getRatingSummary(database.db, data.organizationId, data.productId);
+    expect(summaryAfter?.ratingCount).toBe(0);
+    expect(summaryAfter?.averageRating).toBeNull();
+
+    // Public listing must exclude withdrawn review
+    const publicReviews = await listPublicReviews(database.db, data.organizationId, data.productId);
+    expect(publicReviews).toHaveLength(0);
+  });
+
+  it('supports merchant responses and deep customer / order review queries', async () => {
+    const data = await fixture('merchant-response');
+    const submitted = await submitReview(database.db, {
+      organizationId: data.organizationId,
+      accessToken: data.token,
+      rating: 4,
+      title: 'Good delivery',
+      body: 'Arrived nicely packaged.',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await moderateReview(database.db, {
+      organizationId: data.organizationId,
+      actorId: data.actorId,
+      reviewId: submitted.id,
+      revisionId: submitted.revisionId,
+      decision: 'APPROVE',
+    });
+
+    // Upsert merchant response
+    const response = await upsertMerchantResponse(database.db, {
+      organizationId: data.organizationId,
+      actorId: data.actorId,
+      reviewId: submitted.id,
+      body: 'Thank you for your valuable feedback! We are thrilled you loved the packaging.',
+    });
+    expect(response.id).toBeDefined();
+
+    // Verify public review includes the official response
+    const publicReviews = await listPublicReviews(database.db, data.organizationId, data.productId);
+    expect(publicReviews).toHaveLength(1);
+    expect(publicReviews[0]?.merchant_response).toContain('valuable feedback');
+
+    // Verify customer review history
+    const customer = await sql<{ id: string }>`
+      select customer_id::text from reviews.review_access_tokens
+      where organization_id = ${data.organizationId} and token_hash = ${tokenHash(data.token)}
+    `.execute(database.db);
+    const history = await getCustomerReviewHistory(database.db, data.organizationId, customer.rows[0]!.id);
+    expect(history.items).toHaveLength(1);
+    expect(history.metrics.totalSubmitted).toBe(1);
+    expect(history.metrics.averageRatingGiven).toBe(4);
+
+    // Verify order lines review state
+    const order = await sql<{ id: string }>`
+      select o.id::text from orders.orders o
+      join reviews.review_access_tokens rat on rat.customer_id = o.customer_id
+      where rat.token_hash = ${tokenHash(data.token)}
+      limit 1
+    `.execute(database.db);
+    const orderReviewState = await getOrderLinesReviewState(database.db, data.organizationId, order.rows[0]!.id);
+    expect(orderReviewState).toHaveLength(1);
+    expect(orderReviewState[0]?.reviewSubmitted).toBe(true);
+    expect(orderReviewState[0]?.reviewRating).toBe(4);
   });
 });

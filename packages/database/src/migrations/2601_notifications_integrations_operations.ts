@@ -39,7 +39,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('DELIVERY_FAILED','REQUIRED_OPERATIONAL'),('DELIVERY_RTO_INITIATED','REQUIRED_OPERATIONAL'),
       ('RETURN_AUTHORIZED','REQUIRED_OPERATIONAL'),('RETURN_REJECTED','REQUIRED_OPERATIONAL'),
       ('RETURN_RECEIVED','REQUIRED_OPERATIONAL'),('REFUND_COMPLETED','REQUIRED_OPERATIONAL'),
-      ('REVIEW_VISIBLE','OPTIONAL')
+      ('REVIEW_VISIBLE','OPTIONAL'),('REVIEW_REQUEST','OPTIONAL'),('REVIEW_RESPONSE','OPTIONAL')
       on conflict(notification_type) do update set delivery_requirement=excluded.delivery_requirement,updated_at=now();
 
     insert into notifications.notification_channel_policies(notification_type,channel,enabled,automatic_enabled,manual_allowed,template_key) values
@@ -53,7 +53,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('DELIVERY_ATTEMPT_FAILED','IN_APP',true,true,false,null),('DELIVERY_FAILED','IN_APP',true,true,false,null),('DELIVERY_RTO_INITIATED','IN_APP',true,true,false,null),
       ('RETURN_AUTHORIZED','IN_APP',true,true,false,null),('RETURN_REJECTED','IN_APP',true,true,false,null),('RETURN_RECEIVED','IN_APP',true,true,false,null),
       ('REFUND_COMPLETED','IN_APP',true,true,true,null),('REFUND_COMPLETED','EMAIL',true,true,true,'refund-completed'),('REFUND_COMPLETED','SMS',true,false,true,'refund-completed'),
-      ('REVIEW_VISIBLE','IN_APP',true,true,false,null)
+      ('REVIEW_VISIBLE','IN_APP',true,true,false,null),
+      ('REVIEW_REQUEST','IN_APP',true,true,false,null),('REVIEW_REQUEST','EMAIL',true,true,true,'review-request'),('REVIEW_REQUEST','SMS',true,false,true,'review-request'),
+      ('REVIEW_RESPONSE','IN_APP',true,true,false,null),('REVIEW_RESPONSE','EMAIL',true,true,true,'review-response'),('REVIEW_RESPONSE','SMS',true,false,true,'review-response')
       on conflict(notification_type,channel) do update set enabled=excluded.enabled,automatic_enabled=excluded.automatic_enabled,manual_allowed=excluded.manual_allowed,template_key=excluded.template_key,updated_at=now();
   `.execute(db);
 }

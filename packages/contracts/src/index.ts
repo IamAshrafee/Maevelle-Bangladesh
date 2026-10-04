@@ -836,6 +836,7 @@ export interface StorefrontProductDto {
   }[];
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
+  readonly ratingSummary?: ProductRatingSummaryDto | null;
 }
 
 export interface StorefrontContextDto {
@@ -4248,3 +4249,271 @@ export interface SystemStatusDto {
   };
   readonly activeRevision: number;
 }
+
+// ============================================================================
+// Reviews Domain Contracts
+// ============================================================================
+
+export type ReviewSourceDto = 'CUSTOMER' | 'MIGRATION' | 'CONTROLLED_IMPORT';
+export type ReviewLifecycleStatusDto = 'ACTIVE' | 'REMOVED';
+export type ReviewVisibilityStatusDto = 'VISIBLE' | 'HIDDEN';
+export type ReviewModerationStatusDto = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type ReviewModerationReasonDto =
+  | 'SPAM'
+  | 'DUPLICATE'
+  | 'IRRELEVANT'
+  | 'ABUSIVE_OR_THREATENING'
+  | 'PERSONAL_INFORMATION'
+  | 'UNSAFE_MEDIA'
+  | 'FRAUD_SUSPECTED'
+  | 'PROHIBITED_CONTENT'
+  | 'OTHER';
+
+export type ReviewMediaTypeDto = 'IMAGE' | 'VIDEO';
+
+export interface ReviewMediaItemDto {
+  readonly assetId: string;
+  readonly mediaType: ReviewMediaTypeDto;
+  readonly position: number;
+  readonly url: string;
+  readonly thumbnailUrl?: string;
+  readonly altText?: string | null;
+  readonly width?: number | null;
+  readonly height?: number | null;
+}
+
+export interface MerchantResponseDto {
+  readonly body: string;
+  readonly status: 'VISIBLE' | 'HIDDEN';
+  readonly respondedBy: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ProductRatingSummaryDto {
+  readonly productId: string;
+  readonly ratingCount: number;
+  readonly ratingSum: number;
+  readonly averageRating: string | null;
+  readonly formattedAverage: string | null;
+  readonly rating1Count: number;
+  readonly rating2Count: number;
+  readonly rating3Count: number;
+  readonly rating4Count: number;
+  readonly rating5Count: number;
+  readonly textReviewCount: number;
+  readonly mediaReviewCount: number;
+  readonly verifiedReviewCount: number;
+  readonly distributionPercentages: {
+    readonly star1: number;
+    readonly star2: number;
+    readonly star3: number;
+    readonly star4: number;
+    readonly star5: number;
+  };
+  readonly updatedAt: string;
+}
+
+export interface PublicReviewDto {
+  readonly id: string;
+  readonly rating: number;
+  readonly title: string | null;
+  readonly body: string | null;
+  readonly publicDisplayName: string;
+  readonly verifiedPurchase: boolean;
+  readonly purchasedVariant?: {
+    readonly variantId: string | null;
+    readonly label: string | null;
+  } | null;
+  readonly media: readonly ReviewMediaItemDto[];
+  readonly merchantResponse: MerchantResponseDto | null;
+  readonly submittedAt: string;
+  readonly publishedAt?: string | null;
+}
+
+export interface PublicProductReviewsResponseDto {
+  readonly reviews: readonly PublicReviewDto[];
+  readonly summary: ProductRatingSummaryDto | undefined;
+  readonly pagination: {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+  };
+}
+
+export interface ReviewEligibilityDto {
+  readonly eligible: boolean;
+  readonly reason?: string;
+  readonly existingReviewId?: string;
+  readonly orderLineId?: string;
+  readonly orderId?: string;
+  readonly orderNumber?: string;
+  readonly productId?: string;
+  readonly productTitle?: string;
+  readonly variantId?: string;
+  readonly variantLabel?: string;
+  readonly token?: string;
+}
+
+export interface CustomerReviewHistoryItemDto {
+  readonly reviewId: string;
+  readonly productId: string;
+  readonly productTitle: string;
+  readonly productHandle: string;
+  readonly rating: number;
+  readonly title: string | null;
+  readonly body: string | null;
+  readonly lifecycleStatus: ReviewLifecycleStatusDto;
+  readonly visibilityStatus: ReviewVisibilityStatusDto;
+  readonly moderationStatus: ReviewModerationStatusDto;
+  readonly moderationReason: string | null;
+  readonly verifiedPurchase: boolean;
+  readonly purchasedVariantLabel: string | null;
+  readonly mediaCount: number;
+  readonly hasMerchantResponse: boolean;
+  readonly submittedAt: string;
+  readonly moderatedAt: string | null;
+}
+
+export interface CustomerReviewHistoryResponseDto {
+  readonly reviews: readonly CustomerReviewHistoryItemDto[];
+  readonly metrics: {
+    readonly totalSubmitted: number;
+    readonly totalApproved: number;
+    readonly totalPending: number;
+    readonly totalRejected: number;
+    readonly averageRatingGiven: number | null;
+  };
+  readonly pagination: {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+  };
+}
+
+export interface AdminReviewDetailDto {
+  readonly id: string;
+  readonly productId: string;
+  readonly productTitle: string;
+  readonly productHandle: string;
+  readonly customer: {
+    readonly id: string;
+    readonly customerNumber: string;
+    readonly displayName: string | null;
+    readonly primaryPhone?: string | null;
+    readonly primaryEmail?: string | null;
+  };
+  readonly order?: {
+    readonly orderId: string;
+    readonly orderNumber: string;
+    readonly orderLineId: string;
+    readonly skuSnapshot: string | null;
+    readonly orderedAt: string;
+    readonly fulfillmentStatus?: string | null;
+    readonly deliveryOutcome?: string | null;
+    readonly hasReturn?: boolean;
+    readonly hasRefund?: boolean;
+  } | null;
+  readonly purchasedVariant: {
+    readonly variantId: string | null;
+    readonly label: string | null;
+  };
+  readonly verifiedPurchase: boolean;
+  readonly source: ReviewSourceDto;
+  readonly lifecycleStatus: ReviewLifecycleStatusDto;
+  readonly visibilityStatus: ReviewVisibilityStatusDto;
+  readonly currentRevision: {
+    readonly id: string;
+    readonly revisionNumber: number;
+    readonly rating: number;
+    readonly title: string | null;
+    readonly body: string | null;
+    readonly publicDisplayName: string;
+    readonly moderationStatus: ReviewModerationStatusDto;
+    readonly moderationReason: string | null;
+    readonly internalNote: string | null;
+    readonly submittedAt: string;
+    readonly moderatedAt: string | null;
+    readonly moderatedByActorName?: string | null;
+  };
+  readonly publishedRevisionId: string | null;
+  readonly revisions: readonly {
+    readonly id: string;
+    readonly revisionNumber: number;
+    readonly rating: number;
+    readonly title: string | null;
+    readonly body: string | null;
+    readonly publicDisplayName: string;
+    readonly moderationStatus: ReviewModerationStatusDto;
+    readonly moderationReason: string | null;
+    readonly submittedAt: string;
+    readonly moderatedAt: string | null;
+  }[];
+  readonly media: readonly ReviewMediaItemDto[];
+  readonly merchantResponse: MerchantResponseDto | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface AdminReviewListItemDto {
+  readonly id: string;
+  readonly productId: string;
+  readonly productTitle: string;
+  readonly revisionId: string;
+  readonly revisionNumber: number;
+  readonly rating: number;
+  readonly title: string | null;
+  readonly body: string | null;
+  readonly publicDisplayName: string;
+  readonly customerId: string;
+  readonly customerNumber: string;
+  readonly customerName: string;
+  readonly moderationStatus: ReviewModerationStatusDto;
+  readonly moderationReason: string | null;
+  readonly visibilityStatus: ReviewVisibilityStatusDto;
+  readonly lifecycleStatus: ReviewLifecycleStatusDto;
+  readonly verifiedPurchase: boolean;
+  readonly purchasedVariantLabel: string | null;
+  readonly orderNumber: string | null;
+  readonly mediaCount: number;
+  readonly merchantResponse: string | null;
+  readonly submittedAt: string;
+  readonly moderatedAt: string | null;
+}
+
+export interface AdminReviewsListResponseDto {
+  readonly reviews: readonly AdminReviewListItemDto[];
+  readonly counts: {
+    readonly pending: number;
+    readonly visible: number;
+    readonly rejected: number;
+    readonly hidden: number;
+    readonly needsResponse: number;
+    readonly withMedia: number;
+    readonly total: number;
+  };
+  readonly pagination: {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly totalItems: number;
+    readonly totalPages: number;
+  };
+}
+
+export interface OrderLineReviewStateDto {
+  readonly orderLineId: string;
+  readonly productId: string;
+  readonly productTitle: string;
+  readonly variantId: string | null;
+  readonly variantLabel: string | null;
+  readonly isDeliveredOrDispatched: boolean;
+  readonly isEligible: boolean;
+  readonly reviewSubmitted: boolean;
+  readonly reviewId?: string;
+  readonly reviewRating?: number;
+  readonly reviewStatus?: string;
+  readonly token?: string;
+}
+

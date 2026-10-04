@@ -1,8 +1,8 @@
 # Maevelle Ecommerce — Reviews & Ratings Architecture
 
 **Document:** `docs/domains/reviews/reviews-architecture.md`
-**Status:** Initial Domain Design / Living Document
-**Version:** 0.1
+**Status:** Production Complete / Authoritative
+**Version:** 1.0
 **Related:** `catalog-architecture.md`, `orders/order-lifecycle-architecture.md`, `customer-architecture.md`, `media-architecture.md`, `storefront-commerce-architecture.md`, `access-control-architecture.md`
 
 ---
@@ -5124,4 +5124,53 @@ So Promotions should produce deterministic **discount allocations**, not just on
 
 ---
 
-**End of Reviews & Ratings Architecture v0.1**
+# 43. Production Implementation Summary
+
+The Reviews domain has transitioned from an MVP level to a **Production-Complete Product Domain** with authoritative backend guarantees:
+
+### 1. Database Schema & Migration (`2300_reviews.ts`, `2601_notifications_integrations_operations.ts`)
+- **Variant Purchase Context:** Added `purchased_variant_id` (FK to `catalog.product_variants`) and `purchased_variant_label` on `reviews.reviews`.
+- **Single Active Review Invariant (`REV-INV-009`):** Enforced at the database engine level via `create unique index reviews_customer_product_active on reviews.reviews (organization_id, customer_id, product_id) where lifecycle_status = 'ACTIVE'`.
+- **Media Support:** Added `media_type in ('IMAGE', 'VIDEO')` on `reviews.review_media`, supporting user-generated image galleries and future-proof video reviews without schema rewrites.
+- **Invitation & Access Tokens:** Added `invitation_sent_at` and `invitation_channel` on `reviews.review_access_tokens`.
+- **Rating Summary Metrics:** Added `verified_review_count` to `reviews.product_rating_summary` with exact star percentage distribution and verified purchase tracking.
+- **Notifications Policies:** Registered `REVIEW_REQUEST` and `REVIEW_RESPONSE` policies across IN_APP, EMAIL, and SMS channels.
+
+### 2. Shared Contracts (`packages/contracts/src/index.ts`)
+- Added typed DTOs: `PublicReviewDto`, `PublicProductReviewsResponseDto`, `ProductRatingSummaryDto`, `ReviewEligibilityDto`, `CustomerReviewHistoryResponseDto`, `AdminReviewListItemDto`, `AdminReviewsListResponseDto`, `OrderLineReviewStateDto`.
+- Enriched `StorefrontProductDto` with `ratingSummary?: ProductRatingSummaryDto | null`.
+
+### 3. Business Logic & Invariant Enforcement (`packages/database/src/reviews.ts`)
+- **Customer Privacy:** Enforced privacy-safe author name formatting (`formatSafeAuthorName` e.g., "Nusrat Jahan" -> "Nusrat J."). Public storefront DTOs never expose customer IDs, phone numbers, email addresses, or internal order numbers.
+- **Text & Media Sanitization:** `sanitizeReviewText` strips HTML markup and illegal control characters while preserving Unicode (Bangla and English).
+- **Authoritative Verified Purchase:** Derived solely from completed delivery (`outcome_status = 'DELIVERED'`) or fulfillment dispatch (`status = 'DISPATCHED'`).
+- **Customer Review Revisions (`REV-INV-019`):** When a customer edits an active review, a new pending revision is created; the previously approved revision remains visible on the storefront until the new revision is approved.
+- **Anti-Abuse & Moderation Policy (`REV-INV-025`):** Moderation explicitly forbids rejecting reviews based on negative sentiment alone (`NEGATIVE_REVIEW`).
+- **Merchant Responses:** Separate official responses linked to Maevelle organization and staff author audit.
+- **Rating Projection & Repair:** Atomic transactional rebuild of `product_rating_summary` with automated drift detection (`verifyReviewIntegrity`).
+
+### 4. API Endpoints
+- `GET /products/:productId/reviews`: Server-side pagination, rating, media, verified filters, and rating overview.
+- `GET /reviews/eligibility`: Checks whether a customer/order line or token is eligible to review.
+- `POST /reviews`: Idempotent review submission with media ownership verification.
+- `POST /reviews/revisions`: Customer review editing with revision increment.
+- `POST /reviews/:id/withdraw`: Customer review withdrawal (unpublishes from public aggregate).
+- `GET /admin/reviews`: Operational moderation queue with queue tabs, search, filtering, and pagination.
+- `GET /admin/reviews/:id`: Deep operator review inspection (customer, order, return, refund, revisions, media).
+- `POST /admin/reviews/:id/moderate`: Moderation decisions (`APPROVE`, `REJECT`, `HIDE`, `RESTORE`) with policy reasons and internal notes.
+- `POST /admin/reviews/:id/response`: Upsert official Maevelle merchant response.
+- `GET /admin/customers/:id/reviews`: Customer review history for admin customer workspace.
+- `GET /admin/orders/:id/review-state`: Order lines review state query.
+- `GET /admin/reviews/integrity` & `POST /admin/reviews/products/:productId/rebuild-rating-summary`: Integrity diagnostic and self-healing projection repair.
+
+### 5. SEO & Structured Data (`apps/storefront/src/seo.ts`, `packages/database/src/catalog.ts`)
+- Storefront SSR automatically loads `ratingSummary` with `getStorefrontCatalogProduct`.
+- Schema.org `Product` JSON-LD automatically outputs `aggregateRating` (with `ratingValue`, `reviewCount`, `bestRating: '5'`, `worstRating: '1'`) and `review` array from genuine, published reviews, conforming to Google Search Central guidelines.
+
+### 6. Background Worker & Customer Merge Integration
+- `apps/worker/src/worker.ts`: Automatically executes `dispatchPostDeliveryReviewInvitations` on every tick, generating secure scoped access tokens for delivered order lines idempotently.
+- `packages/database/src/customers.ts`: Handles customer merge conflict resolution gracefully by preserving the target customer's active review and withdrawing the duplicate source review.
+
+---
+
+**End of Reviews & Ratings Architecture v1.0**

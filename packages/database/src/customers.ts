@@ -1737,6 +1737,36 @@ export async function mergeCustomers(
       update returns.return_cases set customer_id = ${input.targetCustomerId}, updated_at = now()
       where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
     `.execute(transaction);
+
+    // Invariant REV-INV-009: At most one active review per customer per product.
+    // If both source and target have an active review for the same product,
+    // retain target's review as primary and withdraw/archive the source's duplicate review.
+    const conflictingReviews = await sql<{ source_id: string; product_id: string }>`
+      select s.id::text as source_id, s.product_id::text
+      from reviews.reviews s
+      join reviews.reviews t
+        on t.organization_id = s.organization_id
+        and t.product_id = s.product_id
+        and t.customer_id = ${input.targetCustomerId}::uuid
+        and t.lifecycle_status = 'ACTIVE'
+      where s.organization_id = ${input.organizationId}
+        and s.customer_id = ${input.sourceCustomerId}::uuid
+        and s.lifecycle_status = 'ACTIVE'
+    `.execute(transaction);
+
+    for (const conflict of conflictingReviews.rows) {
+      await sql`
+        update reviews.reviews
+        set lifecycle_status = 'REMOVED',
+            visibility_status = 'HIDDEN',
+            withdrawn_at = now(),
+            updated_at = now(),
+            version = version + 1
+        where organization_id = ${input.organizationId}
+          and id = ${conflict.source_id}::uuid
+      `.execute(transaction);
+    }
+
     await sql`
       update reviews.reviews set customer_id = ${input.targetCustomerId}, updated_at = now()
       where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}

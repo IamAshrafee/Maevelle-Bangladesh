@@ -4083,6 +4083,29 @@ export interface StorefrontProduct {
   readonly description: string | null;
   readonly seoTitle: string | null;
   readonly seoDescription: string | null;
+  readonly ratingSummary?: {
+    readonly productId: string;
+    readonly ratingCount: number;
+    readonly ratingSum: number;
+    readonly averageRating: string | null;
+    readonly formattedAverage: string | null;
+    readonly rating1Count: number;
+    readonly rating2Count: number;
+    readonly rating3Count: number;
+    readonly rating4Count: number;
+    readonly rating5Count: number;
+    readonly textReviewCount: number;
+    readonly mediaReviewCount: number;
+    readonly verifiedReviewCount: number;
+    readonly distributionPercentages: {
+      readonly star1: number;
+      readonly star2: number;
+      readonly star3: number;
+      readonly star4: number;
+      readonly star5: number;
+    };
+    readonly updatedAt: string;
+  } | null;
   readonly shipping?: {
     readonly weight: { readonly value: string; readonly unit: string } | null;
     readonly dimensions: {
@@ -4372,6 +4395,60 @@ export async function getStorefrontCatalogProduct(
       value: detail.value_text,
     })),
     faqs: faqs.rows.map((faq) => ({ question: faq.question, answer: faq.answer })),
+    ratingSummary: await (async () => {
+      const summaryRow = await sql<{
+        rating_count: number;
+        rating_sum: number;
+        rating_1_count: number;
+        rating_2_count: number;
+        rating_3_count: number;
+        rating_4_count: number;
+        rating_5_count: number;
+        text_review_count: number;
+        media_review_count: number;
+        verified_review_count: number;
+        average_rating: string | null;
+        updated_at: string;
+      }>`
+        select
+          rating_count, rating_sum,
+          rating_1_count, rating_2_count, rating_3_count, rating_4_count, rating_5_count,
+          text_review_count, media_review_count, verified_review_count,
+          case when rating_count = 0 then null
+               else (rating_sum::numeric / rating_count)::numeric(10,4)::text
+          end as average_rating,
+          updated_at::text
+        from reviews.product_rating_summary
+        where organization_id = ${organizationId} and product_id = ${row.id}::uuid
+      `.execute(db);
+      const s = summaryRow.rows[0];
+      if (!s) return null;
+      const count = s.rating_count;
+      const pct = (val: number) => (count > 0 ? Math.round((val / count) * 100) : 0);
+      return {
+        productId: row.id,
+        ratingCount: s.rating_count,
+        ratingSum: s.rating_sum,
+        averageRating: s.average_rating ? Number(s.average_rating).toFixed(1) : null,
+        formattedAverage: s.average_rating ? Number(s.average_rating).toFixed(1) : null,
+        rating1Count: s.rating_1_count,
+        rating2Count: s.rating_2_count,
+        rating3Count: s.rating_3_count,
+        rating4Count: s.rating_4_count,
+        rating5Count: s.rating_5_count,
+        textReviewCount: s.text_review_count,
+        mediaReviewCount: s.media_review_count,
+        verifiedReviewCount: s.verified_review_count,
+        distributionPercentages: {
+          star1: pct(s.rating_1_count),
+          star2: pct(s.rating_2_count),
+          star3: pct(s.rating_3_count),
+          star4: pct(s.rating_4_count),
+          star5: pct(s.rating_5_count),
+        },
+        updatedAt: s.updated_at,
+      };
+    })(),
   };
 }
 export async function listCatalogCategories(

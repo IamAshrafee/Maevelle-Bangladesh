@@ -19,6 +19,7 @@ import { deliverPendingInvitationEmails } from '@maevelle/database/iam';
 import { processStorefrontSearchOutbox } from '@maevelle/database/storefront';
 import { processExpiredPaymentOrders, processOrderOutbox } from '@maevelle/database/orders';
 import { expireInventoryReservations } from '@maevelle/database/inventory';
+import { dispatchPostDeliveryReviewInvitations } from '@maevelle/database/reviews';
 import { processCourierBookings, type CourierProviderResolver } from './courier-bookings.js';
 import type { ObjectStoragePort } from '@maevelle/media';
 import { cleanupExpiredMediaUploads, processMediaBatch, purgeOneMediaAsset } from './media-jobs.js';
@@ -160,6 +161,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
               options.adminBaseUrl,
             )
           : Promise.resolve(0),
+        dispatchPostDeliveryReviewInvitations(options.database.db),
       ]);
       logger?.debug(
         {

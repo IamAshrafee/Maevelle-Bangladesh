@@ -43,6 +43,7 @@ import {
 } from '@maevelle/database/customers';
 import { searchGeography } from '@maevelle/database/geography';
 import { getCustomerDeliveryHistory } from '@maevelle/database/delivery-intelligence';
+import { getCustomerReviewHistory } from '@maevelle/database/reviews';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
@@ -406,6 +407,35 @@ export function registerCustomerRoutes(
           active.organizationId,
           (request.params as { customerId: string }).customerId,
           (request.query as { limit?: number }).limit,
+        ),
+      };
+    },
+  );
+
+  app.get(
+    '/admin/customers/:customerId/reviews',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'customers.view');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      const query = request.query as { page?: number; pageSize?: number };
+      return {
+        data: await getCustomerReviewHistory(
+          database.db,
+          active.organizationId,
+          (request.params as { customerId: string }).customerId,
+          {
+            page: query.page ? Number(query.page) : undefined,
+            pageSize: query.pageSize ? Number(query.pageSize) : undefined,
+          },
         ),
       };
     },

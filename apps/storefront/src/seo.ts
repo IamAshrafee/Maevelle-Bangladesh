@@ -1,6 +1,16 @@
 import type { StorefrontProductDto } from '@maevelle/contracts';
 
-export function productJsonLd(product: StorefrontProductDto, canonicalUrl: string) {
+export function productJsonLd(
+  product: StorefrontProductDto,
+  canonicalUrl: string,
+  publishedReviews?: readonly {
+    authorName?: string;
+    rating: number;
+    title?: string | null;
+    body?: string | null;
+    datePublished?: string;
+  }[],
+) {
   const offers = product.variants.flatMap((variant) =>
     variant.price
       ? [
@@ -17,6 +27,42 @@ export function productJsonLd(product: StorefrontProductDto, canonicalUrl: strin
         ]
       : [],
   );
+
+  const aggregateRating =
+    product.ratingSummary &&
+    product.ratingSummary.ratingCount > 0 &&
+    product.ratingSummary.averageRating
+      ? {
+          '@type': 'AggregateRating',
+          ratingValue:
+            product.ratingSummary.formattedAverage ?? product.ratingSummary.averageRating,
+          reviewCount: product.ratingSummary.ratingCount,
+          bestRating: '5',
+          worstRating: '1',
+        }
+      : undefined;
+
+  const reviewMarkup = publishedReviews
+    ?.filter((r) => r.rating >= 1 && r.rating <= 5)
+    .slice(0, 10)
+    .map((r) => ({
+      '@type': 'Review',
+      reviewRating: {
+        '@type': 'Rating',
+        ratingValue: r.rating,
+        bestRating: '5',
+        worstRating: '1',
+      },
+      author: {
+        '@type': 'Person',
+        name: r.authorName ?? 'Verified customer',
+      },
+      ...(r.datePublished ? { datePublished: r.datePublished } : {}),
+      ...(r.title || r.body
+        ? { reviewBody: [r.title, r.body].filter(Boolean).join(' - ') }
+        : {}),
+    }));
+
   return {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -32,6 +78,8 @@ export function productJsonLd(product: StorefrontProductDto, canonicalUrl: strin
       value: detail.value,
     })),
     offers,
+    ...(aggregateRating ? { aggregateRating } : {}),
+    ...(reviewMarkup && reviewMarkup.length > 0 ? { review: reviewMarkup } : {}),
   };
 }
 

@@ -30,6 +30,8 @@ type Review = {
   readonly moderation_reason: string | null;
   readonly visibility_status: string;
   readonly verified_purchase: boolean;
+  readonly purchased_variant_label?: string | null;
+  readonly order_number?: string | null;
   readonly media_count: number;
   readonly merchant_response: string | null;
   readonly submitted_at: string;
@@ -79,7 +81,10 @@ export function ReviewsConsole() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = (await request<ApiEnvelope<readonly Review[]>>('/admin/reviews')).data;
+      const response = await request<any>('/admin/reviews');
+      const rows: readonly Review[] = Array.isArray(response.data)
+        ? response.data
+        : (response.data?.items ?? response.data?.reviews ?? []);
       setReviews(rows);
       setSelectedId((current) => current ?? rows[0]?.id);
       setError('');
@@ -328,6 +333,22 @@ export function ReviewsConsole() {
                     {selected.media_count} attachment{selected.media_count === 1 ? '' : 's'}
                   </dd>
                 </div>
+                {selected.purchased_variant_label ? (
+                  <div>
+                    <dt className="text-muted-foreground">Purchased Variant</dt>
+                    <dd className="font-medium text-foreground mt-0.5">
+                      {selected.purchased_variant_label}
+                    </dd>
+                  </div>
+                ) : null}
+                {selected.order_number ? (
+                  <div>
+                    <dt className="text-muted-foreground">Order</dt>
+                    <dd className="font-medium text-foreground mt-0.5 font-mono">
+                      #{selected.order_number}
+                    </dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt className="text-muted-foreground">Moderation</dt>
                   <dd className="font-medium text-foreground mt-0.5">
