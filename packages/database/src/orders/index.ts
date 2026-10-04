@@ -6,3 +6,6 @@ export * from './placement.js';
 export * from './lifecycle.js';
 export * from './manual.js';
 export * from './outbox.js';
+export * from './risk.js';
+export * from './verifications.js';
+export * from './timeline.js';

@@ -2244,11 +2244,122 @@ export interface OrderSummaryDto {
   readonly tags?: readonly OrderTagDto[];
 }
 
+export interface OrderCapabilitiesDto {
+  readonly canConfirm: boolean;
+  readonly canHold: boolean;
+  readonly canResume: boolean;
+  readonly canCancel: boolean;
+  readonly canCancelLines: boolean;
+  readonly canEditAddress: boolean;
+  readonly canEditCustomerContact: boolean;
+  readonly canAddNote: boolean;
+  readonly canRecordVerification: boolean;
+  readonly canComplete: boolean;
+  readonly canCreateFulfillment: boolean;
+}
+
+export interface OrderVerificationDto {
+  readonly id: string;
+  readonly orderId: string;
+  readonly actorId: string;
+  readonly actorName?: string | null;
+  readonly verificationType:
+    | 'PHONE_CALL'
+    | 'WHATSAPP_MESSAGE'
+    | 'SMS_CONFIRMATION'
+    | 'FRAUD_RISK_REVIEW'
+    | 'MANUAL_APPROVAL';
+  readonly outcome:
+    | 'CONFIRMED'
+    | 'UNREACHABLE'
+    | 'WRONG_NUMBER'
+    | 'CANCEL_REQUESTED'
+    | 'ADDRESS_CORRECTION_REQUESTED'
+    | 'FLAGGED_SUSPICIOUS'
+    | 'APPROVED_OVERRIDE';
+  readonly notes: string | null;
+  readonly riskSnapshot: Record<string, unknown> | null;
+  readonly createdAt: string;
+}
+
+export interface RecordOrderVerificationDto {
+  readonly verificationType:
+    | 'PHONE_CALL'
+    | 'WHATSAPP_MESSAGE'
+    | 'SMS_CONFIRMATION'
+    | 'FRAUD_RISK_REVIEW'
+    | 'MANUAL_APPROVAL';
+  readonly outcome:
+    | 'CONFIRMED'
+    | 'UNREACHABLE'
+    | 'WRONG_NUMBER'
+    | 'CANCEL_REQUESTED'
+    | 'ADDRESS_CORRECTION_REQUESTED'
+    | 'FLAGGED_SUSPICIOUS'
+    | 'APPROVED_OVERRIDE';
+  readonly notes?: string;
+  readonly riskSnapshot?: Record<string, unknown>;
+}
+
+export interface OrderRiskSignalDto {
+  readonly code: string;
+  readonly title: string;
+  readonly severity: 'INFO' | 'LOW' | 'WARNING' | 'CRITICAL';
+  readonly explanation: string;
+}
+
+export interface OrderDuplicateCandidateDto {
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly orderStatus: string;
+  readonly createdAt: string;
+  readonly matchingReasons: readonly string[];
+}
+
+export interface OrderDeliveryRiskAssessmentDto {
+  readonly orderId: string;
+  readonly orderNumber: string;
+  readonly normalizedPhone: string;
+  readonly overallRiskLevel: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
+  readonly recommendation:
+    | 'APPROVE_COD'
+    | 'VERIFY_CUSTOMER'
+    | 'REQUIRE_PREPAYMENT'
+    | 'REJECT_SUSPICIOUS';
+  readonly signals: readonly OrderRiskSignalDto[];
+  readonly internalHistory: unknown;
+  readonly providerHistory: {
+    readonly steadfast?: {
+      readonly available: boolean;
+      readonly phone: string;
+      readonly totalParcels: number;
+      readonly deliveredCount: number;
+      readonly cancelledCount: number;
+      readonly fraudReportsCount: number;
+      readonly successRate: number | null;
+      readonly checkedAt: string;
+      readonly error?: string;
+    };
+    readonly pathao: { readonly available: false; readonly reason: string };
+  };
+  readonly duplicateOrders: readonly OrderDuplicateCandidateDto[];
+  readonly evaluatedAt: string;
+  readonly expiresAt: string;
+  readonly isFresh: boolean;
+}
+
 export interface OrderDetailDto extends OrderSummaryDto {
   readonly version: number;
+  readonly capabilities: OrderCapabilitiesDto;
   readonly lines: readonly OrderLineDto[];
   readonly tags?: readonly OrderTagDto[];
   readonly notes: readonly OrderNoteDto[];
+  readonly verifications?: readonly OrderVerificationDto[];
+  readonly riskSummary?: {
+    readonly overallRiskLevel: string;
+    readonly recommendation: string;
+    readonly signalCount: number;
+  } | null;
   readonly timeline: readonly OrderTimelineEventDto[];
   readonly payment: OrderPaymentSummaryDto;
   readonly merchandiseGross: string;
@@ -2311,6 +2422,7 @@ export interface OrderDetailDto extends OrderSummaryDto {
   readonly cancellation?: {
     readonly reasonCode: string;
     readonly reasonText: string | null;
+    readonly initiatedBy?: 'CUSTOMER' | 'MERCHANT' | 'SYSTEM';
     readonly createdAt: string;
     readonly refundSettlement:
       'NOT_REQUIRED' | 'REFUND_PENDING' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
@@ -2354,10 +2466,23 @@ export interface OrderNoteDto {
 export interface OrderTimelineEventDto {
   readonly id: string;
   readonly eventType: string;
-  readonly aggregateType: string;
-  readonly aggregateId: string;
   readonly occurredAt: string;
-  readonly payload: Record<string, unknown>;
+  readonly category?:
+    | 'ORDER'
+    | 'PAYMENT'
+    | 'FULFILLMENT'
+    | 'DELIVERY'
+    | 'RETURN'
+    | 'VERIFICATION'
+    | 'NOTE';
+  readonly title?: string;
+  readonly description?: string | null;
+  readonly actorType?: 'CUSTOMER' | 'ADMIN' | 'SYSTEM' | 'COURIER';
+  readonly actorName?: string | null;
+  readonly metadata?: Record<string, unknown>;
+  readonly aggregateType?: string;
+  readonly aggregateId?: string;
+  readonly payload?: Record<string, unknown>;
 }
 
 export interface OrderPaymentSummaryDto {

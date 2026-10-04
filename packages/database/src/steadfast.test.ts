@@ -165,4 +165,66 @@ describe('steadfast courier integration', () => {
     expect(tracking?.events).toHaveLength(1);
     expect(tracking?.events[0]!.normalizedStatus).toBe('DELIVERED');
   });
+
+  it('queries official Steadfast fraud check endpoint and parses customer parcel history', async () => {
+    let requestedUrl = '';
+    let apiKeyHeader = '';
+    let secretKeyHeader = '';
+
+    const mockFetch: typeof fetch = async (url, init) => {
+      requestedUrl = String(url);
+      const h = init?.headers as Record<string, string>;
+      apiKeyHeader = h?.['Api-Key'] ?? '';
+      secretKeyHeader = h?.['Secret-Key'] ?? '';
+
+      return new Response(
+        JSON.stringify({
+          status: 200,
+          Total_parcels: 14,
+          total_delivered: 11,
+          total_cancelled: 3,
+          total_fraud_reports: [],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    const result = await (await import('./steadfast.js')).checkSteadfastCustomerFraud(
+      { environment: 'PRODUCTION' },
+      { apiKey: 'my-api-key', secretKey: 'my-secret-key' },
+      '+8801712345678',
+      mockFetch,
+    );
+
+    expect(requestedUrl).toContain('/fraud_check/01712345678');
+    expect(apiKeyHeader).toBe('my-api-key');
+    expect(secretKeyHeader).toBe('my-secret-key');
+    expect(result.available).toBe(true);
+    expect(result.phone).toBe('01712345678');
+    expect(result.totalParcels).toBe(14);
+    expect(result.deliveredCount).toBe(11);
+    expect(result.cancelledCount).toBe(3);
+    expect(result.fraudReportsCount).toBe(0);
+    expect(result.successRate).toBe(78.57);
+  });
+
+  it('handles Steadfast fraud check failure gracefully without throwing', async () => {
+    const mockFetch: typeof fetch = async () => {
+      return new Response('Gateway Timeout', { status: 504 });
+    };
+
+    const result = await (await import('./steadfast.js')).checkSteadfastCustomerFraud(
+      { environment: 'PRODUCTION' },
+      { apiKey: 'my-api-key', secretKey: 'my-secret-key' },
+      '01812345678',
+      mockFetch,
+    );
+
+    expect(result.available).toBe(false);
+    expect(result.phone).toBe('01812345678');
+    expect(result.totalParcels).toBe(0);
+    expect(result.deliveredCount).toBe(0);
+    expect(result.cancelledCount).toBe(0);
+    expect(result.error).toBe('HTTP_504');
+  });
 });

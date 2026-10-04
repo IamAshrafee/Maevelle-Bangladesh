@@ -14,8 +14,14 @@ import {
   updateCheckoutContact,
   updateOrderStatus,
   updateOrderDeliveryAddress,
-} from './orders.js';
-import type { OrderDomainError } from './orders.js';
+  recordOrderVerification,
+  listOrderVerifications,
+  getOrderTimeline,
+  evaluateOrderDeliveryRisk,
+  detectOrderDuplicates,
+  getOrderForAdmin,
+} from './orders/index.js';
+import type { OrderDomainError } from './orders/types.js';
 import { createOrganization } from './platform.js';
 import { createPriceDefinition } from './pricing.js';
 import { createCouponCode, createPromotion } from './promotions.js';
@@ -1141,4 +1147,188 @@ describe('atomic guest checkout and COD Orders', () => {
       });
     });
   });
+
+  describe('Orders Dedicated Domain Capabilities, Verifications, Timeline & Risk', () => {
+    it('records and lists order verification events with outbox and audit trails', async () => {
+      const input = await fixture('2');
+      const flow = await checkoutFor(input);
+      const placed = await submit(flow);
+      if (placed.kind !== 'PLACED') throw new Error('Expected order to be placed');
+
+      const verification = await recordOrderVerification(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+        actorId: input.actorId,
+        verificationType: 'PHONE_CALL',
+        outcome: 'CONFIRMED',
+        notes: 'Customer confirmed address and COD delivery.',
+        riskSnapshot: { signal: 'VERIFIED_OK' },
+      });
+
+      expect(verification).toMatchObject({
+        orderId: placed.order.id,
+        actorId: input.actorId,
+        verificationType: 'PHONE_CALL',
+        outcome: 'CONFIRMED',
+        notes: 'Customer confirmed address and COD delivery.',
+      });
+
+      const list = await listOrderVerifications(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+      });
+
+      expect(list.length).toBe(1);
+      expect(list[0]?.id).toBe(verification.id);
+      expect(list[0]?.outcome).toBe('CONFIRMED');
+    });
+
+    it('records cancellation initiatedBy (MERCHANT vs CUSTOMER) and reflects in order detail', async () => {
+      const input = await fixture('2');
+      const flow = await checkoutFor(input);
+      const placed = await submit(flow);
+      if (placed.kind !== 'PLACED') throw new Error('Expected order to be placed');
+
+      await cancelOrder(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+        actorId: input.actorId,
+        expectedVersion: placed.order.version,
+        reasonCode: 'CUSTOMER_REQUESTED',
+        reasonText: 'Customer called to cancel before shipment',
+        initiatedBy: 'CUSTOMER',
+        idempotencyKey: crypto.randomUUID(),
+      });
+
+      const detail = await getOrderForAdmin(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+      });
+
+      expect(detail.cancellation?.reasonCode).toBe('CUSTOMER_REQUESTED');
+      expect(detail.cancellation?.initiatedBy).toBe('CUSTOMER');
+      expect(detail.capabilities.canCancel).toBe(false);
+      expect(detail.capabilities.canConfirm).toBe(false);
+    });
+
+    it('aggregates a unified business timeline across order, verifications, and cancellation', async () => {
+      const input = await fixture('2');
+      const flow = await checkoutFor(input);
+      const placed = await submit(flow);
+      if (placed.kind !== 'PLACED') throw new Error('Expected order to be placed');
+
+      await recordOrderVerification(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+        actorId: input.actorId,
+        verificationType: 'PHONE_CALL',
+        outcome: 'UNREACHABLE',
+        notes: 'First call went to voicemail.',
+      });
+
+      await cancelOrder(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+        actorId: input.actorId,
+        expectedVersion: placed.order.version,
+        reasonCode: 'CUSTOMER_UNREACHABLE',
+        initiatedBy: 'MERCHANT',
+        idempotencyKey: crypto.randomUUID(),
+      });
+
+      const timeline = await getOrderTimeline(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+      });
+
+      expect(timeline.length).toBeGreaterThanOrEqual(3);
+      const categories = timeline.map((e) => e.category);
+      expect(categories).toContain('ORDER');
+      expect(categories).toContain('VERIFICATION');
+
+      const verificationEvent = timeline.find((e) => e.category === 'VERIFICATION');
+      expect(verificationEvent?.title).toBe('Verification: PHONE_CALL (UNREACHABLE)');
+      expect(verificationEvent?.description).toBe('First call went to voicemail.');
+
+      const cancelEvent = timeline.find((e) => e.eventType === 'ORDER_CANCELLED');
+      expect(cancelEvent?.title).toBe('Order Cancelled (MERCHANT)');
+    });
+
+    it('evaluates delivery risk with explainable signals and duplicate detection', async () => {
+      const input = await fixture('4');
+      const flow1 = await checkoutFor(input);
+      const placed1 = await submit(flow1);
+      if (placed1.kind !== 'PLACED') throw new Error('Expected order 1 to be placed');
+
+      // Same phone and address within 48h creates a duplicate order candidate
+      const flow2 = await checkoutFor(input);
+      const placed2 = await submit(flow2);
+      if (placed2.kind !== 'PLACED') throw new Error('Expected order 2 to be placed');
+
+      const duplicates = await detectOrderDuplicates(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed2.order.id,
+      });
+
+      expect(duplicates.length).toBeGreaterThanOrEqual(1);
+      expect(duplicates.some((d) => d.orderId === placed1.order.id)).toBe(true);
+
+      const assessment = await evaluateOrderDeliveryRisk(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed2.order.id,
+      });
+
+      expect(assessment.overallRiskLevel).toBeDefined();
+      expect(assessment.recommendation).toBeDefined();
+      expect(assessment.signals.length).toBeGreaterThan(0);
+      expect(assessment.duplicateOrders.length).toBeGreaterThanOrEqual(1);
+      expect(assessment.providerHistory.pathao.available).toBe(false);
+    });
+
+    it('returns capabilities, verifications, risk summary, and timeline in admin order detail', async () => {
+      const input = await fixture('2');
+      const flow = await checkoutFor(input);
+      const placed = await submit(flow);
+      if (placed.kind !== 'PLACED') throw new Error('Expected order to be placed');
+
+      await recordOrderVerification(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+        actorId: input.actorId,
+        verificationType: 'MANUAL_APPROVAL',
+        outcome: 'CONFIRMED',
+        notes: 'Approved for packing.',
+      });
+
+      const detail = await getOrderForAdmin(database.db, {
+        organizationId: input.organizationId,
+        orderId: placed.order.id,
+      });
+
+      expect(detail.capabilities).toEqual({
+        canConfirm: true,
+        canHold: true,
+        canResume: false,
+        canCancel: true,
+        canCancelLines: true,
+        canEditAddress: true,
+        canEditCustomerContact: true,
+        canAddNote: true,
+        canRecordVerification: true,
+        canComplete: true,
+        canCreateFulfillment: true,
+      });
+
+      expect(detail.verifications?.length).toBe(1);
+      expect(detail.verifications?.[0]?.verificationType).toBe('MANUAL_APPROVAL');
+      expect(detail.timeline.length).toBeGreaterThanOrEqual(2);
+      expect(detail.riskSummary).toMatchObject({
+        overallRiskLevel: expect.any(String),
+        recommendation: expect.any(String),
+        signalCount: expect.any(Number),
+      });
+    });
+  });
 });
+
+

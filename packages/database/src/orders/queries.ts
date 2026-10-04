@@ -4,18 +4,21 @@ import type { DatabaseSchema } from '../index.js';
 import { getOrderPaymentSummary, type PaymentMethodCode } from '../payments.js';
 import { normalizeCustomerPhone } from '../customer-identities.js';
 import { checkoutRow } from './checkout.js';
-import {
-  OrderDomainError,
-  type AdminOrderDetailView,
-  type OrderDeliveryStatus,
-  type OrderFulfillmentStatus,
-  type OrderListFilters,
-  type OrderListItem,
-  type OrderPaymentStatus,
-  type OrderView,
-  type PaginationMeta,
-  type PublicOrderTrackingView,
+import { OrderDomainError } from './types.js';
+import type {
+  AdminOrderDetailView,
+  OrderCapabilities,
+  OrderDeliveryStatus,
+  OrderFulfillmentStatus,
+  OrderListFilters,
+  OrderListItem,
+  OrderPaymentStatus,
+  OrderView,
+  PaginationMeta,
+  PublicOrderTrackingView,
 } from './types.js';
+import { listOrderVerifications } from './verifications.js';
+import { getOrderTimeline } from './timeline.js';
 
 export async function orderView(db: Kysely<DatabaseSchema>, orderId: string): Promise<OrderView> {
   const order = await sql<{
@@ -206,7 +209,6 @@ export async function getOrderForAdmin(
   const [
     baseOrder,
     notesQuery,
-    timelineQuery,
     tagsQuery,
     fulfillmentsQuery,
     deliveriesQuery,
@@ -215,6 +217,9 @@ export async function getOrderForAdmin(
     discountsQuery,
     cancellationQuery,
     cancellationRefundsQuery,
+    timeline,
+    verifications,
+    riskSummaryQuery,
   ] = await Promise.all([
     baseOrderPromise,
     sql<{ id: string; author_actor_id: string; note_type: string; body: string; created_at: Date }>`
@@ -222,20 +227,6 @@ export async function getOrderForAdmin(
       from orders.order_notes
       where order_id = ${input.orderId}
       order by created_at desc limit 20
-    `.execute(db),
-    sql<{
-      id: string;
-      event_type: string;
-      aggregate_type: string;
-      aggregate_id: string;
-      occurred_at: Date;
-      payload: Record<string, unknown>;
-    }>`
-      select id, event_type, aggregate_type, aggregate_id, occurred_at, payload
-      from platform.outbox_events
-      where aggregate_type in ('orders.order', 'fulfillment.fulfillment', 'delivery.delivery', 'returns.return_case')
-        and (payload->>'orderId' = ${input.orderId} or aggregate_id = ${input.orderId})
-      order by occurred_at desc limit 30
     `.execute(db),
     sql<{ id: string; label: string; color: string | null; created_at: Date }>`
       select t.id, t.label, t.color, t.created_at
@@ -314,9 +305,10 @@ export async function getOrderForAdmin(
     sql<{
       reason_code: string;
       reason_text: string | null;
+      initiated_by: 'CUSTOMER' | 'MERCHANT' | 'SYSTEM' | null;
       created_at: Date;
     }>`
-      select reason_code, reason_text, created_at
+      select reason_code, reason_text, initiated_by, created_at
       from orders.order_cancellations
       where organization_id = ${input.organizationId} and order_id = ${input.orderId}
     `.execute(db),
@@ -332,6 +324,23 @@ export async function getOrderForAdmin(
       where bridge.organization_id = ${input.organizationId}
         and bridge.order_id = ${input.orderId}
       order by refund.id
+    `.execute(db),
+    getOrderTimeline(db, {
+      organizationId: input.organizationId,
+      orderId: input.orderId,
+    }),
+    listOrderVerifications(db, {
+      organizationId: input.organizationId,
+      orderId: input.orderId,
+    }),
+    sql<{
+      overall_risk_level: string;
+      recommendation: string;
+      signal_count: string;
+    }>`
+      select overall_risk_level, recommendation, coalesce(jsonb_array_length(signals), 0)::text as signal_count
+      from orders.order_delivery_risk_evaluations
+      where organization_id = ${input.organizationId} and order_id = ${input.orderId}
     `.execute(db),
   ]);
 
@@ -367,11 +376,59 @@ export async function getOrderForAdmin(
     deliveryStatus = 'CANCELLED';
   else deliveryStatus = 'PENDING';
 
+  const hasDispatchedDeliveries = deliveries.some((d) =>
+    ['HANDED_OVER', 'IN_TRANSIT', 'DELIVERED'].includes(d.operational_status),
+  );
+  const canConfirm = baseOrder.status === 'PENDING';
+  const canHold = ['PENDING', 'CONFIRMED'].includes(baseOrder.status);
+  const canResume = baseOrder.status === 'ON_HOLD';
+  const canCancel =
+    ['PENDING', 'CONFIRMED', 'ON_HOLD'].includes(baseOrder.status) && !hasDispatchedDeliveries;
+  const canCancelLines =
+    ['PENDING', 'CONFIRMED'].includes(baseOrder.status) &&
+    baseOrder.paymentStatus === 'UNPAID' &&
+    fulfillmentStatus === 'UNFULFILLED';
+  const canEditAddress =
+    !['CANCELLED', 'COMPLETED'].includes(baseOrder.status) && !hasDispatchedDeliveries;
+  const canEditCustomerContact = !['CANCELLED', 'COMPLETED'].includes(baseOrder.status);
+  const canAddNote = true;
+  const canRecordVerification = ['PENDING', 'CONFIRMED', 'ON_HOLD'].includes(baseOrder.status);
+  const canComplete =
+    baseOrder.status === 'CONFIRMED' &&
+    (deliveryStatus === 'DELIVERED' || !['CANCELLED', 'COMPLETED'].includes(baseOrder.status));
+  const canCreateFulfillment =
+    baseOrder.status === 'CONFIRMED' &&
+    !['FULFILLED', 'CANCELLED'].includes(fulfillmentStatus);
+
+  const capabilities: OrderCapabilities = {
+    canConfirm,
+    canHold,
+    canResume,
+    canCancel,
+    canCancelLines,
+    canEditAddress,
+    canEditCustomerContact,
+    canAddNote,
+    canRecordVerification,
+    canComplete,
+    canCreateFulfillment,
+  };
+
+  const riskRow = riskSummaryQuery.rows[0];
+  const riskSummary = riskRow
+    ? {
+        overallRiskLevel: riskRow.overall_risk_level,
+        recommendation: riskRow.recommendation,
+        signalCount: Number(riskRow.signal_count),
+      }
+    : null;
+
   return {
     ...baseOrder,
     fulfillmentStatus,
     deliveryStatus,
     deliveryAmount: exists.rows[0]!.delivery_amount,
+    capabilities,
     tags: tagsQuery.rows.map((t) => ({
       id: t.id,
       label: t.label,
@@ -385,14 +442,9 @@ export async function getOrderForAdmin(
       body: n.body,
       createdAt: n.created_at.toISOString(),
     })),
-    timeline: timelineQuery.rows.map((t) => ({
-      id: t.id,
-      eventType: t.event_type,
-      aggregateType: t.aggregate_type,
-      aggregateId: t.aggregate_id,
-      occurredAt: t.occurred_at.toISOString(),
-      payload: t.payload,
-    })),
+    verifications,
+    riskSummary,
+    timeline,
     fulfillments: fulfillmentsQuery.rows.map((f) => ({
       id: f.id,
       fulfillmentNumber: f.fulfillment_number,
@@ -433,6 +485,7 @@ export async function getOrderForAdmin(
       ? {
           reasonCode: cancellationQuery.rows[0].reason_code,
           reasonText: cancellationQuery.rows[0].reason_text,
+          initiatedBy: cancellationQuery.rows[0].initiated_by ?? 'MERCHANT',
           createdAt: cancellationQuery.rows[0].created_at.toISOString(),
           refundSettlement:
             cancellationRefundsQuery.rows.length === 0

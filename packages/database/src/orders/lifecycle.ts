@@ -510,12 +510,17 @@ export async function cancelOrder(
     reasonText?: string;
     idempotencyKey: string;
     actorType?: 'USER' | 'SYSTEM';
+    initiatedBy?: 'CUSTOMER' | 'MERCHANT' | 'SYSTEM';
     /** Worker-only proof that this cancellation is driven by an eligible timed-out intent. */
     paymentTimeoutIntentId?: string;
   },
 ): Promise<{ order: OrderView; releasedReservations: number; cancelledFulfillments: number }> {
   if (!input.reasonCode.trim())
     throw new OrderDomainError('VALIDATION_FAILED', 'A cancellation reason is required.');
+  const initiatedBy =
+    input.actorType === 'SYSTEM'
+      ? 'SYSTEM'
+      : (input.initiatedBy ?? (input.reasonCode.toUpperCase().startsWith('CUSTOMER') ? 'CUSTOMER' : 'MERCHANT'));
   return db.transaction().execute(async (transaction) => {
     let idempotencyRecordId: string;
     try {
@@ -658,7 +663,7 @@ export async function cancelOrder(
     await sql`update orders.orders set order_status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now() where id = ${input.orderId}`.execute(
       transaction,
     );
-    const cancellation = await sql<{ id: string }>`insert into orders.order_cancellations (organization_id, order_id, reason_code, reason_text, created_by_actor_id) values (${input.organizationId}, ${input.orderId}, ${input.reasonCode.trim()}, ${input.reasonText?.trim() ?? null}, ${input.actorType === 'SYSTEM' ? null : input.actorId}) returning id`.execute(
+    const cancellation = await sql<{ id: string }>`insert into orders.order_cancellations (organization_id, order_id, reason_code, reason_text, initiated_by, created_by_actor_id) values (${input.organizationId}, ${input.orderId}, ${input.reasonCode.trim()}, ${input.reasonText?.trim() ?? null}, ${initiatedBy}, ${input.actorType === 'SYSTEM' ? null : input.actorId}) returning id`.execute(
       transaction,
     );
     const cancellationRefunds = await createCancellationRefundObligationsInTransaction(transaction, {

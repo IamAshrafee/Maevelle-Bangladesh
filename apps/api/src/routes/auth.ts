@@ -97,7 +97,7 @@ export function registerAuthRoutes(
   registerPricingRoutes(app, database, auth);
   registerPromotionRoutes(app, database, auth);
   registerCartRoutes(app, database);
-  registerOrderRoutes(app, database, auth);
+  registerOrderRoutes(app, database, auth, config);
   registerPaymentRoutes(app, database, auth);
   registerFulfillmentDeliveryRoutes(app, database, auth, config);
   registerProcurementRoutes(app, database, auth);

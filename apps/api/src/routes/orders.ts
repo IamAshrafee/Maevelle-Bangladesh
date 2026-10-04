@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
+import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import {
   cancelOrder,
@@ -33,6 +34,10 @@ import {
   createOrderTag,
   assignTagToOrder,
   removeTagFromOrder,
+  getOrderTimeline,
+  evaluateOrderDeliveryRisk,
+  listOrderVerifications,
+  recordOrderVerification,
 } from '@maevelle/database/orders';
 import {
   getOrderPaymentInstructions,
@@ -104,6 +109,13 @@ function headers(value: Record<string, string | string[] | undefined>): Headers 
     ),
   );
 }
+function encryptionKey(config?: RuntimeConfig) {
+  if (!config?.authEncryptionKey) return undefined;
+  return {
+    id: 'runtime-auth-key',
+    value: Buffer.from(config.authEncryptionKey, 'base64'),
+  };
+}
 async function admin(
   database: DatabaseClient,
   auth: Auth,
@@ -142,6 +154,7 @@ export function registerOrderRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
   auth: Auth,
+  config?: RuntimeConfig,
 ): void {
   app.post('/storefront/v1/checkouts', async (request, reply) => {
     const cartToken = token(request.headers, cartCookie);
@@ -676,6 +689,128 @@ export function registerOrderRoutes(
       return sendError(reply, caught);
     }
   });
+
+  app.get('/admin/orders/:orderId/timeline', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      const params = request.params as { orderId: string };
+      return {
+        data: await getOrderTimeline(database.db, {
+          organizationId: active.organizationId,
+          orderId: params.orderId,
+        }),
+      };
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
+
+  app.get('/admin/orders/:orderId/risk-assessment', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      const params = request.params as { orderId: string };
+      const encKey = encryptionKey(config);
+      return {
+        data: await evaluateOrderDeliveryRisk(database.db, {
+          organizationId: active.organizationId,
+          orderId: params.orderId,
+          ...(encKey ? { encryptionKey: encKey } : {}),
+        }),
+      };
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
+
+  app.post('/admin/orders/:orderId/risk-assessment/refresh', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.manage');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      const params = request.params as { orderId: string };
+      const encKey = encryptionKey(config);
+      return {
+        data: await evaluateOrderDeliveryRisk(database.db, {
+          organizationId: active.organizationId,
+          orderId: params.orderId,
+          forceRefresh: true,
+          ...(encKey ? { encryptionKey: encKey } : {}),
+        }),
+      };
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
+
+  app.get('/admin/orders/:orderId/verifications', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'orders.view');
+    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+    try {
+      const params = request.params as { orderId: string };
+      return {
+        data: await listOrderVerifications(database.db, {
+          organizationId: active.organizationId,
+          orderId: params.orderId,
+        }),
+      };
+    } catch (caught) {
+      return sendError(reply, caught);
+    }
+  });
+
+  app.post(
+    '/admin/orders/:orderId/verifications',
+    {
+      schema: {
+        body: Type.Object({
+          verificationType: Type.Union([
+            Type.Literal('PHONE_CALL'),
+            Type.Literal('WHATSAPP_MESSAGE'),
+            Type.Literal('SMS_CONFIRMATION'),
+            Type.Literal('FRAUD_RISK_REVIEW'),
+            Type.Literal('MANUAL_APPROVAL'),
+          ]),
+          outcome: Type.Union([
+            Type.Literal('CONFIRMED'),
+            Type.Literal('UNREACHABLE'),
+            Type.Literal('WRONG_NUMBER'),
+            Type.Literal('CANCEL_REQUESTED'),
+            Type.Literal('ADDRESS_CORRECTION_REQUESTED'),
+            Type.Literal('FLAGGED_SUSPICIOUS'),
+            Type.Literal('APPROVED_OVERRIDE'),
+          ]),
+          notes: Type.Optional(Type.String({ maxLength: 2000 })),
+          riskSnapshot: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await admin(database, auth, request.headers, 'orders.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const params = request.params as { orderId: string };
+        const body = request.body as Parameters<typeof recordOrderVerification>[1] & {
+          verificationType: Parameters<typeof recordOrderVerification>[1]['verificationType'];
+          outcome: Parameters<typeof recordOrderVerification>[1]['outcome'];
+          notes?: string;
+          riskSnapshot?: Record<string, unknown>;
+        };
+        const verification = await recordOrderVerification(database.db, {
+          organizationId: active.organizationId,
+          orderId: params.orderId,
+          actorId: active.actorId,
+          verificationType: body.verificationType,
+          outcome: body.outcome,
+          ...(body.notes ? { notes: body.notes } : {}),
+          ...(body.riskSnapshot ? { riskSnapshot: body.riskSnapshot } : {}),
+        });
+        return reply.code(201).send({ data: verification });
+      } catch (caught) {
+        return sendError(reply, caught);
+      }
+    },
+  );
   app.post(
     '/admin/orders/:orderId/status',
     {
@@ -811,6 +946,13 @@ export function registerOrderRoutes(
           version: Type.Integer({ minimum: 1 }),
           reasonCode: Type.String({ minLength: 1 }),
           reasonText: Type.Optional(Type.String()),
+          initiatedBy: Type.Optional(
+            Type.Union([
+              Type.Literal('CUSTOMER'),
+              Type.Literal('MERCHANT'),
+              Type.Literal('SYSTEM'),
+            ]),
+          ),
         }),
       },
     },
@@ -823,7 +965,12 @@ export function registerOrderRoutes(
           .code(422)
           .send({ error: { code: 'VALIDATION_FAILED', message: 'Idempotency-Key is required.' } });
       try {
-        const body = request.body as { version: number; reasonCode: string; reasonText?: string };
+        const body = request.body as {
+          version: number;
+          reasonCode: string;
+          reasonText?: string;
+          initiatedBy?: 'CUSTOMER' | 'MERCHANT' | 'SYSTEM';
+        };
         return {
           data: await cancelOrder(database.db, {
             ...active,
@@ -831,6 +978,7 @@ export function registerOrderRoutes(
             expectedVersion: body.version,
             reasonCode: body.reasonCode,
             ...(body.reasonText ? { reasonText: body.reasonText } : {}),
+            ...(body.initiatedBy ? { initiatedBy: body.initiatedBy } : {}),
             idempotencyKey: key,
           }),
         };

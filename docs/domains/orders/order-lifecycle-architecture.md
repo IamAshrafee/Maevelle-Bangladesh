@@ -4067,4 +4067,62 @@ before moving toward broader technical/schema design.
 
 ---
 
-**End of Order Lifecycle Architecture v0.1**
+# 54. Dedicated Orders Domain Completion (V2 Architecture)
+
+In the dedicated Orders deep completion pass, the Orders module was elevated from a broad commerce foundation into an authoritative, production-grade commercial domain.
+
+### 54.1 Domain Truth & Dimension Separation
+
+The system strictly enforces clear boundaries between separate operational truths:
+- **Commercial Truth (Orders):** What the customer agreed to purchase, price snapshots, line discounts, agreed customer shipping fee, delivery address snapshot, and cancellation intent.
+- **Inventory Truth (Inventory):** Reservations at checkout/order placement, releases upon cancellation or line cancellation, allocation and consumption upon dispatch, and returned stock disposition.
+- **Payment Truth (Payments/Finance):** Outstanding collectible COD amounts, manual bKash/Nagad verification, courier COD remittance tracking, and accounting movements. A parcel marked `DELIVERED` by a courier **never** equates to merchant COD fund settlement.
+- **Delivery Truth (Delivery/Couriers):** Couriers (Steadfast, Pathao), tracking numbers, consignment notes, courier delivery costs, pickup attempts, delivery failures, and RTO (Return to Origin).
+- **Post-Delivery Truth (Returns):** Customer-initiated returns for delivered items, strictly separated from RTO.
+
+### 54.2 Customer Delivery Risk & Fraud Intelligence
+
+Maevelle implements an explainable, provider-neutral delivery risk evaluation engine:
+1. **Explainable Signals & Advisory Recommendations:**
+   - Rather than black-box "fraud" accusations or automated order declines, the engine computes explainable signals (e.g. `STEADY_INTERNAL_HISTORY`, `REPEATED_INTERNAL_RTO`, `COURIER_NETWORK_PROVEN`, `COURIER_NETWORK_HIGH_CANCELLATIONS`, `POTENTIAL_DUPLICATE_ORDER`, `HIGH_VALUE_FIRST_COD`).
+   - Recommendations guide operators (`APPROVE_COD`, `VERIFY_CUSTOMER`, `REQUIRE_PREPAYMENT`, `REJECT_SUSPICIOUS`) while preserving human discretion.
+2. **Official Courier Integration Truth:**
+   - **Steadfast Courier:** Integrates with Steadfast's official merchant API `GET /fraud_check/{phone}` using account `Api-Key` and `Secret-Key`, evaluating nationwide parcels, delivered ratio, cancelled parcels, and fraud reports.
+   - **Pathao Courier:** Official developer Aladdin API does not expose a public customer fraud-check REST endpoint. The system marks Pathao history as unavailable rather than scraping unauthorized merchant portal sessions.
+3. **Duplicate Order Detection:**
+   - Evaluates a 48-hour rolling window across the same normalized phone number, delivery address, or product variants to detect accidental or automated duplicate submissions.
+4. **Performance & Resilience Caching:**
+   - Evaluated risk assessments are cached in `orders.order_delivery_risk_evaluations` with a 1-hour TTL, preventing rate-limit exhaustion during admin page reloads and providing explicit refresh actions.
+
+### 54.3 Operational Verifications Workflow
+
+COD orders in Bangladesh often require operator contact prior to packing:
+- Table `orders.order_verifications` records structured verification events with verification channels (`PHONE_CALL`, `WHATSAPP_MESSAGE`, `SMS_CONFIRMATION`, `FRAUD_RISK_REVIEW`, `MANUAL_APPROVAL`) and outcomes (`CONFIRMED`, `UNREACHABLE`, `WRONG_NUMBER`, `CANCEL_REQUESTED`, `ADDRESS_CORRECTION_REQUESTED`, `FLAGGED_SUSPICIOUS`, `APPROVED_OVERRIDE`).
+- Emits outbox events (`orders.verification_recorded`) and writes security audit logs.
+
+### 54.4 Structured Cancellations & Attribution
+
+- Cancellations record structured reason codes, explanatory notes, and operational origin (`initiated_by`: `'CUSTOMER'` vs `'MERCHANT'` vs `'SYSTEM'`).
+- Distinguishing merchant operational cancellations (e.g. out of stock, courier unreachable) from customer cancellations ensures customer risk scores are not unfairly penalized.
+
+### 54.5 Unified Business Timeline
+
+The Order Timeline (`getOrderTimeline`) normalizes events across multiple domains into a single chronological stream:
+- `ORDER`: Creation, status confirmation, hold/resume, address update, customer contact update, cancellation.
+- `VERIFICATION`: Customer phone calls, WhatsApp confirmations, manual approvals.
+- `PAYMENT`: Payment instructions, payment submissions, approvals, refunds.
+- `FULFILLMENT`: Fulfillment packages created, prepared, dispatched.
+- `DELIVERY`: Courier booking, consignment IDs, tracking numbers, delivery attempts, deliveries, and RTO events.
+- `RETURN`: Post-delivery return requests, approvals, completions.
+- `NOTE`: Staff operational notes.
+
+### 54.6 Capabilities & Frontend Readiness
+
+`OrderDetailDto` exposes explicit action capability flags:
+`canConfirm`, `canHold`, `canResume`, `canCancel`, `canCancelLines`, `canEditAddress`, `canEditCustomerContact`, `canAddNote`, `canRecordVerification`, `canComplete`, `canCreateFulfillment`.
+This eliminates frontend state guesswork and ensures business logic remains strictly server-authoritative.
+
+---
+
+**End of Order Lifecycle Architecture**
+

@@ -131,10 +131,25 @@ export interface OrderTag {
   readonly createdAt: string;
 }
 
+export interface OrderCapabilities {
+  readonly canConfirm: boolean;
+  readonly canHold: boolean;
+  readonly canResume: boolean;
+  readonly canCancel: boolean;
+  readonly canCancelLines: boolean;
+  readonly canEditAddress: boolean;
+  readonly canEditCustomerContact: boolean;
+  readonly canAddNote: boolean;
+  readonly canRecordVerification: boolean;
+  readonly canComplete: boolean;
+  readonly canCreateFulfillment: boolean;
+}
+
 export interface AdminOrderDetailView extends OrderView {
   readonly fulfillmentStatus: OrderFulfillmentStatus;
   readonly deliveryStatus: OrderDeliveryStatus;
   readonly deliveryAmount: string;
+  readonly capabilities: OrderCapabilities;
   readonly tags: readonly OrderTag[];
   readonly notes: readonly {
     id: string;
@@ -143,13 +158,35 @@ export interface AdminOrderDetailView extends OrderView {
     body: string;
     createdAt: string;
   }[];
+  readonly verifications?: readonly {
+    id: string;
+    orderId: string;
+    actorId: string;
+    actorName?: string | null;
+    verificationType: string;
+    outcome: string;
+    notes: string | null;
+    riskSnapshot: Record<string, unknown> | null;
+    createdAt: string;
+  }[];
+  readonly riskSummary?: {
+    readonly overallRiskLevel: string;
+    readonly recommendation: string;
+    readonly signalCount: number;
+  } | null;
   readonly timeline: readonly {
     id: string;
     eventType: string;
-    aggregateType: string;
-    aggregateId: string;
     occurredAt: string;
-    payload: Record<string, unknown>;
+    category?: string;
+    title?: string;
+    description?: string | null;
+    actorType?: string;
+    actorName?: string | null;
+    metadata?: Record<string, unknown>;
+    aggregateType?: string;
+    aggregateId?: string;
+    payload?: Record<string, unknown>;
   }[];
   readonly fulfillments: readonly {
     id: string;
@@ -190,6 +227,7 @@ export interface AdminOrderDetailView extends OrderView {
   readonly cancellation: {
     reasonCode: string;
     reasonText: string | null;
+    initiatedBy?: 'CUSTOMER' | 'MERCHANT' | 'SYSTEM';
     createdAt: string;
     refundSettlement: 'NOT_REQUIRED' | 'REFUND_PENDING' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
     refundObligations: readonly {

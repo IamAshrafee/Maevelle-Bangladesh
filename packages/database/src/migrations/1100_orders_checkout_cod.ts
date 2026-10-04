@@ -279,11 +279,49 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       order_id uuid not null unique references orders.orders(id),
       reason_code text not null,
       reason_text text,
+      initiated_by text not null default 'MERCHANT' check (initiated_by in ('CUSTOMER', 'MERCHANT', 'SYSTEM')),
       created_by_actor_id uuid,
       created_at timestamptz not null default now(),
       unique (organization_id, id),
       foreign key (organization_id, order_id) references orders.orders(organization_id, id)
     );
+
+    -- Customer contact & operational review records before fulfillment.
+    create table orders.order_verifications (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      order_id uuid not null references orders.orders(id),
+      actor_id uuid not null,
+      verification_type text not null
+        check (verification_type in ('PHONE_CALL', 'WHATSAPP_MESSAGE', 'SMS_CONFIRMATION', 'FRAUD_RISK_REVIEW', 'MANUAL_APPROVAL')),
+      outcome text not null
+        check (outcome in ('CONFIRMED', 'UNREACHABLE', 'WRONG_NUMBER', 'CANCEL_REQUESTED', 'ADDRESS_CORRECTION_REQUESTED', 'FLAGGED_SUSPICIOUS', 'APPROVED_OVERRIDE')),
+      notes text,
+      risk_snapshot jsonb,
+      created_at timestamptz not null default now(),
+      unique (organization_id, id),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id)
+    );
+    create index order_verifications_order_idx on orders.order_verifications (organization_id, order_id, created_at desc);
+
+    -- Short-term cached risk evaluation and courier intelligence snapshot for an order.
+    create table orders.order_delivery_risk_evaluations (
+      order_id uuid primary key references orders.orders(id),
+      organization_id uuid not null references platform.organizations(id),
+      normalized_phone text not null,
+      overall_risk_level text not null
+        check (overall_risk_level in ('LOW', 'MODERATE', 'ELEVATED', 'INSUFFICIENT_HISTORY')),
+      recommendation text not null
+        check (recommendation in ('APPROVE_COD', 'VERIFY_CUSTOMER', 'REQUIRE_PREPAYMENT', 'REJECT_SUSPICIOUS')),
+      signals jsonb not null default '[]'::jsonb check (jsonb_typeof(signals) = 'array'),
+      internal_history jsonb not null default '{}'::jsonb check (jsonb_typeof(internal_history) = 'object'),
+      provider_history jsonb not null default '{}'::jsonb check (jsonb_typeof(provider_history) = 'object'),
+      duplicate_orders jsonb not null default '[]'::jsonb check (jsonb_typeof(duplicate_orders) = 'array'),
+      evaluated_at timestamptz not null default now(),
+      expires_at timestamptz not null default (now() + interval '1 hour'),
+      foreign key (organization_id, order_id) references orders.orders(organization_id, id)
+    );
+    create index order_risk_eval_phone_idx on orders.order_delivery_risk_evaluations (organization_id, normalized_phone);
 
     alter table promotions.promotion_usage
       add constraint promotion_usage_order_fk foreign key (order_id) references orders.orders(id);

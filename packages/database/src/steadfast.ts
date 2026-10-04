@@ -231,6 +231,155 @@ export async function createSteadfastProvider(
   };
 }
 
+export interface SteadfastFraudCheckResult {
+  readonly available: boolean;
+  readonly phone: string;
+  readonly totalParcels: number;
+  readonly deliveredCount: number;
+  readonly cancelledCount: number;
+  readonly fraudReportsCount: number;
+  readonly successRate: number | null;
+  readonly checkedAt: string;
+  readonly error?: string;
+}
+
+/**
+ * Queries the official Steadfast merchant fraud check endpoint (`/fraud_check/{phone}`)
+ * to evaluate customer parcel history across Steadfast's nationwide delivery network.
+ */
+export async function checkSteadfastCustomerFraud(
+  config: { readonly environment: SteadfastEnvironment },
+  credentials: SteadfastCredentials,
+  phone: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<SteadfastFraudCheckResult> {
+  const baseUrl = STEADFAST_BASE_URLS[config.environment];
+  const cleanPhone = phone.trim().replace(/[\s().-]+/g, '');
+  const normalizedPhone = cleanPhone.startsWith('+880')
+    ? cleanPhone.slice(3)
+    : cleanPhone.startsWith('880')
+      ? cleanPhone.slice(2)
+      : cleanPhone;
+
+  const checkedAt = new Date().toISOString();
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+
+    const response = await fetchImpl(`${baseUrl}/fraud_check/${encodeURIComponent(normalizedPhone)}`, {
+      method: 'GET',
+      headers: {
+        'Api-Key': credentials.apiKey,
+        'Secret-Key': credentials.secretKey,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+
+    if (!response.ok) {
+      return {
+        available: false,
+        phone: normalizedPhone,
+        totalParcels: 0,
+        deliveredCount: 0,
+        cancelledCount: 0,
+        fraudReportsCount: 0,
+        successRate: null,
+        checkedAt,
+        error: `HTTP_${response.status}`,
+      };
+    }
+
+    const data = await response.json().catch(() => null);
+    if (!isRecord(data)) {
+      return {
+        available: false,
+        phone: normalizedPhone,
+        totalParcels: 0,
+        deliveredCount: 0,
+        cancelledCount: 0,
+        fraudReportsCount: 0,
+        successRate: null,
+        checkedAt,
+        error: 'INVALID_JSON_RESPONSE',
+      };
+    }
+
+    const totalParcels = Number(data.Total_parcels ?? data.total_parcels ?? data.total_parcel ?? 0);
+    const deliveredCount = Number(
+      data.total_delivered ?? data.Total_delivered ?? data.delivered_parcels ?? data.delivered ?? 0,
+    );
+    const cancelledCount = Number(
+      data.total_cancelled ?? data.Total_cancelled ?? data.cancelled_parcels ?? data.cancelled ?? 0,
+    );
+
+    let fraudReportsCount = 0;
+    if (Array.isArray(data.total_fraud_reports)) {
+      fraudReportsCount = data.total_fraud_reports.length;
+    } else if (typeof data.total_fraud_reports === 'number') {
+      fraudReportsCount = data.total_fraud_reports;
+    }
+
+    const successRate =
+      totalParcels > 0 ? Math.round((deliveredCount / totalParcels) * 10000) / 100 : null;
+
+    return {
+      available: true,
+      phone: normalizedPhone,
+      totalParcels,
+      deliveredCount,
+      cancelledCount,
+      fraudReportsCount,
+      successRate,
+      checkedAt,
+    };
+  } catch (err) {
+    return {
+      available: false,
+      phone: normalizedPhone,
+      totalParcels: 0,
+      deliveredCount: 0,
+      cancelledCount: 0,
+      fraudReportsCount: 0,
+      successRate: null,
+      checkedAt,
+      error: err instanceof Error ? err.message : 'NETWORK_ERROR',
+    };
+  }
+}
+
+/**
+ * Retrieves the active decrypted Steadfast credentials for an organization if configured.
+ */
+export async function getActiveSteadfastCredentials(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  encryptionKey: EncryptionKey,
+): Promise<{ accountId: string; config: SteadfastAccountConfig; credentials: SteadfastCredentials } | null> {
+  const row = await sql<{
+    id: string;
+    config: SteadfastAccountConfig;
+    secret_ciphertext: string;
+  }>`
+    select id, config, secret_ciphertext
+    from integrations.integration_accounts
+    where organization_id = ${organizationId}
+      and provider_code = ${STEADFAST_PROVIDER_CODE}
+      and status = 'ACTIVE'
+    order by updated_at desc limit 1
+  `.execute(db);
+  const found = row.rows[0];
+  if (!found || !found.secret_ciphertext) return null;
+  try {
+    const raw = decryptSecret(found.secret_ciphertext, encryptionKey);
+    const creds = JSON.parse(raw) as SteadfastCredentials;
+    return { accountId: found.id, config: found.config, credentials: creds };
+  } catch {
+    return null;
+  }
+}
+
 export async function configureSteadfastAccount(
   db: Kysely<DatabaseSchema>,
   encryptionKey: EncryptionKey,
