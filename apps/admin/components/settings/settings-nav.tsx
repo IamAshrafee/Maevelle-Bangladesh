@@ -13,6 +13,7 @@ import {
   Server,
   Shield,
   SlidersHorizontal,
+  Sparkles,
   Store,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,12 @@ export const coreSettingsTabs = [
     href: '/settings/system',
     label: 'System',
     icon: Server,
+    exact: true,
+  },
+  {
+    href: '/settings/design-system',
+    label: 'Design System',
+    icon: Sparkles,
     exact: true,
   },
 ] as const;

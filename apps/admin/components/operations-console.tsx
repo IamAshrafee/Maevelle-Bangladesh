@@ -7,6 +7,15 @@ import type { ApiEnvelope } from '@maevelle/contracts';
 
 import { OperationalFeedback, OperationalPageHeader } from './operational-worklist';
 import { StatusBadge } from './status-badge';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 type Attention = { domain: string; reason: string; severity: string; count: string; href: string };
 type SearchResult = { kind: string; label: string; detail: string; href: string };
@@ -231,31 +240,30 @@ export function OperationsConsole() {
     }
   };
   return (
-    <main>
-      <section className="shell admin-page">
+    <main className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
         <OperationalPageHeader
           eyebrow="Maevelle / Operations"
           title="Operations center"
           description="Review action queues, search business records, manage personal views, and run permission-safe data tools."
           actions={
-            <button className="button secondary" type="button" onClick={() => void reload()}>
-              <RefreshCw aria-hidden="true" /> Refresh
-            </button>
+            <Button variant="outline" size="sm" onClick={() => void reload()}>
+            <RefreshCw className="size-3.5 mr-1.5" /> Refresh
+          </Button>
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        <section className="panel">
-          <div className="panel-header">
+        <section className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+          <div className="flex items-center justify-between border-b border-border/60 pb-3">
             <div>
-              <p className="eyebrow">Action queue</p>
-              <h2>Attention center</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Action queue</p>
+              <h2 className="text-base font-semibold tracking-tight text-foreground">Attention center</h2>
             </div>
-            <span className="result-count">{attention.length}</span>
+            <span className="px-2.5 py-0.5 rounded-full bg-muted text-xs font-semibold tabular-nums text-foreground">{attention.length}</span>
           </div>
-          <div className="attention-grid">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {attention.map((item) => (
               <Link
-                className="attention-card"
+                className="flex items-center gap-3 p-3.5 rounded-lg border border-border/70 bg-card hover:bg-muted/40 transition-colors shadow-2xs"
                 href={item.href}
                 key={`${item.domain}-${item.reason}`}
               >
@@ -269,16 +277,16 @@ export function OperationsConsole() {
             {attention.length === 0 ? <p>No current operational attention items.</p> : null}
           </div>
         </section>
-        <section className="operations-two-column">
-          <div className="panel">
-            <div className="panel-header">
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-border/60">
               <div>
                 <p className="eyebrow">Cross-domain lookup</p>
                 <h2>Global search</h2>
               </div>
             </div>
-            <form className="form-row" onSubmit={(event) => void search(event)}>
-              <label className="grow-field">
+            <form className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3" onSubmit={(event) => void search(event)}>
+              <label className="flex-1 text-xs font-medium text-muted-foreground">
                 Search
                 <input
                   minLength={2}
@@ -288,12 +296,12 @@ export function OperationsConsole() {
                   required
                 />
               </label>
-              <button className="button primary" type="submit">
+              <button className="h-9 px-4 rounded-lg bg-primary text-primary-foreground font-medium text-xs hover:bg-primary-hover transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center" type="submit">
                 Search
               </button>
             </form>
             {results.length ? (
-              <div className="search-results">
+              <div className="divide-y divide-border border border-border rounded-lg overflow-hidden bg-muted/10">
                 {results.map((result) => (
                   <Link href={result.href} key={`${result.kind}-${result.label}`}>
                     <StatusBadge status={result.kind} />
@@ -308,14 +316,14 @@ export function OperationsConsole() {
               <p>Search results open their authoritative workspace.</p>
             )}
           </div>
-          <div className="panel">
-            <div className="panel-header">
+          <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-border/60">
               <div>
                 <p className="eyebrow">Personal productivity</p>
                 <h2>Saved views</h2>
               </div>
             </div>
-            <form className="form-row" onSubmit={(event) => void save(event)}>
+            <form className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3" onSubmit={(event) => void save(event)}>
               <select name="resourceKey" defaultValue="orders">
                 <option value="orders">Orders</option>
                 <option value="inventory">Inventory</option>
@@ -327,24 +335,24 @@ export function OperationsConsole() {
                 <option value="shipments">Shipments</option>
               </select>
               <input name="name" placeholder="View name" required maxLength={100} />
-              <button className="button secondary" type="submit">
+              <button className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center" type="submit">
                 Save view
               </button>
             </form>
             {savedViews.length ? (
-              <ul className="saved-view-list">
+              <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden bg-muted/10">
                 {savedViews.map((view) => (
                   <li key={view.id}>
                     {view.resource_key}: {view.name} {view.is_default ? '(default)' : ''}{' '}
                     <button
-                      className="button secondary"
+                      className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                       type="button"
                       onClick={() => void updateView(view.id, { isDefault: true })}
                     >
                       Make default
                     </button>{' '}
                     <button
-                      className="button secondary"
+                      className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                       type="button"
                       onClick={() => void updateView(view.id, { status: 'ARCHIVED' })}
                     >
@@ -358,9 +366,9 @@ export function OperationsConsole() {
             )}
           </div>
         </section>
-        <section className="operations-two-column">
-          <div className="panel import-workspace">
-            <div className="panel-header">
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-border/60">
               <div>
                 <p className="eyebrow">All-or-nothing</p>
                 <h2>Catalog Product import</h2>
@@ -372,7 +380,7 @@ export function OperationsConsole() {
               <strong>title, handle, description</strong>. Validation is previewed before an
               explicit confirmation.
             </p>
-            <form className="inset-form" onSubmit={(event) => void uploadImport(event)}>
+            <form className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-lg bg-muted/20 border border-border/60" onSubmit={(event) => void uploadImport(event)}>
               <label>
                 Product type
                 <select name="productTypeId" required defaultValue="">
@@ -391,7 +399,7 @@ export function OperationsConsole() {
                 <input name="file" type="file" accept=".csv,text/csv" required />
               </label>
               <button
-                className="button secondary"
+                className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                 disabled={productTypes.length === 0}
                 type="submit"
               >
@@ -403,7 +411,7 @@ export function OperationsConsole() {
                 {importPreview.valid} valid · {importPreview.invalid} invalid.{' '}
                 {importPreview.confirmable ? (
                   <button
-                    className="button primary"
+                    className="h-9 px-4 rounded-lg bg-primary text-primary-foreground font-medium text-xs hover:bg-primary-hover transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                     type="button"
                     onClick={() => void confirmImport()}
                   >
@@ -415,7 +423,7 @@ export function OperationsConsole() {
               </OperationalFeedback>
             ) : null}
             {imports.length ? (
-              <div className="data-table-shell">
+              <div className="rounded-lg border border-border overflow-hidden">
                 <table>
                   <thead>
                     <tr>
@@ -445,8 +453,8 @@ export function OperationsConsole() {
               <p>No import jobs.</p>
             )}
           </div>
-          <div className="panel export-workspace">
-            <div className="panel-header">
+          <div className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-border/60">
               <div>
                 <p className="eyebrow">Current user scope</p>
                 <h2>Permission-safe exports</h2>
@@ -457,23 +465,23 @@ export function OperationsConsole() {
               Exports are generated server-side from tenant-scoped read models and downloaded as
               CSV.
             </p>
-            <div className="export-actions">
+            <div className="flex flex-wrap items-center gap-2 pt-2">
               <button
-                className="button secondary"
+                className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                 type="button"
                 onClick={() => void exportData('ORDERS')}
               >
                 Export Orders
               </button>
               <button
-                className="button secondary"
+                className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                 type="button"
                 onClick={() => void exportData('CUSTOMERS')}
               >
                 Export Customers
               </button>
               <button
-                className="button secondary"
+                className="h-9 px-3 rounded-lg border border-border bg-card text-foreground font-medium text-xs hover:bg-muted transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                 type="button"
                 onClick={() => void exportData('INVENTORY')}
               >
@@ -481,7 +489,7 @@ export function OperationsConsole() {
               </button>
             </div>
             {exports.length ? (
-              <div className="data-table-shell">
+              <div className="rounded-lg border border-border overflow-hidden">
                 <table>
                   <thead>
                     <tr>
@@ -508,7 +516,6 @@ export function OperationsConsole() {
             )}
           </div>
         </section>
-      </section>
     </main>
   );
 }

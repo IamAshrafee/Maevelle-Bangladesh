@@ -12,6 +12,15 @@ import {
   useOperationalWorklist,
 } from './operational-worklist';
 import { StatusBadge } from './status-badge';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 type Product = { readonly id: string; readonly title: string; readonly handle: string };
 type ProductWorkspace = Product & {
@@ -161,21 +170,20 @@ export function PricingConsole() {
   }
 
   return (
-    <main>
-      <section className="shell admin-page">
+    <main className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
         <OperationalPageHeader
           eyebrow="Commerce / Pricing"
           title="Variant pricing"
           description="Create exact-money, scheduled Variant prices using named Product and SKU selections."
           actions={
-            <button className="button secondary" type="button" onClick={() => void load()}>
-              <RefreshCw aria-hidden="true" /> Refresh
-            </button>
+            <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className="size-3.5 mr-1.5" /> Refresh
+          </Button>
           }
         />
         {message ? <OperationalFeedback tone={tone}>{message}</OperationalFeedback> : null}
-        <section className="commerce-command-layout">
-          <form className="panel inset-form" onSubmit={(event) => void submit(event)}>
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <form className="lg:col-span-2 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4" onSubmit={(event) => void submit(event)}>
             <div className="panel-header">
               <div>
                 <p className="eyebrow">New definition</p>
@@ -262,11 +270,11 @@ export function PricingConsole() {
             <OperationalFeedback tone="warning">
               Active date ranges for one SKU and currency cannot overlap.
             </OperationalFeedback>
-            <button className="button primary" disabled={busy || !product} type="submit">
-              <Plus aria-hidden="true" /> Create price
-            </button>
-          </form>
-          <aside className="panel">
+            <Button type="submit" disabled={busy || !product} className="gap-1.5">
+            <Plus className="size-4" aria-hidden="true" /> Create price
+          </Button>
+        </form>
+        <aside className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-2">
             <p className="eyebrow">Pricing authority</p>
             <h2>Server-resolved truth</h2>
             <p>
@@ -295,7 +303,7 @@ export function PricingConsole() {
           onApplyView={worklist.applyView}
           searchLabel="Search Product, SKU, or currency"
         />
-        <section className="panel worklist-panel">
+        <section className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
           {loading ? (
             <div className="skeleton-list" aria-label="Loading prices">
               <span />
@@ -350,7 +358,6 @@ export function PricingConsole() {
             />
           )}
         </section>
-      </section>
     </main>
   );
 }
@@ -456,8 +463,7 @@ export function PromotionsConsole() {
   }
 
   return (
-    <main>
-      <section className="shell admin-page">
+    <main className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
         <OperationalPageHeader
           eyebrow="Commerce / Promotions"
           title="Promotions and coupons"
@@ -491,8 +497,8 @@ export function PromotionsConsole() {
             <StatsDescription>reserved codes</StatsDescription>
           </StatsCard>
         </Stats>
-        <section className="commerce-command-layout">
-          <form className="panel inset-form" onSubmit={(event) => void submit(event)}>
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <form className="lg:col-span-2 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4" onSubmit={(event) => void submit(event)}>
             <div className="panel-header">
               <div>
                 <p className="eyebrow">New campaign</p>
@@ -559,11 +565,11 @@ export function PromotionsConsole() {
                 <input name="endsAt" type="datetime-local" />
               </label>
             </div>
-            <button className="button primary" disabled={busy} type="submit">
-              <Plus aria-hidden="true" /> Create promotion
-            </button>
-          </form>
-          <aside className="panel">
+            <Button type="submit" disabled={busy} className="gap-1.5">
+            <Plus className="size-4" aria-hidden="true" /> Create promotion
+          </Button>
+        </form>
+        <aside className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-2">
             <p className="eyebrow">Usage semantics</p>
             <h2>Committed only after Order</h2>
             <p>
@@ -658,7 +664,6 @@ export function PromotionsConsole() {
             />
           )}
         </section>
-      </section>
     </main>
   );
 }

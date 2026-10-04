@@ -23,6 +23,7 @@ import {
   Server,
   Shield,
   SlidersHorizontal,
+  Sparkles,
   Store,
   Truck,
   Users,
@@ -156,6 +157,14 @@ export function SettingsOverviewConsole() {
         description: 'Inactivity duration before administrative sessions require re-authentication.',
         href: '/settings/security',
         keywords: 'security session timeout idle minutes inactivity logout',
+      },
+      {
+        id: 'design-system',
+        title: 'Design System & UI Lab',
+        category: 'Interface',
+        description: 'Inspect semantic tokens, typography scales, buttons, tables, and UI primitives.',
+        href: '/settings/design-system',
+        keywords: 'design system ui tokens colors buttons components lab showcase typography',
       },
     ];
     return list;
@@ -348,6 +357,23 @@ export function SettingsOverviewConsole() {
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Resend email delivery, Pathao courier, Cloudflare R2, and payment gateways.
+              </p>
+            </div>
+          </Link>
+
+          <Link
+            href="/settings/design-system"
+            className="p-4 rounded-xl border border-border bg-card hover:border-primary/40 transition-all space-y-2 group shadow-2xs"
+          >
+            <div className="flex size-8 items-center justify-center rounded-lg bg-teal-500/10 text-teal-600 group-hover:scale-105 transition-transform">
+              <Sparkles className="size-4" />
+            </div>
+            <div className="space-y-0.5">
+              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                Design System
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Visual tokens, typography scale, buttons, tables, and operational UI lab.
               </p>
             </div>
           </Link>

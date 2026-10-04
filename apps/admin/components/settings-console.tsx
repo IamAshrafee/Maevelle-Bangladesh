@@ -6,6 +6,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { SettingsNav } from './settings/settings-nav';
 import { OperationalFeedback, OperationalPageHeader } from './operational-worklist';
+import { Button } from '@/components/ui/button';
 
 type Profile = {
   readonly display_name: string;
@@ -125,8 +126,7 @@ export function SettingsConsole() {
   }
 
   return (
-    <main>
-      <section className="shell admin-page">
+    <main className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
         <OperationalPageHeader
           eyebrow="Settings / Organization"
           title="Organization settings"
@@ -174,8 +174,8 @@ export function SettingsConsole() {
             onChange={() => setDirty(true)}
             onSubmit={(event) => void save(event)}
           >
-            <section className="panel inset-form">
-              <div className="panel-header">
+            <section className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div>
                   <p className="eyebrow">Business profile</p>
                   <h2>Operator-facing identity</h2>
@@ -191,7 +191,7 @@ export function SettingsConsole() {
                   required
                 />
               </label>
-              <div className="form-row">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label>
                   Support email
                   <input
@@ -227,8 +227,8 @@ export function SettingsConsole() {
                 intentionally read-only in this profile editor.
               </OperationalFeedback>
             </section>
-            <section className="panel inset-form">
-              <div className="panel-header">
+            <section className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-2xs space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div>
                   <p className="eyebrow">Storefront profile</p>
                   <h2>Customer-facing identity</h2>
@@ -259,20 +259,19 @@ export function SettingsConsole() {
                 settings already stored by other features.
               </p>
             </section>
-            <footer className="settings-actions">
+            <footer className="lg:col-span-2 flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border">
               <small>
                 Schema version {profile.schema_version ?? 1}
                 {profile.updated_at
                   ? ` · Last updated ${new Date(profile.updated_at).toLocaleString()}`
                   : ''}
               </small>
-              <button className="button primary" disabled={busy} type="submit">
-                <Save aria-hidden="true" /> {busy ? 'Saving…' : 'Save settings'}
-              </button>
+              <Button type="submit" disabled={busy} className="gap-1.5">
+                <Save className="size-4" aria-hidden="true" /> {busy ? 'Saving…' : 'Save settings'}
+              </Button>
             </footer>
           </form>
         ) : null}
-      </section>
-    </main>
+      </main>
   );
 }

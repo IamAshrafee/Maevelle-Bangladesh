@@ -7,6 +7,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ApiEnvelope } from '@maevelle/contracts';
 
 import { StatusBadge } from './status-badge';
+import {
+  OperationalFeedback,
+  OperationalPageHeader,
+} from './operational-worklist';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/native-select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type Notification = {
   id: string;
@@ -411,7 +419,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
             </aside>
           ) : null}
           <form
-            className="command-panel integration-form"
+            className="rounded-lg border border-border bg-card p-5 space-y-4"
             onSubmit={async (event) => {
               event.preventDefault();
               const form = event.currentTarget;
@@ -523,7 +531,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                 placeholder={pathaoData?.accounts[0]?.hasWebhookSecret ? '••••••••••••••••' : 'Enter Webhook Secret if configured'}
               />
             </label>
-            <div className="inline-actions">
+            <div className="flex flex-wrap items-center gap-2 pt-2">
               <button disabled={busy} type="submit">
                 {pathaoData?.selectedAccountId ? 'Replace credentials' : 'Connect Pathao'}
               </button>
@@ -531,7 +539,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                 <>
                   <button
                     disabled={busy}
-                    className="secondary"
+                    className="h-9 px-3 rounded-md border border-border bg-card text-foreground hover:bg-muted text-xs font-medium"
                     type="button"
                     onClick={() => void runPathaoAction('check-connection')}
                   >
@@ -539,7 +547,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                   </button>
                   <button
                     disabled={busy}
-                    className="secondary"
+                    className="h-9 px-3 rounded-md border border-border bg-card text-foreground hover:bg-muted text-xs font-medium"
                     type="button"
                     onClick={() => void runPathaoAction('stores/sync')}
                   >
@@ -547,7 +555,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                   </button>
                   <button
                     disabled={busy}
-                    className="secondary"
+                    className="h-9 px-3 rounded-md border border-border bg-card text-foreground hover:bg-muted text-xs font-medium"
                     type="button"
                     onClick={togglePathao}
                   >
@@ -612,7 +620,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
             </section>
           ) : null}
           <form
-            className="command-panel integration-form"
+            className="rounded-lg border border-border bg-card p-5 space-y-4"
             onSubmit={async (event) => {
               event.preventDefault();
               const form = event.currentTarget;
@@ -689,7 +697,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                 placeholder={steadfastData[0]?.hasCredentials ? '••••••••••••••••' : 'Enter Secret Key'}
               />
             </label>
-            <div className="inline-actions">
+            <div className="flex flex-wrap items-center gap-2 pt-2">
               <button disabled={busy} type="submit">
                 {steadfastData[0]?.hasCredentials ? 'Replace credentials' : 'Connect Steadfast'}
               </button>
@@ -697,7 +705,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                 <>
                   <button
                     disabled={busy || !steadfastData[0].hasCredentials}
-                    className="secondary"
+                    className="h-9 px-3 rounded-md border border-border bg-card text-foreground hover:bg-muted text-xs font-medium"
                     type="button"
                     onClick={checkSteadfastConnectionAction}
                   >
@@ -705,7 +713,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                   </button>
                   <button
                     disabled={busy}
-                    className="secondary"
+                    className="h-9 px-3 rounded-md border border-border bg-card text-foreground hover:bg-muted text-xs font-medium"
                     type="button"
                     onClick={toggleSteadfast}
                   >
@@ -718,7 +726,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
             </div>
           </form>
           <form
-            className="command-panel integration-form"
+            className="rounded-lg border border-border bg-card p-5 space-y-4"
             onSubmit={async (event) => {
               event.preventDefault();
               const form = event.currentTarget;
@@ -790,7 +798,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
             rows={integrationData.operations}
             action={(row) =>
               row.status === 'UNKNOWN_OUTCOME' || row.status === 'RECONCILIATION_REQUIRED' ? (
-                <div className="inline-actions">
+                <div className="flex flex-wrap items-center gap-2 pt-2">
                   <button
                     disabled={busy}
                     type="button"
@@ -841,7 +849,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
               <StatsValue>{notifications.length}</StatsValue>
             </StatsCard>
           </Stats>
-          <section className="worklist-toolbar">
+          <section className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-4 rounded-lg border border-border bg-card">
             <label>
               View
               <select value={filter} onChange={(event) => setFilter(event.target.value)}>
@@ -869,10 +877,10 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
               <p>Choose another view or clear the search.</p>
             </div>
           ) : null}
-          <section className="notification-list">
+          <section className="space-y-4">
             {visible.map((item) => (
-              <article key={item.id}>
-                <div className="detail-panel-header">
+              <article key={item.id} className="rounded-lg border border-border bg-card p-5 space-y-3">
+                <div className="flex items-start justify-between gap-4 pb-3 border-b border-border">
                   <div>
                     <p className="eyebrow">
                       {item.source_domain.replaceAll('_', ' ')} ·{' '}
@@ -889,7 +897,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
                   attempt(s)
                 </p>
                 {item.attempts?.map((attempt) => (
-                  <p key={attempt.attemptNumber} className="attempt-line">
+                  <p key={attempt.attemptNumber} className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/20 p-2 rounded border border-border/40">
                     <StatusBadge status={attempt.status} /> Attempt {attempt.attemptNumber} via{' '}
                     {attempt.provider}
                     {attempt.errorCode ? ` · ${attempt.errorCode.replaceAll('_', ' ')}` : ''}
@@ -982,7 +990,7 @@ export function NotificationsConsole({ integrations = false }: { integrations?: 
             <button disabled={busy} type="submit">
               Save preference
             </button>
-            <ul className="preference-list">
+            <ul className="divide-y divide-border border border-border rounded-md overflow-hidden bg-muted/10">
               {preferences.map((item) => (
                 <li key={`${item.notification_type}-${item.channel}`}>
                   <span>

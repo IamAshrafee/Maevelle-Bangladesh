@@ -23,7 +23,7 @@ const StatsCard = React.forwardRef<
   <article
     ref={ref}
     className={cn(
-      "min-w-0 py-4 px-5 bg-white/85 hover:bg-white/95 transition-all duration-150 relative group",
+      "min-w-0 py-4 px-5 bg-card hover:bg-card/90 transition-colors duration-150 relative group",
       className
     )}
     {...props}

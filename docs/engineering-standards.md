@@ -134,11 +134,14 @@ whose behavior is controlled by growing combinations of boolean props.
   workspaces should be composed from focused hooks/providers and components,
   not accumulated in one console file.
 - Use the established Tailwind CSS, shadcn, Base UI, and shared design-token
-  direction for new interfaces. Do not add feature-specific raw vanilla CSS,
-  large one-off selector blocks, or inline style systems.
-- Gradually migrate touched legacy global/vanilla CSS into reusable primitives
-  and utility-based styling. A repository-wide styling rewrite is required only
-  when it is the assigned task.
+  direction for new interfaces. Follow the authoritative guide in
+  [`docs/admin-design-system.md`](admin-design-system.md) for color tokens,
+  typography, control heights, table densities, and structural page primitives.
+  Do not add feature-specific raw vanilla CSS, large one-off selector blocks,
+  or inline style systems.
+- Maintain a lean `globals.css`: component styling belongs in Tailwind-based
+  React components, never in global stylesheets. Avoid specificity traps,
+  ancestor selectors, and `transition: all`.
 - Build accessible primitives with semantic HTML, labels, keyboard support,
   focus visibility, appropriate ARIA, and sufficient contrast.
 - Design responsive behavior intentionally for relevant screen sizes; do not

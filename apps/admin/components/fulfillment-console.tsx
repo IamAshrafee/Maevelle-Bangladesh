@@ -1,10 +1,19 @@
 'use client';
 
-import { ArrowRight, Boxes, PackageCheck, Truck, Warehouse } from 'lucide-react';
+import { ArrowRight, Boxes, PackageCheck, Truck, Warehouse, X } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
+import { Button, buttonVariants } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 import type { ApiEnvelope, WarehouseLocationDto } from '@maevelle/contracts';
 
@@ -103,98 +112,100 @@ export function FulfillmentConsole() {
     void reload();
   }, [reload]);
 
-  const worklist = useOperationalWorklist({
+  const worklist = useOperationalWorklist<Fulfillment>({
     items: fulfillments,
-    storageKey: 'admin:fulfillments',
     getSearchText: searchText,
     getStatus: statusOf,
     getReference: referenceOf,
+    storageKey: 'maevelle.admin.fulfillment.views',
   });
-  const selected = useMemo(
-    () => fulfillments.find((item) => item.id === selectedId),
-    [fulfillments, selectedId],
-  );
-  const awaitingDispatch = fulfillments.filter((item) => item.status === 'PACKED').length;
-  const inProgress = fulfillments.filter((item) =>
-    ['READY', 'PICKING', 'PACKED'].includes(item.status),
-  ).length;
 
-  async function action(fulfillment: Fulfillment, actionName: FulfillmentAction) {
-    if (
-      actionName === 'cancel' &&
-      !window.confirm('Cancel this fulfillment? Its order reservation is retained.')
-    )
-      return;
+  const selected = useMemo(
+    () => fulfillments.find((item) => item.id === selectedId) ?? worklist.visibleItems[0],
+    [fulfillments, selectedId, worklist.visibleItems],
+  );
+
+  const action = async (item: Fulfillment, command: FulfillmentAction) => {
     setBusy(true);
     try {
-      await request(`/admin/fulfillments/${fulfillment.id}/${actionName}`, {
-        method: 'POST',
-        ...(actionName === 'cancel' ? { headers: { 'idempotency-key': crypto.randomUUID() } } : {}),
-        body: JSON.stringify({ version: fulfillment.version }),
-      });
-      setMessage(`Fulfillment ${actionName.replace('-', ' ')} completed.`);
+      if (command === 'cancel') {
+        const reason = window.prompt('Provide a reason for cancelling this fulfillment:');
+        if (!reason) return;
+        await request(`/admin/fulfillments/${item.id}/cancel`, {
+          method: 'POST',
+          body: JSON.stringify({ version: item.version, reason }),
+        });
+      } else {
+        await request(`/admin/fulfillments/${item.id}/${command}`, {
+          method: 'POST',
+          body: JSON.stringify({ version: item.version }),
+        });
+      }
+      setMessage(`Fulfillment ${item.fulfillmentNumber} updated successfully.`);
       setMessageTone('success');
       await reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'The fulfillment command was rejected.');
+      setMessage(error instanceof Error ? error.message : 'Action failed.');
       setMessageTone('danger');
     } finally {
       setBusy(false);
     }
-  }
+  };
 
-  async function createDelivery(fulfillment: Fulfillment) {
+  const createDelivery = async (item: Fulfillment) => {
     setBusy(true);
     try {
-      await request(`/admin/fulfillments/${fulfillment.id}/deliveries`, {
+      await request('/admin/delivery/shipments', {
         method: 'POST',
-        headers: { 'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          orderId: item.orderNumber,
+          fulfillmentId: item.id,
+          warehouseLocationId: locations.find((location) => location.name === item.locationName)
+            ?.id,
+        }),
       });
-      setMessage('Delivery created. Continue in Operations → Deliveries.');
+      setMessage(`Delivery created for fulfillment ${item.fulfillmentNumber}.`);
       setMessageTone('success');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Delivery could not be created.');
+      setMessage(error instanceof Error ? error.message : 'Unable to create delivery.');
       setMessageTone('danger');
     } finally {
       setBusy(false);
     }
-  }
+  };
 
+  const inProgress = fulfillments.filter((item) =>
+    ['READY', 'PICKING', 'PACKED'].includes(item.status),
+  ).length;
+  const awaitingDispatch = fulfillments.filter((item) => item.status === 'PACKED').length;
   const nextAction = selected ? nextActionFor(selected.status) : undefined;
 
   return (
-    <main>
-      <section className="shell admin-page">
-        <OperationalPageHeader
-          eyebrow="Operations / Fulfillment"
-          title="Fulfillment worklist"
-          description="Move reserved order lines through pick, pack, and physical dispatch with one authoritative next action."
-          actions={
-            <div className="flex items-center gap-2">
-              <FulfillmentCreateDialog
-                locations={locations}
-                onSuccess={async (newId) => {
-                  setMessage('Fulfillment created successfully.');
-                  setMessageTone('success');
-                  await reload();
-                  if (newId) setSelectedId(newId);
-                }}
-              />
-              <Link className="button secondary inline-flex items-center gap-1.5" href="/deliveries">
-                Open deliveries <ArrowRight className="size-4" aria-hidden="true" />
-              </Link>
-            </div>
-          }
-        />
-        <Stats aria-label="Fulfillment summary">
+    <main className="space-y-6">
+      <OperationalPageHeader
+        eyebrow="Operations / Warehouse"
+        title="Fulfillments"
+        description="Pick, pack, and prepare physical shipments while tracking stock consumption."
+        actions={
+          <FulfillmentCreateDialog
+            locations={locations}
+            onSuccess={async (id?: string) => {
+              await reload();
+              if (id) setSelectedId(id);
+            }}
+          />
+        }
+      />
+
+      <section className="space-y-6">
+        <Stats>
           <StatsCard>
-            <StatsTitle>All fulfillments</StatsTitle>
+            <StatsTitle>Open fulfillments</StatsTitle>
             <StatsValue>{fulfillments.length}</StatsValue>
-            <StatsDescription>Across every lifecycle state</StatsDescription>
+            <StatsDescription>Active operational units</StatsDescription>
           </StatsCard>
           <StatsCard>
-            <StatsTitle>In progress</StatsTitle>
+            <StatsTitle>Floor activity</StatsTitle>
             <StatsValue>{inProgress}</StatsValue>
             <StatsDescription>Ready, picking, or packed</StatsDescription>
           </StatsCard>
@@ -209,12 +220,14 @@ export function FulfillmentConsole() {
             <StatsDescription>Eligible fulfillment warehouses</StatsDescription>
           </StatsCard>
         </Stats>
+
         {locations.length === 0 && !loading ? (
           <OperationalFeedback tone="warning">
             Create an active stock-holding warehouse before fulfilling orders.
           </OperationalFeedback>
         ) : null}
         {message ? <OperationalFeedback tone={messageTone}>{message}</OperationalFeedback> : null}
+
         <OperationalWorklistToolbar
           query={worklist.query}
           onQueryChange={worklist.setQuery}
@@ -231,184 +244,206 @@ export function FulfillmentConsole() {
           onApplyView={worklist.applyView}
           searchLabel="Search fulfillment, order, SKU, or warehouse"
         />
-        <div className={`operational-workspace ${selected ? 'detail-open' : ''}`}>
-          <section className={`panel worklist-panel density-${worklist.density}`}>
+
+        <div className={`grid grid-cols-1 ${selected ? 'lg:grid-cols-12' : ''} gap-6 items-start`}>
+          <section className={`${selected ? 'lg:col-span-7' : 'w-full'} rounded-lg border border-border bg-card overflow-hidden`}>
             {loading ? (
-              <div className="skeleton-list" aria-label="Loading fulfillments">
-                <span />
-                <span />
-                <span />
+              <div className="p-12 text-center space-y-3" aria-label="Loading fulfillments">
+                <div className="size-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-muted-foreground">Loading fulfillments…</p>
               </div>
             ) : worklist.visibleItems.length ? (
-              <div className="data-table-shell">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Fulfillment</th>
-                      <th>Order</th>
-                      <th>Warehouse</th>
-                      <th>Lines</th>
-                      <th>Status</th>
-                      <th>
+              <div className="overflow-x-auto">
+                <Table density={worklist.density === 'compact' ? 'compact' : 'comfortable'}>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fulfillment</TableHead>
+                      <TableHead>Order</TableHead>
+                      <TableHead>Warehouse</TableHead>
+                      <TableHead className="text-right">Lines</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-16">
                         <span className="sr-only">Open</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {worklist.visibleItems.map((item) => (
-                      <tr key={item.id} className={item.id === selectedId ? 'selected-row' : ''}>
-                        <td>
-                          <strong>{item.fulfillmentNumber}</strong>
-                        </td>
-                        <td>{item.orderNumber}</td>
-                        <td>{item.locationName}</td>
-                        <td className="numeric">{item.lines.length}</td>
-                        <td>
-                          <StatusBadge status={item.status} />
-                        </td>
-                        <td>
-                          <button type="button" onClick={() => setSelectedId(item.id)}>
-                            Open
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {worklist.visibleItems.map((item) => {
+                      const isSelected = item.id === selectedId;
+                      return (
+                        <TableRow key={item.id} className={isSelected ? 'bg-primary/5' : undefined}>
+                          <TableCell className="font-medium text-foreground">
+                            {item.fulfillmentNumber}
+                          </TableCell>
+                          <TableCell>{item.orderNumber}</TableCell>
+                          <TableCell>{item.locationName}</TableCell>
+                          <TableCell className="text-right tabular-nums">{item.lines.length}</TableCell>
+                          <TableCell>
+                            <StatusBadge status={item.status} />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => setSelectedId(item.id)}
+                            >
+                              Open
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
             ) : (
-              <OperationalEmptyState
-                title="No matching fulfillments"
-                description="Clear filters or create a fulfillment from an eligible order."
-                action={
-                  <Link className="button secondary" href="/orders">
-                    Open orders
-                  </Link>
-                }
-              />
+              <div className="p-8">
+                <OperationalEmptyState
+                  title="No matching fulfillments"
+                  description="Clear filters or create a fulfillment from an eligible order."
+                  action={
+                    <Link className={buttonVariants({ variant: 'outline' })} href="/orders">
+                      Open orders
+                    </Link>
+                  }
+                />
+              </div>
             )}
           </section>
+
           {selected ? (
             <aside
-              className="operational-detail"
+              className="lg:col-span-5 rounded-lg border border-border bg-card p-5 space-y-5 sticky top-20"
               aria-label={`${selected.fulfillmentNumber} detail`}
             >
-              <header className="detail-header">
+              <header className="flex items-start justify-between gap-4 pb-4 border-b border-border">
                 <div>
-                  <p className="eyebrow">Fulfillment</p>
-                  <h2>{selected.fulfillmentNumber}</h2>
-                  <div className="inline-status">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fulfillment</p>
+                  <h2 className="text-lg font-semibold text-foreground mt-0.5">{selected.fulfillmentNumber}</h2>
+                  <div className="mt-1.5">
                     <StatusBadge status={selected.status} />
                   </div>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={() => setSelectedId(undefined)}
                   aria-label="Close detail"
                 >
-                  ×
-                </button>
+                  <X className="size-4" />
+                </Button>
               </header>
+
               {nextAction ? (
-                <section className="next-action-card">
+                <section className="p-4 rounded-lg border border-primary/30 bg-primary/5 flex items-center justify-between gap-4">
                   <div>
-                    <strong>Recommended next action</strong>
-                    <p>Continue the canonical fulfillment lifecycle.</p>
+                    <strong className="block text-sm font-medium text-foreground">Recommended next action</strong>
+                    <p className="text-xs text-muted-foreground">Continue the canonical fulfillment lifecycle.</p>
                   </div>
-                  <button
+                  <Button
                     type="button"
                     disabled={busy}
                     onClick={() => void action(selected, nextAction[1])}
                   >
                     {nextAction[0]}
-                  </button>
+                  </Button>
                 </section>
               ) : null}
-              <div className="detail-body">
-                <dl className="detail-facts">
+
+              <div className="space-y-5">
+                <dl className="grid grid-cols-3 gap-3 text-xs bg-muted/20 rounded-md p-3 border border-border/60">
                   <div>
-                    <dt>Order</dt>
-                    <dd>{selected.orderNumber}</dd>
+                    <dt className="text-muted-foreground">Order</dt>
+                    <dd className="font-medium text-foreground mt-0.5">{selected.orderNumber}</dd>
                   </div>
                   <div>
-                    <dt>Warehouse</dt>
-                    <dd>{selected.locationName}</dd>
+                    <dt className="text-muted-foreground">Warehouse</dt>
+                    <dd className="font-medium text-foreground mt-0.5">{selected.locationName}</dd>
                   </div>
                   <div>
-                    <dt>Version</dt>
-                    <dd>{selected.version}</dd>
+                    <dt className="text-muted-foreground">Version</dt>
+                    <dd className="font-medium text-foreground mt-0.5">{selected.version}</dd>
                   </div>
                 </dl>
-                <section>
-                  <h3>Physical lines</h3>
-                  <div className="data-table-shell">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Product / SKU</th>
-                          <th>Quantity</th>
-                          <th>Consumed</th>
-                        </tr>
-                      </thead>
-                      <tbody>
+
+                <section className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Physical lines</h3>
+                  <div className="rounded-md border border-border overflow-hidden">
+                    <Table density="compact">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product / SKU</TableHead>
+                          <TableHead className="text-right">Qty</TableHead>
+                          <TableHead className="text-right">Consumed</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {selected.lines.map((line) => (
-                          <tr key={`${line.sku}-${line.productTitle}`}>
-                            <td>
-                              <strong>{line.productTitle}</strong>
-                              <span className="cell-secondary">{line.sku}</span>
-                            </td>
-                            <td className="numeric">{line.quantity}</td>
-                            <td className="numeric">
+                          <TableRow key={`${line.sku}-${line.productTitle}`}>
+                            <TableCell>
+                              <div className="font-medium text-foreground">{line.productTitle}</div>
+                              <span className="text-xs text-muted-foreground">{line.sku}</span>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{line.quantity}</TableCell>
+                            <TableCell className="text-right tabular-nums">
                               {selected.status === 'DISPATCHED' ? line.consumed : '—'}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 </section>
-                <div className="detail-actions">
+
+                <div className="flex flex-wrap items-center gap-2 pt-2">
                   {['PACKED', 'DISPATCHED'].includes(selected.status) ? (
-                    <button
+                    <Button
                       disabled={busy}
                       onClick={() => void createDelivery(selected)}
                       type="button"
+                      className="gap-1.5"
                     >
-                      <Truck aria-hidden="true" /> Prepare delivery
-                    </button>
+                      <Truck className="size-4" aria-hidden="true" /> Prepare delivery
+                    </Button>
                   ) : null}
                   {['DRAFT', 'READY', 'PICKING', 'PACKED'].includes(selected.status) ? (
-                    <button
-                      className="danger-action"
+                    <Button
+                      variant="destructive"
                       disabled={busy}
                       onClick={() => void action(selected, 'cancel')}
                       type="button"
                     >
                       Cancel fulfillment
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
-                <section className="operational-guidance">
-                  <Boxes aria-hidden="true" />
-                  <div>
-                    <strong>Inventory boundary</strong>
-                    <p>Cart and checkout never consume stock. Dispatch is the physical event.</p>
+
+                <div className="space-y-2.5 pt-2">
+                  <div className="flex items-start gap-3 p-3 rounded-md bg-muted/20 border border-border/60 text-xs">
+                    <Boxes className="size-4 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
+                    <div>
+                      <strong className="block font-medium text-foreground">Inventory boundary</strong>
+                      <p className="text-muted-foreground mt-0.5">Cart and checkout never consume stock. Dispatch is the physical event.</p>
+                    </div>
                   </div>
-                </section>
-                <section className="operational-guidance">
-                  <PackageCheck aria-hidden="true" />
-                  <div>
-                    <strong>Costing boundary</strong>
-                    <p>FIFO assignment is committed atomically with dispatch.</p>
+                  <div className="flex items-start gap-3 p-3 rounded-md bg-muted/20 border border-border/60 text-xs">
+                    <PackageCheck className="size-4 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
+                    <div>
+                      <strong className="block font-medium text-foreground">Costing boundary</strong>
+                      <p className="text-muted-foreground mt-0.5">FIFO assignment is committed atomically with dispatch.</p>
+                    </div>
                   </div>
-                </section>
-                <section className="operational-guidance">
-                  <Warehouse aria-hidden="true" />
-                  <div>
-                    <strong>Warehouse</strong>
-                    <p>{selected.locationName} owns the physical fulfillment movement.</p>
+                  <div className="flex items-start gap-3 p-3 rounded-md bg-muted/20 border border-border/60 text-xs">
+                    <Warehouse className="size-4 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
+                    <div>
+                      <strong className="block font-medium text-foreground">Warehouse</strong>
+                      <p className="text-muted-foreground mt-0.5">{selected.locationName} owns the physical fulfillment movement.</p>
+                    </div>
                   </div>
-                </section>
+                </div>
               </div>
             </aside>
           ) : null}

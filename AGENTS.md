@@ -132,6 +132,70 @@ backend and frontend task:
   full-screen dialog, sheet, or dedicated route when space, scrolling, keyboard
   use, or recovery would otherwise be difficult.
 
+## Admin Portal visual system and styling architecture
+
+The Admin Portal styling architecture is standardized on **Tailwind CSS v4** and
+**shadcn/Base UI component primitives**. Follow these strict visual-system rules
+in all frontend work across `apps/admin`:
+
+- **Authoritative Semantic Tokens:** Never scatter literal color values or
+  arbitrary hex codes for standard UI elements. Use semantic theme tokens:
+  - Base canvas: `bg-background` (`#f8fafc` light, `#090d16` dark).
+  - Surfaces & cards: `bg-card` (`#ffffff` light, `#111827` dark).
+  - Borders: `border-border` (`#e2e8f0` light, `#1e293b` dark).
+  - Primary brand action: `bg-primary` (Maevelle Electric Teal `#0d9488` light,
+    `#14b8a6` dark) with `hover:bg-primary-hover` and `bg-primary-subtle`.
+  - Secondary/neutral: `bg-secondary text-secondary-foreground`, `bg-muted`.
+  - Semantic business statuses: `bg-success` (`#16a34a`), `bg-warning` (`#d97706`),
+    `bg-destructive` (`#dc2626`), and `bg-info` (`#2563eb`). Never confuse brand
+    teal with a business status.
+- **Zero-Tolerance Quality Rules:**
+  - **No `transition: all`:** Never use `transition: all` or `transition-all`.
+    Always specify explicit animated properties (e.g. `transition-colors`,
+    `transition-opacity`) with short 120–150ms durations.
+  - **No routine `!important`:** Do not use `!important` to force specificity.
+    Component variants and utility composition solve visual priority cleanly.
+    `!important` is only permitted inside `@media (prefers-reduced-motion: reduce)`.
+  - **No page-specific CSS in `globals.css`:** Never declare module or workspace
+    styling (e.g. `.orders-workspace`, `.catalog-grid`) in `globals.css`.
+    `globals.css` is restricted to core Tailwind imports, theme tokens, and
+    minimal base normalization.
+  - **No ancestor styling hacks:** Do not style components via broad parent
+    selectors like `.admin-content button` or `.admin-content table`. Styling
+    belongs directly on the reusable component primitive.
+  - **No recursive font variables:** Typography uses Inter Variable via Next.js
+    `next/font` with `variable: '--font-inter'` mapped to `--font-sans`. Never
+    declare `--font-sans: var(--font-sans)`.
+- **Authoritative Primitives:**
+  - **Buttons:** Use `<Button>` from `@/components/ui/button` with standard
+    variants (`default`, `secondary`, `outline`, `ghost`, `destructive`, `glass`)
+    and standardized heights (32px `sm`, 36px `default`, 40px `lg`).
+  - **Forms:** Use `<Input>`, `<NativeSelect>`, and `<Textarea>` from
+    `@/components/ui/`. Standard height is `h-9` (36px) with `bg-card`.
+  - **Tables:** Use `<Table>` from `@/components/ui/table` supporting density
+    (`compact` for high-volume inventory/finance, `comfortable` for orders)
+    and right-aligned `tabular-nums`.
+  - **Status Badges:** Use `<StatusBadge>` from `@/components/status-badge`
+    for consistent semantic indicators across orders, fulfillments, reviews,
+    inventory, and payments.
+  - **Page Structure:** Build screens using the structural primitives in
+    `@/components/ui/page-shell`: `<AdminPage>`, `<PageHeader>`, `<PageTitle>`,
+    `<PageDescription>`, `<PageActions>`, `<PageSection>`, `<PagePanel>`,
+    `<EmptyState>`, `<ErrorState>`, and `<LoadingState>`.
+- **Typography & Numeric Displays:** Standard UI font is Inter. All monetary
+  figures (BDT amounts), SKUs, order IDs, inventory counts, dates, and metric
+  values must use `tabular-nums font-mono` to prevent horizontal jitter.
+- **Elevation & Liquid Glass:**
+  - **Three-tier elevation:** Level 1 Flat (border-first, no shadow), Level 2
+    Raised (`shadow-2xs border border-border` for KPI metric cards), Level 3
+    Floating (`shadow-md` / `shadow-lg` for command palettes and modal dialogs).
+  - **Restrained Glass:** Translucent frosted glass (`bg-background/85 backdrop-blur-md`)
+    is reserved strictly for sticky chrome (topbar, mobile drawer) and floating
+    overlays. Never place backdrop filters on tables, scrolling lists, or forms.
+- **Design System Showcase:** Inspect and verify all tokens, typography,
+  buttons, tables, and dark theme behavior at the development-only lab route:
+  `/admin/design-system`.
+
 ## Dependencies and framework changes
 
 - Before installing, replacing, upgrading, or configuring a dependency or
