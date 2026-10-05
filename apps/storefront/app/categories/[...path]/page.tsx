@@ -1,21 +1,43 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CatalogBrowser } from '@/components/catalog-browser';
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ path: string[] }>;
-}): Promise<Metadata> {
-  const { path } = await params;
-  const name = path.at(-1)?.replaceAll('-', ' ') ?? 'Category';
+import { notFound } from 'next/navigation';
+
+import { CatalogBrowser } from '@/features/catalog/components/catalog-browser';
+import type { StorefrontSearchParams } from '@/features/catalog/search-params';
+import { loadPublicCategories, loadPublicStorefrontContext } from '@/lib/api/server/catalog';
+
+type CategoryRoute = {
+  readonly params: Promise<{ path: string[] }>;
+  readonly searchParams: Promise<StorefrontSearchParams>;
+};
+
+async function resolveCategory(path: readonly string[]) {
+  const context = await loadPublicStorefrontContext();
+  const categories = await loadPublicCategories(context.organizationId);
+  const categoryPath = path.join('/');
   return {
-    title: name,
-    description: `Browse published products in ${name}.`,
-    alternates: { canonical: `/categories/${path.join('/')}` },
+    categoryPath,
+    category: categories.find((entry) => entry.path === categoryPath),
   };
 }
-export default async function CategoryPage({ params }: { params: Promise<{ path: string[] }> }) {
+
+export async function generateMetadata({ params }: CategoryRoute): Promise<Metadata> {
   const { path } = await params;
+  const { category, categoryPath } = await resolveCategory(path);
+  if (!category) return { title: 'Category unavailable', robots: { index: false, follow: true } };
+
+  return {
+    title: category.name,
+    description: `Browse published products in ${category.name}.`,
+    alternates: { canonical: `/categories/${categoryPath}` },
+  };
+}
+
+export default async function CategoryPage({ params, searchParams }: CategoryRoute) {
+  const { path } = await params;
+  const { category, categoryPath } = await resolveCategory(path);
+  if (!category) notFound();
+
   return (
     <main>
       <section className="shell wide">
@@ -24,14 +46,18 @@ export default async function CategoryPage({ params }: { params: Promise<{ path:
           <span aria-hidden="true">/</span>
           <Link href="/categories">Shop</Link>
           <span aria-hidden="true">/</span>
-          <span>{path.at(-1)?.replaceAll('-', ' ')}</span>
+          <span>{category.name}</span>
         </nav>
         <div className="collection-heading">
           <p className="eyebrow">Collection</p>
-          <h1>{path.at(-1)?.replaceAll('-', ' ')}</h1>
+          <h1>{category.name}</h1>
           <p>Explore current styles and available variants in this collection.</p>
         </div>
-        <CatalogBrowser categoryPath={path.join('/')} />
+        <CatalogBrowser
+          categoryPath={categoryPath}
+          pathname={`/categories/${categoryPath}`}
+          searchParams={await searchParams}
+        />
       </section>
     </main>
   );

@@ -24,6 +24,10 @@ export default defineConfig({
     include: [
       'apps/**/src/**/*.{test,spec}.ts',
       'apps/**/src/**/*.{test,spec}.tsx',
+      'apps/**/lib/**/*.{test,spec}.ts',
+      'apps/**/lib/**/*.{test,spec}.tsx',
+      'apps/**/features/**/*.{test,spec}.ts',
+      'apps/**/features/**/*.{test,spec}.tsx',
       'packages/**/src/**/*.{test,spec}.ts',
       'packages/**/src/**/*.{test,spec}.tsx',
       'tooling/**/*.test.ts',

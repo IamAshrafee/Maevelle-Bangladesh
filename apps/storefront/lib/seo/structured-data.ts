@@ -1,5 +1,7 @@
 import type { StorefrontProductDto } from '@maevelle/contracts';
 
+import { publicMediaPath } from '../media/url';
+
 export function productJsonLd(
   product: StorefrontProductDto,
   canonicalUrl: string,
@@ -43,23 +45,20 @@ export function productJsonLd(
       : undefined;
 
   const reviewMarkup = publishedReviews
-    ?.filter((r) => r.rating >= 1 && r.rating <= 5)
+    ?.filter((review) => review.rating >= 1 && review.rating <= 5)
     .slice(0, 10)
-    .map((r) => ({
+    .map((review) => ({
       '@type': 'Review',
       reviewRating: {
         '@type': 'Rating',
-        ratingValue: r.rating,
+        ratingValue: review.rating,
         bestRating: '5',
         worstRating: '1',
       },
-      author: {
-        '@type': 'Person',
-        name: r.authorName ?? 'Verified customer',
-      },
-      ...(r.datePublished ? { datePublished: r.datePublished } : {}),
-      ...(r.title || r.body
-        ? { reviewBody: [r.title, r.body].filter(Boolean).join(' - ') }
+      author: { '@type': 'Person', name: review.authorName ?? 'Verified customer' },
+      ...(review.datePublished ? { datePublished: review.datePublished } : {}),
+      ...(review.title || review.body
+        ? { reviewBody: [review.title, review.body].filter(Boolean).join(' - ') }
         : {}),
     }));
 
@@ -69,9 +68,11 @@ export function productJsonLd(
     name: product.title,
     description: product.description ?? undefined,
     image: product.media.map((asset) =>
-      new URL(`/api/media/public/${asset.id}`, canonicalUrl).toString(),
+      new URL(publicMediaPath(asset.id, 'pdp'), canonicalUrl).toString(),
     ),
     url: canonicalUrl,
+    sku: product.variants.length === 1 ? product.variants[0]?.sku : undefined,
+    productID: product.id,
     additionalProperty: product.details.map((detail) => ({
       '@type': 'PropertyValue',
       name: `${detail.group}: ${detail.label}`,
@@ -79,7 +80,7 @@ export function productJsonLd(
     })),
     offers,
     ...(aggregateRating ? { aggregateRating } : {}),
-    ...(reviewMarkup && reviewMarkup.length > 0 ? { review: reviewMarkup } : {}),
+    ...(reviewMarkup?.length ? { review: reviewMarkup } : {}),
   };
 }
 
@@ -91,6 +92,21 @@ export function faqJsonLd(faqs: StorefrontProductDto['faqs']) {
       '@type': 'Question',
       name: faq.question,
       acceptedAnswer: { '@type': 'Answer', text: faq.answer },
+    })),
+  };
+}
+
+export function breadcrumbJsonLd(
+  items: readonly { readonly name: string; readonly url: string }[],
+) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: item.url,
     })),
   };
 }

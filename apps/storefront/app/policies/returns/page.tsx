@@ -1,4 +1,7 @@
-export const metadata = { title: 'Returns and refunds' };
+export const metadata = {
+  title: 'Returns and refunds',
+  alternates: { canonical: '/policies/returns' },
+};
 
 export default function ReturnsPolicyPage() {
   return (

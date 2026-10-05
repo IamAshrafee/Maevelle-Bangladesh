@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { type FormEvent, useEffect, useState } from 'react';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
-import { notifyCartChanged } from '@/components/storefront-context';
+import { notifyCartChanged } from '@/features/cart/cart-events';
 
 interface CartView {
   currency: string;

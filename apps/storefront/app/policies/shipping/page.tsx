@@ -1,4 +1,7 @@
-export const metadata = { title: 'Shipping and delivery' };
+export const metadata = {
+  title: 'Shipping and delivery',
+  alternates: { canonical: '/policies/shipping' },
+};
 
 export default function ShippingPolicyPage() {
   return (

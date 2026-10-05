@@ -847,6 +847,167 @@ export interface StorefrontContextDto {
   readonly announcement?: string;
 }
 
+export interface StorefrontCategoryDto {
+  readonly id: string;
+  readonly name: string;
+  readonly handle: string;
+  readonly path: string;
+  readonly parentId: string | null;
+  readonly depth: number;
+}
+
+export type StorefrontSearchSortDto = 'RELEVANCE' | 'NEWEST' | 'PRICE_ASC' | 'PRICE_DESC';
+export type StorefrontAvailabilityFilterDto = 'IN_STOCK' | 'OUT_OF_STOCK';
+
+export interface StorefrontSearchItemDto {
+  readonly id: string;
+  readonly handle: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly minimumPrice: string | null;
+  readonly currency: string | null;
+  readonly available: boolean;
+  readonly rank: number;
+  readonly primaryMediaAssetId: string | null;
+  readonly secondaryMediaAssetId: string | null;
+  readonly averageRating: string | null;
+  readonly reviewCount: number;
+}
+
+export interface StorefrontSearchResultDto {
+  readonly items: readonly StorefrontSearchItemDto[];
+  readonly total: number;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly filters: {
+    readonly minimumPrice: string | null;
+    readonly maximumPrice: string | null;
+    readonly availability: readonly StorefrontAvailabilityFilterDto[];
+  };
+}
+
+export const commerceEventNames = [
+  'PRODUCT_VIEWED',
+  'PRODUCT_LIST_VIEWED',
+  'PRODUCT_SELECTED',
+  'VARIANT_SELECTED',
+  'SIZE_GUIDE_OPENED',
+  'ADD_TO_CART',
+  'REMOVE_FROM_CART',
+  'VIEW_CART',
+  'BEGIN_CHECKOUT',
+  'ADD_SHIPPING_INFO',
+  'ADD_PAYMENT_INFO',
+  'ORDER_PLACED',
+  'PAYMENT_CONFIRMED',
+  'ORDER_DELIVERED',
+  'ORDER_CANCELLED',
+  'REFUND_COMPLETED',
+] as const;
+
+export type CommerceEventNameDto = (typeof commerceEventNames)[number];
+export type CommerceEventOriginDto = 'BROWSER' | 'SERVER';
+export type CommerceConsentDecisionDto = 'GRANTED' | 'DENIED' | 'UNKNOWN';
+
+export interface CommerceConsentStateDto {
+  readonly necessary: 'GRANTED';
+  readonly analytics: CommerceConsentDecisionDto;
+  readonly marketing: CommerceConsentDecisionDto;
+  readonly preferences: CommerceConsentDecisionDto;
+  readonly recordedAt: string;
+}
+
+export interface CommerceAttributionDto {
+  readonly source?: string;
+  readonly medium?: string;
+  readonly campaign?: string;
+  readonly content?: string;
+  readonly referrerOrigin?: string;
+  readonly touch: 'FIRST' | 'SESSION' | 'LAST_NON_DIRECT';
+}
+
+/** Stable commerce identity shared by analytics adapters and future feed mappings. */
+export interface CommerceItemDto {
+  readonly productId: string;
+  readonly productGroupId?: string;
+  readonly presentationVariantId?: string;
+  readonly skuId: string;
+  readonly sku: string;
+  readonly itemName: string;
+  readonly variantName?: string;
+  readonly category?: string;
+  readonly price?: string;
+  readonly currency?: string;
+  readonly quantity?: number;
+}
+
+interface CommerceProductEventDataDto {
+  readonly item: CommerceItemDto;
+}
+
+interface CommerceListEventDataDto {
+  readonly listId: string;
+  readonly listName: string;
+  readonly items: readonly CommerceItemDto[];
+}
+
+interface CommerceCartEventDataDto {
+  readonly cartId: string;
+  readonly item: CommerceItemDto;
+  readonly value?: string;
+  readonly currency?: string;
+}
+
+interface CommerceCheckoutEventDataDto {
+  readonly cartId: string;
+  readonly items: readonly CommerceItemDto[];
+  readonly value: string;
+  readonly currency: string;
+}
+
+interface CommerceOrderEventDataDto {
+  readonly orderId: string;
+  readonly items: readonly CommerceItemDto[];
+  readonly value: string;
+  readonly currency: string;
+}
+
+export interface CommerceEventDataMapDto {
+  readonly PRODUCT_VIEWED: CommerceProductEventDataDto;
+  readonly PRODUCT_LIST_VIEWED: CommerceListEventDataDto;
+  readonly PRODUCT_SELECTED: CommerceProductEventDataDto & {
+    readonly listId?: string;
+    readonly position?: number;
+  };
+  readonly VARIANT_SELECTED: CommerceProductEventDataDto;
+  readonly SIZE_GUIDE_OPENED: Pick<CommerceItemDto, 'productId' | 'productGroupId'>;
+  readonly ADD_TO_CART: CommerceCartEventDataDto;
+  readonly REMOVE_FROM_CART: CommerceCartEventDataDto;
+  readonly VIEW_CART: CommerceCheckoutEventDataDto;
+  readonly BEGIN_CHECKOUT: CommerceCheckoutEventDataDto;
+  readonly ADD_SHIPPING_INFO: CommerceCheckoutEventDataDto & { readonly shippingTier?: string };
+  readonly ADD_PAYMENT_INFO: CommerceCheckoutEventDataDto & { readonly paymentType?: string };
+  readonly ORDER_PLACED: CommerceOrderEventDataDto;
+  readonly PAYMENT_CONFIRMED: CommerceOrderEventDataDto;
+  readonly ORDER_DELIVERED: CommerceOrderEventDataDto;
+  readonly ORDER_CANCELLED: CommerceOrderEventDataDto & { readonly reasonCode?: string };
+  readonly REFUND_COMPLETED: CommerceOrderEventDataDto & { readonly refundId: string };
+}
+
+export type CommerceEventDto<Name extends CommerceEventNameDto = CommerceEventNameDto> = {
+  readonly [EventName in Name]: {
+    readonly schemaVersion: 1;
+    readonly name: EventName;
+    /** One logical event ID is reused by browser and server adapters for deduplication. */
+    readonly eventId: string;
+    readonly occurredAt: string;
+    readonly origin: CommerceEventOriginDto;
+    readonly consent: CommerceConsentStateDto;
+    readonly attribution?: CommerceAttributionDto;
+    readonly data: CommerceEventDataMapDto[EventName];
+  };
+}[Name];
+
 export type SizingLifecycleStatusDto = 'ACTIVE' | 'ARCHIVED';
 export type SizingRevisionStatusDto = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type SizingSubjectTypeDto = 'BODY' | 'GARMENT' | 'PRODUCT';
@@ -2333,10 +2494,7 @@ export interface OrderDeliveryRiskAssessmentDto {
   readonly normalizedPhone: string;
   readonly overallRiskLevel: 'INSUFFICIENT_HISTORY' | 'LOW' | 'MODERATE' | 'ELEVATED';
   readonly recommendation:
-    | 'APPROVE_COD'
-    | 'VERIFY_CUSTOMER'
-    | 'REQUIRE_PREPAYMENT'
-    | 'REJECT_SUSPICIOUS';
+    'APPROVE_COD' | 'VERIFY_CUSTOMER' | 'REQUIRE_PREPAYMENT' | 'REJECT_SUSPICIOUS';
   readonly signals: readonly OrderRiskSignalDto[];
   readonly internalHistory: CustomerDeliveryHistoryDto;
   readonly providerHistory: {
@@ -2479,13 +2637,7 @@ export interface OrderTimelineEventDto {
   readonly eventType: string;
   readonly occurredAt: string;
   readonly category?:
-    | 'ORDER'
-    | 'PAYMENT'
-    | 'FULFILLMENT'
-    | 'DELIVERY'
-    | 'RETURN'
-    | 'VERIFICATION'
-    | 'NOTE';
+    'ORDER' | 'PAYMENT' | 'FULFILLMENT' | 'DELIVERY' | 'RETURN' | 'VERIFICATION' | 'NOTE';
   readonly title?: string;
   readonly description?: string | null;
   readonly actorType?: 'CUSTOMER' | 'ADMIN' | 'SYSTEM' | 'COURIER';
@@ -2558,9 +2710,7 @@ export type CustomerSourceDto =
   | 'EXTERNAL_API';
 
 export type CustomerRestrictionTypeDto =
-  | 'ORDERING_BLOCKED'
-  | 'COD_RESTRICTED'
-  | 'ORDER_REVIEW_REQUIRED';
+  'ORDERING_BLOCKED' | 'COD_RESTRICTED' | 'ORDER_REVIEW_REQUIRED';
 
 export type CustomerRestrictionStatusDto = 'ACTIVE' | 'LIFTED' | 'EXPIRED';
 
@@ -2591,11 +2741,7 @@ export interface LiftCustomerRestrictionInputDto {
 }
 
 export type CustomerAccountLinkTypeDto =
-  | 'VERIFIED_PHONE'
-  | 'VERIFIED_EMAIL'
-  | 'MANUAL_CLAIM'
-  | 'INVITATION'
-  | 'GUEST_CONVERSION';
+  'VERIFIED_PHONE' | 'VERIFIED_EMAIL' | 'MANUAL_CLAIM' | 'INVITATION' | 'GUEST_CONVERSION';
 
 export type CustomerAccountStatusDto = 'ACTIVE' | 'UNLINKED' | 'SUSPENDED';
 
@@ -3448,10 +3594,7 @@ export interface TeamMemberDetailDto extends TeamMemberListItemDto {
   readonly lifecycle_reason?: string | null;
 }
 
-export type TwoFactorEnforcementModeDto =
-  | 'OPTIONAL'
-  | 'CRITICAL_CAPABILITIES'
-  | 'ALL_MEMBERS';
+export type TwoFactorEnforcementModeDto = 'OPTIONAL' | 'CRITICAL_CAPABILITIES' | 'ALL_MEMBERS';
 
 export interface TwoFactorPolicyDto {
   readonly mode: TwoFactorEnforcementModeDto;
@@ -3694,7 +3837,6 @@ export interface AccountSecurityActivityItemDto {
   readonly occurredAt: string;
   readonly ipAddress?: string | null;
 }
-
 
 export type EmailNotificationStatus =
   | 'NOT_APPLICABLE'

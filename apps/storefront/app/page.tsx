@@ -1,5 +1,11 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CatalogBrowser } from '@/components/catalog-browser';
+
+import { FeaturedCatalog } from '@/features/catalog/components/catalog-browser';
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+};
 
 export default function StorefrontHomePage() {
   return (
@@ -50,7 +56,7 @@ export default function StorefrontHomePage() {
             View all <span aria-hidden="true">→</span>
           </Link>
         </div>
-        <CatalogBrowser featured />
+        <FeaturedCatalog />
       </section>
       <section className="editorial-split">
         <div className="editorial-art" aria-hidden="true">

@@ -1,9 +1,30 @@
 import type { Metadata } from 'next';
+import { Noto_Sans_Bengali, Playfair_Display, Plus_Jakarta_Sans } from 'next/font/google';
 
 import './globals.css';
-import { StorefrontFooter, StorefrontHeader } from '@/components/storefront-header';
-import { StorefrontContextProvider } from '@/components/storefront-context';
-import { storefrontPublicBaseUrl } from '@/src/server-catalog';
+import { StorefrontFooter } from '@/components/layout/storefront-footer';
+import { StorefrontHeader } from '@/components/layout/storefront-header';
+import { storefrontPublicBaseUrl } from '@/lib/env/storefront';
+
+// Fastify is a runtime service in the standalone deployment, so routes must not
+// attempt to prerender against an API that does not exist in the build stage.
+export const dynamic = 'force-dynamic';
+
+const uiFont = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-plus-jakarta',
+  display: 'swap',
+});
+const editorialFont = Playfair_Display({
+  subsets: ['latin'],
+  variable: '--font-playfair',
+  display: 'swap',
+});
+const bengaliFont = Noto_Sans_Bengali({
+  subsets: ['bengali'],
+  variable: '--font-noto-bengali',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(storefrontPublicBaseUrl),
@@ -18,12 +39,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
-        <StorefrontContextProvider>
-          <StorefrontHeader />
-          {children}
-          <StorefrontFooter />
-        </StorefrontContextProvider>
+      <body className={`${uiFont.variable} ${editorialFont.variable} ${bengaliFont.variable}`}>
+        <StorefrontHeader />
+        {children}
+        <StorefrontFooter />
       </body>
     </html>
   );

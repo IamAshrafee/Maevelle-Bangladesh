@@ -1,11 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
-  ApiEnvelope,
   ProductRatingSummaryDto,
   PublicReviewDto,
   PublicSizeGuideDto,
@@ -14,7 +12,8 @@ import type {
 import { ProductReviews } from '@/components/product-reviews';
 import { StarRating } from '@/components/reviews/star-rating';
 import { SizeGuideDialog } from '@/components/size-guide-dialog';
-import { notifyCartChanged, useStorefrontContext } from '@/components/storefront-context';
+import { notifyCartChanged } from '@/features/cart/cart-events';
+import { requestStorefrontClient, StorefrontClientApiError } from '@/lib/api/client/http';
 
 interface CartView {
   version: number;
@@ -31,30 +30,31 @@ function money(amount: string, currency = 'BDT') {
 }
 
 export interface ProductPageClientProps {
-  readonly initialProduct?: StorefrontProductDto | undefined;
+  readonly initialProduct: StorefrontProductDto;
+  readonly initialGuide: PublicSizeGuideDto | null;
+  readonly organizationId: string;
+  readonly currency: string;
   readonly initialReviews?: readonly PublicReviewDto[] | undefined;
   readonly initialSummary?: ProductRatingSummaryDto | undefined;
 }
 
 export function ProductPageClient({
   initialProduct,
+  initialGuide,
+  organizationId,
+  currency,
   initialReviews,
   initialSummary,
-}: ProductPageClientProps = {}) {
-  const parameters = useParams<{ handle: string }>();
-  const { context, loading: contextLoading } = useStorefrontContext();
-  const [product, setProduct] = useState<StorefrontProductDto | undefined>(initialProduct);
-  const [guide, setGuide] = useState<PublicSizeGuideDto | null>();
+}: ProductPageClientProps) {
+  const product = initialProduct;
+  const guide = initialGuide;
   const [selected, setSelected] = useState<Record<string, string>>(() => {
-    if (!initialProduct) return {};
     const visualAxis = initialProduct.options.find((opt) => opt.isVisual);
     if (!visualAxis) return {};
     const primaryVal =
       visualAxis.values.find((val) => val.isPrimary) ||
       visualAxis.values.find((val) =>
-        initialProduct.variants.some(
-          (v) => v.optionValueIds.includes(val.id) && v.available,
-        ),
+        initialProduct.variants.some((v) => v.optionValueIds.includes(val.id) && v.available),
       ) ||
       visualAxis.values[0];
     return primaryVal ? { [visualAxis.id]: primaryVal.id } : {};
@@ -63,67 +63,8 @@ export function ProductPageClient({
   const [cart, setCart] = useState<CartView>();
   const [cartMessage, setCartMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>(
-    initialProduct ? 'ready' : 'loading',
-  );
   const sizeDialog = useRef<HTMLDialogElement>(null);
   const galleryDialog = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    if (!context || !parameters.handle) return;
-    if (initialProduct && initialProduct.handle === parameters.handle && guide !== undefined) return;
-    const controller = new AbortController();
-    const query = `organizationId=${encodeURIComponent(context.organizationId)}`;
-    if (!initialProduct) setState('loading');
-    void Promise.all([
-      !initialProduct
-        ? fetch(`/api/storefront/v1/products/${encodeURIComponent(parameters.handle)}?${query}`, {
-            signal: controller.signal,
-          })
-        : Promise.resolve(null),
-      fetch(
-        `/api/storefront/v1/products/${encodeURIComponent(parameters.handle)}/size-guide?${query}`,
-        { signal: controller.signal },
-      ),
-    ])
-      .then(async ([catalogResponse, guideResponse]) => {
-        if (catalogResponse) {
-          if (catalogResponse.status === 404) return setState('missing');
-          if (!catalogResponse.ok) throw new Error('catalog');
-          const catalog = (await catalogResponse.json()) as ApiEnvelope<StorefrontProductDto>;
-          setProduct(catalog.data);
-          const visualAxis = catalog.data.options.find((opt) => opt.isVisual);
-          const initial: Record<string, string> = {};
-
-          if (visualAxis) {
-            const primaryVal =
-              visualAxis.values.find((val) => val.isPrimary) ||
-              visualAxis.values.find((val) =>
-                catalog.data.variants.some(
-                  (v) => v.optionValueIds.includes(val.id) && v.available,
-                ),
-              ) ||
-              visualAxis.values[0];
-
-            if (primaryVal) {
-              initial[visualAxis.id] = primaryVal.id;
-            }
-          }
-          setSelected(initial);
-        }
-        setGuide(
-          guideResponse.ok
-            ? ((await guideResponse.json()) as ApiEnvelope<PublicSizeGuideDto | null>).data
-            : null,
-        );
-        setState('ready');
-      })
-      .catch(() => {
-        if (!controller.signal.aborted && !initialProduct) setState('error');
-      });
-    return () => controller.abort();
-  }, [context, parameters.handle, initialProduct, guide]);
-
 
   const selectedVariant = useMemo(() => {
     if (!product) return undefined;
@@ -193,8 +134,7 @@ export function ProductPageClient({
     // 2. Visual presentation value gallery (e.g. Color)
     if (selectedVisualValueId) {
       const optionMedia = product.media.filter(
-        (asset) =>
-          asset.optionValueId === selectedVisualValueId && asset.variantId === null,
+        (asset) => asset.optionValueId === selectedVisualValueId && asset.variantId === null,
       );
       if (optionMedia.length > 0) {
         return optionMedia.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
@@ -215,7 +155,7 @@ export function ProductPageClient({
 
   const visualSelectionKey = useMemo(() => {
     const visualAxis = product?.options.find((opt) => opt.isVisual);
-    return visualAxis ? selected[visualAxis.id] ?? '' : '';
+    return visualAxis ? (selected[visualAxis.id] ?? '') : '';
   }, [product, selected]);
 
   useEffect(() => {
@@ -255,8 +195,7 @@ export function ProductPageClient({
     if (visualAxis && axisId !== visualAxis.id && selected[visualAxis.id]) {
       const matchesVisual = product.variants.some(
         (v) =>
-          v.optionValueIds.includes(valueId) &&
-          v.optionValueIds.includes(selected[visualAxis.id]!),
+          v.optionValueIds.includes(valueId) && v.optionValueIds.includes(selected[visualAxis.id]!),
       );
       if (matchesVisual) {
         fallback[visualAxis.id] = selected[visualAxis.id]!;
@@ -265,19 +204,16 @@ export function ProductPageClient({
     setSelected(fallback);
   }
   async function loadOrCreateCart(): Promise<CartView> {
-    const current = await fetch('/api/storefront/v1/carts/current', { credentials: 'include' });
-    if (current.ok) return ((await current.json()) as ApiEnvelope<CartView>).data;
-    const created = await fetch('/api/storefront/v1/carts', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        organizationId: context?.organizationId,
-        currency: context?.currency ?? 'BDT',
-      }),
-    });
-    if (!created.ok) throw new Error('Your cart could not be started. Please try again.');
-    return ((await created.json()) as ApiEnvelope<CartView>).data;
+    try {
+      return await requestStorefrontClient<CartView>('/api/storefront/v1/carts/current');
+    } catch (error) {
+      if (!(error instanceof StorefrontClientApiError) || error.status !== 404) throw error;
+      return requestStorefrontClient<CartView>('/api/storefront/v1/carts', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ organizationId, currency }),
+      });
+    }
   }
   async function addToCart() {
     if (!selectedVariant?.price || !selectedVariant.available) return;
@@ -285,19 +221,18 @@ export function ProductPageClient({
     setCartMessage('');
     try {
       const current = cart ?? (await loadOrCreateCart());
-      const response = await fetch('/api/storefront/v1/carts/current/lines', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          variantId: selectedVariant.id,
-          quantity: '1',
-          version: current.version,
-        }),
-      });
-      if (!response.ok)
-        throw new Error('This option is no longer available. Please choose another.');
-      const next = ((await response.json()) as ApiEnvelope<CartView>).data;
+      const next = await requestStorefrontClient<CartView>(
+        '/api/storefront/v1/carts/current/lines',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            variantId: selectedVariant.id,
+            quantity: '1',
+            version: current.version,
+          }),
+        },
+      );
       setCart(next);
       notifyCartChanged();
       setCartMessage('Added to your bag.');
@@ -308,45 +243,7 @@ export function ProductPageClient({
     }
   }
 
-  if (contextLoading || state === 'loading')
-    return (
-      <main>
-        <section className="pdp-shell">
-          <div className="pdp-loading" aria-label="Loading product" aria-busy="true">
-            <span />
-            <span />
-          </div>
-        </section>
-      </main>
-    );
-  if (state === 'missing')
-    return (
-      <main>
-        <section className="catalog-message missing-state">
-          <p className="eyebrow">No longer available</p>
-          <h1>This product cannot be found</h1>
-          <p>It may be unpublished or its address may have changed.</p>
-          <Link className="button-link dark" href="/categories">
-            Continue shopping
-          </Link>
-        </section>
-      </main>
-    );
-  if (state === 'error' || !product || !context)
-    return (
-      <main>
-        <section className="catalog-message error-state">
-          <h1>We could not load this product</h1>
-          <p>Please try again or return to the collection.</p>
-          <button type="button" onClick={() => window.location.reload()}>
-            Try again
-          </button>
-        </section>
-      </main>
-    );
-
   const currentMedia = shownMedia[activeMedia];
-  const price = selectedVariant?.price;
   return (
     <main>
       <article className="pdp-shell">
@@ -426,9 +323,7 @@ export function ProductPageClient({
                         0,
                     ).toFixed(1)}
                   </span>
-                  <span className="pdp-rating-count">
-                    ({product.ratingSummary.ratingCount})
-                  </span>
+                  <span className="pdp-rating-count">({product.ratingSummary.ratingCount})</span>
                 </a>
               ) : (
                 <a href="#reviews" className="pdp-rating-pill is-empty">
@@ -462,7 +357,8 @@ export function ProductPageClient({
                 ) : (
                   <div className="flex items-baseline gap-2">
                     <strong>
-                      {money(priceDisplay.min, priceDisplay.currency)} – {money(priceDisplay.max, priceDisplay.currency)}
+                      {money(priceDisplay.min, priceDisplay.currency)} –{' '}
+                      {money(priceDisplay.max, priceDisplay.currency)}
                     </strong>
                     {unselectedAxes.length > 0 && (
                       <span className="text-xs text-muted-foreground font-normal">
@@ -615,12 +511,11 @@ export function ProductPageClient({
         <div id="reviews">
           <ProductReviews
             productId={product.id}
-            organizationId={context.organizationId}
+            organizationId={organizationId}
             initialReviews={initialReviews}
             initialSummary={initialSummary}
           />
         </div>
-
       </article>
       <SizeGuideDialog
         guide={guide}

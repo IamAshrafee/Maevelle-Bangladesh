@@ -1,28 +1,11 @@
 import Link from 'next/link';
 
-export interface StorefrontCardItem {
-  readonly id: string;
-  readonly handle: string;
-  readonly title: string;
-  readonly description: string | null;
-  readonly minimumPrice: string | null;
-  readonly currency: string | null;
-  readonly available: boolean;
-  readonly primaryMediaAssetId: string | null;
-  readonly secondaryMediaAssetId: string | null;
-  readonly averageRating: string | null;
-  readonly reviewCount: number;
-}
+import type { StorefrontSearchItemDto } from '@maevelle/contracts';
 
-function money(amount: string, currency = 'BDT') {
-  return new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number(amount));
-}
+import { formatMoney } from '@/lib/format/money';
+import { publicMediaPath } from '@/lib/media/url';
 
-export function ProductCard({ item }: { readonly item: StorefrontCardItem }) {
+export function ProductCard({ item }: { readonly item: StorefrontSearchItemDto }) {
   return (
     <article className="product-card">
       <Link
@@ -38,7 +21,7 @@ export function ProductCard({ item }: { readonly item: StorefrontCardItem }) {
               decoding="async"
               height="640"
               loading="lazy"
-              src={`/api/media/public/${item.primaryMediaAssetId}?rendition=card`}
+              src={publicMediaPath(item.primaryMediaAssetId, 'card')}
               width="480"
             />
             {item.secondaryMediaAssetId ? (
@@ -48,7 +31,7 @@ export function ProductCard({ item }: { readonly item: StorefrontCardItem }) {
                 decoding="async"
                 height="640"
                 loading="lazy"
-                src={`/api/media/public/${item.secondaryMediaAssetId}?rendition=card`}
+                src={publicMediaPath(item.secondaryMediaAssetId, 'card')}
                 width="480"
               />
             ) : null}
@@ -80,7 +63,7 @@ export function ProductCard({ item }: { readonly item: StorefrontCardItem }) {
         </p>
         <p className="product-price">
           {item.minimumPrice && item.currency
-            ? `From ${money(item.minimumPrice, item.currency)}`
+            ? `From ${formatMoney(item.minimumPrice, item.currency)}`
             : 'Price coming soon'}
         </p>
       </div>

@@ -1,10 +1,17 @@
 import type { Metadata } from 'next';
-import { CatalogBrowser } from '@/components/catalog-browser';
+import { CatalogBrowser } from '@/features/catalog/components/catalog-browser';
+import type { StorefrontSearchParams } from '@/features/catalog/search-params';
+
 export const metadata: Metadata = {
   title: 'Categories',
   description: 'Browse the Maevelle product category hierarchy.',
+  alternates: { canonical: '/categories' },
 };
-export default function CategoriesPage() {
+export default async function CategoriesPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<StorefrontSearchParams>;
+}) {
   return (
     <main>
       <section className="collection-hero shell wide">
@@ -13,7 +20,7 @@ export default function CategoriesPage() {
         <p>
           Explore every published piece, refine by price and availability, and find the right fit.
         </p>
-        <CatalogBrowser />
+        <CatalogBrowser pathname="/categories" searchParams={await searchParams} />
       </section>
     </main>
   );

@@ -1,20 +1,25 @@
 import type { Metadata } from 'next';
+import { notFound, permanentRedirect } from 'next/navigation';
 
 import { ProductPageClient } from '@/components/product-page-client';
-import { faqJsonLd, productJsonLd, safeJsonLd } from '@/src/seo';
+import { publicMediaPath } from '@/lib/media/url';
+import { absoluteStorefrontUrl } from '@/lib/seo/url';
+import { breadcrumbJsonLd, faqJsonLd, productJsonLd, safeJsonLd } from '@/lib/seo/structured-data';
 import {
   loadPublicProduct,
   loadPublicProductReviews,
+  loadPublicSizeGuide,
   loadPublicStorefrontContext,
-  storefrontPublicBaseUrl,
-} from '@/src/server-catalog';
+} from '@/lib/api/server/catalog';
 
 type ProductRoute = { readonly params: Promise<{ handle: string }> };
 
 export async function generateMetadata({ params }: ProductRoute): Promise<Metadata> {
   const { handle } = await params;
   const product = await loadPublicProduct(handle);
-  const canonical = `${storefrontPublicBaseUrl}/products/${encodeURIComponent(handle)}`;
+  const canonical = absoluteStorefrontUrl(
+    `/products/${encodeURIComponent(product?.handle ?? handle)}`,
+  );
   if (!product)
     return {
       title: 'Product unavailable',
@@ -26,8 +31,8 @@ export async function generateMetadata({ params }: ProductRoute): Promise<Metada
     product.seoDescription?.trim() ||
     product.description?.trim() ||
     `Shop ${product.title} from Maevelle Bangladesh.`;
-  const images = product.media.map(
-    (asset) => `${storefrontPublicBaseUrl}/api/media/public/${asset.id}`,
+  const images = product.media.map((asset) =>
+    new URL(publicMediaPath(asset.id, 'pdp'), canonical).toString(),
   );
   return {
     title,
@@ -49,13 +54,15 @@ export default async function ProductPage({ params }: ProductRoute) {
     loadPublicStorefrontContext(),
     loadPublicProduct(handle),
   ]);
+  if (!product) notFound();
+  if (product.handle !== handle) permanentRedirect(`/products/${product.handle}`);
 
-  const reviewsData =
-    product && context
-      ? await loadPublicProductReviews(product.id, context.organizationId, { pageSize: 5 })
-      : undefined;
+  const [reviewsData, sizeGuide] = await Promise.all([
+    loadPublicProductReviews(product.id, context.organizationId, 5),
+    loadPublicSizeGuide(product.handle, context.organizationId),
+  ]);
 
-  const canonical = `${storefrontPublicBaseUrl}/products/${encodeURIComponent(handle)}`;
+  const canonical = absoluteStorefrontUrl(`/products/${encodeURIComponent(product.handle)}`);
 
   const publishedReviewsForSeo = reviewsData?.reviews.map((r) => ({
     authorName: r.publicDisplayName,
@@ -65,42 +72,25 @@ export default async function ProductPage({ params }: ProductRoute) {
     datePublished: r.submittedAt,
   }));
 
-  const breadcrumb = {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: storefrontPublicBaseUrl },
-      {
-        '@type': 'ListItem',
-        position: 2,
-        name: 'Shop',
-        item: `${storefrontPublicBaseUrl}/categories`,
-      },
-      ...(product
-        ? [{ '@type': 'ListItem', position: 3, name: product.title, item: canonical }]
-        : []),
-    ],
-  };
+  const breadcrumb = breadcrumbJsonLd([
+    { name: 'Home', url: absoluteStorefrontUrl('/') },
+    { name: 'Shop', url: absoluteStorefrontUrl('/categories') },
+    { name: product.title, url: canonical },
+  ]);
 
   return (
     <>
-      {product ? (
-        <>
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: safeJsonLd(
-                productJsonLd(product, canonical, publishedReviewsForSeo),
-              ),
-            }}
-          />
-          {product.faqs.length > 0 ? (
-            <script
-              type="application/ld+json"
-              dangerouslySetInnerHTML={{ __html: safeJsonLd(faqJsonLd(product.faqs)) }}
-            />
-          ) : null}
-        </>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: safeJsonLd(productJsonLd(product, canonical, publishedReviewsForSeo)),
+        }}
+      />
+      {product.faqs.length > 0 ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(faqJsonLd(product.faqs)) }}
+        />
       ) : null}
       <script
         type="application/ld+json"
@@ -108,10 +98,12 @@ export default async function ProductPage({ params }: ProductRoute) {
       />
       <ProductPageClient
         initialProduct={product}
+        initialGuide={sizeGuide}
+        organizationId={context.organizationId}
+        currency={context.currency}
         initialReviews={reviewsData?.reviews}
         initialSummary={reviewsData?.summary ?? product?.ratingSummary ?? undefined}
       />
     </>
   );
 }
-

@@ -67,7 +67,7 @@ function ReviewSubmitContent() {
         if (!json.data.eligible) {
           setErrorReason(json.data.reason ?? 'NOT_ELIGIBLE');
         }
-      } catch (err) {
+      } catch {
         if (!controller.signal.aborted) {
           setErrorReason('NETWORK_ERROR');
         }
