@@ -2,32 +2,32 @@
 
 ## Active area
 
-Storefront Experience — Production Architecture Foundation.
+Storefront Experience — Production Design System / Visual Foundation.
 
 ## Evidence state
 
-`ARCHITECTURE_FOUNDATION_OWNER_REVIEW`
+`DESIGN_SYSTEM_LOCAL_VERIFICATION_COMPLETE / OWNER_REVIEW_PENDING`
 
-The implementation is locally verified in the uncommitted worktree above baseline `3393e19`. The Storefront now has server-first public reads, narrow global client islands, typed API boundaries, Tailwind v4 with quarantined legacy CSS, deliberate font/Media ownership, executable SEO policy, runtime sitemap behavior, semantic measurement contracts, and durable agent/architecture documentation.
+Task 02 is locally implemented above architecture checkpoint `32d1152`. The Storefront now has one semantic Tailwind v4 visual language, intentional Latin/editorial/Bengali typography, mobile-first layout rules, restrained shape/elevation/motion, accessible server-compatible primitives, contrast protection, a development-only design lab, lower-cascade legacy quarantine, and a canonical design-system contract.
+
+The approved UI/UX artifact and prior Storefront `DESIGN.md` described by the task were not present in the repository. `#7E0E35` is the implemented/recommended primary and `#9E2A4B` is a supporting rose; owner visual confirmation remains explicitly required.
 
 ## Verification completed
 
-- Storefront/contracts TypeScript build passed.
-- 7 focused SEO/catalog/measurement tests passed.
+- Storefront TypeScript passed.
+- 11 focused token/contrast tests passed.
 - Focused ESLint passed.
 - Storefront production build passed.
 - Architecture check, secret scan, and `git diff --check` passed.
+- Development browser smoke at 390 px and 1440 px confirmed 16/24 px gutters, 1240 px desktop container, no horizontal overflow, 48 px default controls, correct computed Plus Jakarta/Playfair/Noto Bengali stacks, and visible skip-link focus.
 
-Docker reported no running services, so public browser/mobile behavior through Caddy/API is not current evidence. Owner review remains pending.
+The Docker stack was running, but its Storefront image was not rebuilt; browser evidence came from the current development server. Owner/design-team visual judgment remains a separate gate.
 
 ## Next action
 
-Review the public Storefront at `http://127.0.0.1:8080` with the local stack running. Then begin Task 2 Design System / Visual Foundation using:
+Compare `/design-system` with the approved UI/UX artifact when available and decide `OWNER_DECISION_REQUIRED — STOREFRONT_PRIMARY_BERRY`:
 
-- `apps/storefront/AGENTS.md`
-- `docs/storefront/architecture.md`
-- `docs/storefront/seo-policy.md`
-- `docs/storefront/performance.md`
-- `docs/storefront/measurement.md`
+- Option A/recommended/current: `#7E0E35`.
+- Option B: `#9E2A4B`, replacing—not duplicating—the semantic primary.
 
-Task 2 must replace legacy visual sections incrementally and must not claim Homepage, Catalog, PDP, Cart, Checkout, or vendor analytics completion merely because this foundation exists.
+Then begin the production Global Shell/Header/Footer task, followed by Homepage, Catalog/Search, PDP, Cart, Checkout, Order tracking, and Reviews as distinct page/workflow tasks. The Task 02 foundation does not make those screens visually complete.

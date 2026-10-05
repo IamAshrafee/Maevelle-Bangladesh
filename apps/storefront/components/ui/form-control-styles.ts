@@ -1,0 +1,2 @@
+export const formControlClassName =
+  'w-full min-w-0 rounded-md border border-border-strong bg-surface px-3 text-base text-foreground shadow-none transition-[border-color,box-shadow] duration-150 ease-maevelle placeholder:text-foreground-subtle hover:border-foreground-subtle focus:border-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-foreground-subtle aria-invalid:border-danger aria-invalid:outline-danger read-only:bg-surface-muted';

@@ -1,0 +1,131 @@
+/*
+ * Maevelle Storefront production tokens.
+ *
+ * Application components consume semantic names such as background, surface,
+ * foreground, primary, and danger. Raw brand colors are reserved for the
+ * design lab and rare brand artwork; they are not the application API.
+ */
+@theme static {
+  /* Brand palette */
+  --color-berry-950: #4a1027;
+  --color-berry-900: #65102e;
+  --color-berry-800: #7e0e35;
+  --color-berry-700: #9e2a4b;
+  --color-rose-200: #e8c9d2;
+  --color-blush: #f8e8ed;
+  --color-linen: #f7f0ea;
+  --color-warm-white: #fffaf7;
+  --color-espresso: #291c20;
+  --color-stone: #665b5e;
+
+  /* Semantic surfaces and content */
+  --color-background: #fffaf7;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-muted: #f7f0ea;
+  --color-surface-inverse: #291c20;
+  --color-foreground: #291c20;
+  --color-foreground-muted: #665b5e;
+  --color-foreground-subtle: #786b6f;
+  --color-foreground-inverse: #fffaf7;
+
+  /* Semantic borders */
+  --color-border-subtle: #e9ded9;
+  --color-border: #d8c9c4;
+  --color-border-strong: #ad979c;
+
+  /* Semantic actions */
+  --color-primary: #7e0e35;
+  --color-primary-hover: #65102e;
+  --color-primary-active: #4a1027;
+  --color-primary-foreground: #ffffff;
+  --color-primary-subtle: #f8e8ed;
+  --color-secondary: #f1e3e7;
+  --color-secondary-hover: #e8d2d8;
+  --color-secondary-foreground: #4a1027;
+  --color-focus: #b52d5b;
+
+  /* Semantic feedback */
+  --color-success: #17633f;
+  --color-success-subtle: #e8f5ed;
+  --color-success-foreground: #12492f;
+  --color-warning: #8a4a07;
+  --color-warning-subtle: #fff2d5;
+  --color-warning-foreground: #653604;
+  --color-danger: #a72532;
+  --color-danger-hover: #861c27;
+  --color-danger-subtle: #fce9ec;
+  --color-danger-foreground: #7b1924;
+  --color-info: #245e8f;
+  --color-info-subtle: #e9f2f9;
+  --color-info-foreground: #19486f;
+  --color-scrim: rgb(41 28 32 / 58%);
+
+  /* Typography */
+  --text-display: clamp(2.25rem, 8vw, 4.75rem);
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.035em;
+  --text-heading-lg: clamp(1.875rem, 5vw, 3rem);
+  --text-heading-lg--line-height: 1.1;
+  --text-heading-lg--letter-spacing: -0.025em;
+  --text-heading-md: clamp(1.5rem, 3vw, 2rem);
+  --text-heading-md--line-height: 1.18;
+  --text-heading-md--letter-spacing: -0.018em;
+  --text-heading-sm: 1.25rem;
+  --text-heading-sm--line-height: 1.3;
+  --text-body-lg: 1.125rem;
+  --text-body-lg--line-height: 1.7;
+  --text-body-md: 1rem;
+  --text-body-md--line-height: 1.6;
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.55;
+  --text-label: 0.875rem;
+  --text-label--line-height: 1.35;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+  --text-price-lg: 1.5rem;
+  --text-price-lg--line-height: 1.25;
+  --text-price-md: 1rem;
+  --text-price-md--line-height: 1.4;
+
+  /* Shape */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* Elevation */
+  --shadow-raised: 0 1px 2px rgb(74 16 39 / 6%), 0 8px 24px rgb(74 16 39 / 5%);
+  --shadow-floating: 0 12px 36px rgb(41 28 32 / 12%);
+  --shadow-modal: 0 24px 64px rgb(41 28 32 / 18%);
+
+  /* Layout */
+  --container-storefront: 77.5rem;
+  --container-narrow: 44rem;
+  --spacing-gutter: 1rem;
+  --spacing-grid: 0.75rem;
+  --spacing-gutter-desktop: 1.5rem;
+
+  /* Motion */
+  --ease-maevelle: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Next/font variables live on <body>; inline mapping resolves them at use-site. */
+@theme inline {
+  --font-sans:
+    var(--font-plus-jakarta), var(--font-noto-bengali), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-playfair), Georgia, 'Times New Roman', serif;
+  --font-bangla: var(--font-noto-bengali), var(--font-plus-jakarta), ui-sans-serif, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+  --motion-surface: 260ms;
+  --glass-background: rgb(255 250 247 / 96%);
+  --glass-background-supported: rgb(255 250 247 / 84%);
+}

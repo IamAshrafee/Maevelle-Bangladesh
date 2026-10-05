@@ -1,8 +1,4 @@
 @import 'tailwindcss';
-@import '../styles/legacy.css';
-
-@theme inline {
-  --font-sans: var(--font-plus-jakarta);
-  --font-serif: var(--font-playfair);
-  --font-bangla: var(--font-noto-bengali);
-}
+@import '../styles/theme.css';
+@import '../styles/legacy.css' layer(base);
+@import '../styles/base.css';

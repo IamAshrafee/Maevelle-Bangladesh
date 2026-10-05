@@ -13,6 +13,7 @@
 - `apps/storefront/lib/analytics`: vendor-neutral commerce identity, consent, and browser event hand-off.
 - `apps/storefront/lib/media`, `format`, `env`: focused cross-feature utilities.
 - `apps/storefront/styles/legacy.css`: quarantined MVP page styling. New page-specific CSS must not be added here.
+- `apps/storefront/styles/theme.css` and `base.css`: the canonical Tailwind v4 visual tokens and minimal document/accessibility foundation. See `docs/storefront/design-system.md`.
 - `packages/contracts`: types shared across browser, server rendering, API, and future measurement workers.
 - `packages/ui-storefront`: intentionally remains empty until components have genuine cross-application reuse. App-local brand UI does not move there merely for symmetry.
 
@@ -49,6 +50,8 @@ Failure classes are intentional:
 5. Route features: page-specific orchestration under `features` or route-local `_components`.
 
 Prefer composition and named variants to boolean prop growth. Keep feature components local until two credible consumers need the same behavior.
+
+Task 2 established the first production primitive set under `components/ui`, `components/layout`, and `components/commerce`. These remain app-local because the Maevelle Storefront identity is not a brand-neutral monorepo UI package.
 
 ## Current keep/refactor/replace decisions
 

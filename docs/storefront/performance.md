@@ -44,7 +44,9 @@ The backend Media system is the canonical optimizer. Sharp produces privacy-safe
 
 Next self-hosts Plus Jakarta Sans (functional UI), Playfair Display (selective editorial display), and Noto Sans Bengali (deliberate Bangla fallback), all with `display: swap`. Page work should not add families or weights casually. Task 2 owns final typography tokens and measured font payload.
 
-Tailwind v4/PostCSS is active. `app/globals.css` contains framework imports/tokens only. The 3,301-line MVP stylesheet is isolated in `styles/legacy.css` so page redesigns can delete owned sections instead of growing a global dependency graph.
+Tailwind v4/PostCSS is active. `app/globals.css` is an import manifest; `styles/theme.css` contains the production semantic token contract and `styles/base.css` contains minimal document/accessibility behavior. The 3,300-line MVP stylesheet remains isolated in `styles/legacy.css` and is imported into the low-priority base layer so production utilities win. Page redesigns delete their owned legacy sections instead of growing the global dependency graph.
+
+Task 2 added no runtime dependency and no route-wide Client Component. Foundational primitives are server-compatible except when a future feature supplies interaction. Glass remains a feature-detected, restricted surface recipe rather than a general scrolling effect. The development lab is unavailable in production.
 
 ## Delivery and security ownership
 
