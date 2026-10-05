@@ -86,3 +86,56 @@ delivery.
 - **Member removal/suspension:** affects authorization independently of 2FA; use the lifecycle workflow,
   not a 2FA reset, when access should end.
 
+## Step-by-step user workflows (Maevelle staff)
+
+### 1. Enable two-factor authentication for your account
+
+1. Click your user avatar or navigate to **Account Security** (`/account/security`).
+2. Locate the **Authenticator App** card and click **Set up authenticator**.
+3. **Confirm your identity:** Enter your current account password and click **Continue**.
+4. **Scan QR code:** Open your preferred authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.) and scan the on-screen QR code.
+   - *On the same mobile phone?* Click **Enter setup key manually** and copy the 32-character secret key directly into your authenticator app.
+5. **Verify code:** Enter the 6-digit code shown in your authenticator app into the OTP input.
+   - *Having trouble?* Ensure your phone's date and time are set to automatic, then enter the newest code shown.
+6. **Save recovery codes:**
+   - Click **Copy codes** or **Download codes (.txt)** to store your recovery codes in a secure password manager or offline file.
+   - Check the acknowledgement box: `"I have safely stored these recovery codes"`.
+   - Click **Finish setup**. Your status immediately updates to **Enabled**.
+
+### 2. Sign in with two-factor authentication
+
+1. Navigate to `/login` and submit your email and password.
+2. Maevelle transitions automatically to `/two-factor`.
+3. Enter the 6-digit verification code from your authenticator app.
+4. Click **Verify & Continue**. You will be securely redirected to the Admin Portal dashboard or your requested destination.
+
+### 3. Sign in using a recovery code (lost authenticator)
+
+1. On the `/two-factor` challenge screen, click **Use a recovery code**.
+2. Enter one of your unused recovery codes (e.g. `ABCD-EFGH`).
+3. Click **Verify Recovery Code**.
+4. Once verified, this code is permanently consumed. You can immediately access your account and generate a new set of recovery codes or reconfigure your authenticator app under **Account Security**.
+
+### 4. Reset a staff member's authenticator (Team Administrators)
+
+1. Navigate to **Team & Access** (`/team`).
+2. In the directory table, review the member's 2FA status (`Enabled`, `Required`, or `Not enabled`).
+3. Click on the member to open their **Team Member Details** console (`/team/[id]`).
+4. In the **Security & Two-Factor Authentication** panel, click **Reset two-factor authentication**.
+5. Read the destructive confirmation warning.
+6. Enter an **Audit Reason** (e.g., `"Verified phone replacement via HR in-person confirmation"`).
+7. Enter your **own current 6-digit verification code** to confirm authorization.
+8. Click **Confirm Reset**. The member's enrollment is wiped, their sessions revoked, and their status updates immediately.
+
+### 5. Require 2FA across the organization
+
+1. Navigate to **Settings → Security** (`/settings/security`).
+2. In the **Two-Factor Authentication Policy** card, choose your enforcement tier:
+   - **Optional:** Staff may opt in voluntarily.
+   - **Critical & Restricted Capabilities:** Enforced for Owners and operators with critical financial, inventory, or security permissions.
+   - **All Admin Portal Members:** Mandatory for all operators.
+3. Choose an appropriate **Grace Period** preset (`24 hours`, `72 hours`, `7 days`, or `14 days`) so active staff can enroll without immediate operational lockout.
+4. Enter an **Audit Reason** and your **own 6-digit verification code**.
+5. Click **Save Policy Changes**. Eligible team members will see a clear warning banner with their setup deadline.
+
+

@@ -17,6 +17,19 @@ export default function LoginPage() {
     setSubmitting(true);
     setMessage(undefined);
     try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const rawRedirect = searchParams.get('redirect');
+      const safeRedirect =
+        rawRedirect &&
+        rawRedirect.startsWith('/') &&
+        !rawRedirect.startsWith('//') &&
+        !rawRedirect.startsWith('/\\') &&
+        !rawRedirect.includes(':')
+          ? rawRedirect.startsWith('/admin')
+            ? rawRedirect
+            : `/admin${rawRedirect}`
+          : '/admin';
+
       const response = await fetch('/api/auth/sign-in/email', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -29,7 +42,10 @@ export default function LoginPage() {
       }
       const result = (await response.json()) as { twoFactorRedirect?: boolean };
       if (result.twoFactorRedirect) {
-        window.location.assign('/admin/two-factor');
+        const dest = rawRedirect
+          ? `/admin/two-factor?redirect=${encodeURIComponent(safeRedirect)}`
+          : '/admin/two-factor';
+        window.location.assign(dest);
         return;
       }
       const context = await fetch('/api/admin/context', { credentials: 'include' });
@@ -37,7 +53,7 @@ export default function LoginPage() {
         setMessage('Your identity is authenticated, but it has no active Maevelle membership.');
         return;
       }
-      window.location.assign('/admin');
+      window.location.assign(safeRedirect);
     } catch {
       setMessage('Unable to reach Maevelle. Please try again.');
     } finally {

@@ -1,9 +1,18 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const defaultTestDatabaseUrl =
   'postgresql://maevelle_dev:maevelle_dev_password@127.0.0.1:5434/maevelle_test';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'apps/admin'),
+    },
+  },
   test: {
     environment: 'node',
     // Integration files share one disposable PostgreSQL database. Run files serially;

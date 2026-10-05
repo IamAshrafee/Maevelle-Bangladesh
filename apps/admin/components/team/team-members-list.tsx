@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -50,11 +51,19 @@ export function TeamMembersList({
 }) {
   const router = useRouter();
   const { activeActor, presets } = useTeam();
+  const [twoFactorFilter, setTwoFactorFilter] = useState<'ALL' | 'ENABLED' | 'REQUIRED' | 'DISABLED'>('ALL');
+
+  const filteredMembers = members.filter((member) => {
+    if (twoFactorFilter === 'ENABLED') return member.two_factor_enabled;
+    if (twoFactorFilter === 'REQUIRED') return !member.two_factor_enabled && member.two_factor_required;
+    if (twoFactorFilter === 'DISABLED') return !member.two_factor_enabled && !member.two_factor_required;
+    return true;
+  });
 
   return (
     <div className="space-y-4">
       {/* Search and Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" aria-hidden="true" />
           <Input
@@ -65,25 +74,51 @@ export function TeamMembersList({
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">Status:</span>
-          {[
-            { id: 'ALL', label: 'All Members' },
-            { id: 'ACTIVE', label: 'Active' },
-            { id: 'DISABLED', label: 'Suspended' },
-            { id: 'REMOVED', label: 'Removed' },
-          ].map(({ id, label }) => (
-            <Button
-              key={id}
-              type="button"
-              variant={statusFilter === id ? 'default' : 'outline'}
-              size="sm"
-              className="h-8 text-xs px-2.5"
-              onClick={() => onStatusChange(id)}
-            >
-              {label}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Status:</span>
+            {[
+              { id: 'ALL', label: 'All' },
+              { id: 'ACTIVE', label: 'Active' },
+              { id: 'DISABLED', label: 'Suspended' },
+            ].map(({ id, label }) => (
+              <Button
+                key={id}
+                type="button"
+                variant={statusFilter === id ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 text-xs px-2.5"
+                onClick={() => onStatusChange(id)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1.5 border-l border-border/60 pl-3">
+            <span className="text-xs text-muted-foreground">2FA:</span>
+            {[
+              { id: 'ALL', label: 'All' },
+              { id: 'ENABLED', label: 'Enabled' },
+              { id: 'REQUIRED', label: 'Required' },
+              { id: 'DISABLED', label: 'Not enabled' },
+            ].map(({ id, label }) => (
+              <Button
+                key={id}
+                type="button"
+                variant={twoFactorFilter === id ? 'secondary' : 'ghost'}
+                size="sm"
+                className={`h-8 text-xs px-2.5 ${
+                  twoFactorFilter === id
+                    ? 'bg-primary/10 text-primary font-semibold border border-primary/20'
+                    : 'text-muted-foreground'
+                }`}
+                onClick={() => setTwoFactorFilter(id as typeof twoFactorFilter)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -94,13 +129,13 @@ export function TeamMembersList({
             <div className="size-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-xs text-muted-foreground">Loading organization members…</p>
           </div>
-        ) : members.length === 0 ? (
+        ) : filteredMembers.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <Users className="size-8 text-muted-foreground mx-auto opacity-50" />
             <p className="text-sm font-medium text-foreground">No team members match your criteria</p>
             <p className="text-xs text-muted-foreground">
-              {searchQuery || statusFilter !== 'ALL'
-                ? 'Try clearing the search query or changing the status filter.'
+              {searchQuery || statusFilter !== 'ALL' || twoFactorFilter !== 'ALL'
+                ? 'Try clearing the search query or changing the filter options.'
                 : 'No members currently found in this organization.'}
             </p>
           </div>
@@ -119,7 +154,7 @@ export function TeamMembersList({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {members.map((member) => {
+                {filteredMembers.map((member) => {
                   const isSelf = activeActor.membershipId === member.id;
                   const isOwner = member.membership_type === 'OWNER';
                   const roleName = getRoleSummary(member.capabilities, presets, member.membership_type);
@@ -173,22 +208,22 @@ export function TeamMembersList({
 
                       {/* 2FA Posture */}
                       <td className="py-3 px-4 text-xs">
-                        {member.two_factor_enabled ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                            <ShieldCheck className="size-3.5" />
-                            Enabled
-                          </span>
-                        ) : member.two_factor_required ? (
-                          <span className="inline-flex items-center gap-1 font-medium text-warning">
-                            <ShieldAlert className="size-3.5" />
-                            Required
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-muted-foreground">
-                            <ShieldAlert className="size-3.5 text-amber-500" />
-                            Disabled
-                          </span>
-                        )}
+                        <StatusBadge
+                          status={
+                            member.two_factor_enabled
+                              ? 'Enabled'
+                              : member.two_factor_required
+                                ? 'Required'
+                                : 'Not enabled'
+                          }
+                          tone={
+                            member.two_factor_enabled
+                              ? 'success'
+                              : member.two_factor_required
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                        />
                       </td>
 
                       {/* Location Scope */}

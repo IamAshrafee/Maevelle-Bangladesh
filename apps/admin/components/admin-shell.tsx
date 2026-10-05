@@ -37,6 +37,7 @@ import {
   Ruler,
   Search,
   Settings,
+  ShieldAlert,
   ShieldCheck,
   ShoppingBag,
   Tags,
@@ -52,6 +53,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import type { AdminContextDto, ApiEnvelope } from '@maevelle/contracts';
 
 import { AdminCapabilitiesProvider } from './admin-capabilities';
+import { TwoFactorRequiredGate } from './security/two-factor-required-gate';
 import { cn } from '@/lib/utils';
 
 type AdminContext = AdminContextDto;
@@ -654,6 +656,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   if (pathname === '/login' || pathname === '/two-factor') return children;
 
+  if (context?.twoFactor.accessRestricted) {
+    return (
+      <TwoFactorRequiredGate
+        context={context}
+        onEnrolled={() => {
+          void fetch('/api/admin/context', { credentials: 'include' }).then(async (response) => {
+            if (response.ok) {
+              setContext((await response.json()) as AdminContext);
+            }
+          });
+        }}
+      />
+    );
+  }
+
   const logout = async () => {
     await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
     router.replace('/login');
@@ -855,6 +872,32 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
+
+        {/* 2FA Grace Period Notice */}
+        {context?.twoFactor.enrollmentRequired &&
+        !context.twoFactor.accessRestricted &&
+        pathname !== '/account/security' ? (
+          <div className="bg-warning/10 border-b border-warning/30 px-4 py-2.5 text-xs text-foreground flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="size-4 text-warning shrink-0" />
+              <span>
+                <strong>Authenticator setup required:</strong> Your account must configure two-factor authentication before{' '}
+                {context.twoFactor.enrollmentDeadline
+                  ? new Date(context.twoFactor.enrollmentDeadline).toLocaleDateString(undefined, {
+                      dateStyle: 'medium',
+                    })
+                  : 'the upcoming deadline'}{' '}
+                to retain administrative access.
+              </span>
+            </div>
+            <Link
+              href="/account/security"
+              className="font-semibold text-warning hover:underline underline-offset-2 shrink-0 inline-flex items-center gap-1"
+            >
+              Set up now →
+            </Link>
+          </div>
+        ) : null}
 
         {/* Inner Content Area */}
         <div className="flex-1 min-w-0">

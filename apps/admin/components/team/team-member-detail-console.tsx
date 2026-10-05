@@ -56,6 +56,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { OperationalFeedback } from '../operational-worklist';
 import { StatusBadge } from '../status-badge';
+import { TotpCodeInput } from '../security/totp-code-input';
 import { TeamAuditTimeline } from './team-audit-timeline';
 import { TeamProvider, useTeam } from './team-context';
 import {
@@ -858,20 +859,22 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
                 <div className="space-y-3 text-xs">
                   <div className="flex items-center justify-between py-2 border-b border-border/40">
                     <span className="text-muted-foreground">Two-Factor Authentication</span>
-                    <Badge
-                      variant="outline"
-                      className={
+                    <StatusBadge
+                      status={
                         member.two_factor_enabled
-                          ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10'
-                          : 'text-amber-500 border-amber-500/30 bg-amber-500/10'
+                          ? 'Enabled'
+                          : member.two_factor_required
+                            ? 'Required — pending'
+                            : 'Not enabled'
                       }
-                    >
-                      {member.two_factor_enabled
-                        ? 'TOTP Enabled'
-                        : member.two_factor_required
-                          ? 'Required — pending'
-                          : 'Not Enabled'}
-                    </Badge>
+                      tone={
+                        member.two_factor_enabled
+                          ? 'success'
+                          : member.two_factor_required
+                            ? 'warning'
+                            : 'neutral'
+                      }
+                    />
                   </div>
 
                   <div className="flex items-center justify-between py-2 border-b border-border/40">
@@ -881,9 +884,9 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
 
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
                     {member.two_factor_enabled
-                      ? 'Administrative sessions are secured with time-based OTP.'
+                      ? 'Administrative sessions are secured with an Authenticator App.'
                       : member.two_factor_required
-                        ? `Enrollment is required${member.two_factor_enrollment_deadline ? ` by ${new Date(member.two_factor_enrollment_deadline).toLocaleString()}` : ''}.`
+                        ? `Enrollment is required${member.two_factor_enrollment_deadline ? ` before ${new Date(member.two_factor_enrollment_deadline).toLocaleString()}` : ''}.`
                         : 'MFA is recommended for all accounts with operational capabilities.'}
                   </p>
 
@@ -901,21 +904,37 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
                     </Button>
                   ) : null}
 
-                  {canResetTwoFactor &&
-                  !isSelf &&
-                  !isTargetOwner &&
-                  member.two_factor_enabled ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 h-8 w-full border-destructive/30 text-xs text-destructive hover:bg-destructive/10"
-                      onClick={() => setConfirmResetTwoFactor(true)}
-                      disabled={busy}
-                    >
-                      <KeyRound className="mr-1.5 size-3.5" />
-                      Reset two-factor authentication
-                    </Button>
+                  {isTargetOwner ? (
+                    <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-[11px] text-muted-foreground flex items-center gap-2 mt-2">
+                      <Shield className="size-3.5 text-primary shrink-0" />
+                      <span>Owner security credentials are protected and cannot be reset by other administrators.</span>
+                    </div>
+                  ) : isSelf ? (
+                    <div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-[11px] text-muted-foreground mt-2">
+                      Manage your own authenticator in{' '}
+                      <Link href="/account/security" className="text-primary hover:underline font-medium">
+                        Account Security
+                      </Link>
+                      .
+                    </div>
+                  ) : canResetTwoFactor ? (
+                    member.two_factor_enabled ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 h-8 w-full border-destructive/30 text-xs text-destructive hover:bg-destructive/10"
+                        onClick={() => setConfirmResetTwoFactor(true)}
+                        disabled={busy}
+                      >
+                        <KeyRound className="mr-1.5 size-3.5" />
+                        Reset two-factor authentication
+                      </Button>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground italic pt-1 text-center">
+                        Member does not have an active authenticator enrollment.
+                      </p>
+                    )
                   ) : null}
                 </div>
               </div>
@@ -1297,35 +1316,31 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-destructive">
                 <KeyRound className="size-5" />
-                Reset two-factor authentication
+                Reset two-factor authentication?
               </DialogTitle>
               <DialogDescription>
-                This removes <strong>{member.name}</strong>&apos;s authenticator setup and recovery
-                codes, then revokes every active session. They must enroll again when policy requires
-                it. The Owner account cannot be reset here.
+                This will remove <strong>{member.name}</strong>&apos;s authenticator setup, invalidate all their recovery codes, and revoke every active session. If organization policy requires 2FA, they will be prompted to set up a new authenticator upon their next login.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="two-factor-reset-code" className="text-xs font-medium">
+              <div className="space-y-2">
+                <Label htmlFor="two-factor-reset-code" className="text-xs font-medium block text-center">
                   Your current authenticator code
                 </Label>
-                <Input
+                <TotpCodeInput
                   id="two-factor-reset-code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
                   value={resetTwoFactorCode}
-                  onChange={(event) =>
-                    setResetTwoFactorCode(event.target.value.replace(/\D/g, '').slice(0, 6))
-                  }
-                  placeholder="000000"
-                  className="h-9 font-mono tabular-nums"
+                  onChange={setResetTwoFactorCode}
+                  disabled={busy}
+                  autoFocus
                 />
+                <p className="text-[11px] text-muted-foreground text-center">
+                  Enter your own 6-digit authenticator code to confirm this security action.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="two-factor-reset-reason" className="text-xs font-medium">
-                  Audit reason
+                  Audit reason (required)
                 </Label>
                 <Textarea
                   id="two-factor-reset-reason"
@@ -1333,7 +1348,7 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
                   maxLength={500}
                   value={resetTwoFactorReason}
                   onChange={(event) => setResetTwoFactorReason(event.target.value)}
-                  placeholder="Why this member can no longer use their enrolled factor"
+                  placeholder="Why this member can no longer access their enrolled factor"
                   className="text-xs"
                 />
               </div>
@@ -1351,7 +1366,7 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
                 variant="destructive"
                 onClick={handleResetTwoFactor}
                 disabled={
-                  busy || resetTwoFactorCode.length !== 6 || !resetTwoFactorReason.trim()
+                  busy || resetTwoFactorCode.length !== 6 || resetTwoFactorReason.trim().length < 3
                 }
               >
                 {busy ? 'Resetting…' : 'Reset 2FA and revoke sessions'}

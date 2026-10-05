@@ -178,6 +178,60 @@ Security lifecycle events use the existing `audit.audit_events`, `platform.outbo
 deliveries regardless of ordinary preference settings; provider delivery remains asynchronous. Failure
 to deliver a notification does not reverse an already completed authentication action.
 
+## Frontend architecture and components
+
+The Admin Portal frontend integrates 2FA natively through Next.js App Router and the Maevelle Admin Design System (Tailwind CSS v4 and shadcn/Base UI component primitives).
+
+### Routes and surfaces
+
+| Route | Role / Surface | Key Components |
+| --- | --- | --- |
+| `/login` | Primary credentials sign-in | `login/page.tsx` — intercepts `twoFactorRedirect: true` and transitions smoothly to `/two-factor`. |
+| `/two-factor` | Second-factor login challenge | `two-factor/page.tsx`, `TotpCodeInput` — supports 6-digit TOTP, 1-click fallback to recovery code, clock-drift help, lockout notice, and safe sign-out. |
+| `/account/security` | Personal 2FA management | `TwoFactorSecurityConsole`, `AuthenticatorSetupWizard`, `TwoFactorManagementDialog` — guided enrollment, regeneration, and policy status. |
+| `/settings/security` | Organization 2FA policy | `TwoFactorPolicyCard`, `TotpCodeInput` — 3 policy modes, configurable grace periods, audit reasons, and fresh TOTP confirmation. |
+| `/team` | Directory posture | `TeamMembersList` — 2FA status badges (`Enabled`, `Required`, `Not enabled`) and filter toolbar (`all`, `enabled`, `required`, `not_enabled`). |
+| `/team/[id]` | Member security & reset | `TeamMemberDetailConsole`, `TotpCodeInput` — detailed 2FA status, owner protection, self-management notice, and fresh admin reset dialog. |
+| Any Admin Route | Route enforcement gate | `AdminShell`, `TwoFactorRequiredGate` — blocks navigation when `accessRestricted: true` to prevent dashboard data leakage; displays grace period warning strip. |
+
+### Component hierarchy
+
+- `TotpCodeInput`: Accessible, keyboard-friendly 6-digit OTP input built on `input-otp`. Supports grouped 3-3 display, clipboard paste sanitization, numeric virtual keyboard (`inputMode="numeric"`), auto-focus, backspace navigation, and disabled submission states.
+- `RecoveryCodesPanel`: Tabular monospace display (`tabular-nums font-mono`) of generated recovery codes with 1-click clipboard copy, transient "Copied" feedback, `.txt` file export (excluding sensitive tokens/secrets), and mandatory acknowledgement checkbox (`"I have saved my recovery codes"`).
+- `AuthenticatorSetupWizard`: Multi-step guided modal:
+  1. *Introduction*: Calm explanation of compatible apps (Google Authenticator, Microsoft Authenticator, etc.).
+  2. *Password Confirmation*: Clean identity verification step with show/hide password toggle.
+  3. *QR Setup & Manual Key*: Client-side QR rendering using `qrcode` on a high-contrast white backing canvas (dark-mode immune). Collapsible manual setup key with 1-click copy for mobile/single-device users.
+  4. *Code Verification*: 6-digit verification with contextual clock-drift troubleshooting tip.
+  5. *Recovery Codes*: Save recovery codes safely before completion.
+  6. *Success*: Subtle confirmation banner returning the operator to `/account/security`.
+- `TwoFactorManagementDialog`: Dedicated modal for high-sensitivity account actions: regenerating recovery codes and disabling 2FA. Re-authenticates using account password and current TOTP, and cleanly disables the disable action when organization policy enforces 2FA.
+- `TwoFactorRequiredGate`: Full-page blocking gate rendered inside `AdminShell` when a user's session is restricted (`accessRestricted: true`). Eliminates redirect loops while preventing unauthorized access to protected dashboard APIs, and provides clear action to initiate enrollment or safely sign out.
+- `TwoFactorPolicyCard`: Organization-wide policy configuration interface with 3 visual options (`OPTIONAL`, `CRITICAL_CAPABILITIES`, `ALL_MEMBERS`), quick-select grace period presets (24h, 72h, 7d, 14d), mandatory change reason, and fresh acting-admin TOTP verification.
+
+### Sensitive frontend state handling
+
+To uphold zero-leakage security standards:
+- **No persistent storage:** Enrollment URIs, TOTP setup secrets, recovery codes, entered passwords, and active OTP values are **NEVER** stored in `localStorage`, `sessionStorage`, browser query parameters, or persistent global stores.
+- **Component lifecycle isolation:** Sensitive enrollment state exists solely in transient React component state (`useState`) during wizard mounting and is wiped immediately upon dialog closure or step advancement.
+- **No telemetry/log leaks:** Development and production logging rules strictly forbid printing TOTP secrets, recovery codes, or OTP entries to `console.log`, analytics trackers, or Sentry error breadcrumbs.
+- **No sensitive props in SSR:** Server components never receive or render raw TOTP secrets into server-rendered HTML payloads.
+
+### Authentication state machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> Unauthenticated: Open Admin Portal
+  Unauthenticated --> PasswordCheck: Submit Email + Password
+  PasswordCheck --> Authenticated: 2FA Disabled & Not Required
+  PasswordCheck --> TwoFactorChallenge: 2FA Enabled
+  TwoFactorChallenge --> Authenticated: Valid TOTP or Recovery Code
+  TwoFactorChallenge --> Unauthenticated: Cancel / Sign Out
+  Authenticated --> MandatoryEnrollment: Policy Enforced & Deadline Passed
+  MandatoryEnrollment --> Authenticated: Complete Enrollment Wizard
+  MandatoryEnrollment --> Unauthenticated: Sign Out
+```
+
 ## Troubleshooting
 
 - **Every code is invalid:** enable automatic date/time and timezone on the phone, select the correct
@@ -189,4 +243,5 @@ to deliver a notification does not reverse an already completed authentication a
   person clone the authenticator.
 - **Member is stuck after policy change:** verify the active organization, policy deadline, account
   status, and the member's capability-derived requirement, then complete enrollment at Account security.
+
 

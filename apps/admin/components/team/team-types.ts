@@ -351,6 +351,15 @@ export function formatIamErrorMessage(error: unknown): string {
     if (message.includes('STEP_UP_REQUIRED')) {
       return 'A fresh two-factor (MFA) authenticated session from the past 10 minutes is required for this operation.';
     }
+    if (message.includes('INVALID_TOTP') || message.includes('INVALID_CODE')) {
+      return 'The verification code from your authenticator app was incorrect. Try the newest code shown.';
+    }
+    if (message.includes('ACCOUNT_TEMPORARILY_LOCKED')) {
+      return 'Too many incorrect attempts. For security, verification is temporarily locked. Please try again later.';
+    }
+    if (message.includes('CONFLICT') && message.includes('active authenticator')) {
+      return 'This member does not have an active authenticator enrollment.';
+    }
     if (message.includes('VERSION_CONFLICT')) {
       return 'The record was modified concurrently by another administrator. Please refresh and review the updated state.';
     }
