@@ -99,6 +99,24 @@ function parseJson<T>(value: unknown): T | undefined {
   }
 }
 
+/** Saves active session index for a user with encryption and 30d retention. */
+async function saveSessionIndex(
+  options: AuthStorageOptions,
+  userId: string,
+  entries: StoredSessionIndexEntry[],
+): Promise<void> {
+  const key = { id: 'v1', value: options.encryptionKey };
+  const hash = (value: string) => hmacSha256(options.hmacSecret, value);
+  const indexKey = `active-sessions-${userId}`;
+  const now = Date.now();
+  await setAuthStorageValue(
+    options.database.db,
+    hash(indexKey),
+    Buffer.from(encryptSecret(JSON.stringify(entries), key), 'utf8'),
+    new Date(now + 30 * 24 * 60 * 60 * 1000),
+  );
+}
+
 /** Revokes every Better Auth secondary-storage session without exposing tokens. */
 export async function revokeAuthSessionsForUser(
   options: AuthStorageOptions,
@@ -110,6 +128,63 @@ export async function revokeAuthSessionsForUser(
   await Promise.all(entries.map((entry) => storage.delete(entry.token)));
   await storage.delete(indexKey);
   return entries.length;
+}
+
+/** Revokes a single session by its safe public sessionId. Returns true if revoked. */
+export async function revokeAuthSessionById(
+  options: AuthStorageOptions,
+  userId: string,
+  sessionId: string,
+): Promise<boolean> {
+  const storage = createAuthSecondaryStorage(options);
+  const indexKey = `active-sessions-${userId}`;
+  const entries = parseJson<StoredSessionIndexEntry[]>(await storage.get(indexKey)) ?? [];
+  const now = Date.now();
+  let targetToken: string | null = null;
+  const remaining: StoredSessionIndexEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.expiresAt <= now) continue;
+    const payload = parseJson<StoredSessionPayload>(await storage.get(entry.token));
+    if (payload?.session?.id === sessionId) {
+      targetToken = entry.token;
+    } else {
+      remaining.push(entry);
+    }
+  }
+
+  if (!targetToken) return false;
+  await storage.delete(targetToken);
+  await saveSessionIndex(options, userId, remaining);
+  return true;
+}
+
+/** Revokes all active sessions for a user except the current session. Returns count of revoked sessions. */
+export async function revokeOtherAuthSessions(
+  options: AuthStorageOptions,
+  userId: string,
+  currentSessionId: string,
+): Promise<number> {
+  const storage = createAuthSecondaryStorage(options);
+  const indexKey = `active-sessions-${userId}`;
+  const entries = parseJson<StoredSessionIndexEntry[]>(await storage.get(indexKey)) ?? [];
+  const now = Date.now();
+  const tokensToDelete: string[] = [];
+  const remaining: StoredSessionIndexEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.expiresAt <= now) continue;
+    const payload = parseJson<StoredSessionPayload>(await storage.get(entry.token));
+    if (payload?.session?.id && payload.session.id === currentSessionId) {
+      remaining.push(entry);
+    } else {
+      tokensToDelete.push(entry.token);
+    }
+  }
+
+  await Promise.all(tokensToDelete.map((token) => storage.delete(token)));
+  await saveSessionIndex(options, userId, remaining);
+  return tokensToDelete.length;
 }
 
 /** Returns security metadata only; session tokens never leave encrypted storage. */
@@ -124,3 +199,4 @@ export async function listAuthSessionsForUser(options: AuthStorageOptions, userI
   );
   return sessions.filter((session) => session !== undefined);
 }
+

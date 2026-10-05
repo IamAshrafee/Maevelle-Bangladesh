@@ -20,6 +20,12 @@ export interface IamActor {
   readonly membershipId: string;
 }
 
+export interface IamAccountActor {
+  readonly organizationId?: string | null | undefined;
+  readonly userId: string;
+  readonly membershipId?: string | null | undefined;
+}
+
 export type IamErrorCode =
   | 'CONFLICT'
   | 'FORBIDDEN'
@@ -147,23 +153,25 @@ export async function validateCapabilityAssignment(
 export async function appendIamAudit(
   db: IamDatabase,
   input: {
-    readonly actor: IamActor;
+    readonly actor: IamActor | IamAccountActor;
     readonly action: string;
     readonly targetType: string;
     readonly targetId: string;
-    readonly reason?: string;
+    readonly reason?: string | undefined;
     readonly before?: unknown;
     readonly after?: unknown;
     readonly metadata?: unknown;
   },
 ): Promise<void> {
+  const orgValue = input.actor.organizationId ? sql`${input.actor.organizationId}::uuid` : sql`null`;
+  const memValue = input.actor.membershipId ? sql`${input.actor.membershipId}::uuid` : sql`null`;
   await sql`
     insert into audit.audit_events (
       organization_id, actor_type, actor_id, membership_id, action, target_type, target_id,
       reason, before_diff, after_diff, metadata
     ) values (
-      ${input.actor.organizationId}::uuid, 'USER', ${input.actor.userId}::uuid,
-      ${input.actor.membershipId}::uuid, ${input.action}, ${input.targetType}, ${input.targetId}::uuid,
+      ${orgValue}, 'USER', ${input.actor.userId}::uuid,
+      ${memValue}, ${input.action}, ${input.targetType}, ${input.targetId}::uuid,
       ${input.reason ?? null}, ${JSON.stringify(input.before ?? null)}::jsonb,
       ${JSON.stringify(input.after ?? null)}::jsonb, ${JSON.stringify(input.metadata ?? null)}::jsonb
     )
@@ -173,7 +181,7 @@ export async function appendIamAudit(
 export async function appendIamOutbox(
   db: IamDatabase,
   input: {
-    readonly organizationId: string;
+    readonly organizationId?: string | null | undefined;
     readonly eventType: string;
     readonly aggregateType: string;
     readonly aggregateId: string;
@@ -181,12 +189,13 @@ export async function appendIamOutbox(
     readonly payload: unknown;
   },
 ): Promise<void> {
+  const orgValue = input.organizationId ? sql`${input.organizationId}::uuid` : sql`null`;
   await sql`
     insert into platform.outbox_events (
       organization_id, event_type, event_version, aggregate_type, aggregate_id,
       aggregate_version, payload, occurred_at
     ) values (
-      ${input.organizationId}::uuid, ${input.eventType}, 1, ${input.aggregateType},
+      ${orgValue}, ${input.eventType}, 1, ${input.aggregateType},
       ${input.aggregateId}::uuid, ${input.aggregateVersion}, ${JSON.stringify(input.payload)}::jsonb, now()
     )
   `.execute(db);

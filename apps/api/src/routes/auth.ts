@@ -9,6 +9,7 @@ import { createAuth } from '../auth/auth.js';
 import { recordUserTwoFactorEvent, resolveTwoFactorAccessState } from '@maevelle/database/iam';
 import { registerTwoFactorSecurityRoutes } from './two-factor-security.js';
 import { registerAdminContextRoute } from './admin-context.js';
+import { registerAccountRoutes } from './account.js';
 import { registerCatalogRoutes } from './catalog.js';
 import { registerMediaRoutes } from './media.js';
 import { registerSizingRoutes } from './sizing.js';
@@ -126,6 +127,7 @@ export function registerAuthRoutes(
     if (!path.startsWith('/admin/')) return;
     if (
       path === '/admin/context' ||
+      path.startsWith('/admin/account') ||
       path === '/admin/security/two-factor/status' ||
       path === '/admin/security/two-factor/enrollment' ||
       path === '/admin/security/two-factor/enrollment/verify'
@@ -161,32 +163,29 @@ export function registerAuthRoutes(
       });
   });
 
+  const objectStorage = createObjectStorage(
+    config.mediaStorageProvider === 'local'
+      ? { provider: 'local', rootDirectory: config.mediaStoragePath }
+      : {
+          provider: 's3',
+          endpoint: config.mediaStorageEndpoint!,
+          region: config.mediaStorageRegion,
+          accessKeyId: config.mediaStorageAccessKeyId!,
+          secretAccessKey: config.mediaStorageSecretAccessKey!,
+          privateBucket: config.mediaPrivateBucket,
+          publicBucket: config.mediaPublicBucket,
+          forcePathStyle: config.mediaStorageForcePathStyle,
+        },
+  );
+
   registerTwoFactorSecurityRoutes(app, database, auth, config);
   registerAdminContextRoute(app, database, auth);
+  registerAccountRoutes(app, database, auth, config, objectStorage);
   registerCatalogRoutes(app, database, auth, config.storefrontOrganizationCode);
-  registerMediaRoutes(
-    app,
-    database,
-    auth,
-    createObjectStorage(
-      config.mediaStorageProvider === 'local'
-        ? { provider: 'local', rootDirectory: config.mediaStoragePath }
-        : {
-            provider: 's3',
-            endpoint: config.mediaStorageEndpoint!,
-            region: config.mediaStorageRegion,
-            accessKeyId: config.mediaStorageAccessKeyId!,
-            secretAccessKey: config.mediaStorageSecretAccessKey!,
-            privateBucket: config.mediaPrivateBucket,
-            publicBucket: config.mediaPublicBucket,
-            forcePathStyle: config.mediaStorageForcePathStyle,
-          },
-    ),
-    {
-      maxUploadBytes: config.mediaMaxUploadBytes,
-      uploadExpirySeconds: config.mediaUploadExpirySeconds,
-    },
-  );
+  registerMediaRoutes(app, database, auth, objectStorage, {
+    maxUploadBytes: config.mediaMaxUploadBytes,
+    uploadExpirySeconds: config.mediaUploadExpirySeconds,
+  });
   registerSizingRoutes(app, database, auth);
   registerInventoryRoutes(app, database, auth);
   registerWarehouseRoutes(app, database, auth);

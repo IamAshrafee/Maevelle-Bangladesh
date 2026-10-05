@@ -75,6 +75,7 @@ const navigation: readonly NavGroup[] = [
     label: 'Overview',
     items: [
       { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { label: 'My Account', href: '/account', icon: UserRoundCog },
       { label: 'Account security', href: '/account/security', icon: ShieldCheck },
       { label: 'Attention', href: '/operations', icon: Gauge, capability: 'admin.operations.view' },
     ],
@@ -855,21 +856,42 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </div>
 
             {/* User Profile / Sign-out */}
-            <button
-              type="button"
-              onClick={() => void logout()}
-              title="Sign out of Operator session"
-              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer group"
-            >
-              <div className="size-7 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs border border-primary/20 shrink-0">
-                O
-              </div>
-              <div className="hidden md:flex flex-col items-start leading-tight">
-                <strong className="text-xs font-semibold text-foreground">Operator</strong>
-                <small className="text-[10px] text-muted-foreground group-hover:text-destructive transition-colors">Sign out</small>
-              </div>
-              <LogOut className="size-3.5 ml-1 hidden md:block text-muted-foreground group-hover:text-destructive transition-colors shrink-0" aria-hidden="true" />
-            </button>
+            <div className="flex items-center gap-1">
+              <Link
+                href="/account"
+                title="My Account"
+                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors group cursor-pointer"
+              >
+                {context?.user?.image ? (
+                  <img
+                    src={context.user.image}
+                    alt={context.user.name || 'User avatar'}
+                    className="size-7 rounded-full object-cover border border-primary/30 shrink-0"
+                  />
+                ) : (
+                  <div className="size-7 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs border border-primary/20 shrink-0">
+                    {context?.user?.name ? context.user.name.slice(0, 1).toUpperCase() : 'O'}
+                  </div>
+                )}
+                <div className="hidden md:flex flex-col items-start leading-tight">
+                  <strong className="text-xs font-semibold text-foreground truncate max-w-[120px]">
+                    {context?.user?.name || 'Operator'}
+                  </strong>
+                  <small className="text-[10px] text-muted-foreground group-hover:text-primary transition-colors">
+                    My Account
+                  </small>
+                </div>
+              </Link>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                title="Sign out of session"
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                aria-label="Sign out"
+              >
+                <LogOut className="size-3.5 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </header>
 

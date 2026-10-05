@@ -3601,7 +3601,100 @@ export interface AdminContextDto {
     readonly accessRestricted: boolean;
     readonly enrollmentDeadline: string | null;
   };
+  readonly user?: {
+    readonly name: string;
+    readonly email: string;
+    readonly image?: string | null;
+  };
 }
+
+export interface UserAccountProfileDto {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string;
+  readonly emailVerified: boolean;
+  readonly image: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface UserAccountMembershipDto {
+  readonly organizationId: string;
+  readonly organizationName: string;
+  readonly membershipId: string;
+  readonly membershipType: MembershipTypeDto;
+  readonly status: MembershipStatusDto;
+  readonly joinedAt: string;
+  readonly displayName?: string | null;
+}
+
+export interface UserAccountSecurityDto {
+  readonly hasPassword: boolean;
+  readonly twoFactorEnabled: boolean;
+  readonly twoFactorRequired: boolean;
+  readonly enrollmentRequired: boolean;
+  readonly accessRestricted: boolean;
+  readonly enrollmentDeadline: string | null;
+  readonly activeSessionsCount: number;
+}
+
+export interface UserAccountPendingEmailChangeDto {
+  readonly pendingEmail: string;
+  readonly requestedAt: string;
+  readonly expiresAt: string;
+}
+
+export interface UserAccountOverviewDto {
+  readonly profile: UserAccountProfileDto;
+  readonly membership: UserAccountMembershipDto | null;
+  readonly security: UserAccountSecurityDto;
+  readonly pendingEmailChange?: UserAccountPendingEmailChangeDto | null;
+}
+
+export interface UpdateAccountProfileRequestDto {
+  readonly name: string;
+}
+
+export interface ChangeAccountPasswordRequestDto {
+  readonly currentPassword: string;
+  readonly newPassword: string;
+  readonly revokeOtherSessions?: boolean;
+}
+
+export interface RequestEmailChangeRequestDto {
+  readonly newEmail: string;
+  readonly currentPassword: string;
+  readonly code?: string;
+}
+
+export interface ConfirmEmailChangeRequestDto {
+  readonly token: string;
+}
+
+export interface VerifyEmailRequestDto {
+  readonly token: string;
+}
+
+export interface AccountSessionItemDto {
+  readonly id: string;
+  readonly isCurrent: boolean;
+  readonly ipAddress: string | null;
+  readonly userAgent: string | null;
+  readonly deviceLabel: string;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly lastActivityAt: string;
+}
+
+export interface AccountSecurityActivityItemDto {
+  readonly id: string;
+  readonly action: string;
+  readonly title: string;
+  readonly description: string;
+  readonly occurredAt: string;
+  readonly ipAddress?: string | null;
+}
+
 
 export type EmailNotificationStatus =
   | 'NOT_APPLICABLE'

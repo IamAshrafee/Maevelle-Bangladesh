@@ -92,7 +92,8 @@ export class LocalObjectStorage implements ObjectStoragePort {
     if (
       !/^organizations\/[a-zA-Z0-9_-]+\/assets\/[a-zA-Z0-9_-]+\/(?:renditions\/)?[a-zA-Z0-9_.-]+$/.test(
         locator.key,
-      )
+      ) &&
+      !/^avatars\/[a-zA-Z0-9_.-]+$/.test(locator.key)
     )
       throw new Error('Unsafe media object key.');
     const candidate = resolve(this.root, locator.bucket, locator.key);

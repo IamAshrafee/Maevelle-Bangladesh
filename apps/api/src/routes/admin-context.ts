@@ -47,6 +47,13 @@ export function registerAdminContextRoute(
               accessRestricted: Type.Boolean(),
               enrollmentDeadline: Type.Union([Type.String(), Type.Null()]),
             }),
+            user: Type.Optional(
+              Type.Object({
+                name: Type.String(),
+                email: Type.String(),
+                image: Type.Union([Type.String(), Type.Null()]),
+              }),
+            ),
           }),
           401: Type.Object({ error: Type.Literal('UNAUTHENTICATED') }),
           403: Type.Object({ error: Type.Literal('FORBIDDEN') }),
@@ -92,6 +99,11 @@ export function registerAdminContextRoute(
           enrollmentRequired: twoFactor.enrollmentRequired,
           accessRestricted: twoFactor.accessRestricted,
           enrollmentDeadline: twoFactor.policy.enrollmentDeadline,
+        },
+        user: {
+          name: session.user.name ?? '',
+          email: session.user.email ?? '',
+          image: session.user.image ?? null,
         },
       };
     },

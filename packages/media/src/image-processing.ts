@@ -125,3 +125,47 @@ export async function inspectAndProcessImage(content: Buffer): Promise<{
     renditions,
   };
 }
+
+/** Processes, crops to square, strips EXIF, and encodes an avatar image to 256x256 WebP. */
+export async function processAvatarImage(content: Buffer): Promise<{
+  readonly content: Buffer;
+  readonly byteSize: number;
+  readonly checksumSha256: string;
+  readonly width: number;
+  readonly height: number;
+}> {
+  let metadata: Awaited<ReturnType<ReturnType<typeof sharp>['metadata']>>;
+  try {
+    metadata = await sharp(content, { limitInputPixels: MAX_IMAGE_PIXELS }).metadata();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (/pixel limit|dimensions/i.test(message))
+      throw new InvalidImageError(
+        'IMAGE_DIMENSIONS_TOO_LARGE',
+        'Image dimensions exceed the processing safety limit.',
+      );
+    throw new InvalidImageError('CORRUPT_IMAGE', 'The uploaded image could not be decoded.');
+  }
+  if (!metadata.width || !metadata.height || !metadata.format)
+    throw new InvalidImageError('CORRUPT_IMAGE', 'The uploaded image has no usable dimensions.');
+  if (!['jpeg', 'png', 'webp'].includes(metadata.format))
+    throw new InvalidImageError(
+      'UNSUPPORTED_IMAGE',
+      'Only JPEG, PNG, and WebP images are supported for profile avatars.',
+    );
+
+  const result = await sharp(content, { limitInputPixels: MAX_IMAGE_PIXELS })
+    .autoOrient()
+    .resize({ width: 256, height: 256, fit: 'cover', position: 'center' })
+    .webp({ quality: 85, effort: 4 })
+    .toBuffer({ resolveWithObject: true });
+
+  return {
+    content: result.data,
+    byteSize: result.data.length,
+    checksumSha256: sha256(result.data),
+    width: result.info.width,
+    height: result.info.height,
+  };
+}
+

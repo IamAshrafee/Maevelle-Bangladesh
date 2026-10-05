@@ -569,3 +569,32 @@ export async function createOwnerMembership(
     }
   });
 }
+
+export async function createStandardMembership(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  userId: string,
+  displayName: string,
+): Promise<void> {
+  await db.transaction().execute(async (tx) => {
+    const inserted = await sql<{ id: string }>`
+      insert into iam.organization_memberships (
+        organization_id, user_id, membership_type, status, display_name, activated_at
+      ) values (${organizationId}, ${userId}, 'STANDARD', 'ACTIVE', ${displayName}, now())
+      returning id::text
+    `.execute(tx);
+    const membershipId = inserted.rows[0]?.id;
+    if (membershipId) {
+      await sql`
+        insert into audit.audit_events (
+          organization_id, actor_type, actor_id, membership_id, action, target_type, target_id, after_diff
+        ) values (
+          ${organizationId}::uuid, 'USER', ${userId}::uuid, ${membershipId}::uuid,
+          'iam.organization.member_created', 'iam.organization_membership', ${membershipId}::uuid,
+          ${JSON.stringify({ organizationId, userId, displayName, membershipType: 'STANDARD' })}::jsonb
+        )
+      `.execute(tx);
+    }
+  });
+}
+
