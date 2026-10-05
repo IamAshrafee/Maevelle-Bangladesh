@@ -54,6 +54,7 @@ import type { AdminContextDto, ApiEnvelope } from '@maevelle/contracts';
 
 import { AdminCapabilitiesProvider } from './admin-capabilities';
 import { TwoFactorRequiredGate } from './security/two-factor-required-gate';
+import { UserMenu } from './user-menu';
 import { cn } from '@/lib/utils';
 
 type AdminContext = AdminContextDto;
@@ -641,6 +642,18 @@ export function AdminShell({ children }: { children: ReactNode }) {
   }, [pathname, router]);
 
   useEffect(() => {
+    const handleAccountUpdated = () => {
+      void fetch('/api/admin/context', { credentials: 'include' }).then(async (response) => {
+        if (response.ok) {
+          setContext((await response.json()) as AdminContext);
+        }
+      });
+    };
+    window.addEventListener('maevelle:account-updated', handleAccountUpdated);
+    return () => window.removeEventListener('maevelle:account-updated', handleAccountUpdated);
+  }, []);
+
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -855,43 +868,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
               <strong className="text-xs font-semibold text-foreground">Maevelle BD</strong>
             </div>
 
-            {/* User Profile / Sign-out */}
-            <div className="flex items-center gap-1">
-              <Link
-                href="/account"
-                title="My Account"
-                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors group cursor-pointer"
-              >
-                {context?.user?.image ? (
-                  <img
-                    src={context.user.image}
-                    alt={context.user.name || 'User avatar'}
-                    className="size-7 rounded-full object-cover border border-primary/30 shrink-0"
-                  />
-                ) : (
-                  <div className="size-7 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs border border-primary/20 shrink-0">
-                    {context?.user?.name ? context.user.name.slice(0, 1).toUpperCase() : 'O'}
-                  </div>
-                )}
-                <div className="hidden md:flex flex-col items-start leading-tight">
-                  <strong className="text-xs font-semibold text-foreground truncate max-w-[120px]">
-                    {context?.user?.name || 'Operator'}
-                  </strong>
-                  <small className="text-[10px] text-muted-foreground group-hover:text-primary transition-colors">
-                    My Account
-                  </small>
-                </div>
-              </Link>
-              <button
-                type="button"
-                onClick={() => void logout()}
-                title="Sign out of session"
-                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
-                aria-label="Sign out"
-              >
-                <LogOut className="size-3.5 shrink-0" aria-hidden="true" />
-              </button>
-            </div>
+            {/* User Profile Menu */}
+            <UserMenu context={context} onLogout={logout} />
           </div>
         </header>
 

@@ -71,15 +71,16 @@ Your email address serves as your primary sign-in identity and the destination f
 ### Secure Email Change Process
 Changing your sign-in email is a security-sensitive procedure. Maevelle ensures your account cannot be hijacked by an unauthorized person:
 
-1. Under **Change sign-in email**, enter your **New email address**.
-2. Enter your **Current password** to prove fresh authentication.
-3. Click **Request email change**.
-4. **What happens next?**
+1. Click the **Change email** button next to your sign-in email in My Account.
+2. In the modal dialog that appears, enter your **New email address**.
+3. Enter your **Current password** to prove fresh authentication (you can use the show/hide toggle to verify what you typed).
+4. Click **Send verification link**.
+5. **What happens next?**
    - Maevelle sends a secure verification link to your **new email address**.
    - Your account enters a **Pending email change** state.
    - You can continue signing in with your **old email address** until the new address is verified.
    - Once you click the link in the new inbox, your sign-in email updates canonically, a security confirmation notice is sent to your old inbox, and any other active sessions are revoked.
-5. **Cancelling a Request**: If you made a mistake or changed your mind, click **Cancel email change request** in My Account.
+6. **Cancelling a Request**: If you made a mistake or changed your mind, click **Cancel email change request** in My Account.
 
 > **What if I lost access to my current email?**
 > If you no longer have access to your old email address, contact your Maevelle System Administrator. An administrator in Team & Access can assist with an authorized organizational recovery.
@@ -90,13 +91,13 @@ Changing your sign-in email is a security-sensitive procedure. Maevelle ensures 
 
 ### Changing Your Password
 1. Navigate to the **Security & Password** tab.
-2. Under **Change Account Password**, enter:
-   - **Current password**: Your existing sign-in password.
+2. Under **Account Password**, enter:
+   - **Current password**: Your existing sign-in password (use the eye icon toggle if needed).
    - **New password**: Must be **at least 12 characters** in length. Use a combination of uppercase, lowercase, numbers, and symbols for maximum strength.
    - **Confirm new password**: Re-type the exact new password.
 3. **Session Revocation**: By default, the checkbox *"Sign out of all other active sessions and devices upon password change"* is checked. We strongly recommend keeping this checked to terminate any stale or compromised logins on other devices.
 4. Click **Update password**.
-5. You will receive an immediate email notification confirming that your password was updated. If you did not perform this action, contact support immediately.
+5. You will receive an immediate confirmation that your password was updated and other devices were signed out.
 
 ---
 
@@ -104,11 +105,14 @@ Changing your sign-in email is a security-sensitive procedure. Maevelle ensures 
 
 Two-Factor Authentication adds an essential layer of security by requiring a 6-digit code from an Authenticator App (Google Authenticator, Apple Keychain, 1Password, Microsoft Authenticator) whenever you sign in.
 
-- **Status**: Displays whether 2FA is `ENABLED` or `DISABLED`.
+- **Status**: Displays whether 2FA is `ENABLED` or `NOT ENABLED`.
 - **Organization Policy**: If your organization enforces mandatory 2FA, a notice will state: *"Required by Maevelle organization policy"*. Under this policy, you cannot disable 2FA.
-- **Managing 2FA**:
-  - Click **Open 2FA Console →** (or visit `/account/security`).
-  - Here you can scan a QR code to configure an authenticator app, regenerate backup recovery codes, or verify your TOTP codes.
+- **Configuring 2FA**:
+  - If 2FA is not enabled, click **Set up authenticator app**. A setup wizard appears immediately where you can scan a QR code or enter a setup key, confirm a 6-digit code, and save your backup recovery codes.
+- **Managing 2FA & Recovery Codes**:
+  - If 2FA is enabled, you can click **Regenerate recovery codes** to obtain a fresh set of single-use emergency backup codes (this requires password re-authentication).
+  - If not required by organization policy, you can click **Disable 2FA**.
+  - For full-screen management, you can also click **Full 2FA Console →** (or visit `/account/security`).
 
 ---
 

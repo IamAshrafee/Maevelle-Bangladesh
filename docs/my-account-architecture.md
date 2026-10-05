@@ -169,10 +169,10 @@ The server inspects the session's `userAgent` string and derives:
 - `label`: Friendly representation (e.g., `Chrome on Windows`, `Safari on iPhone`)
 
 ### 5.2 Revocation Endpoints
-1. `GET /admin/account/sessions`: Lists all active sessions for the authenticated user with friendly labels, IP addresses, creation timestamps, and an `isCurrentSession` boolean flag. Raw session tokens are never exposed.
-2. `DELETE /admin/account/sessions/:id`: Revokes a specific other session belonging to the user. Validates ownership before deletion; cannot revoke the current session via this route.
-3. `DELETE /admin/account/sessions/other`: Atomically revokes all sessions belonging to the user except the current session.
-4. `DELETE /admin/account/sessions/all`: Revokes all sessions belonging to the user including the current session, terminating all devices and forcing re-login.
+1. `GET /admin/account/sessions`: Lists all active sessions for the authenticated user with friendly labels, IP addresses, creation timestamps, and an `isCurrent` boolean flag. Raw session tokens are never exposed.
+2. `POST /admin/account/sessions/:sessionId/revoke`: Revokes a specific other session belonging to the user. Validates ownership before deletion; cannot revoke the current session via this route.
+3. `POST /admin/account/sessions/revoke-others`: Atomically revokes all sessions belonging to the user except the current session.
+4. `POST /admin/account/sessions/revoke-all`: Revokes all sessions belonging to the user including the current session, terminating all devices and forcing re-login.
 
 ---
 
@@ -196,3 +196,52 @@ All account-level mutations append structured audit records to `iam.audit_events
 | Sign Out Everywhere | `ACCOUNT_ALL_SESSIONS_REVOKED` | `account.sessions.revoked_all` | Session tokens redacted |
 
 > **Critical Safety Invariant**: Under no circumstances are raw passwords, password hashes, TOTP secrets, backup recovery codes, or raw session tokens stored in audit payloads, outbox events, or logged to application outputs.
+
+---
+
+## 7. Frontend Architecture & Modular Component Hierarchy
+
+The My Account frontend is organized under `apps/admin/components/account/` into domain-focused, accessible components:
+
+```text
+apps/admin/components/account/
+├── my-account-console.tsx       # Orchestrator page shell, URL tab synchronization (?tab=...)
+├── account-identity-header.tsx  # Hero overview banner: Avatar, Name, Email, Status badges
+├── profile-tab.tsx              # Personal info, avatar upload/remove, email verification
+├── change-email-dialog.tsx      # Re-authentication modal for requesting email change
+├── security-tab.tsx             # Password update form, integrated 2FA wizard & management
+├── sessions-tab.tsx             # Active devices list, current device marker, revocation dialogs
+├── security-activity-tab.tsx    # Chronological timeline of security events
+└── account-utils.ts             # Initial extraction, relative dates, device category icons
+```
+
+### 7.1 Separation from Team & Access
+- **Zero Cross-Contamination**: Under no circumstances does My Account render administrative member management controls (such as role assignment, invitation revocation, member suspension, or organization security policy overrides).
+- **Read-Only Information**: Work account attributes (`Organization`, `Assigned Role`, `Status`, `Member Since`) are displayed as clear informative key-value presentations rather than disabled input elements to avoid confusing users.
+
+### 7.2 Two-Factor Authentication Reuse
+Rather than creating duplicate 2FA setup or management flows, My Account directly integrates the completed production components from `@/components/security/`:
+- `AuthenticatorSetupWizard`: Step-by-step QR code scanning, manual setup key, OTP validation, and recovery code acknowledgment.
+- `TwoFactorManagementDialog`: Safe password-authenticated recovery code regeneration and 2FA deactivation (blocked if required by organization policy).
+
+---
+
+## 8. User Menu & Global Identity Synchronization
+
+1. **Topbar User Menu (`UserMenu`)**:
+   - Replaced raw link + logout button with an accessible Base UI dropdown menu.
+   - Shows user avatar with fallback initials (Unicode-safe `getInitials()`), full name, email, and assigned role.
+   - Quick navigation links directly to `/account`, `/account?tab=security`, and `/account?tab=sessions`.
+2. **Instant Cross-Component Synchronization**:
+   - When a user updates their display name or uploads/removes an avatar in My Account, `notifyAccountUpdated()` dispatches a `maevelle:account-updated` custom DOM event.
+   - `AdminShell` listens to this event and re-fetches `/api/admin/context`, updating the topbar avatar and user menu immediately across the portal without requiring page reloads or re-authentication.
+
+---
+
+## 9. Verification & Quality Gates
+
+The implementation is verified through:
+- **Unit & Integration Suite**: `apps/admin/src/account-ui.test.tsx` (19 comprehensive tests covering identity, avatar initials, email flows, password policies, device categories, user menu, and authorization boundaries).
+- **TypeScript Static Verification**: Strict `--noEmit` typechecking across the entire workspace with zero compiler errors.
+- **Design System Conformance**: Fully standardized on Tailwind CSS v4 semantic tokens (`bg-background`, `bg-card`, `border-border`, `bg-primary`, `bg-primary-subtle`), explicit micro-transitions (`transition-colors 150ms`), tabular numbers (`tabular-nums font-mono`) for dates/IPs/metrics, and comfortable touch targets.
+
