@@ -30,7 +30,6 @@ import {
   PackageSearch,
   Palette,
   PanelLeftClose,
-  PanelLeft,
   Plug,
   ReceiptText,
   RefreshCw,
@@ -74,6 +73,7 @@ const navigation: readonly NavGroup[] = [
     label: 'Overview',
     items: [
       { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { label: 'Account security', href: '/account/security', icon: ShieldCheck },
       { label: 'Attention', href: '/operations', icon: Gauge, capability: 'admin.operations.view' },
     ],
   },
@@ -620,7 +620,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
-    if (pathname === '/login') return;
+    if (pathname === '/login' || pathname === '/two-factor') return;
     void fetch('/api/admin/context', { credentials: 'include' }).then(async (response) => {
       if (response.status === 401) {
         if (pathname === '/design-system' || pathname.startsWith('/settings/design-system')) {
@@ -628,7 +628,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
         }
         return router.replace('/login');
       }
-      if (response.ok) setContext((await response.json()) as AdminContext);
+      if (response.ok) {
+        const nextContext = (await response.json()) as AdminContext;
+        setContext(nextContext);
+        if (nextContext.twoFactor.accessRestricted && pathname !== '/account/security')
+          router.replace('/account/security');
+      }
     });
   }, [pathname, router]);
 
@@ -647,7 +652,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  if (pathname === '/login') return children;
+  if (pathname === '/login' || pathname === '/two-factor') return children;
 
   const logout = async () => {
     await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });

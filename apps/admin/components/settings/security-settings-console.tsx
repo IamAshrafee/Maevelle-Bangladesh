@@ -12,9 +12,7 @@ import {
   RefreshCw,
   RotateCcw,
   Shield,
-  ShieldAlert,
   ShieldCheck,
-  UserCheck,
   Users,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -29,6 +27,7 @@ import { SettingStatusBadge, RuntimeEffectBadge } from '@/components/settings/se
 import { SettingsNav } from '@/components/settings/settings-nav';
 import { fetchApiData } from '@/lib/api';
 import type { ModuleSettingsResponseDto } from '@maevelle/contracts';
+import { TwoFactorPolicyCard } from '@/components/settings/two-factor-policy-card';
 
 interface SecuritySettingsDto {
   readonly sessionTimeoutMinutes: number;
@@ -258,6 +257,13 @@ export function SecuritySettingsConsole() {
             </SettingField>
           </div>
         </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Two-Factor Authentication"
+        description="Organization policy for standards-compatible authenticator apps."
+      >
+        <TwoFactorPolicyCard />
       </SettingsSection>
 
       {/* Access Control & RBAC Link */}

@@ -3,7 +3,12 @@ import { base32 } from '@better-auth/utils/base32';
 
 import type { RuntimeConfig } from '@maevelle/config';
 import { createDatabase } from '@maevelle/database';
-import { createOrganization, createOwnerMembership } from '@maevelle/database/platform';
+import { listIamAuditEvents, updateOrganizationTwoFactorPolicy } from '@maevelle/database/iam';
+import {
+  createOrganization,
+  createOwnerMembership,
+  findActiveAdminContext,
+} from '@maevelle/database/platform';
 
 import { buildApi } from './app.js';
 import { createAuth } from './auth/auth.js';
@@ -23,6 +28,10 @@ const config: RuntimeConfig = {
   authEncryptionKey: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
   authBaseUrl: 'http://localhost:3000',
   authTrustedOrigins: ['http://localhost:3000'],
+  authTotpIssuer: 'Maevelle',
+  authTotpChallengeSeconds: 600,
+  authTotpMaxFailedAttempts: 10,
+  authTotpLockSeconds: 900,
   mediaStorageProvider: 'local',
   mediaStoragePath: 'var/test-media',
   mediaStorageRegion: 'auto',
@@ -124,7 +133,7 @@ describe('central organization context authorization', () => {
         url: `/admin/context?organizationId=${organizationA}`,
         headers: { cookie: sessionA },
       });
-      expect(allowed.statusCode).toBe(200);
+      expect(allowed.statusCode, allowed.body).toBe(200);
       expect(allowed.json()).toMatchObject({ actorId: userA.id, organizationId: organizationA });
 
       const aToB = await app.inject({
@@ -160,6 +169,59 @@ describe('central organization context authorization', () => {
 });
 
 describe('Better Auth TOTP enforcement', () => {
+  it('enforces a zero-grace organization requirement on protected Admin APIs', async () => {
+    const app = buildApi({ database, config, logger: false });
+    const organizationId = await createOrganizationFixture('mfa-policy-gate');
+    const user = await createUser('mfa-policy-gate');
+    await createOwnerMembership(database.db, organizationId, user.id, 'Policy Gate Owner');
+    const actor = await findActiveAdminContext(database.db, user.id, { organizationId });
+    if (!actor) throw new Error('Owner context was not created.');
+
+    try {
+      const signedIn = await signIn(app, user.email, user.password);
+      const session = cookieHeader(signedIn.headers['set-cookie']);
+      await updateOrganizationTwoFactorPolicy(database.db, {
+        actor: {
+          organizationId,
+          userId: user.id,
+          membershipId: actor.membershipId,
+        },
+        expectedVersion: 0,
+        mode: 'ALL_MEMBERS',
+        gracePeriodHours: 0,
+        reason: 'Integration-test mandatory enrollment gate',
+      });
+
+      const context = await app.inject({
+        method: 'GET',
+        url: '/admin/context',
+        headers: { cookie: session },
+      });
+      expect(context.statusCode, context.body).toBe(200);
+      expect(context.json()).toMatchObject({
+        twoFactor: { enrollmentRequired: true, accessRestricted: true },
+      });
+      const enrollmentStatus = await app.inject({
+        method: 'GET',
+        url: '/admin/security/two-factor/status',
+        headers: { cookie: session },
+      });
+      expect(enrollmentStatus.statusCode, enrollmentStatus.body).toBe(200);
+
+      const protectedRoute = await app.inject({
+        method: 'GET',
+        url: '/admin/security/two-factor/policy',
+        headers: { cookie: session },
+      });
+      expect(protectedRoute.statusCode, protectedRoute.body).toBe(403);
+      expect(protectedRoute.json()).toMatchObject({
+        error: { code: 'TWO_FACTOR_ENROLLMENT_REQUIRED' },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it('requires a valid second factor before restoring protected access and revokes it on logout', async () => {
     const app = buildApi({ database, config, logger: false });
     const organizationId = await createOrganizationFixture('mfa');
@@ -176,13 +238,17 @@ describe('Better Auth TOTP enforcement', () => {
         url: '/admin/context',
         headers: { cookie: initialSession },
       });
-      expect(beforeEnrollment.statusCode).toBe(200);
+      expect(beforeEnrollment.statusCode, beforeEnrollment.body).toBe(200);
 
-      const enrollment = await auth.api.enableTwoFactor({
-        headers: new Headers({ cookie: initialSession }),
-        body: { password: user.password },
+      const enrollmentResponse = await app.inject({
+        method: 'POST',
+        url: '/admin/security/two-factor/enrollment',
+        headers: { cookie: initialSession },
+        payload: { password: user.password },
       });
-      const encodedSecret = new URL(enrollment.totpURI).searchParams.get('secret');
+      expect(enrollmentResponse.statusCode, enrollmentResponse.body).toBe(200);
+      const enrollment = enrollmentResponse.json<{ data: { totpUri: string } }>().data;
+      const encodedSecret = new URL(enrollment.totpUri).searchParams.get('secret');
       expect(encodedSecret).toBeTruthy();
       // Better Auth exposes the enrollment secret as standard Base32 in the
       // authenticator URI; use its own utility rather than reimplementing TOTP.
@@ -192,11 +258,17 @@ describe('Better Auth TOTP enforcement', () => {
 
       const enrollmentVerification = await app.inject({
         method: 'POST',
-        url: '/auth/two-factor/verify-totp',
+        url: '/admin/security/two-factor/enrollment/verify',
         headers: { cookie: initialSession },
         payload: { code: validCode.code },
       });
       expect(enrollmentVerification.statusCode, enrollmentVerification.body).toBe(200);
+      const backupCodes = enrollmentVerification.json<{
+        data: { backupCodes: string[] };
+      }>().data.backupCodes;
+      expect(backupCodes.length).toBeGreaterThan(1);
+      const firstBackupCode = backupCodes[0];
+      if (!firstBackupCode) throw new Error('Enrollment did not return a recovery code.');
       const enrolledSession = cookieHeader(enrollmentVerification.headers['set-cookie']);
 
       const signOutInitial = await app.inject({
@@ -258,6 +330,178 @@ describe('Better Auth TOTP enforcement', () => {
         headers: { cookie: authenticatedSession },
       });
       expect(afterLogout.statusCode).toBe(401);
+
+      const recoverySignIn = await signIn(app, user.email, user.password);
+      expect(recoverySignIn.json()).toMatchObject({ twoFactorRedirect: true });
+      const recoveryChallenge = cookieHeader(recoverySignIn.headers['set-cookie']);
+      const recoveryVerification = await app.inject({
+        method: 'POST',
+        url: '/auth/two-factor/verify-backup-code',
+        headers: { cookie: recoveryChallenge },
+        payload: { code: firstBackupCode },
+      });
+      expect(recoveryVerification.statusCode, recoveryVerification.body).toBe(200);
+      const recoverySession = cookieHeader(recoveryVerification.headers['set-cookie']);
+      expect(
+        (
+          await app.inject({
+            method: 'GET',
+            url: '/admin/context',
+            headers: { cookie: recoverySession },
+          })
+        ).statusCode,
+      ).toBe(200);
+
+      await app.inject({
+        method: 'POST',
+        url: '/auth/sign-out',
+        headers: { cookie: recoverySession },
+        payload: {},
+      });
+      const reusedCodeSignIn = await signIn(app, user.email, user.password);
+      const reusedCodeChallenge = cookieHeader(reusedCodeSignIn.headers['set-cookie']);
+      const reusedCode = await app.inject({
+        method: 'POST',
+        url: '/auth/two-factor/verify-backup-code',
+        headers: { cookie: reusedCodeChallenge },
+        payload: { code: firstBackupCode },
+      });
+      expect(reusedCode.statusCode).toBeGreaterThanOrEqual(400);
+      expect(reusedCode.body).not.toContain(firstBackupCode);
+
+      const secondBackupCode = backupCodes[1];
+      const oldUnusedBackupCode = backupCodes[2];
+      if (!secondBackupCode || !oldUnusedBackupCode)
+        throw new Error('Enrollment returned too few recovery codes for lifecycle verification.');
+      const secondRecovery = await app.inject({
+        method: 'POST',
+        url: '/auth/two-factor/verify-backup-code',
+        headers: { cookie: reusedCodeChallenge },
+        payload: { code: secondBackupCode },
+      });
+      expect(secondRecovery.statusCode, secondRecovery.body).toBe(200);
+      const secondRecoverySession = cookieHeader(secondRecovery.headers['set-cookie']);
+      const currentTotp = await auth.api.generateTOTP({ body: { secret } });
+      const regenerated = await app.inject({
+        method: 'POST',
+        url: '/admin/security/two-factor/backup-codes',
+        headers: { cookie: secondRecoverySession },
+        payload: { password: user.password, code: currentTotp.code },
+      });
+      expect(regenerated.statusCode, regenerated.body).toBe(200);
+      const regeneratedCodes = regenerated.json<{ data: { backupCodes: string[] } }>().data
+        .backupCodes;
+      const firstRegeneratedCode = regeneratedCodes[0];
+      if (!firstRegeneratedCode) throw new Error('Recovery-code regeneration returned no codes.');
+
+      await app.inject({
+        method: 'POST',
+        url: '/auth/sign-out',
+        headers: { cookie: secondRecoverySession },
+        payload: {},
+      });
+      const regeneratedSignIn = await signIn(app, user.email, user.password);
+      const regeneratedChallenge = cookieHeader(regeneratedSignIn.headers['set-cookie']);
+      const invalidatedOldCode = await app.inject({
+        method: 'POST',
+        url: '/auth/two-factor/verify-backup-code',
+        headers: { cookie: regeneratedChallenge },
+        payload: { code: oldUnusedBackupCode },
+      });
+      expect(invalidatedOldCode.statusCode).toBeGreaterThanOrEqual(400);
+      const validRegeneratedCode = await app.inject({
+        method: 'POST',
+        url: '/auth/two-factor/verify-backup-code',
+        headers: { cookie: regeneratedChallenge },
+        payload: { code: firstRegeneratedCode },
+      });
+      expect(validRegeneratedCode.statusCode, validRegeneratedCode.body).toBe(200);
+
+      const audit = await listIamAuditEvents(database.db, organizationId, {
+        search: 'iam.two_factor.',
+      });
+      expect(audit.items.map((row) => row.action)).toEqual(
+        expect.arrayContaining([
+          'iam.two_factor.enrollment_started',
+          'iam.two_factor.enabled',
+          'iam.two_factor.backup_codes_regenerated',
+          'iam.two_factor.recovery_code_used',
+        ]),
+      );
+      const serializedAudit = JSON.stringify(audit.items);
+      expect(serializedAudit).not.toContain(secret);
+      for (const backupCode of backupCodes) expect(serializedAudit).not.toContain(backupCode);
+      for (const backupCode of regeneratedCodes) expect(serializedAudit).not.toContain(backupCode);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('temporarily locks a protected account after the configured failed-attempt limit', async () => {
+    const lockConfig: RuntimeConfig = {
+      ...config,
+      authTotpMaxFailedAttempts: 3,
+      authTotpLockSeconds: 60,
+    };
+    const app = buildApi({ database, config: lockConfig, logger: false });
+    const organizationId = await createOrganizationFixture('mfa-lock');
+    const user = await createUser('mfa-lock');
+    await createOwnerMembership(database.db, organizationId, user.id, 'Locked MFA User');
+    const auth = createAuth(lockConfig, database, true);
+
+    try {
+      const initialLogin = await signIn(app, user.email, user.password);
+      const initialSession = cookieHeader(initialLogin.headers['set-cookie']);
+      const enrollment = await app.inject({
+        method: 'POST',
+        url: '/admin/security/two-factor/enrollment',
+        headers: { cookie: initialSession },
+        payload: { password: user.password },
+      });
+      expect(enrollment.statusCode, enrollment.body).toBe(200);
+      const encodedSecret = new URL(
+        enrollment.json<{ data: { totpUri: string } }>().data.totpUri,
+      ).searchParams.get('secret');
+      if (!encodedSecret) throw new Error('Enrollment did not return a TOTP secret.');
+      const secret = new TextDecoder().decode(base32.decode(encodedSecret));
+      const validCode = (await auth.api.generateTOTP({ body: { secret } })).code;
+      const verified = await app.inject({
+        method: 'POST',
+        url: '/admin/security/two-factor/enrollment/verify',
+        headers: { cookie: initialSession },
+        payload: { code: validCode },
+      });
+      expect(verified.statusCode, verified.body).toBe(200);
+      await app.inject({
+        method: 'POST',
+        url: '/auth/sign-out',
+        headers: { cookie: cookieHeader(verified.headers['set-cookie']) },
+        payload: {},
+      });
+
+      const challenge = await signIn(app, user.email, user.password);
+      const challengeCookie = cookieHeader(challenge.headers['set-cookie']);
+      const invalidCodes = ['000000', '000001', '000002', '000003'].filter(
+        (candidate) => candidate !== validCode,
+      );
+      for (const invalidCode of invalidCodes.slice(0, 3)) {
+        const failed = await app.inject({
+          method: 'POST',
+          url: '/auth/two-factor/verify-totp',
+          headers: { cookie: challengeCookie },
+          payload: { code: invalidCode },
+        });
+        expect(failed.statusCode).toBeGreaterThanOrEqual(400);
+        expect(failed.body).not.toContain(invalidCode);
+      }
+      const locked = await app.inject({
+        method: 'POST',
+        url: '/auth/two-factor/verify-totp',
+        headers: { cookie: challengeCookie },
+        payload: { code: invalidCodes[3] ?? '999999' },
+      });
+      expect(locked.statusCode, locked.body).toBe(429);
+      expect(locked.json()).toMatchObject({ code: 'ACCOUNT_TEMPORARILY_LOCKED' });
     } finally {
       await app.close();
     }

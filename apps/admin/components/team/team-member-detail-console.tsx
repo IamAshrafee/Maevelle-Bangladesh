@@ -2,24 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   Activity,
   AlertCircle,
-  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Calendar,
   Check,
-  CheckCircle2,
-  Clock,
   Copy,
-  ExternalLink,
   Globe,
   KeyRound,
   Laptop,
   Layers,
-  Lock,
   LogOut,
   Mail,
   MapPin,
@@ -33,21 +27,12 @@ import {
   User,
   UserCheck,
   UserRoundX,
-  Users,
   UserX,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -85,12 +70,12 @@ import {
 } from './team-types';
 
 function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
-  const router = useRouter();
   const {
     activeActor,
     canManagePermissions,
     canManageLifecycle,
     canRevokeSessions,
+    canResetTwoFactor,
     isReadOnly,
     request,
     presets,
@@ -121,6 +106,9 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
   >(null);
   const [lifecycleReason, setLifecycleReason] = useState('');
   const [confirmRevokeSessions, setConfirmRevokeSessions] = useState(false);
+  const [confirmResetTwoFactor, setConfirmResetTwoFactor] = useState(false);
+  const [resetTwoFactorReason, setResetTwoFactorReason] = useState('');
+  const [resetTwoFactorCode, setResetTwoFactorCode] = useState('');
 
   // Load member and sessions
   const loadMemberData = useCallback(async () => {
@@ -319,6 +307,36 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
         tone: 'success',
       });
       setSessions([]);
+    } catch (err) {
+      setFeedback({
+        message: formatIamErrorMessage(err),
+        tone: 'danger',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResetTwoFactor() {
+    if (!member) return;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      await request(`/admin/team/${member.id}/two-factor/reset`, {
+        method: 'POST',
+        body: JSON.stringify({
+          code: resetTwoFactorCode.trim(),
+          reason: resetTwoFactorReason.trim(),
+        }),
+      });
+      setConfirmResetTwoFactor(false);
+      setResetTwoFactorReason('');
+      setResetTwoFactorCode('');
+      setFeedback({
+        message: `Two-factor authentication reset for ${member.name}. Their active sessions were revoked.`,
+        tone: 'success',
+      });
+      await loadMemberData();
     } catch (err) {
       setFeedback({
         message: formatIamErrorMessage(err),
@@ -848,7 +866,11 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
                           : 'text-amber-500 border-amber-500/30 bg-amber-500/10'
                       }
                     >
-                      {member.two_factor_enabled ? 'TOTP Enabled' : 'Not Enabled'}
+                      {member.two_factor_enabled
+                        ? 'TOTP Enabled'
+                        : member.two_factor_required
+                          ? 'Required — pending'
+                          : 'Not Enabled'}
                     </Badge>
                   </div>
 
@@ -860,7 +882,9 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
                     {member.two_factor_enabled
                       ? 'Administrative sessions are secured with time-based OTP.'
-                      : 'MFA is recommended for all accounts with operational capabilities.'}
+                      : member.two_factor_required
+                        ? `Enrollment is required${member.two_factor_enrollment_deadline ? ` by ${new Date(member.two_factor_enrollment_deadline).toLocaleString()}` : ''}.`
+                        : 'MFA is recommended for all accounts with operational capabilities.'}
                   </p>
 
                   {canRevokeSessions && !isSelf && sessions.length > 0 ? (
@@ -874,6 +898,23 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
                     >
                       <LogOut className="size-3.5 mr-1.5" />
                       Revoke {sessions.length} Active Session{sessions.length > 1 ? 's' : ''}
+                    </Button>
+                  ) : null}
+
+                  {canResetTwoFactor &&
+                  !isSelf &&
+                  !isTargetOwner &&
+                  member.two_factor_enabled ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 h-8 w-full border-destructive/30 text-xs text-destructive hover:bg-destructive/10"
+                      onClick={() => setConfirmResetTwoFactor(true)}
+                      disabled={busy}
+                    >
+                      <KeyRound className="mr-1.5 size-3.5" />
+                      Reset two-factor authentication
                     </Button>
                   ) : null}
                 </div>
@@ -1244,6 +1285,76 @@ function TeamMemberDetailContent({ memberId }: { readonly memberId: string }) {
                 disabled={busy}
               >
                 {busy ? 'Revoking…' : 'Revoke all sessions'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {confirmResetTwoFactor ? (
+        <Dialog open={true} onOpenChange={(open) => !open && setConfirmResetTwoFactor(false)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <KeyRound className="size-5" />
+                Reset two-factor authentication
+              </DialogTitle>
+              <DialogDescription>
+                This removes <strong>{member.name}</strong>&apos;s authenticator setup and recovery
+                codes, then revokes every active session. They must enroll again when policy requires
+                it. The Owner account cannot be reset here.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="two-factor-reset-code" className="text-xs font-medium">
+                  Your current authenticator code
+                </Label>
+                <Input
+                  id="two-factor-reset-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={resetTwoFactorCode}
+                  onChange={(event) =>
+                    setResetTwoFactorCode(event.target.value.replace(/\D/g, '').slice(0, 6))
+                  }
+                  placeholder="000000"
+                  className="h-9 font-mono tabular-nums"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="two-factor-reset-reason" className="text-xs font-medium">
+                  Audit reason
+                </Label>
+                <Textarea
+                  id="two-factor-reset-reason"
+                  rows={3}
+                  maxLength={500}
+                  value={resetTwoFactorReason}
+                  onChange={(event) => setResetTwoFactorReason(event.target.value)}
+                  placeholder="Why this member can no longer use their enrolled factor"
+                  className="text-xs"
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmResetTwoFactor(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleResetTwoFactor}
+                disabled={
+                  busy || resetTwoFactorCode.length !== 6 || !resetTwoFactorReason.trim()
+                }
+              >
+                {busy ? 'Resetting…' : 'Reset 2FA and revoke sessions'}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -44,6 +44,8 @@ export async function listTeamMembers(
     name: string;
     email: string;
     two_factor_enabled: boolean;
+    two_factor_required: boolean;
+    two_factor_enrollment_deadline: string | null;
     membership_type: string;
     status: string;
     version: string;
@@ -54,7 +56,21 @@ export async function listTeamMembers(
     scopes: AccessScope[];
   }>`
     select membership.id::text, membership.user_id::text, user_record.name, user_record.email,
-      user_record.two_factor_enabled, membership.membership_type, membership.status,
+      user_record.two_factor_enabled,
+      (coalesce(policy.enforcement_mode, 'OPTIONAL') = 'ALL_MEMBERS' or
+        (coalesce(policy.enforcement_mode, 'OPTIONAL') = 'CRITICAL_CAPABILITIES' and
+          (membership.membership_type = 'OWNER' or exists (
+            select 1 from iam.membership_capability_grants factor_grant
+            join iam.capability_definitions factor_capability
+              on factor_capability.capability_code = factor_grant.capability_code
+            where factor_grant.membership_id = membership.id
+              and factor_capability.status = 'ACTIVE'
+              and factor_capability.sensitivity in ('CRITICAL', 'RESTRICTED')
+          )))) two_factor_required,
+      case when policy.enforcement_started_at is null then null else
+        (policy.enforcement_started_at + make_interval(hours => policy.grace_period_hours))::text
+      end two_factor_enrollment_deadline,
+      membership.membership_type, membership.status,
       membership.version::text, membership.access_version::text,
       membership.created_at::text, membership.updated_at::text,
       coalesce((select array_agg(grant_record.capability_code order by grant_record.capability_code)
@@ -65,6 +81,8 @@ export async function listTeamMembers(
         from iam.membership_scopes scope where scope.membership_id = membership.id), '[]'::jsonb) scopes
     from iam.organization_memberships membership
     join iam.users user_record on user_record.id = membership.user_id
+    left join iam.organization_two_factor_policies policy
+      on policy.organization_id = membership.organization_id
     where membership.organization_id = ${organizationId}::uuid
       and (${query.status ?? null}::text is null or membership.status = ${query.status ?? null})
       and (${search}::text is null or user_record.name ilike ${search} escape '\\' or user_record.email ilike ${search} escape '\\')
@@ -299,6 +317,8 @@ export async function findTeamMemberDetail(
     name: string;
     email: string;
     two_factor_enabled: boolean;
+    two_factor_required: boolean;
+    two_factor_enrollment_deadline: string | null;
     membership_type: string;
     status: string;
     version: string;
@@ -314,7 +334,21 @@ export async function findTeamMemberDetail(
     scopes: AccessScope[];
   }>`
     select membership.id::text, membership.user_id::text, user_record.name, user_record.email,
-      user_record.two_factor_enabled, membership.membership_type, membership.status,
+      user_record.two_factor_enabled,
+      (coalesce(policy.enforcement_mode, 'OPTIONAL') = 'ALL_MEMBERS' or
+        (coalesce(policy.enforcement_mode, 'OPTIONAL') = 'CRITICAL_CAPABILITIES' and
+          (membership.membership_type = 'OWNER' or exists (
+            select 1 from iam.membership_capability_grants factor_grant
+            join iam.capability_definitions factor_capability
+              on factor_capability.capability_code = factor_grant.capability_code
+            where factor_grant.membership_id = membership.id
+              and factor_capability.status = 'ACTIVE'
+              and factor_capability.sensitivity in ('CRITICAL', 'RESTRICTED')
+          )))) two_factor_required,
+      case when policy.enforcement_started_at is null then null else
+        (policy.enforcement_started_at + make_interval(hours => policy.grace_period_hours))::text
+      end two_factor_enrollment_deadline,
+      membership.membership_type, membership.status,
       membership.version::text, membership.access_version::text,
       membership.created_at::text, membership.updated_at::text,
       membership.invited_at::text, membership.activated_at::text,
@@ -328,6 +362,8 @@ export async function findTeamMemberDetail(
         from iam.membership_scopes scope where scope.membership_id = membership.id), '[]'::jsonb) scopes
     from iam.organization_memberships membership
     join iam.users user_record on user_record.id = membership.user_id
+    left join iam.organization_two_factor_policies policy
+      on policy.organization_id = membership.organization_id
     where membership.organization_id = ${organizationId}::uuid
       and membership.id = ${membershipId}::uuid
     limit 1

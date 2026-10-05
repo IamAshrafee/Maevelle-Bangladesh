@@ -3,8 +3,11 @@ import type { FastifyInstance } from 'fastify';
 import type { RuntimeConfig } from '@maevelle/config';
 import type { DatabaseClient } from '@maevelle/database';
 import { createObjectStorage } from '@maevelle/media';
+import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import { createAuth } from '../auth/auth.js';
+import { recordUserTwoFactorEvent, resolveTwoFactorAccessState } from '@maevelle/database/iam';
+import { registerTwoFactorSecurityRoutes } from './two-factor-security.js';
 import { registerAdminContextRoute } from './admin-context.js';
 import { registerCatalogRoutes } from './catalog.js';
 import { registerMediaRoutes } from './media.js';
@@ -42,15 +45,38 @@ export function registerAuthRoutes(
   const auth = createAuth(config, database);
 
   app.all('/auth/*', async (request, reply) => {
+    const authPath = request.raw.url?.split('?', 1)[0] ?? request.url.split('?', 1)[0] ?? '';
+    if (
+      request.method === 'POST' &&
+      [
+        '/auth/two-factor/enable',
+        '/auth/two-factor/disable',
+        '/auth/two-factor/generate-backup-codes',
+      ].includes(authPath)
+    )
+      return reply.code(404).send({
+        error: {
+          code: 'USE_MAEVELLE_SECURITY_API',
+          message: 'Use the Maevelle Account Security workflow for this operation.',
+        },
+      });
     const host = request.headers.host ?? 'localhost';
-    const body =
+    const requestBody =
       request.body === undefined
         ? undefined
         : typeof request.body === 'string'
-          ? request.body
+          ? JSON.parse(request.body)
           : Buffer.isBuffer(request.body)
-            ? request.body.toString('utf8')
-            : JSON.stringify(request.body);
+            ? JSON.parse(request.body.toString('utf8'))
+            : request.body;
+    const hardenedBody =
+      request.method === 'POST' &&
+      ['/auth/two-factor/verify-totp', '/auth/two-factor/verify-backup-code'].includes(authPath) &&
+      requestBody &&
+      typeof requestBody === 'object'
+        ? { ...(requestBody as Record<string, unknown>), trustDevice: false }
+        : requestBody;
+    const body = hardenedBody === undefined ? undefined : JSON.stringify(hardenedBody);
     const response = await auth.handler(
       new Request(`${request.protocol}://${host}${request.raw.url}`, {
         method: request.method,
@@ -63,8 +89,79 @@ export function registerAuthRoutes(
       }),
     );
     for (const [name, value] of response.headers) reply.header(name, value);
-    return reply.code(response.status).send(await response.text());
+    reply.header('cache-control', 'no-store, private');
+    const responseText = await response.text();
+    if (
+      response.ok &&
+      request.method === 'POST' &&
+      authPath === '/auth/two-factor/verify-backup-code'
+    ) {
+      const payload = JSON.parse(responseText) as { user?: { id?: string } };
+      if (payload.user?.id) {
+        try {
+          await recordUserTwoFactorEvent(database.db, {
+            userId: payload.user.id,
+            event: 'recovery_code_used',
+            requestId: request.id,
+            ipAddress: request.ip,
+            ...(request.headers['user-agent']
+              ? { userAgent: request.headers['user-agent'] }
+              : {}),
+          });
+        } catch (error) {
+          request.log.error(
+            { err: error, securityEvent: 'recovery_code_used' },
+            'Failed to persist two-factor audit and notification side effects',
+          );
+        }
+      }
+    }
+    return reply.code(response.status).send(responseText);
   });
+
+  // Each registered Admin route still authorizes through findActiveAdminContext;
+  // this hook is an additional organization-policy gate, not an RBAC substitute.
+  app.addHook('preHandler', async (request, reply) => {
+    const path = request.url.split('?', 1)[0] ?? '';
+    if (!path.startsWith('/admin/')) return;
+    if (
+      path === '/admin/context' ||
+      path === '/admin/security/two-factor/status' ||
+      path === '/admin/security/two-factor/enrollment' ||
+      path === '/admin/security/two-factor/enrollment/verify'
+    )
+      return;
+    const session = await auth.api.getSession({
+      headers: new Headers(
+        Object.entries(request.headers).flatMap(([name, value]) =>
+          typeof value === 'string' ? [[name, value]] : [],
+        ),
+      ),
+    });
+    if (!session?.user?.id) return;
+    const selectedOrganization = request.headers['x-organization-id'];
+    const active = await findActiveAdminContext(database.db, session.user.id, {
+      ...(typeof selectedOrganization === 'string'
+        ? { organizationId: selectedOrganization }
+        : {}),
+    });
+    if (!active) return;
+    const state = await resolveTwoFactorAccessState(
+      database.db,
+      session.user.id,
+      active.organizationId,
+    );
+    if (state?.accessRestricted)
+      return reply.code(403).send({
+        error: {
+          code: 'TWO_FACTOR_ENROLLMENT_REQUIRED',
+          message: 'Set up an authenticator app before accessing protected Maevelle operations.',
+          details: { enrollmentDeadline: state.policy.enrollmentDeadline },
+        },
+      });
+  });
+
+  registerTwoFactorSecurityRoutes(app, database, auth, config);
   registerAdminContextRoute(app, database, auth);
   registerCatalogRoutes(app, database, auth, config.storefrontOrganizationCode);
   registerMediaRoutes(

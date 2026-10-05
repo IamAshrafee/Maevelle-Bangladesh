@@ -5,12 +5,10 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
-  Clock,
   Globe,
   KeyRound,
   Laptop,
   LogOut,
-  MapPin,
   RefreshCw,
   Save,
   Shield,
@@ -51,7 +49,6 @@ import {
   getRoleSummary,
   type AuthSessionDto,
   type TeamMemberDetailDto,
-  type TeamMemberListItemDto,
 } from './team-types';
 
 export function TeamMemberDetailSheet({
@@ -77,7 +74,6 @@ export function TeamMemberDetailSheet({
   const [member, setMember] = useState<TeamMemberDetailDto | null>(null);
   const [sessions, setSessions] = useState<readonly AuthSessionDto[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingSessions, setLoadingSessions] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'danger' } | null>(
     null,
@@ -310,6 +306,11 @@ export function TeamMemberDetailSheet({
                       <>
                         <ShieldCheck className="size-3.5 text-emerald-500" />
                         Enabled
+                      </>
+                    ) : member.two_factor_required ? (
+                      <>
+                        <ShieldAlert className="size-3.5 text-warning" />
+                        Required
                       </>
                     ) : (
                       <>

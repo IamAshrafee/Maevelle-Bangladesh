@@ -67,6 +67,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('admin.team.lifecycle.manage', 'identity-access', 'Suspend, restore, or remove non-Owner memberships.', 'CRITICAL', '{}'),
       ('admin.team.owner.transfer', 'identity-access', 'Transfer the protected primary Owner relationship.', 'CRITICAL', '{}'),
       ('admin.team.sessions.revoke', 'identity-access', 'Revoke active administrator sessions.', 'HIGH', '{}'),
+      ('admin.team.two_factor.reset', 'identity-access', 'Reset a non-Owner member''s authenticator enrollment after strong verification.', 'RESTRICTED', '{}'),
+      ('admin.security.two_factor_policy.manage', 'identity-access', 'Change organization-wide authenticator enrollment requirements.', 'RESTRICTED', '{}'),
       ('admin.team.manage', 'identity-access', 'Deprecated broad team-management capability retained for migration visibility.', 'CRITICAL', '{}');
     update iam.capability_definitions set status = 'DEPRECATED' where capability_code = 'admin.team.manage';
     create table iam.permission_presets (
@@ -104,6 +106,18 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       foreign key (organization_id, membership_id) references iam.organization_memberships(organization_id, id)
     );
     create index membership_scopes_lookup on iam.membership_scopes (membership_id, capability_code, scope_type, scope_id);
+
+    create table iam.organization_two_factor_policies (
+      organization_id uuid primary key references platform.organizations(id) on delete cascade,
+      enforcement_mode text not null default 'OPTIONAL'
+        check (enforcement_mode in ('OPTIONAL', 'CRITICAL_CAPABILITIES', 'ALL_MEMBERS')),
+      grace_period_hours integer not null default 168 check (grace_period_hours between 0 and 720),
+      enforcement_started_at timestamptz,
+      updated_by_actor_id uuid references iam.users(id),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1 check (version > 0),
+      check ((enforcement_mode = 'OPTIONAL') = (enforcement_started_at is null))
+    );
 
     create table iam.membership_invitations (
       id uuid primary key default uuidv7(),
@@ -199,7 +213,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index auth_verifications_identifier on iam.auth_verifications (identifier);
     create table iam.auth_two_factor (
       id uuid primary key default uuidv7(),
-      user_id uuid not null unique references iam.users(id),
+      user_id uuid not null unique references iam.users(id) on delete cascade,
       secret text not null,
       backup_codes text not null,
       verified boolean not null default true,

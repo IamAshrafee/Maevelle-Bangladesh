@@ -3,6 +3,7 @@ import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
 import { findActiveAdminContext } from '@maevelle/database/platform';
+import { resolveTwoFactorAccessState } from '@maevelle/database/iam';
 
 import type { createAuth } from '../auth/auth.js';
 
@@ -39,6 +40,13 @@ export function registerAdminContextRoute(
                 scopeId: Type.String(),
               }),
             ),
+            twoFactor: Type.Object({
+              isEnabled: Type.Boolean(),
+              isRequired: Type.Boolean(),
+              enrollmentRequired: Type.Boolean(),
+              accessRestricted: Type.Boolean(),
+              enrollmentDeadline: Type.Union([Type.String(), Type.Null()]),
+            }),
           }),
           401: Type.Object({ error: Type.Literal('UNAUTHENTICATED') }),
           403: Type.Object({ error: Type.Literal('FORBIDDEN') }),
@@ -64,6 +72,12 @@ export function registerAdminContextRoute(
       };
       const active = await findActiveAdminContext(database.db, session.user.id, contextRequest);
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const twoFactor = await resolveTwoFactorAccessState(
+        database.db,
+        session.user.id,
+        active.organizationId,
+      );
+      if (!twoFactor) return reply.code(403).send({ error: 'FORBIDDEN' });
 
       return {
         actorId: session.user.id,
@@ -72,6 +86,13 @@ export function registerAdminContextRoute(
         membershipType: active.membershipType,
         capabilities: [...active.capabilities],
         scopes: [...active.scopes],
+        twoFactor: {
+          isEnabled: twoFactor.isEnabled,
+          isRequired: twoFactor.isRequired,
+          enrollmentRequired: twoFactor.enrollmentRequired,
+          accessRestricted: twoFactor.accessRestricted,
+          enrollmentDeadline: twoFactor.policy.enrollmentDeadline,
+        },
       };
     },
   );

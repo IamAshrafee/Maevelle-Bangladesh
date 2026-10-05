@@ -21,6 +21,7 @@ export interface MaevelleAuth {
       body: { password: string; issuer?: string };
     }): Promise<{ totpURI: string; backupCodes: string[] }>;
     generateTOTP(input: { body: { secret: string } }): Promise<{ code: string }>;
+    viewBackupCodes(input: { body: { userId: string } }): Promise<{ backupCodes: string[] }>;
   };
 }
 
@@ -77,6 +78,7 @@ export function createAuth(
       modelName: 'iam.sessions',
       expiresIn: 12 * 60 * 60,
       updateAge: 60,
+      freshAge: 10 * 60,
       cookieCache: { enabled: false },
       storeSessionInDatabase: false,
       preserveSessionInDatabase: true,
@@ -94,7 +96,15 @@ export function createAuth(
     }),
     plugins: [
       twoFactor({
-        issuer: 'Maevelle Admin',
+        issuer: config.authTotpIssuer,
+        twoFactorCookieMaxAge: config.authTotpChallengeSeconds,
+        // Trusted-device bypass is intentionally disabled for the Admin Portal V1.
+        trustDeviceMaxAge: 0,
+        accountLockout: {
+          enabled: true,
+          maxFailedAttempts: config.authTotpMaxFailedAttempts,
+          durationSeconds: config.authTotpLockSeconds,
+        },
         twoFactorTable: 'iam.auth_two_factor',
         schema: {
           user: {

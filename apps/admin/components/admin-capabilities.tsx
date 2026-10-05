@@ -14,6 +14,13 @@ const defaultContext: AdminUserContext = {
   membershipType: 'STANDARD',
   capabilities: [],
   scopes: [],
+  twoFactor: {
+    isEnabled: false,
+    isRequired: false,
+    enrollmentRequired: false,
+    accessRestricted: false,
+    enrollmentDeadline: null,
+  },
   isOwner: false,
 };
 
@@ -38,6 +45,7 @@ export function AdminCapabilitiesProvider({
       membershipType: context?.membershipType ?? 'STANDARD',
       capabilities: effectiveCapabilities,
       scopes: context?.scopes ?? [],
+      twoFactor: context?.twoFactor ?? defaultContext.twoFactor,
       isOwner: context?.membershipType === 'OWNER',
     }),
     [context, effectiveCapabilities],

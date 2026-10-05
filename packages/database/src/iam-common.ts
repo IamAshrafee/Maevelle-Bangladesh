@@ -206,21 +206,17 @@ export async function enqueueMemberSecurityNotification(
   await sql`
     insert into notifications.notifications (
       organization_id, notification_type, recipient_type, membership_id, channel,
-      rendered_subject, rendered_body, status, source_domain, source_id
+      rendered_subject, rendered_body, intended_recipient, status, queued_at, source_domain, source_id
     )
     select ${input.organizationId}::uuid, ${input.notificationType}, 'MEMBERSHIP',
-      ${input.membershipId}::uuid, channel, ${input.subject}, ${input.body}, 'PENDING',
-      'iam', ${input.sourceId}::uuid
+      membership.id, requested.channel, ${input.subject}, ${input.body},
+      case when requested.channel = 'EMAIL' then user_record.email else null end,
+      'QUEUED', now(), 'iam', ${input.sourceId}::uuid
     from (values ('IN_APP'), ('EMAIL')) requested(channel)
-    where not exists (
-      select 1 from notifications.preferences preference
-      where preference.organization_id = ${input.organizationId}::uuid
-        and preference.recipient_type = 'MEMBERSHIP'
-        and preference.recipient_id = ${input.membershipId}::uuid
-        and preference.notification_type = ${input.notificationType}
-        and preference.channel = requested.channel
-        and not preference.enabled
-    )
+    join iam.organization_memberships membership
+      on membership.id = ${input.membershipId}::uuid
+      and membership.organization_id = ${input.organizationId}::uuid
+    join iam.users user_record on user_record.id = membership.user_id
   `.execute(db);
 }
 

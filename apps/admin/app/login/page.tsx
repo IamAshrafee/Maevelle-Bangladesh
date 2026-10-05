@@ -27,6 +27,11 @@ export default function LoginPage() {
         setMessage('Unable to sign in. Check your credentials and try again.');
         return;
       }
+      const result = (await response.json()) as { twoFactorRedirect?: boolean };
+      if (result.twoFactorRedirect) {
+        window.location.assign('/admin/two-factor');
+        return;
+      }
       const context = await fetch('/api/admin/context', { credentials: 'include' });
       if (!context.ok) {
         setMessage('Your identity is authenticated, but it has no active Maevelle membership.');

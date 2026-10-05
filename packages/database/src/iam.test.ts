@@ -11,7 +11,10 @@ import {
   IamError,
   membershipCanAccessScope,
   replaceMemberPermissions,
+  resetMemberTwoFactor,
+  resolveTwoFactorAccessState,
   transferOwnership,
+  updateOrganizationTwoFactorPolicy,
 } from './iam.js';
 import { createOrganization, createOwnerMembership, findActiveAdminContext } from './platform.js';
 import { createLocation } from './warehouse.js';
@@ -325,9 +328,7 @@ describe('organization IAM', () => {
       membershipId: member.membership.id,
       expectedVersion: 1,
       capabilityCodes: ['inventory.view'],
-      scopes: [
-        { capabilityCode: 'inventory.view', scopeType: 'LOCATION', scopeId: allowed.id },
-      ],
+      scopes: [{ capabilityCode: 'inventory.view', scopeType: 'LOCATION', scopeId: allowed.id }],
     });
     await expect(
       membershipCanAccessScope(
@@ -436,6 +437,120 @@ describe('organization IAM', () => {
     });
     expect(context).toBeDefined();
     expect(context?.capabilities).toContain('catalog.view');
+  });
+
+  it('enforces capability-sensitive 2FA policy and protects administrative reset', async () => {
+    const fixture = await createFixture('two-factor-policy');
+    const protectedMember = await createStandardMember(fixture.organizationId, 'protected-member');
+    const resetAdministrator = await createStandardMember(
+      fixture.organizationId,
+      'reset-administrator',
+    );
+    const unauthorizedMember = await createStandardMember(
+      fixture.organizationId,
+      'unauthorized-resetter',
+    );
+    await sql`
+      insert into iam.membership_capability_grants (membership_id, capability_code, created_by)
+      values
+        (${protectedMember.membership.id}::uuid, 'admin.team.permissions.manage', ${fixture.owner.id}::uuid),
+        (${resetAdministrator.membership.id}::uuid, 'admin.team.two_factor.reset', ${fixture.owner.id}::uuid)
+    `.execute(database.db);
+
+    const policy = await updateOrganizationTwoFactorPolicy(database.db, {
+      actor: fixture.actor,
+      expectedVersion: 0,
+      mode: 'CRITICAL_CAPABILITIES',
+      gracePeriodHours: 0,
+      reason: 'Protect high-impact administrators',
+    });
+    expect(policy).toMatchObject({ mode: 'CRITICAL_CAPABILITIES', version: 1 });
+
+    const protectedState = await resolveTwoFactorAccessState(
+      database.db,
+      protectedMember.user.id,
+      fixture.organizationId,
+    );
+    expect(protectedState).toMatchObject({
+      isRequired: true,
+      enrollmentRequired: true,
+      accessRestricted: true,
+    });
+
+    await sql`
+      update iam.users set two_factor_enabled = true where id = ${protectedMember.user.id}::uuid
+    `.execute(database.db);
+    await sql`
+      insert into iam.auth_two_factor (user_id, secret, backup_codes, verified)
+      values (${protectedMember.user.id}::uuid, 'encrypted-test-secret', 'encrypted-test-codes', true)
+    `.execute(database.db);
+
+    await expect(
+      resetMemberTwoFactor(database.db, {
+        actor: {
+          organizationId: fixture.organizationId,
+          userId: unauthorizedMember.user.id,
+          membershipId: unauthorizedMember.membership.id,
+        },
+        membershipId: protectedMember.membership.id,
+        reason: 'Must not be authorized',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    const resetActor = {
+      organizationId: fixture.organizationId,
+      userId: resetAdministrator.user.id,
+      membershipId: resetAdministrator.membership.id,
+    };
+    await sql`
+      update iam.users set two_factor_enabled = true where id = ${fixture.owner.id}::uuid
+    `.execute(database.db);
+    await sql`
+      insert into iam.auth_two_factor (user_id, secret, backup_codes, verified)
+      values (${fixture.owner.id}::uuid, 'encrypted-owner-secret', 'encrypted-owner-codes', true)
+    `.execute(database.db);
+    await expect(
+      resetMemberTwoFactor(database.db, {
+        actor: resetActor,
+        membershipId: fixture.ownerMembership.id,
+        reason: 'Must not reset Owner',
+      }),
+    ).rejects.toMatchObject({ code: 'OWNER_PROTECTED' });
+
+    await expect(
+      resetMemberTwoFactor(database.db, {
+        actor: resetActor,
+        membershipId: resetAdministrator.membership.id,
+        reason: 'Must not reset self',
+      }),
+    ).rejects.toMatchObject({ code: 'SELF_CHANGE_FORBIDDEN' });
+
+    await expect(
+      resetMemberTwoFactor(database.db, {
+        actor: fixture.actor,
+        membershipId: protectedMember.membership.id,
+        reason: 'Verified lost authenticator',
+      }),
+    ).resolves.toMatchObject({ reset: true, userId: protectedMember.user.id });
+
+    const resetState = await sql<{
+      two_factor_enabled: boolean;
+      enrollment_count: string;
+      audit_count: string;
+      notification_count: string;
+    }>`
+      select user_record.two_factor_enabled,
+        (select count(*)::text from iam.auth_two_factor where user_id = user_record.id) enrollment_count,
+        (select count(*)::text from audit.audit_events where target_id = ${protectedMember.membership.id}::uuid and action = 'iam.two_factor.admin_reset') audit_count,
+        (select count(*)::text from notifications.notifications where membership_id = ${protectedMember.membership.id}::uuid and notification_type = 'IAM_TWO_FACTOR_ADMIN_RESET') notification_count
+      from iam.users user_record where user_record.id = ${protectedMember.user.id}::uuid
+    `.execute(database.db);
+    expect(resetState.rows[0]).toMatchObject({
+      two_factor_enabled: false,
+      enrollment_count: '0',
+      audit_count: '1',
+      notification_count: '2',
+    });
   });
 
   it('records an audit event when owner membership is created at bootstrap', async () => {

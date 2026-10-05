@@ -15,6 +15,10 @@ export interface RuntimeConfig {
   readonly authEncryptionKey: string;
   readonly authBaseUrl: string;
   readonly authTrustedOrigins: readonly string[];
+  readonly authTotpIssuer: string;
+  readonly authTotpChallengeSeconds: number;
+  readonly authTotpMaxFailedAttempts: number;
+  readonly authTotpLockSeconds: number;
   readonly mediaStorageProvider: 'local' | 's3';
   readonly mediaStoragePath: string;
   readonly mediaStorageEndpoint?: string;
@@ -172,6 +176,20 @@ function httpUrl(value: string, variableName: string): string {
   }
 }
 
+function shortLabel(
+  environment: Environment,
+  variableName: string,
+  defaultValue: string,
+  maximumLength: number,
+): string {
+  const value = environment[variableName]?.trim() || defaultValue;
+  if (!value || value.length > maximumLength || /[\r\n\0]/.test(value))
+    throw new ConfigurationError(
+      `${variableName} must be a non-empty label no longer than ${maximumLength} characters.`,
+    );
+  return value;
+}
+
 /**
  * Parses only runtime configuration needed by the current foundation. Error
  * messages deliberately name variables without echoing their values.
@@ -319,6 +337,28 @@ export function parseConfig(environment: Environment): RuntimeConfig {
           .map((s) => s.trim())
           .filter(Boolean)
       : ['http://localhost:3000', 'http://localhost:3001'],
+    authTotpIssuer: shortLabel(environment, 'AUTH_TOTP_ISSUER', 'Maevelle', 64),
+    authTotpChallengeSeconds: integer(
+      environment,
+      'AUTH_TOTP_CHALLENGE_SECONDS',
+      600,
+      120,
+      1_800,
+    ),
+    authTotpMaxFailedAttempts: integer(
+      environment,
+      'AUTH_TOTP_MAX_FAILED_ATTEMPTS',
+      10,
+      3,
+      20,
+    ),
+    authTotpLockSeconds: integer(
+      environment,
+      'AUTH_TOTP_LOCK_SECONDS',
+      900,
+      60,
+      86_400,
+    ),
     mediaStorageProvider,
     mediaStoragePath: environment.MEDIA_STORAGE_PATH ?? 'var/media',
     ...(mediaStorageEndpoint ? { mediaStorageEndpoint } : {}),

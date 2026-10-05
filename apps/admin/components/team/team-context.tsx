@@ -26,6 +26,7 @@ export interface TeamContextValue {
   readonly canManageLifecycle: boolean;
   readonly canTransferOwnership: boolean;
   readonly canRevokeSessions: boolean;
+  readonly canResetTwoFactor: boolean;
   readonly isReadOnly: boolean;
   readonly capabilities: readonly CapabilityCatalogItemDto[];
   readonly groupedDomains: readonly {
@@ -81,8 +82,15 @@ export function TeamProvider({ children }: { readonly children: ReactNode }) {
   const canTransferOwnership = activeActor.isOwner;
   const canRevokeSessions =
     activeActor.isOwner || activeActor.capabilities.includes('admin.team.sessions.revoke');
+  const canResetTwoFactor =
+    activeActor.isOwner || activeActor.capabilities.includes('admin.team.two_factor.reset');
   const isReadOnly =
-    !canInvite && !canManagePermissions && !canManageLifecycle && !canTransferOwnership;
+    !canInvite &&
+    !canManagePermissions &&
+    !canManageLifecycle &&
+    !canTransferOwnership &&
+    !canRevokeSessions &&
+    !canResetTwoFactor;
 
   const reloadMetadata = useCallback(async () => {
     setLoadingMetadata(true);
@@ -122,6 +130,7 @@ export function TeamProvider({ children }: { readonly children: ReactNode }) {
       canManageLifecycle,
       canTransferOwnership,
       canRevokeSessions,
+      canResetTwoFactor,
       isReadOnly,
       capabilities,
       groupedDomains,
@@ -139,6 +148,7 @@ export function TeamProvider({ children }: { readonly children: ReactNode }) {
       canManageLifecycle,
       canTransferOwnership,
       canRevokeSessions,
+      canResetTwoFactor,
       isReadOnly,
       capabilities,
       groupedDomains,

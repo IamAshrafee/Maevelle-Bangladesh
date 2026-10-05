@@ -3402,6 +3402,8 @@ export interface TeamMemberListItemDto {
   readonly name: string;
   readonly email: string;
   readonly two_factor_enabled: boolean;
+  readonly two_factor_required: boolean;
+  readonly two_factor_enrollment_deadline: string | null;
   readonly membership_type: MembershipTypeDto;
   readonly status: MembershipStatusDto;
   readonly version: string | number;
@@ -3444,6 +3446,34 @@ export interface TeamMemberDetailDto extends TeamMemberListItemDto {
   readonly disabled_at?: string | null;
   readonly removed_at?: string | null;
   readonly lifecycle_reason?: string | null;
+}
+
+export type TwoFactorEnforcementModeDto =
+  | 'OPTIONAL'
+  | 'CRITICAL_CAPABILITIES'
+  | 'ALL_MEMBERS';
+
+export interface TwoFactorPolicyDto {
+  readonly mode: TwoFactorEnforcementModeDto;
+  readonly gracePeriodHours: number;
+  readonly enforcementStartedAt: string | null;
+  readonly enrollmentDeadline: string | null;
+  readonly version: number;
+}
+
+export interface TwoFactorStatusDto {
+  readonly organizationId: string;
+  readonly membershipId: string;
+  readonly membershipType: MembershipTypeDto;
+  readonly isEnabled: boolean;
+  readonly enrollmentPending: boolean;
+  readonly hasRecoveryCodes: boolean;
+  readonly policy: TwoFactorPolicyDto;
+  readonly isRequired: boolean;
+  readonly enrollmentRequired: boolean;
+  readonly accessRestricted: boolean;
+  readonly issuer: string;
+  readonly trustedDevicesEnabled: boolean;
 }
 
 export interface CreatePermissionPresetRequestDto {
@@ -3564,6 +3594,13 @@ export interface AdminContextDto {
   readonly membershipType: MembershipTypeDto;
   readonly capabilities: readonly string[];
   readonly scopes: readonly AccessScopeDto[];
+  readonly twoFactor: {
+    readonly isEnabled: boolean;
+    readonly isRequired: boolean;
+    readonly enrollmentRequired: boolean;
+    readonly accessRestricted: boolean;
+    readonly enrollmentDeadline: string | null;
+  };
 }
 
 export type EmailNotificationStatus =
@@ -4516,4 +4553,3 @@ export interface OrderLineReviewStateDto {
   readonly reviewStatus?: string;
   readonly token?: string;
 }
-

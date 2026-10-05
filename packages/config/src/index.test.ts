@@ -22,6 +22,10 @@ describe('parseConfig', () => {
       apiHost: '127.0.0.1',
       apiPort: 3000,
       logLevel: 'info',
+      authTotpIssuer: 'Maevelle',
+      authTotpChallengeSeconds: 600,
+      authTotpMaxFailedAttempts: 10,
+      authTotpLockSeconds: 900,
       storefrontOrganizationCode: 'maevelle',
       emailEnabled: false,
       emailProvider: 'local',
@@ -58,17 +62,41 @@ describe('parseConfig', () => {
   });
 
   it('rejects unsafe production SMS test configuration', () => {
-    expect(() => parseConfig({ ...validEnvironment, NODE_ENV: 'production', SMS_ENVIRONMENT: 'production', SMS_TEST_MODE: 'true' })).toThrow(/SMS_TEST_MODE/);
+    expect(() =>
+      parseConfig({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        SMS_ENVIRONMENT: 'production',
+        SMS_TEST_MODE: 'true',
+      }),
+    ).toThrow(/SMS_TEST_MODE/);
   });
 
   it('requires an SMS provider when sending is enabled', () => {
-    expect(() => parseConfig({ ...validEnvironment, SMS_ENABLED: 'true', SMS_PROVIDER: 'none' })).toThrow(/SMS_PROVIDER/);
+    expect(() =>
+      parseConfig({ ...validEnvironment, SMS_ENABLED: 'true', SMS_PROVIDER: 'none' }),
+    ).toThrow(/SMS_PROVIDER/);
   });
 
   it('selects the distinct test database when NODE_ENV is test', () => {
     const config = parseConfig({ ...validEnvironment, NODE_ENV: 'test' });
 
     expect(config.databaseUrl).toBe(validEnvironment.TEST_DATABASE_URL);
+  });
+
+  it('rejects unsafe authenticator challenge and lockout configuration', () => {
+    expect(() => parseConfig({ ...validEnvironment, AUTH_TOTP_CHALLENGE_SECONDS: '60' })).toThrow(
+      /AUTH_TOTP_CHALLENGE_SECONDS/,
+    );
+    expect(() => parseConfig({ ...validEnvironment, AUTH_TOTP_MAX_FAILED_ATTEMPTS: '2' })).toThrow(
+      /AUTH_TOTP_MAX_FAILED_ATTEMPTS/,
+    );
+    expect(() => parseConfig({ ...validEnvironment, AUTH_TOTP_LOCK_SECONDS: '30' })).toThrow(
+      /AUTH_TOTP_LOCK_SECONDS/,
+    );
+    expect(() => parseConfig({ ...validEnvironment, AUTH_TOTP_ISSUER: 'x'.repeat(65) })).toThrow(
+      /AUTH_TOTP_ISSUER/,
+    );
   });
 
   it('fails closed when a required database URL is absent', () => {

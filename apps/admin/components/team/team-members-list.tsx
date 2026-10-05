@@ -6,26 +6,14 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
-  MoreHorizontal,
   Search,
-  Shield,
   ShieldAlert,
   ShieldCheck,
-  UserCheck,
-  UserRound,
   Users,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 
 import { StatusBadge } from '../status-badge';
@@ -44,7 +32,6 @@ export function TeamMembersList({
   statusFilter,
   onStatusChange,
   onPageChange,
-  onRefresh,
 }: {
   readonly members: readonly TeamMemberListItemDto[];
   readonly loading: boolean;
@@ -190,6 +177,11 @@ export function TeamMembersList({
                           <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
                             <ShieldCheck className="size-3.5" />
                             Enabled
+                          </span>
+                        ) : member.two_factor_required ? (
+                          <span className="inline-flex items-center gap-1 font-medium text-warning">
+                            <ShieldAlert className="size-3.5" />
+                            Required
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-muted-foreground">
