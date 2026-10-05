@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
 
+import { absoluteStorefrontUrl } from '@/lib/seo/url';
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
@@ -7,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/api/', '/admin/'],
     },
-    sitemap: '/sitemap.xml',
+    sitemap: absoluteStorefrontUrl('/sitemap.xml'),
   };
 }
