@@ -20,6 +20,7 @@ import {
   HeartHandshake,
   Image,
   Landmark,
+  Laptop,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -42,12 +43,14 @@ import {
   ShoppingBag,
   Tags,
   Truck,
+  User,
   UserRoundCog,
   Users,
   Warehouse,
   X,
   type LucideIcon,
 } from 'lucide-react';
+import * as React from 'react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AdminContextDto, ApiEnvelope } from '@maevelle/contracts';
@@ -55,6 +58,7 @@ import type { AdminContextDto, ApiEnvelope } from '@maevelle/contracts';
 import { AdminCapabilitiesProvider } from './admin-capabilities';
 import { TwoFactorRequiredGate } from './security/two-factor-required-gate';
 import { UserMenu } from './user-menu';
+import { getInitials } from './account/account-utils';
 import { cn } from '@/lib/utils';
 
 type AdminContext = AdminContextDto;
@@ -76,8 +80,6 @@ const navigation: readonly NavGroup[] = [
     label: 'Overview',
     items: [
       { label: 'Dashboard', href: '/', icon: LayoutDashboard },
-      { label: 'My Account', href: '/account', icon: UserRoundCog },
-      { label: 'Account security', href: '/account/security', icon: ShieldCheck },
       { label: 'Attention', href: '/operations', icon: Gauge, capability: 'admin.operations.view' },
     ],
   },
@@ -380,6 +382,24 @@ const navigation: readonly NavGroup[] = [
 ];
 
 const quickCommands: readonly NavItem[] = [
+  {
+    label: 'My account & profile',
+    href: '/account',
+    icon: User,
+    keywords: 'profile password security email sessions 2fa avatar user self personal',
+  },
+  {
+    label: 'Account security & 2FA',
+    href: '/account?tab=security',
+    icon: ShieldCheck,
+    keywords: 'password two factor 2fa authenticator security',
+  },
+  {
+    label: 'Active sessions & devices',
+    href: '/account?tab=sessions',
+    icon: Laptop,
+    keywords: 'sessions devices revoke tokens logins device',
+  },
   {
     label: 'Add an expense',
     href: '/finance/expenses?create=expense',
@@ -691,6 +711,16 @@ export function AdminShell({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
+  const userName = context?.user?.name || 'Maevelle Operator';
+  const userRole =
+    context?.membershipType === 'OWNER'
+      ? 'Owner'
+      : context?.membershipType === 'STANDARD'
+        ? 'Team Member'
+        : 'Operator';
+  const initials = getInitials(context?.user?.name);
+  const isAccountActive = pathname.startsWith('/account');
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row relative">
       {/* Mobile Backdrop */}
@@ -786,14 +816,63 @@ export function AdminShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        {/* Sidebar Footer: Quick Settings & Collapse (Desktop Only) */}
-        <div className="hidden md:flex flex-col gap-1 border-t border-sidebar-border p-2 shrink-0">
+        {/* Sidebar Footer: User Profile, Quick Settings & Collapse */}
+        <div className="flex flex-col gap-1 border-t border-sidebar-border p-2 shrink-0">
+          <Link
+            href="/account"
+            onClick={() => setMobileOpen(false)}
+            aria-current={isAccountActive ? 'page' : undefined}
+            title={collapsed ? `${userName} (My Account)` : undefined}
+            className={cn(
+              'group flex items-center gap-2.5 rounded-lg text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+              collapsed
+                ? 'justify-center size-9 mx-auto p-0'
+                : 'px-2 py-1.5',
+              isAccountActive
+                ? 'bg-primary/10 text-primary border border-primary/20 font-semibold shadow-2xs'
+                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+            )}
+          >
+            {context?.user?.image ? (
+              <img
+                src={context.user.image}
+                alt={userName}
+                className={cn(
+                  'rounded-full object-cover shrink-0 size-7',
+                  isAccountActive ? 'ring-2 ring-primary/40' : 'border border-primary/30',
+                )}
+              />
+            ) : (
+              <div
+                className={cn(
+                  'rounded-full font-bold flex items-center justify-center shrink-0 select-none text-[11px] size-7',
+                  isAccountActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-primary/10 text-primary border border-primary/25',
+                )}
+                aria-hidden="true"
+              >
+                {initials ? initials : <User className="size-3.5" />}
+              </div>
+            )}
+
+            <div className={cn('min-w-0 flex-1 flex flex-col text-left leading-tight', collapsed && 'hidden')}>
+              <strong className="text-xs font-semibold text-sidebar-foreground truncate group-hover:text-sidebar-accent-foreground">
+                {userName}
+              </strong>
+              <span className="text-[10px] text-muted-foreground truncate">
+                {userRole} · My Account
+              </span>
+            </div>
+          </Link>
+
           <Link
             href="/settings"
+            onClick={() => setMobileOpen(false)}
             aria-current={isNavActive(pathname, '/settings') ? 'page' : undefined}
             title={collapsed ? 'Settings' : undefined}
             className={cn(
-              'flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+              'flex items-center gap-3 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
               isNavActive(pathname, '/settings')
                 ? 'bg-primary/10 text-primary font-semibold'
                 : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
@@ -814,7 +893,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             type="button"
             onClick={() => setCollapsed((value) => !value)}
             className={cn(
-              'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer',
+              'hidden md:flex w-full items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors cursor-pointer',
               collapsed && 'justify-center px-0 size-9 mx-auto',
             )}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}

@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { AdminContextDto } from '@maevelle/contracts';
 

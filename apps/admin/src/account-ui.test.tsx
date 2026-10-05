@@ -21,6 +21,7 @@ import { SecurityTab } from '../components/account/security-tab';
 import { SessionsTab } from '../components/account/sessions-tab';
 import { SecurityActivityTab } from '../components/account/security-activity-tab';
 import { UserMenu } from '../components/user-menu';
+import { AdminShell } from '../components/admin-shell';
 
 // Mock Next.js navigation hooks
 vi.mock('next/navigation', () => ({
@@ -416,4 +417,37 @@ describe('My Account / Self-Service Account Frontend', () => {
       expect(securityHtml).not.toContain('Enforce Org Policy');
     });
   });
+
+  describe('Sidebar Navigation & User Profile Integration', () => {
+    it('renders the dedicated My Account profile card in the sidebar footer and keeps Overview clean', () => {
+      const html = renderToStaticMarkup(
+        <AdminShell>
+          <div data-testid="workspace-content">Workspace Active</div>
+        </AdminShell>,
+      );
+
+      // Verify workspace content renders
+      expect(html).toContain('data-testid="workspace-content"');
+
+      // Verify the dedicated user profile footer card exists with link to /account
+      expect(html).toContain('href="/account"');
+      expect(html).toContain('My Account');
+      expect(html).toContain('Maevelle Operator');
+      expect(html).toContain('Operator · My Account');
+
+      // Verify Overview section contains only Dashboard and Attention
+      expect(html).toContain('Overview');
+      expect(html).toContain('href="/"');
+      expect(html).toContain('Dashboard');
+      expect(html).toContain('Attention');
+
+      // Verify Overview does NOT contain redundant Account security
+      expect(html).not.toContain('Account security');
+
+      // Verify Team members is present under administrative settings
+      expect(html).toContain('href="/team"');
+      expect(html).toContain('Team members');
+    });
+  });
 });
+
