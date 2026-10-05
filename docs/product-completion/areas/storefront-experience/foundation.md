@@ -4,7 +4,7 @@
 
 `LOCAL_VERIFICATION_COMPLETE / OWNER_REVIEW_PENDING`
 
-Architecture checkpoint: `32d1152`; Task 02 implementation is currently an uncommitted worktree checkpoint.
+Architecture checkpoint: `32d1152`; Task 02 implementation checkpoint: `f551bde`.
 
 ## Completed foundation
 
