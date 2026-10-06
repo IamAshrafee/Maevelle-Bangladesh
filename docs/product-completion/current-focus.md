@@ -8,7 +8,7 @@ Storefront Experience — Production Design System / Visual Foundation.
 
 `DESIGN_SYSTEM_LOCAL_VERIFICATION_COMPLETE / OWNER_REVIEW_PENDING`
 
-Task 02 is locally implemented above architecture checkpoint `32d1152`. The Storefront now has one semantic Tailwind v4 visual language, intentional Latin/editorial/Bengali typography, mobile-first layout rules, restrained shape/elevation/motion, accessible server-compatible primitives, contrast protection, a development-only design lab, lower-cascade legacy quarantine, and a canonical design-system contract.
+Task 02 is locally implemented above architecture checkpoint `32d1152`. The Storefront now has one semantic Tailwind v4 visual language, intentional Latin/editorial/Bengali typography, mobile-first layout rules, restrained shape/elevation/motion, accessible server-compatible primitives, contrast protection, a permanent noindex `/design-system` reference, lower-cascade legacy quarantine, and a canonical design-system contract.
 
 The approved UI/UX artifact and prior Storefront `DESIGN.md` described by the task were not present in the repository. `#7E0E35` is the implemented/recommended primary and `#9E2A4B` is a supporting rose; owner visual confirmation remains explicitly required.
 

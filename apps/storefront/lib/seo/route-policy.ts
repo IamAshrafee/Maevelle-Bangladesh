@@ -9,6 +9,7 @@ export type StorefrontRouteKind =
   | 'ORDER_CONFIRMATION'
   | 'ORDER_TRACKING'
   | 'REVIEW_SUBMISSION'
+  | 'DESIGN_SYSTEM'
   | 'POLICY';
 
 export interface StorefrontSeoPolicy {
@@ -84,6 +85,13 @@ export const storefrontSeoPolicy: Readonly<Record<StorefrontRouteKind, Storefron
     structuredData: [],
   },
   REVIEW_SUBMISSION: {
+    index: false,
+    follow: false,
+    includeInSitemap: false,
+    canonical: 'NONE',
+    structuredData: [],
+  },
+  DESIGN_SYSTEM: {
     index: false,
     follow: false,
     includeInSitemap: false,

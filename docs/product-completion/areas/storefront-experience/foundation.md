@@ -25,7 +25,7 @@ Architecture checkpoint: `32d1152`; Task 02 implementation checkpoint: `f551bde`
 - Mobile-first `Container`/`Section` layout rules with 16 px mobile gutters, 24 px desktop gutters, and a 1240 px main maximum.
 - Server-compatible Button, IconButton, Badge, Chip/choice/swatch, native form, Field, selection, Surface, Notice, loading, typography, accessibility, and Money/Price primitives.
 - Visible focus, skip navigation, reduced-motion behavior, 48 px primary touch targets, semantic feedback pairs, and focused WCAG contrast assertions.
-- Development-only `/design-system` lab covering English/Bangla/mixed type, prices, important component states, responsive behavior, surfaces, forms, and loading. The route is `noindex` and unavailable in production.
+- Permanent `/design-system` lab covering English/Bangla/mixed type, prices, important component states, responsive behavior, surfaces, forms, and loading. The route stays directly reachable in every environment while remaining `noindex`, `nofollow`, and excluded from the sitemap.
 - MVP CSS remains quarantined in the Tailwind base layer; production utilities win and no new page styling was added.
 - Canonical human-readable contract in `docs/storefront/design-system.md`; missing approved design artifacts and the berry choice are truthfully owner-flagged.
 - No new runtime or development dependency.

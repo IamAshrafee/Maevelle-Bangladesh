@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 
 import { Price } from '@/components/commerce/price';
 import { Container } from '@/components/layout/container';
@@ -19,10 +18,13 @@ import { Spinner } from '@/components/ui/spinner';
 import { Surface } from '@/components/ui/surface';
 import { Textarea } from '@/components/ui/textarea';
 import { Heading, Text } from '@/components/ui/typography';
+import { storefrontSeoPolicy } from '@/lib/seo/route-policy';
+
+const designSystemSeo = storefrontSeoPolicy.DESIGN_SYSTEM;
 
 export const metadata: Metadata = {
   title: 'Storefront Design System Lab',
-  robots: { index: false, follow: false },
+  robots: { index: designSystemSeo.index, follow: designSystemSeo.follow },
 };
 
 const swatches = [
@@ -62,13 +64,11 @@ function CloseIcon() {
 }
 
 export default function StorefrontDesignSystemPage() {
-  if (process.env.NODE_ENV === 'production') notFound();
-
   return (
     <main className="bg-background text-foreground">
       <Section spacing="editorial">
         <Container>
-          <Badge variant="brand">Development only</Badge>
+          <Badge variant="brand">Living design reference</Badge>
           <Heading className="mt-5 max-w-4xl" level={1} variant="display">
             Maevelle Storefront visual foundation
           </Heading>

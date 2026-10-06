@@ -10,9 +10,20 @@ describe('Storefront SEO foundation', () => {
       'ORDER_CONFIRMATION',
       'ORDER_TRACKING',
       'REVIEW_SUBMISSION',
+      'DESIGN_SYSTEM',
     ] as const) {
       expect(storefrontSeoPolicy[route]).toMatchObject({ index: false, includeInSitemap: false });
     }
+  });
+
+  it('keeps the permanent design-system reference reachable but non-indexable', () => {
+    expect(storefrontSeoPolicy.DESIGN_SYSTEM).toEqual({
+      index: false,
+      follow: false,
+      includeInSitemap: false,
+      canonical: 'NONE',
+      structuredData: [],
+    });
   });
 
   it('uses stable product identity and authoritative variant offers', () => {

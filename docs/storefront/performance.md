@@ -46,7 +46,7 @@ Next self-hosts Plus Jakarta Sans (functional UI), Playfair Display (selective e
 
 Tailwind v4/PostCSS is active. `app/globals.css` is an import manifest; `styles/theme.css` contains the production semantic token contract and `styles/base.css` contains minimal document/accessibility behavior. The 3,300-line MVP stylesheet remains isolated in `styles/legacy.css` and is imported into the low-priority base layer so production utilities win. Page redesigns delete their owned legacy sections instead of growing the global dependency graph.
 
-Task 2 added no runtime dependency and no route-wide Client Component. Foundational primitives are server-compatible except when a future feature supplies interaction. Glass remains a feature-detected, restricted surface recipe rather than a general scrolling effect. The development lab is unavailable in production.
+Task 2 added no runtime dependency and no route-wide Client Component. Foundational primitives are server-compatible except when a future feature supplies interaction. Glass remains a feature-detected, restricted surface recipe rather than a general scrolling effect. The permanent `/design-system` reference remains server-rendered, has no dedicated client bundle, and is excluded from indexing and the sitemap.
 
 ## Delivery and security ownership
 

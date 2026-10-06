@@ -148,7 +148,7 @@ Keep primitives Server Component compatible. Add `'use client'` only when browse
 
 ## Development lab and quality gate
 
-The lab is `/design-system` in development. It includes color, type, Bangla/mixed strings, Taka prices, buttons, badges, chips, swatches, forms, semantic feedback, surfaces, loading, and responsive layout. It is `noindex` and calls `notFound()` in production.
+The permanent lab is `/design-system` in every environment. It includes color, type, Bangla/mixed strings, Taka prices, buttons, badges, chips, swatches, forms, semantic feedback, surfaces, loading, and responsive layout. It remains `noindex`, `nofollow`, and excluded from the sitemap, but it must stay directly reachable so owners and future implementation tasks can inspect the shared visual language after every update.
 
 Before extending the system, inspect the lab at mobile, tablet, and desktop widths and run:
 
