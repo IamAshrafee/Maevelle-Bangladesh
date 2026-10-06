@@ -385,7 +385,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
       environment.STOREFRONT_BASE_URL ?? 'http://localhost:3000',
       'STOREFRONT_BASE_URL',
     ),
-    storefrontInternalApiUrl: environment.STOREFRONT_INTERNAL_API_URL?.trim() || 'http://127.0.0.1:3000',
+    storefrontInternalApiUrl: environment.STOREFRONT_INTERNAL_API_URL?.trim() || 'http://127.0.0.1:3002',
     emailEnabled,
     emailProvider,
     emailEnvironment,

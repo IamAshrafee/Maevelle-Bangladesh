@@ -44,8 +44,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body className={`${uiFont.variable} ${editorialFont.variable} ${bengaliFont.variable}`}>
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${uiFont.variable} ${editorialFont.variable} ${bengaliFont.variable}`}
+        suppressHydrationWarning
+      >
         <SkipLink>Skip to content</SkipLink>
         <StorefrontHeader />
         <div id="main-content" tabIndex={-1}>

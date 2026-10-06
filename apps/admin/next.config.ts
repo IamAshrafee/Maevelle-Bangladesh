@@ -49,6 +49,16 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/admin',
+        basePath: false,
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {

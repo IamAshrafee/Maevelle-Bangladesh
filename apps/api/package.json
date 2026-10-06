@@ -20,6 +20,6 @@
   "scripts": {
     "dev": "cross-env API_PORT=3002 tsx watch --env-file=../../.env src/server.ts",
     "build": "tsc --build tsconfig.build.json --pretty false",
-    "bootstrap:owner": "pnpm run build && node dist/src/bootstrap-owner.js"
+    "bootstrap:owner": "pnpm run build && node --env-file=../../.env dist/src/bootstrap-owner.js"
   }
 }

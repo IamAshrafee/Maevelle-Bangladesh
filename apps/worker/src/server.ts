@@ -121,8 +121,8 @@ if (entrypoint && import.meta.url === pathToFileURL(entrypoint).href) {
     .then((worker) => {
       installWorkerShutdownHandlers(worker);
     })
-    .catch(() => {
-      console.error('Worker startup failed. Check configuration and PostgreSQL availability.');
+    .catch((error) => {
+      console.error('Worker startup failed. Check configuration and PostgreSQL availability.', error);
       process.exitCode = 1;
     });
 }

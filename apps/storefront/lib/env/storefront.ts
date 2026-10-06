@@ -16,6 +16,6 @@ export const storefrontPublicBaseUrl = origin(
 );
 
 export const storefrontInternalApiUrl = origin(
-  process.env.STOREFRONT_INTERNAL_API_URL ?? 'http://127.0.0.1:3000',
+  process.env.STOREFRONT_INTERNAL_API_URL ?? 'http://127.0.0.1:3002',
   'STOREFRONT_INTERNAL_API_URL',
 );

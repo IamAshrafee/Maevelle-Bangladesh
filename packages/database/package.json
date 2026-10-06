@@ -167,12 +167,12 @@
   },
   "scripts": {
     "build": "tsc --build tsconfig.build.json --pretty false",
-    "migrate": "pnpm run build && node dist/src/migrate-cli.js",
-    "migrate:status": "pnpm run build && node dist/src/migrate-cli.js --status",
-    "seed": "pnpm run build && node dist/src/seed/cli.js",
-    "seed:staging": "pnpm run build && node dist/src/staging-seed.js",
-    "import:skybuy": "pnpm run build && node dist/src/imports/skybuy/cli.js",
-    "import:skybuy:apply": "pnpm run build && node dist/src/imports/skybuy/apply-cli.js"
+    "migrate": "pnpm run build && node --env-file=../../.env dist/src/migrate-cli.js",
+    "migrate:status": "pnpm run build && node --env-file=../../.env dist/src/migrate-cli.js --status",
+    "seed": "pnpm run build && node --env-file=../../.env dist/src/seed/cli.js",
+    "seed:staging": "pnpm run build && node --env-file=../../.env dist/src/staging-seed.js",
+    "import:skybuy": "pnpm run build && node --env-file=../../.env dist/src/imports/skybuy/cli.js",
+    "import:skybuy:apply": "pnpm run build && node --env-file=../../.env dist/src/imports/skybuy/apply-cli.js"
   },
   "dependencies": {
     "@maevelle/core": "workspace:*",

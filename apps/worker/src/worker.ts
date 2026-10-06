@@ -199,7 +199,20 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         return;
       }
 
-      await options.database.ping();
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= 10; attempt += 1) {
+        try {
+          await options.database.ping();
+          lastError = undefined;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 10) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+      }
+      if (lastError) throw lastError;
       started = true;
       logger?.info({}, 'Worker started.');
       await runTick();

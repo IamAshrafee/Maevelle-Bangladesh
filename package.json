@@ -23,7 +23,7 @@
     "test:acceptance": "node scripts/acceptance.mjs",
     "smoke:staging": "node scripts/staging-smoke.mjs",
     "check:release-readiness": "node scripts/release-readiness.mjs",
-    "db:up": "docker compose up -d postgres",
+    "db:up": "docker compose up -d --wait postgres",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs --follow postgres",
     "db:status": "docker compose ps postgres",

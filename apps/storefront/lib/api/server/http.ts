@@ -33,11 +33,24 @@ function errorDetails(body: unknown): { code: string; message: string } {
 }
 
 export async function requestStorefrontApi<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${storefrontInternalApiUrl}${path}`, {
-    ...init,
-    headers: { accept: 'application/json', ...init?.headers },
-    signal: init?.signal ?? AbortSignal.timeout(2000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${storefrontInternalApiUrl}${path}`, {
+      ...init,
+      headers: { accept: 'application/json', ...init?.headers },
+      signal: init?.signal ?? AbortSignal.timeout(10_000),
+    });
+  } catch (error: unknown) {
+    const isTimeout =
+      error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    throw new StorefrontApiError(
+      503,
+      isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_UNAVAILABLE',
+      isTimeout
+        ? 'The request to Storefront API timed out.'
+        : 'The Storefront service is unavailable.',
+    );
+  }
   const body = (await response.json().catch(() => undefined)) as
     ApiEnvelope<T> | ApiErrorBody | undefined;
 

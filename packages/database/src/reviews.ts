@@ -310,7 +310,7 @@ export async function checkReviewEligibility(
         l.option_snapshot,
         f.status as fulfillment_status,
         d.outcome_status as delivery_outcome,
-        o.status as order_status
+        o.order_status as order_status
       from orders.order_lines l
       join orders.orders o on o.id = l.order_id and o.organization_id = l.organization_id
       left join catalog.products p on p.id = l.product_id and p.organization_id = l.organization_id
@@ -420,7 +420,7 @@ export async function checkReviewEligibility(
       where l.organization_id = ${input.organizationId}
         and o.customer_id = ${resolvedCustomerId}::uuid
         and l.product_id = ${resolvedProductId}::uuid
-        and o.status <> 'CANCELLED'
+        and o.order_status <> 'CANCELLED'
         and (f.status = 'DISPATCHED' or d.outcome_status = 'DELIVERED')
       order by o.created_at desc
       limit 1
@@ -2228,10 +2228,10 @@ export async function dispatchPostDeliveryReviewInvitations(
     left join fulfillment.fulfillment_lines fl on fl.order_line_id = l.id and fl.organization_id = l.organization_id
     left join fulfillment.fulfillments f on f.id = fl.fulfillment_id and f.organization_id = l.organization_id
     left join delivery.deliveries d on d.fulfillment_id = f.id and d.organization_id = l.organization_id
-    where o.status <> 'CANCELLED'
+    where o.order_status <> 'CANCELLED'
       ${options?.organizationId ? sql`and l.organization_id = ${options.organizationId}` : sql``}
       and (d.outcome_status = 'DELIVERED' or f.status = 'DISPATCHED')
-      and coalesce(d.completed_at, f.dispatched_at, f.updated_at) <= now() - (${delayHours} || ' hours')::interval
+      and coalesce(d.delivered_at, f.dispatched_at, f.updated_at) <= now() - (${delayHours} || ' hours')::interval
       and not exists (
         select 1 from reviews.review_access_tokens rat
         where rat.organization_id = l.organization_id

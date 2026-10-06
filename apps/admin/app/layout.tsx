@@ -28,8 +28,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={cn('font-sans antialiased', inter.variable, jetbrainsMono.variable)}>
-      <body>
+    <html lang="en" className={cn('font-sans antialiased', inter.variable, jetbrainsMono.variable)} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <TooltipProvider>
           <AdminShell>{children}</AdminShell>
         </TooltipProvider>
