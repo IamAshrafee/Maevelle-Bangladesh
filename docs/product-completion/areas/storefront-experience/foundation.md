@@ -4,7 +4,7 @@
 
 `LOCAL_VERIFICATION_COMPLETE / OWNER_REVIEW_PENDING`
 
-Architecture checkpoint: `32d1152`; Task 02 implementation checkpoint: `f551bde`.
+Architecture checkpoint: `32d1152`; Task 02 implementation checkpoint: `f551bde`; permanent design-reference availability checkpoint: `e0d9730`.
 
 ## Completed foundation
 
