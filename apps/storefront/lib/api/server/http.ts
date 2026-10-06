@@ -36,6 +36,7 @@ export async function requestStorefrontApi<T>(path: string, init?: RequestInit):
   const response = await fetch(`${storefrontInternalApiUrl}${path}`, {
     ...init,
     headers: { accept: 'application/json', ...init?.headers },
+    signal: init?.signal ?? AbortSignal.timeout(2000),
   });
   const body = (await response.json().catch(() => undefined)) as
     ApiEnvelope<T> | ApiErrorBody | undefined;

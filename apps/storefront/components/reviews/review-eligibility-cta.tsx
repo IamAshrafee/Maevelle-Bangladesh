@@ -9,7 +9,6 @@ export interface ReviewEligibilityCtaProps {
 }
 
 export function ReviewEligibilityCta({
-  productId,
   organizationId,
 }: ReviewEligibilityCtaProps) {
   const searchParams = useSearchParams();
