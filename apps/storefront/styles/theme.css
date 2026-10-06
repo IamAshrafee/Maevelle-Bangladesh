@@ -14,36 +14,80 @@
   --color-rose-200: #e8c9d2;
   --color-blush: #f8e8ed;
   --color-linen: #f7f0ea;
-  --color-warm-white: #fffaf7;
-  --color-espresso: #291c20;
-  --color-stone: #665b5e;
+  --color-warm-white: #fff8f5;
+  --color-espresso: #1e1b19;
+  --color-stone: #574144;
+
+  /* Stitch design system tokens */
+  --color-surface-dim: #e0d8d5;
+  --color-surface-bright: #fff8f5;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #faf2ee;
+  --color-surface-container: #f4ece8;
+  --color-surface-container-high: #eee7e3;
+  --color-surface-container-highest: #e9e1dd;
+  --color-on-surface: #1e1b19;
+  --color-on-surface-variant: #574144;
+  --color-inverse-surface: #33302d;
+  --color-inverse-on-surface: #f7efeb;
+  --color-outline: #8a7174;
+  --color-outline-variant: #ddbfc3;
+  --color-surface-tint: #a83252;
+  --color-primary-container: #9e2a4b;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #ffbbc6;
+  --color-inverse-primary: #ffb2bf;
+  --color-secondary: #a63359;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #fd779d;
+  --color-on-secondary-container: #740734;
+  --color-tertiary: #443e40;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #5c5557;
+  --color-on-tertiary-container: #d4cacc;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-primary-fixed: #ffd9de;
+  --color-primary-fixed-dim: #ffb2bf;
+  --color-on-primary-fixed: #3f0015;
+  --color-on-primary-fixed-variant: #88183c;
+  --color-secondary-fixed: #ffd9e0;
+  --color-secondary-fixed-dim: #ffb1c2;
+  --color-on-secondary-fixed: #3f0018;
+  --color-on-secondary-fixed-variant: #871a42;
+  --color-tertiary-fixed: #eae0e2;
+  --color-tertiary-fixed-dim: #cec4c6;
+  --color-on-tertiary-fixed: #1f1a1c;
+  --color-on-tertiary-fixed-variant: #4b4547;
+  --color-surface-variant: #e9e1dd;
 
   /* Semantic surfaces and content */
-  --color-background: #fffaf7;
-  --color-surface: #ffffff;
+  --color-background: #fff8f5;
+  --color-surface: #fff8f5;
   --color-surface-raised: #ffffff;
-  --color-surface-muted: #f7f0ea;
-  --color-surface-inverse: #291c20;
-  --color-foreground: #291c20;
-  --color-foreground-muted: #665b5e;
-  --color-foreground-subtle: #786b6f;
-  --color-foreground-inverse: #fffaf7;
+  --color-surface-muted: #f4ece8;
+  --color-foreground: #1e1b19;
+  --color-foreground-muted: #574144;
+  --color-foreground-subtle: #76686c;
+  --color-foreground-inverse: #f7efeb;
 
   /* Semantic borders */
-  --color-border-subtle: #e9ded9;
-  --color-border: #d8c9c4;
-  --color-border-strong: #ad979c;
+  --color-border-subtle: #eee7e3;
+  --color-border: #ddbfc3;
+  --color-border-strong: #8a7174;
 
   /* Semantic actions */
   --color-primary: #7e0e35;
   --color-primary-hover: #65102e;
   --color-primary-active: #4a1027;
   --color-primary-foreground: #ffffff;
-  --color-primary-subtle: #f8e8ed;
-  --color-secondary: #f1e3e7;
-  --color-secondary-hover: #e8d2d8;
-  --color-secondary-foreground: #4a1027;
-  --color-focus: #b52d5b;
+  --color-on-primary: #ffffff;
+  --color-primary-subtle: #ffd9de;
+  --color-secondary-hover: #871a42;
+  --color-secondary-foreground: #ffffff;
+  --color-focus: #9e2a4b;
 
   /* Semantic feedback */
   --color-success: #17633f;
@@ -52,60 +96,91 @@
   --color-warning: #8a4a07;
   --color-warning-subtle: #fff2d5;
   --color-warning-foreground: #653604;
-  --color-danger: #a72532;
-  --color-danger-hover: #861c27;
-  --color-danger-subtle: #fce9ec;
-  --color-danger-foreground: #7b1924;
+  --color-danger: #ba1a1a;
+  --color-danger-hover: #93000a;
+  --color-danger-subtle: #ffdad6;
+  --color-danger-foreground: #93000a;
   --color-info: #245e8f;
   --color-info-subtle: #e9f2f9;
   --color-info-foreground: #19486f;
-  --color-scrim: rgb(41 28 32 / 58%);
+  --color-scrim: rgb(30 27 25 / 50%);
 
-  /* Typography */
+  /* Typography Scales */
   --text-display: clamp(2.25rem, 8vw, 4.75rem);
   --text-display--line-height: 1.02;
   --text-display--letter-spacing: -0.035em;
-  --text-heading-lg: clamp(1.875rem, 5vw, 3rem);
-  --text-heading-lg--line-height: 1.1;
-  --text-heading-lg--letter-spacing: -0.025em;
-  --text-heading-md: clamp(1.5rem, 3vw, 2rem);
-  --text-heading-md--line-height: 1.18;
-  --text-heading-md--letter-spacing: -0.018em;
-  --text-heading-sm: 1.25rem;
-  --text-heading-sm--line-height: 1.3;
-  --text-body-lg: 1.125rem;
-  --text-body-lg--line-height: 1.7;
-  --text-body-md: 1rem;
-  --text-body-md--line-height: 1.6;
-  --text-body-sm: 0.875rem;
-  --text-body-sm--line-height: 1.55;
+  --text-display-hero: 2.25rem;
+  --text-display-hero--line-height: 2.75rem;
+  --text-display-hero--letter-spacing: -0.02em;
+  --text-display-hero-mobile: 1.75rem;
+  --text-display-hero-mobile--line-height: 2.125rem;
+  --text-display-hero-mobile--letter-spacing: -0.01em;
+  --text-headline-lg: 1.75rem;
+  --text-headline-lg--line-height: 2.25rem;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg-mobile: 1.375rem;
+  --text-headline-lg-mobile--line-height: 1.75rem;
+  --text-headline-lg-mobile--letter-spacing: 0em;
+  --text-headline-md: 1.125rem;
+  --text-headline-md--line-height: 1.5rem;
+  --text-headline-md--letter-spacing: -0.01em;
+  --text-headline-sm: 1rem;
+  --text-headline-sm--line-height: 1.375rem;
+  --text-headline-sm--letter-spacing: 0em;
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.5rem;
+  --text-body-lg--letter-spacing: 0em;
+  --text-body-md: 0.875rem;
+  --text-body-md--line-height: 1.25rem;
+  --text-body-md--letter-spacing: 0em;
+  --text-body-sm: 0.75rem;
+  --text-body-sm--line-height: 1rem;
+  --text-body-sm--letter-spacing: 0.01em;
   --text-label: 0.875rem;
   --text-label--line-height: 1.35;
+  --text-label-md: 0.8125rem;
+  --text-label-md--line-height: 1rem;
+  --text-label-md--letter-spacing: 0.02em;
+  --text-label-sm: 0.6875rem;
+  --text-label-sm--line-height: 0.875rem;
+  --text-label-sm--letter-spacing: 0.04em;
   --text-caption: 0.75rem;
   --text-caption--line-height: 1.4;
-  --text-price-lg: 1.5rem;
-  --text-price-lg--line-height: 1.25;
-  --text-price-md: 1rem;
-  --text-price-md--line-height: 1.4;
+  --text-price-lg: 1.25rem;
+  --text-price-lg--line-height: 1.5rem;
+  --text-price-lg--letter-spacing: -0.01em;
+  --text-price-md: 0.9375rem;
+  --text-price-md--line-height: 1.125rem;
+  --text-price-md--letter-spacing: 0em;
 
   /* Shape */
   --radius-xs: 0.25rem;
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
   --radius-full: 9999px;
 
-  /* Elevation */
-  --shadow-raised: 0 1px 2px rgb(74 16 39 / 6%), 0 8px 24px rgb(74 16 39 / 5%);
-  --shadow-floating: 0 12px 36px rgb(41 28 32 / 12%);
-  --shadow-modal: 0 24px 64px rgb(41 28 32 / 18%);
+  /* Scale */
+  --scale-98: 0.98;
 
-  /* Layout */
+  /* Elevation */
+  --shadow-raised: 0 1px 3px rgb(30 27 25 / 4%), 0 6px 16px rgb(158 42 75 / 4%);
+  --shadow-floating: 0 8px 24px -4px rgb(158 42 75 / 8%), 0 2px 6px -1px rgb(30 27 25 / 4%);
+  --shadow-modal: 0 20px 32px -8px rgb(30 27 25 / 16%);
+
+  /* Layout & Spacing */
   --container-storefront: 77.5rem;
   --container-narrow: 44rem;
-  --spacing-gutter: 1rem;
+  --spacing-gutter: 0.75rem;
+  --spacing-margin: 1rem;
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 0.75rem;
+  --spacing-space-lg: 1rem;
+  --spacing-space-xl: 1.5rem;
   --spacing-grid: 0.75rem;
   --spacing-gutter-desktop: 1.5rem;
 
@@ -119,6 +194,19 @@
     var(--font-plus-jakarta), var(--font-noto-bengali), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-playfair), Georgia, 'Times New Roman', serif;
   --font-bangla: var(--font-noto-bengali), var(--font-plus-jakarta), ui-sans-serif, sans-serif;
+  --font-display-hero: var(--font-playfair), Georgia, serif;
+  --font-display-hero-mobile: var(--font-playfair), Georgia, serif;
+  --font-headline-lg: var(--font-playfair), Georgia, serif;
+  --font-headline-lg-mobile: var(--font-playfair), Georgia, serif;
+  --font-headline-md: var(--font-plus-jakarta), sans-serif;
+  --font-headline-sm: var(--font-plus-jakarta), sans-serif;
+  --font-body-lg: var(--font-plus-jakarta), sans-serif;
+  --font-body-md: var(--font-plus-jakarta), sans-serif;
+  --font-body-sm: var(--font-plus-jakarta), sans-serif;
+  --font-price-lg: var(--font-plus-jakarta), sans-serif;
+  --font-price-md: var(--font-plus-jakarta), sans-serif;
+  --font-label-md: var(--font-plus-jakarta), sans-serif;
+  --font-label-sm: var(--font-plus-jakarta), sans-serif;
 }
 
 :root {
@@ -126,6 +214,6 @@
   --motion-fast: 120ms;
   --motion-normal: 180ms;
   --motion-surface: 260ms;
-  --glass-background: rgb(255 250 247 / 96%);
-  --glass-background-supported: rgb(255 250 247 / 84%);
+  --glass-background: rgb(255 248 245 / 96%);
+  --glass-background-supported: rgb(255 248 245 / 85%);
 }

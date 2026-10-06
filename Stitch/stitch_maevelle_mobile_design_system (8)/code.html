@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-error-container": "#93000a", "error": "#ba1a1a", "primary-fixed-dim": "#ffb2bf", "outline": "#8a7174", "inverse-on-surface": "#f7efeb", "on-tertiary-container": "#d4cacc", "on-surface": "#1e1b19", "primary-fixed": "#ffd9de", "outline-variant": "#ddbfc3", "on-tertiary-fixed": "#1f1a1c", "surface-container-low": "#faf2ee", "on-secondary-container": "#740734", "primary-container": "#9e2a4b", "tertiary": "#443e40", "surface-bright": "#fff8f5", "surface-container-highest": "#e9e1dd", "secondary-fixed": "#ffd9e0", "secondary": "#a63359", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#4b4547", "on-error": "#ffffff", "surface-dim": "#e0d8d5", "on-secondary-fixed-variant": "#871a42", "on-primary-container": "#ffbbc6", "on-primary-fixed": "#3f0015", "on-background": "#1e1b19", "tertiary-container": "#5c5557", "surface-container-high": "#eee7e3", "surface-container-lowest": "#ffffff", "surface-variant": "#e9e1dd", "surface-tint": "#a83252", "on-primary-fixed-variant": "#88183c", "secondary-fixed-dim": "#ffb1c2", "on-tertiary": "#ffffff", "background": "#fff8f5", "surface": "#fff8f5", "error-container": "#ffdad6", "surface-container": "#f4ece8", "secondary-container": "#fd779d", "on-surface-variant": "#574144", "inverse-surface": "#33302d", "on-secondary-fixed": "#3f0018", "on-primary": "#ffffff", "tertiary-fixed": "#eae0e2", "primary": "#7e0e35", "inverse-primary": "#ffb2bf", "tertiary-fixed-dim": "#cec4c6" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "1.5rem", "space-md": "0.75rem", "space-sm": "0.5rem", "space-xs": "0.25rem", "gutter": "0.75rem", "space-lg": "1rem", "margin": "1rem" }, "fontFamily": { "headline-lg": ["Playfair Display"], "price-md": ["Plus Jakarta Sans"], "display-hero-mobile": ["Playfair Display"], "headline-md": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Playfair Display"], "body-lg": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "display-hero": ["Playfair Display"], "label-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "price-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"] }, "fontSize": { "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "500" }], "price-md": ["15px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "700" }], "display-hero-mobile": ["28px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "500" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "display-hero": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "label-md": ["13px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "headline-sm": ["16px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "600" }], "price-lg": ["20px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }] } } } }</script><style>@layer base{html,body{width:100vw;min-height:100%;margin:0;padding:0;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 350,'GRAD' 0,'opsz' 24;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-surface font-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(158,42,75,0.04)]"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-xs"><button aria-label="Open navigation menu" class="w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors"><span class="material-symbols-outlined text-[24px]">menu</span></button></div><div class="flex-1 flex items-center justify-center text-center"><a class="inline-flex flex-col items-center" data-path="explore" href="#"><span class="font-headline-lg text-headline-lg tracking-tight text-primary leading-none font-semibold">Maevelle</span><span class="font-label-sm text-[10px] tracking-[0.2em] uppercase text-on-surface-variant/80 -mt-1">Dhaka</span></a></div><div class="flex items-center gap-space-xs justify-end"><button aria-label="Search catalog" class="w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">search</span></button><button aria-label="View shopping bag" class="relative w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors" id="openCartBtn"><span class="material-symbols-outlined text-[22px]">shopping_bag</span><span class="absolute top-2 right-2 min-w-[16px] h-4 px-1 rounded-full bg-primary text-on-primary font-label-sm text-[10px] flex items-center justify-center leading-none">2</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-1"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Interactive Toast Demo Container -->
+<div class="hidden fixed top-20 left-4 right-4 z-50 p-3 bg-inverse-surface text-inverse-on-surface rounded-xl shadow-xl flex items-center justify-between transition-all duration-300" id="interactiveToast">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary-fixed text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-inverse-on-surface">Copied Spec Token</span>
+<span class="font-body-sm text-body-sm text-inverse-on-surface/80" id="toastMessage">Token hex mapped to clipboard</span>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-inverse-on-surface/70 hover:text-inverse-on-surface" onclick="document.getElementById('interactiveToast').classList.add('hidden')">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- SECTION 1: HEADER & INTRO SPEC -->
+<header class="px-margin pt-4 pb-space-lg">
+<div class="flex items-center justify-between mb-2">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-fixed text-on-primary-fixed">
+<span class="material-symbols-outlined text-[14px]">terminal</span>
+<span class="font-label-sm text-label-sm tracking-wide">DESIGN SYSTEM SPEC SHEET</span>
+</div>
+<span class="font-label-sm text-label-sm px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-bold">v1.2.0 MOBILE</span>
+</div>
+<h1 class="font-display-hero-mobile text-display-hero-mobile text-primary leading-tight font-semibold">
+      Maevelle UI Kit &amp; Component Vault
+    </h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1.5">
+      Single source of truth for engineering teams building the Maevelle Dhaka iOS &amp; Android client. Viewport baseline: 390px (Mobile-First Ergonomics).
+    </p>
+<!-- Design Philosophy Manifesto Card -->
+<div class="mt-space-md p-space-md bg-surface-container-low rounded-xl shadow-sm space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Philosophy: Curated • Feminine • High-Contrast</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Engineered for Bangladesh’s mobile network conditions (EDGE to 4G handshakes). Zero heavy client dependencies, strict WCAG AA 4.5:1+ contrast resilience under direct tropical daylight, and micro-animations calibrated under 2KB per spec.
+      </p>
+<div class="grid grid-cols-2 gap-2 pt-1">
+<div class="p-2.5 rounded-lg bg-surface-container-lowest shadow-sm flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Touch Envelope</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold mt-0.5">48px x 48px Min</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-lowest shadow-sm flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Canvas Standard</span>
+<span class="font-headline-sm text-headline-sm text-secondary font-bold mt-0.5">390 x 844 CSS px</span>
+</div>
+</div>
+</div>
+</header>
+<!-- SECTION 2: COLOR TOKENS & CONTRAST MATRIX -->
+<section class="px-margin py-space-md">
+<div class="flex items-center justify-between mb-space-sm">
+<div class="flex items-center gap-2">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">01. Color &amp; Contrast Matrix</h2>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">WCAG 2.1 AA</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      Tap any color swatch to copy the token reference directly into your IDE clipboard.
+    </p>
+<div class="grid grid-cols-1 gap-2.5">
+<!-- Token 1: Primary Action -->
+<button class="w-full text-left p-3 rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between active:scale-98 transition-transform" onclick="navigator.clipboard.writeText('#9E2A4B'); showToast('Primary Container: #9E2A4B')">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-lg bg-primary-container shadow-inner flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-[18px]">touch_app</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface">Primary CTA</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface-variant">#9E2A4B</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Deep Berry Rose • 4.8:1 on White</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">4.8:1 AA</span>
+</button>
+<!-- Token 2: Primary Pressed -->
+<button class="w-full text-left p-3 rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between active:scale-98 transition-transform" onclick="navigator.clipboard.writeText('#7E0E35'); showToast('Primary: #7E0E35')">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-lg bg-primary shadow-inner flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-[18px]">compress</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface">Primary Pressed</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface-variant">#7E0E35</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Deep Pressed • 7.2:1 Editorial</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">7.2:1 AAA</span>
+</button>
+<!-- Token 3: Secondary Accent -->
+<button class="w-full text-left p-3 rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between active:scale-98 transition-transform" onclick="navigator.clipboard.writeText('#A63359'); showToast('Secondary: #A63359')">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-lg bg-secondary shadow-inner flex items-center justify-center text-on-secondary">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">favorite</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface">Secondary Accent</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface-variant">#A63359</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Heritage Rose • Active Wishlist</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-secondary font-bold">4.6:1 AA</span>
+</button>
+<!-- Token 4: Surface Background -->
+<button class="w-full text-left p-3 rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between active:scale-98 transition-transform" onclick="navigator.clipboard.writeText('#FFF8F5'); showToast('Surface: #FFF8F5')">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-lg bg-surface shadow-inner flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">crop_portrait</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface">Surface Alabaster</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface-variant">#FFF8F5</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Viewport Canvas Background</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold">CANVAS</span>
+</button>
+<!-- Status Colors Multi-Row -->
+<div class="p-3 rounded-xl bg-surface-container-lowest shadow-sm space-y-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider block">Commerce Validation &amp; Alerts</span>
+<div class="grid grid-cols-3 gap-2">
+<div class="p-2 rounded-lg bg-surface-container-low flex flex-col items-center text-center">
+<div class="w-6 h-6 rounded-full bg-secondary-fixed flex items-center justify-center mb-1 text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[14px]">local_shipping</span>
+</div>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">Dhaka Deliv</span>
+<span class="font-label-sm text-[10px] text-on-surface-variant">#FFD9E0</span>
+</div>
+<div class="p-2 rounded-lg bg-surface-container-low flex flex-col items-center text-center">
+<div class="w-6 h-6 rounded-full bg-primary-fixed-dim flex items-center justify-center mb-1 text-primary">
+<span class="material-symbols-outlined text-[14px]">bolt</span>
+</div>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">Flash Deal</span>
+<span class="font-label-sm text-[10px] text-on-surface-variant">#FFB2BF</span>
+</div>
+<div class="p-2 rounded-lg bg-surface-container-low flex flex-col items-center text-center">
+<div class="w-6 h-6 rounded-full bg-error-container flex items-center justify-center mb-1 text-on-error-container">
+<span class="material-symbols-outlined text-[14px]">error</span>
+</div>
+<span class="font-label-sm text-label-sm font-bold text-error">Critical</span>
+<span class="font-label-sm text-[10px] text-error">#BA1A1A</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 3: TYPOGRAPHY & BANGLADESH CURRENCY SYSTEM -->
+<section class="px-margin py-space-md">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">02. Typography &amp; Currency (BDT)</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      Editorial Playfair Serif balanced with utilitarian Plus Jakarta Sans for rapid mobile reading.
+    </p>
+<div class="space-y-3">
+<!-- Spec 1: Display -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-1">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm">font-display-hero-mobile • Playfair Display 28/34</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container-low">600 Semi</span>
+</div>
+<div class="font-display-hero-mobile text-display-hero-mobile text-primary">
+          Artisanal Jamdani &amp; Freshwater Pearls
+        </div>
+</div>
+<!-- Spec 2: Headline -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-1">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm">font-headline-lg-mobile • Playfair Display 22/28</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container-low">500 Med</span>
+</div>
+<div class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">
+          Crafted for Gulshan &amp; Banani Evenings
+        </div>
+</div>
+<!-- Spec 3: Body & Micro UI -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-2">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm">font-body-md • Plus Jakarta Sans 14/20</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded bg-surface-container-low">400 Reg</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+          Each heirloom jewelry ornament is individually hand-molded and dipped in 18-karat micro-gold vermeil in our Dhanmondi studio.
+        </p>
+<div class="pt-2 flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm">font-label-sm • Plus Jakarta Sans 11/14</span>
+<span class="font-label-sm text-label-sm text-primary font-bold">TRACKING +0.04em</span>
+</div>
+<span class="font-label-sm text-label-sm uppercase text-on-surface tracking-wider block">
+          SKU: MV-DH-2024-GLD • 100% RECYCLED VERMEIL
+        </span>
+</div>
+<!-- Bangladesh Currency Display Spec -->
+<div class="p-3.5 rounded-xl bg-surface-container-low shadow-sm space-y-3">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm text-on-surface">BDT "৳" Formatting Rules</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-primary text-on-primary">Commerce Rule</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          Never write "Tk." or "BDT". Always prepend the official unicode "৳" without trailing decimals (৳2,450 not ৳2,450.00). Use Bangladesh comma grouping (Lakh format when &gt; 99,999).
+        </p>
+<!-- Live Currency Specimen -->
+<div class="p-3 rounded-lg bg-surface-container-lowest flex items-baseline justify-between shadow-xs">
+<div class="flex items-baseline gap-2">
+<span class="font-price-lg text-price-lg text-primary">৳2,450</span>
+<span class="font-body-sm text-body-sm text-outline line-through">৳3,200</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-md bg-secondary-fixed text-on-secondary-fixed font-bold">23% SAVINGS</span>
+</div>
+<!-- Bilingual Baseline Alignment Note -->
+<div class="p-2.5 rounded-lg bg-surface-container-high/60 flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">translate</span>
+<span class="font-body-sm text-body-sm text-on-surface">
+            বাংলা সাপোর্ট: <span class="font-semibold text-primary">৳ ২,৪৫০ (২৩% ছাড়)</span> — Baseline unified for Latin numerals.
+          </span>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 4: BUTTON SYSTEM & ALL VARIATIONS (Full Matrix) -->
+<section class="px-margin py-space-md">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">03. Button Architecture Matrix</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      Live states with micro-feedback, tactile tap scaling (0.98), and minimum 48px hitboxes.
+    </p>
+<!-- State Matrix Showcase -->
+<div class="space-y-4">
+<!-- 1. Primary Solid Sticky Button (52px height) -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-2">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider">Primary Sticky CTA (h-52px)</span>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Default + Icon</span>
+</div>
+<button class="w-full h-13 py-3.5 px-4 rounded-xl bg-primary text-on-primary font-headline-sm text-headline-sm font-semibold shadow-md active:scale-98 transition-transform flex items-center justify-between">
+<span class="font-price-md text-price-md">৳2,450</span>
+<span class="flex items-center gap-1.5">
+<span>Continue to Secure Checkout</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</span>
+</button>
+</div>
+<!-- 2. Interactive States Grid (Default, Pressed, Loading, Disabled) -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-3">
+<span class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider block">State Variations (h-48px)</span>
+<!-- Default State -->
+<div class="space-y-1">
+<span class="font-label-sm text-[10px] text-on-surface-variant">State: Default</span>
+<button class="w-full h-12 rounded-xl bg-primary-container text-on-primary font-label-md text-label-md font-semibold shadow-sm active:scale-98 transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">shopping_bag</span>
+<span>Add to Shopping Bag</span>
+</button>
+</div>
+<!-- Pressed / Active Simulation -->
+<div class="space-y-1">
+<span class="font-label-sm text-[10px] text-on-surface-variant">State: Active Pressed (scale-98 + #7E0E35)</span>
+<button class="w-full h-12 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-semibold scale-98 shadow-inner flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">shopping_bag</span>
+<span>Adding to Bag...</span>
+</button>
+</div>
+<!-- Sleek Animated Loading Spinner State -->
+<div class="space-y-1">
+<span class="font-label-sm text-[10px] text-on-surface-variant">State: Loading Async</span>
+<button class="w-full h-12 rounded-xl bg-primary/90 text-on-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-2 opacity-95 cursor-not-allowed" disabled="">
+<svg class="animate-spin h-5 w-5 text-on-primary" fill="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+<path class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+</svg>
+<span>Verifying bKash Transaction...</span>
+</button>
+</div>
+<!-- Disabled / Waitlist State -->
+<div class="space-y-1">
+<span class="font-label-sm text-[10px] text-on-surface-variant">State: Disabled / Waitlist</span>
+<button class="w-full h-12 rounded-xl bg-surface-container text-outline font-label-md text-label-md font-semibold flex items-center justify-center gap-2 cursor-not-allowed" disabled="">
+<span class="material-symbols-outlined text-[18px]">lock_clock</span>
+<span>Sold Out • Join Dhanmondi Waitlist</span>
+</button>
+</div>
+</div>
+<!-- 3. Secondary, Tonal & Destructive Buttons -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-3">
+<span class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider block">Hierarchy Tiers</span>
+<!-- Soft Tonal Button -->
+<button class="w-full h-11 rounded-xl bg-surface-container-low text-primary hover:bg-surface-container font-label-md text-label-md font-semibold active:scale-98 transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">bookmark_add</span>
+<span>Save Item for Later (Wishlist)</span>
+</button>
+<!-- Instant Buy Bangladesh Express Button -->
+<button class="w-full h-11 rounded-xl bg-secondary-fixed text-on-secondary-fixed hover:bg-secondary-fixed-dim font-label-md text-label-md font-bold active:scale-98 transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+<span>⚡ Instant Buy via Cash-on-Delivery</span>
+</button>
+<!-- Destructive Action Button -->
+<button class="w-full h-11 rounded-xl bg-error-container text-on-error-container hover:bg-error-container/80 font-label-md text-label-md font-semibold active:scale-98 transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">delete_sweep</span>
+<span>Remove Item from Bag</span>
+</button>
+</div>
+</div>
+</section>
+<!-- SECTION 5: ICON BUTTONS MATRIX & QUANTITY STEPPER -->
+<section class="px-margin py-space-md">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">04. Icon Buttons &amp; Steppers</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      Enforces minimum 48px touch hitbox padding. Interactive: tap items to toggle states.
+    </p>
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-4">
+<div class="grid grid-cols-4 gap-2 text-center">
+<!-- Heart Toggle -->
+<div class="flex flex-col items-center gap-1">
+<button class="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center text-primary active:scale-90 transition-transform" id="specHeartBtn" onclick="toggleHeartSpec()">
+<span class="material-symbols-outlined text-[22px]" id="specHeartIcon">favorite</span>
+</button>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Wishlist</span>
+</div>
+<!-- Bag with Counter -->
+<div class="flex flex-col items-center gap-1">
+<div class="relative">
+<button class="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[22px]">shopping_bag</span>
+</button>
+<span class="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary text-on-primary font-label-sm text-[10px] flex items-center justify-center font-bold">2</span>
+</div>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Bag Badge</span>
+</div>
+<!-- Filter with Dot -->
+<div class="flex flex-col items-center gap-1">
+<div class="relative">
+<button class="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[22px]">tune</span>
+</button>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary"></span>
+</div>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Filter (Active)</span>
+</div>
+<!-- Share Button -->
+<div class="flex flex-col items-center gap-1">
+<button class="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[22px]">share</span>
+</button>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Share</span>
+</div>
+</div>
+<!-- Quantity Stepper Specimen -->
+<div class="pt-3 border-t border-surface-container flex items-center justify-between">
+<div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold block">Quantity Stepper</span>
+<span class="font-body-sm text-[11px] text-on-surface-variant">Prevents decrements below 1</span>
+</div>
+<div class="flex items-center rounded-xl bg-surface-container-low p-1 shadow-inner">
+<button class="w-9 h-9 rounded-lg bg-surface-container-lowest flex items-center justify-center text-on-surface-variant disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all shadow-xs" disabled="" id="qtyMinusBtn" onclick="updateQty(-1)">
+<span class="material-symbols-outlined text-[16px]">remove</span>
+</button>
+<span class="w-10 text-center font-headline-sm text-headline-sm font-bold text-on-surface" id="qtyDisplay">1</span>
+<button class="w-9 h-9 rounded-lg bg-surface-container-lowest flex items-center justify-center text-primary active:scale-95 transition-all shadow-xs" onclick="updateQty(1)">
+<span class="material-symbols-outlined text-[16px]">add</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 6: CHIPS, FILTER PILLS & TAGS -->
+<section class="px-margin py-space-md">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">05. Chips, Pills &amp; Local Badges</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      Localized status pills engineered for Bangladesh quick-commerce expectations.
+    </p>
+<div class="space-y-3">
+<!-- Category Pills -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-2">
+<span class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider block">Category Selection Pills</span>
+<div class="flex flex-wrap gap-2">
+<!-- Active Pill -->
+<div class="px-3 py-1.5 rounded-full bg-primary text-on-primary flex items-center gap-1.5 shadow-xs">
+<span class="font-label-md text-label-md">Pearl Drops</span>
+<span class="w-4 h-4 rounded-full bg-on-primary/20 text-on-primary font-label-sm text-[9px] flex items-center justify-center font-bold">48</span>
+</div>
+<!-- Inactive Pill -->
+<div class="px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface flex items-center gap-1.5 hover:bg-surface-container transition-colors">
+<span class="font-label-md text-label-md">Velvet Ribbons</span>
+<span class="w-4 h-4 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-[9px] flex items-center justify-center font-bold">19</span>
+</div>
+<!-- Inactive Pill 2 -->
+<div class="px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface flex items-center gap-1.5 hover:bg-surface-container transition-colors">
+<span class="font-label-md text-label-md">Gold Vermeil</span>
+<span class="w-4 h-4 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-[9px] flex items-center justify-center font-bold">32</span>
+</div>
+</div>
+</div>
+<!-- Dismissible Active Filter Chips -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-2">
+<span class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider block">Dismissible Applied Filters</span>
+<div class="flex flex-wrap gap-2">
+<div class="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm flex items-center gap-1">
+<span>In Stock in Gulshan</span>
+<span class="material-symbols-outlined text-[14px] cursor-pointer">close</span>
+</div>
+<div class="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm flex items-center gap-1">
+<span>Under ৳2,500</span>
+<span class="material-symbols-outlined text-[14px] cursor-pointer">close</span>
+</div>
+<div class="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm flex items-center gap-1">
+<span>Freshwater Pearl</span>
+<span class="material-symbols-outlined text-[14px] cursor-pointer">close</span>
+</div>
+</div>
+</div>
+<!-- Commerce Urgency & Local Badges -->
+<div class="p-3.5 rounded-xl bg-surface-container-low shadow-sm space-y-2">
+<span class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider block">Commerce Badges &amp; MFS Callouts</span>
+<div class="flex flex-wrap gap-2">
+<!-- Urgency -->
+<div class="px-2.5 py-1 rounded-md bg-error-container text-on-error-container font-label-sm text-label-sm flex items-center gap-1 font-semibold">
+<span>🔥 Only 2 Left in Stock</span>
+</div>
+<!-- Dhaka Express -->
+<div class="px-2.5 py-1 rounded-md bg-surface-container-lowest text-primary font-label-sm text-label-sm flex items-center gap-1 font-bold shadow-xs">
+<span class="material-symbols-outlined text-[14px]">bolt</span>
+<span>24h Dhaka Express</span>
+</div>
+<!-- Dhanmondi Atelier -->
+<div class="px-2.5 py-1 rounded-md bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm flex items-center gap-1 font-bold">
+<span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+<span>Dhanmondi Atelier Handcrafted</span>
+</div>
+<!-- bKash Cashback -->
+<div class="px-2.5 py-1 rounded-md bg-secondary text-on-secondary font-label-sm text-label-sm flex items-center gap-1 font-bold">
+<span>৳ 5% bKash Instant Cashback</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 7: FORM CONTROLS & LOCAL INPUTS -->
+<section class="px-margin py-space-md">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">06. Form Controls &amp; BD Inputs</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      Optimized for high-conversion checkout with Bangladesh courier SMS verification standards.
+    </p>
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-4">
+<!-- Standard Input Default & Focused -->
+<div class="space-y-1.5">
+<label class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider">Customer Full Name</label>
+<div class="relative">
+<input class="w-full h-12 px-3.5 rounded-xl bg-surface-container-lowest text-on-surface font-body-md text-body-md focus:bg-surface-container-low transition-colors outline-hidden shadow-sm" type="text" value="Tahmina Chowdhury"/>
+<span class="absolute right-3 top-3.5 text-primary material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<!-- Bangladesh Mobile Phone Number with +880 Prefix -->
+<div class="space-y-1.5">
+<label class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider flex items-center justify-between">
+<span>Courier Contact Number</span>
+<span class="text-primary font-bold">OTP Delivery</span>
+</label>
+<div class="flex items-center rounded-xl bg-surface-container-low shadow-inner p-1">
+<div class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-container-lowest text-on-surface font-headline-sm text-[13px] shadow-xs">
+<span class="text-[14px]">🇧🇩</span>
+<span class="font-bold">+880</span>
+</div>
+<input class="w-full h-10 px-3 bg-transparent text-on-surface font-headline-sm text-headline-sm tracking-wider outline-hidden" placeholder="1712-345678" type="tel" value="1755-890123"/>
+<span class="pr-2 text-primary material-symbols-outlined text-[18px]">verified</span>
+</div>
+<span class="font-body-sm text-[11px] text-on-surface-variant block">RedX &amp; SteadFast riders will confirm via this number.</span>
+</div>
+<!-- Selection Controls: Radio, Checkbox, Toggle -->
+<div class="pt-3 border-t border-surface-container space-y-3">
+<span class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider block">Selection Controls</span>
+<!-- Radio Button Row -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2.5">
+<div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+<div class="w-2 h-2 rounded-full bg-on-primary"></div>
+</div>
+<span class="font-headline-sm text-[13px] text-on-surface font-medium">Home Delivery (Dhaka Inside: ৳70)</span>
+</div>
+<span class="font-label-sm text-[11px] text-primary font-bold">SELECTED</span>
+</div>
+<!-- Custom Checkbox Row -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2.5">
+<div class="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-on-primary shadow-xs">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface">Gift wrapping with velvet satin ribbon</span>
+</div>
+<span class="font-price-md text-[13px] text-primary font-bold">+৳120</span>
+</div>
+<!-- Toggle Switch Row -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low">
+<div>
+<span class="font-headline-sm text-[13px] text-on-surface block font-medium">Save bKash Wallet for 1-Tap Checkout</span>
+<span class="font-body-sm text-[11px] text-on-surface-variant">Encrypted tokenization via bKash PGW</span>
+</div>
+<div class="w-11 h-6 rounded-full bg-primary p-0.5 flex items-center justify-end shadow-inner cursor-pointer">
+<div class="w-5 h-5 rounded-full bg-on-primary shadow-sm"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 8: BORDER RADIUS, SPACING & ELEVATION PHILOSOPHY -->
+<section class="px-margin py-space-md">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">07. Radius, Spacing &amp; Depth</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      Tactile soft curves paired with ambient blush diffusion (rgba(158,42,75,0.06)).
+    </p>
+<div class="grid grid-cols-2 gap-2.5">
+<div class="p-3 rounded-lg bg-surface-container-lowest shadow-sm flex flex-col items-center text-center">
+<div class="w-12 h-10 rounded-sm bg-primary-fixed mb-1.5 flex items-center justify-center text-on-primary-fixed font-label-sm text-[10px] font-bold">4px</div>
+<span class="font-headline-sm text-[13px] text-on-surface font-bold">rounded-sm</span>
+<span class="font-body-sm text-[11px] text-on-surface-variant">Micro badges, tags</span>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-lowest shadow-sm flex flex-col items-center text-center">
+<div class="w-12 h-10 rounded-md bg-primary-fixed mb-1.5 flex items-center justify-center text-on-primary-fixed font-label-sm text-[10px] font-bold">8px</div>
+<span class="font-headline-sm text-[13px] text-on-surface font-bold">rounded-md</span>
+<span class="font-body-sm text-[11px] text-on-surface-variant">Inputs, swatches</span>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-lowest shadow-sm flex flex-col items-center text-center">
+<div class="w-12 h-10 rounded-xl bg-primary-fixed mb-1.5 flex items-center justify-center text-on-primary-fixed font-label-sm text-[10px] font-bold">12px</div>
+<span class="font-headline-sm text-[13px] text-on-surface font-bold">rounded-xl</span>
+<span class="font-body-sm text-[11px] text-on-surface-variant">Cards, container blocks</span>
+</div>
+<div class="p-3 rounded-lg bg-surface-container-lowest shadow-sm flex flex-col items-center text-center">
+<div class="w-12 h-10 rounded-full bg-primary-fixed mb-1.5 flex items-center justify-center text-on-primary-fixed font-label-sm text-[10px] font-bold">9999px</div>
+<span class="font-headline-sm text-[13px] text-on-surface font-bold">rounded-full</span>
+<span class="font-body-sm text-[11px] text-on-surface-variant">Pills, icon buttons</span>
+</div>
+</div>
+</section>
+<!-- SECTION 9: FEEDBACK, SURFACES & LOADING SPECIMENS -->
+<section class="px-margin py-space-md">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">08. Feedback &amp; Skeleton Shimmers</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      Live specimens showing in-app alerts and network shimmer placeholders.
+    </p>
+<div class="space-y-3">
+<!-- Specimen 1: Value Alert Banner -->
+<div class="p-3.5 rounded-xl bg-primary-fixed text-on-primary-fixed flex items-start gap-2.5 shadow-sm">
+<span class="material-symbols-outlined text-[20px] text-primary" style="font-variation-settings: 'FILL' 1;">card_giftcard</span>
+<div>
+<span class="font-headline-sm text-[13px] font-bold block">Complimentary Gift Box Included</span>
+<span class="font-body-sm text-body-sm text-on-primary-fixed-variant">All orders over ৳2,000 within Dhaka City receive Maevelle signature velvet preservation pouch.</span>
+</div>
+</div>
+<!-- Specimen 2: Skeleton Loader Preview -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm space-y-3">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-bold uppercase tracking-wider">Skeleton Loading Placeholder</span>
+<span class="font-label-sm text-[10px] text-primary font-bold animate-pulse">SHIMMERING</span>
+</div>
+<div class="flex gap-3">
+<div class="w-16 h-20 rounded-lg bg-surface-container-high animate-pulse flex-shrink-0"></div>
+<div class="flex-1 space-y-2 py-1">
+<div class="w-3/4 h-3.5 rounded-sm bg-surface-container-high animate-pulse"></div>
+<div class="w-1/2 h-3 rounded-sm bg-surface-container animate-pulse"></div>
+<div class="w-1/3 h-4 rounded-sm bg-surface-container-highest animate-pulse mt-2"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 10: ASSEMBLED PRODUCT CARD SPECIMEN -->
+<section class="px-margin py-space-md pb-8">
+<div class="flex items-center gap-2 mb-space-sm">
+<span class="w-2 h-5 rounded-full bg-primary"></span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold">09. Assembled Molecule Specimen</h2>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+      How all discrete design tokens, type scales, chips, and hitboxes unite into a 3:4 product card.
+    </p>
+<!-- Fully Assembled 3:4 Product Card -->
+<div class="p-3 rounded-2xl bg-surface-container-lowest shadow-md max-w-[340px] mx-auto space-y-3">
+<!-- 3:4 Portrait Image Frame -->
+<div class="relative w-full aspect-[3/4] rounded-xl overflow-hidden bg-surface-container-low">
+<img alt="Maevelle Handcrafted Pearl Earrings" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1VvJXJ0IMb6fP9FEM54eE7JuTZGGfHM44mBQ-qZC1C7dQRvxXP9rOu7mDqgBUbj1ggMmV-8n39IBOmi8sprBb0d_eTcOKuELfIF9v0DpwDmEqx7SR3PwCjtiphjgu2fJPZIsAttFMbjltw-M8NlseVh4CbYtgUTjdLYj4k5cLIgBAyg_F47U1HSIhYOnDxJefAEkRG2Nph7Ruxxmna_NqZsmfcINKiyVzvyIQzaD6P7vFKunaAT-oFtEE4"/>
+<!-- Top Urgency Pill Overlay -->
+<div class="absolute top-2.5 left-2.5">
+<span class="px-2 py-0.5 rounded-full bg-primary/90 backdrop-blur-xs text-on-primary font-label-sm text-[10px] uppercase font-bold tracking-wider">
+            ATELIER DROP
+          </span>
+</div>
+<!-- Wishlist Hitbox (44x44px target envelope) -->
+<button class="absolute top-2 right-2 w-10 h-10 rounded-full bg-surface-container-lowest/90 backdrop-blur-xs text-primary flex items-center justify-center active:scale-90 transition-transform shadow-xs" id="cardHeartBtn" onclick="toggleCardHeart()">
+<span class="material-symbols-outlined text-[20px]" id="cardHeartIcon">favorite</span>
+</button>
+</div>
+<!-- Color Swatches Matrix -->
+<div class="flex items-center gap-2 pt-0.5">
+<button aria-label="Ivory" class="w-5 h-5 rounded-full bg-[#FAF5EE] ring-2 ring-primary ring-offset-2 ring-offset-surface-container-lowest shadow-inner"></button>
+<button aria-label="Gold Vermeil" class="w-5 h-5 rounded-full bg-[#D4AF37] opacity-80"></button>
+<button aria-label="Rose Pearl" class="w-5 h-5 rounded-full bg-[#E5B5B5] opacity-80"></button>
+<span class="font-body-sm text-[11px] text-on-surface-variant ml-1">+2 finishes</span>
+</div>
+<!-- Title & Price Block -->
+<div class="space-y-1">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold line-clamp-1">
+          Aurelia Pearl Drop Earrings
+        </span>
+<p class="font-body-sm text-[11px] text-on-surface-variant line-clamp-1">
+          Hand-strung Freshwater Pearls • 18K Micro-Gold Vermeil
+        </p>
+<div class="flex items-baseline justify-between pt-1">
+<div class="flex items-baseline gap-1.5">
+<span class="font-price-lg text-price-lg text-primary font-bold">৳1,650</span>
+<span class="font-body-sm text-body-sm text-outline line-through">৳2,100</span>
+</div>
+<span class="font-label-sm text-[10px] px-1.5 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-bold">-21%</span>
+</div>
+</div>
+<!-- Add to Bag Action Button -->
+<button class="w-full h-11 rounded-xl bg-primary text-on-primary font-label-md text-label-md font-semibold active:scale-98 transition-all flex items-center justify-center gap-1.5 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">shopping_bag</span>
+<span>Add to Bag • ৳1,650</span>
+</button>
+</div>
+</section>
+<!-- Interactive Local JavaScript Runtime -->
+<script>
+    // Toast spec helper
+    function showToast(text) {
+      const toast = document.getElementById('interactiveToast');
+      const msg = document.getElementById('toastMessage');
+      if (toast && msg) {
+        msg.textContent = text;
+        toast.classList.remove('hidden');
+        clearTimeout(window.toastTimer);
+        window.toastTimer = setTimeout(() => {
+          toast.classList.add('hidden');
+        }, 2600);
+      }
+    }
+
+    // Toggle heart wishlist spec
+    function toggleHeartSpec() {
+      const icon = document.getElementById('specHeartIcon');
+      const btn = document.getElementById('specHeartBtn');
+      if (icon && btn) {
+        const isFilled = icon.style.fontVariationSettings?.includes("'FILL' 1");
+        if (isFilled) {
+          icon.style.fontVariationSettings = "'FILL' 0";
+          btn.classList.remove('bg-primary', 'text-on-primary');
+          btn.classList.add('bg-surface-container-low', 'text-primary');
+          showToast('Wishlist: Removed');
+        } else {
+          icon.style.fontVariationSettings = "'FILL' 1";
+          btn.classList.remove('bg-surface-container-low', 'text-primary');
+          btn.classList.add('bg-primary', 'text-on-primary');
+          showToast('Wishlist: Active Filled State');
+        }
+      }
+    }
+
+    // Toggle Card Heart
+    function toggleCardHeart() {
+      const icon = document.getElementById('cardHeartIcon');
+      if (icon) {
+        const isFilled = icon.style.fontVariationSettings?.includes("'FILL' 1");
+        if (isFilled) {
+          icon.style.fontVariationSettings = "'FILL' 0";
+        } else {
+          icon.style.fontVariationSettings = "'FILL' 1";
+          showToast('Added Aurelia Earrings to Wishlist');
+        }
+      }
+    }
+
+    // Stepper interactive logic
+    let currentQty = 1;
+    function updateQty(delta) {
+      currentQty = Math.max(1, currentQty + delta);
+      const display = document.getElementById('qtyDisplay');
+      const minusBtn = document.getElementById('qtyMinusBtn');
+      if (display) display.textContent = currentQty;
+      if (minusBtn) {
+        minusBtn.disabled = currentQty <= 1;
+      }
+    }
+  </script>
+</div></main><!-- Quick Cart Drawer Bottom Sheet Modal -->
+<div aria-label="Your Shopping Bag" aria-modal="true" class="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto" id="cartDrawerModal" role="dialog">
+<!-- Scrim Backdrop -->
+<div class="absolute inset-0 bg-[#1E1B19]/50 backdrop-blur-xs transition-opacity duration-300" id="cartBackdrop"></div>
+<!-- Drawer Content Sheet -->
+<div class="relative w-full max-h-[751px] bg-surface-container-lowest rounded-t-3xl shadow-xl flex flex-col overflow-hidden transition-transform duration-300 ease-out z-10" id="cartDrawerSheet">
+<!-- Top Handle Bar -->
+<div class="w-full flex items-center justify-center pt-3 pb-1 cursor-grab">
+<div class="w-12 h-1.5 rounded-full bg-surface-container-highest"></div>
+</div>
+<!-- Drawer Header -->
+<div class="px-margin py-2.5 flex items-center justify-between border-b border-surface-container">
+<div class="flex items-center gap-2">
+<h2 class="font-headline-lg text-[20px] leading-tight text-on-surface font-semibold">Shopping Bag</h2>
+<span class="font-label-sm text-[11px] px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-bold">2 items</span>
+</div>
+<button aria-label="Close shopping bag" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" id="closeCartBtn">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Free Shipping Progress Indicator -->
+<div class="bg-surface-container-low px-margin py-2.5 border-b border-surface-container/60">
+<div class="flex items-center justify-between font-label-sm text-[11px] text-on-surface mb-1.5">
+<div class="flex items-center gap-1.5 text-primary font-semibold">
+<span class="material-symbols-outlined text-[16px]">local_shipping</span>
+<span>Add ৳500 more for Free Dhaka Express!</span>
+</div>
+<span class="text-on-surface-variant font-medium">৳2,500 / ৳3,000</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-500" style="width: 83.33%;"></div>
+</div>
+</div>
+<!-- Scrollable Cart Items List -->
+<div class="flex-1 overflow-y-auto px-margin py-3 divide-y divide-surface-container/60 space-y-3">
+<!-- Item 1: Aurelia Freshwater Pearl Drop Earrings -->
+<div class="pt-3 first:pt-0 flex gap-3 group">
+<div class="w-20 h-24 rounded-lg overflow-hidden bg-surface-container-low flex-shrink-0 relative">
+<img alt="Aurelia Freshwater Pearl Drop Earrings" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAU8kN5Vdd-XFeUvL46CjxHeMIuqVlvOhzkxBeqEZbQrpiAvJAiT-7KIfOiRtN8aHnlzi4hl7xu93DUKF1LuLzY7_QV3v_7C9HV326W7qStkQMjNbSV9416GdaPdUvNT05egHsMOPWx_l2v_-w_bwM1u73AHYoiOqof4dI9HA21x3AGn1cFuS-IR6lPC7KsnlSwjexBjU1nzxRYx9mekEi6tr1w1Gj7NRsuBBgaH2bJjAiRGixv7mxx"/>
+</div>
+<div class="flex-1 flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-sm text-[14px] leading-tight text-on-surface font-semibold line-clamp-1">Aurelia Freshwater Pearl Drop Earrings</h3>
+<button aria-label="Remove item" class="text-on-surface-variant/70 hover:text-error transition-colors p-0.5">
+<span class="material-symbols-outlined text-[16px]">delete_outline</span>
+</button>
+</div>
+<p class="font-body-sm text-[11px] text-on-surface-variant mt-0.5">18K Gold Plated • Natural Ivory</p>
+</div>
+<div class="flex items-center justify-between mt-2">
+<div class="flex items-center border border-outline-variant/60 rounded-lg bg-surface-container-lowest overflow-hidden h-7">
+<button aria-label="Decrease quantity" class="w-7 h-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all text-xs font-semibold">-</button>
+<span class="w-7 text-center font-label-md text-xs font-semibold text-on-surface">1</span>
+<button aria-label="Increase quantity" class="w-7 h-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all text-xs font-semibold">+</button>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳1,650</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 2: Plush Velvet Hair Ribbon -->
+<div class="pt-3 flex gap-3 group">
+<div class="w-20 h-24 rounded-lg overflow-hidden bg-surface-container-low flex-shrink-0 relative">
+<img alt="Plush Velvet Hair Ribbon" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC57r3CLXUvSZDBeSKxpeW7zHa4TrFki3NN8CLIcNCvq3b0x3BgofZM0zdNua_l8jL5nikW5IvXlgQEapXPagGkR7P3N-42uqSvANLP4zOsySIjt0LqFD-QyzC9kv_zUS_Q1kLJx_KqQ1Vtma1HqZVoxE8BNuFF2WBZDzQWGDBYsYv26QNi8khn29i6w-Me5_-376wN8A3ehSUNcdGYyVnQWNxyLKrloWk_OQw1kcZz0XKVo9NZhIXn"/>
+</div>
+<div class="flex-1 flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-sm text-[14px] leading-tight text-on-surface font-semibold line-clamp-1">Plush Velvet Hair Ribbon</h3>
+<button aria-label="Remove item" class="text-on-surface-variant/70 hover:text-error transition-colors p-0.5">
+<span class="material-symbols-outlined text-[16px]">delete_outline</span>
+</button>
+</div>
+<p class="font-body-sm text-[11px] text-on-surface-variant mt-0.5">Deep Berry Silk Velvet</p>
+</div>
+<div class="flex items-center justify-between mt-2">
+<div class="flex items-center border border-outline-variant/60 rounded-lg bg-surface-container-lowest overflow-hidden h-7">
+<button aria-label="Decrease quantity" class="w-7 h-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all text-xs font-semibold">-</button>
+<span class="w-7 text-center font-label-md text-xs font-semibold text-on-surface">1</span>
+<button aria-label="Increase quantity" class="w-7 h-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all text-xs font-semibold">+</button>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳850</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Summary, Trust reassurance, and Actions Section -->
+<div class="bg-surface-container-low/70 border-t border-surface-container px-margin pt-3 pb-safe shadow-[0_-4px_20px_rgba(158,42,75,0.06)]">
+<!-- Cost Breakdown -->
+<div class="space-y-1 pb-2.5">
+<div class="flex items-center justify-between font-body-sm text-[13px] text-on-surface-variant">
+<span>Subtotal</span>
+<span class="font-medium text-on-surface">৳2,500</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-[13px] text-on-surface-variant">
+<span>Delivery</span>
+<span class="text-[12px] text-primary font-medium">৳70 Dhaka / Free over ৳3,000</span>
+</div>
+<div class="flex items-center justify-between font-headline-sm text-headline-sm font-semibold text-on-surface pt-1 border-t border-surface-container">
+<span>Estimated Total</span>
+<span class="font-price-lg text-price-lg text-primary font-bold">৳2,500</span>
+</div>
+</div>
+<!-- Dual Action CTA Buttons -->
+<div class="flex flex-col gap-2 pt-1 pb-2">
+<button class="w-full h-12 rounded-xl bg-primary text-on-primary font-headline-sm text-[15px] font-semibold shadow-md active:scale-98 transition-all flex items-center justify-between px-4">
+<span class="font-bold font-price-md">৳2,500</span>
+<span class="flex items-center gap-1.5">
+<span>Continue to Checkout</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</span>
+</button>
+<button class="w-full h-11 rounded-xl bg-surface-container-lowest border border-outline-variant/70 text-on-surface hover:bg-surface-container-low font-label-md text-label-md font-semibold active:scale-98 transition-all flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-primary">shopping_bag</span>
+<span>View Full Cart Page</span>
+</button>
+</div>
+<!-- Local Convenience & Trust Seal -->
+<div class="flex items-center justify-center gap-2 pb-2 text-[11px] font-label-sm text-on-surface-variant/80 text-center">
+<span class="material-symbols-outlined text-[14px] text-primary">verified_user</span>
+<span>Cash on Delivery (COD) &amp; bKash • 7-Day Doorstep Exchange</span>
+</div>
+</div>
+</div>
+</div><div class="fixed bottom-24 inset-x-margin z-40 pointer-events-none flex flex-col gap-space-sm items-center pb-safe" id="toast-root"></div><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-4px_20px_rgba(158,42,75,0.06)]" data-active-classes="text-primary font-semibold"><div class="h-16 px-space-md grid grid-cols-4 items-center"><a class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="explore" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">storefront</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Explore</span><span class="w-1 h-1 rounded-full bg-primary mt-0.5 opacity-90"></span></a><a class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="categories" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">grid_view</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Categories</span></a><a class="group relative flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="wishlist" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">favorite</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Wishlist</span><span class="absolute top-1 right-[28%] min-w-[14px] h-[14px] px-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[9px] flex items-center justify-center font-bold">5</span></a><a class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="account" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">account_circle</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Account</span></a></div></nav></body></html>

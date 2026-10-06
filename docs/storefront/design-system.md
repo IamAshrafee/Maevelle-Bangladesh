@@ -6,32 +6,22 @@ The system is light-theme only, mobile-first, warm, restrained, product-focused,
 
 ## Source-of-truth reconciliation
 
-No approved UI/UX artifact or prior Storefront `DESIGN.md` was present in the repository during Task 02. The task brief supplied the only production palette and geometry direction. Missing artwork is not treated as evidence.
+The approved UI/UX design system artifacts were provided via `Stitch/DESIGN (1).md` and the Stitch UI vaults (`stitch_maevelle_mobile_design_system (1, 3, 7, 8)`). These reconcile the token and component definitions into production-grade foundations.
 
 | Token or rule | Conflicting/current values | Approved artifact value | Canonical value | Resolution |
 | --- | --- | --- | --- | --- |
-| Primary | Brief structured `#7E0E35`; prose `#9E2A4B`; MVP `#8C3248` | Not available | `#7E0E35` | Structured production token; stronger white-text contrast. `#9E2A4B` remains Berry Rose 700, not another primary. Owner visual confirmation remains required. |
-| Primary hover | MVP `#682035` | Not available | `#65102E` | Darkens primary without changing hue family. |
-| Canvas | MVP `#FFFDF9`; brief warm-white/linen direction | Not available | `#FFFAF7` | Warm enough to distinguish the canvas while keeping photography neutral. |
-| Surface | MVP mixed white/paper | Not available | `#FFFFFF` | Gives clear hierarchy against the warm canvas. |
-| Foreground | MVP `#211C1B`; brief espresso direction | Not available | `#291C20` | Warm near-black with 15.82:1 contrast on canvas. |
-| Muted text | MVP `#6F6662` | Not available | `#665B5E` | Readable at 6.29:1 on canvas. |
-| Spacing | Brief `4/8/12/16/24/32`; scattered MVP values | Not available | Tailwind 4 px base scale | Preserves the requested scale while allowing larger editorial spacing. |
-| Radius | Brief prose used `rounded-md` for 8 px; structured scale names differed | Not available | `xs/sm 4`, `md 8`, `lg 12`, `xl 16`, `2xl 24` px | Components use `rounded-md` for the standard 8 px control radius. |
-| Elevation | Unnamed MVP shadows | Not available | `raised`, `floating`, `modal` | Three warm, diffused levels; flat remains the default. |
-| Motion | Brief ranges only | Not available | `120/180/260ms` | Fast controls, normal state changes, and surface movement respectively. |
-| Main container | Brief approximately 1240 px | Not available | `77.5rem` / 1240 px | Exact shared maximum with 16 px mobile and 24 px desktop gutters. |
-| Typography | Task 01 loaded 3 variable families | Not available | Plus Jakarta Sans, Playfair Display, Noto Sans Bengali | Retained; Playfair is editorial only and Bangla always uses Noto Sans Bengali. |
-
-### Owner decision required
-
-`OWNER_DECISION_REQUIRED — STOREFRONT_PRIMARY_BERRY`
-
-- Option A: `#7E0E35` (implemented and recommended). Deeper, more premium, white contrast 10.49:1.
-- Option B: `#9E2A4B`. Brighter/softer, white contrast 7.27:1, but it should replace the primary token rather than coexist as a second primary.
-- Required review: compare the development lab with the missing approved design artifact. A later decision changes the semantic token only; component APIs remain stable.
-
-This decision does not block page implementation because the codebase has one unambiguous runtime primary today.
+| Primary | Brief structured `#7E0E35`; prose `#9E2A4B`; MVP `#8C3248` | `#7E0E35` (Primary Pressed / Brand Anchor), `#9E2A4B` (Primary CTA Container) | `#7E0E35` (primary) / `#9E2A4B` (primary-container) | Canonical authority established. `#7E0E35` anchors brand identity and pressed states (7.2:1 AAA); `#9E2A4B` powers high-conversion primary CTAs (4.8:1 AA). |
+| Primary hover | MVP `#682035` | `#65102E` | `#65102E` | Darkens primary without changing hue family. |
+| Canvas & Surface | MVP `#FFFDF9` | `#FFF8F5` (Surface Alabaster) / `#FFFFFF` (Pristine Card Base) | `#FFF8F5` / `#FFFFFF` | Warm alabaster neutral prevents tropical screen glare while pristine white tiles elevate products. |
+| Surface Containers | Unspecified in MVP | Lowest `#FFFFFF`, Low `#FAF2EE`, Mid `#F4ECE8`, High `#EEE7E3`, Highest `#E9E1DD` | Five-tier container scale | Provides structured architectural elevation for sheets, cards, inputs, and steppers. |
+| Foreground / Ink | MVP `#211C1B` | `#1E1B19` (Espresso Ink) | `#1E1B19` | Warm near-black with 15.8:1 contrast on alabaster canvas. |
+| Muted text | MVP `#6F6662` | `#574144` (Stone) | `#574144` | Readable at 9.0:1 on canvas. |
+| Spacing | Scattered MVP values | 4, 8, 12, 16, 24, 32 px | 4 px base scale + Stitch spacing tokens | `space-xs 4`, `space-sm 8`, `space-md 12`, `space-lg 16`, `space-xl 24` px. |
+| Radius | Inconsistent | `rounded-sm 4px`, `rounded-md 8px`, `rounded-xl 12px`, `rounded-2xl 16px`, `rounded-full 9999px` | Stitch 5-tier geometry | Standardized across micro badges, inputs, cards, drawers, and pills. |
+| Elevation | Unnamed MVP shadows | Ambient blush diffusion `rgba(158, 42, 75, 0.04-0.08)` | `raised`, `floating`, `modal` | Warm diffused drop-shadows with blush tint. |
+| Motion | Brief ranges only | `120/180/260ms` + `active:scale-98` | `120/180/260ms` with tactile press scaling | Tactile touch scaling for buttons, icon buttons, and chips. |
+| Main container | Brief approx 1240 px | `390px` mobile baseline up to `1240px` desktop | `390px` to `1240px` | Strict mobile-first thumb ergonomics reflowing to 1240px desktop. |
+| Typography | 3 variable families | Playfair Display + Plus Jakarta Sans + Noto Sans Bengali | Retained & unified | Playfair Display for editorial headlines, Plus Jakarta Sans for functional commerce, Noto Sans Bengali for Bangla scripts. |
 
 ## Color system
 
@@ -123,18 +113,40 @@ Glass is allowed only for sticky global chrome, a sticky mobile purchase bar, or
 | `Badge` | Compact semantic status/brand label; neutral, brand, success, warning, danger, info. |
 | `Chip` / `ChoiceChip` | Display metadata vs. interactive `aria-pressed` choice; unavailable choices are not conveyed through opacity alone. |
 | `ColorSwatch` | Named, focusable, selected/unavailable states with a 48 px target. Dynamic product color is the only justified inline style. |
-| `Input`, `Textarea`, `Select` | Native elements, 48 px minimum controls, 16 px text, disabled/read-only/error states, and normal attribute forwarding. |
-| `Field` | Requires a stable `id`; wires label, description, error, `aria-describedby`, and `aria-invalid` without client JavaScript. |
-| `Checkbox`, `Radio` | Native semantics with a shared label hit area, keyboard behavior, and accent/focus treatment. |
+| `Input` | Luxury text input with forwardRef; `sm/md/lg` size variants (36px, 44px, 48px); `leftIcon` and `rightIcon` slots; `clearable` button; `showPasswordToggle` reveal; error states with primary/error focus rings. |
+| `Select` | Custom luxury select primitive with `sm/md/lg` sizes; styled `ChevronDownIcon`; `leftIcon` slot; error states; `appearance-none` with touch-friendly hitboxes. |
+| `Textarea` | Multi-line input with `min-h-24/28`, live character counter (`showCharacterCount`), `maxCharacters`, and error states. |
+| `Field` | Stable ID form wrapper wiring labels, required asterisk, optional indicators, helper text, and error states with `AlertCircleIcon`. |
+| `Checkbox`, `Radio` | Custom luxury checkboxes and radios with rounded-[5px] and circular frames, animated checkmarks and inner dots, peer-focus rings, labels, and descriptions. |
+| `RadioCard` | Interactive checkout tile for delivery and payment selection (e.g. 24h Express vs Standard; bKash vs COD) with radio check, badges, price tags, and hover/active transitions. |
 | `Container`, `Section` | Enforce shared gutters, maximum widths, and functional/editorial vertical rhythm. |
-| `Surface` | Flat/raised/floating/inverse/glass recipes with restrained geometry and elevation. |
-| `Notice` | Neutral/success/warning/danger/info feedback with readable semantic pairs and live-region-compatible roles. |
-| `Skeleton`, `Spinner` | Reduced-motion-aware loading foundations; spinner always exposes a status label. |
-| `Separator`, `VisuallyHidden`, `SkipLink` | Semantic structure, accessible naming, and keyboard bypass. |
-| `Heading`, `Text` | Small explicit typography API that preserves heading level independently from visual role. |
-| `Money`, `Price` | `Intl` formatting, Taka support, sale/original presentation, and tabular figures without pricing calculations. |
+| `Surface` | 3-tier elevation system (`flat`, `raised`, `floating`) plus liquid frosted glass, sunken wells, and optional interactive hover/touch scaling. |
+| `Notice` | 6 luxury semantic variants (`brand`, `success`, `warning`, `danger`, `info`, `neutral`) with default icons, dismiss control, and call-to-action buttons. |
+| `Skeleton`, `Spinner` | Warm neutral surface shimmers with presets (`text`, `circular`, `card`, `button`); multi-size editorial spinners (`xs/sm/md/lg`) in brand primary and neutral. |
+| `Separator`, `VisuallyHidden`, `SkipLink` | Hairline dividers with horizontal/vertical orientation and optional centered labels; accessibility skip link with primary luxury styling. |
+| `Heading`, `Text`, `Kicker` | Playfair Display editorial serif display headings, Plus Jakarta Sans clean UI text, and uppercase letterspaced kicker labels. |
+| `Money`, `Price` | Formatted Taka (`৳`) currency figures with tabular numerals, comparison strikethroughs, and sale badges. |
+| `SortDrawer` | 1:1 Stitch bottom-sheet drawer with auto-select, editorial Playfair heading, crisp berry radio checkmarks, Trending pill, and single Reset button. |
+| `CartDrawer` | Slide-up shopping bag sheet with free shipping progress bar (৳2,500 threshold), item steppers, subtotal, and dual checkout CTAs. |
+| `ProductCard` | 3:4 portrait card with ATELIER DROP urgency badge, wishlist pop button, finish swatches, and inline Add to Bag. |
+| `QuantityStepper` | Tactile `[-] count [+]` stepper with minimum 1 protection and `scale-90` tactile feedback. |
+| `WishlistButton` | Animated heart toggle with tactile scale pop and accessibility labeling. |
+| `PhoneInput` | Courier contact input with 🇧🇩 `+880` prefix chip, validation, and verified check indicator. |
+| `Toggle` | Tactile iOS/Maevelle 1-tap checkout switch with smooth sliding thumb. |
+| `BottomNav` | Mobile 4-tab bottom navigation with safe-area padding and active indicator. |
+| `TrustBadges` | Maevelle White Glove Dispatch 3-pillar customer trust banner. |
+| `FilterDrawer` | Multi-faceted bottom sheet drawer for collection refinement (price slider, palette swatches, material chips, Dhaka express toggles). |
+| `FilterTriggerButton` | Ergonomic catalog bar trigger button with dynamic active criteria badge. |
+| `AnnouncementBar` | High-visibility top marquee for Dhaka courier promise and promotions with dismiss control. |
+| `MobileNavbar` | Viewport `< lg` header matching Stitch mobile design with brand logo, search expander drawer, and badged cart icon (no hamburger, no account). |
+| `DesktopNavbar` | Viewport `lg+` 2-row luxury header with brand typography, prominent search bar, badged utilities, and an interactive category mega-menu. |
+| `MobileFooter` | Viewport `< lg` minimal footer with compact brand header, quick utility links, local payment pills, and bottom-nav safe clearance. |
+| `DesktopFooter` | Viewport `lg+` luxury noir footer with VIP atelier newsletter dispatch, 4-column atelier architecture, white glove trust standards, and verified payment badges. |
+| `StorefrontFooter` | Master footer component automatically rendering `MobileFooter` on mobile/tablet and `DesktopFooter` on desktop. |
 
-Components deliberately not created: Switch, SegmentedControl, ToggleGroup, Dialog, Drawer, BottomSheet, Tooltip, Tabs, Accordion, Toast, Progress, and a final ProductCard. They should wait for an approved feature flow; native `<dialog>` and the existing implementations should be evaluated during the relevant page task. No speculative client-side primitive or UI dependency was added.
+
+### Quarantined Legacy CSS Neutralization
+To prevent legacy MVP styles (`styles/legacy.css`) from contaminating production components—specifically the legacy rule forcing buttons to 44px min-height, border radius, and dark hover—`styles/base.css` explicitly resets button `min-height: 0`, `min-width: 0`, `border-radius: 0`, and `button:hover:not(:disabled)`. All buttons, icon buttons, and circular controls now render with true geometric dimensions.
 
 ## CSS and component ownership
 
@@ -145,6 +157,21 @@ Components deliberately not created: Switch, SegmentedControl, ToggleGroup, Dial
 Static arbitrary Tailwind values are disallowed in normal product work. A rare platform expression such as safe-area math or the internal glass fallback is acceptable only when no named token can express it. Dynamic values such as a backend color swatch may use a narrowly scoped inline style.
 
 Keep primitives Server Component compatible. Add `'use client'` only when browser state, events, or APIs require it. Avoid barrels on hot client paths and import component files directly.
+
+### Shared Component Authority & Single Source of Truth
+Every shared pattern (such as `QuantityStepper`, `Price`, `Money`, `SortDrawer`, `CartDrawer`, `Button`, `IconButton`, `Chip`, `Badge`, `PhoneInput`, `Toggle`, `ProductCard`) must have a single authoritative component implementation in `components/ui/`, `components/commerce/`, or `components/layout/`.
+- **Never inline duplicate patterns:** Do not write inline one-off steppers, buttons, badges, chips, inputs, or cards inside drawers, modals, or pages.
+- **Evolve the primitive:** If a design artifact (like Stitch) introduces a compact size or a specialized visual treatment (e.g., compact 28px in-cart stepper vs 36px PDP stepper, or mobile vs desktop card interactions), add that variant or size directly to the reusable component and consume it in the drawer/page.
+- **Immediate propagation:** Updating the shared component guarantees consistent ergonomics, accessibility, keyboard navigation, and styling across all storefront surfaces simultaneously.
+
+### Product Card Architecture (Mobile & Desktop)
+Extracted faithfully from the Warm Editorial Atelier shop design (`Stitch/stitch_maevelle_mobile_first_design_system1`), replacing legacy card markup with a borderless, high-editorial aesthetic:
+- **Hero Image Container:** 3:4 aspect ratio with `rounded-xl`, `bg-surface-container-low`, and subtle diffused shadow (`shadow-[0_4px_16px_rgba(26,22,23,0.04)]`).
+- **Capsule Badges:** Frosted glass capsule badges (`Editor's Pick`, `New In`, `Best Seller`) and scarcity pills (`Low Stock (3 left)` in `bg-secondary-fixed text-on-secondary-fixed`).
+- **Frosted Wishlist Button:** Floating 32px (`size-xs`) frosted glass circular button with tactile press scaling.
+- **Floating Reassurance / Rating Pills:** "Dhaka 24-48h Delivery" with bolt icon and Star Rating pill (`★ 4.9 (34)`) directly anchored to the bottom of the artwork. On desktop, bottom pills smoothly fade out on image hover as the Quick Add bar slides up.
+- **Sold Out State:** 30% desaturated image, dark veil overlay (`bg-inverse-surface/35 backdrop-blur-[1px]`), uppercase "Sold Out" tag, and interactive "Notify Me" action with bell icon.
+- **Desktop Enhancements:** Slide-up frosted "Quick Add to Bag" action bar on pointer hover (`group-hover:translate-y-0 group-hover:opacity-100`), smooth secondary image crossfade, expanded multi-line title, subtitle specifications, and interactive finish swatch previews.
 
 ## Development lab and quality gate
 

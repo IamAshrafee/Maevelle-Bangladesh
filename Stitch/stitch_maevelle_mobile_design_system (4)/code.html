@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-error-container": "#93000a", "error": "#ba1a1a", "primary-fixed-dim": "#ffb2bf", "outline": "#8a7174", "inverse-on-surface": "#f7efeb", "on-tertiary-container": "#d4cacc", "on-surface": "#1e1b19", "primary-fixed": "#ffd9de", "outline-variant": "#ddbfc3", "on-tertiary-fixed": "#1f1a1c", "surface-container-low": "#faf2ee", "on-secondary-container": "#740734", "primary-container": "#9e2a4b", "tertiary": "#443e40", "surface-bright": "#fff8f5", "surface-container-highest": "#e9e1dd", "secondary-fixed": "#ffd9e0", "secondary": "#a63359", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#4b4547", "on-error": "#ffffff", "surface-dim": "#e0d8d5", "on-secondary-fixed-variant": "#871a42", "on-primary-container": "#ffbbc6", "on-primary-fixed": "#3f0015", "on-background": "#1e1b19", "tertiary-container": "#5c5557", "surface-container-high": "#eee7e3", "surface-container-lowest": "#ffffff", "surface-variant": "#e9e1dd", "surface-tint": "#a83252", "on-primary-fixed-variant": "#88183c", "secondary-fixed-dim": "#ffb1c2", "on-tertiary": "#ffffff", "background": "#fff8f5", "surface": "#fff8f5", "error-container": "#ffdad6", "surface-container": "#f4ece8", "secondary-container": "#fd779d", "on-surface-variant": "#574144", "inverse-surface": "#33302d", "on-secondary-fixed": "#3f0018", "on-primary": "#ffffff", "tertiary-fixed": "#eae0e2", "primary": "#7e0e35", "inverse-primary": "#ffb2bf", "tertiary-fixed-dim": "#cec4c6" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "1.5rem", "space-md": "0.75rem", "space-sm": "0.5rem", "space-xs": "0.25rem", "gutter": "0.75rem", "space-lg": "1rem", "margin": "1rem" }, "fontFamily": { "headline-lg": ["Playfair Display"], "price-md": ["Plus Jakarta Sans"], "display-hero-mobile": ["Playfair Display"], "headline-md": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Playfair Display"], "body-lg": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "display-hero": ["Playfair Display"], "label-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "price-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"] }, "fontSize": { "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "500" }], "price-md": ["15px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "700" }], "display-hero-mobile": ["28px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "500" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "display-hero": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "label-md": ["13px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "headline-sm": ["16px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "600" }], "price-lg": ["20px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }] } } } }</script><style>@layer base{html,body{width:100vw;min-height:100%;margin:0;padding:0;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 350,'GRAD' 0,'opsz' 24;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-surface font-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(158,42,75,0.04)]"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-xs"><button aria-label="Open navigation menu" class="w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors"><span class="material-symbols-outlined text-[24px]">menu</span></button></div><div class="flex-1 flex items-center justify-center text-center"><a class="inline-flex flex-col items-center" data-path="explore" href="#"><span class="font-headline-lg text-headline-lg tracking-tight text-primary leading-none font-semibold">Maevelle</span><span class="font-label-sm text-[10px] tracking-[0.2em] uppercase text-on-surface-variant/80 -mt-1">Dhaka</span></a></div><div class="flex items-center gap-space-xs justify-end"><button aria-label="Search catalog" class="w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">search</span></button><button aria-label="View shopping bag" class="relative w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors" id="openCartBtn"><span class="material-symbols-outlined text-[22px]">shopping_bag</span><span class="absolute top-2 right-2 min-w-[16px] h-4 px-1 rounded-full bg-primary text-on-primary font-label-sm text-[10px] flex items-center justify-center leading-none">2</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-1"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Search Input Area -->
+<div class="px-margin pt-space-xs pb-space-sm">
+<div class="relative flex items-center w-full">
+<span class="material-symbols-outlined absolute left-3 text-[20px] text-on-surface-variant pointer-events-none">search</span>
+<input class="w-full h-12 pl-10 pr-10 rounded-xl bg-surface-container text-on-surface font-body-md text-body-md placeholder:text-on-surface-variant/60 focus:outline-none focus:bg-surface-container-lowest focus:shadow-md transition-all shadow-sm" placeholder="Search earrings, hair bows, bags..." type="text"/>
+<button aria-label="Clear or voice search" class="absolute right-2 w-8 h-8 flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+</div>
+</div>
+<!-- Category Pills Scroller -->
+<div class="w-full overflow-x-auto pb-space-sm px-margin flex gap-space-xs scrollbar-none items-center">
+<button class="flex-shrink-0 h-9 px-4 rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform">
+<span>All Pieces</span>
+<span class="text-[10px] bg-primary-container/60 text-on-primary px-1.5 py-0.5 rounded-full font-label-sm leading-none">48</span>
+</button>
+<button class="flex-shrink-0 h-9 px-4 rounded-full bg-surface-container-low text-on-surface hover:bg-surface-container font-label-md text-label-md flex items-center gap-1 transition-colors active:scale-95">
+<span>Hair Accents</span>
+</button>
+<button class="flex-shrink-0 h-9 px-4 rounded-full bg-surface-container-low text-on-surface hover:bg-surface-container font-label-md text-label-md flex items-center gap-1 transition-colors active:scale-95">
+<span>Fine Jewelry</span>
+</button>
+<button class="flex-shrink-0 h-9 px-4 rounded-full bg-surface-container-low text-on-surface hover:bg-surface-container font-label-md text-label-md flex items-center gap-1 transition-colors active:scale-95">
+<span>Handbags</span>
+</button>
+<button class="flex-shrink-0 h-9 px-4 rounded-full bg-surface-container-low text-on-surface hover:bg-surface-container font-label-md text-label-md flex items-center gap-1 transition-colors active:scale-95">
+<span>Silk Scarves</span>
+</button>
+<button class="flex-shrink-0 h-9 px-4 rounded-full bg-surface-container-low text-on-surface hover:bg-surface-container font-label-md text-label-md flex items-center gap-1 transition-colors active:scale-95">
+<span>New Arrivals</span>
+</button>
+</div>
+<!-- Sticky Action Controls & Refinements -->
+<div class="sticky top-16 z-30 bg-surface/95 backdrop-blur-md pb-space-xs pt-space-xs shadow-sm">
+<div class="px-margin flex items-center justify-between gap-space-xs">
+<!-- Filter Trigger -->
+<button class="h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-2 active:scale-95 transition-all shadow-sm" id="openFilterBtn">
+<span class="material-symbols-outlined text-[18px] text-primary">filter_list</span>
+<span>Filter</span>
+<span class="w-5 h-5 rounded-full bg-primary text-on-primary font-label-sm text-[10px] flex items-center justify-center font-bold">2</span>
+</button>
+<!-- Sort Dropdown -->
+<div class="relative">
+<button class="h-11 px-3.5 rounded-xl bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1.5 active:scale-95 transition-all shadow-sm" id="sortTriggerBtn">
+<span class="text-on-surface-variant font-normal">Sort:</span>
+<span class="font-semibold text-primary">Featured</span>
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">keyboard_arrow_down</span>
+</button>
+</div>
+<!-- Grid Column Switcher -->
+<div class="flex items-center p-1 rounded-xl bg-surface-container-low shadow-sm">
+<button aria-label="2-column grid" class="w-9 h-9 rounded-lg bg-surface-container-lowest text-primary shadow-xs flex items-center justify-center transition-all" id="gridCol2Btn">
+<span class="material-symbols-outlined text-[18px]">grid_view</span>
+</button>
+<button aria-label="1-column view" class="w-9 h-9 rounded-lg text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-all" id="gridCol1Btn">
+<span class="material-symbols-outlined text-[18px]">view_agenda</span>
+</button>
+</div>
+</div>
+<!-- Active Filter Tag Chips -->
+<div class="px-margin mt-space-sm flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1">
+<div class="flex-shrink-0 inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm">
+<span>In Stock</span>
+<button aria-label="Remove In Stock filter" class="w-4 h-4 rounded-full flex items-center justify-center hover:bg-secondary-fixed-dim/60 text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[12px]">close</span>
+</button>
+</div>
+<div class="flex-shrink-0 inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm">
+<span>Jewelry</span>
+<button aria-label="Remove Jewelry filter" class="w-4 h-4 rounded-full flex items-center justify-center hover:bg-secondary-fixed-dim/60 text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[12px]">close</span>
+</button>
+</div>
+<div class="flex-shrink-0 inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm">
+<span>Under ৳2,500</span>
+<button aria-label="Remove price filter" class="w-4 h-4 rounded-full flex items-center justify-center hover:bg-secondary-fixed-dim/60 text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[12px]">close</span>
+</button>
+</div>
+<button class="flex-shrink-0 font-label-sm text-label-sm text-primary hover:underline px-1 py-1 font-semibold">
+        Clear all
+      </button>
+</div>
+<!-- Live Counter -->
+<div class="px-margin pt-1.5 flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm">
+<span>Showing <strong class="text-on-surface font-semibold">24</strong> of 48 pieces</span>
+<span class="flex items-center gap-1 text-[11px] text-primary">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+        Curated for Dhaka
+      </span>
+</div>
+</div>
+<!-- Product Catalog Grid -->
+<section class="px-margin pt-space-sm pb-space-lg">
+<div class="grid grid-cols-2 gap-gutter" id="catalogGrid">
+<!-- Card 1: Handcrafted Pearl Drop Earrings -->
+<article class="flex flex-col bg-surface-container-lowest rounded-xl p-2 shadow-sm transition-all hover:shadow-md group">
+<div class="relative w-full aspect-[3/4] rounded-lg overflow-hidden bg-surface-container-low mb-2">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Exquisite freshwater handcrafted pearl drop earrings with delicate 18k gold filigree wiring displayed on a plush blush pink textured silk fabric, luxury editorial studio lighting, soft rose shadows, warm South Asian heritage aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAU8kN5Vdd-XFeUvL46CjxHeMIuqVlvOhzkxBeqEZbQrpiAvJAiT-7KIfOiRtN8aHnlzi4hl7xu93DUKF1LuLzY7_QV3v_7C9HV326W7qStkQMjNbSV9416GdaPdUvNT05egHsMOPWx_l2v_-w_bwM1u73AHYoiOqof4dI9HA21x3AGn1cFuS-IR6lPC7KsnlSwjexBjU1nzxRYx9mekEi6tr1w1Gj7NRsuBBgaH2bJjAiRGixv7mxx"/>
+<div class="absolute top-2 left-2 bg-primary-fixed text-on-primary-fixed font-label-sm text-[10px] px-2 py-0.5 rounded-full shadow-xs">
+            Handcrafted
+          </div>
+<button aria-label="Add Handcrafted Pearl Drop Earrings to wishlist" class="wishlist-btn absolute top-2 right-2 w-9 h-9 rounded-full bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-center text-on-surface active:scale-90 transition-transform shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+</div>
+<div class="flex flex-col flex-1 justify-between">
+<div>
+<div class="flex items-center gap-1 mb-1">
+<span class="w-2.5 h-2.5 rounded-full bg-[#E5D3B3] ring-1 ring-offset-1 ring-primary/40" title="Champagne Gold"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-[#E0E0E0]" title="Pure Silver"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-[#E8A598]" title="Rose Gold"></span>
+</div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface line-clamp-2 leading-tight">Handcrafted Pearl Drop Earrings</h3>
+</div>
+<div class="mt-2 flex items-baseline gap-1.5">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳1,450</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant line-through">৳1,800</span>
+</div>
+</div>
+</article>
+<!-- Card 2: Plush Velvet Hair Ribbon -->
+<article class="flex flex-col bg-surface-container-lowest rounded-xl p-2 shadow-sm transition-all hover:shadow-md group">
+<div class="relative w-full aspect-[3/4] rounded-lg overflow-hidden bg-surface-container-low mb-2">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Deep crimson plush velvet oversized hair ribbon tied on glossy dark wavy hair from behind, high-end editorial boutique portrait, rich burgundy hues, warm ambient glow, Dhaka high-fashion lifestyle aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC57r3CLXUvSZDBeSKxpeW7zHa4TrFki3NN8CLIcNCvq3b0x3BgofZM0zdNua_l8jL5nikW5IvXlgQEapXPagGkR7P3N-42uqSvANLP4zOsySIjt0LqFD-QyzC9kv_zUS_Q1kLJx_KqQ1Vtma1HqZVoxE8BNuFF2WBZDzQWGDBYsYv26QNi8khn29i6w-Me5_-376wN8A3ehSUNcdGYyVnQWNxyLKrloWk_OQw1kcZz0XKVo9NZhIXn"/>
+<div class="absolute top-2 left-2 bg-secondary-container text-on-secondary-container font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold shadow-xs">
+            Popular
+          </div>
+<button aria-label="Add Plush Velvet Hair Ribbon to wishlist" class="wishlist-btn absolute top-2 right-2 w-9 h-9 rounded-full bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-center text-on-surface active:scale-90 transition-transform shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+</div>
+<div class="flex flex-col flex-1 justify-between">
+<div>
+<div class="flex items-center gap-1 mb-1">
+<span class="w-2.5 h-2.5 rounded-full bg-[#7E0E35] ring-1 ring-offset-1 ring-primary/40" title="Crimson Noir"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-[#1E1B19]" title="Noir Black"></span>
+</div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface line-clamp-2 leading-tight">Plush Velvet Hair Ribbon</h3>
+</div>
+<div class="mt-2 flex items-baseline justify-between">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳850</span>
+<span class="font-label-sm text-[10px] text-primary font-semibold">Ready to ship</span>
+</div>
+</div>
+</article>
+<!-- Card 3: Quilted Mini Crossbody Bag -->
+<article class="flex flex-col bg-surface-container-lowest rounded-xl p-2 shadow-sm transition-all hover:shadow-md group">
+<div class="relative w-full aspect-[3/4] rounded-lg overflow-hidden bg-surface-container-low mb-2">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Chic micro-quilted vegan leather mini crossbody bag in soft ivory cream with polished brushed gold link chain, poised atop a contemporary travertine pedestal, soft berry botanical accents nearby, elegant studio fashion photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKDdqIq5xEjf8-Raz-z8QW3zWVqKUn8q1bPrUHU0cf0vBKxUbpZ8CKbgROqGCCSjIGdMKTetBhJlkCcJ-z7kqCszcVS5Jas5QgbWR0yaFm9OYtj90J-e2p-LBF2kTnHHWRtF7Sm5XYIf69OvXyoSqfynxtS5Ai9DvAR27mA9uPZPLhSQHf67UoXYCF4Itwie61r_8E0WQPj5lnqrYESoDQGVXDGMF09CoKZvWqxWqynAoiV9E2DNV2"/>
+<div class="absolute top-2 left-2 bg-error-container text-on-error-container font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold shadow-xs">
+            Only 2 Left
+          </div>
+<button aria-label="Add Quilted Mini Crossbody Bag to wishlist" class="wishlist-btn absolute top-2 right-2 w-9 h-9 rounded-full bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-center text-on-surface active:scale-90 transition-transform shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+</div>
+<div class="flex flex-col flex-1 justify-between">
+<div>
+<div class="flex items-center gap-1 mb-1">
+<span class="w-2.5 h-2.5 rounded-full bg-[#FAF2EE] ring-1 ring-offset-1 ring-primary/40" title="Alabaster Cream"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-[#D4C4B5]" title="Taupe Gray"></span>
+</div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface line-clamp-2 leading-tight">Quilted Mini Crossbody Bag</h3>
+</div>
+<div class="mt-2 flex items-baseline gap-1.5">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳2,950</span>
+</div>
+</div>
+</article>
+<!-- Card 4: Printed Botanical Silk Scarf -->
+<article class="flex flex-col bg-surface-container-lowest rounded-xl p-2 shadow-sm transition-all hover:shadow-md group">
+<div class="relative w-full aspect-[3/4] rounded-lg overflow-hidden bg-surface-container-low mb-2">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Artisanal mulberry silk square scarf with hand-painted South Asian floral and pomegranate botanical prints in deep magenta, blush pink, and sage green, draped gently over a modern ceramic bust, warm sunlight streaming through blinds" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtg0qLtWa2m0M-JejD05J3NYIsC4Nmu-GOzJ6SR9SvFyAEYj-zDSZGNwbfnpu_ld4pbc2rpvHMUbJeRWLw1Uzf7hNN62hkFy2av3X_p2SVk-XxLI4ei_BPCuZvi0Qs8l9e0Vxii7lOQlCAOoAZLUGBKyv_wYEMbMBqM8tjRGJXQYxwMAa90ZQv4S5t6kg27C1LR1Lex_HrbFf1KGcG9ON_QAo91MNSbmPG1g5cfJb6px34HxLfUzxF"/>
+<button aria-label="Add Printed Botanical Silk Scarf to wishlist" class="wishlist-btn absolute top-2 right-2 w-9 h-9 rounded-full bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-center text-on-surface active:scale-90 transition-transform shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+</div>
+<div class="flex flex-col flex-1 justify-between">
+<div>
+<div class="flex items-center gap-1 mb-1 text-[11px] text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-amber-500" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-bold text-on-surface">4.9</span>
+<span class="text-on-surface-variant/70">(38)</span>
+</div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface line-clamp-2 leading-tight">Printed Botanical Silk Scarf</h3>
+</div>
+<div class="mt-2 flex items-baseline gap-1.5">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳1,200</span>
+</div>
+</div>
+</article>
+<!-- Card 5: Starburst Zirconia Choker -->
+<article class="flex flex-col bg-surface-container-lowest rounded-xl p-2 shadow-sm transition-all hover:shadow-md group">
+<div class="relative w-full aspect-[3/4] rounded-lg overflow-hidden bg-surface-container-low mb-2">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Glistening starburst cubic zirconia choker necklace on delicate gold vermeil chain placed on a warm terracotta saucer, dazzling refractions, micro luxury studio photography, rich berry and amber tone palette" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLlxfb3tTCGZ85CPUXvTJC5yehsctjp_oAT-RZbXpOT640JqB2cO9SxWlaUKTCd2KxjgtyDBNMwYx2MJ4_rG_kAKysgBvrb-lG3ouUh06Lf_BeGXgBFJ3oyJj2Z1_yOl5gzM4yF7rNbiaztn3myUbO_ZRFXboJACH6Laeh2t7rkRoj0Ehb1G6jQxjCKYrZiuVwyMKNoc6am9SPOfOhHu5XEipHpyEyTU2UC08JjlDz00-63D7Ovi5E"/>
+<div class="absolute top-2 left-2 bg-primary text-on-primary font-label-sm text-[10px] px-2 py-0.5 rounded-full font-bold shadow-xs">
+            -20%
+          </div>
+<button aria-label="Add Starburst Zirconia Choker to wishlist" class="wishlist-btn absolute top-2 right-2 w-9 h-9 rounded-full bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-center text-on-surface active:scale-90 transition-transform shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+</div>
+<div class="flex flex-col flex-1 justify-between">
+<div>
+<div class="flex items-center gap-1 mb-1">
+<span class="w-2.5 h-2.5 rounded-full bg-[#E5D3B3] ring-1 ring-offset-1 ring-primary/40" title="Gold Vermeil"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-[#E0E0E0]" title="Platinum Silver"></span>
+</div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface line-clamp-2 leading-tight">Starburst Zirconia Choker</h3>
+</div>
+<div class="mt-2 flex items-baseline gap-1.5">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳1,850</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant line-through">৳2,300</span>
+</div>
+</div>
+</article>
+<!-- Card 6: Pleated Cloud Evening Clutch -->
+<article class="flex flex-col bg-surface-container-lowest rounded-xl p-2 shadow-sm transition-all hover:shadow-md group">
+<div class="relative w-full aspect-[3/4] rounded-lg overflow-hidden bg-surface-container-low mb-2">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Architectural pleated cloud pouch clutch bag in warm rose-taupe satin finish, magnetic sculptural closure, minimal warm editorial fashion staging, soft daylight shadows, Maevelle signature luxury aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCM3-JzmeTblncwTkYJPXFi5083vfsqtKwCoxyUXH0HiVCkQDL7a3TYwo6a-nyysiqXy2G_N0rydMl_m0Pqgn43AX2omgthFaLpOnZ8luehP5FLRPwVtYF8S7lCB9P_vCYngMR2EjnP6TOXS-6NKg6Emqh--ByS6hio1UnEL00kzcDWcqBBmGSkxK_3mUvv8x1uI7SjiXaqNSZxJHd4YEtyaZ3lteBO4S6ONs7UyUAFqVd0LlVQGlL9"/>
+<div class="absolute top-2 left-2 bg-surface-container-highest text-on-surface font-label-sm text-[10px] px-2 py-0.5 rounded-full shadow-xs">
+            Limited Edition
+          </div>
+<button aria-label="Add Pleated Cloud Evening Clutch to wishlist" class="wishlist-btn absolute top-2 right-2 w-9 h-9 rounded-full bg-surface-container-lowest/80 backdrop-blur-md flex items-center justify-center text-on-surface active:scale-90 transition-transform shadow-sm">
+<span class="material-symbols-outlined text-[18px]">favorite</span>
+</button>
+</div>
+<div class="flex flex-col flex-1 justify-between">
+<div>
+<div class="flex items-center gap-1 mb-1">
+<span class="w-2.5 h-2.5 rounded-full bg-[#D4A3AE] ring-1 ring-offset-1 ring-primary/40" title="Rose Quartz"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-[#3F3637]" title="Deep Espresso"></span>
+</div>
+<h3 class="font-body-md text-body-md font-medium text-on-surface line-clamp-2 leading-tight">Pleated Cloud Evening Clutch</h3>
+</div>
+<div class="mt-2 flex items-baseline gap-1.5">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳3,400</span>
+</div>
+</div>
+</article>
+</div>
+</section>
+<!-- Bangladesh Local Commerce Trust Banner -->
+<section class="px-margin mb-space-lg">
+<div class="p-space-md rounded-2xl bg-surface-container-low shadow-sm flex flex-col gap-space-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">local_shipping</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Maevelle White Glove Dispatch</h4>
+</div>
+<div class="grid grid-cols-3 gap-2 pt-1 text-center">
+<div class="p-2 rounded-xl bg-surface-container-lowest flex flex-col items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[20px] text-primary mb-1">bolt</span>
+<span class="font-label-sm text-[11px] font-semibold text-on-surface leading-tight">Dhaka Express</span>
+<span class="font-body-sm text-[10px] text-on-surface-variant mt-0.5">24-48 Hours</span>
+</div>
+<div class="p-2 rounded-xl bg-surface-container-lowest flex flex-col items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[20px] text-primary mb-1">payments</span>
+<span class="font-label-sm text-[11px] font-semibold text-on-surface leading-tight">Cash On Delivery</span>
+<span class="font-body-sm text-[10px] text-on-surface-variant mt-0.5">Nationwide</span>
+</div>
+<div class="p-2 rounded-xl bg-surface-container-lowest flex flex-col items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[20px] text-primary mb-1">verified</span>
+<span class="font-label-sm text-[11px] font-semibold text-on-surface leading-tight">Hand Inspected</span>
+<span class="font-body-sm text-[10px] text-on-surface-variant mt-0.5">Quality Seal</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Bottom Pagination / Infinite Scroll Trigger -->
+<section class="px-margin pb-space-xl flex flex-col items-center gap-2 text-center">
+<button class="w-full max-w-xs h-12 rounded-xl bg-surface-container-highest text-on-surface hover:bg-surface-container font-headline-sm text-headline-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm">
+<span>Load More Pieces</span>
+<span class="text-xs bg-surface-container-lowest px-2 py-0.5 rounded-full font-bold text-primary">24</span>
+</button>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Showing 24 of 48 heirloom accessories</p>
+</section>
+<!-- Filter Bottom Drawer Modal -->
+<div class="fixed inset-0 z-50 pointer-events-none opacity-0 transition-opacity duration-300 flex flex-col justify-end" id="filterModal">
+<!-- Backdrop Scrim -->
+<div class="absolute inset-0 bg-on-surface/40 backdrop-blur-xs transition-opacity" id="filterBackdrop"></div>
+<!-- Drawer Content Sheet -->
+<div class="relative w-full max-h-[751px] bg-surface-container-lowest rounded-t-3xl shadow-xl flex flex-col translate-y-full transition-transform duration-300 ease-out pointer-events-auto" id="filterSheet">
+<!-- Drag Bar Handle -->
+<div class="w-full flex items-center justify-center pt-3 pb-2 cursor-grab">
+<div class="w-12 h-1.5 rounded-full bg-surface-container-highest"></div>
+</div>
+<!-- Sheet Header -->
+<div class="px-margin py-2 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold">Refine Selection</h2>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-bold">2 active</span>
+</div>
+<button aria-label="Close filters" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors" id="closeFilterBtn">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Scrollable Filter Body -->
+<div class="px-margin py-2 overflow-y-auto space-y-space-lg flex-1">
+<!-- Price Range Slider -->
+<div>
+<div class="flex items-center justify-between mb-2">
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface">Price Budget</span>
+<span class="font-price-md text-price-md text-primary font-bold">৳500 – ৳3,400</span>
+</div>
+<div class="relative w-full py-2">
+<input class="w-full accent-primary h-2 bg-surface-container rounded-lg cursor-pointer" max="5000" min="500" step="100" type="range" value="3400"/>
+<div class="flex justify-between text-[11px] font-label-sm text-on-surface-variant mt-1.5">
+<span>৳500</span>
+<span>৳2,500</span>
+<span>৳5,000+</span>
+</div>
+</div>
+</div>
+<!-- Color Palette Swatches -->
+<div>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface block mb-2">Palette &amp; Tones</span>
+<div class="grid grid-cols-5 gap-2.5">
+<button class="flex flex-col items-center gap-1 group">
+<span class="w-10 h-10 rounded-full bg-[#7E0E35] ring-2 ring-primary ring-offset-2 flex items-center justify-center text-on-primary shadow-xs">
+<span class="material-symbols-outlined text-[18px]">check</span>
+</span>
+<span class="font-label-sm text-[10px] text-on-surface font-semibold">Crimson</span>
+</button>
+<button class="flex flex-col items-center gap-1 group">
+<span class="w-10 h-10 rounded-full bg-[#E5D3B3] flex items-center justify-center shadow-xs"></span>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Gold</span>
+</button>
+<button class="flex flex-col items-center gap-1 group">
+<span class="w-10 h-10 rounded-full bg-[#FAF2EE] shadow-xs"></span>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Pearl</span>
+</button>
+<button class="flex flex-col items-center gap-1 group">
+<span class="w-10 h-10 rounded-full bg-[#1E1B19] flex items-center justify-center shadow-xs"></span>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Noir</span>
+</button>
+<button class="flex flex-col items-center gap-1 group">
+<span class="w-10 h-10 rounded-full bg-[#D4A3AE] flex items-center justify-center shadow-xs"></span>
+<span class="font-label-sm text-[10px] text-on-surface-variant">Blush</span>
+</button>
+</div>
+</div>
+<!-- Material Category Chips -->
+<div>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface block mb-2">Primary Material</span>
+<div class="flex flex-wrap gap-2">
+<button class="h-9 px-3.5 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md active:scale-95 transition-all">Freshwater Pearl</button>
+<button class="h-9 px-3.5 rounded-lg bg-primary-fixed text-on-primary-fixed font-label-md text-label-md font-semibold active:scale-95 transition-all">Mulberry Silk</button>
+<button class="h-9 px-3.5 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md active:scale-95 transition-all">Gold Vermeil</button>
+<button class="h-9 px-3.5 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md active:scale-95 transition-all">Plush Velvet</button>
+</div>
+</div>
+<!-- Delivery Speed Toggles -->
+<div>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface block mb-2">Delivery &amp; Availability</span>
+<div class="space-y-2">
+<label class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low cursor-pointer">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[20px] text-primary">speed</span>
+<div>
+<div class="font-label-md text-label-md font-semibold text-on-surface">Dhaka 24-Hour Express</div>
+<div class="font-body-sm text-[11px] text-on-surface-variant">Guaranteed fast dispatch</div>
+</div>
+</div>
+<input checked="" class="w-5 h-5 rounded accent-primary cursor-pointer" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low cursor-pointer">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">inventory_2</span>
+<div>
+<div class="font-label-md text-label-md font-semibold text-on-surface">In Stock Only</div>
+<div class="font-body-sm text-[11px] text-on-surface-variant">Exclude pre-orders</div>
+</div>
+</div>
+<input checked="" class="w-5 h-5 rounded accent-primary cursor-pointer" type="checkbox"/>
+</label>
+</div>
+</div>
+</div>
+<!-- Action Footer -->
+<div class="p-margin bg-surface-container-lowest shadow-lg flex gap-space-sm items-center">
+<button class="h-12 px-5 rounded-xl bg-surface-container-low text-on-surface font-label-md text-label-md hover:bg-surface-container transition-colors" id="resetFiltersBtn">
+          Reset
+        </button>
+<button class="flex-1 h-12 rounded-xl bg-primary text-on-primary font-headline-sm text-headline-sm font-semibold shadow-md active:scale-98 transition-all flex items-center justify-center gap-2" id="applyFiltersBtn">
+<span>Apply Filters</span>
+<span class="text-xs bg-primary-container px-2 py-0.5 rounded-full font-bold">24 Pieces</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const filterModal = document.getElementById('filterModal');
+    const filterSheet = document.getElementById('filterSheet');
+    const openFilterBtn = document.getElementById('openFilterBtn');
+    const closeFilterBtn = document.getElementById('closeFilterBtn');
+    const filterBackdrop = document.getElementById('filterBackdrop');
+    const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+    const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+
+    function openDrawer() {
+      filterModal.classList.remove('pointer-events-none', 'opacity-0');
+      filterModal.classList.add('opacity-100');
+      filterSheet.classList.remove('translate-y-full');
+      filterSheet.classList.add('translate-y-0');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDrawer() {
+      filterSheet.classList.remove('translate-y-0');
+      filterSheet.classList.add('translate-y-full');
+      filterModal.classList.remove('opacity-100');
+      filterModal.classList.add('opacity-0');
+      setTimeout(() => {
+        filterModal.classList.add('pointer-events-none');
+        document.body.style.overflow = '';
+      }, 300);
+    }
+
+    openFilterBtn?.addEventListener('click', openDrawer);
+    closeFilterBtn?.addEventListener('click', closeDrawer);
+    filterBackdrop?.addEventListener('click', closeDrawer);
+    applyFiltersBtn?.addEventListener('click', closeDrawer);
+    resetFiltersBtn?.addEventListener('click', closeDrawer);
+
+    // Grid toggle interaction (2 columns vs 1 column)
+    const gridCol2Btn = document.getElementById('gridCol2Btn');
+    const gridCol1Btn = document.getElementById('gridCol1Btn');
+    const catalogGrid = document.getElementById('catalogGrid');
+
+    gridCol2Btn?.addEventListener('click', () => {
+      catalogGrid.className = 'grid grid-cols-2 gap-gutter';
+      gridCol2Btn.className = 'w-9 h-9 rounded-lg bg-surface-container-lowest text-primary shadow-xs flex items-center justify-center transition-all';
+      gridCol1Btn.className = 'w-9 h-9 rounded-lg text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-all';
+    });
+
+    gridCol1Btn?.addEventListener('click', () => {
+      catalogGrid.className = 'grid grid-cols-1 gap-gutter';
+      gridCol1Btn.className = 'w-9 h-9 rounded-lg bg-surface-container-lowest text-primary shadow-xs flex items-center justify-center transition-all';
+      gridCol2Btn.className = 'w-9 h-9 rounded-lg text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-all';
+    });
+
+    // Wishlist Toggle Micro-interaction
+    const wishlistBtns = document.querySelectorAll('.wishlist-btn');
+    wishlistBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const icon = btn.querySelector('.material-symbols-outlined');
+        const isFilled = icon.style.fontVariationSettings?.includes("'FILL' 1");
+        if (isFilled) {
+          icon.style.fontVariationSettings = "'FILL' 0";
+          icon.classList.remove('text-primary');
+        } else {
+          icon.style.fontVariationSettings = "'FILL' 1";
+          icon.classList.add('text-primary');
+          btn.classList.add('scale-125');
+          setTimeout(() => btn.classList.remove('scale-125'), 200);
+        }
+      });
+    });
+  })();
+</script></main><!-- Quick Cart Drawer Bottom Sheet Modal -->
+<div aria-label="Your Shopping Bag" aria-modal="true" class="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto" id="cartDrawerModal" role="dialog">
+<!-- Scrim Backdrop -->
+<div class="absolute inset-0 bg-[#1E1B19]/50 backdrop-blur-xs transition-opacity duration-300" id="cartBackdrop"></div>
+<!-- Drawer Content Sheet -->
+<div class="relative w-full max-h-[85vh] bg-surface-container-lowest rounded-t-3xl shadow-xl flex flex-col overflow-hidden transition-transform duration-300 ease-out z-10" id="cartDrawerSheet">
+<!-- Top Handle Bar -->
+<div class="w-full flex items-center justify-center pt-3 pb-1 cursor-grab">
+<div class="w-12 h-1.5 rounded-full bg-surface-container-highest"></div>
+</div>
+<!-- Drawer Header -->
+<div class="px-margin py-2.5 flex items-center justify-between border-b border-surface-container">
+<div class="flex items-center gap-2">
+<h2 class="font-headline-lg text-[20px] leading-tight text-on-surface font-semibold">Shopping Bag</h2>
+<span class="font-label-sm text-[11px] px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-bold">2 items</span>
+</div>
+<button aria-label="Close shopping bag" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" id="closeCartBtn">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Free Shipping Progress Indicator -->
+<div class="bg-surface-container-low px-margin py-2.5 border-b border-surface-container/60">
+<div class="flex items-center justify-between font-label-sm text-[11px] text-on-surface mb-1.5">
+<div class="flex items-center gap-1.5 text-primary font-semibold">
+<span class="material-symbols-outlined text-[16px]">local_shipping</span>
+<span>Add ৳500 more for Free Dhaka Express!</span>
+</div>
+<span class="text-on-surface-variant font-medium">৳2,500 / ৳3,000</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-500" style="width: 83.33%;"></div>
+</div>
+</div>
+<!-- Scrollable Cart Items List -->
+<div class="flex-1 overflow-y-auto px-margin py-3 divide-y divide-surface-container/60 space-y-3">
+<!-- Item 1: Aurelia Freshwater Pearl Drop Earrings -->
+<div class="pt-3 first:pt-0 flex gap-3 group">
+<div class="w-20 h-24 rounded-lg overflow-hidden bg-surface-container-low flex-shrink-0 relative">
+<img alt="Aurelia Freshwater Pearl Drop Earrings" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAU8kN5Vdd-XFeUvL46CjxHeMIuqVlvOhzkxBeqEZbQrpiAvJAiT-7KIfOiRtN8aHnlzi4hl7xu93DUKF1LuLzY7_QV3v_7C9HV326W7qStkQMjNbSV9416GdaPdUvNT05egHsMOPWx_l2v_-w_bwM1u73AHYoiOqof4dI9HA21x3AGn1cFuS-IR6lPC7KsnlSwjexBjU1nzxRYx9mekEi6tr1w1Gj7NRsuBBgaH2bJjAiRGixv7mxx"/>
+</div>
+<div class="flex-1 flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-sm text-[14px] leading-tight text-on-surface font-semibold line-clamp-1">Aurelia Freshwater Pearl Drop Earrings</h3>
+<button aria-label="Remove item" class="text-on-surface-variant/70 hover:text-error transition-colors p-0.5">
+<span class="material-symbols-outlined text-[16px]">delete_outline</span>
+</button>
+</div>
+<p class="font-body-sm text-[11px] text-on-surface-variant mt-0.5">18K Gold Plated • Natural Ivory</p>
+</div>
+<div class="flex items-center justify-between mt-2">
+<div class="flex items-center border border-outline-variant/60 rounded-lg bg-surface-container-lowest overflow-hidden h-7">
+<button aria-label="Decrease quantity" class="w-7 h-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all text-xs font-semibold">-</button>
+<span class="w-7 text-center font-label-md text-xs font-semibold text-on-surface">1</span>
+<button aria-label="Increase quantity" class="w-7 h-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all text-xs font-semibold">+</button>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳1,650</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 2: Plush Velvet Hair Ribbon -->
+<div class="pt-3 flex gap-3 group">
+<div class="w-20 h-24 rounded-lg overflow-hidden bg-surface-container-low flex-shrink-0 relative">
+<img alt="Plush Velvet Hair Ribbon" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC57r3CLXUvSZDBeSKxpeW7zHa4TrFki3NN8CLIcNCvq3b0x3BgofZM0zdNua_l8jL5nikW5IvXlgQEapXPagGkR7P3N-42uqSvANLP4zOsySIjt0LqFD-QyzC9kv_zUS_Q1kLJx_KqQ1Vtma1HqZVoxE8BNuFF2WBZDzQWGDBYsYv26QNi8khn29i6w-Me5_-376wN8A3ehSUNcdGYyVnQWNxyLKrloWk_OQw1kcZz0XKVo9NZhIXn"/>
+</div>
+<div class="flex-1 flex flex-col justify-between">
+<div>
+<div class="flex items-start justify-between gap-1">
+<h3 class="font-headline-sm text-[14px] leading-tight text-on-surface font-semibold line-clamp-1">Plush Velvet Hair Ribbon</h3>
+<button aria-label="Remove item" class="text-on-surface-variant/70 hover:text-error transition-colors p-0.5">
+<span class="material-symbols-outlined text-[16px]">delete_outline</span>
+</button>
+</div>
+<p class="font-body-sm text-[11px] text-on-surface-variant mt-0.5">Deep Berry Silk Velvet</p>
+</div>
+<div class="flex items-center justify-between mt-2">
+<div class="flex items-center border border-outline-variant/60 rounded-lg bg-surface-container-lowest overflow-hidden h-7">
+<button aria-label="Decrease quantity" class="w-7 h-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all text-xs font-semibold">-</button>
+<span class="w-7 text-center font-label-md text-xs font-semibold text-on-surface">1</span>
+<button aria-label="Increase quantity" class="w-7 h-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low active:scale-95 transition-all text-xs font-semibold">+</button>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-price-md text-price-md text-on-surface font-bold">৳850</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Summary, Trust reassurance, and Actions Section -->
+<div class="bg-surface-container-low/70 border-t border-surface-container px-margin pt-3 pb-safe shadow-[0_-4px_20px_rgba(158,42,75,0.06)]">
+<!-- Cost Breakdown -->
+<div class="space-y-1 pb-2.5">
+<div class="flex items-center justify-between font-body-sm text-[13px] text-on-surface-variant">
+<span>Subtotal</span>
+<span class="font-medium text-on-surface">৳2,500</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-[13px] text-on-surface-variant">
+<span>Delivery</span>
+<span class="text-[12px] text-primary font-medium">৳70 Dhaka / Free over ৳3,000</span>
+</div>
+<div class="flex items-center justify-between font-headline-sm text-headline-sm font-semibold text-on-surface pt-1 border-t border-surface-container">
+<span>Estimated Total</span>
+<span class="font-price-lg text-price-lg text-primary font-bold">৳2,500</span>
+</div>
+</div>
+<!-- Dual Action CTA Buttons -->
+<div class="flex flex-col gap-2 pt-1 pb-2">
+<button class="w-full h-12 rounded-xl bg-primary text-on-primary font-headline-sm text-[15px] font-semibold shadow-md active:scale-98 transition-all flex items-center justify-between px-4">
+<span class="font-bold font-price-md">৳2,500</span>
+<span class="flex items-center gap-1.5">
+<span>Continue to Checkout</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</span>
+</button>
+<button class="w-full h-11 rounded-xl bg-surface-container-lowest border border-outline-variant/70 text-on-surface hover:bg-surface-container-low font-label-md text-label-md font-semibold active:scale-98 transition-all flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-primary">shopping_bag</span>
+<span>View Full Cart Page</span>
+</button>
+</div>
+<!-- Local Convenience & Trust Seal -->
+<div class="flex items-center justify-center gap-2 pb-2 text-[11px] font-label-sm text-on-surface-variant/80 text-center">
+<span class="material-symbols-outlined text-[14px] text-primary">verified_user</span>
+<span>Cash on Delivery (COD) &amp; bKash • 7-Day Doorstep Exchange</span>
+</div>
+</div>
+</div>
+</div><div class="fixed bottom-24 inset-x-margin z-40 pointer-events-none flex flex-col gap-space-sm items-center pb-safe" id="toast-root"></div><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-4px_20px_rgba(158,42,75,0.06)]" data-active-classes="text-primary font-semibold"><div class="h-16 px-space-md grid grid-cols-4 items-center"><a aria-current="page" class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 transition-colors text-primary font-semibold" data-path="explore" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">storefront</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Explore</span><span class="w-1 h-1 rounded-full bg-primary mt-0.5 opacity-90"></span></a><a class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="categories" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">grid_view</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Categories</span></a><a class="group relative flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="wishlist" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">favorite</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Wishlist</span><span class="absolute top-1 right-[28%] min-w-[14px] h-[14px] px-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[9px] flex items-center justify-center font-bold">5</span></a><a class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="account" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">account_circle</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Account</span></a></div></nav></body></html>

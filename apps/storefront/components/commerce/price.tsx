@@ -26,25 +26,38 @@ export function Money({
 type PriceProps = ComponentProps<'div'> & {
   amount: number | string;
   currency?: string;
+  discountBadge?: string;
   locale?: string;
   originalAmount?: number | string;
-  size?: 'md' | 'lg';
+  showSavings?: boolean;
+  size?: 'sm' | 'md' | 'lg';
 };
 
 export function Price({
   amount,
   className,
   currency = 'BDT',
+  discountBadge,
   locale = 'en-BD',
   originalAmount,
+  showSavings = true,
   size = 'md',
   ...props
 }: PriceProps) {
+  const numAmount = Number(amount);
+  const numOriginal = originalAmount !== undefined ? Number(originalAmount) : undefined;
+  const calculatedSavings =
+    numOriginal && numOriginal > numAmount
+      ? Math.round(((numOriginal - numAmount) / numOriginal) * 100)
+      : undefined;
+
+  const savingsLabel = discountBadge || (calculatedSavings ? `${calculatedSavings}% SAVINGS` : undefined);
+
   return (
     <div
       className={cx(
-        'flex flex-wrap items-baseline gap-x-2 gap-y-1 font-semibold text-foreground',
-        size === 'lg' ? 'text-price-lg' : 'text-price-md',
+        'flex flex-wrap items-baseline gap-x-2 gap-y-1 font-semibold text-primary',
+        size === 'lg' ? 'text-price-lg' : size === 'sm' ? 'text-body-sm font-bold' : 'text-price-md',
         className,
       )}
       {...props}
@@ -53,10 +66,15 @@ export function Price({
       {originalAmount !== undefined ? (
         <Money
           amount={originalAmount}
-          className="text-body-sm font-normal text-foreground-muted line-through"
+          className="text-body-sm font-normal text-outline line-through"
           currency={currency}
           locale={locale}
         />
+      ) : null}
+      {showSavings && savingsLabel ? (
+        <span className="rounded-md bg-secondary-fixed px-1.5 py-0.5 text-label-sm text-[10px] font-bold text-on-secondary-fixed">
+          {savingsLabel}
+        </span>
       ) : null}
     </div>
   );

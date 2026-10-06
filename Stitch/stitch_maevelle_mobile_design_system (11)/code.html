@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-error-container": "#93000a", "error": "#ba1a1a", "primary-fixed-dim": "#ffb2bf", "outline": "#8a7174", "inverse-on-surface": "#f7efeb", "on-tertiary-container": "#d4cacc", "on-surface": "#1e1b19", "primary-fixed": "#ffd9de", "outline-variant": "#ddbfc3", "on-tertiary-fixed": "#1f1a1c", "surface-container-low": "#faf2ee", "on-secondary-container": "#740734", "primary-container": "#9e2a4b", "tertiary": "#443e40", "surface-bright": "#fff8f5", "surface-container-highest": "#e9e1dd", "secondary-fixed": "#ffd9e0", "secondary": "#a63359", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#4b4547", "on-error": "#ffffff", "surface-dim": "#e0d8d5", "on-secondary-fixed-variant": "#871a42", "on-primary-container": "#ffbbc6", "on-primary-fixed": "#3f0015", "on-background": "#1e1b19", "tertiary-container": "#5c5557", "surface-container-high": "#eee7e3", "surface-container-lowest": "#ffffff", "surface-variant": "#e9e1dd", "surface-tint": "#a83252", "on-primary-fixed-variant": "#88183c", "secondary-fixed-dim": "#ffb1c2", "on-tertiary": "#ffffff", "background": "#fff8f5", "surface": "#fff8f5", "error-container": "#ffdad6", "surface-container": "#f4ece8", "secondary-container": "#fd779d", "on-surface-variant": "#574144", "inverse-surface": "#33302d", "on-secondary-fixed": "#3f0018", "on-primary": "#ffffff", "tertiary-fixed": "#eae0e2", "primary": "#7e0e35", "inverse-primary": "#ffb2bf", "tertiary-fixed-dim": "#cec4c6" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "1.5rem", "space-md": "0.75rem", "space-sm": "0.5rem", "space-xs": "0.25rem", "gutter": "0.75rem", "space-lg": "1rem", "margin": "1rem" }, "fontFamily": { "headline-lg": ["Playfair Display"], "price-md": ["Plus Jakarta Sans"], "display-hero-mobile": ["Playfair Display"], "headline-md": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Playfair Display"], "body-lg": ["Plus Jakarta Sans"], "label-sm": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "display-hero": ["Playfair Display"], "label-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"], "price-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"] }, "fontSize": { "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "500" }], "price-md": ["15px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "700" }], "display-hero-mobile": ["28px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "500" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }], "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "display-hero": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "label-md": ["13px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "headline-sm": ["16px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "600" }], "price-lg": ["20px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }] } } } }</script><style>@layer base{html,body{width:100vw;min-height:100%;margin:0;padding:0;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 350,'GRAD' 0,'opsz' 24;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head><body class="bg-surface font-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(158,42,75,0.04)]"><div class="h-16 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-xs"><button aria-label="Open navigation menu" class="w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors"><span class="material-symbols-outlined text-[24px]">menu</span></button></div><div class="flex-1 flex items-center justify-center text-center"><a class="inline-flex flex-col items-center" data-path="curated-shop-listing" href="#"><span class="font-headline-lg text-headline-lg tracking-tight text-primary leading-none font-semibold">Maevelle</span><span class="font-label-sm text-[10px] tracking-[0.2em] uppercase text-on-surface-variant/80 -mt-1">Dhaka</span></a></div><div class="flex items-center gap-space-xs justify-end"><button aria-label="Search catalog" class="w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">search</span></button><a aria-label="View shopping bag" class="relative w-12 h-12 flex items-center justify-center text-on-surface hover:text-primary transition-colors" data-path="dedicated-shopping-bag" href="#"><span class="material-symbols-outlined text-[22px]">shopping_bag</span><span class="absolute top-2 right-2 min-w-[16px] h-4 px-1 rounded-full bg-primary text-on-primary font-label-sm text-[10px] flex items-center justify-center leading-none font-bold">2</span></a><a aria-label="View profile" class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-1 text-on-primary hover:bg-primary-container transition-colors" data-path="account" href="#"><span class="material-symbols-outlined text-[18px]">person</span></a></div></div></header><main class="flex flex-col relative w-full pt-16 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Wishlist Header Section -->
+<section class="px-margin pt-space-md pb-space-sm">
+<div class="flex items-center justify-between gap-space-sm mb-space-xs">
+<div class="flex items-center gap-space-xs">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary tracking-tight font-medium">Your Wishlist</h1>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm font-semibold">5 Pieces</span>
+</div>
+<div class="flex items-center gap-1">
+<button aria-label="Share Wishlist link" class="w-12 h-12 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container active:scale-95 transition-all" id="btn-share">
+<span class="material-symbols-outlined text-[20px]">share</span>
+</button>
+<button aria-label="Wishlist options" class="w-12 h-12 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed max-w-[92%]">
+      Saved heirloom accessories and artisanal edits reserved for your personal consideration.
+    </p>
+</section>
+<!-- Quick Filter Pills (Sticky horizontal bar) -->
+<div class="w-full overflow-x-auto scrollbar-none py-space-xs px-margin mb-space-sm flex items-center gap-space-xs bg-surface/90 backdrop-blur-md">
+<button class="filter-pill whitespace-nowrap px-3.5 h-9 rounded-full font-label-md text-label-md flex items-center justify-center bg-primary text-on-primary shadow-sm transition-all" data-category="all">
+      All Items (5)
+    </button>
+<button class="filter-pill whitespace-nowrap px-3.5 h-9 rounded-full font-label-md text-label-md flex items-center justify-center bg-surface-container-high text-on-surface-variant hover:text-primary active:scale-95 transition-all" data-category="jewelry">
+      Jewelry (2)
+    </button>
+<button class="filter-pill whitespace-nowrap px-3.5 h-9 rounded-full font-label-md text-label-md flex items-center justify-center bg-surface-container-high text-on-surface-variant hover:text-primary active:scale-95 transition-all" data-category="hair">
+      Hair Accents (1)
+    </button>
+<button class="filter-pill whitespace-nowrap px-3.5 h-9 rounded-full font-label-md text-label-md flex items-center justify-center bg-surface-container-high text-on-surface-variant hover:text-primary active:scale-95 transition-all" data-category="bags">
+      Bags (1)
+    </button>
+<button class="filter-pill whitespace-nowrap px-3.5 h-9 rounded-full font-label-md text-label-md flex items-center justify-center bg-surface-container-high text-on-surface-variant hover:text-primary active:scale-95 transition-all" data-category="wraps">
+      Silk Wraps (1)
+    </button>
+</div>
+<!-- Wishlist Items List -->
+<div class="px-margin flex flex-col gap-space-md" id="wishlist-container">
+<!-- Item 1: Aurelia Freshwater Pearl Drop Earrings -->
+<article class="wishlist-item w-full bg-surface-container-lowest rounded-xl p-space-sm shadow-[0_2px_12px_rgba(158,42,75,0.04)] flex gap-space-md relative overflow-hidden" data-category="jewelry" data-price="1650">
+<div class="relative w-28 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover object-center" data-alt="Exquisite gold filigree dangling earrings with luminous natural baroque pearls displayed on a deep navy blue velvet pedestal in warm boutique sunlight with soft shadows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzkpUPJ12sKWW5onX-6c7kVGKHfuMKVHW_sXP34-aBJ4zZNTPohJYomko0376CDMgXcaQLjwx6_QzSgV6rzRY4rzTmjtMUkSscx4F8aaAahX0LVll4_xMVWmYkAOLSwKHADkGRIsXTUb17ErkjhUsLyNOWhefVosIxyIjzisFpP_T2es4Sz_nd3Uarp7N4NYiqJjK5h-mRDz-1uI6AKDlHXZLVGUb-6NNq0YrGU0xWAM3PvV4k75cE"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/90 backdrop-blur-sm text-primary font-label-sm text-[9px] uppercase tracking-wider font-bold">
+          Jewelry
+        </span>
+</div>
+<div class="flex-1 flex flex-col justify-between py-0.5 min-w-0">
+<div>
+<div class="flex items-center justify-between gap-1 mb-1">
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-error-container text-on-error-container font-label-sm text-[10px] font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-error animate-pulse"></span> Only 2 Left
+            </span>
+<button aria-label="Remove Aurelia Freshwater Pearl Drop Earrings from wishlist" class="remove-btn w-12 h-12 -mr-3 -mt-3 flex items-center justify-center text-on-surface-variant/70 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[19px]">delete_outline</span>
+</button>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">Aurelia Pearl Drop Earrings</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 truncate">18K Gold Plated • Ivory Luster</p>
+</div>
+<div class="mt-2"><div class="flex items-center justify-between gap-2 pt-1"><div class="flex flex-col"><div class="flex items-baseline gap-1.5"><span class="font-price-md text-price-md text-primary font-bold">৳1,650</span><span class="font-body-sm text-body-sm text-on-surface-variant/70 line-through">৳2,100</span></div><span class="font-label-sm text-[10px] text-secondary font-semibold">21% Off</span></div><button class="add-to-bag-btn h-9 px-3 rounded-full border border-primary/20 bg-surface-container-low hover:bg-primary hover:text-on-primary text-primary font-label-sm text-label-sm font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95"><span class="material-symbols-outlined text-[16px]">shopping_bag</span><span>Move to Bag</span></button></div></div>
+</div>
+</article>
+<!-- Item 2: Botanical Flora Jamdani Silk Wrap -->
+<article class="wishlist-item w-full bg-surface-container-lowest rounded-xl p-space-sm shadow-[0_2px_12px_rgba(158,42,75,0.04)] flex gap-space-md relative overflow-hidden" data-category="wraps" data-price="1200">
+<div class="relative w-28 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover object-top" data-alt="Graceful model draped in traditional emerald green and shimmering gold Jamdani silk fabric with delicate pink botanical floral weave seated elegantly in an sunlit Dhaka heritage drawing room" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5cW9tFpoN92QEcN94j0r3Fw8IfYVg_2mKRrjgC0KABMNyPVFLET1Guor_yXsWuq_kqb6Lrl7UKJgSuCZbOd_p2KHwC39egxt3q-FYA9mn2spe7Ht274H6uNWJiUqwy1K-6MXKWINeV1tvcLeWlly2nBcYmQRkn8jyhNX_DibcLGiX0UHTwhoteSoy2mOedAmIGSXugMwiUDF85E7WSk3ZEf5VP4cMH3siI1Metk82wB90cU0BiZdo"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/90 backdrop-blur-sm text-primary font-label-sm text-[9px] uppercase tracking-wider font-bold">
+          Wrap
+        </span>
+</div>
+<div class="flex-1 flex flex-col justify-between py-0.5 min-w-0">
+<div>
+<div class="flex items-center justify-between gap-1 mb-1">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-label-sm text-[10px] font-semibold">
+              Artisan Batch
+            </span>
+<button aria-label="Remove Jamdani Silk Wrap from wishlist" class="remove-btn w-12 h-12 -mr-3 -mt-3 flex items-center justify-center text-on-surface-variant/70 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[19px]">delete_outline</span>
+</button>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">Flora Jamdani Silk Wrap</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 truncate">Mulberry Silk • Hand-Rolled Edge</p>
+</div>
+<div class="mt-2"><div class="flex items-center justify-between gap-2 pt-1"><div class="flex flex-col"><span class="font-price-md text-price-md text-primary font-bold">৳1,200</span><span class="font-label-sm text-[10px] text-tertiary font-medium">Dhaka Express</span></div><button class="add-to-bag-btn h-9 px-3 rounded-full border border-primary/20 bg-surface-container-low hover:bg-primary hover:text-on-primary text-primary font-label-sm text-label-sm font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95"><span class="material-symbols-outlined text-[16px]">shopping_bag</span><span>Move to Bag</span></button></div></div>
+</div>
+</article>
+<!-- Item 3: Quilted Mini Crossbody Bag -->
+<article class="wishlist-item w-full bg-surface-container-lowest rounded-xl p-space-sm shadow-[0_2px_12px_rgba(158,42,75,0.04)] flex gap-space-md relative overflow-hidden" data-category="bags" data-price="2950">
+<div class="relative w-28 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover object-center" data-alt="Blush pink quilted leather designer mini handbag with polished gold chain strap and charm detail resting on draped silk fabric next to romantic fresh garden roses in Parisian setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCVMJEBZjI5rSJ9i45vU32PaT9friW48MlJ2UH0zRx7Dyaf-_zTJPDT4MBoaemklKdzQThRzsF8ho9YhPa-wpBIElyTDYMx2Elz7vyMXDIK-NILYXp8hYnVdaE2eKuvHMzUyT42bFq6LSKAL-88rHoYirC5X29X_PjgPvP1AHIX4D2WNb8z7KZ5ZqiRO1n5DGwtQ7S55ozW8-lw9sCKh98ZyXGH15KNx4kdPqioM1HGbAFGWYm4QKAG"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/90 backdrop-blur-sm text-primary font-label-sm text-[9px] uppercase tracking-wider font-bold">
+          Handbag
+        </span>
+</div>
+<div class="flex-1 flex flex-col justify-between py-0.5 min-w-0">
+<div>
+<div class="flex items-center justify-between gap-1 mb-1">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-[10px] font-semibold">
+              Low Stock
+            </span>
+<button aria-label="Remove Quilted Mini Crossbody Bag from wishlist" class="remove-btn w-12 h-12 -mr-3 -mt-3 flex items-center justify-center text-on-surface-variant/70 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[19px]">delete_outline</span>
+</button>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">Quilted Mini Crossbody</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 truncate">Blush Cream Nappa • Gold Chain</p>
+</div>
+<div class="mt-2"><div class="flex items-center justify-between gap-2 pt-1"><div class="flex flex-col"><span class="font-price-md text-price-md text-primary font-bold">৳2,950</span><span class="font-label-sm text-[10px] text-tertiary">1 Unit Left</span></div><button class="add-to-bag-btn h-9 px-3 rounded-full border border-primary/20 bg-surface-container-low hover:bg-primary hover:text-on-primary text-primary font-label-sm text-label-sm font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95"><span class="material-symbols-outlined text-[16px]">shopping_bag</span><span>Move to Bag</span></button></div></div>
+</div>
+</article>
+<!-- Item 4: Plush Velvet Silk Hair Ribbon -->
+<article class="wishlist-item w-full bg-surface-container-lowest rounded-xl p-space-sm shadow-[0_2px_12px_rgba(158,42,75,0.04)] flex gap-space-md relative overflow-hidden" data-category="hair" data-price="850">
+<div class="relative w-28 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover object-center" data-alt="Curated flatlay arrangement of luxurious mauve pink silk velvet hair ribbons, pearlescent hair clips, and tortoiseshell barrettes on warm Italian marble vanity tabletop beside dried eucalyptus" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2VSdj9EIVfEU5Ei9fwYA-TKQmsNgBjl9xSQVTwp7NUQdjypVNCWazUEX3jAcl_fuhubV125KMMU14IA3Y2n1sH724DRgULOhPJY_LYX2oOYcygMRV7PKFdVm-TxHR4Q5CAOPysPJFuRAM1T5enCbB5JPAK61oDekNVTN23sruQnf4mgaMy9CF4zZTf_bbNnYZaGB06BH0VaYVrHaBhdeZukGefTNzvpHeuX0YtF66rKoiDdT2yd3E"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/90 backdrop-blur-sm text-primary font-label-sm text-[9px] uppercase tracking-wider font-bold">
+          Hair Accent
+        </span>
+</div>
+<div class="flex-1 flex flex-col justify-between py-0.5 min-w-0">
+<div>
+<div class="flex items-center justify-between gap-1 mb-1">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-[10px] font-semibold">
+              Trending in Dhaka
+            </span>
+<button aria-label="Remove Velvet Ribbon from wishlist" class="remove-btn w-12 h-12 -mr-3 -mt-3 flex items-center justify-center text-on-surface-variant/70 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[19px]">delete_outline</span>
+</button>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">Plush Velvet Silk Ribbon</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 truncate">Deep Berry Silk • Hand-Tied</p>
+</div>
+<div class="mt-2"><div class="flex items-center justify-between gap-2 pt-1"><div class="flex flex-col"><span class="font-price-md text-price-md text-primary font-bold">৳850</span><span class="font-label-sm text-[10px] text-tertiary">Ready to Ship</span></div><button class="add-to-bag-btn h-9 px-3 rounded-full border border-primary/20 bg-surface-container-low hover:bg-primary hover:text-on-primary text-primary font-label-sm text-label-sm font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95"><span class="material-symbols-outlined text-[16px]">shopping_bag</span><span>Move to Bag</span></button></div></div>
+</div>
+</article>
+<!-- Item 5: Starburst Zirconia Choker -->
+<article class="wishlist-item w-full bg-surface-container-lowest rounded-xl p-space-sm shadow-[0_2px_12px_rgba(158,42,75,0.04)] flex gap-space-md relative overflow-hidden" data-category="jewelry" data-price="1850">
+<div class="relative w-28 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-surface-container-high">
+<img class="w-full h-full object-cover object-center" data-alt="Dainty sparkling zirconia starburst choker necklace laid over smooth warm sandstone with delicate dried botanical accents in soft editorial studio light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRFvPAIL7d8meRLbCEK02Df7NVnogJoUTfNz6gDwTInuJyfAOG8yH9sURanLFryhm5fGM0-w_I3dCQwhOuScKj-aJdd62sizsF0qNU0Ps33R93CxVFk5SF_du7KoS-NUP4-yoeEqqpWSeSZLdqyjFEpveXEt4D953k5jEd0i4tcOaRvQstfngRJF0AyPcqOJbBcx8aZBAGMAxxKoL3Rbiv-zuNayHsmGEEz7LhzptnxrK_hS3j1OHB"/>
+<span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/90 backdrop-blur-sm text-primary font-label-sm text-[9px] uppercase tracking-wider font-bold">
+          Jewelry
+        </span>
+</div>
+<div class="flex-1 flex flex-col justify-between py-0.5 min-w-0">
+<div>
+<div class="flex items-center justify-between gap-1 mb-1">
+<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-fixed-dim text-on-primary-fixed-variant font-label-sm text-[10px] font-semibold">
+              Back in Stock
+            </span>
+<button aria-label="Remove Starburst Zirconia Choker from wishlist" class="remove-btn w-12 h-12 -mr-3 -mt-3 flex items-center justify-center text-on-surface-variant/70 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[19px]">delete_outline</span>
+</button>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface truncate">Starburst Zirconia Choker</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5 truncate">Sterling Silver • Grade AAA</p>
+</div>
+<div class="mt-2"><div class="flex items-center justify-between gap-2 pt-1"><div class="flex flex-col"><span class="font-price-md text-price-md text-primary font-bold">৳1,850</span><span class="font-body-sm text-body-sm text-on-surface-variant/70 line-through">৳2,300</span></div><button class="add-to-bag-btn h-9 px-3 rounded-full border border-primary/20 bg-surface-container-low hover:bg-primary hover:text-on-primary text-primary font-label-sm text-label-sm font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95"><span class="material-symbols-outlined text-[16px]">shopping_bag</span><span>Move to Bag</span></button></div></div>
+</div>
+</article>
+</div>
+<!-- Empty State Placeholder (Hidden initially, triggered if items removed) -->
+<div class="hidden px-margin py-space-xl flex flex-col items-center text-center" id="empty-state">
+<div class="w-20 h-20 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary mb-space-md">
+<span class="material-symbols-outlined text-[36px]">favorite</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">Your Wishlist is Dreaming</h3>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-xs mb-space-lg">Explore our curated heirloom edits and save pieces you adore for later contemplation.</p>
+<a class="h-12 px-6 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold flex items-center justify-center" href="#">
+      Explore New Arrivals
+    </a>
+</div>
+<!-- Atelier Concierge & Studio Fitting Note -->
+<section class="px-margin mt-space-lg mb-space-md">
+<div class="w-full bg-surface-container-low rounded-xl p-space-md shadow-sm">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">store</span>
+</div>
+<div class="flex-1 min-w-0">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-0.5">Banani Studio Private Fitting</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+            Visiting our studio in Banani? Your saved 5 pieces can be set aside for an exclusive private styling session.
+          </p>
+<a class="inline-flex items-center gap-1.5 text-primary font-label-md text-label-md font-semibold mt-2.5 hover:underline" href="https://wa.me/">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+<span>Reserve Viewing on WhatsApp</span>
+</a>
+</div>
+</div>
+</div>
+</section>
+<!-- Summary Card & Multi-Action Floating Bar -->
+<section class="px-margin mb-space-xl">
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-[0_4px_20px_rgba(158,42,75,0.06)] flex flex-col gap-space-sm">
+<!-- Delivery Progress bar -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-secondary">local_shipping</span>
+            Dhaka Express Delivery
+          </span>
+<span class="font-label-sm text-label-sm text-primary font-bold">৳8,500 / ৳9,000</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 94%;"></div>
+</div>
+<p class="font-body-sm text-[11px] text-on-surface-variant">
+          Add <strong class="text-primary font-semibold">৳500 more</strong> on checkout to unlock Complimentary Same-Day Delivery in Gulshan &amp; Banani.
+        </p>
+</div>
+<!-- Total & Action Button -->
+<div class="pt-space-sm flex flex-col gap-space-sm">
+<div class="flex items-baseline justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Total Value (5 Items)</span>
+<span class="font-price-lg text-price-lg text-primary font-bold">৳8,500</span>
+</div>
+<button class="w-full h-12 rounded-lg bg-primary text-on-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-2 hover:bg-primary-container active:scale-[0.98] transition-all shadow-md" id="btn-move-all">
+<span class="material-symbols-outlined text-[20px]">shopping_bag</span>
+<span>Move All Available to Bag (5 Pieces)</span>
+</button>
+</div>
+</div>
+</section>
+</div>
+<script>
+  (function() {
+    // Filter pill tabs functionality
+    const pills = document.querySelectorAll('.filter-pill');
+    const items = document.querySelectorAll('.wishlist-item');
+    const emptyState = document.getElementById('empty-state');
+    const toastRoot = document.getElementById('toast-root');
+
+    function showToast(message) {
+      if (!toastRoot) return;
+      const toast = document.createElement('div');
+      toast.className = 'px-4 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface font-label-md text-label-md shadow-lg pointer-events-auto flex items-center gap-2 transition-all transform duration-300 translate-y-4 opacity-0';
+      toast.innerHTML = '<span class="material-symbols-outlined text-[18px] text-secondary-container">check_circle</span>' + message;
+      toastRoot.appendChild(toast);
+      
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-4', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 2500);
+    }
+
+    pills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        pills.forEach(p => {
+          p.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+          p.classList.add('bg-surface-container-high', 'text-on-surface-variant');
+        });
+        pill.classList.remove('bg-surface-container-high', 'text-on-surface-variant');
+        pill.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+
+        const category = pill.getAttribute('data-category');
+        let visibleCount = 0;
+        items.forEach(item => {
+          if (category === 'all' || item.getAttribute('data-category') === category) {
+            item.style.display = 'flex';
+            visibleCount++;
+          } else {
+            item.style.display = 'none';
+          }
+        });
+      });
+    });
+
+    // Remove buttons with warm animation
+    document.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const article = e.target.closest('.wishlist-item');
+        if (article) {
+          article.style.transition = 'all 0.3s ease';
+          article.style.opacity = '0';
+          article.style.transform = 'scale(0.95)';
+          setTimeout(() => {
+            article.remove();
+            showToast('Piece removed from your wishlist');
+            const remaining = document.querySelectorAll('.wishlist-item');
+            if (remaining.length === 0 && emptyState) {
+              emptyState.classList.remove('hidden');
+            }
+          }, 300);
+        }
+      });
+    });
+
+    // Add to bag micro-interaction
+    document.querySelectorAll('.add-to-bag-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const originalText = this.innerHTML;
+        this.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span> Adding...';
+        this.disabled = true;
+        setTimeout(() => {
+          this.innerHTML = '<span class="material-symbols-outlined text-[18px]">done</span> Added';
+          this.classList.remove('bg-primary');
+          this.classList.add('bg-surface-container-high', 'text-primary');
+          showToast('Added to your Maevelle shopping bag');
+        }, 600);
+      });
+    });
+
+    // Move All Available button
+    const moveAllBtn = document.getElementById('btn-move-all');
+    if (moveAllBtn) {
+      moveAllBtn.addEventListener('click', function() {
+        this.innerHTML = '<span class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span> Transferring 5 Items...';
+        setTimeout(() => {
+          this.innerHTML = '<span class="material-symbols-outlined text-[20px]">check_circle</span> 5 Items Transferred to Bag';
+          this.classList.replace('bg-primary', 'bg-secondary');
+          showToast('All in-stock pieces reserved in your bag');
+        }, 800);
+      });
+    }
+
+    // Share Wishlist
+    const shareBtn = document.getElementById('btn-share');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', () => {
+        if (navigator.share) {
+          navigator.share({
+            title: 'My Maevelle Wishlist',
+            text: 'Take a look at the curated accessories I saved at Maevelle Dhaka',
+            url: window.location.href
+          }).catch(() => {});
+        } else {
+          showToast('Wishlist link copied to clipboard');
+        }
+      });
+    }
+  })();
+</script></main><div class="fixed bottom-24 inset-x-margin z-40 pointer-events-none flex flex-col gap-space-sm items-center pb-safe" id="toast-root"></div><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-4px_20px_rgba(158,42,75,0.06)]" data-active-classes="text-primary font-semibold"><div class="h-16 px-space-md grid grid-cols-4 items-center"><a class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="curated-shop-listing" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">storefront</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Explore</span></a><a class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="categories" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">grid_view</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Categories</span></a><a class="group relative flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-primary font-semibold hover:text-primary transition-colors" data-path="wishlist" href="#"><span class="material-symbols-outlined text-[22px] [font-variation-settings:'FILL'_1] group-hover:scale-105 transition-transform text-primary">favorite</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5 text-primary">Wishlist</span><span class="absolute top-1 right-[28%] min-w-[15px] h-[15px] px-1 rounded-full bg-secondary text-on-secondary font-label-sm text-[9px] flex items-center justify-center font-bold shadow-sm">5</span><span class="w-1 h-1 rounded-full bg-primary mt-0.5"></span></a><a class="group flex flex-col items-center justify-center h-full min-h-[48px] py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="account" href="#"><span class="material-symbols-outlined text-[22px] group-hover:scale-105 transition-transform">account_circle</span><span class="font-label-sm text-label-sm tracking-wide mt-0.5">Account</span></a></div></nav></body></html>
