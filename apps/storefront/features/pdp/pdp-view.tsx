@@ -18,15 +18,9 @@ import { PdpTrustGrid } from './pdp-trust-grid';
 import { PdpEditorialAccordions } from './pdp-editorial-accordions';
 import { PdpStickyBar } from './pdp-sticky-bar';
 import { PdpCrossSells } from './pdp-cross-sells';
+import type { CrossSellProduct } from './pdp-cross-sells';
 import type { PriceDisplay } from './pdp-commercial-header';
-
-function money(amount: string, currency = 'BDT') {
-  return new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number(amount));
-}
+import { formatTaka } from './pdp-money';
 
 export interface PdpViewProps {
   readonly product: StorefrontProductDto;
@@ -35,6 +29,7 @@ export interface PdpViewProps {
   readonly currency: string;
   readonly initialReviews?: readonly PublicReviewDto[] | undefined;
   readonly initialSummary?: ProductRatingSummaryDto | undefined;
+  readonly crossSells?: readonly CrossSellProduct[] | undefined;
   readonly wishlisted?: boolean;
   readonly onWishlistToggle?: () => void;
   readonly onAddToCart: (variantId: string, quantity: number) => Promise<void>;
@@ -49,6 +44,7 @@ export function PdpView({
   currency,
   initialReviews,
   initialSummary,
+  crossSells,
   wishlisted = false,
   onWishlistToggle,
   onAddToCart,
@@ -263,7 +259,7 @@ export function PdpView({
           </span>
           {priceDisplay?.amount && unselectedAxes.length === 0 && selectedVariant?.available && (
             <span className="text-[15px] font-bold tabular-nums">
-              {money(String(Number(priceDisplay.amount) * quantity), priceDisplay.currency)}
+              {formatTaka(Number(priceDisplay.amount) * quantity, priceDisplay.currency)}
             </span>
           )}
         </button>
@@ -352,7 +348,7 @@ export function PdpView({
         </section>
 
         {/* Cross-sells */}
-        <PdpCrossSells products={[]} />
+        <PdpCrossSells products={crossSells} />
 
         {/* Sticky bottom bar */}
         <PdpStickyBar
@@ -451,16 +447,16 @@ export function PdpView({
                 {/* Price */}
                 {priceDisplay?.type === 'exact' && (
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <span className="text-[24px] font-bold text-[#9e2a4b] tabular-nums">
-                      {money(priceDisplay.amount, priceDisplay.currency)}
+                    <span className="text-[24px] font-bold text-primary tabular-nums">
+                      {formatTaka(priceDisplay.amount, priceDisplay.currency)}
                     </span>
                     {priceDisplay.compareAtAmount &&
                       Number(priceDisplay.compareAtAmount) > Number(priceDisplay.amount) && (
                         <>
-                          <span className="text-[18px] font-bold text-[#8a7174] line-through tabular-nums">
-                            {money(priceDisplay.compareAtAmount, priceDisplay.currency)}
+                          <span className="text-[18px] font-bold text-outline line-through tabular-nums">
+                            {formatTaka(priceDisplay.compareAtAmount, priceDisplay.currency)}
                           </span>
-                          <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[#ffd9e0] text-[#740734]">
+                          <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-container">
                             SAVE{' '}
                             {Math.round(
                               ((Number(priceDisplay.compareAtAmount) - Number(priceDisplay.amount)) /
@@ -471,7 +467,7 @@ export function PdpView({
                           </span>
                         </>
                       )}
-                    <span className="text-[12px] text-[#574144] ml-auto">Tax &amp; VAT incl.</span>
+                    <span className="text-[12px] text-on-surface-variant ml-auto">Tax &amp; VAT incl.</span>
                   </div>
                 )}
 
@@ -494,7 +490,7 @@ export function PdpView({
 
           {/* Full-width cross-sells */}
           <div className="mt-12">
-            <PdpCrossSells products={[]} />
+            <PdpCrossSells products={crossSells} />
           </div>
         </div>
       </div>

@@ -11,6 +11,7 @@ import { notifyCartChanged } from '@/features/cart/cart-events';
 import { useWishlist } from '@/features/wishlist/use-wishlist';
 import { requestStorefrontClient, StorefrontClientApiError } from '@/lib/api/client/http';
 import { PdpView } from '@/features/pdp';
+import type { CrossSellProduct } from '@/features/pdp';
 
 interface CartView {
   version: number;
@@ -25,6 +26,7 @@ export interface ProductPageClientProps {
   readonly currency: string;
   readonly initialReviews?: readonly PublicReviewDto[] | undefined;
   readonly initialSummary?: ProductRatingSummaryDto | undefined;
+  readonly crossSells?: readonly CrossSellProduct[] | undefined;
 }
 
 export function ProductPageClient({
@@ -34,6 +36,7 @@ export function ProductPageClient({
   currency,
   initialReviews,
   initialSummary,
+  crossSells,
 }: ProductPageClientProps) {
   const [cart, setCart] = useState<CartView>();
   const [cartMessage, setCartMessage] = useState('');
@@ -105,6 +108,7 @@ export function ProductPageClient({
       currency={currency}
       initialReviews={initialReviews}
       initialSummary={initialSummary}
+      crossSells={crossSells}
       wishlisted={wishlisted}
       onWishlistToggle={handleWishlistToggle}
       onAddToCart={handleAddToCart}

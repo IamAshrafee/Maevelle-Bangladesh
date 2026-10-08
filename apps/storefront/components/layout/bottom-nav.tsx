@@ -23,7 +23,7 @@ export function BottomNav({
 }: BottomNavProps) {
   const pathname = usePathname();
 
-  if (pathname?.startsWith('/checkout')) {
+  if (pathname?.startsWith('/checkout') || pathname?.startsWith('/products')) {
     return null;
   }
 

@@ -10,6 +10,7 @@ import {
   loadPublicProductReviews,
   loadPublicSizeGuide,
   loadPublicStorefrontContext,
+  searchPublicCatalog,
 } from '@/lib/api/server/catalog';
 
 type ProductRoute = { readonly params: Promise<{ handle: string }> };
@@ -57,10 +58,30 @@ export default async function ProductPage({ params }: ProductRoute) {
   if (!product) notFound();
   if (product.handle !== handle) permanentRedirect(`/products/${product.handle}`);
 
-  const [reviewsData, sizeGuide] = await Promise.all([
+  const [reviewsData, sizeGuide, searchResult] = await Promise.all([
     loadPublicProductReviews(product.id, context.organizationId, 5),
     loadPublicSizeGuide(product.handle, context.organizationId),
+    searchPublicCatalog(context.organizationId, {
+      sort: 'RELEVANCE',
+      page: 1,
+    }).catch(() => null),
   ]);
+
+  const crossSells = (searchResult?.items ?? [])
+    .filter((item) => item.id !== product.id)
+    .slice(0, 6)
+    .map((item) => ({
+      id: item.id,
+      handle: item.handle,
+      title: item.title,
+      price: item.minimumPrice ?? '0',
+      currency: item.currency ?? context.currency,
+      imageUrl: item.primaryMediaAssetId
+        ? publicMediaPath(item.primaryMediaAssetId, 'thumbnail')
+        : '',
+      imageAlt: item.title,
+      badge: 'Curated',
+    }));
 
   const canonical = absoluteStorefrontUrl(`/products/${encodeURIComponent(product.handle)}`);
 
@@ -103,6 +124,7 @@ export default async function ProductPage({ params }: ProductRoute) {
         currency={context.currency}
         initialReviews={reviewsData?.reviews}
         initialSummary={reviewsData?.summary ?? product?.ratingSummary ?? undefined}
+        crossSells={crossSells}
       />
     </>
   );
