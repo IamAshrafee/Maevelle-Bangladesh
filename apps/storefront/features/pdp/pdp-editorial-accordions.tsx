@@ -49,11 +49,13 @@ function Accordion({ id, title, defaultOpen = false, content }: AccordionItem) {
 export interface PdpEditorialAccordionsProps {
   readonly productDetails?: readonly { group: string; label: string; value: string }[];
   readonly productFaqs?: readonly { question: string; answer: string }[];
+  readonly onFittingGuide?: () => void;
 }
 
 export function PdpEditorialAccordions({
   productDetails,
   productFaqs,
+  onFittingGuide,
 }: PdpEditorialAccordionsProps) {
   const hasDimensions =
     productDetails && productDetails.some((d) => d.group?.toLowerCase().includes('dimension'));
@@ -125,6 +127,15 @@ export function PdpEditorialAccordions({
               <p className="text-[12px]">
                 Ideal for festive Dawat half-up crowns, elegant Eid daytime buns, or low side-swept ponytails.
               </p>
+              {onFittingGuide && (
+                <button
+                  type="button"
+                  onClick={onFittingGuide}
+                  className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#9e2a4b] hover:text-[#7e0e35] underline underline-offset-2 cursor-pointer bg-transparent border-0 p-0"
+                >
+                  Open Atelier Size &amp; Fit Guide →
+                </button>
+              )}
             </div>
           )
         }

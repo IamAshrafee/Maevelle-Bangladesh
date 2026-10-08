@@ -65,6 +65,7 @@ export function PdpView({
 
   const [activeMedia, setActiveMedia] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const sizeDialogRef = useRef<HTMLDialogElement>(null);
 
   const selectedVariant = useMemo(() => {
@@ -315,7 +316,7 @@ export function PdpView({
           selected={selected}
           onChoose={choose}
           valuePossible={valuePossible}
-          onFittingGuide={() => sizeDialogRef.current?.showModal()}
+          onFittingGuide={() => setIsSizeGuideOpen(true)}
         />
 
         {/* Trust grid */}
@@ -325,6 +326,7 @@ export function PdpView({
         <PdpEditorialAccordions
           productDetails={product.details}
           productFaqs={product.faqs}
+          onFittingGuide={() => setIsSizeGuideOpen(true)}
         />
 
         {/* Reviews */}
@@ -478,7 +480,7 @@ export function PdpView({
                     selected={selected}
                     onChoose={choose}
                     valuePossible={valuePossible}
-                    onFittingGuide={() => sizeDialogRef.current?.showModal()}
+                    onFittingGuide={() => setIsSizeGuideOpen(true)}
                   />
                 </div>
 
@@ -495,8 +497,10 @@ export function PdpView({
         </div>
       </div>
 
-      {/* Size guide dialog */}
+      {/* Size guide drawer / modal */}
       <SizeGuideDialog
+        isOpen={isSizeGuideOpen}
+        onClose={() => setIsSizeGuideOpen(false)}
         guide={guide}
         dialogRef={sizeDialogRef}
         productTitle={product.title}

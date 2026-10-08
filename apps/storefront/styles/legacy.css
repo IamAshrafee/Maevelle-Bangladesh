@@ -1981,67 +1981,25 @@ h3 {
   }
 }
 
-.size-guide-dialog,
-.gallery-dialog {
-  width: min(100% - 2rem, 54rem);
-  max-height: calc(100vh - 2rem);
-  border: 0;
-  background: var(--paper);
-  box-shadow: 0 20px 80px #0005;
-  padding: 0;
-}
-.size-guide-dialog::backdrop,
-.gallery-dialog::backdrop {
-  background: #1b1513bd;
-}
-.size-guide-dialog header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--line);
-  padding: 1.25rem;
-}
-.size-guide-dialog header h2 {
-  margin: 0;
-  font-size: 2rem;
-}
-.size-guide-dialog header button,
-.gallery-dialog > button {
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-}
-.size-guide-dialog > p {
-  padding: 0 1.25rem;
-}
-.table-scroll {
-  overflow-x: auto;
-  padding: 0 1.25rem;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th,
-td {
-  border-bottom: 1px solid var(--line);
-  padding: 0.75rem;
-  text-align: left;
-}
-.dialog-note {
-  color: var(--muted);
-  font-size: 0.84rem;
-}
 .gallery-dialog {
   width: min(100% - 2rem, 60rem);
+  max-height: calc(100vh - 2rem);
+  border: 0;
+  box-shadow: 0 20px 80px #0005;
+  padding: 0;
   overflow: auto;
   background: #161212;
+}
+.gallery-dialog::backdrop {
+  background: #1b1513bd;
 }
 .gallery-dialog > button {
   position: fixed;
   z-index: 1;
   margin: 0.75rem;
   background: white;
+  border: 0;
+  color: var(--ink);
 }
 .gallery-dialog img {
   width: 100%;

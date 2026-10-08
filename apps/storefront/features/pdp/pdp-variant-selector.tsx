@@ -59,10 +59,17 @@ export function PdpVariantSelector({
               {isSize && onFittingGuide ? (
                 <button
                   type="button"
+                  id="pdp-size-guide-trigger"
                   onClick={onFittingGuide}
-                  className="text-[12px] font-semibold text-[#9e2a4b] underline underline-offset-2 min-h-0 border-0 bg-transparent p-0"
+                  className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#9e2a4b] hover:text-[#7e0e35] underline underline-offset-2 min-h-0 border-0 bg-transparent p-0 cursor-pointer transition-colors"
                 >
-                  Fitting Guide
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0l12.6 12.6z" />
+                    <path d="m14.5 12.5 2-2" />
+                    <path d="m11.5 9.5 2-2" />
+                    <path d="m8.5 6.5 2-2" />
+                  </svg>
+                  <span>Size &amp; Fit Guide</span>
                 </button>
               ) : isColor ? (
                 <span className="text-[11px] text-[#8a7174]">Pure Silk Velvet</span>

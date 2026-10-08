@@ -59,6 +59,7 @@ import { MobileFooter } from '@/components/layout/mobile-footer';
 import { DesktopFooter } from '@/components/layout/desktop-footer';
 import { WishlistPageShell } from '@/features/wishlist/components/wishlist-page-shell';
 import { CheckoutPageShell } from '@/features/checkout';
+import { SizeGuideDialog } from '@/components/size-guide-dialog';
 
 export default function StorefrontDesignSystemPage() {
   // Interactive UI State
@@ -86,6 +87,7 @@ export default function StorefrontDesignSystemPage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [drawerFilters, setDrawerFilters] = useState<FilterValues>(DEFAULT_FILTER_VALUES);
   const [cartCount, setCartCount] = useState(2);
 
@@ -173,6 +175,14 @@ export default function StorefrontDesignSystemPage() {
           >
             <ArrowRightIcon className="rotate-90" size={14} />
             <span>Sort</span>
+          </button>
+          <button
+            id="ui-lab-size-guide-btn"
+            className="flex items-center gap-1.5 rounded-lg bg-surface-container-low px-2.5 py-1 text-label-sm font-semibold text-primary transition-colors hover:bg-surface-container cursor-pointer"
+            onClick={() => setIsSizeGuideOpen(true)}
+            type="button"
+          >
+            <span>Size Guide</span>
           </button>
           <button
             className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1 text-label-sm font-semibold text-on-primary shadow-xs transition-colors hover:bg-primary-hover cursor-pointer"
@@ -2056,6 +2066,14 @@ export default function StorefrontDesignSystemPage() {
         }}
         onClose={() => setIsFilterOpen(false)}
         resultCount={24}
+      />
+
+      <SizeGuideDialog
+        isOpen={isSizeGuideOpen}
+        onClose={() => setIsSizeGuideOpen(false)}
+        productTitle="Mulberry Silk Embroidered Kurti Top"
+        selectedSizeLabel="S"
+        onSelectSize={(s) => showToast(`Selected Size ${s} applied from Size Guide.`)}
       />
 
     </div>
