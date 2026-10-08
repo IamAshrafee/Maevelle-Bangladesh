@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 import { cx } from '@/components/ui/classnames';
@@ -31,9 +31,14 @@ export function MobileNavbar({
   responsive = true,
   storeName = 'Maevelle',
 }: MobileNavbarProps) {
+  const pathname = usePathname();
   const router = useRouter();
   const liveCount = useCartCount(initialCartCount ?? 0);
   const cartCount = initialCartCount !== undefined ? initialCartCount : liveCount;
+
+  if (pathname?.startsWith('/checkout')) {
+    return null;
+  }
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

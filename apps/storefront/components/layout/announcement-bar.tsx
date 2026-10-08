@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { cx } from '@/components/ui/classnames';
@@ -22,7 +23,10 @@ export function AnnouncementBar({
   className,
   dismissible = true,
 }: AnnouncementBarProps) {
+  const pathname = usePathname();
   const [isDismissing, setIsDismissing] = useState(false);
+
+  const isCheckout = pathname?.startsWith('/checkout');
   const [isDismissed, setIsDismissed] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -65,6 +69,7 @@ export function AnnouncementBar({
         isDismissing
           ? 'max-h-0 opacity-0 py-0'
           : 'max-h-12 opacity-100 min-h-[34px] sm:min-h-[36px] py-1.5',
+        isCheckout && 'hidden lg:flex',
         className,
       )}
       onMouseEnter={() => setIsPaused(true)}

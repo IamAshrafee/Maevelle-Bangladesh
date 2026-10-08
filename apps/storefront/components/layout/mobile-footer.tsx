@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 import { cx } from '@/components/ui/classnames';
 import { ArrowUpIcon } from '@/components/ui/icons';
@@ -16,6 +17,12 @@ export function MobileFooter({
   responsive = true,
   storeName = 'Maevelle',
 }: MobileFooterProps) {
+  const pathname = usePathname();
+
+  if (pathname?.startsWith('/checkout')) {
+    return null;
+  }
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

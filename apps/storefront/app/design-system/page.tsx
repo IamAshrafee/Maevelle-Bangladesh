@@ -58,6 +58,7 @@ import { DesktopNavbar } from '@/components/layout/desktop-navbar';
 import { MobileFooter } from '@/components/layout/mobile-footer';
 import { DesktopFooter } from '@/components/layout/desktop-footer';
 import { WishlistPageShell } from '@/features/wishlist/components/wishlist-page-shell';
+import { CheckoutPageShell } from '@/features/checkout';
 
 export default function StorefrontDesignSystemPage() {
   // Interactive UI State
@@ -1951,6 +1952,65 @@ export default function StorefrontDesignSystemPage() {
               </div>
               <div className="bg-surface p-2 sm:p-4">
                 <WishlistPageShell mode="desktop" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 15. EXPRESS CHECKOUT SPECIMEN */}
+        <section className="space-y-4 pt-8 border-t border-border/60">
+          <div className="flex flex-col gap-1">
+            <span className="font-label-sm text-xs font-bold uppercase tracking-wider text-secondary">
+              15. Complete Checkout Experience
+            </span>
+            <h2 className="font-headline-md text-headline-md text-on-surface">
+              Express Checkout (Stitch 1:1 Mobile &amp; 2-Column Desktop Atelier)
+            </h2>
+          </div>
+          <p className="text-body-sm text-on-surface-variant max-w-3xl">
+            High-conversion luxury checkout flow. Mobile view is a 1:1 extraction of the Stitch mobile design system featuring 3-step indicator, collapsible order summary accordion, 🇧🇩 +880 mobile verification, Dhaka Express vs Nationwide courier toggle, official bKash/Nagad &amp; COD payment selectors, Maevelle Bangladesh guarantee badges, and persistent bottom purchase bar. Desktop view expands into a 2-column atelier layout with a sticky order value sidebar.
+          </p>
+
+          <div className="flex items-center gap-3">
+            <Link
+              className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-primary text-on-primary font-label-md text-xs font-semibold shadow-xs hover:bg-primary-hover active:scale-98 transition-transform"
+              href="/checkout"
+            >
+              <span>Visit Live /checkout Page</span>
+              <ArrowRightIcon size={14} />
+            </Link>
+          </div>
+
+          <div className="space-y-6">
+            {/* Mobile Checkout Specimen (Phone Shell) */}
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface-container-lowest shadow-xs">
+              <div className="border-b border-border/40 bg-surface-container-low px-4 py-2 flex items-center justify-between">
+                <span className="font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
+                  Mobile Checkout Specimen (Stitch 1:1 Design Extraction)
+                </span>
+                <span className="rounded-full bg-primary-fixed px-2 py-0.5 font-label-sm text-[10px] font-bold text-on-primary-fixed">
+                  Viewport &lt; lg Touch Enclosed
+                </span>
+              </div>
+              <div className="p-4 sm:p-6 bg-surface/50">
+                <div className="max-w-md mx-auto rounded-3xl bg-surface border border-border/60 overflow-hidden shadow-sm">
+                  <CheckoutPageShell mode="mobile" />
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop Checkout Specimen (Expanded 2-Column Split) */}
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface-container-lowest shadow-xs">
+              <div className="border-b border-border/40 bg-surface-container-low px-4 py-2 flex items-center justify-between">
+                <span className="font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
+                  Desktop Checkout Specimen (Expanded 2-Column Atelier &amp; Sticky Summary)
+                </span>
+                <span className="rounded-full bg-primary-fixed px-2 py-0.5 font-label-sm text-[10px] font-bold text-on-primary-fixed">
+                  Viewport lg+ Pointer Architecture
+                </span>
+              </div>
+              <div className="bg-surface p-2 sm:p-4">
+                <CheckoutPageShell mode="desktop" />
               </div>
             </div>
           </div>

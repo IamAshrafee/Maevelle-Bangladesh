@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { cx } from '@/components/ui/classnames';
-import { GridIcon, HeartIcon, PersonIcon, StorefrontIcon } from '@/components/ui/icons';
+import { GridIcon, HeartIcon, StorefrontIcon, TruckIcon } from '@/components/ui/icons';
 
 export type BottomNavProps = {
-  activeTab?: 'explore' | 'categories' | 'wishlist' | 'account' | undefined;
+  activeTab?: 'explore' | 'categories' | 'wishlist' | 'orders' | undefined;
   className?: string | undefined;
-  onTabClick?: ((tab: 'explore' | 'categories' | 'wishlist' | 'account') => void) | undefined;
+  onTabClick?: ((tab: 'explore' | 'categories' | 'wishlist' | 'orders') => void) | undefined;
   responsive?: boolean | undefined;
   wishlistCount?: number | undefined;
 };
@@ -23,6 +23,10 @@ export function BottomNav({
 }: BottomNavProps) {
   const pathname = usePathname();
 
+  if (pathname?.startsWith('/checkout')) {
+    return null;
+  }
+
   const currentTab =
     activeTab ||
     (pathname === '/'
@@ -31,8 +35,8 @@ export function BottomNav({
         ? 'categories'
         : pathname?.startsWith('/wishlist')
           ? 'wishlist'
-          : pathname?.startsWith('/account') || pathname?.startsWith('/orders')
-            ? 'account'
+          : pathname?.startsWith('/orders')
+            ? 'orders'
             : 'explore');
 
   return (
@@ -116,20 +120,20 @@ export function BottomNav({
           )}
         </Link>
 
-        {/* Account Tab */}
+        {/* Track Order Tab */}
         <Link
           className={cx(
             'group flex h-full min-h-12 flex-col items-center justify-center py-1 transition-colors duration-150 active:scale-95',
-            currentTab === 'account'
+            currentTab === 'orders'
               ? 'text-primary font-semibold'
               : 'text-on-surface-variant hover:text-primary',
           )}
-          href="/orders"
-          onClick={() => onTabClick?.('account')}
+          href="/orders/track"
+          onClick={() => onTabClick?.('orders')}
         >
-          <PersonIcon className="transition-transform duration-150 group-hover:scale-105" size={22} />
-          <span className="mt-0.5 text-label-sm tracking-wide text-[11px]">Account</span>
-          {currentTab === 'account' ? (
+          <TruckIcon className="transition-transform duration-150 group-hover:scale-105" size={22} />
+          <span className="mt-0.5 text-label-sm tracking-wide text-[11px]">Track</span>
+          {currentTab === 'orders' ? (
             <span className="mt-0.5 size-1 rounded-full bg-primary opacity-90 transition-opacity duration-150" />
           ) : (
             <span className="mt-0.5 size-1" />

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-tertiary-fixed": "#1f1a1c", "inverse-on-surface": "#f7efeb", "tertiary-container": "#5c5557", "outline-variant": "#ddbfc3", "on-surface-variant": "#574144", "tertiary-fixed-dim": "#cec4c6", "on-primary": "#ffffff", "tertiary-fixed": "#eae0e2", "secondary-fixed": "#ffd9e0", "on-secondary-fixed-variant": "#871a42", "on-secondary-fixed": "#3f0018", "surface-container-highest": "#e9e1dd", "on-secondary": "#ffffff", "surface-container": "#f4ece8", "on-background": "#1e1b19", "secondary-fixed-dim": "#ffb1c2", "surface-variant": "#e9e1dd", "surface-bright": "#fff8f5", "inverse-primary": "#ffb2bf", "inverse-surface": "#33302d", "secondary-container": "#fd779d", "on-tertiary-fixed-variant": "#4b4547", "surface-container-lowest": "#ffffff", "on-primary-fixed": "#3f0015", "on-surface": "#1e1b19", "surface-container-high": "#eee7e3", "on-primary-fixed-variant": "#88183c", "error-container": "#ffdad6", "on-primary-container": "#ffbbc6", "primary": "#7e0e35", "background": "#fff8f5", "surface": "#fff8f5", "on-error-container": "#93000a", "surface-tint": "#a83252", "surface-container-low": "#faf2ee", "primary-container": "#9e2a4b", "error": "#ba1a1a", "on-tertiary-container": "#d4cacc", "outline": "#8a7174", "secondary": "#a63359", "primary-fixed-dim": "#ffb2bf", "primary-fixed": "#ffd9de", "on-error": "#ffffff", "tertiary": "#443e40", "surface-dim": "#e0d8d5", "on-tertiary": "#ffffff", "on-secondary-container": "#740734" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-lg": "1rem", "space-md": "0.75rem", "space-xs": "0.25rem", "space-sm": "0.5rem", "gutter": "0.75rem", "space-xl": "1.5rem", "margin": "1rem" }, "fontFamily": { "headline-lg-mobile": [ "Playfair Display" ], "body-sm": [ "Plus Jakarta Sans" ], "body-lg": [ "Plus Jakarta Sans" ], "headline-sm": [ "Plus Jakarta Sans" ], "headline-md": [ "Plus Jakarta Sans" ], "body-md": [ "Plus Jakarta Sans" ], "price-lg": [ "Plus Jakarta Sans" ], "price-md": [ "Plus Jakarta Sans" ], "headline-lg": [ "Playfair Display" ], "label-md": [ "Plus Jakarta Sans" ], "label-sm": [ "Plus Jakarta Sans" ], "display-hero-mobile": [ "Playfair Display" ], "display-hero": [ "Playfair Display" ] }, "fontSize": { "headline-lg-mobile": [ "22px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "500" } ], "body-sm": [ "12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" } ], "body-lg": [ "16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" } ], "headline-sm": [ "16px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "600" } ], "headline-md": [ "18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "body-md": [ "14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" } ], "price-lg": [ "20px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700" } ], "price-md": [ "15px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "700" } ], "headline-lg": [ "28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "500" } ], "label-md": [ "13px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" } ], "label-sm": [ "11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600" } ], "display-hero-mobile": [ "28px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "display-hero": [ "36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "600" } ] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(158,42,75,0.04)]"><div class="h-16 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><button aria-label="Go back" class="w-11 h-11 flex items-center justify-center -ml-2 text-on-surface hover:text-primary transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><img alt="Clean, luxury minimalist wordmark with elegant serif lettering 'MAEVELLE' and a delicate sub-label 'BANGLADESH' or a refined monogram petal/lotus motif in deep berry rose (#9E2A4B) on transparent background. Premium, curated, feminine fashion aesthetic.. Design context: - Primary color: #9e2a4b
+- Font: playfairDisplay
+- Mode: light
+- Roundness: rounded-md
+. The logo should be visually consistent with these brand tokens." class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1X3_nUZyNGvWEzGijUxGW8HTP169Ant_b9e_Lm9MOpFvJyCcMS4iiOpmNe4kQbmF1ARXlnERmK2ev1LBsxQINNaIahe721C99Jvz50ALJxFGQJS2gKP5jda-LfuRjjnQlp-eQymET8llhX41QWoHJyT_m8lsKw8elDNcIcOtGeSI0yAZ7011GWqbVfBr39UGBw2siGDDVhhRELxe1sob7GA7Nr4_qYdKsrC_lXjg4PLHwQW8dcOv00d3Q"/><div class="flex flex-col justify-center pl-space-xs"><span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Maevelle BD</span><h1 class="font-headline-sm text-headline-sm text-on-surface leading-tight">Shipping Address</h1></div></div><div class="flex items-center gap-space-sm"><div class="hidden xs:flex items-center gap-1 bg-surface-container-low px-2 py-1 rounded-full text-on-surface-variant"><span class="material-symbols-outlined text-primary text-[14px]">lock</span><span class="font-label-sm text-label-sm text-on-surface-variant tracking-tight">256-Bit SSL Secured</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full pt-16 bg-surface min-h-screen"><div class="flex flex-col w-full pb-safe">
+<!-- Stepper Bar -->
+<div class="px-margin pt-space-md pb-space-sm">
+<div class="flex items-center justify-between relative">
+<div class="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-0.5 bg-primary-container z-0"></div>
+<!-- Step 1 -->
+<div class="relative z-10 flex flex-col items-center gap-1">
+<div class="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Bag</span>
+</div>
+<!-- Step 2 -->
+<div class="relative z-10 flex flex-col items-center gap-1">
+<div class="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Payment</span>
+</div>
+<!-- Step 3 -->
+<div class="relative z-10 flex flex-col items-center gap-1">
+<div class="w-7 h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-md">
+<span class="material-symbols-outlined text-[16px]">celebration</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">Confirmed</span>
+</div>
+</div>
+</div>
+<div class="px-margin flex flex-col gap-space-lg pt-space-xs">
+<!-- Celebration Hero Card -->
+<div class="relative overflow-hidden rounded-xl bg-surface-container-lowest p-space-lg shadow-sm">
+<div class="absolute -top-12 -right-12 w-36 h-36 rounded-full bg-secondary-fixed opacity-40 blur-2xl pointer-events-none"></div>
+<div class="absolute -bottom-8 -left-8 w-28 h-28 rounded-full bg-primary-fixed opacity-40 blur-xl pointer-events-none"></div>
+<div class="relative flex flex-col items-center text-center">
+<!-- Floating Animated Seal -->
+<div class="w-16 h-16 rounded-full bg-surface-container-low flex items-center justify-center mb-space-md shadow-inner">
+<div class="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center shadow-md">
+<span class="material-symbols-outlined text-on-primary text-[26px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary font-semibold mb-1">Receipt Confirmed</span>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-medium leading-tight mb-2">
+          Shukriya, Nusrat!
+        </h2>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-xs mb-space-md">
+          Your curated parcel has been scheduled for personalized atelier packaging.
+        </p>
+<!-- Order ID Pill & Copy Interaction -->
+<div class="w-full bg-surface-container-low rounded-lg p-space-sm flex items-center justify-between gap-space-sm mb-space-md">
+<div class="flex items-center gap-2 text-left min-w-0">
+<span class="material-symbols-outlined text-primary text-[18px]">receipt_long</span>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Order Identifier</span>
+<span class="font-label-md text-label-md text-on-surface font-bold tracking-wide truncate" id="orderIdText">#MB-84291</span>
+</div>
+</div>
+<button class="h-8 px-3 rounded-full bg-surface-container-lowest text-primary text-label-sm font-label-sm font-semibold flex items-center gap-1 shadow-sm active:scale-95 transition-all" id="copyBtn" onclick="copyOrderId()">
+<span class="material-symbols-outlined text-[14px]" id="copyIcon">content_copy</span>
+<span id="copyLabel">Copy</span>
+</button>
+</div>
+<!-- SMS / WhatsApp dispatch reassurance -->
+<div class="flex items-center gap-2 bg-secondary-fixed/30 rounded-lg px-3 py-2 w-full text-left">
+<span class="material-symbols-outlined text-secondary text-[18px]">mark_chat_read</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Notification receipt dispatched to <span class="font-semibold text-on-surface">+880 1712-345678</span> via SMS &amp; WhatsApp.
+          </p>
+</div>
+</div>
+</div>
+<!-- Live Tracking & Timeline -->
+<div class="rounded-xl bg-surface-container-lowest p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]">local_shipping</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Delivery Progress</h3>
+</div>
+<span class="bg-secondary-fixed/50 text-on-secondary-fixed-variant px-2.5 py-0.5 rounded-full font-label-sm text-label-sm font-semibold">
+          Dhaka Express
+        </span>
+</div>
+<!-- ETA banner -->
+<div class="bg-surface-container-low rounded-lg p-space-sm flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-full bg-surface-container-lowest flex items-center justify-center text-primary shadow-sm flex-shrink-0">
+<span class="material-symbols-outlined text-[20px]">calendar_today</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Estimated Handover</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Friday, May 24 – Saturday, May 25</span>
+</div>
+</div>
+<!-- Timeline steps -->
+<div class="relative pl-6 flex flex-col gap-space-lg pt-space-xs">
+<div class="absolute left-2.5 top-2.5 bottom-2.5 w-0.5 bg-surface-container-high"></div>
+<!-- Timeline 1 -->
+<div class="relative flex items-start gap-space-sm">
+<div class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[12px]">check</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Order Placed</span>
+<span class="font-label-sm text-label-sm text-secondary font-medium">Today · 3:45 PM</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Payment verified via bKash gateway.</span>
+</div>
+</div>
+<!-- Timeline 2 -->
+<div class="relative flex items-start gap-space-sm">
+<div class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-primary-fixed text-primary flex items-center justify-center shadow-sm ring-4 ring-surface-container-lowest">
+<span class="material-symbols-outlined text-[12px]">inventory_2</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-primary font-bold">Atelier Inspection &amp; Gift Wrap</span>
+<span class="bg-primary-fixed text-primary px-2 py-0.2 rounded-full font-label-sm text-label-sm">Active</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Quality-checked &amp; wax-sealed at Banani Studio.</span>
+</div>
+</div>
+<!-- Timeline 3 -->
+<div class="relative flex items-start gap-space-sm opacity-60">
+<div class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px]">two_wheeler</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Handed to Pathao Express Courier</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Tracking link activated once parcel leaves studio.</span>
+</div>
+</div>
+<!-- Timeline 4 -->
+<div class="relative flex items-start gap-space-sm opacity-60">
+<div class="absolute -left-6 top-0.5 w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px]">home</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Doorstep Delivery &amp; Unboxing</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Recipient pin verification upon doorstep arrival.</span>
+</div>
+</div>
+</div>
+<!-- Destination Card Recap -->
+<div class="bg-surface-container-low/70 rounded-lg p-space-sm flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-secondary text-[20px] mt-0.5">pin_drop</span>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Shipping To</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Nusrat Jahan</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">House 42, Road 7/A, Apt 4B, Dhanmondi (1209), Dhaka</span>
+</div>
+</div>
+</div>
+<!-- Items & Payment Receipt Breakdown -->
+<div class="rounded-xl bg-surface-container-lowest p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Curated Items</h3>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">2 Packages</span>
+</div>
+<!-- Product item 1 -->
+<div class="flex items-center gap-space-md bg-surface-container-low/40 p-2.5 rounded-lg">
+<div class="w-16 h-20 rounded-md overflow-hidden bg-surface-container-high flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="Close up editorial luxury shot of the Aurelia Freshwater Pearl Drop Earrings in 18K gold setting resting on soft warm ivory velvet backdrop, romantic rose-tinted lighting, pristine high-end jewelry presentation." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDObp62A5QneXc1q8Tw5lXzyrx17U7umoxW_r0pi_fXLVdaycLgntwdcvPo3QV5TE149YC_MWohAYkUh43iBIskXCsDUNZAqAAkfQlUo2_WunJcQsWmecnY39Zmf-hyseh0ZLX7YDBtbwXwNIPiQgmNASvGLdp9Ycv6E-sQlASMQ51MSaRK-cdtbKXrS949akfMm6CXKvXUzJHeCTn_luqKUcM7A_dklRq0zgrYZ3e9YCtnSo0n-GFn"/>
+</div>
+<div class="flex flex-col justify-between flex-1 min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Aurelia Pearl Drop Earrings</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">18K Gold Plated · Qty: 1</span>
+<span class="font-price-md text-price-md text-on-surface font-bold mt-1">৳1,650</span>
+</div>
+</div>
+<!-- Product item 2 -->
+<div class="flex items-center gap-space-md bg-surface-container-low/40 p-2.5 rounded-lg">
+<div class="w-16 h-20 rounded-md overflow-hidden bg-surface-container-high flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="Refined luxury editorial studio shot of deep berry silk velvet hair ribbon folded gently with delicate stitching details on cream silk background, elegant warm studio tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFb7_XiGxoj_IFu61l8oMmv33E9F5xzljmRO1aNLnwR53B3ZlUNT9-jvwp9CNmmRCAKOgBcTQVnQQ4PgWkx5ot_f7uvAkZqRC0R-Zz4UVFi-Y6uF0H26flAa1gHm2Y7Q-gy6EsXlCE3_SDsq5QhkLyOTQAlE0qEWjIu8N_-6Da0jGyx6tLIop17gzf10__l2vOMGKKO5QYVVKPPBv7qsRYOd8uuToidqNrEq7rJ-XsRL1-etGEcZUm"/>
+</div>
+<div class="flex flex-col justify-between flex-1 min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-medium truncate">Plush Velvet Hair Ribbon</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Deep Berry Silk · Qty: 1</span>
+<span class="font-price-md text-price-md text-on-surface font-bold mt-1">৳850</span>
+</div>
+</div>
+<!-- Packaging perk highlight -->
+<div class="flex items-center gap-2 p-2.5 rounded-lg bg-surface-container-low">
+<span class="material-symbols-outlined text-primary text-[18px]">redeem</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">
+          Complimentary handwritten calligraphy card &amp; Maevelle luxury keepsake box included.
+        </span>
+</div>
+<!-- Payment Method Badge -->
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-[11px]">
+            bK
+          </div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">bKash Mobile Banking</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">TrxID: 9JK84M2P</span>
+</div>
+</div>
+<div class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span class="font-label-sm text-label-sm font-semibold">Paid</span>
+</div>
+</div>
+<!-- Financial Calculation -->
+<div class="flex flex-col gap-2 pt-2">
+<div class="flex justify-between items-center text-on-surface-variant font-body-sm text-body-sm">
+<span>Subtotal</span>
+<span class="font-label-md text-label-md text-on-surface">৳2,500</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant font-body-sm text-body-sm">
+<span class="flex items-center gap-1">
+            Voucher Code <span class="bg-primary-fixed text-primary px-1.5 py-0.5 rounded text-[10px] font-bold">MAEVELLEFIRST</span>
+</span>
+<span class="font-label-md text-label-md text-secondary">-৳200</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant font-body-sm text-body-sm">
+<span>Dhaka Express Courier</span>
+<span class="font-label-md text-label-md text-on-surface">৳70</span>
+</div>
+<div class="h-px bg-surface-container-high my-1"></div>
+<div class="flex justify-between items-baseline">
+<span class="font-headline-sm text-headline-sm text-on-surface">Total Paid</span>
+<div class="text-right">
+<span class="font-price-lg text-price-lg text-primary font-bold">৳2,370</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[10px]">VAT inclusive</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Assurance & Concierge Support -->
+<div class="rounded-xl bg-surface-container-lowest p-space-lg shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[22px]">verified_user</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">The Maevelle Promise</h3>
+</div>
+<div class="grid grid-cols-2 gap-space-sm">
+<div class="bg-surface-container-low p-3 rounded-lg flex flex-col gap-1">
+<span class="material-symbols-outlined text-primary text-[20px]">package_2</span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">Doorstep Check</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant leading-tight">Inspect your box prior to rider handover.</span>
+</div>
+<div class="bg-surface-container-low p-3 rounded-lg flex flex-col gap-1">
+<span class="material-symbols-outlined text-primary text-[20px]">swap_horizontal_circle</span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">7-Day Exchange</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant leading-tight">Instant replacement for any fit issue.</span>
+</div>
+</div>
+<!-- Concierge Action Row -->
+<div class="flex flex-col gap-space-xs pt-space-xs">
+<a class="w-full h-12 rounded-lg bg-surface-container-low text-on-surface flex items-center justify-between px-space-md active:bg-surface-container-high transition-colors" href="https://wa.me/8801894000000" rel="noopener noreferrer" target="_blank">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-secondary-container/40 flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined text-[18px]">support_agent</span>
+</div>
+<div class="flex flex-col text-left">
+<span class="font-label-sm text-label-sm font-semibold">WhatsApp Concierge</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">+880 1894-MAEVELLE</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-secondary text-[18px]">chevron_right</span>
+</a>
+<button class="w-full h-12 rounded-lg bg-surface-container-low text-on-surface flex items-center justify-between px-space-md active:bg-surface-container-high transition-colors" onclick="downloadReceipt()">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">file_download</span>
+</div>
+<div class="flex flex-col text-left">
+<span class="font-label-sm text-label-sm font-semibold">Download PDF Invoice</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">Official Tax &amp; Warranty Card</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-secondary text-[18px]">download</span>
+</button>
+</div>
+</div>
+<!-- Interactive Bottom Actions -->
+<div class="flex flex-col gap-space-sm pt-space-xs pb-space-lg">
+<button class="w-full h-12 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md font-semibold shadow-md active:scale-[0.98] transition-transform flex items-center justify-center gap-2" onclick="window.location.reload()">
+<span class="material-symbols-outlined text-[18px]">track_changes</span>
+<span>Track Order Status</span>
+</button>
+<button class="w-full h-12 rounded-lg bg-surface-container-lowest text-primary font-label-md text-label-md font-semibold shadow-sm active:bg-surface-container-low transition-colors flex items-center justify-center gap-2" onclick="history.back()">
+<span class="material-symbols-outlined text-[18px]">storefront</span>
+<span>Continue Exploring Vault</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  function copyOrderId() {
+    const orderId = 'MB-84291';
+    navigator.clipboard.writeText(orderId).then(() => {
+      const copyIcon = document.getElementById('copyIcon');
+      const copyLabel = document.getElementById('copyLabel');
+      if (copyIcon && copyLabel) {
+        copyIcon.innerText = 'check';
+        copyLabel.innerText = 'Copied';
+        setTimeout(() => {
+          copyIcon.innerText = 'content_copy';
+          copyLabel.innerText = 'Copy';
+        }, 2200);
+      }
+    });
+  }
+
+  function downloadReceipt() {
+    const btn = event.currentTarget;
+    const originalText = btn.innerHTML;
+    btn.classList.add('opacity-75');
+    setTimeout(() => {
+      btn.classList.remove('opacity-75');
+      alert('Invoice #MB-84291 has been queued for download in PDF format.');
+    }, 600);
+  }
+</script></main></body></html>

@@ -2533,124 +2533,7 @@ td {
   height: 10rem;
 }
 
-/* Checkout */
-.checkout-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(20rem, 0.75fr);
-  gap: clamp(2rem, 5vw, 5rem);
-}
-.checkout-forms {
-  display: grid;
-  gap: 1rem;
-}
-.checkout-card {
-  border: 1px solid var(--line);
-  background: white;
-  padding: clamp(1rem, 3vw, 1.6rem);
-}
-.checkout-card header {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: start;
-  gap: 1rem;
-  margin-bottom: 1.4rem;
-}
-.checkout-card header > span {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--ink);
-  color: white;
-  font-size: 0.78rem;
-}
-.checkout-card header h2 {
-  margin: 0 0 0.2rem;
-  font-size: 1.55rem;
-}
-.checkout-card header p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-.checkout-card header > strong {
-  color: var(--positive);
-  font-size: 0.8rem;
-}
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-.form-grid .full {
-  grid-column: 1 / -1;
-}
-.method-option {
-  display: flex;
-  min-height: 4.3rem;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 0.8rem;
-  border: 1px solid var(--line);
-  padding: 0.85rem;
-  cursor: pointer;
-}
-.method-option.selected {
-  border-color: var(--accent);
-  background: #fbf0f3;
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-.method-option input {
-  width: 1.1rem;
-  min-height: 1.1rem;
-  accent-color: var(--accent);
-}
-.method-option > span {
-  display: grid;
-  gap: 0.2rem;
-}
-.method-option small {
-  color: var(--muted);
-  font-weight: 450;
-}
-.payment-options {
-  display: grid;
-  gap: 0.65rem;
-}
-.checkout-items {
-  display: grid;
-  gap: 0.8rem;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-}
-.checkout-items article {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.85rem;
-}
-.checkout-items article > div {
-  display: grid;
-}
-.checkout-items span {
-  color: var(--muted);
-}
-.checkout-promotion {
-  border: 1px dashed var(--positive);
-  padding: 0.55rem;
-  color: var(--positive);
-  font-size: 0.8rem;
-}
-.checkout-loading {
-  display: grid;
-  gap: 1rem;
-}
-.checkout-loading span {
-  height: 8rem;
-}
+
 
 /* Customer content, footer */
 .policy-page,
@@ -3066,15 +2949,6 @@ td {
     align-items: start;
     flex-direction: column;
     gap: 0.4rem;
-  }
-  .checkout-card {
-    padding: 1rem;
-  }
-  .checkout-card header {
-    grid-template-columns: auto 1fr;
-  }
-  .checkout-card header > strong {
-    grid-column: 2;
   }
 }
 
