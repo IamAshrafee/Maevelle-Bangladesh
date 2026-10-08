@@ -9,14 +9,16 @@ import { cx } from '@/components/ui/classnames';
 import {
   ArrowRightIcon,
   ChevronDownIcon,
+  CloseIcon,
   HeartIcon,
   SearchIcon,
   ShoppingBagIcon,
-  SparklesIcon,
-  SpeedIcon,
   TruckIcon,
 } from '@/components/ui/icons';
 import { useCartCount } from '@/features/cart/use-cart-count';
+import { SEARCH_PLACEHOLDER } from './search-constants';
+import { SearchDropdownPanel } from './search-dropdown-panel';
+import { useRecentSearches } from './use-recent-searches';
 
 export type DesktopNavbarProps = {
   cartCount?: number | undefined;
@@ -151,6 +153,8 @@ export function DesktopNavbar({
   const liveCount = useCartCount(initialCartCount ?? 0);
   const cartCount = initialCartCount !== undefined ? initialCartCount : liveCount;
 
+  const { addRecentSearch } = useRecentSearches();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -225,12 +229,14 @@ export function DesktopNavbar({
     e.preventDefault();
     const query = searchQuery.trim();
     if (query) {
+      addRecentSearch(query);
       router.push(`/search?q=${encodeURIComponent(query)}`);
       setIsSearchFocused(false);
     }
   };
 
   const handleSelectSearchSuggestion = (term: string) => {
+    addRecentSearch(term);
     setSearchQuery(term);
     router.push(`/search?q=${encodeURIComponent(term)}`);
     setIsSearchFocused(false);
@@ -275,27 +281,41 @@ export function DesktopNavbar({
               </span>
             </Link>
 
-            {/* Prominent Search Bar (Center) with Live Dropdown */}
-            <div className="relative flex-1 max-w-xl" ref={searchBoxRef}>
+            {/* Prominent Search Bar (Center) with Live Dropdown & Backdrop */}
+            <div className="relative flex-1 max-w-xl z-40" ref={searchBoxRef}>
               <form className="relative w-full" onSubmit={handleSearchSubmit}>
-                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/70">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/70 transition-colors">
                   <SearchIcon size={18} />
                 </span>
                 <input
                   aria-label="Search catalog products"
-                  className="h-11 w-full rounded-full border border-border/60 bg-surface-container-low/80 pl-11 pr-24 font-body-md text-sm text-on-surface placeholder:text-on-surface-variant/60 shadow-2xs transition-[background-color,border-color,box-shadow] focus:border-primary/40 focus:bg-surface-container-lowest focus:ring-3 focus:ring-primary/10 focus:outline-none"
+                  className="h-11 w-full rounded-full border border-border/60 bg-surface-container-low/80 pl-11 pr-28 font-body-md text-sm text-on-surface placeholder:text-on-surface-variant/60 shadow-2xs transition-[background-color,border-color,box-shadow] focus:border-primary/40 focus:bg-surface-container-lowest focus:ring-3 focus:ring-primary/10 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
                   onBlur={() => {
                     // Delay slightly to let click events inside dropdown register
                     setTimeout(() => setIsSearchFocused(false), 200);
                   }}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setIsSearchFocused(true)}
-                  placeholder="Search handcrafted jewelry, silk scarves, atelier pieces…"
+                  placeholder={SEARCH_PLACEHOLDER}
                   ref={searchInputRef}
                   type="search"
                   value={searchQuery}
                 />
-                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                  {searchQuery && (
+                    <button
+                      aria-label="Clear search query"
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container active:scale-90 transition-all duration-150 cursor-pointer mr-0.5 animate-in zoom-in-75 fade-in-0"
+                      onClick={() => {
+                        setSearchQuery('');
+                        searchInputRef.current?.focus();
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      type="button"
+                    >
+                      <CloseIcon size={13} />
+                    </button>
+                  )}
                   <kbd className="hidden sm:inline-block rounded bg-surface-container px-1.5 py-0.5 font-mono text-[10px] font-semibold text-on-surface-variant/70 border border-border/40 select-none">
                     ⌘K
                   </kbd>
@@ -311,41 +331,27 @@ export function DesktopNavbar({
 
               {/* Floating Quick Search Suggestions Panel */}
               {isSearchFocused && (
-                <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-2xl border border-border/70 bg-surface-container-lowest/98 p-4 shadow-xl backdrop-blur-2xl animate-in fade-in slide-in-from-top-1 duration-150">
-                  <div className="flex items-center justify-between mb-2 pb-1 border-b border-border/40">
-                    <span className="font-label-sm text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                      <SparklesIcon size={12} />
-                      <span>Trending in Atelier</span>
-                    </span>
-                    <span className="text-[11px] text-on-surface-variant font-mono">Press ↵ to search</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 py-1">
-                    {SEARCH_SUGGESTIONS.map((term) => (
-                      <button
-                        className="rounded-full bg-surface-container px-3 py-1.5 font-label-sm text-xs text-on-surface transition-[background-color,color] hover:bg-primary-fixed hover:text-on-primary-fixed cursor-pointer"
-                        key={term}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSelectSearchSuggestion(term)}
-                        type="button"
-                      >
-                        {term}
-                      </button>
-                    ))}
-                  </div>
+                <div className="absolute left-0 right-0 top-full mt-2.5 z-50 animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150">
+                  <SearchDropdownPanel
+                    onClose={() => setIsSearchFocused(false)}
+                    onSelectTerm={handleSelectSearchSuggestion}
+                    query={searchQuery}
+                  />
                 </div>
               )}
             </div>
 
-            {/* Right Action Utilities (Badged Icons & Courier Reassurance) */}
-            <div className="flex items-center gap-4 shrink-0">
-              {/* Dhaka 24h Express Courier Pill */}
+            {/* Dimmed backdrop when desktop search is focused */}
+            {isSearchFocused && (
               <div
-                className="hidden xl:flex items-center gap-1.5 rounded-full bg-primary-fixed/35 px-3 py-1 font-label-sm text-xs font-semibold text-primary select-none cursor-default"
-                title="Orders placed before 2 PM dispatched same day across Dhaka metro"
-              >
-                <SpeedIcon size={15} />
-                <span>Dhaka 24h Express</span>
-              </div>
+                aria-hidden="true"
+                className="fixed inset-0 top-[112px] z-30 bg-[#1E1B19]/35 backdrop-blur-2xs transition-opacity duration-200 animate-in fade-in"
+                onClick={() => setIsSearchFocused(false)}
+              />
+            )}
+
+            {/* Right Action Utilities (Badged Icons & Cart) */}
+            <div className="flex items-center gap-4 shrink-0">
 
               {/* Favorite / Wishlist Button with Badge */}
               <Link

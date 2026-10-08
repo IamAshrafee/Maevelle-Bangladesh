@@ -5,8 +5,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 import { cx } from '@/components/ui/classnames';
-import { CloseIcon, SearchIcon, ShoppingBagIcon, SparklesIcon } from '@/components/ui/icons';
+import { CloseIcon, SearchIcon, ShoppingBagIcon } from '@/components/ui/icons';
 import { useCartCount } from '@/features/cart/use-cart-count';
+import { SEARCH_PLACEHOLDER } from './search-constants';
+import { SearchDropdownPanel } from './search-dropdown-panel';
+import { useRecentSearches } from './use-recent-searches';
 
 export type MobileNavbarProps = {
   cartCount?: number | undefined;
@@ -15,14 +18,6 @@ export type MobileNavbarProps = {
   responsive?: boolean | undefined;
   storeName?: string | undefined;
 };
-
-const TRENDING_SEARCHES = [
-  { term: 'Freshwater Pearls', category: 'Jewelry' },
-  { term: 'Silk Scarves', category: 'Accessories' },
-  { term: 'Velvet Hair Ribbons', category: 'Hair' },
-  { term: 'Gold Vermeil', category: 'Jewelry' },
-  { term: 'Quilted Mini Crossbody', category: 'Bags' },
-];
 
 export function MobileNavbar({
   cartCount: initialCartCount,
@@ -36,16 +31,21 @@ export function MobileNavbar({
   const liveCount = useCartCount(initialCartCount ?? 0);
   const cartCount = initialCartCount !== undefined ? initialCartCount : liveCount;
 
+  const { addRecentSearch } = useRecentSearches();
+
   if (pathname?.startsWith('/checkout')) {
     return null;
   }
 
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isTabletSearchFocused, setIsTabletSearchFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isScrolled, setIsScrolled] = useState(false);
   const [cartAnimate, setCartAnimate] = useState(false);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const tabletSearchInputRef = useRef<HTMLInputElement>(null);
+  const tabletSearchBoxRef = useRef<HTMLDivElement>(null);
 
   // Trigger bounce animation when cart count increases
   useEffect(() => {
@@ -65,19 +65,53 @@ export function MobileNavbar({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Keyboard navigation: Escape key closes search
+  // Keyboard navigation: Cmd+K / Ctrl+K opens search, Escape closes search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isSearchOpen) {
-        setIsSearchOpen(false);
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea';
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        // If on tablet screen, focus tablet input; if on mobile phone, open drawer
+        if (window.innerWidth >= 640) {
+          tabletSearchInputRef.current?.focus();
+          setIsTabletSearchFocused(true);
+        } else {
+          setIsMobileSearchOpen(true);
+          setTimeout(() => searchInputRef.current?.focus(), 120);
+        }
+      } else if (e.key === '/' && !isInput) {
+        e.preventDefault();
+        if (window.innerWidth >= 640) {
+          tabletSearchInputRef.current?.focus();
+          setIsTabletSearchFocused(true);
+        } else {
+          setIsMobileSearchOpen(true);
+          setTimeout(() => searchInputRef.current?.focus(), 120);
+        }
+      } else if (e.key === 'Escape') {
+        setIsMobileSearchOpen(false);
+        setIsTabletSearchFocused(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSearchOpen]);
+  }, []);
+
+  // Close tablet dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tabletSearchBoxRef.current && !tabletSearchBoxRef.current.contains(e.target as Node)) {
+        setIsTabletSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleToggleSearch = () => {
-    setIsSearchOpen((prev) => {
+    setIsMobileSearchOpen((prev) => {
       const next = !prev;
       if (next) {
         setTimeout(() => searchInputRef.current?.focus(), 120);
@@ -90,15 +124,19 @@ export function MobileNavbar({
     e.preventDefault();
     const query = searchQuery.trim();
     if (query) {
+      addRecentSearch(query);
       router.push(`/search?q=${encodeURIComponent(query)}`);
-      setIsSearchOpen(false);
+      setIsMobileSearchOpen(false);
+      setIsTabletSearchFocused(false);
     }
   };
 
   const handleSelectSuggestion = (term: string) => {
+    addRecentSearch(term);
     setSearchQuery(term);
     router.push(`/search?q=${encodeURIComponent(term)}`);
-    setIsSearchOpen(false);
+    setIsMobileSearchOpen(false);
+    setIsTabletSearchFocused(false);
   };
 
   return (
@@ -129,30 +167,75 @@ export function MobileNavbar({
           </Link>
 
           {/* Tablet Inline Search Bar (Visible on sm to lg) */}
-          <div className="hidden sm:flex flex-1 max-w-xs md:max-w-sm mx-4">
+          <div
+            className="relative hidden sm:flex flex-1 max-w-xs md:max-w-md mx-4 z-40"
+            ref={tabletSearchBoxRef}
+          >
             <form className="relative w-full" onSubmit={handleSearchSubmit}>
               <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant/70">
                 <SearchIcon size={16} />
               </span>
               <input
                 aria-label="Search catalog"
-                className="h-10 w-full rounded-full border border-border/60 bg-surface-container-low/70 pl-9 pr-4 font-body-md text-xs text-on-surface placeholder:text-on-surface-variant/60 shadow-2xs transition-[background-color,border-color,box-shadow] focus:border-primary/40 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/10 focus:outline-none"
+                className="h-10 w-full rounded-full border border-border/60 bg-surface-container-low/70 pl-9 pr-24 font-body-md text-xs text-on-surface placeholder:text-on-surface-variant/60 shadow-2xs transition-[background-color,border-color,box-shadow] focus:border-primary/40 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/10 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
+                onBlur={() => {
+                  setTimeout(() => setIsTabletSearchFocused(false), 200);
+                }}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search jewelry, scarves, bows…"
+                onFocus={() => setIsTabletSearchFocused(true)}
+                placeholder={SEARCH_PLACEHOLDER}
+                ref={tabletSearchInputRef}
                 type="search"
                 value={searchQuery}
               />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {searchQuery && (
+                  <button
+                    aria-label="Clear search input"
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-on-surface-variant hover:text-primary active:scale-90 transition-all cursor-pointer mr-0.5 animate-in zoom-in-75 fade-in-0"
+                    onClick={() => {
+                      setSearchQuery('');
+                      tabletSearchInputRef.current?.focus();
+                    }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    type="button"
+                  >
+                    <CloseIcon size={12} />
+                  </button>
+                )}
+                <kbd className="rounded bg-surface-container px-1 py-0.5 font-mono text-[9px] font-semibold text-on-surface-variant/70 border border-border/40 select-none">
+                  ⌘K
+                </kbd>
+                <button
+                  aria-label="Submit search"
+                  className="flex h-6 items-center justify-center rounded-full bg-primary px-2.5 text-[10px] font-semibold text-white transition-[background-color,transform] hover:bg-primary-hover active:scale-95 cursor-pointer shadow-xs"
+                  type="submit"
+                >
+                  Search
+                </button>
+              </div>
             </form>
+
+            {/* Floating Tablet Dropdown */}
+            {isTabletSearchFocused && (
+              <div className="absolute left-0 right-0 top-full mt-2 z-50 animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150">
+                <SearchDropdownPanel
+                  onClose={() => setIsTabletSearchFocused(false)}
+                  onSelectTerm={handleSelectSuggestion}
+                  query={searchQuery}
+                />
+              </div>
+            )}
           </div>
 
           {/* Header Actions: Search & Shopping Bag (Right) */}
           <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Search Toggle Button (Mobile phones only; tablet has inline input) */}
             <button
-              aria-expanded={isSearchOpen}
+              aria-expanded={isMobileSearchOpen}
               aria-label="Search catalog"
               className={`flex sm:hidden h-11 w-11 items-center justify-center rounded-full transition-colors cursor-pointer active:scale-95 ${
-                isSearchOpen
+                isMobileSearchOpen
                   ? 'bg-primary-fixed/30 text-primary'
                   : 'text-on-surface hover:bg-surface-container-low hover:text-primary'
               }`}
@@ -202,12 +285,9 @@ export function MobileNavbar({
           </div>
         </div>
 
-        {/* Expandable Mobile Search Drawer Panel */}
-        {isSearchOpen && (
-          <div
-            className="border-t border-border/40 bg-surface-container-lowest/98 px-4 pt-2.5 pb-4 backdrop-blur-2xl shadow-lg transition-opacity duration-200 animate-in fade-in slide-in-from-top-2"
-            ref={searchContainerRef}
-          >
+        {/* Expandable Mobile Search Drawer Panel (Mobile phones only) */}
+        {isMobileSearchOpen && (
+          <div className="border-t border-border/40 bg-surface-container-lowest/98 px-4 pt-3 pb-4 backdrop-blur-2xl shadow-lg transition-opacity duration-200 animate-in fade-in-0 slide-in-from-top-3 sm:hidden">
             <form className="relative flex items-center gap-2" onSubmit={handleSearchSubmit}>
               <div className="relative flex-1">
                 <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant/70">
@@ -215,9 +295,9 @@ export function MobileNavbar({
                 </span>
                 <input
                   aria-label="Search catalog products"
-                  className="h-11 w-full rounded-xl bg-surface-container-low pl-10 pr-9 font-body-md text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="h-11 w-full rounded-xl bg-surface-container-low pl-10 pr-9 font-body-md text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search earrings, hair bows, bags..."
+                  placeholder={SEARCH_PLACEHOLDER}
                   ref={searchInputRef}
                   type="search"
                   value={searchQuery}
@@ -225,8 +305,11 @@ export function MobileNavbar({
                 {searchQuery && (
                   <button
                     aria-label="Clear search input"
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface cursor-pointer"
-                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full text-on-surface-variant hover:text-primary active:scale-90 transition-all duration-150 cursor-pointer animate-in zoom-in-75 fade-in-0"
+                    onClick={() => {
+                      setSearchQuery('');
+                      searchInputRef.current?.focus();
+                    }}
                     type="button"
                   >
                     <CloseIcon size={14} />
@@ -243,49 +326,38 @@ export function MobileNavbar({
 
               <button
                 aria-label="Close search panel"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface cursor-pointer"
-                onClick={() => setIsSearchOpen(false)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container hover:text-on-surface active:scale-90 transition-all duration-150 cursor-pointer"
+                onClick={() => setIsMobileSearchOpen(false)}
                 type="button"
               >
                 <CloseIcon size={20} />
               </button>
             </form>
 
-            {/* Quick Trending Searches & Badges */}
             <div className="mt-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <SparklesIcon className="text-primary" size={13} />
-                <span className="font-label-sm text-[11px] font-semibold text-on-surface uppercase tracking-wider">
-                  Trending in Dhaka:
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {TRENDING_SEARCHES.map((item) => (
-                  <button
-                    className="group inline-flex items-center gap-1.5 rounded-full bg-surface-container px-3 py-1 font-label-sm text-[11px] text-on-surface transition-[background-color,color] hover:bg-primary-fixed hover:text-on-primary-fixed active:scale-95 cursor-pointer"
-                    key={item.term}
-                    onClick={() => handleSelectSuggestion(item.term)}
-                    type="button"
-                  >
-                    <span>{item.term}</span>
-                    <span className="text-[9px] opacity-60 font-normal">({item.category})</span>
-                  </button>
-                ))}
-              </div>
+              <SearchDropdownPanel
+                isMobile
+                onClose={() => setIsMobileSearchOpen(false)}
+                onSelectTerm={handleSelectSuggestion}
+                query={searchQuery}
+              />
             </div>
           </div>
         )}
       </header>
 
-      {/* Dimmed backdrop when mobile search is open */}
-      {isSearchOpen && (
+      {/* Dimmed backdrop when mobile or tablet search is active */}
+      {(isMobileSearchOpen || isTabletSearchFocused) && (
         <div
           aria-hidden="true"
           className={cx(
             'fixed inset-0 top-[64px] z-30 bg-[#1E1B19]/35 backdrop-blur-2xs transition-opacity animate-in fade-in duration-200',
             responsive && 'lg:hidden',
           )}
-          onClick={() => setIsSearchOpen(false)}
+          onClick={() => {
+            setIsMobileSearchOpen(false);
+            setIsTabletSearchFocused(false);
+          }}
         />
       )}
     </>
