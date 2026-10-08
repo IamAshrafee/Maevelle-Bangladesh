@@ -1,25 +1,15 @@
 'use client';
 
-import {
-  type ClipboardEvent,
-  type DragEvent,
-  type RefObject,
-  useMemo,
-  useState,
-} from 'react';
+import { type ClipboardEvent, type DragEvent, type RefObject, useMemo, useState } from 'react';
 import Image from 'next/image';
 import {
   ArrowLeft,
   ArrowRight,
   Camera,
-  Check,
   FileText,
   FolderOpen,
   ImageIcon,
-  Info,
   LoaderCircle,
-  Palette,
-  Sparkles,
   Star,
   Trash2,
   UploadCloud,
@@ -27,17 +17,8 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  AssetPickerDialog,
-  type SelectedMediaAsset,
-} from '@/components/media/asset-picker-dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AssetPickerDialog, type SelectedMediaAsset } from '@/components/media/asset-picker-dialog';
 import type { StagedMediaItem } from './types';
 
 export interface MediaCardScopeOption {
@@ -165,8 +146,7 @@ export function MediaCard({
         (m) =>
           (m.optionValueRef && m.optionValueRef === matchKey) ||
           (m.optionValueId && m.optionValueId === matchKey) ||
-          (m.role === 'COLOR_GALLERY' &&
-            m.optionValueRef === targetOpt?.optionValueRef),
+          (m.role === 'COLOR_GALLERY' && m.optionValueRef === targetOpt?.optionValueRef),
       );
     }
     return mediaItems;
@@ -248,7 +228,7 @@ export function MediaCard({
           <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t">
             <button
               type="button"
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
                 activeTab === 'all'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'bg-muted/50 text-muted-foreground hover:text-foreground'
@@ -270,7 +250,7 @@ export function MediaCard({
                 <button
                   key={opt.id}
                   type="button"
-                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
                     activeTab === opt.id
                       ? 'bg-primary text-primary-foreground shadow-xs'
                       : 'bg-muted/50 text-muted-foreground hover:text-foreground'
@@ -286,7 +266,7 @@ export function MediaCard({
 
             <button
               type="button"
-              className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
                 activeTab === 'size-diagram'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'bg-muted/50 text-muted-foreground hover:text-foreground'
@@ -314,7 +294,7 @@ export function MediaCard({
       <CardContent className="space-y-4">
         {/* Drag and Drop Zone */}
         <div
-          className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition-colors cursor-pointer ${
+          className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition-colors duration-150 ${
             isDraggingOver
               ? 'border-primary bg-primary/5'
               : 'border-muted-foreground/25 hover:border-primary/50'
@@ -330,7 +310,10 @@ export function MediaCard({
             accept="image/jpeg,image/png,image/webp"
             multiple
             className="hidden"
-            onChange={(e) => onFilesSelected(e.target.files, currentUploadScope)}
+            onChange={(event) => {
+              onFilesSelected(event.target.files, currentUploadScope);
+              event.currentTarget.value = '';
+            }}
           />
           <div className="rounded-full bg-muted p-3 text-muted-foreground mb-2">
             <UploadCloud className="size-6" />
@@ -367,7 +350,7 @@ export function MediaCard({
               return (
                 <div
                   key={media.id}
-                  className={`group relative flex flex-col overflow-hidden rounded-lg border bg-muted/20 transition-all ${
+                  className={`group relative flex flex-col overflow-hidden rounded-lg border bg-muted/20 transition-[border-color,box-shadow] duration-150 ${
                     media.isPrimary
                       ? 'ring-2 ring-primary ring-offset-2 border-primary'
                       : 'hover:border-primary/40'
@@ -400,6 +383,12 @@ export function MediaCard({
                         <span>{media.error}</span>
                       </div>
                     )}
+
+                    {!media.isUploading && media.assetId && !media.error ? (
+                      <Badge className="absolute right-2 top-2 bg-success text-success-foreground text-[10px] shadow-xs">
+                        Ready
+                      </Badge>
+                    ) : null}
 
                     {/* Badges on preview */}
                     <div className="absolute left-2 top-2 flex flex-col gap-1">
@@ -529,7 +518,10 @@ export function MediaCard({
                           } else if (val.startsWith('color:')) {
                             const rawId = val.replace('color:', '');
                             const opt = colorScopes.find(
-                              (c) => c.optionValueRef === rawId || c.optionValueId === rawId || c.id === val,
+                              (c) =>
+                                c.optionValueRef === rawId ||
+                                c.optionValueId === rawId ||
+                                c.id === val,
                             );
                             onUpdateMediaScope(media.id, {
                               role: 'COLOR_GALLERY',
@@ -540,7 +532,9 @@ export function MediaCard({
                             });
                           } else if (val.startsWith('variant:')) {
                             const rawId = val.replace('variant:', '');
-                            const opt = scopeOptions.find((s) => s.variantId === rawId || s.variantRef === rawId);
+                            const opt = scopeOptions.find(
+                              (s) => s.variantId === rawId || s.variantRef === rawId,
+                            );
                             onUpdateMediaScope(media.id, {
                               role: 'GALLERY',
                               variantRef: opt?.variantRef || rawId,

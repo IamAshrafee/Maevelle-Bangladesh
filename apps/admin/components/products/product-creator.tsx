@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 import { BasicInfoCard } from './creator/basic-info-card';
 import { CreatorHeader } from './creator/creator-header';
+import { CustomerDetailsCard } from './creator/customer-details-card';
 import { DraftRecoveryAlert } from './creator/draft-recovery-alert';
 import { MediaCard } from './creator/media-card';
 import { OrganizationSidebar } from './creator/organization-sidebar';
@@ -95,7 +96,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               fieldErrors={state.fieldErrors}
               onTitleChange={state.handleTitleChange}
               onHandleChange={state.handleHandleChange}
-              onToggleHandleLock={() => state.setIsHandleLocked(!state.isHandleLocked)}
+              onToggleHandleLock={state.handleToggleHandleLock}
               onProductTypeChange={state.handleProductTypeChange}
               onAttributeChange={(attrId, val) => {
                 state.setAttributeValues((prev) => ({ ...prev, [attrId]: val }));
@@ -112,7 +113,9 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               mediaItems={state.mediaItems}
               isDraggingOver={state.isDraggingOver}
               fileInputRef={state.fileInputRef}
-              onFilesSelected={(files, targetScope) => void state.handleFilesSelected(files, targetScope)}
+              onFilesSelected={(files, targetScope) =>
+                void state.handleFilesSelected(files, targetScope)
+              }
               onSetDraggingOver={state.setIsDraggingOver}
               onSetPrimaryMedia={state.handleSetPrimaryMedia}
               onRemoveMedia={state.handleRemoveMedia}
@@ -234,15 +237,31 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               }}
             />
 
-            {/* Card 6: SEO & Customer Content */}
+            {/* Customer-facing grouped information and FAQs */}
+            <CustomerDetailsCard
+              attributes={state.activeAttributes}
+              attributeValues={state.attributeValues}
+              informationGroups={state.informationGroups}
+              faqs={state.faqs}
+              error={state.fieldErrors.content}
+              onAddGroup={state.addInformationGroup}
+              onUpdateGroupTitle={state.updateInformationGroupTitle}
+              onRemoveGroup={state.removeInformationGroup}
+              onAddItem={state.addInformationItem}
+              onUpdateItem={state.updateInformationItem}
+              onRemoveItem={state.removeInformationItem}
+              onAddFaq={state.addFaq}
+              onUpdateFaq={state.updateFaq}
+              onRemoveFaq={state.removeFaq}
+            />
+
+            {/* Optional search metadata */}
             <SeoContentCard
               title={state.title}
               handle={state.handle}
               description={state.description}
               seoTitle={state.seoTitle}
               seoDescription={state.seoDescription}
-              highlights={state.highlights}
-              faqs={state.faqs}
               showAdvancedContent={state.showAdvancedContent}
               onToggleAdvancedContent={() =>
                 state.setShowAdvancedContent(!state.showAdvancedContent)
@@ -255,12 +274,6 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                 state.setSeoDescription(v);
                 state.setIsDirty(true);
               }}
-              onAddHighlight={state.addHighlight}
-              onUpdateHighlight={state.updateHighlight}
-              onRemoveHighlight={state.removeHighlight}
-              onAddFaq={state.addFaq}
-              onUpdateFaq={state.updateFaq}
-              onRemoveFaq={state.removeFaq}
             />
           </div>
 
@@ -270,6 +283,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
               categories={state.references.categories}
               selectedCategoryIds={state.selectedCategoryIds}
               primaryCategoryId={state.primaryCategoryId}
+              recommendedCategoryId={state.selectedProductType?.primaryCategoryId}
               tags={state.references.tags}
               selectedTagIds={state.selectedTagIds}
               occasions={state.references.occasions}

@@ -1,6 +1,7 @@
 'use client';
 
-import { Check, HelpCircle } from 'lucide-react';
+import Link from 'next/link';
+import { Check, ExternalLink, HelpCircle, Ruler } from 'lucide-react';
 import type {
   CatalogCategoryChoiceDto,
   CatalogVocabularyItemDto,
@@ -8,22 +9,12 @@ import type {
 } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { HierarchicalCategoryPicker } from './hierarchical-category-picker';
 import type { ReadinessChecklistItem, SizingReferenceData } from './types';
@@ -32,6 +23,7 @@ interface OrganizationSidebarProps {
   readonly categories: readonly CatalogCategoryChoiceDto[];
   readonly selectedCategoryIds: readonly string[];
   readonly primaryCategoryId: string;
+  readonly recommendedCategoryId?: string | null | undefined;
   readonly tags: readonly CatalogVocabularyItemDto[];
   readonly selectedTagIds: readonly string[];
   readonly occasions: readonly CatalogVocabularyItemDto[];
@@ -62,6 +54,7 @@ export function OrganizationSidebar({
   categories,
   selectedCategoryIds,
   primaryCategoryId,
+  recommendedCategoryId,
   tags,
   selectedTagIds,
   occasions,
@@ -93,9 +86,7 @@ export function OrganizationSidebar({
               Publication Readiness
             </CardTitle>
             <Badge
-              variant={
-                readinessChecklist.isReadyToPublish ? 'default' : 'secondary'
-              }
+              variant={readinessChecklist.isReadyToPublish ? 'default' : 'secondary'}
               className="text-[11px]"
             >
               {readinessChecklist.progressPercent}%
@@ -111,7 +102,7 @@ export function OrganizationSidebar({
               <div
                 className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full ${
                   item.isComplete
-                    ? 'bg-emerald-600 text-white'
+                    ? 'bg-success text-success-foreground'
                     : 'border border-muted-foreground/30 text-transparent'
                 }`}
               >
@@ -119,9 +110,7 @@ export function OrganizationSidebar({
               </div>
               <span
                 className={
-                  item.isComplete
-                    ? 'text-foreground font-medium'
-                    : 'text-muted-foreground'
+                  item.isComplete ? 'text-foreground font-medium' : 'text-muted-foreground'
                 }
               >
                 {item.label}
@@ -138,10 +127,7 @@ export function OrganizationSidebar({
                 Set status to Active upon saving
               </span>
             </div>
-            <Switch
-              checked={publishImmediately}
-              onCheckedChange={onPublishImmediatelyChange}
-            />
+            <Switch checked={publishImmediately} onCheckedChange={onPublishImmediatelyChange} />
           </div>
         </CardContent>
       </Card>
@@ -153,21 +139,26 @@ export function OrganizationSidebar({
         onToggleCategory={onToggleCategory}
         primaryCategoryId={primaryCategoryId}
         onSelectPrimaryCategory={onSelectPrimaryCategory}
+        recommendedCategoryId={recommendedCategoryId}
       />
 
       {/* Sidebar Card 3: Sizing System & Size Guide */}
       <Card className="shadow-xs">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold">
-              Sizing & Measurement Guide
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Ruler className="size-4 text-primary" aria-hidden="true" />
+              <CardTitle className="text-sm font-semibold">
+                Sizing &amp; measurement guide
+              </CardTitle>
+            </div>
             <Tooltip>
               <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
                 <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
-                Attach an active size guide to display a measurements table to customers on the storefront.
+                Attach an active size guide to display a measurements table to customers on the
+                storefront.
               </TooltipContent>
             </Tooltip>
           </div>
@@ -176,6 +167,11 @@ export function OrganizationSidebar({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
+            Choose a size system to keep variant sizes consistent. Then attach the exact chart
+            customers will see before choosing a size.
+          </div>
+
           {/* Size System */}
           <div className="space-y-1.5">
             <Label htmlFor="size-system-select" className="text-xs font-medium">
@@ -187,9 +183,7 @@ export function OrganizationSidebar({
               onChange={(e) => onSizeSystemChange(e.target.value)}
               className="text-xs"
             >
-              <NativeSelectOption value="">
-                None (Non-sized product)
-              </NativeSelectOption>
+              <NativeSelectOption value="">None (Non-sized product)</NativeSelectOption>
               {sizingData.systems.map((s) => (
                 <NativeSelectOption key={s.id} value={s.id}>
                   {s.name}
@@ -210,22 +204,63 @@ export function OrganizationSidebar({
                 onChange={(e) => onSizeGuideChange(e.target.value)}
                 className="text-xs"
               >
-                <NativeSelectOption value="">
-                  Select a guide chart…
-                </NativeSelectOption>
+                <NativeSelectOption value="">Select a guide chart…</NativeSelectOption>
                 {sizeGuides
-                  .filter(
-                    (g) =>
-                      g.sizeSystemId === sizeSystemId &&
-                      g.status === 'ACTIVE',
-                  )
+                  .filter((g) => g.sizeSystemId === sizeSystemId && g.status === 'ACTIVE')
                   .map((g) => (
                     <NativeSelectOption key={g.id} value={g.id}>
                       {g.name} (v{g.version})
                     </NativeSelectOption>
                   ))}
               </NativeSelect>
+              {sizeGuides.filter(
+                (guide) => guide.sizeSystemId === sizeSystemId && guide.status === 'ACTIVE',
+              ).length === 0 ? (
+                <p className="rounded-md border border-warning/30 bg-warning/5 p-2 text-[11px] text-warning">
+                  No active guide matches this size system. Create or activate one before publishing
+                  a size chart.
+                </p>
+              ) : null}
             </div>
+          )}
+
+          {sizeSystemId ? (
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-foreground">Customer preview</span>
+                {sizeGuideId ? (
+                  <Link
+                    href={`/sizing/guides/${sizeGuideId}`}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary-hover"
+                  >
+                    Open guide <ExternalLink className="size-3" />
+                  </Link>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {sizingData.sizeDefinitions
+                  .filter((size) => size.sizeSystemId === sizeSystemId)
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((size) => (
+                    <Badge
+                      key={size.id}
+                      variant="outline"
+                      className="font-mono text-[10px] tabular-nums"
+                    >
+                      {size.label}
+                    </Badge>
+                  ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {sizeGuideId
+                  ? `${sizeGuides.find((guide) => guide.id === sizeGuideId)?.name ?? 'Selected guide'} will be available from the product page.`
+                  : 'Sizes can be configured now, but customers will not see a measurement table until a guide is attached.'}
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              Use “None” only when customers do not choose a size for this product.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -233,9 +268,7 @@ export function OrganizationSidebar({
       {/* Sidebar Card 4: Tags, Occasions & Collections */}
       <Card className="shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold">
-            Taxonomy & Badges
-          </CardTitle>
+          <CardTitle className="text-sm font-semibold">Taxonomy & Badges</CardTitle>
           <CardDescription className="text-xs">
             Marketing tags, festive occasions, and seasonal collections.
           </CardDescription>
@@ -251,7 +284,7 @@ export function OrganizationSidebar({
                   <button
                     key={tag.id}
                     type="button"
-                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors ${
+                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
                       isSelected
                         ? 'border-primary bg-primary text-primary-foreground font-medium'
                         : 'border-input bg-background hover:bg-muted text-foreground'
@@ -280,7 +313,7 @@ export function OrganizationSidebar({
                   <button
                     key={occ.id}
                     type="button"
-                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors ${
+                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
                       isSelected
                         ? 'border-primary bg-primary text-primary-foreground font-medium'
                         : 'border-input bg-background hover:bg-muted text-foreground'
@@ -309,7 +342,7 @@ export function OrganizationSidebar({
                   <button
                     key={coll.id}
                     type="button"
-                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors ${
+                    className={`rounded-md border px-2 py-0.5 text-xs transition-colors duration-150 ${
                       isSelected
                         ? 'border-primary bg-primary text-primary-foreground font-medium'
                         : 'border-input bg-background hover:bg-muted text-foreground'

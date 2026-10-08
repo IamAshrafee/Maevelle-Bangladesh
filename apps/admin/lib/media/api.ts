@@ -68,6 +68,7 @@ function putFile(
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('PUT', url);
+    request.timeout = 60_000;
     request.withCredentials = includeCredentials;
     for (const [name, value] of Object.entries(headers)) request.setRequestHeader(name, value);
     request.upload.addEventListener('progress', (event) => {
@@ -77,9 +78,27 @@ function putFile(
       if (request.status >= 200 && request.status < 300) {
         onProgress?.(100);
         resolve();
-      } else reject(new Error('Object storage rejected the upload.'));
+      } else {
+        let message = 'Object storage rejected the upload.';
+        try {
+          const payload = JSON.parse(request.responseText) as {
+            error?: { message?: string } | string;
+          };
+          message =
+            typeof payload.error === 'string' ? payload.error : payload.error?.message || message;
+        } catch {
+          // Keep the safe fallback for non-JSON storage responses.
+        }
+        reject(new Error(message));
+      }
     });
     request.addEventListener('error', () => reject(new Error('Upload connection failed.')));
+    request.addEventListener('timeout', () =>
+      reject(new Error('Upload timed out. Check the connection and try again.')),
+    );
+    request.addEventListener('abort', () =>
+      reject(new Error('Upload was cancelled before it completed.')),
+    );
     request.send(file);
   });
 }
@@ -165,9 +184,7 @@ export async function syncProductMediaPlacements(
   return response.data;
 }
 
-export async function bulkTrashMedia(
-  assetIds: readonly string[],
-): Promise<{
+export async function bulkTrashMedia(assetIds: readonly string[]): Promise<{
   readonly trashedCount: number;
   readonly skippedInUseCount: number;
   readonly inUseAssetIds: readonly string[];

@@ -316,7 +316,7 @@ export function PdpView({
           selected={selected}
           onChoose={choose}
           valuePossible={valuePossible}
-          onFittingGuide={() => setIsSizeGuideOpen(true)}
+          {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
         />
 
         {/* Trust grid */}
@@ -326,7 +326,7 @@ export function PdpView({
         <PdpEditorialAccordions
           productDetails={product.details}
           productFaqs={product.faqs}
-          onFittingGuide={() => setIsSizeGuideOpen(true)}
+          {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
         />
 
         {/* Reviews */}
@@ -480,7 +480,7 @@ export function PdpView({
                     selected={selected}
                     onChoose={choose}
                     valuePossible={valuePossible}
-                    onFittingGuide={() => setIsSizeGuideOpen(true)}
+                    {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
                   />
                 </div>
 

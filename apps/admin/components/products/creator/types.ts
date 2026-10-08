@@ -112,6 +112,12 @@ export interface InfoHighlightEntry {
   value: string;
 }
 
+export interface InformationGroupEntry {
+  readonly id: string;
+  title: string;
+  items: InfoHighlightEntry[];
+}
+
 export interface ReadinessChecklistItem {
   readonly id: string;
   readonly label: string;
@@ -143,7 +149,7 @@ export interface ProductCreatorDraft {
   readonly selectedCollectionIds: readonly string[];
   readonly sizeSystemId: string;
   readonly sizeGuideId: string;
-  readonly attributeValues: Record<string, string | boolean>;
+  readonly attributeValues: Record<string, string | boolean | null>;
   readonly variantMode: 'simple' | 'variants';
   readonly priceAmount: string;
   readonly compareAtAmount: string;
@@ -162,6 +168,8 @@ export interface ProductCreatorDraft {
   readonly dimensionUnit: 'CM' | 'MM' | 'IN';
   readonly seoTitle: string;
   readonly seoDescription: string;
-  readonly highlights: readonly InfoHighlightEntry[];
+  readonly informationGroups?: readonly InformationGroupEntry[];
+  /** Backward-compatible local draft field from the flat highlights editor. */
+  readonly highlights?: readonly InfoHighlightEntry[];
   readonly faqs: readonly FaqEntry[];
 }

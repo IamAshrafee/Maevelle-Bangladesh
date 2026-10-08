@@ -1,30 +1,21 @@
 'use client';
 
-import { FileText, HelpCircle, Lock, Unlock } from 'lucide-react';
+import { FileText, HelpCircle } from 'lucide-react';
 import type {
   CatalogAttributeDefinitionDto,
   CatalogProductTypeDefinitionDto,
 } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { TriStateToggle } from '@/components/ui/tri-state-toggle';
+
+import { ProductIdentityFields } from './product-identity-fields';
 
 interface BasicInfoCardProps {
   readonly title: string;
@@ -35,13 +26,13 @@ interface BasicInfoCardProps {
   readonly types: readonly CatalogProductTypeDefinitionDto[];
   readonly selectedProductType?: CatalogProductTypeDefinitionDto | undefined;
   readonly activeAttributes: readonly CatalogAttributeDefinitionDto[];
-  readonly attributeValues: Record<string, string | boolean>;
+  readonly attributeValues: Record<string, string | boolean | null>;
   readonly fieldErrors: Record<string, string>;
   readonly onTitleChange: (val: string) => void;
   readonly onHandleChange: (val: string) => void;
   readonly onToggleHandleLock: () => void;
   readonly onProductTypeChange: (typeId: string) => void;
-  readonly onAttributeChange: (attrId: string, val: string | boolean) => void;
+  readonly onAttributeChange: (attrId: string, val: string | boolean | null) => void;
   readonly onDescriptionChange: (desc: string) => void;
 }
 
@@ -66,237 +57,171 @@ export function BasicInfoCard({
   return (
     <Card className="shadow-xs">
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <FileText className="size-4 text-primary" aria-hidden="true" />
-            <CardTitle className="text-base font-semibold">
-              Basic Information
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Product identity &amp; story</CardTitle>
           </div>
           <Badge variant="secondary" className="text-xs">
             Required
           </Badge>
         </div>
         <CardDescription>
-          Title, storefront URL slug, product classification, and narrative description.
+          Name the product, confirm its storefront URL, and tell the customer story first.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Title */}
+
+      <CardContent className="space-y-6">
+        <ProductIdentityFields
+          title={title}
+          handle={handle}
+          isHandleLocked={isHandleLocked}
+          titleError={fieldErrors.title}
+          handleError={fieldErrors.handle}
+          onTitleChange={onTitleChange}
+          onHandleChange={onHandleChange}
+          onToggleHandleLock={onToggleHandleLock}
+        />
+
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="product-title" className="font-medium text-xs sm:text-sm">
-              Product Title <span className="text-destructive">*</span>
+          <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
+            <Label htmlFor="product-description" className="text-xs font-medium sm:text-sm">
+              Product details &amp; story
             </Label>
             <span className="text-[11px] text-muted-foreground">
-              {title.length}/180
+              Materials, craftsmanship, fit, use and care
             </span>
           </div>
-          <Input
-            id="product-title"
-            placeholder="e.g. Royal Silk Festive Panjabi - Maroon & Gold"
-            value={title}
-            onChange={(e) => onTitleChange(e.target.value)}
-            className="text-sm font-medium"
+          <Textarea
+            id="product-description"
+            rows={5}
+            placeholder="Explain what makes this product special and give customers the practical details they need…"
+            value={description}
+            onChange={(event) => onDescriptionChange(event.target.value)}
           />
-          {fieldErrors.title && (
-            <p className="text-xs text-destructive">{fieldErrors.title}</p>
-          )}
         </div>
 
-        {/* Handle / URL Slug */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
+        <section className="space-y-4 rounded-xl border border-border bg-muted/20 p-4">
+          <div className="space-y-1">
             <div className="flex items-center gap-1.5">
-              <Label htmlFor="product-handle" className="font-medium text-xs sm:text-sm">
-                Storefront URL Slug <span className="text-destructive">*</span>
+              <Label htmlFor="product-type-select" className="text-xs font-semibold sm:text-sm">
+                Product classification <span className="text-destructive">*</span>
               </Label>
               <Tooltip>
                 <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
                   <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
                 </TooltipTrigger>
-                <TooltipContent>
-                  The unique web address for this product on the public storefront.
+                <TooltipContent className="max-w-xs">
+                  Classification controls the structured attributes shown below. It does not
+                  silently assign a category.
                 </TooltipContent>
               </Tooltip>
             </div>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
-              onClick={onToggleHandleLock}
-            >
-              {isHandleLocked ? (
-                <>
-                  <Lock className="size-3 text-emerald-600" />
-                  <span>Synced with Title</span>
-                </>
-              ) : (
-                <>
-                  <Unlock className="size-3 text-amber-600" />
-                  <span>Custom Slug</span>
-                </>
-              )}
-            </Button>
-          </div>
-
-          <div className="flex items-center rounded-md border bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground focus-within:ring-1 focus-within:ring-ring">
-            <span className="select-none text-muted-foreground">
-              maevelle.com/products/
-            </span>
-            <input
-              id="product-handle"
-              type="text"
-              readOnly={isHandleLocked}
-              value={handle}
-              onChange={(e) => onHandleChange(e.target.value)}
-              className="ml-1 w-full bg-transparent font-mono text-xs text-foreground outline-none disabled:cursor-not-allowed"
-              placeholder="royal-silk-festive-panjabi"
-            />
-          </div>
-          {fieldErrors.handle && (
-            <p className="text-xs text-destructive">{fieldErrors.handle}</p>
-          )}
-        </div>
-
-        {/* Product Type */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-1.5">
-            <Label htmlFor="product-type-select" className="font-medium text-xs sm:text-sm">
-              Product Classification (Type) <span className="text-destructive">*</span>
-            </Label>
-            <Tooltip>
-              <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
-                <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
-              </TooltipTrigger>
-              <TooltipContent>
-                Defines the merchandise taxonomy, default categories, and custom specification attributes.
-              </TooltipContent>
-            </Tooltip>
+            <p className="text-[11px] text-muted-foreground">
+              Choose the closest merchandise type. Nothing is selected automatically.
+            </p>
           </div>
 
           <NativeSelect
             id="product-type-select"
             value={productTypeId}
-            onChange={(e) => onProductTypeChange(e.target.value)}
-            className="text-xs sm:text-sm"
+            onChange={(event) => onProductTypeChange(event.target.value)}
           >
-            <NativeSelectOption value="">
-              Select a product type…
-            </NativeSelectOption>
+            <NativeSelectOption value="">Select a product type…</NativeSelectOption>
             {types.map((type) => (
               <NativeSelectOption key={type.id} value={type.id}>
                 {type.name} {type.code ? `(${type.code})` : ''}
               </NativeSelectOption>
             ))}
           </NativeSelect>
-          {fieldErrors.productTypeId && (
+          {fieldErrors.productTypeId ? (
             <p className="text-xs text-destructive">{fieldErrors.productTypeId}</p>
-          )}
-        </div>
+          ) : null}
 
-        {/* Dynamic Attributes (Rendered based on selected Product Type) */}
-        {activeAttributes.length > 0 && (
-          <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-            <div className="flex items-center justify-between border-b pb-2">
-              <span className="text-xs font-semibold text-foreground">
-                {selectedProductType?.name} Attributes
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                Custom specifications for this product type
-              </span>
+          {productTypeId && activeAttributes.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+              This classification has no active product attributes. You can continue without adding
+              specifications here.
             </div>
+          ) : null}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {activeAttributes.map((attr) => (
-                <div key={attr.id} className="space-y-1.5">
-                  <Label className="text-xs font-medium">
-                    {attr.name}
-                    {attr.required && (
-                      <span className="text-destructive ml-0.5">*</span>
-                    )}
-                  </Label>
-
-                  {/* BOOLEAN */}
-                  {attr.valueType === 'BOOLEAN' ? (
-                    <div className="flex items-center gap-2 pt-1">
-                      <Switch
-                        checked={Boolean(attributeValues[attr.id])}
-                        onCheckedChange={(checked) =>
-                          onAttributeChange(attr.id, checked)
-                        }
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        {attributeValues[attr.id] ? 'Yes' : 'No'}
-                      </span>
+          {activeAttributes.length > 0 ? (
+            <div className="space-y-3 border-t border-border pt-4">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs font-semibold text-foreground">
+                  {selectedProductType?.name} key attributes
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Published in the Key Attributes group.
+                </span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {activeAttributes.map((attribute) => {
+                  const value = attributeValues[attribute.id] ?? null;
+                  return (
+                    <div key={attribute.id} className="space-y-1.5">
+                      <Label className="text-xs font-medium">
+                        {attribute.name}
+                        {attribute.required ? (
+                          <span className="ml-0.5 text-destructive">*</span>
+                        ) : null}
+                      </Label>
+                      {attribute.valueType === 'BOOLEAN' ? (
+                        <TriStateToggle
+                          ariaLabel={attribute.name}
+                          value={typeof value === 'boolean' ? value : null}
+                          onValueChange={(next) => onAttributeChange(attribute.id, next)}
+                        />
+                      ) : attribute.valueType === 'REFERENCE' ? (
+                        <NativeSelect
+                          value={typeof value === 'string' ? value : ''}
+                          onChange={(event) =>
+                            onAttributeChange(attribute.id, event.target.value || null)
+                          }
+                          className="text-xs"
+                        >
+                          <NativeSelectOption value="">Not provided</NativeSelectOption>
+                          {attribute.referenceOptions.map((option) => (
+                            <NativeSelectOption key={option.id} value={option.id}>
+                              {option.label}
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                      ) : (
+                        <Input
+                          type={
+                            attribute.valueType === 'INTEGER' || attribute.valueType === 'DECIMAL'
+                              ? 'number'
+                              : attribute.valueType === 'DATE'
+                                ? 'date'
+                                : 'text'
+                          }
+                          step={attribute.valueType === 'DECIMAL' ? 'any' : undefined}
+                          placeholder={`Enter ${attribute.name.toLowerCase()}…`}
+                          value={typeof value === 'string' ? value : ''}
+                          onChange={(event) =>
+                            onAttributeChange(attribute.id, event.target.value || null)
+                          }
+                          className="text-xs"
+                        />
+                      )}
+                      {value === null && attribute.valueType === 'BOOLEAN' ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          Not provided — no yes/no claim will be published.
+                        </p>
+                      ) : null}
+                      {fieldErrors[`attr_${attribute.id}`] ? (
+                        <p className="text-[11px] text-destructive">
+                          {fieldErrors[`attr_${attribute.id}`]}
+                        </p>
+                      ) : null}
                     </div>
-                  ) : attr.valueType === 'REFERENCE' && attr.referenceOptions ? (
-                    /* REFERENCE (Dropdown) */
-                    <NativeSelect
-                      value={String(attributeValues[attr.id] || '')}
-                      onChange={(e) =>
-                        onAttributeChange(attr.id, e.target.value)
-                      }
-                      className="text-xs h-8"
-                    >
-                      <NativeSelectOption value="">
-                        Select {attr.name}…
-                      </NativeSelectOption>
-                      {attr.referenceOptions.map((opt) => (
-                        <NativeSelectOption key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  ) : (
-                    /* TEXT or NUMBER */
-                    <Input
-                      type={
-                        attr.valueType === 'INTEGER' || attr.valueType === 'DECIMAL'
-                          ? 'number'
-                          : 'text'
-                      }
-                      step={attr.valueType === 'DECIMAL' ? 'any' : undefined}
-                      placeholder={`Enter ${attr.name.toLowerCase()}…`}
-                      value={String(attributeValues[attr.id] || '')}
-                      onChange={(e) =>
-                        onAttributeChange(attr.id, e.target.value)
-                      }
-                      className="text-xs h-8"
-                    />
-                  )}
-
-                  {fieldErrors[`attr_${attr.id}`] && (
-                    <p className="text-[11px] text-destructive">
-                      {fieldErrors[`attr_${attr.id}`]}
-                    </p>
-                  )}
-                </div>
-              ))}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Description */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="product-description" className="font-medium text-xs sm:text-sm">
-              Product Story & Details
-            </Label>
-            <span className="text-[11px] text-muted-foreground">
-              Fabric, craftsmanship, fit, care instructions
-            </span>
-          </div>
-          <Textarea
-            id="product-description"
-            rows={4}
-            placeholder="Crafted with pure mulberry silk, this tailored panjabi features intricate hand-embroidered collars and mother-of-pearl buttons. Ideal for celebratory gatherings and Eid festivities…"
-            value={description}
-            onChange={(e) => onDescriptionChange(e.target.value)}
-          />
-        </div>
+          ) : null}
+        </section>
       </CardContent>
     </Card>
   );

@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  type ChangeEvent,
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type {
@@ -19,7 +11,6 @@ import type {
   CatalogProductSummaryDto,
   CatalogProductTypeDefinitionDto,
   CatalogProductWorkspaceDto,
-  CatalogVocabularyItemDto,
   CatalogVocabularyListDto,
   SizeGuideSummaryDto,
   WarehouseLocationDto,
@@ -35,7 +26,7 @@ import { uploadMediaFile, waitForMediaReady } from '@/lib/media/api';
 
 import type {
   FaqEntry,
-  InfoHighlightEntry,
+  InformationGroupEntry,
   OptionAxisState,
   OptionValueState,
   ProductCreatorDraft,
@@ -123,6 +114,47 @@ export function generateVariantSku(
   return `${prefix}${parts.join('-')}`;
 }
 
+function contentGroupsPayload(groups: readonly InformationGroupEntry[]) {
+  return groups
+    .map((group) => ({
+      title: group.title.trim(),
+      items: group.items
+        .filter((item) => item.label.trim() && item.value.trim())
+        .map((item) => ({ label: item.label.trim(), value: item.value.trim() })),
+    }))
+    .filter((group) => group.title && group.items.length > 0);
+}
+
+function customerContentValidationError(
+  groups: readonly InformationGroupEntry[],
+  faqs: readonly FaqEntry[],
+): string | null {
+  const meaningfulGroups = groups.filter(
+    (group) =>
+      group.title.trim() || group.items.some((item) => item.label.trim() || item.value.trim()),
+  );
+  const groupTitles = meaningfulGroups.map((group) => group.title.trim().toLocaleLowerCase('en'));
+  if (groupTitles.some((title) => !title))
+    return 'Name every specification group that contains information.';
+  if (new Set(groupTitles).size !== groupTitles.length)
+    return 'Each specification group needs a unique name.';
+
+  for (const group of meaningfulGroups) {
+    const meaningfulItems = group.items.filter((item) => item.label.trim() || item.value.trim());
+    if (meaningfulItems.length === 0)
+      return `Add at least one key and value to “${group.title.trim()}”, or remove the empty group.`;
+    if (meaningfulItems.some((item) => !item.label.trim() || !item.value.trim()))
+      return `Complete both the key and value for every row in “${group.title.trim()}”.`;
+    const labels = meaningfulItems.map((item) => item.label.trim().toLocaleLowerCase('en'));
+    if (new Set(labels).size !== labels.length)
+      return `Use each key only once in “${group.title.trim()}”.`;
+  }
+
+  if (faqs.some((faq) => Boolean(faq.question.trim()) !== Boolean(faq.answer.trim())))
+    return 'Complete both the question and answer for every FAQ, or remove the incomplete FAQ.';
+  return null;
+}
+
 export function useProductCreatorState({
   productId,
 }: {
@@ -138,7 +170,7 @@ export function useProductCreatorState({
     'UNPUBLISHED',
   );
   const [workspaceData, setWorkspaceData] = useState<CatalogProductWorkspaceDto | null>(null);
-  const [removedMediaPlacementIds, setRemovedMediaPlacementIds] = useState<string[]>([]);
+  const [, setRemovedMediaPlacementIds] = useState<string[]>([]);
 
   // Loading & Reference State
   const [loading, setLoading] = useState(true);
@@ -187,7 +219,9 @@ export function useProductCreatorState({
   const [sizeGuideId, setSizeGuideId] = useState('');
 
   // Dynamic Attributes
-  const [attributeValues, setAttributeValues] = useState<Record<string, string | boolean>>({});
+  const [attributeValues, setAttributeValues] = useState<Record<string, string | boolean | null>>(
+    {},
+  );
 
   // Pricing & Costing
   const [priceAmount, setPriceAmount] = useState('');
@@ -220,7 +254,7 @@ export function useProductCreatorState({
   // SEO & Content
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDescription, setSeoDescription] = useState('');
-  const [highlights, setHighlights] = useState<InfoHighlightEntry[]>([]);
+  const [informationGroups, setInformationGroups] = useState<InformationGroupEntry[]>([]);
   const [faqs, setFaqs] = useState<FaqEntry[]>([]);
   const [showAdvancedContent, setShowAdvancedContent] = useState(false);
 
@@ -321,7 +355,7 @@ export function useProductCreatorState({
             setSizeSystemId(workspace.sizeSystemId || '');
             setSizeGuideId(workspace.sizeGuideId || '');
 
-            const attrs: Record<string, string | boolean> = {};
+            const attrs: Record<string, string | boolean | null> = {};
             (workspace.organization.attributes || []).forEach((a) => {
               if (a.value !== null && a.value !== undefined) {
                 attrs[a.id] = a.value;
@@ -452,16 +486,17 @@ export function useProductCreatorState({
 
             setSeoTitle(workspace.content.seoTitle || '');
             setSeoDescription(workspace.content.seoDescription || '');
-            const primaryGroup = workspace.content.informationGroups[0];
-            if (primaryGroup) {
-              setHighlights(
-                primaryGroup.items.map((item, idx) => ({
-                  id: `${idx}-${item.label}`,
+            setInformationGroups(
+              workspace.content.informationGroups.map((group, groupIndex) => ({
+                id: group.id || `group-${groupIndex}`,
+                title: group.title,
+                items: group.items.map((item, itemIndex) => ({
+                  id: item.id || `item-${groupIndex}-${itemIndex}`,
                   label: item.label,
                   value: item.value,
                 })),
-              );
-            }
+              })),
+            );
             setFaqs(
               (workspace.content.faqs || []).map((f, idx) => ({
                 id: `${idx}-${f.question}`,
@@ -475,18 +510,7 @@ export function useProductCreatorState({
             setPublicationStatus(workspace.publicationStatus);
             setIsDirty(false);
           } else {
-            // New Product initialization
-            if (typesData.length > 0 && !productTypeId) {
-              const defaultType = typesData[0];
-              if (defaultType) {
-                setProductTypeId(defaultType.id);
-                if (defaultType.primaryCategoryId) {
-                  setSelectedCategoryIds([defaultType.primaryCategoryId]);
-                  setPrimaryCategoryId(defaultType.primaryCategoryId);
-                }
-              }
-            }
-
+            // New products intentionally begin unclassified and uncategorized.
             // Check for local draft in create mode
             try {
               const rawDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
@@ -560,7 +584,7 @@ export function useProductCreatorState({
         dimensionUnit,
         seoTitle,
         seoDescription,
-        highlights,
+        informationGroups,
         faqs,
       };
 
@@ -605,7 +629,7 @@ export function useProductCreatorState({
     dimensionUnit,
     seoTitle,
     seoDescription,
-    highlights,
+    informationGroups,
     faqs,
   ]);
 
@@ -647,7 +671,13 @@ export function useProductCreatorState({
       setDimensionUnit(d.dimensionUnit || 'CM');
       setSeoTitle(d.seoTitle || '');
       setSeoDescription(d.seoDescription || '');
-      setHighlights([...(d.highlights || [])]);
+      setInformationGroups(
+        d.informationGroups
+          ? d.informationGroups.map((group) => ({ ...group, items: [...group.items] }))
+          : d.highlights?.length
+            ? [{ id: `legacy-${Date.now()}`, title: 'Product Details', items: [...d.highlights] }]
+            : [],
+      );
       setFaqs([...(d.faqs || [])]);
 
       setDraftTimestamp(null);
@@ -677,12 +707,8 @@ export function useProductCreatorState({
 
   const handleProductTypeChange = (newTypeId: string) => {
     setProductTypeId(newTypeId);
+    setAttributeValues({});
     setIsDirty(true);
-    const chosenType = references.types.find((t) => t.id === newTypeId);
-    if (chosenType?.primaryCategoryId && selectedCategoryIds.length === 0) {
-      setSelectedCategoryIds([chosenType.primaryCategoryId]);
-      setPrimaryCategoryId(chosenType.primaryCategoryId);
-    }
   };
 
   // --------------------------------------------------------------------------
@@ -718,6 +744,15 @@ export function useProductCreatorState({
     }
   };
 
+  const handleToggleHandleLock = () => {
+    setIsHandleLocked((locked) => {
+      const next = !locked;
+      if (next) setHandle(slugify(title));
+      return next;
+    });
+    setIsDirty(true);
+  };
+
   // --------------------------------------------------------------------------
   // Media Uploads
   // --------------------------------------------------------------------------
@@ -734,11 +769,24 @@ export function useProductCreatorState({
     if (!files || files.length === 0) return;
     setIsDirty(true);
 
+    const acceptedFiles = Array.from(files).filter((file) => {
+      const supported = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
+      return supported && file.size > 0 && file.size <= 10 * 1024 * 1024;
+    });
+    if (acceptedFiles.length === 0) {
+      setGeneralError('Choose a JPEG, PNG, or WebP image smaller than 10 MB.');
+      return;
+    }
+    if (acceptedFiles.length !== files.length) {
+      setGeneralError(
+        'Some files were skipped because they were not JPEG, PNG, or WebP images under 10 MB.',
+      );
+    }
+
     const visualAxis = optionAxes.find((a) => a.isVisual && a.values.length > 0);
     const primaryVisualVal = visualAxis?.values.find((v) => v.isPrimary) || visualAxis?.values[0];
 
-    const resolvedRole =
-      targetScope?.role || (visualAxis ? 'COLOR_GALLERY' : 'GALLERY');
+    const resolvedRole = targetScope?.role || (visualAxis ? 'COLOR_GALLERY' : 'GALLERY');
     const resolvedOptionValueRef =
       targetScope?.optionValueRef !== undefined
         ? targetScope.optionValueRef
@@ -754,7 +802,7 @@ export function useProductCreatorState({
     const resolvedVariantRef = targetScope?.variantRef ?? null;
     const resolvedVariantId = targetScope?.variantId ?? null;
 
-    const newItems: StagedMediaItem[] = Array.from(files).map((file, idx) => ({
+    const newItems: StagedMediaItem[] = acceptedFiles.map((file, idx) => ({
       id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
       file,
       previewUrl: URL.createObjectURL(file),
@@ -772,53 +820,57 @@ export function useProductCreatorState({
 
     setMediaItems((prev) => [...prev, ...newItems]);
 
-    // Stream files to Media service in background
-    for (const item of newItems) {
-      if (!item.file) continue;
+    // Upload independently so one slow image does not block every remaining file.
+    await Promise.all(
+      newItems.map(async (item) => {
+        if (!item.file) return;
 
-      try {
-        const uploaded = await uploadMediaFile(item.file, {
-          visibility: 'PUBLIC',
-          title: item.file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
-          altText: item.altText || title || 'Product Image',
-          onProgress: (uploadProgress) =>
-            setMediaItems((current) =>
-              current.map((media) => (media.id === item.id ? { ...media, uploadProgress } : media)),
+        try {
+          const uploaded = await uploadMediaFile(item.file, {
+            visibility: 'PUBLIC',
+            title: item.file.name.replace(/\.[^.]+$/, '').replaceAll('-', ' '),
+            altText: item.altText || title || 'Product Image',
+            onProgress: (uploadProgress) =>
+              setMediaItems((current) =>
+                current.map((media) =>
+                  media.id === item.id ? { ...media, uploadProgress } : media,
+                ),
+              ),
+          });
+          const assetId = uploaded.assetId;
+          setMediaItems((current) =>
+            current.map((media) =>
+              media.id === item.id ? { ...media, assetId, processingStage: 'PROCESSING' } : media,
             ),
-        });
-        const assetId = uploaded.assetId;
-        setMediaItems((current) =>
-          current.map((media) =>
-            media.id === item.id ? { ...media, assetId, processingStage: 'PROCESSING' } : media,
-          ),
-        );
-        const status = await waitForMediaReady(assetId);
-        if (status !== 'READY')
-          throw new Error(
-            status === 'FAILED' || status === 'QUARANTINED'
-              ? 'Media processing rejected this image.'
-              : 'Image is still processing. Open the Media library to retry or check status.',
           );
+          const status = await waitForMediaReady(assetId, { timeoutMs: 90_000 });
+          if (status !== 'READY')
+            throw new Error(
+              status === 'FAILED' || status === 'QUARANTINED'
+                ? 'Media processing rejected this image.'
+                : 'Image is still processing. Open the Media library to retry or check status.',
+            );
 
-        setMediaItems((prev) =>
-          prev.map((m) =>
-            m.id === item.id ? { ...m, assetId, isUploading: false, uploadProgress: 100 } : m,
-          ),
-        );
-      } catch (err) {
-        setMediaItems((prev) =>
-          prev.map((m) =>
-            m.id === item.id
-              ? {
-                  ...m,
-                  isUploading: false,
-                  error: err instanceof Error ? err.message : 'Upload failed',
-                }
-              : m,
-          ),
-        );
-      }
-    }
+          setMediaItems((prev) =>
+            prev.map((m) =>
+              m.id === item.id ? { ...m, assetId, isUploading: false, uploadProgress: 100 } : m,
+            ),
+          );
+        } catch (err) {
+          setMediaItems((prev) =>
+            prev.map((m) =>
+              m.id === item.id
+                ? {
+                    ...m,
+                    isUploading: false,
+                    error: err instanceof Error ? err.message : 'Upload failed',
+                  }
+                : m,
+            ),
+          );
+        }
+      }),
+    );
   };
 
   const handleSetPrimaryMedia = (id: string) => {
@@ -884,7 +936,9 @@ export function useProductCreatorState({
               ...(scope.variantId !== undefined ? { variantId: scope.variantId } : {}),
               ...(scope.optionValueId !== undefined ? { optionValueId: scope.optionValueId } : {}),
               ...(scope.variantRef !== undefined ? { variantRef: scope.variantRef } : {}),
-              ...(scope.optionValueRef !== undefined ? { optionValueRef: scope.optionValueRef } : {}),
+              ...(scope.optionValueRef !== undefined
+                ? { optionValueRef: scope.optionValueRef }
+                : {}),
             }
           : m,
       ),
@@ -906,8 +960,7 @@ export function useProductCreatorState({
     const visualAxis = optionAxes.find((a) => a.isVisual && a.values.length > 0);
     const primaryVisualVal = visualAxis?.values.find((v) => v.isPrimary) || visualAxis?.values[0];
 
-    const resolvedRole =
-      targetScope?.role || (visualAxis ? 'COLOR_GALLERY' : 'GALLERY');
+    const resolvedRole = targetScope?.role || (visualAxis ? 'COLOR_GALLERY' : 'GALLERY');
     const resolvedOptionValueRef =
       targetScope?.optionValueRef !== undefined
         ? targetScope.optionValueRef
@@ -1140,10 +1193,10 @@ export function useProductCreatorState({
             id: `optval-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             label,
             isPrimary: isFirstOnVisual,
-            colorId: typeof valInput === 'object' ? valInput.colorId ?? null : null,
-            colorHex: typeof valInput === 'object' ? valInput.colorHex ?? null : null,
+            colorId: typeof valInput === 'object' ? (valInput.colorId ?? null) : null,
+            colorHex: typeof valInput === 'object' ? (valInput.colorHex ?? null) : null,
             sizeDefinitionId:
-              typeof valInput === 'object' ? valInput.sizeDefinitionId ?? null : null,
+              typeof valInput === 'object' ? (valInput.sizeDefinitionId ?? null) : null,
           };
           return { ...axis, values: [...axis.values, valObj] };
         }
@@ -1361,24 +1414,100 @@ export function useProductCreatorState({
   };
 
   // --------------------------------------------------------------------------
-  // Highlights & FAQs
+  // Grouped customer information & FAQs
   // --------------------------------------------------------------------------
-  const addHighlight = () => {
-    setHighlights((prev) => [
-      ...prev,
-      { id: `${Date.now()}-${Math.random()}`, label: '', value: '' },
-    ]);
+  const markCustomerContentChanged = () => {
     setIsDirty(true);
+    setFieldErrors((previous) => {
+      if (!previous.content) return previous;
+      const next = { ...previous };
+      delete next.content;
+      return next;
+    });
   };
 
-  const updateHighlight = (id: string, field: 'label' | 'value', val: string) => {
-    setHighlights((prev) => prev.map((h) => (h.id === id ? { ...h, [field]: val } : h)));
-    setIsDirty(true);
+  const addInformationGroup = (title = '') => {
+    setInformationGroups((previous) => {
+      const normalizedTitle = title.trim().toLocaleLowerCase('en');
+      const existingGroup = normalizedTitle
+        ? previous.find((group) => group.title.trim().toLocaleLowerCase('en') === normalizedTitle)
+        : undefined;
+      const item = {
+        id: `item-${Date.now()}-${Math.random()}`,
+        label: '',
+        value: '',
+      };
+
+      if (existingGroup) {
+        return previous.map((group) =>
+          group.id === existingGroup.id ? { ...group, items: [...group.items, item] } : group,
+        );
+      }
+
+      return [...previous, { id: `group-${Date.now()}-${Math.random()}`, title, items: [item] }];
+    });
+    markCustomerContentChanged();
   };
 
-  const removeHighlight = (id: string) => {
-    setHighlights((prev) => prev.filter((h) => h.id !== id));
-    setIsDirty(true);
+  const updateInformationGroupTitle = (groupId: string, title: string) => {
+    setInformationGroups((previous) =>
+      previous.map((group) => (group.id === groupId ? { ...group, title } : group)),
+    );
+    markCustomerContentChanged();
+  };
+
+  const removeInformationGroup = (groupId: string) => {
+    setInformationGroups((previous) => previous.filter((group) => group.id !== groupId));
+    markCustomerContentChanged();
+  };
+
+  const addInformationItem = (groupId: string) => {
+    setInformationGroups((previous) =>
+      previous.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              items: [
+                ...group.items,
+                { id: `item-${Date.now()}-${Math.random()}`, label: '', value: '' },
+              ],
+            }
+          : group,
+      ),
+    );
+    markCustomerContentChanged();
+  };
+
+  const updateInformationItem = (
+    groupId: string,
+    itemId: string,
+    field: 'label' | 'value',
+    value: string,
+  ) => {
+    setInformationGroups((previous) =>
+      previous.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              items: group.items.map((item) =>
+                item.id === itemId ? { ...item, [field]: value } : item,
+              ),
+            }
+          : group,
+      ),
+    );
+    markCustomerContentChanged();
+  };
+
+  const removeInformationItem = (groupId: string, itemId: string) => {
+    setInformationGroups((previous) =>
+      previous.map((group) =>
+        group.id === groupId
+          ? { ...group, items: group.items.filter((item) => item.id !== itemId) }
+          : group,
+      ),
+    );
+    markCustomerContentChanged();
   };
 
   const addFaq = () => {
@@ -1386,17 +1515,17 @@ export function useProductCreatorState({
       ...prev,
       { id: `${Date.now()}-${Math.random()}`, question: '', answer: '' },
     ]);
-    setIsDirty(true);
+    markCustomerContentChanged();
   };
 
   const updateFaq = (id: string, field: 'question' | 'answer', val: string) => {
     setFaqs((prev) => prev.map((f) => (f.id === id ? { ...f, [field]: val } : f)));
-    setIsDirty(true);
+    markCustomerContentChanged();
   };
 
   const removeFaq = (id: string) => {
     setFaqs((prev) => prev.filter((f) => f.id !== id));
-    setIsDirty(true);
+    markCustomerContentChanged();
   };
 
   // --------------------------------------------------------------------------
@@ -1479,6 +1608,9 @@ export function useProductCreatorState({
         }
       }
     });
+
+    const contentError = customerContentValidationError(informationGroups, faqs);
+    if (contentError) errors.content = contentError;
 
     if (variantMode === 'simple') {
       if (!sku.trim()) errors.sku = 'SKU is required for a single SKU product.';
@@ -1651,28 +1783,15 @@ export function useProductCreatorState({
         await catalogData(`/admin/catalog/products/${productId}/media`, {
           method: 'PUT',
           body: JSON.stringify({ placements }),
-        }).catch((err) => {
-          console.error('Failed to sync media placements', err);
         });
         setRemovedMediaPlacementIds([]);
 
         // 7. Update Customer Content & SEO
         const validFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
-        const validHighlights = highlights.filter((h) => h.label.trim() && h.value.trim());
+        const validInformationGroups = contentGroupsPayload(informationGroups);
         setSavingStatusText('Saving customer content & search metadata…');
         const contentPayload: CatalogProductContentUpdateDto = {
-          informationGroups:
-            validHighlights.length > 0
-              ? [
-                  {
-                    title: 'Product Details',
-                    items: validHighlights.map((h) => ({
-                      label: h.label.trim(),
-                      value: h.value.trim(),
-                    })),
-                  },
-                ]
-              : [],
+          informationGroups: validInformationGroups,
           faqs: validFaqs.map((f) => ({
             question: f.question.trim(),
             answer: f.answer.trim(),
@@ -1680,11 +1799,16 @@ export function useProductCreatorState({
           seoTitle: seoTitle.trim() || null,
           seoDescription: seoDescription.trim() || null,
         };
-        await catalogData(`/admin/catalog/products/${productId}/content`, {
-          method: 'PUT',
-          headers: { 'if-match': `"${currentVersion}"` },
-          body: JSON.stringify(contentPayload),
-        }).catch(() => null);
+        const contentResult = await catalogData<CatalogProductSummaryDto>(
+          `/admin/catalog/products/${productId}/content`,
+          {
+            method: 'PUT',
+            headers: { 'if-match': `"${currentVersion}"` },
+            body: JSON.stringify(contentPayload),
+          },
+        );
+        currentVersion = contentResult.version;
+        setProductVersion(currentVersion);
 
         // 8. Update Variants and Pricing
         if (variantMode === 'simple') {
@@ -1817,7 +1941,7 @@ export function useProductCreatorState({
           await catalogData(`/admin/catalog/products/${productId}/publish`, {
             method: 'POST',
             body: JSON.stringify({ version: currentVersion }),
-          }).catch(() => null);
+          });
         }
 
         setIsDirty(false);
@@ -2004,61 +2128,46 @@ export function useProductCreatorState({
         method: 'POST',
         body: JSON.stringify(payload),
       });
-
+      let createdVersion = created.version;
 
       // 5. Save Customer Content (FAQs and Highlights)
       const validFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
-      const validHighlights = highlights.filter((h) => h.label.trim() && h.value.trim());
+      const validInformationGroups = contentGroupsPayload(informationGroups);
 
       if (
         validFaqs.length > 0 ||
-        validHighlights.length > 0 ||
+        validInformationGroups.length > 0 ||
         seoTitle.trim() ||
         seoDescription.trim()
       ) {
         setSavingStatusText('Saving customer content & search metadata…');
-        try {
-          const contentPayload: CatalogProductContentUpdateDto = {
-            informationGroups:
-              validHighlights.length > 0
-                ? [
-                    {
-                      title: 'Product Details',
-                      items: validHighlights.map((h) => ({
-                        label: h.label.trim(),
-                        value: h.value.trim(),
-                      })),
-                    },
-                  ]
-                : [],
-            faqs: validFaqs.map((f) => ({
-              question: f.question.trim(),
-              answer: f.answer.trim(),
-            })),
-            seoTitle: seoTitle.trim() || null,
-            seoDescription: seoDescription.trim() || null,
-          };
-          await catalogData(`/admin/catalog/products/${created.id}/content`, {
+        const contentPayload: CatalogProductContentUpdateDto = {
+          informationGroups: validInformationGroups,
+          faqs: validFaqs.map((f) => ({
+            question: f.question.trim(),
+            answer: f.answer.trim(),
+          })),
+          seoTitle: seoTitle.trim() || null,
+          seoDescription: seoDescription.trim() || null,
+        };
+        const contentResult = await catalogData<CatalogProductSummaryDto>(
+          `/admin/catalog/products/${created.id}/content`,
+          {
             method: 'PUT',
-            headers: { 'if-match': `"${created.version}"` },
+            headers: { 'if-match': `"${createdVersion}"` },
             body: JSON.stringify(contentPayload),
-          });
-        } catch {
-          // non-fatal
-        }
+          },
+        );
+        createdVersion = contentResult.version;
       }
 
       // 6. If targetStatus is ACTIVE, publish the product
       if (targetStatus === 'ACTIVE' || publishImmediately) {
         setSavingStatusText('Publishing product to storefront…');
-        try {
-          await catalogData(`/admin/catalog/products/${created.id}/publish`, {
-            method: 'POST',
-            body: JSON.stringify({ version: created.version }),
-          });
-        } catch {
-          // non-fatal
-        }
+        await catalogData(`/admin/catalog/products/${created.id}/publish`, {
+          method: 'POST',
+          body: JSON.stringify({ version: createdVersion }),
+        });
       }
 
       // 7. Cleanup draft and navigate directly to product detail page!
@@ -2134,7 +2243,7 @@ export function useProductCreatorState({
     dimensionUnit,
     seoTitle,
     seoDescription,
-    highlights,
+    informationGroups,
     faqs,
     showAdvancedContent,
     publishImmediately,
@@ -2173,6 +2282,7 @@ export function useProductCreatorState({
     handleProductTypeChange,
     handleTitleChange,
     handleHandleChange,
+    handleToggleHandleLock,
     handleFilesSelected,
     handleSetPrimaryMedia,
     handleRemoveMedia,
@@ -2198,9 +2308,12 @@ export function useProductCreatorState({
     handleUpdateMatrixRow,
     handleBulkUpdateMatrix,
     handleApplyShippingPreset,
-    addHighlight,
-    updateHighlight,
-    removeHighlight,
+    addInformationGroup,
+    updateInformationGroupTitle,
+    removeInformationGroup,
+    addInformationItem,
+    updateInformationItem,
+    removeInformationItem,
     addFaq,
     updateFaq,
     removeFaq,

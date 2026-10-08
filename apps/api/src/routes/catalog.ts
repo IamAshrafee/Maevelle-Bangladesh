@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Type } from 'typebox';
 
 import type {
@@ -61,6 +61,40 @@ import {
 const organizationIdParameter = Type.String({
   pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
 });
+// A string/boolean/null JSON-schema union is unsafe with Fastify coercion: false can
+// become the string "false". Preserve the primitive here and validate it explicitly.
+export const catalogAttributeValueParameter = Type.Unknown({
+  description: 'A text, boolean, or null product attribute value.',
+});
+
+export function isCatalogAttributeValue(value: unknown): value is string | boolean | null {
+  return (
+    value === null ||
+    typeof value === 'boolean' ||
+    (typeof value === 'string' && value.length <= 2_000)
+  );
+}
+
+function invalidCatalogAttributeValues(
+  entries: readonly { readonly value: unknown }[] | undefined,
+): boolean {
+  return entries?.some((entry) => !isCatalogAttributeValue(entry.value)) ?? false;
+}
+
+function validateCatalogAttributeValues(property: 'attributes' | 'values') {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as Record<string, unknown> | undefined;
+    const entries = body?.[property] as readonly { readonly value: unknown }[] | undefined;
+    if (invalidCatalogAttributeValues(entries)) {
+      return reply.code(400).send({
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Attribute values must be text, true, false, or null.',
+        },
+      });
+    }
+  };
+}
 const variantWriteSchema = Type.Object({
   sku: Type.String({ minLength: 1, maxLength: 120 }),
   title: Type.Optional(Type.String({ minLength: 1, maxLength: 180 })),
@@ -367,12 +401,13 @@ export function registerCatalogRoutes(
           values: Type.Array(
             Type.Object({
               attributeDefinitionId: organizationIdParameter,
-              value: Type.Union([Type.String({ maxLength: 2000 }), Type.Boolean(), Type.Null()]),
+              value: catalogAttributeValueParameter,
             }),
             { maxItems: 100 },
           ),
         }),
       },
+      preValidation: validateCatalogAttributeValues('values'),
     },
     async (request, reply) => {
       const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
@@ -497,7 +532,7 @@ export function registerCatalogRoutes(
             Type.Array(
               Type.Object({
                 attributeDefinitionId: organizationIdParameter,
-                value: Type.Union([Type.String(), Type.Boolean(), Type.Null()]),
+                value: catalogAttributeValueParameter,
               }),
             ),
           ),
@@ -664,6 +699,7 @@ export function registerCatalogRoutes(
           seoDescription: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
         }),
       },
+      preValidation: validateCatalogAttributeValues('attributes'),
     },
     async (request, reply) => {
       const context = await requireCapability(database, auth, request.headers, 'catalog.manage');

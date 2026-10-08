@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+
 export type NodeEnvironment = 'development' | 'test' | 'production';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -419,5 +422,23 @@ export function parseConfig(environment: Environment): RuntimeConfig {
 }
 
 export function loadConfig(): RuntimeConfig {
-  return parseConfig(process.env);
+  const config = parseConfig(process.env);
+
+  if (config.mediaStorageProvider !== 'local' || isAbsolute(config.mediaStoragePath)) return config;
+
+  const runtimeDirectory = resolve(process.cwd());
+  let workspaceRoot = runtimeDirectory;
+  while (!existsSync(join(workspaceRoot, 'pnpm-workspace.yaml'))) {
+    const parent = dirname(workspaceRoot);
+    if (parent === workspaceRoot) {
+      workspaceRoot = runtimeDirectory;
+      break;
+    }
+    workspaceRoot = parent;
+  }
+
+  return Object.freeze({
+    ...config,
+    mediaStoragePath: resolve(workspaceRoot, config.mediaStoragePath),
+  });
 }

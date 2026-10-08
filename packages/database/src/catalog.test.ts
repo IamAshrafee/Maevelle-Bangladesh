@@ -514,6 +514,22 @@ describe('catalog invariants', () => {
       handle,
       description: 'Fallback customer description.',
     });
+    const attribute = await sql<{ id: string }>`
+      insert into catalog.attribute_definitions
+        (organization_id,code,name,value_type,scope,status)
+      values (${fixture.organizationId},'adjustable','Adjustable','BOOLEAN','PRODUCT','ACTIVE')
+      returning id
+    `.execute(database.db);
+    await sql`
+      insert into catalog.product_type_attributes
+        (organization_id,product_type_id,attribute_definition_id,is_required)
+      values (${fixture.organizationId},${fixture.productTypeId},${attribute.rows[0]!.id},false)
+    `.execute(database.db);
+    await sql`
+      insert into catalog.product_attribute_values
+        (organization_id,product_id,attribute_definition_id,value_boolean)
+      values (${fixture.organizationId},${product.id},${attribute.rows[0]!.id},true)
+    `.execute(database.db);
     const content = await replaceCatalogProductContent(database.db, {
       ...fixture,
       productId: product.id,
@@ -591,6 +607,7 @@ describe('catalog invariants', () => {
       seoTitle: 'Organic Cotton Hat | Maevelle',
       seoDescription: 'Shop an adjustable organic cotton hat from Maevelle Bangladesh.',
       details: [
+        { group: 'Key Attributes', label: 'Adjustable', value: 'Yes' },
         { group: 'Materials', label: 'Shell', value: 'Organic cotton' },
         { group: 'Materials', label: 'Care', value: 'Hand wash cold' },
       ],

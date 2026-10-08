@@ -4205,8 +4205,10 @@ export async function getStorefrontCatalogProduct(
     width_value: string | null;
     height_value: string | null;
     dimension_unit: string | null;
+    product_type_id: string;
   }>`
     select product.id,product.handle,product.title,product.description,product.seo_title,product.seo_description,
+      product.product_type_id::text,
       product.weight_value::text,product.weight_unit,product.length_value::text,product.width_value::text,
       product.height_value::text,product.dimension_unit
     from catalog.products product
@@ -4332,6 +4334,34 @@ export async function getStorefrontCatalogProduct(
       and information_group.product_id=${row.id}
     order by information_group.position, item.position, item.id
   `.execute(db);
+  const keyAttributes = await sql<{ label: string; value_text: string }>`
+    select definition.name as label,
+      case definition.value_type
+        when 'TEXT' then value.value_text
+        when 'INTEGER' then value.value_integer::text
+        when 'DECIMAL' then value.value_decimal::text
+        when 'BOOLEAN' then case when value.value_boolean then 'Yes' else 'No' end
+        when 'DATE' then value.value_date::text
+        when 'REFERENCE' then reference_option.label
+      end as value_text
+    from catalog.product_type_attributes binding
+    join catalog.attribute_definitions definition
+      on definition.organization_id=binding.organization_id
+      and definition.id=binding.attribute_definition_id
+    join catalog.product_attribute_values value
+      on value.organization_id=binding.organization_id
+      and value.product_id=${row.id}
+      and value.attribute_definition_id=definition.id
+    left join catalog.attribute_reference_options reference_option
+      on reference_option.organization_id=value.organization_id
+      and reference_option.attribute_definition_id=value.attribute_definition_id
+      and reference_option.id=value.value_reference_id
+    where binding.organization_id=${organizationId}
+      and binding.product_type_id=${row.product_type_id}::uuid
+      and definition.scope='PRODUCT'
+      and definition.status='ACTIVE'
+    order by binding.is_required desc,definition.name,definition.id
+  `.execute(db);
   const faqs = await sql<{ question: string; answer: string }>`
     select question,answer from catalog.product_faqs
     where organization_id=${organizationId} and product_id=${row.id} order by position,id
@@ -4389,11 +4419,27 @@ export async function getStorefrontCatalogProduct(
       width: asset.width_px,
       height: asset.height_px,
     })),
-    details: details.rows.map((detail) => ({
-      group: detail.group_title,
-      label: detail.label,
-      value: detail.value_text,
-    })),
+    details: [
+      ...keyAttributes.rows.map((attribute) => ({
+        group: 'Key Attributes',
+        label: attribute.label,
+        value: attribute.value_text,
+      })),
+      ...details.rows
+        .filter(
+          (detail) =>
+            detail.group_title.toLocaleLowerCase('en') !== 'key attributes' ||
+            !keyAttributes.rows.some(
+              (attribute) =>
+                attribute.label.toLocaleLowerCase('en') === detail.label.toLocaleLowerCase('en'),
+            ),
+        )
+        .map((detail) => ({
+          group: detail.group_title,
+          label: detail.label,
+          value: detail.value_text,
+        })),
+    ],
     faqs: faqs.rows.map((faq) => ({ question: faq.question, answer: faq.answer })),
     ratingSummary: await (async () => {
       const summaryRow = await sql<{
