@@ -453,6 +453,31 @@ describe('catalog invariants', () => {
         and attribute_definition_id=${archivedAttribute.rows[0]!.id}::uuid
     `.execute(database.db);
     expect(preservedArchived.rows[0]?.value_text).toBe('Historical value');
+    const variantAttribute = await sql<{ id: string }>`
+      insert into catalog.attribute_definitions
+        (organization_id,code,name,value_type,scope)
+      values (${fixture.organizationId},'variant-finish','Variant finish','TEXT','VARIANT')
+      returning id::text
+    `.execute(database.db);
+    await sql`
+      insert into catalog.product_type_attributes
+        (organization_id,product_type_id,attribute_definition_id)
+      values (${fixture.organizationId},${fixture.productTypeId},${variantAttribute.rows[0]!.id}::uuid)
+    `.execute(database.db);
+    const ignoredUnsetVariant = await setCatalogProductAttributes(database.db, {
+      ...fixture,
+      productId: product.id,
+      expectedVersion: attributed.version,
+      values: [
+        { attributeDefinitionId: byCode.get('material')!, value: 'Cotton' },
+        { attributeDefinitionId: byCode.get('washable')!, value: false },
+        {
+          attributeDefinitionId: legacyReference.rows[0]!.id,
+          value: referenceOption.rows[0]!.id,
+        },
+        { attributeDefinitionId: variantAttribute.rows[0]!.id, value: null },
+      ],
+    });
     const unrelatedReference = await sql<{ id: string }>`
       insert into catalog.attribute_definitions
         (organization_id,code,name,value_type,scope)
@@ -469,7 +494,7 @@ describe('catalog invariants', () => {
       setCatalogProductAttributes(database.db, {
         ...fixture,
         productId: product.id,
-        expectedVersion: attributed.version,
+        expectedVersion: ignoredUnsetVariant.version,
         values: [
           { attributeDefinitionId: byCode.get('material')!, value: 'Cotton' },
           {
@@ -483,7 +508,7 @@ describe('catalog invariants', () => {
       setCatalogProductAttributes(database.db, {
         ...fixture,
         productId: product.id,
-        expectedVersion: attributed.version,
+        expectedVersion: ignoredUnsetVariant.version,
         values: [{ attributeDefinitionId: byCode.get('material')!, value: null }],
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' satisfies CatalogDomainError['code'] });

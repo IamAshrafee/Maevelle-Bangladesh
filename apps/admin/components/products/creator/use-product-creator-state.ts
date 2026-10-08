@@ -701,7 +701,10 @@ export function useProductCreatorState({
   );
 
   const activeAttributes = useMemo(
-    () => selectedProductType?.attributes?.filter((a) => a.status === 'ACTIVE') ?? [],
+    () =>
+      selectedProductType?.attributes?.filter(
+        (attribute) => attribute.status === 'ACTIVE' && attribute.scope === 'PRODUCT',
+      ) ?? [],
     [selectedProductType],
   );
 
@@ -1696,6 +1699,7 @@ export function useProductCreatorState({
         // 3. Update Dynamic Attributes
         const attrChanged =
           !workspaceData ||
+          productTypeId !== workspaceData.productTypeId ||
           activeAttributes.some((attr) => {
             const oldVal =
               workspaceData.organization.attributes.find((a) => a.id === attr.id)?.value ?? null;

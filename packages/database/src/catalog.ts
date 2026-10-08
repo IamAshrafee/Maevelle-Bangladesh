@@ -1559,7 +1559,8 @@ export async function createCatalogProduct(
       `.execute(transaction);
     }
 
-    if (input.attributes && input.attributes.length > 0) {
+    // Validate the complete Product-level definition set even when no values were supplied.
+    {
       const definitions = await sql<{
         id: string;
         name: string;
@@ -1584,7 +1585,11 @@ export async function createCatalogProduct(
       `.execute(transaction);
       const byId = new Map(definitions.rows.map((def) => [def.id, def]));
       const supplied = new Map<string, string | boolean | null>();
-      for (const entry of input.attributes) {
+      for (const entry of input.attributes ?? []) {
+        const isUnset =
+          entry.value === null ||
+          (typeof entry.value === 'string' && entry.value.trim().length === 0);
+        if (!byId.has(entry.attributeDefinitionId) && isUnset) continue;
         if (supplied.has(entry.attributeDefinitionId))
           throw new CatalogDomainError('VALIDATION_FAILED', 'Provide each Product attribute once.');
         if (!byId.has(entry.attributeDefinitionId))
@@ -1607,6 +1612,14 @@ export async function createCatalogProduct(
           );
         return { definition, value };
       });
+      const missing = normalized.filter(
+        (entry) => entry.definition.is_required && entry.value === undefined,
+      );
+      if (missing.length > 0)
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          `Complete required attribute${missing.length === 1 ? '' : 's'}: ${missing.map((entry) => entry.definition.name).join(', ')}.`,
+        );
       for (const entry of normalized) {
         if (entry.value === undefined) continue;
         if (entry.value.column === 'value_reference_id') {
@@ -2519,6 +2532,10 @@ export async function setCatalogProductAttributes(
     const byId = new Map(definitions.rows.map((definition) => [definition.id, definition]));
     const supplied = new Map<string, string | boolean | null>();
     for (const entry of input.values) {
+      const isUnset =
+        entry.value === null ||
+        (typeof entry.value === 'string' && entry.value.trim().length === 0);
+      if (!byId.has(entry.attributeDefinitionId) && isUnset) continue;
       if (supplied.has(entry.attributeDefinitionId))
         throw new CatalogDomainError('VALIDATION_FAILED', 'Provide each Product attribute once.');
       if (!byId.has(entry.attributeDefinitionId))
@@ -2569,18 +2586,10 @@ export async function setCatalogProductAttributes(
       delete from catalog.product_attribute_values value
       using catalog.attribute_definitions definition
       where value.attribute_definition_id=definition.id
+        and definition.organization_id=value.organization_id
         and value.organization_id=${input.organizationId}
         and value.product_id=${input.productId}::uuid
         and definition.scope='PRODUCT' and definition.status='ACTIVE'
-        and exists (
-          select 1 from catalog.products product
-          join catalog.product_type_attributes binding
-            on binding.organization_id=product.organization_id
-            and binding.product_type_id=product.product_type_id
-            and binding.attribute_definition_id=definition.id
-          where product.organization_id=${input.organizationId}
-            and product.id=${input.productId}::uuid
-        )
     `.execute(transaction);
     for (const entry of normalized) {
       if (entry.value === undefined) continue;
