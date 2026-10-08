@@ -217,3 +217,24 @@
   --glass-background: rgb(255 248 245 / 96%);
   --glass-background-supported: rgb(255 248 245 / 85%);
 }
+
+/*
+ * Shared utility classes for scrollable containers and safe-area insets.
+ * These complement Tailwind v4 utilities and are safe to define at root level
+ * since they carry no specificity conflicts with the utility layer.
+ */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}

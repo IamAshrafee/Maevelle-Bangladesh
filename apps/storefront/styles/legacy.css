@@ -623,259 +623,6 @@ h3 {
   }
 }
 
-/* PDP */
-.pdp-shell {
-  width: min(100% - 2rem, 92rem);
-  margin-inline: auto;
-  padding-block: 2rem 6rem;
-}
-.pdp-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(24rem, 0.85fr);
-  gap: clamp(2rem, 6vw, 6rem);
-}
-.product-gallery {
-  position: sticky;
-  top: 6.5rem;
-  align-self: start;
-}
-.gallery-main {
-  display: block;
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background: var(--soft);
-  padding: 0;
-}
-.gallery-main:hover:not(:disabled) {
-  background: var(--soft);
-}
-.gallery-main img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.gallery-thumbnails {
-  display: flex;
-  gap: 0.6rem;
-  overflow-x: auto;
-  padding-top: 0.75rem;
-}
-.gallery-thumbnails button {
-  flex: 0 0 4.5rem;
-  min-height: 6rem;
-  overflow: hidden;
-  border: 2px solid transparent;
-  background: var(--soft);
-  padding: 0;
-}
-.gallery-thumbnails button.selected {
-  border-color: var(--ink);
-}
-.gallery-thumbnails img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.pdp-information {
-  padding-top: 0.5rem;
-}
-.pdp-information h1 {
-  margin-bottom: 0.8rem;
-  font-size: clamp(2.3rem, 4.5vw, 4.3rem);
-}
-.pdp-rating-link {
-  margin-bottom: 1.25rem;
-  font-size: 0.88rem;
-}
-.pdp-price {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-.pdp-price strong {
-  font-size: 1.35rem;
-}
-.pdp-price del {
-  color: var(--muted);
-}
-.pdp-price span {
-  color: var(--accent);
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-.pdp-description {
-  max-width: 38rem;
-  color: var(--muted);
-}
-.variant-options {
-  margin-top: 2rem;
-}
-.variant-options fieldset {
-  border: 0;
-  margin: 0 0 1.4rem;
-  padding: 0;
-}
-.variant-options legend {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.65rem;
-  font-weight: 800;
-}
-.variant-options legend button {
-  min-height: 2rem;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  padding: 0;
-  text-decoration: underline;
-}
-.option-values {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-.option-values button {
-  min-width: 3rem;
-  border-color: var(--line);
-  background: white;
-  color: var(--ink);
-}
-.option-values button.selected {
-  border-color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--ink);
-}
-.option-values button:disabled {
-  text-decoration: line-through;
-}
-.option-values .swatch {
-  display: inline-block;
-  width: 1rem;
-  height: 1rem;
-  margin-right: 0.45rem;
-  border: 1px solid #888;
-  border-radius: 50%;
-  vertical-align: -0.12rem;
-}
-.color-options button {
-  display: inline-flex;
-  align-items: center;
-}
-.availability {
-  padding-left: 1rem;
-  border-left: 3px solid var(--line);
-  font-size: 0.9rem;
-}
-.availability.available {
-  border-color: var(--positive);
-  color: var(--positive);
-}
-.availability.unavailable {
-  border-color: var(--warning);
-  color: var(--warning);
-}
-.add-to-cart {
-  width: 100%;
-  min-height: 3.4rem;
-  margin-top: 0.5rem;
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.cart-feedback {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.8rem;
-  background: #edf5ef;
-  padding: 0.8rem 1rem;
-  color: var(--positive);
-}
-.pdp-assurances {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
-  margin-block: 1.5rem;
-}
-.pdp-assurances p {
-  display: grid;
-  gap: 0.25rem;
-  margin: 0;
-  border: 1px solid var(--line);
-  padding: 0.8rem;
-  font-size: 0.78rem;
-}
-.pdp-assurances span {
-  color: var(--muted);
-}
-.product-accordions {
-  border-top: 1px solid var(--line);
-}
-.product-accordions details {
-  border-bottom: 1px solid var(--line);
-  padding: 1rem 0;
-}
-.product-accordions summary {
-  cursor: pointer;
-  font-weight: 800;
-}
-.product-accordions details > p,
-.product-accordions dl,
-.product-accordions details > div {
-  margin-top: 1rem;
-  color: var(--muted);
-}
-.product-accordions dl div {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr;
-  border-top: 1px solid var(--line);
-  padding-block: 0.6rem;
-}
-.product-accordions dd {
-  margin: 0;
-}
-#reviews {
-  margin-top: clamp(4rem, 8vw, 8rem);
-  border-top: 1px solid var(--line);
-  padding-top: 3.5rem;
-}
-
-.pdp-rating-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.25rem 0.65rem;
-  border-radius: 9999px;
-  background: var(--soft);
-  border: 1px solid var(--line);
-  font-size: 0.82rem;
-  color: var(--ink);
-  text-decoration: none;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
-}
-.pdp-rating-pill:hover {
-  border-color: var(--accent);
-  background: #fbf7f4;
-}
-.pdp-rating-pill.is-empty {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-.pdp-rating-score {
-  font-weight: 700;
-  color: var(--ink);
-}
-.pdp-rating-count {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
 
 /* Product Reviews Master Section */
 .product-reviews-section {
@@ -2360,13 +2107,7 @@ td {
   .brand {
     text-align: center;
   }
-  .pdp-grid {
-    grid-template-columns: 1fr 0.9fr;
-    gap: 2rem;
-  }
-  .pdp-assurances {
-    grid-template-columns: 1fr;
-  }
+
 }
 
 @media (max-width: 780px) {
@@ -2401,31 +2142,11 @@ td {
   .product-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .pdp-grid {
-    grid-template-columns: 1fr;
-  }
-  .product-gallery {
-    position: static;
-    margin-inline: -1rem;
-  }
-  .gallery-thumbnails {
-    padding-inline: 1rem;
-  }
-  .pdp-information {
-    padding-top: 1rem;
-  }
-
   .form-grid {
     grid-template-columns: 1fr;
   }
   .form-grid .full {
     grid-column: 1;
-  }
-  .pdp-loading {
-    grid-template-columns: 1fr;
-  }
-  .pdp-loading span:last-child {
-    min-height: 18rem;
   }
   .review-section-heading {
     align-items: start;
@@ -2439,8 +2160,7 @@ td {
 
 @media (max-width: 480px) {
   .shell,
-  .shell.wide,
-  .pdp-shell {
+  .shell.wide {
     width: min(100% - 1.25rem, 92rem);
   }
   h1 {
@@ -2503,12 +2223,6 @@ td {
   }
   .price-fields {
     grid-template-columns: 1fr;
-  }
-  .gallery-main {
-    aspect-ratio: 4 / 5;
-  }
-  .pdp-information h1 {
-    font-size: 2.45rem;
   }
 
 }

@@ -1,0 +1,8 @@
+export { PdpView } from './pdp-view';
+export { PdpGallery } from './pdp-gallery';
+export { PdpCommercialHeader } from './pdp-commercial-header';
+export { PdpVariantSelector } from './pdp-variant-selector';
+export { PdpTrustGrid } from './pdp-trust-grid';
+export { PdpEditorialAccordions } from './pdp-editorial-accordions';
+export { PdpStickyBar } from './pdp-sticky-bar';
+export { PdpCrossSells } from './pdp-cross-sells';

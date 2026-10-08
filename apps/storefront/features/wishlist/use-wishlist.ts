@@ -55,6 +55,27 @@ export function useWishlist() {
     setToastMessage(null);
   };
 
+  const addItem = (item: WishlistItem) => {
+    setItems((prev) => {
+      if (prev.some((i) => i.id === item.id)) return prev;
+      return [item, ...prev];
+    });
+    showToast(`“${item.title}” added to your wishlist`);
+  };
+
+  const toggleWishlist = (item: WishlistItem) => {
+    const exists = items.some((i) => i.id === item.id);
+    if (exists) {
+      removeItem(item.id);
+      return false;
+    } else {
+      addItem(item);
+      return true;
+    }
+  };
+
+  const isInWishlist = (id: string) => items.some((i) => i.id === id);
+
   const removeItem = (id: string) => {
     const itemToRemove = items.find((i) => i.id === id);
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -142,12 +163,14 @@ export function useWishlist() {
 
   return {
     activeCategory,
+    addItem,
     amountNeededForFreeDelivery,
     categoryCounts,
     clearToast,
     clearWishlist,
     deliveryProgress,
     filteredItems,
+    isInWishlist,
     isTransferringAll,
     items,
     moveAllToBag,
@@ -158,6 +181,7 @@ export function useWishlist() {
     setActiveCategory,
     showToast,
     toastMessage,
+    toggleWishlist,
     totalPrice,
   };
 }
