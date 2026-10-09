@@ -93,7 +93,7 @@ export function ProductPageClient({
       id: initialProduct.id,
       handle: initialProduct.handle,
       title: initialProduct.title,
-      subtitle: 'Maevelle Atelier',
+      subtitle: 'Maevelle Bangladesh',
       category: 'hair',
       categoryLabel: 'Hair',
       price: 0,

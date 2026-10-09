@@ -56,7 +56,7 @@ export const DEMO_CONSIGNMENT: ConsignmentData = {
     {
       title: 'Handcrafted & Wax Sealed',
       timestamp: 'May 24, 6:15 PM',
-      description: 'Quality passed at Banani Atelier with signature berry ribbon & wax seal.',
+      description: 'Quality verified with signature berry ribbon & wax seal.',
       status: 'completed',
     },
     {
@@ -90,7 +90,7 @@ export const DEMO_CONSIGNMENT: ConsignmentData = {
     {
       id: 'item-2',
       title: 'Plush Velvet Silk Hair Ribbon',
-      variantDescription: 'Deep Berry • Atelier Silk Edition',
+      variantDescription: 'Deep Berry • Signature Silk Edition',
       quantity: 1,
       unitPrice: 850,
       netPrice: 850,
@@ -111,7 +111,7 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
   const isPreparing = order.fulfillmentStatus === 'IN_PROGRESS';
   const isCancelled = order.status === 'CANCELLED';
 
-  let statusBadgeText = 'Order Confirmed — Atelier Scheduled';
+  let statusBadgeText = 'Order Confirmed — Packaging Scheduled';
   if (isCancelled) {
     statusBadgeText = 'Order Cancelled';
   } else if (isDelivered) {
@@ -119,7 +119,7 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
   } else if (isInTransit) {
     statusBadgeText = `In Transit — ${order.delivery?.carrierName || 'Dhaka Express'}`;
   } else if (isPreparing) {
-    statusBadgeText = 'Atelier Packaging & Inspection';
+    statusBadgeText = 'Packaging & Quality Inspection';
   }
 
   const carrierName = order.delivery?.carrierName || 'Pathao Logistics';
@@ -140,7 +140,7 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
   const items: ConsignmentItem[] = order.lines.map((line, idx) => ({
     id: `item-${idx}`,
     title: line.productTitle,
-    variantDescription: line.variantTitle ? `${line.variantTitle} • Handcrafted` : 'Atelier Edition',
+    variantDescription: line.variantTitle ? `${line.variantTitle} • Handcrafted` : 'Signature Edition',
     quantity: Number(line.quantity) || 1,
     unitPrice: Number(line.unitPrice) || 0,
     netPrice: Number(line.net) || 0,
@@ -176,7 +176,7 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
     {
       title: 'Handcrafted & Wax Sealed',
       timestamp: isPreparing || isInTransit || isDelivered ? 'Quality Approved' : 'In Preparation',
-      description: 'Quality passed at Banani Atelier with signature berry ribbon & wax seal.',
+      description: 'Quality verified with signature berry ribbon & wax seal.',
       status: isPreparing ? 'active' : isInTransit || isDelivered ? 'completed' : 'pending',
     },
     {
@@ -186,7 +186,7 @@ export function transformPublicTrackingToConsignment(order: PublicOrderTrackingD
         ? 'Consignment picked up and en route with assigned delivery courier.'
         : isDelivered
         ? 'Courier transit completed.'
-        : 'Awaiting courier collection at Banani Hub.',
+        : 'Awaiting courier collection at fulfillment center.',
       status: isDelivered ? 'completed' : isInTransit ? 'active' : 'pending',
       riderInfo: isInTransit
         ? {

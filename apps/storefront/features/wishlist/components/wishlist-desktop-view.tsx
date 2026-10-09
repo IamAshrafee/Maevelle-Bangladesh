@@ -85,7 +85,7 @@ export function WishlistDesktopView({
             </span>
           </div>
           <p className="mt-2 text-body-md text-on-surface-variant max-w-2xl">
-            Saved heirloom accessories and artisanal edits reserved for your personal consideration at our Dhaka atelier.
+            Saved heirloom accessories and artisanal edits reserved for your personal consideration.
           </p>
         </div>
 
@@ -249,11 +249,11 @@ export function WishlistDesktopView({
                       <strong className="text-primary font-semibold">
                         <Money amount={amountNeededForFreeDelivery} /> more
                       </strong>{' '}
-                      to unlock Complimentary Same-Day Delivery in Gulshan, Banani, and Uttara.
+                      to unlock Complimentary Express Delivery.
                     </>
                   ) : (
                     <span className="text-tertiary font-semibold">
-                      ✨ You have unlocked Complimentary Same-Day Delivery in Dhaka!
+                      ✨ You have unlocked Complimentary Express Delivery!
                     </span>
                   )}
                 </p>
@@ -301,7 +301,7 @@ export function WishlistDesktopView({
               </button>
             </div>
 
-            {/* Banani Studio Concierge Card */}
+            {/* Online Styling Concierge Card */}
             <div className="rounded-2xl border border-border/40 bg-surface-container-low p-5 shadow-2xs space-y-3">
               <div className="flex items-start gap-3">
                 <div className="size-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary shrink-0 shadow-2xs">
@@ -309,10 +309,10 @@ export function WishlistDesktopView({
                 </div>
                 <div>
                   <h3 className="font-headline-sm text-sm font-semibold text-on-surface">
-                    Banani Studio Private Fitting
+                    Online Styling Concierge
                   </h3>
                   <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
-                    Visiting our studio in Banani? Your saved pieces can be reserved for an exclusive private viewing and styling session.
+                    Need personalized advice? Chat directly with our online stylists on WhatsApp for guidance on sizing, pairing, and gift selections.
                   </p>
                 </div>
               </div>
@@ -324,7 +324,7 @@ export function WishlistDesktopView({
                 target="_blank"
               >
                 <WhatsAppIcon size={16} />
-                <span>Reserve Studio Viewing on WhatsApp</span>
+                <span>Chat with Stylist on WhatsApp</span>
               </a>
             </div>
 
@@ -335,7 +335,7 @@ export function WishlistDesktopView({
                 <span>The Maevelle Promise</span>
               </div>
               <ul className="space-y-1.5 text-[11px] text-on-surface-variant/90 pl-1">
-                <li>• 3-Day Doorstep Exchange in Dhaka</li>
+                <li>• 3-Day Easy Doorstep Exchange</li>
                 <li>• Cash on Delivery across all 64 districts</li>
                 <li>• Hand-inspected artisanal quality guarantee</li>
               </ul>
@@ -352,7 +352,7 @@ export function WishlistDesktopView({
             Your Wishlist is Dreaming
           </h2>
           <p className="text-body-md text-on-surface-variant max-w-md mx-auto mb-6">
-            Explore our curated heirloom edits and save pieces you adore for later contemplation at your Dhaka atelier.
+            Explore our curated heirloom edits and save pieces you adore for later contemplation.
           </p>
           <Link
             className="inline-flex items-center justify-center h-12 px-8 rounded-xl bg-primary text-on-primary font-label-md font-semibold shadow-sm hover:bg-primary-hover active:scale-98 transition-transform"

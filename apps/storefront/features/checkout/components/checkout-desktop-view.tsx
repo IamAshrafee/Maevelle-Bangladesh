@@ -74,7 +74,7 @@ export function CheckoutDesktopView({ checkout }: CheckoutDesktopViewProps) {
         <div className="mb-8 flex items-center justify-between border-b border-border-subtle pb-5">
           <div className="flex flex-col">
             <span className="font-sans text-[11px] font-bold uppercase tracking-wider text-secondary">
-              Maevelle Atelier
+              Maevelle Bangladesh
             </span>
             <h1 className="font-serif text-3xl font-semibold tracking-tight text-on-surface">
               {pageTitle}

@@ -215,7 +215,7 @@ export default function CartPage() {
           <div className="flex items-baseline justify-between border-b border-border-subtle pb-4">
             <div>
               <span className="font-sans text-[11px] font-bold uppercase tracking-wider text-secondary block">
-                Atelier Selection
+                Curated Selection
               </span>
               <h1 className="font-serif text-2xl sm:text-3xl font-bold text-on-surface">
                 Your Bag

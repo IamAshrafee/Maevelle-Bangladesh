@@ -172,11 +172,11 @@ export function OrderTrackView() {
             </div>
 
             <h2 className="font-serif text-2xl sm:text-4xl text-on-surface font-semibold tracking-tight">
-              Track Your Atelier Parcel
+              Track Your Order
             </h2>
 
             <p className="font-sans text-sm sm:text-base text-on-surface-variant mt-2 leading-relaxed max-w-2xl">
-              Follow your handcrafted heirlooms from our Banani workshop to your doorstep across Bangladesh.
+              Follow your handcrafted heirlooms delivered directly to your doorstep across Bangladesh.
             </p>
           </section>
 

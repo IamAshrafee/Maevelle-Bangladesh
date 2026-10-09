@@ -32,7 +32,7 @@ export function OrderTrackReassurance() {
                 Need Urgent Assistance?
               </h4>
               <p className="font-sans text-[11px] text-on-surface-variant">
-                Dhaka Atelier Client Experience Desk
+                Maevelle Client Experience Desk
               </p>
             </div>
           </div>

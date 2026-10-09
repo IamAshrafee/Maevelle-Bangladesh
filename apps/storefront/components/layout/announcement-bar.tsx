@@ -13,8 +13,8 @@ export type AnnouncementBarProps = {
 };
 
 const DEFAULT_MESSAGES = [
-  'Complimentary White Glove Delivery across Dhaka on orders over ৳3,000',
-  'Dhaka 24-Hour Express Dispatch • Guaranteed fast courier',
+  'Complimentary Express Delivery across Bangladesh on orders over ৳3,000',
+  'Fast Dispatch Nationwide • 24-48h Dhaka & 2-3 Days Nationwide',
   'Cash on Delivery & Instant bKash / Nagad Accepted with zero surcharges',
 ];
 

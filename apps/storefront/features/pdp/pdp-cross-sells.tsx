@@ -52,7 +52,7 @@ const DEFAULT_ENSEMBLE: readonly CrossSellProduct[] = [
     imageUrl:
       'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?auto=format&fit=crop&w=400&q=80',
     imageAlt: 'French plush velvet ribbon hair accessory in dusty rose',
-    badge: 'Atelier',
+    badge: 'Curated',
   },
 ];
 
@@ -87,7 +87,7 @@ export function PdpCrossSells({ products }: PdpCrossSellsProps) {
                     <div className="w-full h-full flex flex-col items-center justify-center bg-surface-container-low text-primary p-2">
                       <span className="text-2xl font-serif font-bold">M</span>
                       <span className="text-[10px] text-outline text-center mt-1 uppercase tracking-wider">
-                        Atelier
+                        Maevelle
                       </span>
                     </div>
                   )}

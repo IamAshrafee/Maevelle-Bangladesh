@@ -162,7 +162,7 @@ export function MobileNavbar({
               {storeName}
             </span>
             <span className="font-label-sm text-[9.5px] sm:text-[10px] font-medium tracking-[0.24em] text-on-surface-variant/80 uppercase -mt-0.5">
-              Dhaka
+              Bangladesh
             </span>
           </Link>
 

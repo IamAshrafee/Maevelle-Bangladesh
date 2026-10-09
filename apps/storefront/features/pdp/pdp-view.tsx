@@ -460,7 +460,7 @@ export function PdpView({
                 {/* Brand + rating */}
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold uppercase tracking-widest text-[#8a7174]">
-                    Maevelle Atelier&nbsp;•&nbsp;Dhaka
+                    Maevelle Bangladesh
                   </span>
                   {ratingCount > 0 && (
                     <a

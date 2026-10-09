@@ -50,7 +50,7 @@ export function CheckoutGuaranteeCard() {
           <CardGiftcardIcon className="text-secondary" size={20} />
           <span className="text-[11px] font-bold text-on-surface">Luxury Box</span>
           <span className="text-[10px] text-on-surface-variant leading-tight">
-            Atelier gift wrapping
+            Signature gift wrapping
           </span>
         </div>
       </div>

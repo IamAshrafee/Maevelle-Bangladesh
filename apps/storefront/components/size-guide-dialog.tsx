@@ -358,7 +358,7 @@ export function SizeGuideDialog({
                 Size &amp; Fit Guide
               </h2>
               <p className="text-[11px] text-[#574144] truncate hidden sm:block">
-                Maevelle Atelier Precision Specs • {productTitle}
+                Maevelle Bangladesh Precision Specs • {productTitle}
               </p>
             </div>
           </div>
@@ -376,7 +376,7 @@ export function SizeGuideDialog({
                     : 'text-[#574144] hover:text-[#1e1b19]',
                 ].join(' ')}
               >
-                Atelier Chart
+                Size Chart
               </button>
               <button
                 type="button"
@@ -418,7 +418,7 @@ export function SizeGuideDialog({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ffd9e0] text-[#871a42] text-[11px] font-semibold uppercase tracking-wider">
                     <StraightenIcon className="w-3.5 h-3.5" />
-                    Atelier Spec
+                    Garment Spec
                   </span>
                   <span className="text-[12px] text-[#574144] flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-[#a63359]" />
@@ -576,7 +576,7 @@ export function SizeGuideDialog({
                           Maevelle Fit Advice
                         </span>
                         <p className="text-[12px] text-[#574144] mt-1 leading-relaxed">
-                          This atelier piece runs true to a feminine, relaxed silhouette. For an effortless, languid dawat drape over formal trousers or sarees, consider sizing up one size.
+                          This piece runs true to a feminine, relaxed silhouette. For an effortless, languid dawat drape over formal trousers or sarees, consider sizing up one size.
                         </p>
                       </div>
                     </div>
@@ -623,9 +623,9 @@ export function SizeGuideDialog({
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 320 220"
-                        aria-label="Atelier Garment Pattern Diagram"
+                        aria-label="Garment Pattern Diagram"
                       >
-                        {/* Silhouette of Atelier Top */}
+                        {/* Silhouette of Garment Top */}
                         <path
                           d="M 120 30 Q 160 48 200 30 L 250 65 L 225 105 L 195 90 L 195 200 L 125 200 L 125 90 L 95 105 L 70 65 Z"
                           fill="#FAF2EE"
@@ -662,7 +662,7 @@ export function SizeGuideDialog({
                         <text fill="#FFFFFF" fontFamily="sans-serif" fontSize="10" fontWeight="bold" textAnchor="middle" x="117" y="126">2</text>
                       </svg>
                       <span className="text-[10px] text-[#8a7174] italic mt-2 text-center">
-                        Maevelle Atelier Relaxed Pattern Mapping
+                        Maevelle Bangladesh Relaxed Pattern Mapping
                       </span>
                     </div>
 
@@ -780,7 +780,7 @@ export function SizeGuideDialog({
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="text-[13px] font-semibold text-[#1e1b19]">
-                          Banani Atelier Concierge
+                          Maevelle Online Styling Concierge
                         </span>
                         <span className="w-2 h-2 rounded-full bg-[#17633f] animate-pulse" />
                       </div>
@@ -874,7 +874,7 @@ export function SizeGuideDialog({
                 <div className="p-4 rounded-xl bg-[#e8f5ed] border border-[#17633f]/30 flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <span className="text-[11px] font-bold text-[#17633f] uppercase tracking-wider block">
-                      Recommended Atelier Fit
+                      Recommended Fit
                     </span>
                     <span className="text-[20px] font-serif font-bold text-[#12492f]">
                       Size {calculatedRecommendation}

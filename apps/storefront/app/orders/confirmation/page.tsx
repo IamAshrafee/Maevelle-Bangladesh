@@ -245,7 +245,7 @@ export default function OrderConfirmationPage() {
             className="flex items-center gap-2 text-xs font-semibold text-primary hover:text-primary-hover transition-colors"
             href="/"
           >
-            <span>← Return to Maevelle Atelier</span>
+            <span>← Return to Maevelle Bangladesh</span>
           </Link>
 
           <div className="flex items-center gap-2 rounded-full bg-surface-container-low px-3 py-1 text-xs text-on-surface-variant border border-border-subtle">

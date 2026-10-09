@@ -38,7 +38,7 @@ export function WishlistPageShell({ className, mode = 'auto' }: WishlistPageShel
       navigator
         .share({
           title: 'My Maevelle Wishlist',
-          text: 'Take a look at the curated accessories I saved at Maevelle Dhaka',
+          text: 'Take a look at the curated accessories I saved at Maevelle Bangladesh',
           url: window.location.href,
         })
         .catch(() => {

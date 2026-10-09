@@ -157,7 +157,7 @@ export function OrderTrackLookupCard({
           disabled={isLoading}
           type="submit"
         >
-          <span>{isLoading ? 'Verifying Atelier Consignment…' : 'Track Parcel'}</span>
+          <span>{isLoading ? 'Verifying Consignment…' : 'Track Parcel'}</span>
           <ArrowRightIcon size={18} />
         </button>
       </form>

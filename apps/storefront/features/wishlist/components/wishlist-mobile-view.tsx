@@ -219,7 +219,7 @@ export function WishlistMobileView({
         </div>
       )}
 
-      {/* 4. Atelier Concierge & Studio Fitting Note */}
+      {/* 4. Online Styling Concierge */}
       {hasItems ? (
         <section className="px-margin mt-space-lg mb-space-md">
           <div className="w-full bg-surface-container-low rounded-xl p-space-md shadow-sm border border-border/40">
@@ -229,11 +229,10 @@ export function WishlistMobileView({
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-headline-sm text-headline-sm text-on-surface mb-0.5 font-semibold">
-                  Banani Studio Private Fitting
+                  Online Styling Concierge
                 </h3>
                 <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                  Visiting our studio in Banani? Your saved {items.length} pieces can be set aside
-                  for an exclusive private styling session.
+                  Need personalized styling advice? Chat directly with our online team on WhatsApp for guidance on sizing, pairing, and gift selections.
                 </p>
                 <a
                   className="inline-flex items-center gap-1.5 text-primary font-label-md text-label-md font-semibold mt-2.5 hover:underline"
@@ -242,7 +241,7 @@ export function WishlistMobileView({
                   target="_blank"
                 >
                   <WhatsAppIcon size={18} />
-                  <span>Reserve Viewing on WhatsApp</span>
+                  <span>Chat on WhatsApp</span>
                 </a>
               </div>
             </div>
@@ -278,11 +277,11 @@ export function WishlistMobileView({
                     <strong className="text-primary font-semibold">
                       <Money amount={amountNeededForFreeDelivery} /> more
                     </strong>{' '}
-                    on checkout to unlock Complimentary Same-Day Delivery in Gulshan &amp; Banani.
+                    on checkout to unlock Complimentary Express Delivery.
                   </>
                 ) : (
                   <span className="text-tertiary font-semibold">
-                    ✨ You have unlocked Complimentary Same-Day Delivery in Dhaka!
+                    ✨ You have unlocked Complimentary Express Delivery!
                   </span>
                 )}
               </p>

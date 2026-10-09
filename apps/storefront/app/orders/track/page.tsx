@@ -5,7 +5,7 @@ import { OrderTrackView } from '@/features/orders';
 export const metadata: Metadata = {
   title: 'Track Your Order',
   description:
-    'Track your handcrafted Maevelle heirloom parcel from our Banani atelier to your doorstep across Bangladesh in real-time.',
+    'Track your handcrafted Maevelle heirloom parcel delivered directly to your doorstep across Bangladesh in real-time.',
   robots: { index: false, follow: false },
 };
 

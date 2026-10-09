@@ -170,13 +170,13 @@ export function SearchDropdownPanel({
             </div>
           )}
 
-          {/* Trending in Atelier Section */}
+          {/* Trending Searches Section */}
           <div>
             <div className="mb-2.5 flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-primary">
                 <SparklesIcon size={13} />
                 <span className="font-label-sm text-[11px] font-bold uppercase tracking-wider">
-                  Trending in Atelier
+                  Trending Now
                 </span>
               </div>
               {!isMobile && (

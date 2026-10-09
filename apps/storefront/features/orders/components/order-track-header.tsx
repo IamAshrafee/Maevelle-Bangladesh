@@ -39,7 +39,7 @@ export function OrderTrackHeader({ onOpenSupport }: OrderTrackHeaderProps) {
           >
             <span className="font-serif text-lg font-bold tracking-tight">MAEVELLE</span>
             <span className="font-sans text-[9px] uppercase tracking-widest text-on-surface-variant font-medium pt-0.5">
-              Atelier
+              Bangladesh
             </span>
           </Link>
         </div>

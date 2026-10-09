@@ -202,7 +202,7 @@ export function CheckoutPaymentStep({ checkout }: CheckoutPaymentStepProps) {
                   <VerifiedIcon className="text-primary" size={13} />
                 </span>
                 <span className="text-[10px] text-on-surface-variant">
-                  Official Atelier Accounts (Dhaka)
+                  Official Merchant Accounts
                 </span>
               </div>
             </div>

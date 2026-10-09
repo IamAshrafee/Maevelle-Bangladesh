@@ -77,7 +77,7 @@ export function PdpGallery({
                 {productTitle}
               </p>
               <span className="text-[11px] font-semibold text-outline uppercase tracking-widest mt-1.5">
-                Maevelle Atelier Edition
+                Maevelle Bangladesh Edition
               </span>
             </div>
           </>
@@ -90,16 +90,16 @@ export function PdpGallery({
               {productTitle}
             </p>
             <span className="text-[11px] font-semibold text-outline uppercase tracking-widest mt-1.5">
-              Maevelle Atelier Edition
+              Maevelle Bangladesh Edition
             </span>
           </div>
         )}
 
-        {/* Curated Atelier Edition badge */}
+        {/* Curated Edition badge */}
         <div className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-bright/95 shadow-sm backdrop-blur-md pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
           <span className="text-[11px] font-semibold uppercase tracking-widest text-primary">
-            Curated Atelier Edition
+            Curated Edition
           </span>
         </div>
 

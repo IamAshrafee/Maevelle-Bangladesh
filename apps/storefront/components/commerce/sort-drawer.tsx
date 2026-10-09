@@ -36,19 +36,19 @@ const sortOptions = [
   {
     id: 'featured' as SortOption,
     title: 'Featured & Curated',
-    subtitle: 'Handpicked heritage picks for Dhaka',
+    subtitle: 'Handpicked heritage picks for Bangladesh',
     icon: SparklesIcon,
   },
   {
     id: 'newest' as SortOption,
     title: 'Newest Arrivals',
-    subtitle: 'Freshly dispatched heirloom studio drops',
+    subtitle: 'Freshly dispatched curated drops',
     icon: ClockIcon,
   },
   {
     id: 'popular' as SortOption,
     title: 'Most Popular',
-    subtitle: 'Most loved by our Dhaka patrons',
+    subtitle: 'Most loved by our patrons across Bangladesh',
     badge: 'Trending',
     icon: FlameIcon,
   },
@@ -78,7 +78,7 @@ export function SortDrawer({
   onClose,
   onSelectSort,
   selectedSort = 'popular',
-  vaultSubtitle = 'Dhaka Vault',
+  vaultSubtitle = 'Maevelle Vault',
 }: SortDrawerProps) {
   const [activeSort, setActiveSort] = useState<SortOption>(selectedSort);
 

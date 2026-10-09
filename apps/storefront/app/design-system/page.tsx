@@ -151,7 +151,7 @@ export default function StorefrontDesignSystemPage() {
         <div className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-primary animate-pulse" />
           <span className="font-label-sm text-xs font-bold tracking-wider text-primary uppercase">
-            Maevelle Dhaka UI Lab
+            Maevelle Bangladesh UI Lab
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -214,7 +214,7 @@ export default function StorefrontDesignSystemPage() {
             Maevelle UI Kit &amp; Component Vault
           </h1>
           <p className="mt-1.5 text-body-md text-on-surface-variant">
-            Single source of truth for the Maevelle Dhaka iOS, Android &amp; Web client. Viewport
+            Single source of truth for the Maevelle Bangladesh Web &amp; Mobile client. Viewport
             baseline: 390px (Mobile-First Ergonomics).
           </p>
 
@@ -475,7 +475,7 @@ export default function StorefrontDesignSystemPage() {
               </div>
               <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">
                 Each heirloom jewelry ornament is individually hand-molded and dipped in 18-karat
-                micro-gold vermeil in our Dhanmondi studio.
+                micro-gold vermeil with artisanal care.
               </p>
               <div className="flex items-center justify-between pt-2 text-on-surface-variant">
                 <span className="font-label-sm text-[11px]">
@@ -631,7 +631,7 @@ export default function StorefrontDesignSystemPage() {
                   type="button"
                 >
                   <LockClockIcon size={18} />
-                  <span>Sold Out • Join Dhanmondi Waitlist</span>
+                  <span>Sold Out • Join Waitlist</span>
                 </button>
               </div>
             </div>
@@ -848,7 +848,7 @@ export default function StorefrontDesignSystemPage() {
                   24h Dhaka Express
                 </CommerceBadge>
                 <CommerceBadge icon={<SparklesIcon size={14} />} variant="craft">
-                  Dhanmondi Atelier Handcrafted
+                  Artisanal Handcrafted
                 </CommerceBadge>
                 <CommerceBadge variant="mfs">৳ 5% bKash Instant Cashback</CommerceBadge>
               </div>
@@ -906,7 +906,7 @@ export default function StorefrontDesignSystemPage() {
                   description="Press Esc to clear or click the clear button."
                   hint="Catalog Query"
                   id="specimen-search"
-                  label="Search Atelier Pieces"
+                  label="Search Handcrafted Pieces"
                   optional
                 >
                   <Input
@@ -927,7 +927,7 @@ export default function StorefrontDesignSystemPage() {
                 <Field
                   hint="Encrypted Vault"
                   id="specimen-password"
-                  label="Patron Atelier Passkey"
+                  label="Patron Security Passkey"
                 >
                   <Input
                     id="specimen-password"
@@ -1014,7 +1014,7 @@ export default function StorefrontDesignSystemPage() {
                   description="Handwritten with Japanese archival sumi ink on handmade cotton rag paper."
                   hint="Calligraphy Note"
                   id="specimen-textarea"
-                  label="Atelier Gift Note"
+                  label="Complimentary Gift Note"
                   optional
                 >
                   <Textarea
@@ -1056,7 +1056,7 @@ export default function StorefrontDesignSystemPage() {
                     onChange={(e) => setDemoCalligraphyChecked(e.target.checked)}
                   />
                   <Checkbox
-                    description="Restocking next week in Gulshan Flagship Studio."
+                    description="Restocking next week in our online boutique."
                     disabled
                     label="Silk Preservation Dust Bag (Waitlist Closed)"
                   />
@@ -1254,10 +1254,10 @@ export default function StorefrontDesignSystemPage() {
                     <ArrowRightIcon size={14} />
                   </Button>
                 }
-                title="Atelier Dispatches • Complimentary Velvet Gift Box"
+                title="Complimentary Velvet Gift Box • All Orders"
                 variant="brand"
               >
-                All orders over ৳2,000 within Dhaka City receive Maevelle signature crimson velvet preservation pouch with wax-sealed authenticity certificate.
+                All orders over ৳2,000 receive Maevelle signature crimson velvet preservation pouch with wax-sealed authenticity certificate.
               </Notice>
 
               {/* Success Notice */}
@@ -1265,15 +1265,15 @@ export default function StorefrontDesignSystemPage() {
                 title="Dhaka Express Order Confirmed"
                 variant="success"
               >
-                Your heirloom freshwater pearl necklace was inspected by our Banani master jeweler and dispatched with Pathao courier (OTP: 4928).
+                Your heirloom freshwater pearl necklace was inspected by our master jeweler and dispatched with Pathao courier (OTP: 4928).
               </Notice>
 
               {/* Warning Notice */}
               <Notice
-                title="Studio Drop Low Stock"
+                title="Limited Drop Low Stock"
                 variant="warning"
               >
-                Only 2 units of 18K Micro-Gold Vermeil drop earrings remain in stock at the Dhanmondi atelier.
+                Only 2 units of 18K Micro-Gold Vermeil drop earrings remain in stock.
               </Notice>
 
               {/* Danger / Error Notice */}
@@ -1331,7 +1331,7 @@ export default function StorefrontDesignSystemPage() {
                 {/* Profile / Atelier Specimen Skeleton */}
                 <div className="space-y-3 rounded-xl border border-border/40 bg-surface-container-low/40 p-3.5">
                   <span className="font-label-sm text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
-                    Atelier Concierge Shimmer
+                    Online Concierge Shimmer
                   </span>
                   <div className="flex items-center gap-3">
                     <Skeleton className="size-12" variant="circular" />
@@ -1414,7 +1414,7 @@ export default function StorefrontDesignSystemPage() {
                 </span>
                 <Separator />
                 <Separator label="Or continue with instant bKash" />
-                <Separator label="Dhaka Atelier Concierge" />
+                <Separator label="Maevelle Online Concierge" />
               </div>
             </div>
           </div>
@@ -1429,7 +1429,7 @@ export default function StorefrontDesignSystemPage() {
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant max-w-3xl">
-            Extracted faithfully from the Warm Editorial Atelier shop design. Borderless
+            Extracted faithfully from the Warm Editorial shop design. Borderless
             outer silhouette, 3:4 image hero, frosted glass capsule badges, floating delivery/rating pills,
             and finish swatches. Dual responsive modes: <strong>Mobile &amp; Tablet</strong> touch-optimized
             cards and <strong>Desktop</strong> expanded cards with slide-up &quot;Quick Add to Bag&quot; and secondary angle hover crossfade.
@@ -1915,11 +1915,11 @@ export default function StorefrontDesignSystemPage() {
           <div className="flex items-center gap-2">
             <span className="h-5 w-2 rounded-full bg-primary" />
             <h2 className="font-headline-lg-mobile text-headline-lg-mobile font-semibold text-on-surface">
-              14. Customer Page: Your Wishlist (Mobile Stitch 1:1 &amp; Desktop Atelier Split)
+              14. Customer Page: Your Wishlist (Mobile Stitch 1:1 &amp; Desktop Split)
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant max-w-3xl">
-            First full customer workflow screen. Mobile view is an exact 1:1 implementation of the Stitch design system (horizontal thumbnail cards, category filter pills, stock scarcity tags, Banani studio private fitting note, and progressive Dhaka delivery bar). Desktop view elevates the experience with an editorial 2-column split, sticky order value sidebar, and direct cart transfers.
+            First full customer workflow screen. Mobile view is an exact 1:1 implementation of the Stitch design system (horizontal thumbnail cards, category filter pills, stock scarcity tags, online styling note, and progressive delivery bar). Desktop view elevates the experience with an editorial 2-column split, sticky order value sidebar, and direct cart transfers.
           </p>
 
           <div className="flex items-center gap-3">
@@ -1974,11 +1974,11 @@ export default function StorefrontDesignSystemPage() {
               15. Complete Checkout Experience
             </span>
             <h2 className="font-headline-md text-headline-md text-on-surface">
-              Express Checkout (Stitch 1:1 Mobile &amp; 2-Column Desktop Atelier)
+              Express Checkout (Stitch 1:1 Mobile &amp; 2-Column Desktop Layout)
             </h2>
           </div>
           <p className="text-body-sm text-on-surface-variant max-w-3xl">
-            High-conversion luxury checkout flow. Mobile view is a 1:1 extraction of the Stitch mobile design system featuring 3-step indicator, collapsible order summary accordion, 🇧🇩 +880 mobile verification, Dhaka Express vs Nationwide courier toggle, official bKash/Nagad &amp; COD payment selectors, Maevelle Bangladesh guarantee badges, and persistent bottom purchase bar. Desktop view expands into a 2-column atelier layout with a sticky order value sidebar.
+            High-conversion luxury checkout flow. Mobile view is a 1:1 extraction of the Stitch mobile design system featuring 3-step indicator, collapsible order summary accordion, 🇧🇩 +880 mobile verification, Dhaka Express vs Nationwide courier toggle, official bKash/Nagad &amp; COD payment selectors, Maevelle Bangladesh guarantee badges, and persistent bottom purchase bar. Desktop view expands into a 2-column layout with a sticky order value sidebar.
           </p>
 
           <div className="flex items-center gap-3">
@@ -2013,7 +2013,7 @@ export default function StorefrontDesignSystemPage() {
             <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface-container-lowest shadow-xs">
               <div className="border-b border-border/40 bg-surface-container-low px-4 py-2 flex items-center justify-between">
                 <span className="font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
-                  Desktop Checkout Specimen (Expanded 2-Column Atelier &amp; Sticky Summary)
+                  Desktop Checkout Specimen (Expanded 2-Column &amp; Sticky Summary)
                 </span>
                 <span className="rounded-full bg-primary-fixed px-2 py-0.5 font-label-sm text-[10px] font-bold text-on-primary-fixed">
                   Viewport lg+ Pointer Architecture

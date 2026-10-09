@@ -48,7 +48,7 @@ export function PdpCommercialHeader({
       {/* Brand line + rating */}
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold uppercase tracking-widest text-outline">
-          Maevelle Atelier&nbsp;•&nbsp;Dhaka
+          Maevelle Bangladesh
         </span>
         {count > 0 && (
           <a
@@ -97,7 +97,7 @@ export function PdpCommercialHeader({
           <div className="flex flex-col">
             <span className="text-[13px] font-semibold text-on-surface">Ready to Dispatch</span>
             <span className="text-[12px] text-on-surface-variant">
-              Handcrafted in Banani atelier &bull; Ships within 24 hrs
+              Online Exclusive &bull; Ships within 24 hrs across Bangladesh
             </span>
           </div>
         </div>

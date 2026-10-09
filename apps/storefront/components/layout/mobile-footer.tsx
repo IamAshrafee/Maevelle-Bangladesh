@@ -68,7 +68,7 @@ export function MobileFooter({
               {storeName}
             </Link>
             <span className="font-label-sm text-[9px] font-medium tracking-[0.28em] text-on-surface-variant/75 uppercase mt-0.5">
-              Dhaka • Atelier
+              Bangladesh
             </span>
             <p className="mt-1.5 text-xs text-on-surface-variant/80 max-w-xs">
               Heirloom jewelry, freshwater pearls, and fine mulberry silk.
@@ -138,7 +138,7 @@ export function MobileFooter({
                 {storeName}
               </span>
               <span className="font-label-sm text-[9px] font-medium tracking-[0.26em] text-on-surface-variant/75 uppercase mt-1">
-                Dhaka • Atelier
+                Bangladesh
               </span>
             </Link>
             <p className="text-xs text-on-surface-variant leading-relaxed">
@@ -233,7 +233,7 @@ export function MobileFooter({
               Terms
             </Link>
             <span>•</span>
-            <span>🇧🇩 Dhaka, BD</span>
+            <span>🇧🇩 Bangladesh</span>
           </div>
         </div>
       </div>

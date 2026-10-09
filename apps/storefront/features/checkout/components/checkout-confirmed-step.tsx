@@ -234,7 +234,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
                     Receipt Confirmed
                   </span>
                   <span className="text-outline-variant">•</span>
-                  <span className="font-sans text-xs text-on-surface-variant">Dhaka Atelier Studio</span>
+                  <span className="font-sans text-xs text-on-surface-variant">Fulfillment Center</span>
                 </div>
 
                 <h2 className="font-serif text-3xl font-medium text-on-surface leading-tight mb-2">
@@ -242,7 +242,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
                 </h2>
 
                 <p className="font-sans text-sm text-on-surface-variant leading-relaxed">
-                  Your curated parcel has been scheduled for personalized atelier packaging. Each heirloom item is inspected, certified, and enclosed in our signature keepsake box before courier handover.
+                  Your curated parcel has been scheduled for quality packaging. Each heirloom item is inspected, certified, and enclosed in our signature keepsake box before courier handover.
                 </p>
               </div>
             </div>
@@ -316,7 +316,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
           </h2>
 
           <p className="font-sans text-xs sm:text-sm text-on-surface-variant max-w-sm mb-4 leading-relaxed">
-            Your curated parcel has been scheduled for personalized atelier packaging.
+            Your curated parcel has been scheduled for quality packaging and inspection.
           </p>
 
           {/* Order Identifier Pill */}
@@ -418,7 +418,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
             </div>
             <span className="font-sans text-xs text-on-surface-variant">
               {paymentBadge.isPending
-                ? `TrxID submitted via ${paymentBadge.name}. Atelier accounts verifying statement.`
+                ? `TrxID submitted via ${paymentBadge.name}. Accounts verifying statement.`
                 : !paymentBadge.isPaid
                 ? 'Doorstep cash on delivery confirmed.'
                 : `Payment verified via ${paymentBadge.name}.`}
@@ -426,7 +426,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
           </div>
         </div>
 
-        {/* Step 2: Atelier Inspection & Gift Wrap (Active) */}
+        {/* Step 2: Quality Inspection & Gift Wrap (Active) */}
         <div className="relative flex items-start gap-3">
           <div className="absolute -left-6 top-0.5 size-5 rounded-full bg-primary-fixed text-primary flex items-center justify-center shadow-xs ring-4 ring-surface-container-lowest">
             <SparklesIcon size={12} />
@@ -434,7 +434,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-sans text-xs sm:text-sm text-primary font-bold">
-                Atelier Inspection &amp; Gift Wrap
+                Quality Inspection &amp; Gift Wrap
               </span>
               <span className="bg-primary-fixed text-primary px-2 py-0.5 rounded-full font-sans text-[10px] font-bold">
                 Active
@@ -545,7 +545,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
             Curated Items ({items.length})
           </h3>
         </div>
-        <span className="font-sans text-xs text-on-surface-variant">Atelier Parcel</span>
+        <span className="font-sans text-xs text-on-surface-variant">Curated Parcel</span>
       </div>
 
       {/* Item List */}
@@ -695,7 +695,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
             The Maevelle Promise
           </h3>
           <p className="text-xs text-on-surface-variant">
-            Atelier craftsmanship &amp; doorstep client care
+            Artisanal craftsmanship &amp; doorstep client care
           </p>
         </div>
       </div>

@@ -80,7 +80,7 @@ export const DEFAULT_WISHLIST_ITEMS: readonly WishlistItem[] = [
     subtitle: 'Deep Berry Silk • Hand-Tied',
     price: 850,
     deliveryTag: 'Ready to Ship',
-    badge: 'Trending in Dhaka',
+    badge: 'Trending in Bangladesh',
     badgeType: 'surface-container-high',
     imageUrl:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuC2VSdj9EIVfEU5Ei9fwYA-TKQmsNgBjl9xSQVTwp7NUQdjypVNCWazUEX3jAcl_fuhubV125KMMU14IA3Y2n1sH724DRgULOhPJY_LYX2oOYcygMRV7PKFdVm-TxHR4Q5CAOPysPJFuRAM1T5enCbB5JPAK61oDekNVTN23sruQnf4mgaMy9CF4zZTf_bbNnYZaGB06BH0VaYVrHaBhdeZukGefTNzvpHeuX0YtF66rKoiDdT2yd3E',

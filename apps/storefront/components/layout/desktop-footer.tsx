@@ -61,7 +61,7 @@ export function DesktopFooter({
                 {storeName}
               </span>
               <span className="font-label-sm text-[9.5px] font-medium tracking-[0.28em] text-on-surface-variant/75 uppercase mt-1">
-                Dhaka • Atelier
+                Bangladesh
               </span>
             </Link>
             <p className="text-body-sm text-xs leading-relaxed text-on-surface-variant">
@@ -73,14 +73,14 @@ export function DesktopFooter({
           <div className="w-full max-w-sm space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="font-label-sm text-xs font-semibold uppercase tracking-wider text-on-surface">
-                Atelier Dispatches
+                Maevelle Dispatches
               </span>
               <span className="text-[11px] text-on-surface-variant/70 font-mono">
                 Curated &amp; Private
               </span>
             </div>
             <p className="text-body-sm text-xs text-on-surface-variant">
-              Invitations to limited studio drops, care guides, and Dhaka previews.
+              Invitations to new drops, care guides, and seasonal previews.
             </p>
 
             {subscribed ? (
@@ -91,7 +91,7 @@ export function DesktopFooter({
             ) : (
               <form className="relative flex items-center pt-1" onSubmit={handleSubscribe}>
                 <input
-                  aria-label="Email address for atelier letters"
+                  aria-label="Email address for newsletter"
                   className="h-10 w-full border-b border-border bg-transparent pr-20 text-xs text-on-surface placeholder:text-on-surface-variant/50 transition-[border-color,box-shadow] duration-200 focus:border-primary focus:ring-1 focus:ring-primary/20 focus:outline-none"
                   disabled={isSubmitting}
                   onChange={(e) => setEmail(e.target.value)}
@@ -178,20 +178,20 @@ export function DesktopFooter({
               </li>
               <li>
                 <Link className="transition-colors duration-150 hover:text-primary" href="/reviews/submit">
-                  Write an Atelier Review
+                  Write a Review
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Column 3: The Atelier */}
+          {/* Column 3: Customer Care & Boutique */}
           <div className="col-span-4 space-y-3">
             <span className="block font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
-              The Atelier
+              Customer Care
             </span>
             <div className="space-y-2 text-xs leading-relaxed text-on-surface-variant font-label-md">
               <p>
-                <strong className="text-on-surface font-semibold">Flagship:</strong> Road 11, Banani / Gulshan-2, Dhaka
+                <strong className="text-on-surface font-semibold">Online Boutique:</strong> 100% Online E-commerce Store
               </p>
               <p>
                 <strong className="text-on-surface font-semibold">Client Concierge:</strong>{' '}
@@ -203,7 +203,7 @@ export function DesktopFooter({
                 </a>
               </p>
               <p>
-                <strong className="text-on-surface font-semibold">White Glove Promise:</strong> Doorstep inspection before payment across all 64 districts in Bangladesh.
+                <strong className="text-on-surface font-semibold">Doorstep Inspection:</strong> Doorstep inspection before payment across all 64 districts in Bangladesh.
               </p>
             </div>
           </div>
@@ -216,7 +216,7 @@ export function DesktopFooter({
             <span>© {new Date().getFullYear()} {storeName} Bangladesh Ltd.</span>
             <span>•</span>
             <span className="inline-flex items-center gap-1 text-[11px] text-on-surface-variant/70">
-              <span>🇧🇩 Dhaka, BD (৳ BDT)</span>
+              <span>🇧🇩 Bangladesh (৳ BDT)</span>
             </span>
           </div>
 

@@ -59,7 +59,7 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
     ],
     featured: {
       title: 'Aurelia Pearl Drop Earrings',
-      tag: 'Atelier Spotlight',
+      tag: 'Featured Collection',
       description: 'Hand-strung baroque pearls framed in 18k sculpted gold wire.',
       price: '৳1,650',
       path: '/categories/fine-jewelry',
@@ -76,7 +76,7 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
     ],
     materials: [
       { name: 'Pure Mulberry Silk', desc: '100% grade 6A mulberry silk weave, hand-finished' },
-      { name: 'Artisanal Block Prints', desc: 'Natural organic dyes crafted in South Asian ateliers' },
+      { name: 'Artisanal Block Prints', desc: 'Natural organic dyes crafted with artisanal heritage' },
     ],
     featured: {
       title: 'Monsoon Garden Silk Scarf',
@@ -93,7 +93,7 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
       { name: 'Travertine Mini Bags', path: '/categories/handbags/mini', count: '6 pieces' },
       { name: 'Micro-Quilted Crossbody', path: '/categories/handbags/crossbody', count: '10 pieces' },
       { name: 'Embroidered Silk Potlis', path: '/categories/handbags/potli', count: '8 pieces' },
-      { name: 'Structured Atelier Totes', path: '/categories/handbags/totes', count: '5 pieces' },
+      { name: 'Structured Leather Totes', path: '/categories/handbags/totes', count: '5 pieces' },
     ],
     materials: [
       { name: 'Vegan Luxe Leather', desc: 'Buttery texture with reinforced artisanal edges' },
@@ -248,7 +248,7 @@ export function DesktopNavbar({
     { id: 'handbags', label: 'Handbags & Clutches', path: '/categories/handbags', hasDropdown: true },
     { id: 'hair-accents', label: 'Hair Accents', path: '/categories/hair-accents', hasDropdown: true },
     { id: 'new-arrivals', label: 'New Arrivals', path: '/categories/new-arrivals', isNew: true },
-    { id: 'atelier-drops', label: 'Atelier Drops', path: '/categories/atelier', badge: 'Curated' },
+    { id: 'curated-drops', label: 'Curated Drops', path: '/categories/curated', badge: 'Curated' },
     { id: 'all', label: 'Shop All', path: '/categories' },
   ];
 
@@ -277,7 +277,7 @@ export function DesktopNavbar({
                 {storeName}
               </span>
               <span className="font-label-sm text-[9.5px] font-medium tracking-[0.3em] text-on-surface-variant/80 uppercase mt-1">
-                Dhaka • Atelier
+                Bangladesh
               </span>
             </Link>
 
