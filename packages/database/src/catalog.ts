@@ -3522,6 +3522,10 @@ export async function listCatalogProductWorkItems(
 export async function listCatalogVariantChoices(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
+  filter?: {
+    query?: string | null | undefined;
+    status?: string | null | undefined;
+  },
 ): Promise<
   readonly {
     id: string;
@@ -3530,28 +3534,76 @@ export async function listCatalogVariantChoices(
     productTitle: string;
     status: string;
     optionSummary: string;
+    barcode: string | null;
+    estimatedCostAmount: string | null;
+    categoryName: string | null;
+    primaryImageUrl: string | null;
+    inventoryOnHand: number;
   }[]
 > {
+  const queryPattern = filter?.query?.trim() ? `%${filter.query.trim().toLowerCase()}%` : null;
+  const statusFilter = filter?.status?.trim() || null;
+
   const result = await sql<{
     id: string;
     sku: string;
+    barcode: string | null;
+    estimated_cost_amount: string | null;
     product_id: string;
     product_title: string;
     status: string;
+    category_name: string | null;
+    primary_image_url: string | null;
+    inventory_on_hand: number | null;
     option_summary: string;
   }>`
-    select variant.id::text,variant.sku,product.id::text as product_id,
-      product.title as product_title,variant.status,
+    select
+      variant.id::text,
+      variant.sku,
+      variant.barcode,
+      variant.estimated_cost_amount::text as estimated_cost_amount,
+      product.id::text as product_id,
+      product.title as product_title,
+      variant.status,
+      category.name as category_name,
+      coalesce(
+        (select case
+           when asset.visibility_class = 'PUBLIC' then '/api/media/public/' || asset.id::text || '?rendition=thumbnail'
+           else '/api/admin/media/' || asset.id::text || '/content?rendition=thumbnail'
+         end
+         from catalog.product_media media
+         join media.media_assets asset on asset.id = media.asset_id and asset.organization_id = media.organization_id
+         where media.organization_id = variant.organization_id
+           and media.product_id = product.id
+           and (media.variant_id = variant.id or media.variant_id is null)
+         order by case when media.variant_id = variant.id then 0 else 1 end, media.position asc
+         limit 1),
+        null
+      ) as primary_image_url,
+      coalesce(
+        (select sum(level.sellable_quantity + level.unavailable_quantity)
+         from inventory.inventory_items item
+         join inventory.inventory_levels level
+           on level.inventory_item_id = item.id
+           and level.organization_id = item.organization_id
+         where item.organization_id = variant.organization_id
+           and item.variant_id = variant.id),
+        0
+      )::float as inventory_on_hand,
       coalesce(string_agg(axis.name || ': ' || value.display_value, ' · ' order by axis.position,value.position),'') as option_summary
     from catalog.product_variants variant
     join catalog.products product
       on product.id=variant.product_id and product.organization_id=variant.organization_id
+    left join catalog.categories category
+      on category.id=product.primary_category_id and category.organization_id=product.organization_id
     left join catalog.variant_option_values link
       on link.variant_id=variant.id and link.organization_id=variant.organization_id
     left join catalog.product_option_axes axis on axis.id=link.option_axis_id
     left join catalog.product_option_values value on value.id=link.option_value_id
     where variant.organization_id=${organizationId}
-    group by variant.id,product.id,product.title
+      ${statusFilter ? sql`and variant.status = ${statusFilter}` : sql``}
+      ${queryPattern ? sql`and (lower(product.title) like ${queryPattern} or lower(variant.sku) like ${queryPattern} or (variant.barcode is not null and lower(variant.barcode) like ${queryPattern}))` : sql``}
+    group by variant.id, variant.sku, variant.barcode, variant.estimated_cost_amount, variant.status, variant.organization_id, product.id, product.title, category.name
     order by product.title,variant.sku,variant.id
   `.execute(db);
   return result.rows.map((row) => ({
@@ -3561,6 +3613,11 @@ export async function listCatalogVariantChoices(
     productTitle: row.product_title,
     status: row.status,
     optionSummary: row.option_summary,
+    barcode: row.barcode ?? null,
+    estimatedCostAmount: row.estimated_cost_amount ?? null,
+    categoryName: row.category_name ?? null,
+    primaryImageUrl: row.primary_image_url ?? null,
+    inventoryOnHand: row.inventory_on_hand !== null ? Number(row.inventory_on_hand) : 0,
   }));
 }
 

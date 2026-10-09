@@ -11,7 +11,9 @@ import {
   discardLandedCostDraftRevision,
   finalizeLandedCostWorksheet,
   getInventoryValuation,
+  getLandedCostWorksheet,
   listCostLayers,
+  listLandedCostWorksheets,
   listOutboundCostAssignments,
   previewLandedCostWorksheet,
   verifyCostingIntegrity,
@@ -1075,5 +1077,29 @@ describe('landed-cost deterministic allocation', () => {
     expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'UNCOSTED_INVENTORY' })]),
     );
+  });
+
+  it('retrieves landed cost worksheet with shipment and warehouse location details', async () => {
+    const input = await receivedShipment();
+    const created = await createLandedCostWorksheet(database.db, {
+      ...input,
+      baseCurrencyCode: 'CNY',
+    });
+    const worksheet = await getLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      worksheetId: created.id,
+    });
+    expect(worksheet.id).toBe(created.id);
+    expect(worksheet.shipment_id).toBe(input.shipmentId);
+    expect(worksheet.receiving_location_name).toBeTruthy();
+    expect(worksheet.revisions.length).toBe(1);
+    expect(worksheet.revisions[0]!.id).toBe(created.revisionId);
+
+    const list = await listLandedCostWorksheets(database.db, input.organizationId, {
+      shipmentId: input.shipmentId,
+    });
+    expect(list.length).toBe(1);
+    expect(list[0]!.id).toBe(created.id);
+    expect(list[0]!.receiving_location_name).toBe(worksheet.receiving_location_name);
   });
 });

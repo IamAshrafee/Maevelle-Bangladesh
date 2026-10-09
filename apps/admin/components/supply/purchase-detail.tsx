@@ -213,7 +213,10 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
     );
   }
 
-  function handleAddLine(data: { variantId: string; quantity: string; unitPrice: string }) {
+  function handleAddLine(
+    data: { variantId: string; quantity: string; unitPrice: string },
+    keepOpen?: boolean,
+  ) {
     void run(
       () =>
         supplyRequest(`/admin/purchases/${purchaseId}/lines`, {
@@ -221,7 +224,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           body: JSON.stringify(data),
         }),
       'Purchase item added.',
-      () => setAddLineOpen(false),
+      keepOpen ? undefined : () => setAddLineOpen(false),
     );
   }
 

@@ -1299,6 +1299,8 @@ export async function getInventoryValuation(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; inventoryItemId?: string; locationId?: string },
 ) {
+  const inventoryItemId = input.inventoryItemId?.trim() || null;
+  const locationId = input.locationId?.trim() || null;
   const rows = await sql<{
     inventory_item_id: string;
     location_id: string;
@@ -1321,8 +1323,8 @@ export async function getInventoryValuation(
     join catalog.products product on product.id = variant.product_id
     join warehouse.locations location on location.id = position.location_id
     where layer.organization_id = ${input.organizationId}
-      and (${input.inventoryItemId ?? null}::uuid is null or layer.inventory_item_id = ${input.inventoryItemId ?? null}::uuid)
-      and (${input.locationId ?? null}::uuid is null or position.location_id = ${input.locationId ?? null}::uuid)
+      and (${inventoryItemId}::uuid is null or layer.inventory_item_id = ${inventoryItemId}::uuid)
+      and (${locationId}::uuid is null or position.location_id = ${locationId}::uuid)
     group by layer.inventory_item_id, position.location_id, position.condition_code, layer.currency_code, product.title, variant.sku, location.name
     union all
     select layer.inventory_item_id, position.location_id, position.condition_code, layer.currency_code,
@@ -1335,8 +1337,8 @@ export async function getInventoryValuation(
     join catalog.products product on product.id = variant.product_id
     join warehouse.locations location on location.id = position.location_id
     where layer.organization_id = ${input.organizationId}
-      and (${input.inventoryItemId ?? null}::uuid is null or layer.inventory_item_id = ${input.inventoryItemId ?? null}::uuid)
-      and (${input.locationId ?? null}::uuid is null or position.location_id = ${input.locationId ?? null}::uuid)
+      and (${inventoryItemId}::uuid is null or layer.inventory_item_id = ${inventoryItemId}::uuid)
+      and (${locationId}::uuid is null or position.location_id = ${locationId}::uuid)
     group by layer.inventory_item_id, position.location_id, position.condition_code, layer.currency_code, product.title, variant.sku, location.name
     order by inventory_item_id, location_id, condition_code, currency_code
   `.execute(db);
@@ -1403,7 +1405,7 @@ export async function getLandedCostWorksheet(
       loc.name as receiving_location_name
     from landed_cost.worksheets w
     left join inbound_shipment.shipments s on s.id = w.shipment_id and s.organization_id = w.organization_id
-    left join inventory.warehouse_locations loc on loc.id = s.receiving_location_id and loc.organization_id = w.organization_id
+    left join warehouse.locations loc on loc.id = s.receiving_location_id and loc.organization_id = s.organization_id
     where w.organization_id = ${input.organizationId} and w.id = ${input.worksheetId}
   `.execute(db);
   const header = worksheet.rows[0];
@@ -1418,15 +1420,16 @@ export async function getLandedCostWorksheet(
       created_at: string;
       finalized_at: string | null;
       total_effect: string;
+      component_count: string;
     }>`
       select revision.id, revision.revision_number::text, revision.revision_kind, revision.status, revision.supersedes_revision_id,
         revision.created_at::text, revision.finalized_at::text,
         coalesce(sum(component.worksheet_amount), 0)::text as total_effect,
         count(component.id)::text as component_count
       from landed_cost.worksheet_revisions revision
-      left join landed_cost.cost_components component on component.worksheet_revision_id = revision.id
+      left join landed_cost.cost_components component on component.worksheet_revision_id = revision.id and component.organization_id = revision.organization_id
       where revision.organization_id = ${input.organizationId} and revision.worksheet_id = ${input.worksheetId}
-      group by revision.id
+      group by revision.id, revision.revision_number, revision.revision_kind, revision.status, revision.supersedes_revision_id, revision.created_at, revision.finalized_at
       order by revision.revision_number desc
     `.execute(db),
     sql<{
@@ -1471,8 +1474,8 @@ export async function getLandedCostWorksheet(
         allocation.sku_snapshot as sku, allocation.product_title_snapshot as product_title,
         target.eligible_quantity::text as quantity
       from landed_cost.acquisition_cost_results result
-      join landed_cost.allocation_targets target on target.id = result.allocation_target_id
-      join inbound_shipment.purchase_line_allocations allocation on allocation.id = target.shipment_allocation_id
+      join landed_cost.allocation_targets target on target.id = result.allocation_target_id and target.organization_id = result.organization_id
+      join inbound_shipment.purchase_line_allocations allocation on allocation.id = target.shipment_allocation_id and allocation.organization_id = target.organization_id
       where result.organization_id = ${input.organizationId}
         and result.worksheet_revision_id in (select id from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and worksheet_id = ${input.worksheetId})
       order by allocation.product_title_snapshot, allocation.sku_snapshot
@@ -1491,8 +1494,9 @@ export async function listLandedCostWorksheets(
   organizationId: string,
   input: { shipmentId?: string } = {},
 ) {
+  const shipmentId = input.shipmentId?.trim() || null;
   const ids = await sql<{ id: string }>`
-    select id from landed_cost.worksheets where organization_id = ${organizationId} and (${input.shipmentId ?? null}::uuid is null or shipment_id = ${input.shipmentId ?? null}::uuid) order by created_at desc, id desc
+    select id from landed_cost.worksheets where organization_id = ${organizationId} and (${shipmentId}::uuid is null or shipment_id = ${shipmentId}::uuid) order by created_at desc, id desc
   `.execute(db);
   return Promise.all(
     ids.rows.map((row) => getLandedCostWorksheet(db, { organizationId, worksheetId: row.id })),

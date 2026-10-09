@@ -144,48 +144,65 @@ export function PurchaseDetailItemsTable({
               const lineReceived = Number(line.receivedQuantity);
               const lineTotal = lineOrdered * Number(line.unitPrice);
 
-              // Resolve option summary if not on line
+              const variantChoice = variants.find((v) => v.id === line.variantId);
               const optionSummary =
                 line.optionSummary ||
-                variants.find((v) => v.id === line.variantId)?.optionSummary ||
+                variantChoice?.optionSummary ||
                 '';
+              const imageUrl = variantChoice?.primaryImageUrl;
 
               return (
                 <TableRow key={line.id} className="group">
                   {/* Product Details */}
-                  <TableCell className="max-w-[280px]">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-baseline gap-1.5">
-                        <Link
-                          href={`/products/${line.productId}`}
-                          className="font-medium text-foreground hover:underline"
-                        >
-                          {line.productTitle}
-                        </Link>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono text-xs text-muted-foreground">{line.sku}</span>
-                        {optionSummary ? (
-                          <Badge variant="secondary" className="text-[10px] font-normal">
-                            {optionSummary}
-                          </Badge>
-                        ) : null}
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <Link
-                                href={`/inventory/stock?q=${encodeURIComponent(line.sku)}`}
-                                className="inline-flex items-center gap-0.5 text-[11px] text-primary hover:underline"
-                              />
-                            }
+                  <TableCell className="max-w-[320px]">
+                    <div className="flex items-center gap-3">
+                      {imageUrl ? (
+                        <div className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted/30">
+                          <img
+                            src={imageUrl}
+                            alt={line.productTitle}
+                            className="size-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-muted/20 text-muted-foreground/60">
+                          <Package className="size-5" />
+                        </div>
+                      )}
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-baseline gap-1.5">
+                          <Link
+                            href={`/products/${line.productId}`}
+                            className="font-medium text-foreground hover:underline truncate"
                           >
-                            <span>Stock</span>
-                            <ExternalLink className="size-2.5" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            Inspect stock positions and availability for {line.sku}
-                          </TooltipContent>
-                        </Tooltip>
+                            {line.productTitle}
+                          </Link>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-xs text-muted-foreground">{line.sku}</span>
+                          {optionSummary ? (
+                            <Badge variant="secondary" className="text-[10px] font-normal">
+                              {optionSummary}
+                            </Badge>
+                          ) : null}
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Link
+                                  href={`/inventory/stock?q=${encodeURIComponent(line.sku)}`}
+                                  className="inline-flex items-center gap-0.5 text-[11px] text-primary hover:underline"
+                                />
+                              }
+                            >
+                              <span>Stock</span>
+                              <ExternalLink className="size-2.5" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              Search current warehouse on-hand levels for this SKU
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                   </TableCell>

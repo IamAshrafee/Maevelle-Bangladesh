@@ -265,7 +265,7 @@ export function LandedCostWorksheetDetail({
                   key={rev.id}
                   type="button"
                   onClick={() => setSelectedRevisionId(rev.id)}
-                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
                     isSelected
                       ? 'bg-background text-foreground shadow-xs ring-1 ring-border'
                       : 'text-muted-foreground hover:bg-background/50 hover:text-foreground'

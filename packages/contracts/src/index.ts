@@ -701,6 +701,11 @@ export interface CatalogVariantChoiceDto {
   readonly productTitle: string;
   readonly status: string;
   readonly optionSummary: string;
+  readonly barcode?: string | null;
+  readonly primaryImageUrl?: string | null;
+  readonly estimatedCostAmount?: string | null;
+  readonly categoryName?: string | null;
+  readonly inventoryOnHand?: number | null;
 }
 
 export interface CatalogVariantMatrixDto {
