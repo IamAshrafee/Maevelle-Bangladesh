@@ -92,6 +92,16 @@ export const notificationEventCatalog: readonly NotificationEventDefinition[] = 
   customer('reviews.merchant_response.upserted', 'REVIEW_RESPONSE', false),
 
   staff(
+    'integrity.critical_finding.detected',
+    'CRITICAL_INTEGRITY_FINDING',
+    'admin.integrity.view',
+    'Critical integrity finding detected',
+    'A high-impact consistency issue requires authorized investigation. Sensitive evidence is available only in System Integrity.',
+    (id, payload) => `/integrity?findingId=${payloadId(payload, 'findingId', id)}`,
+    'CRITICAL',
+    'SYSTEM',
+  ),
+  staff(
     'orders.order.placed',
     'ORDER_AWAITING_REVIEW',
     'orders.view',

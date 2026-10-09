@@ -23,7 +23,7 @@ async function request<T>(path: string, init?: RequestInit) {
 }
 export function IntegrityConsole() {
   const [findings, setFindings] = useState<readonly Finding[]>([]);
-  const [message, setMessage] = useState('Running integrity verifiers…');
+  const [message, setMessage] = useState('Loading integrity findings…');
   const reload = useCallback(async () => {
     try {
       setFindings((await request<ApiEnvelope<readonly Finding[]>>('/admin/integrity')).data);
@@ -35,16 +35,15 @@ export function IntegrityConsole() {
   useEffect(() => {
     void reload();
   }, [reload]);
-  const repair = async (projection: 'ANALYTICS' | 'SEARCH') => {
+  const runChecks = async () => {
     try {
-      await request('/admin/integrity/repairs', {
+      await request('/admin/integrity/runs', {
         method: 'POST',
-        body: JSON.stringify({ projection }),
+        body: JSON.stringify({}),
       });
-      setMessage(`${projection} projection rebuilt from authoritative source facts.`);
-      await reload();
+      setMessage('Integrity scan queued. Results will appear after the Worker completes it.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Repair was rejected.');
+      setMessage(error instanceof Error ? error.message : 'Integrity scan was rejected.');
     }
   };
   return (
@@ -58,11 +57,8 @@ export function IntegrityConsole() {
         </p>
         <p role="status">{message}</p>
         <p>
-          <button type="button" onClick={() => void repair('ANALYTICS')}>
-            Rebuild Analytics
-          </button>{' '}
-          <button type="button" onClick={() => void repair('SEARCH')}>
-            Rebuild Search projection
+          <button type="button" onClick={() => void runChecks()}>
+            Run integrity checks
           </button>
         </p>
         {findings.length === 0 && !message ? <p>No integrity findings.</p> : null}

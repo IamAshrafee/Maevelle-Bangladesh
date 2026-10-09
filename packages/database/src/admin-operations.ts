@@ -1,15 +1,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from './index.js';
-import { rebuildAnalyticsProjections, verifyAnalyticsIntegrity } from './analytics.js';
 import { createCatalogProduct } from './catalog.js';
-import { verifyCostingIntegrity } from './costing.js';
-import { verifyInventoryIntegrity } from './inventory.js';
-import { verifyFinanceIntegrity } from './finance.js';
-import { verifyNotificationIntegrationIntegrity } from './notifications.js';
-import { verifyPaymentIntegrity } from './payments.js';
-import { rebuildRatingSummary, verifyReviewIntegrity } from './reviews.js';
-import { verifyReturnIntegrity } from './returns.js';
 
 const resourceKeys = new Set([
   'orders',
@@ -85,7 +77,7 @@ export async function getOperationsOverview(
       ),
       sql<{
         count: string;
-      }>`select count(*)::text as count from platform.integrity_issues where organization_id=${organizationId} and status in ('OPEN','INVESTIGATING')`.execute(
+      }>`select count(*)::text as count from platform.integrity_issues where organization_id=${organizationId} and status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING')`.execute(
         db,
       ),
     ]);
@@ -315,102 +307,6 @@ export async function updateSavedView(
       )
     ).rows[0];
   });
-}
-
-export async function getIntegrityCenter(db: Kysely<DatabaseSchema>, organizationId: string) {
-  const [
-    inventory,
-    costing,
-    returns,
-    finance,
-    payments,
-    reviews,
-    notifications,
-    analytics,
-    persisted,
-  ] = await Promise.all([
-    verifyInventoryIntegrity(db, organizationId),
-    verifyCostingIntegrity(db, organizationId),
-    verifyReturnIntegrity(db, organizationId),
-    verifyFinanceIntegrity(db, organizationId),
-    verifyPaymentIntegrity(db, organizationId),
-    verifyReviewIntegrity(db, organizationId),
-    verifyNotificationIntegrationIntegrity(db, organizationId),
-    verifyAnalyticsIntegrity(db, organizationId),
-    sql`select id::text,domain,issue_type code,severity,entity_type,entity_id::text,status,summary description,detected_at::text,repair_reference from platform.integrity_issues where organization_id=${organizationId} and status in ('OPEN','INVESTIGATING') order by detected_at desc`.execute(
-      db,
-    ),
-  ]);
-  const normalize = (domain: string, items: readonly unknown[]) =>
-    items.map((item) => ({
-      domain,
-      severity: 'ERROR',
-      code:
-        typeof item === 'string'
-          ? item
-          : String(
-              (item as { code?: string }).code ??
-                (item as { issueType?: string }).issueType ??
-                'INTEGRITY_FINDING',
-            ),
-      description:
-        typeof item === 'string'
-          ? item
-          : String(
-              (item as { detail?: string }).detail ??
-                (item as { summary?: string }).summary ??
-                'Integrity verification found an inconsistency.',
-            ),
-      repairability:
-        domain === 'Analytics' || domain === 'Reviews'
-          ? 'REBUILDABLE_PROJECTION'
-          : 'DIAGNOSIS_ONLY',
-    }));
-  return [
-    ...normalize('Inventory', inventory),
-    ...normalize('Costing', costing),
-    ...normalize('Returns', returns),
-    ...normalize('Finance', finance),
-    ...normalize('Payments', payments.issues),
-    ...normalize('Reviews', reviews),
-    ...normalize('Notifications/Integrations', notifications),
-    ...normalize('Analytics', analytics),
-    ...persisted.rows,
-  ];
-}
-
-export async function repairProjection(
-  db: Kysely<DatabaseSchema>,
-  input: {
-    organizationId: string;
-    actorId: string;
-    projection: 'ANALYTICS' | 'REVIEW_RATINGS' | 'SEARCH';
-    resourceId?: string;
-  },
-) {
-  const run = await sql<{
-    id: string;
-  }>`insert into platform.projection_repair_runs(organization_id,projection_type,resource_id,requested_by,status) values(${input.organizationId},${input.projection},${input.resourceId ?? null}::uuid,${input.actorId}::uuid,'RUNNING') returning id`.execute(
-    db,
-  );
-  const id = run.rows[0]!.id;
-  try {
-    if (input.projection === 'ANALYTICS')
-      await rebuildAnalyticsProjections(db, input.organizationId);
-    else if (input.projection === 'REVIEW_RATINGS' && input.resourceId)
-      await rebuildRatingSummary(db, input.organizationId, input.resourceId);
-    else if (input.projection !== 'SEARCH')
-      throw new AdminOperationsError('A Product is required for Review Rating repair.');
-    await sql`update platform.projection_repair_runs set status='SUCCEEDED',completed_at=now() where id=${id}::uuid`.execute(
-      db,
-    );
-    return { id, status: 'SUCCEEDED' as const };
-  } catch (error) {
-    await sql`update platform.projection_repair_runs set status='FAILED',completed_at=now(),error_code='REBUILD_FAILED' where id=${id}::uuid`.execute(
-      db,
-    );
-    throw error;
-  }
 }
 
 type CatalogImportRow = {

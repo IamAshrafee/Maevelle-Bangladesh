@@ -1,8 +1,9 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
 import * as operations from '@maevelle/database/admin-operations';
+import * as integrity from '@maevelle/database/integrity';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
@@ -144,43 +145,241 @@ export function registerAdminOperationsRoutes(
       }
     },
   );
-  app.get('/admin/integrity', async (request, reply) => {
+  const integrityError = (reply: FastifyReply, error: unknown) => {
+    if (!(error instanceof integrity.IntegrityDomainError))
+      return reply
+        .code(500)
+        .send({ error: { code: 'INTERNAL_ERROR', message: 'Integrity operation failed.' } });
+    const status =
+      error.code === 'NOT_FOUND'
+        ? 404
+        : error.code === 'CONFLICT' || error.code === 'STALE_VERSION'
+          ? 409
+          : 422;
+    return reply.code(status).send({ error: { code: error.code, message: error.message } });
+  };
+  app.get('/admin/integrity/checks', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'admin.integrity.view');
-    if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
-    return { data: await operations.getIntegrityCenter(database.db, active.organizationId) };
+    if (!active)
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+    return { data: integrity.listIntegrityChecks() };
   });
+  const findingQuery = Type.Object({
+    page: Type.Optional(Type.Integer({ minimum: 1 })),
+    pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    status: Type.Optional(Type.String()),
+    severity: Type.Optional(Type.String()),
+    module: Type.Optional(Type.String()),
+  });
+  app.get('/admin/integrity', { schema: { querystring: findingQuery } }, async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'admin.integrity.view');
+    if (!active)
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+    const query = request.query as {
+      page?: number;
+      pageSize?: number;
+      status?: string;
+      severity?: string;
+      module?: string;
+    };
+    const result = await integrity.listIntegrityFindings(database.db, {
+      organizationId: active.organizationId,
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 25,
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.severity ? { severity: query.severity } : {}),
+      ...(query.module ? { module: query.module } : {}),
+    });
+    return { data: result.items, meta: { pagination: result.pagination } };
+  });
+  app.get(
+    '/admin/integrity/findings/:findingId',
+    { schema: { params: Type.Object({ findingId: Type.String({ format: 'uuid' }) }) } },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'admin.integrity.view');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      try {
+        return {
+          data: await integrity.getIntegrityFinding(
+            database.db,
+            active.organizationId,
+            (request.params as { findingId: string }).findingId,
+          ),
+        };
+      } catch (error) {
+        return integrityError(reply, error);
+      }
+    },
+  );
+  app.patch(
+    '/admin/integrity/findings/:findingId',
+    {
+      schema: {
+        params: Type.Object({ findingId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          version: Type.Integer({ minimum: 1 }),
+          status: Type.Union([
+            Type.Literal('OPEN'),
+            Type.Literal('INVESTIGATING'),
+            Type.Literal('ACCEPTED'),
+          ]),
+          reason: Type.Optional(Type.String({ minLength: 8, maxLength: 1000 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'admin.integrity.view');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      try {
+        return {
+          data: await integrity.updateFindingStatus(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            findingId: (request.params as { findingId: string }).findingId,
+            ...(request.body as {
+              version: number;
+              status: 'OPEN' | 'INVESTIGATING' | 'ACCEPTED';
+              reason?: string;
+            }),
+          }),
+        };
+      } catch (error) {
+        return integrityError(reply, error);
+      }
+    },
+  );
+  app.get(
+    '/admin/integrity/runs',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'admin.integrity.view');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      const query = request.query as { page?: number; pageSize?: number };
+      const result = await integrity.listIntegrityRuns(
+        database.db,
+        active.organizationId,
+        query.page ?? 1,
+        query.pageSize ?? 25,
+      );
+      return { data: result.items, meta: { pagination: result.pagination } };
+    },
+  );
+  app.get(
+    '/admin/integrity/runs/:runId',
+    { schema: { params: Type.Object({ runId: Type.String({ format: 'uuid' }) }) } },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'admin.integrity.view');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      try {
+        return {
+          data: await integrity.getIntegrityRun(
+            database.db,
+            active.organizationId,
+            (request.params as { runId: string }).runId,
+          ),
+        };
+      } catch (error) {
+        return integrityError(reply, error);
+      }
+    },
+  );
   app.post(
-    '/admin/integrity/repairs',
+    '/admin/integrity/runs',
     {
       schema: {
         body: Type.Object({
-          projection: Type.Union([
-            Type.Literal('ANALYTICS'),
-            Type.Literal('REVIEW_RATINGS'),
-            Type.Literal('SEARCH'),
-          ]),
-          resourceId: Type.Optional(Type.String()),
+          module: Type.Optional(Type.String({ maxLength: 80 })),
+          checkIds: Type.Optional(
+            Type.Array(Type.String({ maxLength: 120 }), { minItems: 1, maxItems: 25 }),
+          ),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'admin.integrity.run');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      try {
+        const body = request.body as { module?: string; checkIds?: string[] };
+        return reply.code(202).send({
+          data: await integrity.requestIntegrityRun(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            triggerType: body.module || body.checkIds ? 'TARGETED' : 'MANUAL',
+            ...(body.module ? { module: body.module } : {}),
+            ...(body.checkIds ? { checkIds: body.checkIds } : {}),
+          }),
+        });
+      } catch (error) {
+        return integrityError(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/integrity/findings/:findingId/repair-preview',
+    { schema: { params: Type.Object({ findingId: Type.String({ format: 'uuid' }) }) } },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'admin.integrity.repair');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      try {
+        return {
+          data: await integrity.previewIntegrityRepair(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            findingId: (request.params as { findingId: string }).findingId,
+          }),
+        };
+      } catch (error) {
+        return integrityError(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/integrity/findings/:findingId/repairs',
+    {
+      schema: {
+        params: Type.Object({ findingId: Type.String({ format: 'uuid' }) }),
+        headers: Type.Object(
+          { 'idempotency-key': Type.String({ minLength: 8, maxLength: 200 }) },
+          { additionalProperties: true },
+        ),
+        body: Type.Object({
+          findingVersion: Type.Integer({ minimum: 1 }),
+          repairKey: Type.Union([Type.Literal('ANALYTICS'), Type.Literal('REVIEW_RATINGS')]),
         }),
       },
     },
     async (request, reply) => {
       const active = await context(database, auth, request.headers, 'admin.integrity.repair');
-      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
       try {
         return {
-          data: await operations.repairProjection(database.db, {
+          data: await integrity.executeIntegrityRepair(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
+            findingId: (request.params as { findingId: string }).findingId,
+            idempotencyKey: String(request.headers['idempotency-key']),
             ...(request.body as {
-              projection: 'ANALYTICS' | 'REVIEW_RATINGS' | 'SEARCH';
-              resourceId?: string;
+              findingVersion: number;
+              repairKey: 'ANALYTICS' | 'REVIEW_RATINGS';
             }),
           }),
         };
       } catch (error) {
-        return reply
-          .code(422)
-          .send({ error: error instanceof Error ? error.message : 'REPAIR_REJECTED' });
+        return integrityError(reply, error);
       }
     },
   );

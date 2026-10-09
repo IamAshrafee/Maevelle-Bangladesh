@@ -21,17 +21,14 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       status text not null check(status in ('PENDING','COMPLETED','FAILED')), filters jsonb not null default '{}'::jsonb check(jsonb_typeof(filters)='object'), row_count integer,
       result_data jsonb check(result_data is null or jsonb_typeof(result_data)='array'), created_at timestamptz not null default now(), completed_at timestamptz
     );
-    create table platform.projection_repair_runs (
-      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), projection_type text not null check(projection_type in ('ANALYTICS','REVIEW_RATINGS','SEARCH')),
-      resource_id uuid, requested_by uuid not null references iam.users(id), status text not null check(status in ('RUNNING','SUCCEEDED','FAILED')), started_at timestamptz not null default now(), completed_at timestamptz, error_code text
-    );
     insert into iam.capability_definitions(capability_code,domain,description,sensitivity) values
       ('admin.integrity.view','admin','View unified integrity findings and safe projection repairs.','HIGH'),
+      ('admin.integrity.run','admin','Run bounded manual and targeted integrity scans.','HIGH'),
       ('admin.integrity.repair','admin','Run allow-listed rebuildable projection repairs.','HIGH'),
       ('admin.team.view','iam','View organization membership and capability assignments.','HIGH'),
       ('admin.imports.manage','admin','Validate and confirm domain-service imports.','HIGH') on conflict do nothing;
     insert into iam.membership_capability_grants(membership_id,capability_code)
-      select m.id,c.capability_code from iam.organization_memberships m cross join(values('admin.integrity.view'),('admin.integrity.repair'),('admin.team.view'),('admin.imports.manage')) c(capability_code)
+      select m.id,c.capability_code from iam.organization_memberships m cross join(values('admin.integrity.view'),('admin.integrity.run'),('admin.integrity.repair'),('admin.team.view'),('admin.imports.manage')) c(capability_code)
       where m.membership_type='OWNER' and m.status='ACTIVE' on conflict do nothing;
   `.execute(db);
 }

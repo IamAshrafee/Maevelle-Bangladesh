@@ -148,6 +148,10 @@
       "types": "./src/admin-operations.ts",
       "default": "./dist/src/admin-operations.js"
     },
+    "./integrity": {
+      "types": "./src/integrity.ts",
+      "default": "./dist/src/integrity.js"
+    },
     "./settings": {
       "types": "./src/settings.ts",
       "default": "./dist/src/settings.js"

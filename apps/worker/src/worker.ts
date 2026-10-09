@@ -17,6 +17,7 @@ import {
 import type { EncryptionKey } from '@maevelle/security';
 import { processAnalyticsOutbox } from '@maevelle/database/analytics';
 import { processCatalogImports } from '@maevelle/database/admin-operations';
+import { processIntegrityRuns, scheduleDueIntegrityRuns } from '@maevelle/database/integrity';
 import { deliverPendingInvitationEmails } from '@maevelle/database/iam';
 import { processStorefrontSearchOutbox } from '@maevelle/database/storefront';
 import { processExpiredPaymentOrders, processOrderOutbox } from '@maevelle/database/orders';
@@ -126,6 +127,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         invitationEmails,
         reviewInvitations,
         purgedNotificationHistory,
+        integrityScheduled,
+        integrityRuns,
       ] = await Promise.all([
         runJob(() => reclaimExpiredJobs(options.database.db)),
         runJob(() =>
@@ -203,6 +206,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           : Promise.resolve(0),
         runJob(() => dispatchPostDeliveryReviewInvitations(options.database.db)),
         runJob(() => purgeExpiredNotificationHistory(options.database.db)),
+        runJob(() => scheduleDueIntegrityRuns(options.database.db)),
+        runJob(() => processIntegrityRuns(options.database.db, `worker:${process.pid}`, 1)),
       ]);
       logger?.debug(
         {
@@ -227,6 +232,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           invitationEmails,
           reviewInvitations,
           purgedNotificationHistory,
+          integrityScheduled,
+          integrityRuns,
         },
         'Worker recovery tick.',
       );
