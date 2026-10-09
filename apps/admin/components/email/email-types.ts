@@ -95,12 +95,22 @@ export const statusExplanations: Record<EmailNotificationStatus, string> = {
   QUEUED: 'Maevelle is waiting for the background email worker to send this message.',
   PROCESSING: 'The email worker has claimed this message and is delivering it to Resend.',
   SENT: 'Resend accepted the message and is attempting delivery to the recipient mail server.',
+  ACCEPTED: 'The provider accepted the message; final mailbox delivery is not yet confirmed.',
   DELIVERED: "The recipient's email provider confirmed successful delivery of the message.",
-  DELIVERY_DELAYED: "The recipient's email provider reported a temporary delay, but is still attempting delivery.",
+  DELIVERY_DELAYED:
+    "The recipient's email provider reported a temporary delay, but is still attempting delivery.",
   FAILED: 'Maevelle or Resend could not complete the send due to a technical error.',
-  BOUNCED: "The recipient's email provider permanently rejected the message (invalid mailbox or domain).",
+  REJECTED: 'The provider rejected the message before accepting it for delivery.',
+  EXPIRED: 'The delivery window ended before this message could safely be sent.',
+  UNDELIVERABLE: 'The provider determined that this recipient cannot receive the message.',
+  UNKNOWN_PROVIDER_OUTCOME:
+    'Provider acceptance is uncertain. Automatic retry is blocked until the outcome is reconciled.',
+  BOUNCED:
+    "The recipient's email provider permanently rejected the message (invalid mailbox or domain).",
   COMPLAINED: 'The recipient marked this email as spam or reported a complaint to their provider.',
-  SUPPRESSED: 'Maevelle intentionally prevents future sending to this address to protect sender reputation.',
+  SUPPRESSED:
+    'Maevelle intentionally prevents future sending to this address to protect sender reputation.',
+  CANCELLED: 'The underlying notification intent was cancelled before this delivery was sent.',
   SKIPPED_NO_EMAIL: 'Skipped because the customer does not have an email address on file.',
   PENDING_MANUAL: 'Automatic delivery is disabled by policy. Manual send is available.',
   NOT_APPLICABLE: 'Not applicable for this order state.',
@@ -114,9 +124,7 @@ export async function fetchEmailApi<T>(path: string, init?: RequestInit): Promis
     headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
   });
   const payload = (await response.json().catch(() => undefined)) as
-    | T
-    | { error?: { message?: string } }
-    | undefined;
+    T | { error?: { message?: string } } | undefined;
   if (!response.ok) {
     const errorMsg =
       payload && typeof payload === 'object' && 'error' in payload && payload.error?.message

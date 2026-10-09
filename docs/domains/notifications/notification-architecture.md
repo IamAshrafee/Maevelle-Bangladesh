@@ -1,8 +1,8 @@
 # Maevelle Ecommerce — Notification & Messaging Architecture
 
 **Document:** `docs/domains/notifications/notification-architecture.md`
-**Status:** Initial Domain Design / Living Document
-**Version:** 0.1
+**Status:** Implemented transactional and operational foundation / Living Document
+**Version:** 1.0
 **Related:** All business domains, `access-control-architecture.md`, `customer-architecture.md`, `media-architecture.md`, `storefront-commerce-architecture.md`
 
 ---
@@ -30,7 +30,7 @@ In-App
 
 Email
 
-Future SMS
+SMS (provider-neutral; production provider selection remains external)
 
 Future WhatsApp
 

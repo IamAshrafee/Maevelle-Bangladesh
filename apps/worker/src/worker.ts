@@ -6,6 +6,8 @@ import {
   pollSmsDeliveryStatuses,
   createWebhookEventsFromOutbox,
   deliverPendingEmails,
+  purgeExpiredNotificationHistory,
+  reconcileUnmatchedEmailProviderEvents,
   type EmailAdapter,
   type SmsProvider,
   type SmsRuntimeOptions,
@@ -64,33 +66,49 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
   let closePromise: Promise<void> | undefined;
   let tickRunning = false;
   const emailAdapter = options.emailAdapter ?? createLocalEmailAdapter();
+  const smsProvider = options.smsProvider;
+  const smsRuntime = options.smsRuntime;
   const invitationEmailAdapter = {
     name: emailAdapter.name,
-    send: (request: {
+    send: async (request: {
       notificationId: string;
       recipient: string;
       subject: string;
       body: string;
       idempotencyKey: string;
-    }) =>
-      emailAdapter.send({
+    }) => {
+      const result = await emailAdapter.send({
         notificationId: request.notificationId,
         recipient: emailAdapter.effectiveRecipient(request.recipient),
         subject: request.subject,
         html: `<pre>${request.body.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`,
         text: request.body,
         idempotencyKey: request.idempotencyKey,
-      }),
+      });
+      return result.status === 'UNKNOWN'
+        ? {
+            status: 'FAILED' as const,
+            retryable: false,
+            errorCode: 'PROVIDER_OUTCOME_UNKNOWN_REQUIRES_RECONCILIATION',
+            ...(result.metadata ? { metadata: result.metadata } : {}),
+          }
+        : result;
+    },
   };
 
   const runTick = async (): Promise<void> => {
     if (tickRunning) return;
     tickRunning = true;
     try {
+      // Some job functions begin work before returning a promise. Starting each
+      // through an async boundary turns synchronous setup failures into owned
+      // rejections, so one malformed dependency cannot orphan sibling jobs.
+      const runJob = async <T>(job: () => Promise<T>): Promise<T> => job();
       const [
         reclaimed,
         notifications,
         emailDeliveries,
+        emailWebhookReconciliations,
         smsDeliveries,
         smsPolls,
         webhookEvents,
@@ -106,68 +124,92 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         mediaPurged,
         webhookDeliveries,
         invitationEmails,
+        reviewInvitations,
+        purgedNotificationHistory,
       ] = await Promise.all([
-        reclaimExpiredJobs(options.database.db),
-        processNotificationOutbox(options.database.db, 20, {
-          ...(options.emailStorefrontBaseUrl
-            ? { storefrontBaseUrl: options.emailStorefrontBaseUrl }
-            : {}),
-          ...(options.emailSupportAddress ? { supportEmail: options.emailSupportAddress } : {}),
-          ...(options.emailSenderFrom ? { senderFrom: options.emailSenderFrom } : {}),
-          ...(options.emailEnvironmentLabel
-            ? { environmentLabel: options.emailEnvironmentLabel }
-            : {}),
-          smsEnabled: options.smsRuntime?.enabled ?? false,
-          smsProviderConfigured: options.smsRuntime?.providerConfigured ?? false,
-          smsProviderName: options.smsRuntime?.providerName ?? 'none',
-          ...(options.smsRuntime?.recipientOverride ? { smsRecipientOverride: options.smsRuntime.recipientOverride } : {}),
-          smsSenderType: options.smsRuntime?.senderType ?? 'PROVIDER_DEFAULT',
-          ...(options.smsRuntime?.senderId ? { smsSenderId: options.smsRuntime.senderId } : {}),
-        }),
+        runJob(() => reclaimExpiredJobs(options.database.db)),
+        runJob(() =>
+          processNotificationOutbox(options.database.db, 20, {
+            ...(options.emailStorefrontBaseUrl
+              ? { storefrontBaseUrl: options.emailStorefrontBaseUrl }
+              : {}),
+            ...(options.emailSupportAddress ? { supportEmail: options.emailSupportAddress } : {}),
+            ...(options.emailSenderFrom ? { senderFrom: options.emailSenderFrom } : {}),
+            ...(options.emailEnvironmentLabel
+              ? { environmentLabel: options.emailEnvironmentLabel }
+              : {}),
+            smsEnabled: options.smsRuntime?.enabled ?? false,
+            smsProviderConfigured: options.smsRuntime?.providerConfigured ?? false,
+            smsProviderName: options.smsRuntime?.providerName ?? 'none',
+            ...(options.smsRuntime?.recipientOverride
+              ? { smsRecipientOverride: options.smsRuntime.recipientOverride }
+              : {}),
+            smsSenderType: options.smsRuntime?.senderType ?? 'PROVIDER_DEFAULT',
+            ...(options.smsRuntime?.senderId ? { smsSenderId: options.smsRuntime.senderId } : {}),
+          }),
+        ),
         options.emailEnabled !== false
-          ? deliverPendingEmails(options.database.db, emailAdapter)
+          ? runJob(() => deliverPendingEmails(options.database.db, emailAdapter))
           : Promise.resolve(0),
-        options.smsProvider && options.smsRuntime
-          ? deliverPendingSms(options.database.db, options.smsProvider, options.smsRuntime, options.smsMaxPerTick ?? 20)
-          : Promise.resolve(0),
-        options.smsProvider
-          ? pollSmsDeliveryStatuses(options.database.db, options.smsProvider, options.smsMaxPerTick ?? 20)
-          : Promise.resolve(0),
-        createWebhookEventsFromOutbox(options.database.db),
-        processAnalyticsOutbox(options.database.db),
-        processCatalogImports(options.database.db),
-        processStorefrontSearchOutbox(options.database.db),
-        processOrderOutbox(options.database.db),
-        expireInventoryReservations(options.database.db),
-        processExpiredPaymentOrders(options.database.db),
-        processCourierBookings(options.database, options.courierProviderResolver),
-        options.mediaStorage
-          ? processMediaBatch(options.database, options.mediaStorage)
-          : Promise.resolve(0),
-        options.mediaStorage
-          ? cleanupExpiredMediaUploads(options.database, options.mediaStorage)
-          : Promise.resolve(0),
-        options.mediaStorage
-          ? purgeOneMediaAsset(options.database, options.mediaStorage)
-          : Promise.resolve(0),
-        options.encryptionKey
-          ? deliverPendingWebhooks(options.database.db, options.encryptionKey)
-          : Promise.resolve(0),
-        options.emailEnabled !== false && options.encryptionKey && options.adminBaseUrl
-          ? deliverPendingInvitationEmails(
-              options.database.db,
-              invitationEmailAdapter,
-              options.encryptionKey,
-              options.adminBaseUrl,
+        runJob(() => reconcileUnmatchedEmailProviderEvents(options.database.db)),
+        smsProvider && smsRuntime
+          ? runJob(() =>
+              deliverPendingSms(
+                options.database.db,
+                smsProvider,
+                smsRuntime,
+                options.smsMaxPerTick ?? 20,
+              ),
             )
           : Promise.resolve(0),
-        dispatchPostDeliveryReviewInvitations(options.database.db),
+        smsProvider
+          ? runJob(() =>
+              pollSmsDeliveryStatuses(
+                options.database.db,
+                smsProvider,
+                options.smsMaxPerTick ?? 20,
+              ),
+            )
+          : Promise.resolve(0),
+        runJob(() => createWebhookEventsFromOutbox(options.database.db)),
+        runJob(() => processAnalyticsOutbox(options.database.db)),
+        runJob(() => processCatalogImports(options.database.db)),
+        runJob(() => processStorefrontSearchOutbox(options.database.db)),
+        runJob(() => processOrderOutbox(options.database.db)),
+        runJob(() => expireInventoryReservations(options.database.db)),
+        runJob(() => processExpiredPaymentOrders(options.database.db)),
+        runJob(() => processCourierBookings(options.database, options.courierProviderResolver)),
+        options.mediaStorage
+          ? runJob(() => processMediaBatch(options.database, options.mediaStorage!))
+          : Promise.resolve(0),
+        options.mediaStorage
+          ? runJob(() => cleanupExpiredMediaUploads(options.database, options.mediaStorage!))
+          : Promise.resolve(0),
+        options.mediaStorage
+          ? runJob(() => purgeOneMediaAsset(options.database, options.mediaStorage!))
+          : Promise.resolve(0),
+        options.encryptionKey
+          ? runJob(() => deliverPendingWebhooks(options.database.db, options.encryptionKey!))
+          : Promise.resolve(0),
+        options.emailEnabled !== false && options.encryptionKey && options.adminBaseUrl
+          ? runJob(() =>
+              deliverPendingInvitationEmails(
+                options.database.db,
+                invitationEmailAdapter,
+                options.encryptionKey!,
+                options.adminBaseUrl!,
+              ),
+            )
+          : Promise.resolve(0),
+        runJob(() => dispatchPostDeliveryReviewInvitations(options.database.db)),
+        runJob(() => purgeExpiredNotificationHistory(options.database.db)),
       ]);
       logger?.debug(
         {
           reclaimed,
           notifications,
           emailDeliveries,
+          emailWebhookReconciliations,
           smsDeliveries,
           smsPolls,
           webhookEvents,
@@ -183,6 +225,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           mediaPurged,
           webhookDeliveries,
           invitationEmails,
+          reviewInvitations,
+          purgedNotificationHistory,
         },
         'Worker recovery tick.',
       );

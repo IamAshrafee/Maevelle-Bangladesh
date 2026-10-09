@@ -2,10 +2,7 @@ import { createHash } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from './index.js';
 import { appendAuditEvent } from './platform.js';
-import {
-  renderTransactionalEmail,
-  type TransactionalEmailTemplateKey,
-} from './email-templates.js';
+import { renderTransactionalEmail, type TransactionalEmailTemplateKey } from './email-templates.js';
 
 export class EmailNotificationError extends Error {
   public constructor(
@@ -21,6 +18,20 @@ export interface EmailRenderOptions {
   readonly supportEmail: string;
   readonly senderFrom?: string;
   readonly environmentLabel?: string;
+}
+
+export interface EmailNotificationDetail extends Record<string, unknown> {
+  readonly status: string;
+  readonly notification_type: string;
+  readonly source_id: string;
+  readonly trigger_type: string;
+  readonly parent_notification_id: string | null;
+  readonly intended_recipient: string | null;
+  readonly effective_recipient: string | null;
+  readonly rendered_html: string | null;
+  readonly failure_code: string | null;
+  readonly attempts: Array<Record<string, unknown> & { retryable?: boolean }>;
+  readonly timeline: Array<Record<string, unknown> & { event_type: string }>;
 }
 
 async function orderEmailModel(
@@ -50,10 +61,17 @@ async function orderEmailModel(
     left join customers.customers customer on customer.id=order_row.customer_id
     left join customers.customer_emails customer_email on customer_email.customer_id=order_row.customer_id and customer_email.is_primary
     left join orders.order_addresses address on address.order_id=order_row.id and address.address_type='DELIVERY'
-    where order_row.organization_id=${organizationId} and (${isUuid ? sql`order_row.id=${trimmed}::uuid` : sql`false`} or order_row.order_number=${trimmed})`.execute(db);
+    where order_row.organization_id=${organizationId} and (${isUuid ? sql`order_row.id=${trimmed}::uuid` : sql`false`} or order_row.order_number=${trimmed})`.execute(
+    db,
+  );
   const row = order.rows[0];
   if (!row) throw new EmailNotificationError('NOT_FOUND', 'Order was not found.');
-  const items = await sql<{ title: string; variant: string | null; quantity: string; amount: string }>`
+  const items = await sql<{
+    title: string;
+    variant: string | null;
+    quantity: string;
+    amount: string;
+  }>`
     select product_title_snapshot title,variant_title_snapshot variant,quantity::text,net_amount::text amount
     from orders.order_lines where order_id=${row.id}::uuid and line_status='ACTIVE' order by id
   `.execute(db);
@@ -68,7 +86,8 @@ async function manualEventEligible(
   orderStatus: string,
 ) {
   if (notificationType === 'ORDER_PLACED') return true;
-  if (notificationType === 'ORDER_CONFIRMED') return ['CONFIRMED', 'COMPLETED'].includes(orderStatus);
+  if (notificationType === 'ORDER_CONFIRMED')
+    return ['CONFIRMED', 'COMPLETED'].includes(orderStatus);
   if (notificationType === 'ORDER_CANCELLED') return orderStatus === 'CANCELLED';
   if (notificationType === 'ORDER_COMPLETED') return orderStatus === 'COMPLETED';
   const result = await sql<{ eligible: boolean }>`select case
@@ -118,7 +137,15 @@ async function policy(
 
 export async function listEmailPolicies(db: Kysely<DatabaseSchema>, organizationId: string) {
   return (
-    await sql`select policy.notification_type,policy.delivery_requirement,channel_policy.template_key,
+    await sql<{
+      notification_type: string;
+      delivery_requirement: 'REQUIRED_OPERATIONAL' | 'OPTIONAL';
+      template_key: TransactionalEmailTemplateKey | null;
+      enabled: boolean;
+      automatic_enabled: boolean;
+      manual_allowed: boolean;
+      updated_at: string | null;
+    }>`select policy.notification_type,policy.delivery_requirement,channel_policy.template_key,
       coalesce(override.enabled,channel_policy.enabled) enabled,
       coalesce(override.automatic_enabled,channel_policy.automatic_enabled) automatic_enabled,
       coalesce(override.manual_allowed,channel_policy.manual_allowed) manual_allowed,
@@ -152,7 +179,9 @@ export async function updateEmailPolicy(
     await sql`insert into notifications.organization_policy_overrides(
       organization_id,notification_type,channel,enabled,automatic_enabled,manual_allowed,updated_by_actor_id
     ) values(${input.organizationId},${input.notificationType},'EMAIL',${input.enabled},${input.automaticEnabled},${input.manualAllowed},${input.actorId})
-    on conflict(organization_id,notification_type,channel) do update set enabled=excluded.enabled,automatic_enabled=excluded.automatic_enabled,manual_allowed=excluded.manual_allowed,updated_by_actor_id=excluded.updated_by_actor_id,updated_at=now()`.execute(tx);
+    on conflict(organization_id,notification_type,channel) do update set enabled=excluded.enabled,automatic_enabled=excluded.automatic_enabled,manual_allowed=excluded.manual_allowed,updated_by_actor_id=excluded.updated_by_actor_id,updated_at=now()`.execute(
+      tx,
+    );
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
       actorType: 'USER',
@@ -220,11 +249,16 @@ export const sampleFixtures: Record<string, SampleFixture> = {
       delivery_address: 'Flat 4B, Plot 18, Block D, Banani, Dhaka 1213',
       email: 'tanvir.hasan@example.com',
       items: [
-        { title: 'Classic Leather Minimalist Wallet', variant: 'Cognac Brown', quantity: '1', amount: '1450.00' },
+        {
+          title: 'Classic Leather Minimalist Wallet',
+          variant: 'Cognac Brown',
+          quantity: '1',
+          amount: '1450.00',
+        },
       ],
     },
   },
-  'discounted': {
+  discounted: {
     key: 'discounted',
     label: 'Discounted Promotional Order',
     description: 'Multiple jewelry items with promotional pricing applied',
@@ -236,8 +270,18 @@ export const sampleFixtures: Record<string, SampleFixture> = {
       delivery_address: 'House 55, Road 9/A, Dhanmondi, Dhaka 1209',
       email: 'sabrina.karim@example.com',
       items: [
-        { title: 'Pearl Cluster Hair Clip Set', variant: 'Gold / Pack of 2', quantity: '2', amount: '1360.00' },
-        { title: 'Zirconia Teardrop Earrings', variant: 'Rose Gold', quantity: '1', amount: '1820.00' },
+        {
+          title: 'Pearl Cluster Hair Clip Set',
+          variant: 'Gold / Pack of 2',
+          quantity: '2',
+          amount: '1360.00',
+        },
+        {
+          title: 'Zirconia Teardrop Earrings',
+          variant: 'Rose Gold',
+          quantity: '1',
+          amount: '1820.00',
+        },
       ],
     },
   },
@@ -253,14 +297,34 @@ export const sampleFixtures: Record<string, SampleFixture> = {
       delivery_address: 'Apartment 7A, Green Tower, GEC Circle, Chattogram 4000',
       email: 'dr.nusrat@example.com',
       items: [
-        { title: 'Handwoven Muslin Saree', variant: 'Lilac Dusk', quantity: '1', amount: '5200.00' },
-        { title: 'Embroidered Velvet Blouse Piece', variant: 'Deep Plum / L', quantity: '1', amount: '1850.00' },
-        { title: 'Silver Filigree Jhumka', variant: 'Oxidized Silver', quantity: '1', amount: '1250.00' },
-        { title: 'Gift Wrap & Premium Box', variant: 'Signature Burgundy', quantity: '1', amount: '600.00' },
+        {
+          title: 'Handwoven Muslin Saree',
+          variant: 'Lilac Dusk',
+          quantity: '1',
+          amount: '5200.00',
+        },
+        {
+          title: 'Embroidered Velvet Blouse Piece',
+          variant: 'Deep Plum / L',
+          quantity: '1',
+          amount: '1850.00',
+        },
+        {
+          title: 'Silver Filigree Jhumka',
+          variant: 'Oxidized Silver',
+          quantity: '1',
+          amount: '1250.00',
+        },
+        {
+          title: 'Gift Wrap & Premium Box',
+          variant: 'Signature Burgundy',
+          quantity: '1',
+          amount: '600.00',
+        },
       ],
     },
   },
-  'cancelled': {
+  cancelled: {
     key: 'cancelled',
     label: 'Cancelled Order',
     description: 'Order cancelled prior to fulfillment',
@@ -272,11 +336,16 @@ export const sampleFixtures: Record<string, SampleFixture> = {
       delivery_address: 'Holding 34, Shahid Minar Road, Sylhet 3100',
       email: 'rafiq.islam@example.com',
       items: [
-        { title: 'Pure Cotton Panjabi', variant: 'Sky Blue / XL', quantity: '1', amount: '2200.00' },
+        {
+          title: 'Pure Cotton Panjabi',
+          variant: 'Sky Blue / XL',
+          quantity: '1',
+          amount: '2200.00',
+        },
       ],
     },
   },
-  'refunded': {
+  refunded: {
     key: 'refunded',
     label: 'Refund Completed Order',
     description: 'Order with returned items and completed refund settlement',
@@ -288,7 +357,12 @@ export const sampleFixtures: Record<string, SampleFixture> = {
       delivery_address: 'House 8, Road 11, Uttara Sector 4, Dhaka 1230',
       email: 'mehzabin.c@example.com',
       items: [
-        { title: 'Georgette Anarkali Gown', variant: 'Emerald / S', quantity: '1', amount: '3450.00' },
+        {
+          title: 'Georgette Anarkali Gown',
+          variant: 'Emerald / S',
+          quantity: '1',
+          amount: '3450.00',
+        },
       ],
     },
   },
@@ -306,7 +380,10 @@ export async function previewOrderEmail(
 ) {
   const selectedPolicy = await policy(db, input.organizationId, input.notificationType);
   if (!selectedPolicy?.template_key)
-    throw new EmailNotificationError('VALIDATION_FAILED', 'This event has no transactional email template.');
+    throw new EmailNotificationError(
+      'VALIDATION_FAILED',
+      'This event has no transactional email template.',
+    );
 
   let orderData: {
     display_name: string;
@@ -318,7 +395,8 @@ export async function previewOrderEmail(
     items: readonly { title: string; variant?: string | null; quantity: string; amount: string }[];
   };
 
-  const activeFixtureKey = input.fixtureKey && sampleFixtures[input.fixtureKey] ? input.fixtureKey : 'multi-item';
+  const activeFixtureKey =
+    input.fixtureKey && sampleFixtures[input.fixtureKey] ? input.fixtureKey : 'multi-item';
 
   if (input.orderId && input.orderId.trim()) {
     const order = await orderEmailModel(db, input.organizationId, input.orderId.trim());
@@ -344,9 +422,7 @@ export async function previewOrderEmail(
     ...(orderData.delivery_address ? { deliveryAddress: orderData.delivery_address } : {}),
     trackingUrl: `${input.options.storefrontBaseUrl}/orders/track`,
     supportEmail: input.options.supportEmail,
-    ...(input.options.environmentLabel
-      ? { environmentLabel: input.options.environmentLabel }
-      : {}),
+    ...(input.options.environmentLabel ? { environmentLabel: input.options.environmentLabel } : {}),
     items: orderData.items.map((item) => ({
       title: item.title,
       ...(item.variant ? { variant: item.variant } : {}),
@@ -367,7 +443,6 @@ export async function previewOrderEmail(
     ...rendered,
   };
 }
-
 
 export async function createManualOrderEmail(
   db: Kysely<DatabaseSchema>,
@@ -391,7 +466,10 @@ export async function createManualOrderEmail(
   return db.transaction().execute(async (tx) => {
     const selectedPolicy = await policy(tx, input.organizationId, input.notificationType);
     if (!selectedPolicy?.enabled || !selectedPolicy.manual_allowed || !selectedPolicy.template_key)
-      throw new EmailNotificationError('FORBIDDEN', 'Manual sending is not allowed for this event.');
+      throw new EmailNotificationError(
+        'FORBIDDEN',
+        'Manual sending is not allowed for this event.',
+      );
     const order = await orderEmailModel(tx, input.organizationId, input.orderId);
     if (
       !(await manualEventEligible(
@@ -406,10 +484,17 @@ export async function createManualOrderEmail(
         'CONFLICT',
         'The order has not reached the business state required by this email.',
       );
-    const recipient = input.recipientOverride?.trim().toLowerCase() || order.email?.trim().toLowerCase();
+    const recipient =
+      input.recipientOverride?.trim().toLowerCase() || order.email?.trim().toLowerCase();
     if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
-      throw new EmailNotificationError('VALIDATION_FAILED', 'The order has no usable email recipient.');
-    const suppressed = await sql`select 1 from notifications.email_suppressions where organization_id=${input.organizationId} and normalized_email=${recipient} and active limit 1`.execute(tx);
+      throw new EmailNotificationError(
+        'VALIDATION_FAILED',
+        'The order has no usable email recipient.',
+      );
+    const suppressed =
+      await sql`select 1 from notifications.email_suppressions where organization_id=${input.organizationId} and normalized_email=${recipient} and active limit 1`.execute(
+        tx,
+      );
     if (suppressed.rows[0] && input.triggerType !== 'TEST')
       throw new EmailNotificationError('CONFLICT', 'This recipient is suppressed.');
     const rendered = renderTransactionalEmail(selectedPolicy.template_key, {
@@ -420,7 +505,9 @@ export async function createManualOrderEmail(
       ...(order.delivery_address ? { deliveryAddress: order.delivery_address } : {}),
       trackingUrl: `${input.options.storefrontBaseUrl}/orders/track`,
       supportEmail: input.options.supportEmail,
-      ...(input.options.environmentLabel ? { environmentLabel: input.options.environmentLabel } : {}),
+      ...(input.options.environmentLabel
+        ? { environmentLabel: input.options.environmentLabel }
+        : {}),
       items: order.items.map((item) => ({
         title: item.title,
         ...(item.variant ? { variant: item.variant } : {}),
@@ -429,20 +516,45 @@ export async function createManualOrderEmail(
       })),
     });
     const logicalKey = `notification:manual:v1:${input.organizationId}:${input.notificationType}:${order.id}:${input.idempotencyKey}`;
+    const requestFingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          orderId: order.id,
+          notificationType: input.notificationType,
+          recipient,
+          triggerType: input.triggerType ?? 'MANUAL',
+          parentNotificationId: input.parentNotificationId ?? null,
+          templateKey: rendered.templateKey,
+          templateVersion: rendered.templateVersion,
+        }),
+      )
+      .digest('hex');
     const inserted = await sql<{ id: string }>`insert into notifications.notifications(
       organization_id,notification_type,recipient_type,customer_id,channel,template_key,template_version,
       rendered_subject,rendered_body,rendered_html,intended_recipient,effective_recipient,sender_from,reply_to,status,trigger_type,
-      triggered_by_actor_id,parent_notification_id,idempotency_key,queued_at,source_domain,source_id
+      triggered_by_actor_id,parent_notification_id,idempotency_key,request_fingerprint,queued_at,source_domain,source_id
     ) values(${input.organizationId},${input.notificationType},'CUSTOMER',${order.customer_id}::uuid,'EMAIL',${rendered.templateKey},${rendered.templateVersion},
       ${rendered.subject},${rendered.text},${rendered.html},${recipient},${recipient},${input.options.senderFrom ?? null},${input.options.supportEmail},'QUEUED',${input.triggerType ?? 'MANUAL'},
-      ${input.actorId},${input.parentNotificationId ?? null}::uuid,${logicalKey},now(),'orders.order',${order.id}::uuid)
+      ${input.actorId},${input.parentNotificationId ?? null}::uuid,${logicalKey},${requestFingerprint},now(),'orders.order',${order.id}::uuid)
     on conflict(idempotency_key) do nothing returning id`.execute(tx);
     const notificationId = inserted.rows[0]?.id;
     if (!notificationId) {
-      const existing = await sql<{ id: string }>`select id from notifications.notifications where idempotency_key=${logicalKey}`.execute(tx);
+      const existing = await sql<{
+        id: string;
+        request_fingerprint: string | null;
+      }>`select id,request_fingerprint from notifications.notifications where idempotency_key=${logicalKey}`.execute(
+        tx,
+      );
+      if (existing.rows[0]?.request_fingerprint !== requestFingerprint)
+        throw new EmailNotificationError(
+          'CONFLICT',
+          'The idempotency key was already used for a different email request.',
+        );
       return { id: existing.rows[0]!.id, created: false };
     }
-    await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,source,metadata) values(${input.organizationId},${notificationId}::uuid,'QUEUED','ADMIN',${JSON.stringify({ reason: input.reason.trim(), triggerType: input.triggerType ?? 'MANUAL' })}::jsonb)`.execute(tx);
+    await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,source,metadata) values(${input.organizationId},${notificationId}::uuid,'QUEUED','ADMIN',${JSON.stringify({ reason: input.reason.trim(), triggerType: input.triggerType ?? 'MANUAL' })}::jsonb)`.execute(
+      tx,
+    );
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
       actorType: 'USER',
@@ -472,11 +584,17 @@ export async function sendTestEmail(
 ) {
   const recipient = input.testRecipient.trim().toLowerCase();
   if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
-    throw new EmailNotificationError('VALIDATION_FAILED', 'A valid test recipient email is required.');
+    throw new EmailNotificationError(
+      'VALIDATION_FAILED',
+      'A valid test recipient email is required.',
+    );
 
   const selectedPolicy = await policy(db, input.organizationId, input.notificationType);
   if (!selectedPolicy?.template_key)
-    throw new EmailNotificationError('VALIDATION_FAILED', 'This event has no transactional email template.');
+    throw new EmailNotificationError(
+      'VALIDATION_FAILED',
+      'This event has no transactional email template.',
+    );
 
   let orderData: {
     display_name: string;
@@ -502,7 +620,8 @@ export async function sendTestEmail(
       orderId: order.id,
     };
   } else {
-    const fixture = sampleFixtures[input.fixtureKey ?? 'multi-item'] ?? sampleFixtures['multi-item']!;
+    const fixture =
+      sampleFixtures[input.fixtureKey ?? 'multi-item'] ?? sampleFixtures['multi-item']!;
     orderData = fixture.data;
   }
 
@@ -514,7 +633,9 @@ export async function sendTestEmail(
     ...(orderData.delivery_address ? { deliveryAddress: orderData.delivery_address } : {}),
     trackingUrl: `${input.options.storefrontBaseUrl}/orders/track`,
     supportEmail: input.options.supportEmail,
-    ...(input.options.environmentLabel ? { environmentLabel: input.options.environmentLabel } : { environmentLabel: 'TEST' }),
+    ...(input.options.environmentLabel
+      ? { environmentLabel: input.options.environmentLabel }
+      : { environmentLabel: 'TEST' }),
     items: orderData.items.map((item) => ({
       title: item.title,
       ...(item.variant ? { variant: item.variant } : {}),
@@ -527,11 +648,18 @@ export async function sendTestEmail(
   return db.transaction().execute(async (tx) => {
     let customerId = orderData.customerId;
     if (!customerId) {
-      const defaultCustomer = await sql<{ id: string }>`select id from customers.customers where organization_id=${input.organizationId} order by created_at asc limit 1`.execute(tx);
+      const defaultCustomer = await sql<{
+        id: string;
+      }>`select id from customers.customers where organization_id=${input.organizationId} order by created_at asc limit 1`.execute(
+        tx,
+      );
       customerId = defaultCustomer.rows[0]?.id;
     }
     if (!customerId) {
-      throw new EmailNotificationError('CONFLICT', 'An organization customer is required to anchor transactional notifications.');
+      throw new EmailNotificationError(
+        'CONFLICT',
+        'An organization customer is required to anchor transactional notifications.',
+      );
     }
 
     const sourceId = orderData.orderId ?? crypto.randomUUID();
@@ -545,7 +673,9 @@ export async function sendTestEmail(
     returning id`.execute(tx);
 
     const notificationId = inserted.rows[0]!.id;
-    await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,source,metadata) values(${input.organizationId},${notificationId}::uuid,'QUEUED','ADMIN',${JSON.stringify({ reason: input.reason?.trim() ?? 'Test send from Email Operations Test Lab', triggerType: 'TEST', testRecipient: recipient })}::jsonb)`.execute(tx);
+    await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,source,metadata) values(${input.organizationId},${notificationId}::uuid,'QUEUED','ADMIN',${JSON.stringify({ reason: input.reason?.trim() ?? 'Test send from Email Operations Test Lab', triggerType: 'TEST', testRecipient: recipient })}::jsonb)`.execute(
+      tx,
+    );
 
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
@@ -568,25 +698,49 @@ export async function getOrderEmailEligibility(
 ) {
   const order = await orderEmailModel(db, input.organizationId, input.orderId);
   const policies = await listEmailPolicies(db, input.organizationId);
-  const policyMap = new Map((policies as any[]).map((p) => [p.notification_type, p]));
+  const policyMap = new Map(policies.map((policyRow) => [policyRow.notification_type, policyRow]));
 
   const recipient = order.email?.trim().toLowerCase() ?? null;
   let isSuppressed = false;
   let suppressionReason: string | null = null;
   if (recipient) {
-    const sup = await sql<{ reason: string }>`select reason from notifications.email_suppressions where organization_id=${input.organizationId} and normalized_email=${recipient} and active limit 1`.execute(db);
+    const sup = await sql<{
+      reason: string;
+    }>`select reason from notifications.email_suppressions where organization_id=${input.organizationId} and normalized_email=${recipient} and active limit 1`.execute(
+      db,
+    );
     if (sup.rows[0]) {
       isSuppressed = true;
       suppressionReason = sup.rows[0].reason;
     }
   }
 
-  const existingNotifications = await sql<Record<string, any>>`select n.*
+  const existingNotifications = await sql<{
+    id: string;
+    notification_type: string;
+    status: string;
+    intended_recipient: string | null;
+    effective_recipient: string | null;
+    rendered_subject: string | null;
+    source_id: string;
+    source_domain: string;
+    provider: string | null;
+    provider_message_id: string | null;
+    trigger_type: string;
+    created_at: string;
+    skip_reason: string | null;
+    delivered_at: string | null;
+    updated_at: string;
+    failure_code: string | null;
+    failure_message: string | null;
+  }>`select n.id,n.notification_type,n.status,n.intended_recipient,n.effective_recipient,n.rendered_subject,
+      n.source_id,n.source_domain,n.provider,n.provider_message_id,n.trigger_type,n.created_at::text,n.skip_reason,
+      n.delivered_at::text,n.updated_at::text,n.failure_code,n.failure_message
     from notifications.notifications n
     where n.organization_id=${input.organizationId} and n.source_id=${order.id}::uuid and n.channel='EMAIL'
     order by n.created_at desc`.execute(db);
 
-  const notificationsByType = new Map<string, any>();
+  const notificationsByType = new Map<string, (typeof existingNotifications.rows)[number]>();
   for (const n of existingNotifications.rows) {
     if (!notificationsByType.has(n.notification_type)) {
       notificationsByType.set(n.notification_type, n);
@@ -680,7 +834,8 @@ export async function getOrderEmailEligibility(
       } else {
         if (!recipient) {
           eligibilityCode = 'CUSTOMER_EMAIL_MISSING';
-          explanation = 'Customer has no email address on file. Transactional emails are skipped without blocking the order.';
+          explanation =
+            'Customer has no email address on file. Transactional emails are skipped without blocking the order.';
         } else if (isSuppressed) {
           eligibilityCode = 'RECIPIENT_SUPPRESSED';
           explanation = `Recipient address is suppressed (${suppressionReason?.replaceAll('_', ' ').toLowerCase() ?? 'blocked'}). Automatic delivery is stopped to protect sender reputation.`;
@@ -756,7 +911,6 @@ export async function getOrderEmailEligibility(
   };
 }
 
-
 export async function retryEmailNotification(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; notificationId: string; actorId: string; reason: string },
@@ -764,10 +918,21 @@ export async function retryEmailNotification(
   if (!input.reason.trim())
     throw new EmailNotificationError('VALIDATION_FAILED', 'A retry reason is required.');
   await db.transaction().execute(async (tx) => {
-    const updated = await sql<{ id: string }>`update notifications.notifications set status='QUEUED',failure_code=null,failure_message=null,queued_at=now(),updated_at=now() where organization_id=${input.organizationId} and id=${input.notificationId}::uuid and channel='EMAIL' and status='FAILED' returning id`.execute(tx);
+    const updated = await sql<{
+      id: string;
+    }>`update notifications.notifications n set status='QUEUED',failure_code=null,failure_message=null,queued_at=now(),updated_at=now()
+      where n.organization_id=${input.organizationId} and n.id=${input.notificationId}::uuid and n.channel='EMAIL' and n.status='FAILED'
+        and exists(select 1 from notifications.delivery_attempts latest where latest.notification_id=n.id and latest.retryable
+          and latest.attempt_number=(select max(candidate.attempt_number) from notifications.delivery_attempts candidate where candidate.notification_id=n.id))
+      returning id`.execute(tx);
     if (!updated.rows[0])
-      throw new EmailNotificationError('CONFLICT', 'Only a failed email can be retried.');
-    await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,source,metadata) values(${input.organizationId},${input.notificationId}::uuid,'RETRY_REQUESTED','ADMIN',${JSON.stringify({ reason: input.reason.trim() })}::jsonb)`.execute(tx);
+      throw new EmailNotificationError(
+        'CONFLICT',
+        'Only a failed email with a retryable latest attempt can be retried.',
+      );
+    await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,source,metadata) values(${input.organizationId},${input.notificationId}::uuid,'RETRY_REQUESTED','ADMIN',${JSON.stringify({ reason: input.reason.trim() })}::jsonb)`.execute(
+      tx,
+    );
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
       actorType: 'USER',
@@ -800,7 +965,9 @@ export async function listEmailNotifications(
 ) {
   const offset = (input.page - 1) * input.pageSize;
   const search = input.search?.trim() ? `%${input.search.trim()}%` : null;
-  const rows = await sql<Record<string, unknown> & { total_count: string }>`select n.*,count(*) over()::text total_count
+  const rows = await sql<
+    Record<string, unknown> & { total_count: string }
+  >`select n.*,count(*) over()::text total_count
     from notifications.notifications n
     where n.organization_id=${input.organizationId} and n.channel='EMAIL'
       and (${input.status ?? null}::text is null or n.status=${input.status ?? null})
@@ -835,8 +1002,8 @@ export async function getEmailNotification(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   notificationId: string,
-): Promise<Record<string, any>> {
-  const row = await sql<Record<string, any>>`select n.*,
+): Promise<EmailNotificationDetail> {
+  const row = await sql<EmailNotificationDetail>`select n.*,
       u.name triggered_by_actor_name,
       coalesce((select jsonb_agg(to_jsonb(a) order by a.attempt_number) from notifications.delivery_attempts a where a.notification_id=n.id),'[]'::jsonb) attempts,
       coalesce((select jsonb_agg(
@@ -850,17 +1017,27 @@ export async function getEmailNotification(
         ) order by e.event_at, e.id) from notifications.delivery_events e where e.notification_id=n.id),'[]'::jsonb) timeline
     from notifications.notifications n
     left join iam.users u on u.id = n.triggered_by_actor_id
-    where n.organization_id=${organizationId} and n.id=${notificationId}::uuid and n.channel='EMAIL'`.execute(db);
-  if (!row.rows[0]) throw new EmailNotificationError('NOT_FOUND', 'Email notification was not found.');
+    where n.organization_id=${organizationId} and n.id=${notificationId}::uuid and n.channel='EMAIL'`.execute(
+    db,
+  );
+  if (!row.rows[0])
+    throw new EmailNotificationError('NOT_FOUND', 'Email notification was not found.');
   const n = row.rows[0];
   const recipient = (n.intended_recipient ?? n.effective_recipient)?.toLowerCase();
   let recipientSuppressed = false;
   if (recipient) {
-    const sup = await sql`select 1 from notifications.email_suppressions where organization_id=${organizationId} and normalized_email=${recipient} and active limit 1`.execute(db);
+    const sup =
+      await sql`select 1 from notifications.email_suppressions where organization_id=${organizationId} and normalized_email=${recipient} and active limit 1`.execute(
+        db,
+      );
     recipientSuppressed = Boolean(sup.rows[0]);
   }
-  const canRetry = n.status === 'FAILED';
-  const canResend = ['DELIVERED', 'SENT', 'FAILED', 'BOUNCED'].includes(n.status) && Boolean(n.intended_recipient);
+  const latestAttempt = Array.isArray(n.attempts)
+    ? (n.attempts.at(-1) as { retryable?: boolean } | undefined)
+    : undefined;
+  const canRetry = n.status === 'FAILED' && latestAttempt?.retryable === true;
+  const canResend =
+    ['DELIVERED', 'SENT', 'FAILED', 'BOUNCED'].includes(n.status) && Boolean(n.intended_recipient);
   const canPreview = Boolean(n.rendered_html);
   return {
     ...n,
@@ -869,15 +1046,21 @@ export async function getEmailNotification(
       canRetry,
       canResend,
       canPreview,
-      retryReason: canRetry ? 'Retry this notification after a technical failure.' : 'Only failed notifications can be retried.',
-      resendReason: canResend ? 'Send a new audited copy of this email to the customer.' : 'Resend requires an intended recipient and non-pending status.',
+      retryReason: canRetry
+        ? 'Retry this notification after a technical failure.'
+        : 'Only failed notifications can be retried.',
+      resendReason: canResend
+        ? 'Send a new audited copy of this email to the customer.'
+        : 'Resend requires an intended recipient and non-pending status.',
     },
   };
 }
 
 export async function listEmailSuppressions(db: Kysely<DatabaseSchema>, organizationId: string) {
   return (
-    await sql`select id,normalized_email,reason,source,provider,active,created_at::text,cleared_at::text,clear_reason from notifications.email_suppressions where organization_id=${organizationId} order by active desc,created_at desc limit 200`.execute(db)
+    await sql`select id,normalized_email,reason,source,provider,active,created_at::text,cleared_at::text,clear_reason from notifications.email_suppressions where organization_id=${organizationId} order by active desc,created_at desc limit 200`.execute(
+      db,
+    )
   ).rows;
 }
 
@@ -896,9 +1079,13 @@ export async function setEmailSuppression(
     throw new EmailNotificationError('VALIDATION_FAILED', 'Email and reason are required.');
   await db.transaction().execute(async (tx) => {
     if (input.active)
-      await sql`insert into notifications.email_suppressions(organization_id,normalized_email,reason,source,active) values(${input.organizationId},${email},'ADMINISTRATOR','ADMIN',true) on conflict(organization_id,normalized_email,reason) do update set active=true,cleared_at=null,cleared_by_actor_id=null,clear_reason=null`.execute(tx);
+      await sql`insert into notifications.email_suppressions(organization_id,normalized_email,reason,source,active) values(${input.organizationId},${email},'ADMINISTRATOR','ADMIN',true) on conflict(organization_id,normalized_email,reason) do update set active=true,cleared_at=null,cleared_by_actor_id=null,clear_reason=null`.execute(
+        tx,
+      );
     else
-      await sql`update notifications.email_suppressions set active=false,cleared_at=now(),cleared_by_actor_id=${input.actorId},clear_reason=${input.reason.trim()} where organization_id=${input.organizationId} and normalized_email=${email} and active`.execute(tx);
+      await sql`update notifications.email_suppressions set active=false,cleared_at=now(),cleared_by_actor_id=${input.actorId},clear_reason=${input.reason.trim()} where organization_id=${input.organizationId} and normalized_email=${email} and active`.execute(
+        tx,
+      );
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
       actorType: 'USER',
@@ -925,6 +1112,108 @@ const providerStatus: Record<string, string> = {
   'email.clicked': 'CLICKED',
 };
 
+async function processStoredResendProviderEvent(
+  db: Kysely<DatabaseSchema>,
+  providerEventRowId: number,
+) {
+  const event = await sql<{
+    id: string;
+    provider_event_id: string;
+    provider_message_id: string | null;
+    event_type: string;
+    normalized_type: string;
+    recipient: string | null;
+    payload: Record<string, unknown>;
+    provider_occurred_at: Date | null;
+  }>`select id::text,provider_event_id,provider_message_id,event_type,normalized_type,recipient,payload,provider_occurred_at
+    from notifications.provider_events where id=${providerEventRowId} and provider='resend' for update`.execute(
+    db,
+  );
+  const stored = event.rows[0];
+  if (!stored) return { created: false, processed: false };
+  if (!stored.provider_message_id || stored.normalized_type === 'IGNORED') {
+    await sql`update notifications.provider_events set processed_at=now(),processing_result='IGNORED' where id=${providerEventRowId}`.execute(
+      db,
+    );
+    return { created: true, processed: false };
+  }
+  const notification = await sql<{
+    id: string;
+    organization_id: string;
+    status: string;
+  }>`select id,organization_id,status from notifications.notifications
+    where provider='resend' and provider_message_id=${stored.provider_message_id} for update`.execute(
+    db,
+  );
+  const target = notification.rows[0];
+  if (!target) {
+    await sql`update notifications.provider_events set processed_at=now(),processing_result='UNMATCHED_MESSAGE' where id=${providerEventRowId}`.execute(
+      db,
+    );
+    return { created: true, processed: false };
+  }
+  const normalized = stored.normalized_type;
+  const terminal = ['BOUNCED', 'COMPLAINED', 'SUPPRESSED'].includes(target.status);
+  const shouldUpdate =
+    !terminal &&
+    !(target.status === 'DELIVERED' && ['SENT', 'DELIVERY_DELAYED', 'FAILED'].includes(normalized));
+  if (shouldUpdate && !['OPENED', 'CLICKED'].includes(normalized)) {
+    await sql`update notifications.notifications set status=${normalized},delivered_at=case when ${normalized}='DELIVERED' then coalesce(delivered_at,now()) else delivered_at end,failure_code=case when ${normalized} in ('FAILED','BOUNCED','COMPLAINED','SUPPRESSED') then ${stored.event_type} else failure_code end,updated_at=now() where id=${target.id}::uuid`.execute(
+      db,
+    );
+  }
+  await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,event_at,source,provider_event_id,metadata)
+    values(${target.organization_id},${target.id}::uuid,${normalized},${stored.provider_occurred_at ?? new Date()},'PROVIDER',${stored.provider_event_id},${JSON.stringify({ providerType: stored.event_type })}::jsonb)
+    on conflict(provider_event_id) do nothing`.execute(db);
+  const rawData =
+    stored.payload.data !== null && typeof stored.payload.data === 'object'
+      ? (stored.payload.data as Record<string, unknown>)
+      : {};
+  const bounce = rawData.bounce as { type?: unknown } | undefined;
+  const shouldSuppress =
+    normalized === 'COMPLAINED' ||
+    normalized === 'SUPPRESSED' ||
+    (normalized === 'BOUNCED' && bounce?.type === 'Permanent');
+  if (stored.recipient && shouldSuppress) {
+    const reason =
+      normalized === 'BOUNCED'
+        ? 'HARD_BOUNCE'
+        : normalized === 'COMPLAINED'
+          ? 'COMPLAINT'
+          : 'PROVIDER';
+    await sql`insert into notifications.email_suppressions(organization_id,normalized_email,reason,source,provider,active)
+      values(${target.organization_id},${stored.recipient},${reason},'WEBHOOK','resend',true)
+      on conflict(organization_id,normalized_email,reason) do update set active=true,cleared_at=null`.execute(
+      db,
+    );
+    await sql`update notifications.notifications set status='SUPPRESSED',skip_reason='ACTIVE_EMAIL_SUPPRESSION',updated_at=now()
+      where organization_id=${target.organization_id} and channel='EMAIL' and intended_recipient=${stored.recipient}
+        and status in ('QUEUED','FAILED','PENDING_MANUAL')`.execute(db);
+  }
+  await sql`update notifications.provider_events set processed_at=now(),processing_result='PROCESSED' where id=${providerEventRowId}`.execute(
+    db,
+  );
+  return { created: true, processed: true, notificationId: target.id };
+}
+
+export async function reconcileUnmatchedEmailProviderEvents(
+  db: Kysely<DatabaseSchema>,
+  limit = 50,
+) {
+  const events = await sql<{ id: string }>`select id::text from notifications.provider_events
+    where provider='resend' and processing_result='UNMATCHED_MESSAGE'
+      and received_at>=now()-interval '30 days'
+    order by received_at,id limit ${limit}`.execute(db);
+  let processed = 0;
+  for (const event of events.rows) {
+    const result = await db
+      .transaction()
+      .execute((tx) => processStoredResendProviderEvent(tx, Number(event.id)));
+    if (result.processed) processed += 1;
+  }
+  return processed;
+}
+
 export async function ingestResendWebhook(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -937,39 +1226,18 @@ export async function ingestResendWebhook(
 ) {
   const normalized = providerStatus[input.type] ?? 'IGNORED';
   const providerMessageId = typeof input.data.email_id === 'string' ? input.data.email_id : null;
-  const recipient = Array.isArray(input.data.to) && typeof input.data.to[0] === 'string' ? input.data.to[0].toLowerCase() : null;
+  const recipient =
+    Array.isArray(input.data.to) && typeof input.data.to[0] === 'string'
+      ? input.data.to[0].toLowerCase()
+      : null;
   return db.transaction().execute(async (tx) => {
-    const event = await sql<{ id: string }>`insert into notifications.provider_events(provider,provider_event_id,provider_message_id,event_type,normalized_type,recipient,payload,provider_occurred_at)
+    const event = await sql<{
+      id: string;
+    }>`insert into notifications.provider_events(provider,provider_event_id,provider_message_id,event_type,normalized_type,recipient,payload,provider_occurred_at)
       values('resend',${input.providerEventId},${providerMessageId},${input.type},${normalized},${recipient},${JSON.stringify(input.rawPayload)}::jsonb,${input.createdAt ? new Date(input.createdAt) : null})
       on conflict(provider,provider_event_id) do nothing returning id::text`.execute(tx);
     if (!event.rows[0]) return { created: false, processed: false };
-    if (!providerMessageId || normalized === 'IGNORED') {
-      await sql`update notifications.provider_events set processed_at=now(),processing_result='IGNORED' where id=${Number(event.rows[0]!.id)}`.execute(tx);
-      return { created: true, processed: false };
-    }
-    const notification = await sql<{ id: string; organization_id: string; status: string; intended_recipient: string | null }>`select id,organization_id,status,intended_recipient from notifications.notifications where provider='resend' and provider_message_id=${providerMessageId} for update`.execute(tx);
-    const target = notification.rows[0];
-    if (!target) {
-      await sql`update notifications.provider_events set processed_at=now(),processing_result='UNMATCHED_MESSAGE' where id=${Number(event.rows[0]!.id)}`.execute(tx);
-      return { created: true, processed: false };
-    }
-    const terminal = ['BOUNCED', 'COMPLAINED', 'SUPPRESSED'].includes(target.status);
-    const shouldUpdate = !terminal && !(target.status === 'DELIVERED' && ['SENT', 'DELIVERY_DELAYED', 'FAILED'].includes(normalized));
-    if (shouldUpdate && !['OPENED', 'CLICKED'].includes(normalized)) {
-      await sql`update notifications.notifications set status=${normalized},delivered_at=case when ${normalized}='DELIVERED' then coalesce(delivered_at,now()) else delivered_at end,failure_code=case when ${normalized} in ('FAILED','BOUNCED','COMPLAINED','SUPPRESSED') then ${input.type} else failure_code end,updated_at=now() where id=${target.id}::uuid`.execute(tx);
-    }
-    await sql`insert into notifications.delivery_events(organization_id,notification_id,event_type,event_at,source,provider_event_id,metadata) values(${target.organization_id},${target.id}::uuid,${normalized},${input.createdAt ? new Date(input.createdAt) : new Date()},'PROVIDER',${input.providerEventId},${JSON.stringify({ providerType: input.type })}::jsonb)`.execute(tx);
-    const bounce = input.data.bounce as { type?: unknown } | undefined;
-    const shouldSuppress =
-      normalized === 'COMPLAINED' ||
-      normalized === 'SUPPRESSED' ||
-      (normalized === 'BOUNCED' && bounce?.type === 'Permanent');
-    if (recipient && shouldSuppress) {
-      const reason = normalized === 'BOUNCED' ? 'HARD_BOUNCE' : normalized === 'COMPLAINED' ? 'COMPLAINT' : 'PROVIDER';
-      await sql`insert into notifications.email_suppressions(organization_id,normalized_email,reason,source,provider,active) values(${target.organization_id},${recipient},${reason},'WEBHOOK','resend',true) on conflict(organization_id,normalized_email,reason) do update set active=true,cleared_at=null`.execute(tx);
-    }
-    await sql`update notifications.provider_events set processed_at=now(),processing_result='PROCESSED' where id=${Number(event.rows[0]!.id)}`.execute(tx);
-    return { created: true, processed: true, notificationId: target.id };
+    return processStoredResendProviderEvent(tx, Number(event.rows[0].id));
   });
 }
 
@@ -1016,7 +1284,9 @@ export async function emailOperationalSummary(db: Kysely<DatabaseSchema>, organi
       count(*) filter(where created_at >= now() - interval '7 days' and status in ('FAILED','BOUNCED'))::int last_7_days_failed,
       (select failure_code from notifications.notifications where organization_id=${organizationId} and status='FAILED' and failure_code is not null group by failure_code order by count(*) desc limit 1) top_failure_code,
       (select count(*)::int from notifications.notifications where organization_id=${organizationId} and status='FAILED' and failure_code is not null group by failure_code order by count(*) desc limit 1) top_failure_count
-    from notifications.notifications where organization_id=${organizationId} and channel='EMAIL'`.execute(db);
+    from notifications.notifications where organization_id=${organizationId} and channel='EMAIL'`.execute(
+    db,
+  );
 
   const row = result.rows[0]!;
 

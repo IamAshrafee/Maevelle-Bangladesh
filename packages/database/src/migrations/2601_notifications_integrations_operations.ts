@@ -31,16 +31,28 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index webhook_events_org_created
       on integrations.webhook_events(organization_id,created_at desc);
 
-    insert into notifications.notification_policies(notification_type,delivery_requirement) values
-      ('ORDER_PLACED','REQUIRED_OPERATIONAL'),('ORDER_CONFIRMED','REQUIRED_OPERATIONAL'),
-      ('ORDER_CANCELLED','OPTIONAL'),('ORDER_COMPLETED','REQUIRED_OPERATIONAL'),
-      ('PAYMENT_VERIFIED','REQUIRED_OPERATIONAL'),('ORDER_DISPATCHED','REQUIRED_OPERATIONAL'),
-      ('DELIVERY_COMPLETED','REQUIRED_OPERATIONAL'),('DELIVERY_ATTEMPT_FAILED','OPTIONAL'),
-      ('DELIVERY_FAILED','REQUIRED_OPERATIONAL'),('DELIVERY_RTO_INITIATED','REQUIRED_OPERATIONAL'),
-      ('RETURN_AUTHORIZED','REQUIRED_OPERATIONAL'),('RETURN_REJECTED','REQUIRED_OPERATIONAL'),
-      ('RETURN_RECEIVED','REQUIRED_OPERATIONAL'),('REFUND_COMPLETED','REQUIRED_OPERATIONAL'),
-      ('REVIEW_VISIBLE','OPTIONAL'),('REVIEW_REQUEST','OPTIONAL'),('REVIEW_RESPONSE','OPTIONAL')
-      on conflict(notification_type) do update set delivery_requirement=excluded.delivery_requirement,updated_at=now();
+    insert into notifications.notification_policies(notification_type,delivery_requirement,category,default_priority,contains_sensitive_data) values
+      ('ORDER_PLACED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',false),('ORDER_CONFIRMED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',false),
+      ('ORDER_CANCELLED','OPTIONAL','TRANSACTIONAL','NORMAL',false),('ORDER_COMPLETED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',false),
+      ('PAYMENT_VERIFIED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',true),('ORDER_DISPATCHED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',false),
+      ('DELIVERY_COMPLETED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',false),('DELIVERY_ATTEMPT_FAILED','OPTIONAL','TRANSACTIONAL','NORMAL',false),
+      ('DELIVERY_FAILED','REQUIRED_OPERATIONAL','TRANSACTIONAL','HIGH',false),('DELIVERY_RTO_INITIATED','REQUIRED_OPERATIONAL','TRANSACTIONAL','HIGH',false),
+      ('RETURN_AUTHORIZED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',false),('RETURN_REJECTED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',false),
+      ('RETURN_RECEIVED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',false),('REFUND_COMPLETED','REQUIRED_OPERATIONAL','TRANSACTIONAL','NORMAL',true),
+      ('REVIEW_VISIBLE','OPTIONAL','TRANSACTIONAL','LOW',false),('REVIEW_REQUEST','OPTIONAL','TRANSACTIONAL','LOW',false),('REVIEW_RESPONSE','OPTIONAL','TRANSACTIONAL','LOW',false),
+      ('ORDER_AWAITING_REVIEW','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',false),
+      ('PAYMENT_REVIEW_REQUIRED','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',true),
+      ('DELIVERY_EXCEPTION_REQUIRES_ATTENTION','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',false),
+      ('DELIVERY_FAILED_REQUIRES_ATTENTION','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',false),
+      ('REVIEW_MODERATION_REQUIRED','REQUIRED_OPERATIONAL','OPERATIONAL','NORMAL',false),
+      ('STOCKTAKE_REVIEW_REQUIRED','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',false),
+      ('TRANSFER_READY_FOR_DISPATCH','REQUIRED_OPERATIONAL','OPERATIONAL','NORMAL',false),
+      ('INBOUND_SHIPMENT_ARRIVED','REQUIRED_OPERATIONAL','OPERATIONAL','NORMAL',false),
+      ('RECEIVING_CONDITION_RESOLVED','REQUIRED_OPERATIONAL','OPERATIONAL','NORMAL',false),
+      ('FINANCE_RECONCILIATION_REQUIRES_ATTENTION','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',true),
+      ('SECURITY_TWO_FACTOR_RESET','REQUIRED_OPERATIONAL','SECURITY','CRITICAL',true),
+      ('SECURITY_OWNER_TRANSFERRED','REQUIRED_OPERATIONAL','SECURITY','CRITICAL',true)
+      on conflict(notification_type) do update set delivery_requirement=excluded.delivery_requirement,category=excluded.category,default_priority=excluded.default_priority,contains_sensitive_data=excluded.contains_sensitive_data,updated_at=now();
 
     insert into notifications.notification_channel_policies(notification_type,channel,enabled,automatic_enabled,manual_allowed,template_key) values
       ('ORDER_PLACED','IN_APP',true,true,true,null),('ORDER_PLACED','EMAIL',true,true,true,'order-received'),('ORDER_PLACED','SMS',true,false,true,'order-received'),
@@ -55,7 +67,19 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('REFUND_COMPLETED','IN_APP',true,true,true,null),('REFUND_COMPLETED','EMAIL',true,true,true,'refund-completed'),('REFUND_COMPLETED','SMS',true,false,true,'refund-completed'),
       ('REVIEW_VISIBLE','IN_APP',true,true,false,null),
       ('REVIEW_REQUEST','IN_APP',true,true,false,null),('REVIEW_REQUEST','EMAIL',true,true,true,'review-request'),('REVIEW_REQUEST','SMS',true,false,true,'review-request'),
-      ('REVIEW_RESPONSE','IN_APP',true,true,false,null),('REVIEW_RESPONSE','EMAIL',true,true,true,'review-response'),('REVIEW_RESPONSE','SMS',true,false,true,'review-response')
+      ('REVIEW_RESPONSE','IN_APP',true,true,false,null),('REVIEW_RESPONSE','EMAIL',true,true,true,'review-response'),('REVIEW_RESPONSE','SMS',true,false,true,'review-response'),
+      ('ORDER_AWAITING_REVIEW','IN_APP',true,true,false,null),
+      ('PAYMENT_REVIEW_REQUIRED','IN_APP',true,true,false,null),
+      ('DELIVERY_EXCEPTION_REQUIRES_ATTENTION','IN_APP',true,true,false,null),
+      ('DELIVERY_FAILED_REQUIRES_ATTENTION','IN_APP',true,true,false,null),
+      ('REVIEW_MODERATION_REQUIRED','IN_APP',true,true,false,null),
+      ('STOCKTAKE_REVIEW_REQUIRED','IN_APP',true,true,false,null),
+      ('TRANSFER_READY_FOR_DISPATCH','IN_APP',true,true,false,null),
+      ('INBOUND_SHIPMENT_ARRIVED','IN_APP',true,true,false,null),
+      ('RECEIVING_CONDITION_RESOLVED','IN_APP',true,true,false,null),
+      ('FINANCE_RECONCILIATION_REQUIRES_ATTENTION','IN_APP',true,true,false,null),
+      ('SECURITY_TWO_FACTOR_RESET','IN_APP',true,true,false,null),
+      ('SECURITY_OWNER_TRANSFERRED','IN_APP',true,true,false,null)
       on conflict(notification_type,channel) do update set enabled=excluded.enabled,automatic_enabled=excluded.automatic_enabled,manual_allowed=excluded.manual_allowed,template_key=excluded.template_key,updated_at=now();
   `.execute(db);
 }

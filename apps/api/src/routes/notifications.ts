@@ -92,6 +92,350 @@ export function registerNotificationRoutes(
     if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
     return { data: await notifications.listNotifications(database.db, a.organizationId) };
   });
+  app.get(
+    '/admin/notifications/inbox',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1, maximum: 100_000 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          unreadOnly: Type.Optional(Type.Boolean()),
+          category: Type.Optional(
+            Type.Union([
+              Type.Literal('TRANSACTIONAL'),
+              Type.Literal('OPERATIONAL'),
+              Type.Literal('SECURITY'),
+              Type.Literal('MARKETING'),
+              Type.Literal('SYSTEM'),
+            ]),
+          ),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const query = req.query as {
+        page?: number;
+        pageSize?: number;
+        unreadOnly?: boolean;
+        category?: notifications.NotificationCategory;
+      };
+      return notifications.listRecipientInboxPage(database.db, {
+        organizationId: a.organizationId,
+        membershipId: a.membershipId,
+        page: query.page ?? 1,
+        pageSize: query.pageSize ?? 25,
+        ...(query.unreadOnly !== undefined ? { unreadOnly: query.unreadOnly } : {}),
+        ...(query.category ? { category: query.category } : {}),
+      });
+    },
+  );
+  app.post('/admin/notifications/inbox/read-all', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return {
+      data: {
+        updated: await notifications.markAllNotificationsRead(database.db, {
+          organizationId: a.organizationId,
+          membershipId: a.membershipId,
+        }),
+      },
+    };
+  });
+  app.get(
+    '/admin/notifications/history',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1, maximum: 100_000 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          channel: Type.Optional(
+            Type.Union([Type.Literal('IN_APP'), Type.Literal('EMAIL'), Type.Literal('SMS')]),
+          ),
+          status: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+          notificationType: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+          category: Type.Optional(
+            Type.Union([
+              Type.Literal('TRANSACTIONAL'),
+              Type.Literal('OPERATIONAL'),
+              Type.Literal('SECURITY'),
+              Type.Literal('MARKETING'),
+              Type.Literal('SYSTEM'),
+            ]),
+          ),
+          sourceId: Type.Optional(Type.String({ format: 'uuid' })),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const query = req.query as {
+        page?: number;
+        pageSize?: number;
+        channel?: 'IN_APP' | 'EMAIL' | 'SMS';
+        status?: string;
+        notificationType?: string;
+        category?: notifications.NotificationCategory;
+        sourceId?: string;
+      };
+      return notifications.listNotificationHistory(database.db, {
+        organizationId: a.organizationId,
+        page: query.page ?? 1,
+        pageSize: query.pageSize ?? 25,
+        ...(query.channel ? { channel: query.channel } : {}),
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.notificationType ? { notificationType: query.notificationType } : {}),
+        ...(query.category ? { category: query.category } : {}),
+        ...(query.sourceId ? { sourceId: query.sourceId } : {}),
+      });
+    },
+  );
+  app.get('/admin/notifications/catalog', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return {
+      data: notifications.notificationEventCatalog.map((definition) => ({
+        eventType: definition.eventType,
+        notificationType: definition.notificationType,
+        audience: definition.audience,
+        category: definition.category,
+        priority: definition.priority,
+        ...(definition.audience === 'CUSTOMER'
+          ? { required: definition.required }
+          : { requiredCapability: definition.requiredCapability }),
+      })),
+    };
+  });
+  app.get('/admin/notifications/diagnostics', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return {
+      data: await notifications.notificationOperationalHealth(database.db, a.organizationId),
+    };
+  });
+  app.get(
+    '/admin/notifications/templates',
+    {
+      schema: {
+        querystring: Type.Object({
+          page: Type.Optional(Type.Integer({ minimum: 1, maximum: 100_000 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          channel: Type.Optional(
+            Type.Union([Type.Literal('IN_APP'), Type.Literal('EMAIL'), Type.Literal('SMS')]),
+          ),
+          status: Type.Optional(
+            Type.Union([Type.Literal('DRAFT'), Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')]),
+          ),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const query = req.query as {
+        page?: number;
+        pageSize?: number;
+        channel?: 'IN_APP' | 'EMAIL' | 'SMS';
+        status?: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+      };
+      return notifications.listNotificationTemplates(database.db, {
+        organizationId: a.organizationId,
+        page: query.page ?? 1,
+        pageSize: query.pageSize ?? 25,
+        ...(query.channel ? { channel: query.channel } : {}),
+        ...(query.status ? { status: query.status } : {}),
+      });
+    },
+  );
+  app.post(
+    '/admin/notifications/templates',
+    {
+      schema: {
+        body: Type.Object({
+          notificationType: Type.String({ minLength: 1, maxLength: 120 }),
+          channel: Type.Union([Type.Literal('IN_APP'), Type.Literal('EMAIL'), Type.Literal('SMS')]),
+          name: Type.String({ minLength: 1, maxLength: 160 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.manage');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        const body = req.body as {
+          notificationType: string;
+          channel: 'IN_APP' | 'EMAIL' | 'SMS';
+          name: string;
+        };
+        return reply.code(201).send({
+          data: await notifications.createNotificationTemplate(database.db, {
+            organizationId: a.organizationId,
+            ...body,
+          }),
+        });
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/notifications/templates/:templateId/revisions',
+    {
+      schema: {
+        params: Type.Object({ templateId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          subjectTemplate: Type.Optional(Type.String({ maxLength: 300 })),
+          bodyTemplate: Type.String({ minLength: 1, maxLength: 20_000 }),
+          variableSchema: Type.Record(
+            Type.String({ pattern: '^[a-zA-Z][a-zA-Z0-9_]*$' }),
+            Type.Object({
+              required: Type.Optional(Type.Boolean()),
+              maxLength: Type.Optional(Type.Integer({ minimum: 1, maximum: 10_000 })),
+            }),
+          ),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.manage');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const body = req.body as {
+        subjectTemplate?: string;
+        bodyTemplate: string;
+        variableSchema: notifications.TemplateVariableSchema;
+      };
+      try {
+        return reply.code(201).send({
+          data: await notifications.createTemplateRevision(database.db, {
+            organizationId: a.organizationId,
+            templateId: (req.params as { templateId: string }).templateId,
+            bodyTemplate: body.bodyTemplate,
+            variableSchema: body.variableSchema,
+            ...(body.subjectTemplate !== undefined
+              ? { subjectTemplate: body.subjectTemplate }
+              : {}),
+          }),
+        });
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/notifications/templates/:templateId/revisions/:revisionId/publish',
+    {
+      schema: {
+        params: Type.Object({
+          templateId: Type.String({ format: 'uuid' }),
+          revisionId: Type.String({ format: 'uuid' }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.manage');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const params = req.params as { templateId: string; revisionId: string };
+      try {
+        await notifications.publishTemplateRevision(
+          database.db,
+          a.organizationId,
+          params.templateId,
+          params.revisionId,
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/notifications/template-revisions/:revisionId/preview',
+    {
+      schema: {
+        params: Type.Object({ revisionId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          variables: Type.Record(
+            Type.String(),
+            Type.Union([Type.String(), Type.Number(), Type.Boolean()]),
+          ),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        return {
+          data: await notifications.previewNotificationTemplate(database.db, {
+            organizationId: a.organizationId,
+            revisionId: (req.params as { revisionId: string }).revisionId,
+            variables: (req.body as { variables: notifications.TemplateVariables }).variables,
+          }),
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/notifications/intents/:intentId/cancel',
+    {
+      schema: {
+        params: Type.Object({ intentId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({ reason: Type.String({ minLength: 1, maxLength: 500 }) }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.manage');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        return {
+          data: await notifications.cancelNotificationIntent(database.db, {
+            organizationId: a.organizationId,
+            intentId: (req.params as { intentId: string }).intentId,
+            actorId: a.actorId,
+            reason: (req.body as { reason: string }).reason,
+          }),
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/notifications/deliveries/:notificationId/schedule',
+    {
+      schema: {
+        params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({
+          scheduledFor: Type.String({ format: 'date-time' }),
+          expiresAt: Type.Optional(Type.String({ format: 'date-time' })),
+          reason: Type.String({ minLength: 1, maxLength: 500 }),
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.manage');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const body = req.body as { scheduledFor: string; expiresAt?: string; reason: string };
+      try {
+        return {
+          data: await notifications.scheduleNotificationDelivery(database.db, {
+            organizationId: a.organizationId,
+            notificationId: (req.params as { notificationId: string }).notificationId,
+            actorId: a.actorId,
+            scheduledFor: new Date(body.scheduledFor),
+            reason: body.reason,
+            ...(body.expiresAt ? { expiresAt: new Date(body.expiresAt) } : {}),
+          }),
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
   app.post(
     '/admin/notifications/:notificationId/read',
     { schema: { params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }) } },
@@ -136,17 +480,21 @@ export function registerNotificationRoutes(
     async (req, reply) => {
       const a = await admin(database, auth, req.headers, 'notifications.manage');
       if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
-      await notifications.setNotificationPreference(database.db, {
-        organizationId: a.organizationId,
-        recipientType: 'MEMBERSHIP',
-        recipientId: a.membershipId,
-        ...(req.body as {
-          notificationType: string;
-          channel: 'IN_APP' | 'EMAIL';
-          enabled: boolean;
-        }),
-      });
-      return reply.code(204).send();
+      try {
+        await notifications.setNotificationPreference(database.db, {
+          organizationId: a.organizationId,
+          recipientType: 'MEMBERSHIP',
+          recipientId: a.membershipId,
+          ...(req.body as {
+            notificationType: string;
+            channel: 'IN_APP' | 'EMAIL';
+            enabled: boolean;
+          }),
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
     },
   );
   app.post(
@@ -155,8 +503,8 @@ export function registerNotificationRoutes(
       schema: {
         body: Type.Object({
           recipientType: Type.Union([Type.Literal('MEMBERSHIP'), Type.Literal('CUSTOMER')]),
-          recipientId: Type.String(),
-          notificationType: Type.String(),
+          recipientId: Type.String({ format: 'uuid' }),
+          notificationType: Type.String({ minLength: 1, maxLength: 120 }),
           channel: Type.Union([Type.Literal('IN_APP'), Type.Literal('EMAIL')]),
           enabled: Type.Boolean(),
         }),
@@ -172,11 +520,15 @@ export function registerNotificationRoutes(
         channel: 'IN_APP' | 'EMAIL';
         enabled: boolean;
       };
-      await notifications.setNotificationPreference(database.db, {
-        organizationId: a.organizationId,
-        ...body,
-      });
-      return reply.code(204).send();
+      try {
+        await notifications.setNotificationPreference(database.db, {
+          organizationId: a.organizationId,
+          ...body,
+        });
+        return reply.code(204).send();
+      } catch (error) {
+        return failure(reply, error);
+      }
     },
   );
   app.get('/admin/integrations', async (req, reply) => {
@@ -889,14 +1241,12 @@ export function registerNotificationRoutes(
       body.testRecipient &&
       (!config.smsTestMode || !config.smsAllowedTestRecipients.includes(body.testRecipient))
     )
-      return reply
-        .code(422)
-        .send({
-          error: {
-            code: 'UNSAFE_TEST_RECIPIENT',
-            message: 'The SMS test recipient is not in the deployment allow-list.',
-          },
-        });
+      return reply.code(422).send({
+        error: {
+          code: 'UNSAFE_TEST_RECIPIENT',
+          message: 'The SMS test recipient is not in the deployment allow-list.',
+        },
+      });
     try {
       const result = await notifications.createManualOrderSms(database.db, {
         organizationId: a.organizationId,
@@ -986,25 +1336,21 @@ export function registerNotificationRoutes(
         !config.smsTestMode ||
         config.smsProvider !== 'mock'
       )
-        return reply
-          .code(409)
-          .send({
-            error: {
-              code: 'MOCK_LAB_UNAVAILABLE',
-              message:
-                'Mock lifecycle scenarios are available only with SMS_PROVIDER=mock in a non-production test environment.',
-            },
-          });
+        return reply.code(409).send({
+          error: {
+            code: 'MOCK_LAB_UNAVAILABLE',
+            message:
+              'Mock lifecycle scenarios are available only with SMS_PROVIDER=mock in a non-production test environment.',
+          },
+        });
       if (!normalized.valid || !config.smsAllowedTestRecipients.includes(normalized.normalized))
-        return reply
-          .code(422)
-          .send({
-            error: {
-              code: 'UNSAFE_TEST_RECIPIENT',
-              message:
-                'Choose a valid Bangladesh mobile from the deployment test-recipient allow-list.',
-            },
-          });
+        return reply.code(422).send({
+          error: {
+            code: 'UNSAFE_TEST_RECIPIENT',
+            message:
+              'Choose a valid Bangladesh mobile from the deployment test-recipient allow-list.',
+          },
+        });
       try {
         const result = await notifications.createManualOrderSms(database.db, {
           organizationId: a.organizationId,
@@ -1029,28 +1375,25 @@ export function registerNotificationRoutes(
           result.id,
         );
         const capabilities = new Set(a.capabilities);
-        return reply
-          .code(result.created ? 201 : 200)
-          .send({
-            data: {
-              ...detail,
-              permissions: {
-                canRetry: capabilities.has('notifications.sms.retry'),
-                canResend: capabilities.has('notifications.sms.resend'),
-                canPreview: capabilities.has('notifications.sms.preview'),
-              },
-              availableActions: {
-                ...detail.availableActions,
-                canRetry:
-                  detail.availableActions.canRetry && capabilities.has('notifications.sms.retry'),
-                canResend:
-                  detail.availableActions.canResend && capabilities.has('notifications.sms.resend'),
-                canPreview:
-                  detail.availableActions.canPreview &&
-                  capabilities.has('notifications.sms.preview'),
-              },
+        return reply.code(result.created ? 201 : 200).send({
+          data: {
+            ...detail,
+            permissions: {
+              canRetry: capabilities.has('notifications.sms.retry'),
+              canResend: capabilities.has('notifications.sms.resend'),
+              canPreview: capabilities.has('notifications.sms.preview'),
             },
-          });
+            availableActions: {
+              ...detail.availableActions,
+              canRetry:
+                detail.availableActions.canRetry && capabilities.has('notifications.sms.retry'),
+              canResend:
+                detail.availableActions.canResend && capabilities.has('notifications.sms.resend'),
+              canPreview:
+                detail.availableActions.canPreview && capabilities.has('notifications.sms.preview'),
+            },
+          },
+        });
       } catch (error) {
         return failure(reply, error);
       }
@@ -1177,21 +1520,17 @@ export function registerNotificationRoutes(
         !provider.capabilities.has('DELIVERY_CALLBACK') ||
         !provider.verifyAndParseWebhook
       )
-        return reply
-          .code(404)
-          .send({
-            error: {
-              code: 'SMS_WEBHOOK_UNAVAILABLE',
-              message: 'This SMS provider has no registered callback handler.',
-            },
-          });
+        return reply.code(404).send({
+          error: {
+            code: 'SMS_WEBHOOK_UNAVAILABLE',
+            message: 'This SMS provider has no registered callback handler.',
+          },
+        });
       const rawBody = (req as typeof req & { rawBody?: string }).rawBody;
       if (!rawBody)
-        return reply
-          .code(400)
-          .send({
-            error: { code: 'INVALID_WEBHOOK', message: 'A raw callback body is required.' },
-          });
+        return reply.code(400).send({
+          error: { code: 'INVALID_WEBHOOK', message: 'A raw callback body is required.' },
+        });
       try {
         const parsed = await provider.verifyAndParseWebhook({
           rawBody,
@@ -1206,14 +1545,12 @@ export function registerNotificationRoutes(
           await notifications.applySmsDeliveryEvent(database.db, provider.name, event);
         return reply.code(204).send();
       } catch {
-        return reply
-          .code(400)
-          .send({
-            error: {
-              code: 'INVALID_WEBHOOK',
-              message: 'SMS callback authentication or payload validation failed.',
-            },
-          });
+        return reply.code(400).send({
+          error: {
+            code: 'INVALID_WEBHOOK',
+            message: 'SMS callback authentication or payload validation failed.',
+          },
+        });
       }
     },
   );
@@ -1233,11 +1570,9 @@ export function registerNotificationRoutes(
       typeof timestamp !== 'string' ||
       typeof signature !== 'string'
     )
-      return reply
-        .code(400)
-        .send({
-          error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature headers are missing.' },
-        });
+      return reply.code(400).send({
+        error: { code: 'INVALID_WEBHOOK', message: 'Webhook signature headers are missing.' },
+      });
     let event: { type: string; created_at?: string; data: Record<string, unknown> };
     try {
       const resend = new Resend(config.resendApiKey ?? 're_webhook_verification_only');
@@ -1265,11 +1600,9 @@ export function registerNotificationRoutes(
         { err: error, providerEventId: id },
         'Verified Resend webhook could not be persisted.',
       );
-      return reply
-        .code(500)
-        .send({
-          error: { code: 'WEBHOOK_PROCESSING_FAILED', message: 'Webhook could not be processed.' },
-        });
+      return reply.code(500).send({
+        error: { code: 'WEBHOOK_PROCESSING_FAILED', message: 'Webhook could not be processed.' },
+      });
     }
   });
 }

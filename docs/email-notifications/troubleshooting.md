@@ -6,7 +6,11 @@ Confirm the lifecycle emitted a supported outbox event and the worker is running
 
 ## Queued for too long
 
-Check **Email operations**: sending may be globally disabled, the worker may be stopped, or provider configuration may be missing. Restarting the worker is a deployment task. A stale Processing claim becomes retryable after five minutes.
+Check **Email operations**: sending may be globally disabled, the worker may be stopped, or provider configuration may be missing. Restarting the worker is a deployment task. A stale Processing claim becomes **Unknown provider outcome** after five minutes; reconcile it against Resend before any intentional resend.
+
+## Unknown provider outcome
+
+The provider may have accepted the request even though Maevelle did not receive a definitive response. Do not use automatic retry. Search Resend using the stored notification/idempotency context, allow webhook reconciliation to settle the record, or perform an explicit audited resend only after an operator decides duplication risk is acceptable.
 
 ## Resend rejected the message
 

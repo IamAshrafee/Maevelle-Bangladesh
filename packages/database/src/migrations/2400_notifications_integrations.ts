@@ -10,6 +10,10 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create table notifications.notification_policies (
       notification_type text primary key,
       delivery_requirement text not null check (delivery_requirement in ('REQUIRED_OPERATIONAL','OPTIONAL')),
+      category text not null default 'OPERATIONAL' check (category in ('TRANSACTIONAL','OPERATIONAL','SECURITY','MARKETING','SYSTEM')),
+      default_priority text not null default 'NORMAL' check (default_priority in ('LOW','NORMAL','HIGH','CRITICAL')),
+      retention_days integer not null default 365 check (retention_days between 1 and 3650),
+      contains_sensitive_data boolean not null default false,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
@@ -36,6 +40,30 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       primary key (organization_id, notification_type, channel),
       foreign key(notification_type,channel) references notifications.notification_channel_policies(notification_type,channel)
     );
+    create table notifications.notification_intents (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      notification_type text not null references notifications.notification_policies(notification_type),
+      category text not null check (category in ('TRANSACTIONAL','OPERATIONAL','SECURITY','MARKETING','SYSTEM')),
+      priority text not null check (priority in ('LOW','NORMAL','HIGH','CRITICAL')),
+      source_event_id uuid references platform.outbox_events(event_id),
+      source_domain text not null,
+      source_id uuid not null,
+      deduplication_key text not null,
+      occurred_at timestamptz not null,
+      status text not null default 'ACTIVE' check (status in ('ACTIVE','CANCELLED')),
+      cancelled_at timestamptz,
+      cancellation_reason text,
+      created_at timestamptz not null default now(),
+      unique (organization_id, id),
+      unique (organization_id, deduplication_key),
+      unique (source_event_id, notification_type)
+    );
+    create index notification_intents_source
+      on notifications.notification_intents(organization_id,source_domain,source_id,created_at desc);
+    create index notification_intents_active_priority
+      on notifications.notification_intents(organization_id,priority,created_at desc)
+      where status='ACTIVE';
     create table notifications.notification_templates (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
       notification_type text not null, channel text not null check(channel in ('IN_APP','EMAIL','SMS')), name text not null,
@@ -57,26 +85,38 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create table notifications.notifications (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), notification_type text not null,
+      intent_id uuid,
       recipient_type text not null check(recipient_type in ('MEMBERSHIP','CUSTOMER')), customer_id uuid references customers.customers(id), membership_id uuid references iam.organization_memberships(id),
       channel text not null check(channel in ('IN_APP','EMAIL','SMS')), template_revision_id uuid references notifications.template_revisions(id),
       template_key text, template_version integer, rendered_subject text, rendered_body text not null, rendered_html text,
       intended_recipient text, effective_recipient text, sender_from text, reply_to text, provider text, provider_message_id text,
-      status text not null check(status in ('NOT_APPLICABLE','SKIPPED_NO_EMAIL','SKIPPED_NO_PHONE','PENDING_MANUAL','QUEUED','PROCESSING','SENT','ACCEPTED','DELIVERED','DELIVERY_DELAYED','FAILED','REJECTED','EXPIRED','UNDELIVERABLE','UNKNOWN_PROVIDER_OUTCOME','BOUNCED','COMPLAINED','SUPPRESSED','READ')),
+      category text not null default 'OPERATIONAL' check(category in ('TRANSACTIONAL','OPERATIONAL','SECURITY','MARKETING','SYSTEM')),
+      priority text not null default 'NORMAL' check(priority in ('LOW','NORMAL','HIGH','CRITICAL')),
+      action_path text,
+      status text not null check(status in ('NOT_APPLICABLE','SKIPPED_NO_EMAIL','SKIPPED_NO_PHONE','PENDING_MANUAL','QUEUED','PROCESSING','SENT','ACCEPTED','DELIVERED','DELIVERY_DELAYED','FAILED','REJECTED','EXPIRED','UNDELIVERABLE','UNKNOWN_PROVIDER_OUTCOME','BOUNCED','COMPLAINED','SUPPRESSED','READ','CANCELLED')),
       trigger_type text not null default 'AUTOMATIC' check(trigger_type in ('AUTOMATIC','MANUAL','TEST','RESEND')),
       triggered_by_actor_id uuid references iam.users(id), parent_notification_id uuid references notifications.notifications(id),
       idempotency_key text not null default uuidv7()::text, request_fingerprint text, skip_reason text, failure_code text, failure_message text,
       source_event_id uuid references platform.outbox_events(event_id), source_domain text not null, source_id uuid not null,
+      scheduled_for timestamptz not null default now(), expires_at timestamptz, cancelled_at timestamptz, cancellation_reason text,
       created_at timestamptz not null default now(), queued_at timestamptz, processing_started_at timestamptz, read_at timestamptz, sent_at timestamptz, delivered_at timestamptz, updated_at timestamptz not null default now(),
       check((recipient_type='CUSTOMER' and customer_id is not null and membership_id is null) or (recipient_type='MEMBERSHIP' and membership_id is not null and customer_id is null)),
-      unique(organization_id,id), unique(idempotency_key)
+      check(expires_at is null or expires_at > created_at),
+      unique(organization_id,id), unique(idempotency_key),
+      foreign key(organization_id,intent_id) references notifications.notification_intents(organization_id,id)
     );
-    create unique index notifications_source_recipient_channel on notifications.notifications(source_event_id,recipient_type,coalesce(customer_id,membership_id),channel) where source_event_id is not null;
+    create unique index notifications_source_recipient_channel on notifications.notifications(source_event_id,notification_type,recipient_type,coalesce(customer_id,membership_id),channel) where source_event_id is not null;
     create index notifications_inbox on notifications.notifications(organization_id,membership_id,created_at desc) where channel='IN_APP';
     create index notifications_channel_status_created on notifications.notifications(organization_id, channel, status, created_at desc);
     create index notifications_source on notifications.notifications(organization_id, source_id);
     create index notifications_customer on notifications.notifications(organization_id, customer_id, created_at desc);
     create index notifications_provider_message on notifications.notifications(provider, provider_message_id) where provider_message_id is not null;
     create index notifications_intended_recipient on notifications.notifications(organization_id, lower(intended_recipient));
+    create index notifications_intent on notifications.notifications(organization_id,intent_id,created_at desc) where intent_id is not null;
+    create index notifications_dispatch_ready on notifications.notifications(channel,priority,scheduled_for,created_at)
+      where status in ('QUEUED','FAILED');
+    create index notifications_inbox_unread on notifications.notifications(organization_id,membership_id,created_at desc)
+      where channel='IN_APP' and read_at is null;
     create table notifications.sms_delivery_details (
       notification_id uuid primary key references notifications.notifications(id) on delete cascade,
       organization_id uuid not null references platform.organizations(id),

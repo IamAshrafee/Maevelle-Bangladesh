@@ -26,6 +26,14 @@ function failure(name: string, message?: string): DeliveryResult {
   };
 }
 
+function unknownOutcome(message?: string): DeliveryResult {
+  return {
+    status: 'UNKNOWN',
+    errorCode: 'RESEND_NETWORK_OUTCOME_UNKNOWN',
+    metadata: { ...(message ? { message: message.slice(0, 300) } : {}) },
+  };
+}
+
 export function createResendEmailProvider(options: ResendEmailProviderOptions): EmailAdapter {
   const resend = new Resend(options.apiKey);
   return {
@@ -56,7 +64,9 @@ export function createResendEmailProvider(options: ResendEmailProviderOptions): 
           metadata: { acceptedBy: 'resend' },
         };
       } catch (error) {
-        return failure('network_error', error instanceof Error ? error.message : undefined);
+        // A transport exception does not prove Resend rejected the request. The
+        // stable idempotency key and provider reconciliation must resolve it.
+        return unknownOutcome(error instanceof Error ? error.message : undefined);
       }
     },
   };

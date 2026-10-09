@@ -10,10 +10,7 @@ import {
   type SmsProvider,
   type SmsSenderType,
 } from './sms.js';
-import {
-  renderTransactionalSms,
-  type TransactionalSmsTemplateKey,
-} from './sms-templates.js';
+import { renderTransactionalSms, type TransactionalSmsTemplateKey } from './sms-templates.js';
 
 export { listTransactionalSmsTemplates, renderTransactionalSms } from './sms-templates.js';
 export * from './sms.js';
@@ -219,10 +216,7 @@ export async function previewOrderSms(
     ...(input.fixture?.customerName ? { customerName: input.fixture.customerName } : {}),
     ...(input.fixture?.trackingUrl ? { trackingUrl: input.fixture.trackingUrl } : {}),
   };
-  const rendered = renderTransactionalSms(
-    policy.template_key,
-    model,
-  );
+  const rendered = renderTransactionalSms(policy.template_key, model);
   const phone = normalizeBangladeshPhone(order.normalized_phone ?? order.phone);
   const segmentCapacity =
     rendered.segmentCount <= 1
@@ -628,6 +622,10 @@ export async function setSmsSuppression(
       on conflict(organization_id,normalized_phone,reason) do update set active=true,cleared_at=null,cleared_by_actor_id=null,clear_reason=null`.execute(
         tx,
       );
+    if (input.active)
+      await sql`update notifications.notifications set status='SUPPRESSED',skip_reason='ACTIVE_SMS_SUPPRESSION',updated_at=now()
+        where organization_id=${input.organizationId} and channel='SMS' and intended_recipient=${phone.normalized}
+          and status in ('QUEUED','FAILED','PENDING_MANUAL')`.execute(tx);
     else
       await sql`update notifications.sms_suppressions set active=false,cleared_at=now(),cleared_by_actor_id=${input.actorId},clear_reason=${input.reason.trim()} where organization_id=${input.organizationId} and normalized_phone=${phone.normalized} and active`.execute(
         tx,
@@ -654,9 +652,47 @@ export async function deliverPendingSms(
 ) {
   if (!runtime.enabled || !runtime.providerConfigured || !provider.capabilities.has('SEND'))
     return 0;
-  await sql`update notifications.notifications set status='FAILED',failure_code='PROCESSING_LEASE_EXPIRED',updated_at=now() where channel='SMS' and status='PROCESSING' and processing_started_at<now()-interval '5 minutes'`.execute(
+  await sql`update notifications.notifications n set status='CANCELLED',cancelled_at=now(),cancellation_reason='INTENT_CANCELLED',updated_at=now()
+    where n.channel='SMS' and n.status in ('QUEUED','FAILED','PENDING_MANUAL')
+      and exists(select 1 from notifications.notification_intents intent where intent.id=n.intent_id and intent.organization_id=n.organization_id and intent.status='CANCELLED')`.execute(
     db,
   );
+  await sql`update notifications.notifications set status='EXPIRED',failure_code='DELIVERY_WINDOW_EXPIRED',updated_at=now()
+    where channel='SMS' and status in ('QUEUED','FAILED') and expires_at is not null and expires_at<=now()`.execute(
+    db,
+  );
+  await sql`update notifications.notifications n set status='SUPPRESSED',skip_reason='ACTIVE_SMS_SUPPRESSION',updated_at=now()
+    where n.channel='SMS' and n.status in ('QUEUED','FAILED')
+      and exists(select 1 from notifications.sms_suppressions suppression
+        where suppression.organization_id=n.organization_id and suppression.normalized_phone=n.intended_recipient and suppression.active)`.execute(
+    db,
+  );
+  await sql`update notifications.notifications n set status='SUPPRESSED',skip_reason='CHANNEL_POLICY_DISABLED_AT_SEND',updated_at=now()
+    where n.channel='SMS' and n.status in ('QUEUED','FAILED') and exists(
+      select 1 from notifications.notification_channel_policies channel
+      left join notifications.organization_policy_overrides override
+        on override.organization_id=n.organization_id and override.notification_type=channel.notification_type and override.channel=channel.channel
+      where channel.notification_type=n.notification_type and channel.channel='SMS'
+        and (not coalesce(override.enabled,channel.enabled)
+          or (n.trigger_type='AUTOMATIC' and not coalesce(override.automatic_enabled,channel.automatic_enabled))))`.execute(
+    db,
+  );
+  const stale = await sql<{
+    id: string;
+    organization_id: string;
+    provider: string | null;
+  }>`update notifications.notifications
+    set status='UNKNOWN_PROVIDER_OUTCOME',failure_code='PROCESSING_LEASE_EXPIRED_OUTCOME_UNKNOWN',updated_at=now()
+    where channel='SMS' and status='PROCESSING' and processing_started_at<now()-interval '5 minutes'
+    returning id,organization_id,provider`.execute(db);
+  for (const item of stale.rows) {
+    await recordSmsAttempt(db, {
+      organizationId: item.organization_id,
+      notificationId: item.id,
+      provider: item.provider ?? provider.name,
+      result: { outcome: 'UNKNOWN', errorCode: 'PROCESSING_LEASE_EXPIRED_OUTCOME_UNKNOWN' },
+    });
+  }
   const pending = await sql<{
     id: string;
     organization_id: string;
@@ -670,8 +706,18 @@ export async function deliverPendingSms(
   }>`with candidates as (
       select n.id from notifications.notifications n where n.channel='SMS' and (n.status='QUEUED' or (n.status='FAILED' and exists(
         select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.retryable and a.next_retry_at<=now() and a.attempt_number=(select max(a2.attempt_number) from notifications.delivery_attempts a2 where a2.notification_id=n.id))))
+        and n.scheduled_for<=now() and (n.expires_at is null or n.expires_at>now())
+        and not exists(select 1 from notifications.sms_suppressions suppression where suppression.organization_id=n.organization_id and suppression.normalized_phone=n.intended_recipient and suppression.active)
+        and not exists(select 1 from notifications.notification_intents intent where intent.id=n.intent_id and intent.status='CANCELLED')
+        and exists(select 1 from notifications.notification_channel_policies channel
+          left join notifications.organization_policy_overrides override
+            on override.organization_id=n.organization_id and override.notification_type=channel.notification_type and override.channel=channel.channel
+          where channel.notification_type=n.notification_type and channel.channel='SMS'
+            and coalesce(override.enabled,channel.enabled)
+            and (n.trigger_type<>'AUTOMATIC' or coalesce(override.automatic_enabled,channel.automatic_enabled)))
         and not exists(select 1 from notifications.delivery_attempts a where a.notification_id=n.id and a.status='ACCEPTED')
-      order by n.created_at for update skip locked limit ${limit})
+      order by case n.priority when 'CRITICAL' then 1 when 'HIGH' then 2 when 'NORMAL' then 3 else 4 end,n.scheduled_for,n.created_at
+      for update skip locked limit ${limit})
     update notifications.notifications n set status='PROCESSING',processing_started_at=now(),updated_at=now() from candidates c
     join notifications.sms_delivery_details d on d.notification_id=c.id where n.id=c.id
     returning n.id,n.organization_id,n.rendered_body,n.idempotency_key,n.effective_recipient recipient,d.encoding,d.estimated_segments,d.sender_type,d.sender_id`.execute(

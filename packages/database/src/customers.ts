@@ -9,7 +9,7 @@ import {
 } from './customer-identities.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { decimal4Minor, decimal4Text } from './orders/types.js';
-import { getCustomerDeliveryHistory, type CustomerDeliveryHistory } from './delivery-intelligence.js';
+import { getCustomerDeliveryHistory } from './delivery-intelligence.js';
 
 export * from './customers/types.js';
 export * from './customers/restrictions.js';
@@ -23,7 +23,7 @@ import type {
   CustomerRestrictionType,
   CustomerAccount,
 } from './customers/types.js';
-import { getActiveCustomerRestrictions, listCustomerRestrictions } from './customers/restrictions.js';
+import { listCustomerRestrictions } from './customers/restrictions.js';
 import { getCustomerAccount } from './customers/accounts.js';
 
 export type CustomerSource =
@@ -257,7 +257,7 @@ export async function resolveOrCreateOrderCustomerInTransaction(
   const normalizedEmail = input.email
     ? identityInput(() => normalizeCustomerEmail(input.email!))
     : undefined;
-  const normalizedName = normalizeCustomerName(input.displayName);
+  normalizeCustomerName(input.displayName);
 
   // A row lock cannot protect an identity that does not exist yet. Serialize
   // first-time resolution for the same tenant + phone so concurrent checkouts
@@ -674,7 +674,9 @@ export async function listCustomers(
       orderCount: Number(row.order_count ?? 0),
       totalSpend: row.total_spend ?? '0',
       lastOrderAt: row.last_order_at?.toISOString() ?? null,
-      activeRestrictions: (row.active_restrictions ?? []).filter(Boolean) as readonly CustomerRestrictionType[],
+      activeRestrictions: (row.active_restrictions ?? []).filter(
+        Boolean,
+      ) as readonly CustomerRestrictionType[],
     })),
     pagination: {
       page,
@@ -837,7 +839,10 @@ export async function verifyCustomerPhone(
       actorId: input.actorId,
       customerId: input.customerId,
       action: 'customers.customer.phone_verified',
-      metadata: { phoneId: input.phoneId, verificationSource: input.verificationSource ?? 'MANUAL_OPERATOR' },
+      metadata: {
+        phoneId: input.phoneId,
+        verificationSource: input.verificationSource ?? 'MANUAL_OPERATOR',
+      },
     });
 
     return { id: row.id, verificationStatus: 'VERIFIED', verifiedAt: verifiedAt.toISOString() };
@@ -882,7 +887,10 @@ export async function verifyCustomerEmail(
       actorId: input.actorId,
       customerId: input.customerId,
       action: 'customers.customer.email_verified',
-      metadata: { emailId: input.emailId, verificationSource: input.verificationSource ?? 'MANUAL_OPERATOR' },
+      metadata: {
+        emailId: input.emailId,
+        verificationSource: input.verificationSource ?? 'MANUAL_OPERATOR',
+      },
     });
 
     return { id: row.id, verificationStatus: 'VERIFIED', verifiedAt: verifiedAt.toISOString() };
@@ -969,17 +977,19 @@ export async function addCustomerAddress(
 export async function findCustomerDuplicateCandidates(
   db: Kysely<DatabaseSchema>,
   input: { organizationId: string; customerId: string },
-): Promise<readonly {
-  customerId: string;
-  confidence: string;
-  signals: readonly string[];
-  displayName?: string;
-  customerNumber?: string;
-  status?: string;
-  primaryPhone?: string | null;
-  primaryEmail?: string | null;
-  orderCount?: number;
-}[]> {
+): Promise<
+  readonly {
+    customerId: string;
+    confidence: string;
+    signals: readonly string[];
+    displayName?: string;
+    customerNumber?: string;
+    status?: string;
+    primaryPhone?: string | null;
+    primaryEmail?: string | null;
+    orderCount?: number;
+  }[]
+> {
   const result = await sql<{
     customer_id: string;
     confidence: string;
@@ -1279,7 +1289,6 @@ export async function getCustomerDetail(
     getCustomerDeliveryHistory(db, { organizationId, customerId }),
   ]);
 
-
   return {
     id: row.id,
     customerNumber: row.customer_number,
@@ -1370,7 +1379,8 @@ export async function getCustomerDetail(
       const activeOrderCount = Number(stats.rows[0]?.active_order_count ?? 0);
       const totalSpendMinor = decimal4Minor(totalSpend);
       const netCollectedMinor = decimal4Minor(collectedAmount) - decimal4Minor(refundedAmount);
-      const outstandingMinor = totalSpendMinor > netCollectedMinor ? totalSpendMinor - netCollectedMinor : 0n;
+      const outstandingMinor =
+        totalSpendMinor > netCollectedMinor ? totalSpendMinor - netCollectedMinor : 0n;
       const aovMinor = activeOrderCount > 0 ? totalSpendMinor / BigInt(activeOrderCount) : 0n;
       return {
         totalOrders: Number(stats.rows[0]?.order_count ?? 0),
@@ -1779,6 +1789,25 @@ export async function mergeCustomers(
       update notifications.notifications set customer_id = ${input.targetCustomerId}
       where organization_id = ${input.organizationId} and customer_id = ${input.sourceCustomerId}
     `.execute(transaction);
+    await sql`
+      delete from notifications.preferences source
+      where source.organization_id = ${input.organizationId}
+        and source.recipient_type = 'CUSTOMER'
+        and source.recipient_id = ${input.sourceCustomerId}
+        and exists (
+          select 1 from notifications.preferences target
+          where target.organization_id = source.organization_id
+            and target.recipient_type = 'CUSTOMER'
+            and target.recipient_id = ${input.targetCustomerId}
+            and target.notification_type = source.notification_type
+            and target.channel = source.channel
+        )
+    `.execute(transaction);
+    await sql`
+      update notifications.preferences set recipient_id = ${input.targetCustomerId}, updated_at = now()
+      where organization_id = ${input.organizationId}
+        and recipient_type = 'CUSTOMER' and recipient_id = ${input.sourceCustomerId}
+    `.execute(transaction);
 
     await sql`
       update customers.customer_aliases
@@ -2156,7 +2185,8 @@ export async function updateCustomerAddress(
         and customer_id = ${input.customerId} and status = 'ACTIVE'
       for update
     `.execute(transaction);
-    if (!address.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer address was not found.');
+    if (!address.rows[0])
+      throw new CustomerDomainError('NOT_FOUND', 'Customer address was not found.');
 
     if (input.geographyNodeId) {
       const geography = await sql<{
@@ -2229,7 +2259,8 @@ export async function setPrimaryCustomerPhone(
         and id = ${input.phoneId}
       for update
     `.execute(transaction);
-    if (!targetPhone.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer phone was not found.');
+    if (!targetPhone.rows[0])
+      throw new CustomerDomainError('NOT_FOUND', 'Customer phone was not found.');
 
     await sql`
       update customers.customer_phones
@@ -2265,7 +2296,8 @@ export async function setPrimaryCustomerEmail(
         and id = ${input.emailId}
       for update
     `.execute(transaction);
-    if (!targetEmail.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer email was not found.');
+    if (!targetEmail.rows[0])
+      throw new CustomerDomainError('NOT_FOUND', 'Customer email was not found.');
 
     await sql`
       update customers.customer_emails
@@ -2301,7 +2333,8 @@ export async function setDefaultCustomerAddress(
         and id = ${input.addressId} and status = 'ACTIVE'
       for update
     `.execute(transaction);
-    if (!targetAddress.rows[0]) throw new CustomerDomainError('NOT_FOUND', 'Customer address was not found.');
+    if (!targetAddress.rows[0])
+      throw new CustomerDomainError('NOT_FOUND', 'Customer address was not found.');
 
     await sql`
       update customers.customer_addresses

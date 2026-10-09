@@ -3844,6 +3844,69 @@ export interface AccountSecurityActivityItemDto {
   readonly ipAddress?: string | null;
 }
 
+export type NotificationCategoryDto =
+  'TRANSACTIONAL' | 'OPERATIONAL' | 'SECURITY' | 'MARKETING' | 'SYSTEM';
+export type NotificationPriorityDto = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
+
+export interface NotificationInboxItemDto {
+  readonly id: string;
+  readonly notification_type: string;
+  readonly rendered_subject: string | null;
+  readonly rendered_body: string;
+  readonly category: NotificationCategoryDto;
+  readonly priority: NotificationPriorityDto;
+  readonly action_path: string | null;
+  readonly status: string;
+  readonly source_domain: string;
+  readonly source_id: string;
+  readonly created_at: string;
+  readonly read_at: string | null;
+}
+
+export interface NotificationHistoryRowDto {
+  readonly id: string;
+  readonly intent_id: string | null;
+  readonly notification_type: string;
+  readonly recipient_type: 'MEMBERSHIP' | 'CUSTOMER';
+  readonly customer_id: string | null;
+  readonly membership_id: string | null;
+  readonly channel: 'IN_APP' | 'EMAIL' | 'SMS';
+  readonly category: NotificationCategoryDto;
+  readonly priority: NotificationPriorityDto;
+  readonly status: string;
+  readonly trigger_type: 'AUTOMATIC' | 'MANUAL' | 'TEST' | 'RESEND';
+  readonly provider: string | null;
+  readonly failure_code: string | null;
+  readonly skip_reason: string | null;
+  readonly source_domain: string;
+  readonly source_id: string;
+  readonly scheduled_for: string;
+  readonly expires_at: string | null;
+  readonly created_at: string;
+  readonly sent_at: string | null;
+  readonly delivered_at: string | null;
+}
+
+export interface NotificationEventCatalogItemDto {
+  readonly eventType: string;
+  readonly notificationType: string;
+  readonly audience: 'CUSTOMER' | 'STAFF';
+  readonly category: NotificationCategoryDto;
+  readonly priority: NotificationPriorityDto;
+  readonly required?: boolean;
+  readonly requiredCapability?: string;
+}
+
+export interface NotificationOperationalHealthDto {
+  readonly queued: number;
+  readonly processing: number;
+  readonly retry_wait: number;
+  readonly unknown_outcome: number;
+  readonly dead_letter_events: number;
+  readonly unmatched_provider_events: number;
+  readonly oldest_queued_at: string | null;
+}
+
 export type EmailNotificationStatus =
   | 'NOT_APPLICABLE'
   | 'SKIPPED_NO_EMAIL'
@@ -3851,12 +3914,18 @@ export type EmailNotificationStatus =
   | 'QUEUED'
   | 'PROCESSING'
   | 'SENT'
+  | 'ACCEPTED'
   | 'DELIVERED'
   | 'DELIVERY_DELAYED'
   | 'FAILED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'UNDELIVERABLE'
+  | 'UNKNOWN_PROVIDER_OUTCOME'
   | 'BOUNCED'
   | 'COMPLAINED'
   | 'SUPPRESSED'
+  | 'CANCELLED'
   | 'READ';
 
 export type EmailTriggerType = 'AUTOMATIC' | 'MANUAL' | 'TEST' | 'RESEND';
