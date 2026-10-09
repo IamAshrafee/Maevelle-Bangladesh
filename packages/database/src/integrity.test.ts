@@ -6,6 +6,7 @@ import { createOrganization } from './platform.js';
 import {
   executeIntegrityRun,
   getIntegrityFinding,
+  getIntegrityOverview,
   getIntegrityRun,
   listIntegrityFindings,
   requestIntegrityRun,
@@ -126,4 +127,63 @@ describe('durable System Integrity orchestration', () => {
       expect.objectContaining({ status: 'FAILED', checks_failed: 1 }),
     );
   });
+
+  it('computes honest overview metrics and filters findings by search term and repairability', async () => {
+    const tenant = await organization('overview');
+
+    // Before any scans, status is NOT_ASSESSED
+    const initialOverview = await getIntegrityOverview(database.db, tenant.id);
+    expect(initialOverview.overallStatus).toBe('NOT_ASSESSED');
+    expect(initialOverview.latestRun).toBeNull();
+    expect(initialOverview.checksSummary.total).toBe(12);
+
+    // Create a dead letter job to produce a finding
+    await sql`insert into platform.jobs
+      (organization_id,queue_name,job_type,payload_version,payload,status,initiator_type,authorization_mode)
+      values(${tenant.id},'default','test.integrity.overview-dead-letter',1,'{}'::jsonb,'DEAD_LETTER','SYSTEM','SYSTEM')`.execute(
+      database.db,
+    );
+
+    const run = await requestIntegrityRun(database.db, {
+      organizationId: tenant.id,
+      triggerType: 'MANUAL',
+      checkIds: ['platform.recovery'],
+    });
+    await executeIntegrityRun(database.db, run.id);
+
+    // After scan with finding, overallStatus is ATTENTION_REQUIRED or CRITICAL_ISSUES_DETECTED
+    const postOverview = await getIntegrityOverview(database.db, tenant.id);
+    expect(postOverview.findingsCounts.totalOpen).toBe(1);
+    expect(postOverview.latestRun).toEqual(
+      expect.objectContaining({ status: 'SUCCEEDED', findings_detected: 1 }),
+    );
+    expect(postOverview.recentFindings.length).toBe(1);
+
+    // Search query filter
+    const matchSearch = await listIntegrityFindings(database.db, {
+      organizationId: tenant.id,
+      page: 1,
+      pageSize: 10,
+      query: 'DEAD_LETTER_JOB',
+    });
+    expect(matchSearch.items.length).toBe(1);
+
+    const noMatchSearch = await listIntegrityFindings(database.db, {
+      organizationId: tenant.id,
+      page: 1,
+      pageSize: 10,
+      query: 'NON_EXISTENT_QUERY',
+    });
+    expect(noMatchSearch.items.length).toBe(0);
+
+    // Repairable filter (DEAD_LETTER_JOB is diagnosis only)
+    const repairableList = await listIntegrityFindings(database.db, {
+      organizationId: tenant.id,
+      page: 1,
+      pageSize: 10,
+      repairableOnly: true,
+    });
+    expect(repairableList.items.length).toBe(0);
+  });
 });
+

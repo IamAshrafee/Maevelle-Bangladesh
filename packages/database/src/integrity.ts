@@ -829,6 +829,198 @@ export async function getIntegrityRun(
   return { ...run.rows[0], checks: checks.rows };
 }
 
+export async function cancelIntegrityRun(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  runId: string,
+) {
+  const row = await sql<{ id: string; status: string }>`update platform.integrity_runs
+    set status='INTERRUPTED',completed_at=now(),error_summary='Scan was cancelled by operator.'
+    where organization_id=${organizationId} and id=${runId}::uuid and status='QUEUED'
+    returning id::text,status`.execute(db);
+  if (!row.rows[0]) throw new IntegrityDomainError('NOT_FOUND', 'Queued run was not found or is already executing.');
+  return row.rows[0];
+}
+
+export async function getIntegrityOverview(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+) {
+  const [countsResult, latestRunResult, activeRunResult, moduleRows, recentRows, queueRows] =
+    await Promise.all([
+      sql<{
+        open_count: string;
+        critical_count: string;
+        error_count: string;
+        warning_count: string;
+        info_count: string;
+        resolved_count: string;
+        accepted_count: string;
+      }>`select
+        count(*) filter (where status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING'))::text as open_count,
+        count(*) filter (where status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING') and severity = 'CRITICAL')::text as critical_count,
+        count(*) filter (where status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING') and severity = 'ERROR')::text as error_count,
+        count(*) filter (where status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING') and severity = 'WARNING')::text as warning_count,
+        count(*) filter (where status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING') and severity = 'INFO')::text as info_count,
+        count(*) filter (where status = 'RESOLVED')::text as resolved_count,
+        count(*) filter (where status = 'ACCEPTED')::text as accepted_count
+      from platform.integrity_issues
+      where organization_id = ${organizationId}`.execute(db),
+
+      sql`select id::text,trigger_type,scope_type,scope_module,selected_check_ids,status,started_at::text,completed_at::text,checks_total,checks_completed,checks_failed,records_inspected::text,findings_detected,error_summary,created_at::text
+        from platform.integrity_runs
+        where organization_id=${organizationId} and status in ('SUCCEEDED', 'PARTIAL', 'FAILED', 'INTERRUPTED')
+        order by created_at desc, id desc limit 1`.execute(db),
+
+      sql`select id::text,trigger_type,scope_type,scope_module,selected_check_ids,status,started_at::text,completed_at::text,checks_total,checks_completed,checks_failed,records_inspected::text,findings_detected,error_summary,lease_expires_at::text,created_at::text
+        from platform.integrity_runs
+        where organization_id=${organizationId} and status in ('QUEUED', 'RUNNING')
+        order by created_at desc, id desc limit 1`.execute(db),
+
+      sql<{
+        domain: string;
+        open_count: string;
+        critical_count: string;
+        last_detected_at: string | null;
+      }>`select domain,
+        count(*) filter (where status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING'))::text as open_count,
+        count(*) filter (where status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING') and severity = 'CRITICAL')::text as critical_count,
+        max(last_detected_at)::text as last_detected_at
+      from platform.integrity_issues
+      where organization_id = ${organizationId}
+      group by domain`.execute(db),
+
+      sql`select id::text,check_id,check_version,domain,category,issue_type code,severity,confidence,entity_type,entity_id::text,status,summary,summary description,details,first_detected_at::text,first_detected_at::text detected_at,last_detected_at::text,occurrence_count,repair_reference,case when check_id='analytics.projection' or (check_id='reviews.projection' and issue_type='RATING_SUMMARY_DRIFT' and entity_id is not null) then 'REBUILDABLE_PROJECTION' else 'DIAGNOSIS_ONLY' end repairability,version::text
+        from platform.integrity_issues
+        where organization_id=${organizationId} and status in ('OPEN','INVESTIGATING','REPAIR_PENDING','REPAIRING')
+        order by case severity when 'CRITICAL' then 0 when 'ERROR' then 1 when 'WARNING' then 2 else 3 end, last_detected_at desc, id desc
+        limit 5`.execute(db),
+
+      sql<{
+        queued_runs: string;
+        running_runs: string;
+        failed_runs: string;
+      }>`select
+        count(*) filter (where status = 'QUEUED')::text as queued_runs,
+        count(*) filter (where status = 'RUNNING')::text as running_runs,
+        count(*) filter (where status in ('FAILED', 'INTERRUPTED'))::text as failed_runs
+      from platform.integrity_runs
+      where organization_id = ${organizationId}`.execute(db),
+    ]);
+
+  const counts = countsResult.rows[0];
+  const totalOpen = Number(counts?.open_count ?? 0);
+  const critical = Number(counts?.critical_count ?? 0);
+  const error = Number(counts?.error_count ?? 0);
+  const warning = Number(counts?.warning_count ?? 0);
+  const info = Number(counts?.info_count ?? 0);
+  const resolved = Number(counts?.resolved_count ?? 0);
+  const accepted = Number(counts?.accepted_count ?? 0);
+
+  const latestRun = (latestRunResult.rows[0] as any) ?? null;
+  const activeRun = (activeRunResult.rows[0] as any) ?? null;
+
+  let overallStatus:
+    | 'HEALTHY_IN_COMPLETED_CHECKS'
+    | 'CRITICAL_ISSUES_DETECTED'
+    | 'ATTENTION_REQUIRED'
+    | 'CHECKS_INCOMPLETE'
+    | 'NOT_ASSESSED'
+    | 'SCAN_IN_PROGRESS';
+
+  if (activeRun) {
+    overallStatus = 'SCAN_IN_PROGRESS';
+  } else if (!latestRun) {
+    overallStatus = 'NOT_ASSESSED';
+  } else if (critical > 0) {
+    overallStatus = 'CRITICAL_ISSUES_DETECTED';
+  } else if (error > 0 || warning > 0) {
+    overallStatus = 'ATTENTION_REQUIRED';
+  } else if (
+    latestRun.status === 'PARTIAL' ||
+    latestRun.status === 'FAILED' ||
+    latestRun.status === 'INTERRUPTED'
+  ) {
+    overallStatus = 'CHECKS_INCOMPLETE';
+  } else {
+    overallStatus = 'HEALTHY_IN_COMPLETED_CHECKS';
+  }
+
+  const moduleMap = new Map<
+    string,
+    { checkCount: number; openFindingsCount: number; criticalCount: number; lastDetectedAt: string | null }
+  >();
+  for (const check of integrityCheckRegistry) {
+    const existing = moduleMap.get(check.module) ?? {
+      checkCount: 0,
+      openFindingsCount: 0,
+      criticalCount: 0,
+      lastDetectedAt: null,
+    };
+    existing.checkCount += 1;
+    moduleMap.set(check.module, existing);
+  }
+  for (const row of moduleRows.rows) {
+    const existing = moduleMap.get(row.domain) ?? {
+      checkCount: 0,
+      openFindingsCount: 0,
+      criticalCount: 0,
+      lastDetectedAt: null,
+    };
+    existing.openFindingsCount = Number(row.open_count);
+    existing.criticalCount = Number(row.critical_count);
+    existing.lastDetectedAt = row.last_detected_at;
+    moduleMap.set(row.domain, existing);
+  }
+
+  const modules = [...moduleMap.entries()].map(([mod, data]) => ({
+    module: mod,
+    checkCount: data.checkCount,
+    openFindingsCount: data.openFindingsCount,
+    criticalCount: data.criticalCount,
+    lastDetectedAt: data.lastDetectedAt,
+    status: (data.criticalCount > 0
+      ? 'CRITICAL_ISSUES'
+      : data.openFindingsCount > 0
+        ? 'ATTENTION_REQUIRED'
+        : latestRun
+          ? 'HEALTHY'
+          : 'NOT_RUN') as 'HEALTHY' | 'CRITICAL_ISSUES' | 'ATTENTION_REQUIRED' | 'NOT_RUN',
+  }));
+
+  const queueHealth = {
+    queuedRuns: Number(queueRows.rows[0]?.queued_runs ?? 0),
+    runningRuns: Number(queueRows.rows[0]?.running_runs ?? 0),
+    failedRuns: Number(queueRows.rows[0]?.failed_runs ?? 0),
+  };
+
+  const checksSummary = {
+    total: integrityCheckRegistry.length,
+    frequentCount: integrityCheckRegistry.filter((c) => c.schedule === 'FREQUENT').length,
+    nightlyCount: integrityCheckRegistry.filter((c) => c.schedule === 'NIGHTLY').length,
+    repairableCount: integrityCheckRegistry.filter((c) => c.repairKeys.length > 0).length,
+  };
+
+  return {
+    overallStatus,
+    latestRun,
+    activeRun,
+    checksSummary,
+    findingsCounts: {
+      totalOpen,
+      critical,
+      error,
+      warning,
+      info,
+      resolved,
+      accepted,
+    },
+    modules,
+    recentFindings: recentRows.rows as any[],
+    queueHealth,
+  };
+}
+
 export async function listIntegrityFindings(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -838,18 +1030,47 @@ export async function listIntegrityFindings(
     status?: string;
     severity?: string;
     module?: string;
+    checkId?: string;
+    repairableOnly?: boolean;
+    query?: string;
   },
 ) {
   const offset = (input.page - 1) * input.pageSize;
+  const searchTerm = input.query
+    ? `%${input.query.trim().replaceAll('%', '\\%').replaceAll('_', '\\_')}%`
+    : null;
+
   const [rows, count] = await Promise.all([
-    sql`select id::text,check_id,check_version,domain,category,issue_type code,severity,confidence,entity_type,entity_id::text,status,summary,summary description,details,first_detected_at::text,first_detected_at::text detected_at,last_detected_at::text,occurrence_count,repair_reference,case when check_id='analytics.projection' or (check_id='reviews.projection' and issue_type='RATING_SUMMARY_DRIFT' and entity_id is not null) then 'REBUILDABLE_PROJECTION' else 'DIAGNOSIS_ONLY' end repairability,version::text from platform.integrity_issues where organization_id=${input.organizationId} and (${input.status ?? null}::text is null or status=${input.status ?? null}) and (${input.severity ?? null}::text is null or severity=${input.severity ?? null}) and (${input.module ?? null}::text is null or domain=${input.module ?? null}) order by case severity when 'CRITICAL' then 0 when 'ERROR' then 1 when 'WARNING' then 2 else 3 end,last_detected_at desc,id desc limit ${input.pageSize} offset ${offset}`.execute(
-      db,
-    ),
+    sql`select id::text,check_id,check_version,domain,category,issue_type code,severity,confidence,entity_type,entity_id::text,status,summary,summary description,details,first_detected_at::text,first_detected_at::text detected_at,last_detected_at::text,occurrence_count,repair_reference,case when check_id='analytics.projection' or (check_id='reviews.projection' and issue_type='RATING_SUMMARY_DRIFT' and entity_id is not null) then 'REBUILDABLE_PROJECTION' else 'DIAGNOSIS_ONLY' end repairability,version::text
+      from platform.integrity_issues
+      where organization_id=${input.organizationId}
+        and (${input.status ?? null}::text is null or status=${input.status ?? null})
+        and (${input.severity ?? null}::text is null or severity=${input.severity ?? null})
+        and (${input.module ?? null}::text is null or domain=${input.module ?? null})
+        and (${input.checkId ?? null}::text is null or check_id=${input.checkId ?? null})
+        and (${input.repairableOnly ? true : null}::boolean is null or (
+          check_id='analytics.projection' or (check_id='reviews.projection' and issue_type='RATING_SUMMARY_DRIFT' and entity_id is not null)
+        ))
+        and (${searchTerm ? true : null}::boolean is null or (
+          summary ilike ${searchTerm} or issue_type ilike ${searchTerm} or check_id ilike ${searchTerm} or entity_type ilike ${searchTerm} or entity_id::text ilike ${searchTerm}
+        ))
+      order by case severity when 'CRITICAL' then 0 when 'ERROR' then 1 when 'WARNING' then 2 else 3 end,last_detected_at desc,id desc
+      limit ${input.pageSize} offset ${offset}`.execute(db),
     sql<{
       count: string;
-    }>`select count(*)::text count from platform.integrity_issues where organization_id=${input.organizationId} and (${input.status ?? null}::text is null or status=${input.status ?? null}) and (${input.severity ?? null}::text is null or severity=${input.severity ?? null}) and (${input.module ?? null}::text is null or domain=${input.module ?? null})`.execute(
-      db,
-    ),
+    }>`select count(*)::text count
+      from platform.integrity_issues
+      where organization_id=${input.organizationId}
+        and (${input.status ?? null}::text is null or status=${input.status ?? null})
+        and (${input.severity ?? null}::text is null or severity=${input.severity ?? null})
+        and (${input.module ?? null}::text is null or domain=${input.module ?? null})
+        and (${input.checkId ?? null}::text is null or check_id=${input.checkId ?? null})
+        and (${input.repairableOnly ? true : null}::boolean is null or (
+          check_id='analytics.projection' or (check_id='reviews.projection' and issue_type='RATING_SUMMARY_DRIFT' and entity_id is not null)
+        ))
+        and (${searchTerm ? true : null}::boolean is null or (
+          summary ilike ${searchTerm} or issue_type ilike ${searchTerm} or check_id ilike ${searchTerm} or entity_type ilike ${searchTerm} or entity_id::text ilike ${searchTerm}
+        ))`.execute(db),
   ]);
   const totalItems = Number(count.rows[0]?.count ?? 0);
   return {

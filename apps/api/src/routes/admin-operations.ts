@@ -158,6 +158,12 @@ export function registerAdminOperationsRoutes(
           : 422;
     return reply.code(status).send({ error: { code: error.code, message: error.message } });
   };
+  app.get('/admin/integrity/overview', async (request, reply) => {
+    const active = await context(database, auth, request.headers, 'admin.integrity.view');
+    if (!active)
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+    return { data: await integrity.getIntegrityOverview(database.db, active.organizationId) };
+  });
   app.get('/admin/integrity/checks', async (request, reply) => {
     const active = await context(database, auth, request.headers, 'admin.integrity.view');
     if (!active)
@@ -170,6 +176,9 @@ export function registerAdminOperationsRoutes(
     status: Type.Optional(Type.String()),
     severity: Type.Optional(Type.String()),
     module: Type.Optional(Type.String()),
+    checkId: Type.Optional(Type.String()),
+    repairableOnly: Type.Optional(Type.Boolean()),
+    q: Type.Optional(Type.String({ maxLength: 100 })),
   });
   app.get('/admin/integrity', { schema: { querystring: findingQuery } }, async (request, reply) => {
     const active = await context(database, auth, request.headers, 'admin.integrity.view');
@@ -181,6 +190,9 @@ export function registerAdminOperationsRoutes(
       status?: string;
       severity?: string;
       module?: string;
+      checkId?: string;
+      repairableOnly?: boolean;
+      q?: string;
     };
     const result = await integrity.listIntegrityFindings(database.db, {
       organizationId: active.organizationId,
@@ -189,6 +201,9 @@ export function registerAdminOperationsRoutes(
       ...(query.status ? { status: query.status } : {}),
       ...(query.severity ? { severity: query.severity } : {}),
       ...(query.module ? { module: query.module } : {}),
+      ...(query.checkId ? { checkId: query.checkId } : {}),
+      ...(query.repairableOnly ? { repairableOnly: query.repairableOnly } : {}),
+      ...(query.q ? { query: query.q } : {}),
     });
     return { data: result.items, meta: { pagination: result.pagination } };
   });
@@ -303,6 +318,7 @@ export function registerAdminOperationsRoutes(
           checkIds: Type.Optional(
             Type.Array(Type.String({ maxLength: 120 }), { minItems: 1, maxItems: 25 }),
           ),
+          executeInline: Type.Optional(Type.Boolean()),
         }),
       },
     },
@@ -311,16 +327,43 @@ export function registerAdminOperationsRoutes(
       if (!active)
         return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
       try {
-        const body = request.body as { module?: string; checkIds?: string[] };
-        return reply.code(202).send({
-          data: await integrity.requestIntegrityRun(database.db, {
-            organizationId: active.organizationId,
-            actorId: active.actorId,
-            triggerType: body.module || body.checkIds ? 'TARGETED' : 'MANUAL',
-            ...(body.module ? { module: body.module } : {}),
-            ...(body.checkIds ? { checkIds: body.checkIds } : {}),
-          }),
+        const body = request.body as { module?: string; checkIds?: string[]; executeInline?: boolean };
+        const run = await integrity.requestIntegrityRun(database.db, {
+          organizationId: active.organizationId,
+          actorId: active.actorId,
+          triggerType: body.module || body.checkIds ? 'TARGETED' : 'MANUAL',
+          ...(body.module ? { module: body.module } : {}),
+          ...(body.checkIds ? { checkIds: body.checkIds } : {}),
         });
+        if (body.executeInline) {
+          const executed = await integrity.executeIntegrityRun(
+            database.db,
+            run.id,
+            `admin:${active.actorId}`,
+          );
+          return reply.code(200).send({ data: executed ?? run });
+        }
+        return reply.code(202).send({ data: run });
+      } catch (error) {
+        return integrityError(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/integrity/runs/:runId/cancel',
+    { schema: { params: Type.Object({ runId: Type.String({ format: 'uuid' }) }) } },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'admin.integrity.run');
+      if (!active)
+        return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+      try {
+        return {
+          data: await integrity.cancelIntegrityRun(
+            database.db,
+            active.organizationId,
+            (request.params as { runId: string }).runId,
+          ),
+        };
       } catch (error) {
         return integrityError(reply, error);
       }

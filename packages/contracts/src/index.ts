@@ -4920,3 +4920,199 @@ export interface OrderLineReviewStateDto {
   readonly reviewStatus?: string;
   readonly token?: string;
 }
+
+// ---------------------------------------------------------------------------
+// System Integrity DTOs
+// ---------------------------------------------------------------------------
+
+export type IntegritySeverityDto = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+export type IntegrityCategoryDto =
+  | 'DATA'
+  | 'BUSINESS'
+  | 'FINANCIAL'
+  | 'OPERATIONAL'
+  | 'PROJECTION'
+  | 'STORAGE'
+  | 'SECURITY_CONFIGURATION';
+export type IntegrityFindingStatusDto =
+  | 'OPEN'
+  | 'INVESTIGATING'
+  | 'REPAIR_PENDING'
+  | 'REPAIRING'
+  | 'RESOLVED'
+  | 'ACCEPTED';
+export type IntegrityOverallStatusDto =
+  | 'HEALTHY_IN_COMPLETED_CHECKS'
+  | 'CRITICAL_ISSUES_DETECTED'
+  | 'ATTENTION_REQUIRED'
+  | 'CHECKS_INCOMPLETE'
+  | 'NOT_ASSESSED'
+  | 'SCAN_IN_PROGRESS';
+export type IntegrityCheckCostDto = 'LIGHT' | 'MODERATE' | 'HEAVY';
+export type IntegrityScheduleDto = 'FREQUENT' | 'NIGHTLY' | 'MANUAL_ONLY';
+export type IntegrityRepairabilityDto = 'REBUILDABLE_PROJECTION' | 'DIAGNOSIS_ONLY';
+export type IntegrityTriggerTypeDto = 'SCHEDULED' | 'MANUAL' | 'TARGETED' | 'VERIFICATION';
+export type IntegrityRunStatusDto =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCEEDED'
+  | 'PARTIAL'
+  | 'FAILED'
+  | 'INTERRUPTED'
+  | 'CANCELLED';
+
+export interface IntegrityCheckDto {
+  readonly id: string;
+  readonly version: number;
+  readonly name: string;
+  readonly description: string;
+  readonly module: string;
+  readonly invariant: string;
+  readonly category: IntegrityCategoryDto;
+  readonly defaultSeverity: IntegritySeverityDto;
+  readonly cost: IntegrityCheckCostDto;
+  readonly supportedScopes: readonly ('ORGANIZATION' | 'MODULE' | 'ENTITY')[];
+  readonly schedule: IntegrityScheduleDto;
+  readonly repairKeys: readonly string[];
+  readonly requiredCapability: string;
+}
+
+export interface IntegrityFindingEvidenceDto {
+  readonly expected?: string | null;
+  readonly observed?: string | null;
+  readonly metadata?: Readonly<Record<string, string | number | boolean | null>>;
+}
+
+export interface IntegrityFindingListItemDto {
+  readonly id: string;
+  readonly check_id: string;
+  readonly check_version: number;
+  readonly domain: string;
+  readonly category: IntegrityCategoryDto;
+  readonly code: string;
+  readonly severity: IntegritySeverityDto;
+  readonly confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  readonly entity_type: string | null;
+  readonly entity_id: string | null;
+  readonly status: IntegrityFindingStatusDto;
+  readonly summary: string;
+  readonly description: string;
+  readonly details: IntegrityFindingEvidenceDto;
+  readonly first_detected_at: string;
+  readonly detected_at: string;
+  readonly last_detected_at: string;
+  readonly occurrence_count: number;
+  readonly repair_reference: string | null;
+  readonly repairability: IntegrityRepairabilityDto;
+  readonly version: string;
+}
+
+export interface IntegrityFindingEventDto {
+  readonly event_type: string;
+  readonly actor_id: string | null;
+  readonly from_status: string | null;
+  readonly to_status: string | null;
+  readonly metadata: unknown;
+  readonly created_at: string;
+}
+
+export interface IntegrityRepairRunDto {
+  readonly id: string;
+  readonly repair_key: string;
+  readonly status: string;
+  readonly preview: unknown;
+  readonly result: unknown;
+  readonly verification_run_id: string | null;
+  readonly created_at: string;
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+}
+
+export interface IntegrityFindingDetailDto extends IntegrityFindingListItemDto {
+  readonly events: readonly IntegrityFindingEventDto[];
+  readonly repairs: readonly IntegrityRepairRunDto[];
+}
+
+export interface IntegrityRepairPreviewDto {
+  readonly key: string;
+  readonly risk: 'LOW' | 'MODERATE' | 'HIGH';
+  readonly description: string;
+  readonly effects: readonly string[];
+  readonly findingId: string;
+  readonly findingVersion: number;
+  readonly preconditions: readonly string[];
+  readonly verification: string;
+}
+
+export interface IntegrityRunDto {
+  readonly id: string;
+  readonly trigger_type: IntegrityTriggerTypeDto;
+  readonly scope_type: 'ORGANIZATION' | 'MODULE';
+  readonly scope_module: string | null;
+  readonly selected_check_ids: readonly string[];
+  readonly status: IntegrityRunStatusDto;
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly checks_total: number;
+  readonly checks_completed: number;
+  readonly checks_failed: number;
+  readonly records_inspected: string;
+  readonly findings_detected: number;
+  readonly error_summary: string | null;
+  readonly created_at: string;
+}
+
+export interface IntegrityRunCheckDto {
+  readonly check_id: string;
+  readonly check_version: number;
+  readonly status: string;
+  readonly records_inspected: string;
+  readonly findings_detected: number;
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly duration_ms: string | null;
+  readonly error_code: string | null;
+  readonly error_summary: string | null;
+}
+
+export interface IntegrityRunDetailDto extends IntegrityRunDto {
+  readonly checks: readonly IntegrityRunCheckDto[];
+}
+
+export interface IntegrityModuleSummaryDto {
+  readonly module: string;
+  readonly checkCount: number;
+  readonly openFindingsCount: number;
+  readonly criticalCount: number;
+  readonly lastDetectedAt: string | null;
+  readonly status: 'HEALTHY' | 'CRITICAL_ISSUES' | 'ATTENTION_REQUIRED' | 'NOT_RUN';
+}
+
+export interface IntegrityOverviewDto {
+  readonly overallStatus: IntegrityOverallStatusDto;
+  readonly latestRun: IntegrityRunDto | null;
+  readonly activeRun: (IntegrityRunDto & { readonly lease_expires_at?: string | null }) | null;
+  readonly checksSummary: {
+    readonly total: number;
+    readonly frequentCount: number;
+    readonly nightlyCount: number;
+    readonly repairableCount: number;
+  };
+  readonly findingsCounts: {
+    readonly totalOpen: number;
+    readonly critical: number;
+    readonly error: number;
+    readonly warning: number;
+    readonly info: number;
+    readonly resolved: number;
+    readonly accepted: number;
+  };
+  readonly modules: readonly IntegrityModuleSummaryDto[];
+  readonly recentFindings: readonly IntegrityFindingListItemDto[];
+  readonly queueHealth: {
+    readonly queuedRuns: number;
+    readonly runningRuns: number;
+    readonly failedRuns: number;
+  };
+}
+
