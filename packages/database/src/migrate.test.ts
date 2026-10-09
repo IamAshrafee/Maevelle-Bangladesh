@@ -121,8 +121,12 @@ describe('clean PostgreSQL migration path', () => {
         'order_facts',
         'payment_facts',
         'projection_event_receipts',
+        'projection_state',
+        'report_exports',
         'return_facts',
         'sales_facts',
+        'storefront_events',
+        'storefront_sessions',
       ]);
       const tables = await sql<{ table_name: string }>`
         select table_name from information_schema.tables

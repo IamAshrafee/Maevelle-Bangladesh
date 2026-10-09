@@ -8,7 +8,13 @@ import {
   consumeAnalyticsOutbox,
   getAnalyticsDashboards,
   getAnalyticsOverview,
+  getAnalyticsReport,
+  getAnalyticsExport,
+  ingestStorefrontEvent,
+  normalizeAnalyticsReportQuery,
+  processAnalyticsExports,
   rebuildAnalyticsProjections,
+  requestAnalyticsExport,
   verifyAnalyticsIntegrity,
 } from './analytics.js';
 
@@ -103,5 +109,85 @@ describe('rebuildable analytics projections', () => {
     expect(await captureInventoryDailySnapshot(database.db, organizationId, '2026-08-24')).toEqual({
       rows: 0,
     });
+  });
+
+  it('records consented storefront observations idempotently and exposes explicit funnel denominators', async () => {
+    const organizationId = await fixture('behavior');
+    const eventId = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
+    const occurredAt = new Date().toISOString();
+    const occurredOn = occurredAt.slice(0, 10);
+    const event = {
+      schemaVersion: 1 as const,
+      name: 'PRODUCT_VIEWED' as const,
+      eventId,
+      occurredAt,
+      origin: 'BROWSER' as const,
+      sessionId,
+      consent: { analytics: 'GRANTED' as const, marketing: 'DENIED' as const },
+      attribution: { source: 'facebook', medium: 'social', campaign: 'eid', touch: 'FIRST' as const },
+      data: {
+        item: {
+          productId: crypto.randomUUID(),
+          skuId: crypto.randomUUID(),
+        },
+      },
+    };
+    await expect(ingestStorefrontEvent(database.db, organizationId, event)).resolves.toEqual({
+      accepted: true,
+      duplicate: false,
+      reason: 'RECORDED',
+    });
+    await expect(ingestStorefrontEvent(database.db, organizationId, event)).resolves.toEqual({
+      accepted: true,
+      duplicate: true,
+      reason: 'DUPLICATE',
+    });
+    await expect(
+      ingestStorefrontEvent(database.db, organizationId, {
+        ...event,
+        eventId: crypto.randomUUID(),
+        consent: { analytics: 'UNKNOWN', marketing: 'UNKNOWN' },
+      }),
+    ).resolves.toEqual({
+      accepted: false,
+      duplicate: false,
+      reason: 'ANALYTICS_CONSENT_REQUIRED',
+    });
+    const report = await getAnalyticsReport(database.db, organizationId, 'STOREFRONT', {
+      from: occurredOn,
+      to: occurredOn,
+    });
+    expect(report.availability.status).toBe('AVAILABLE');
+    expect(report.totals).toEqual([
+      expect.objectContaining({ eligible_sessions: '1', product_view_sessions: '1' }),
+    ]);
+  });
+
+  it('bounds report ranges and uses inclusive dates with an exclusive upper boundary', () => {
+    expect(normalizeAnalyticsReportQuery({ from: '2026-10-01', to: '2026-10-10' })).toEqual(
+      expect.objectContaining({ from: '2026-10-01', toExclusive: '2026-10-11', pageSize: 25 }),
+    );
+    expect(() =>
+      normalizeAnalyticsReportQuery({ from: '2020-01-01', to: '2026-10-10' }),
+    ).toThrow('cannot exceed 731 days');
+  });
+
+  it('leases, renders, and retrieves tenant-scoped CSV exports', async () => {
+    const organizationId = await fixture('export');
+    await rebuildAnalyticsProjections(database.db, organizationId);
+    const requested = await requestAnalyticsExport(database.db, {
+      organizationId,
+      actorId: crypto.randomUUID(),
+      report: 'ORDERS',
+      query: { from: '2026-01-01', to: '2026-12-31' },
+    });
+    expect(requested.status).toBe('QUEUED');
+    await expect(processAnalyticsExports(database.db, 'test-worker')).resolves.toBe(1);
+    const exported = await getAnalyticsExport(database.db, organizationId, requested.id);
+    expect(exported).toEqual(
+      expect.objectContaining({ status: 'READY', content_type: 'text/csv; charset=utf-8' }),
+    );
+    expect(exported?.payload).toContain('section');
   });
 });

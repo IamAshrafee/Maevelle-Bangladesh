@@ -206,7 +206,7 @@ export function registerAuthRoutes(
   registerPathaoRoutes(app, database, auth, config);
   registerSteadfastRoutes(app, database, auth, config);
   registerCourierWebhookRoutes(app, database);
-  registerAnalyticsRoutes(app, database, auth);
+  registerAnalyticsRoutes(app, database, auth, config.storefrontOrganizationCode);
   registerAdminOperationsRoutes(app, database, auth);
   registerTeamAccessRoutes(app, database, auth, config);
   registerAssetRoutes(app, database, auth);

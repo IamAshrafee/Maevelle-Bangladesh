@@ -12,7 +12,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create table analytics.sales_facts (
       id bigint generated always as identity primary key, organization_id uuid not null references platform.organizations(id), source_order_line_id uuid not null unique references orders.order_lines(id), order_id uuid not null references orders.orders(id), customer_id uuid references customers.customers(id),
-      product_id uuid references catalog.products(id), variant_id uuid references catalog.product_variants(id), order_date date not null, committed_at timestamptz not null, currency_code text not null, quantity numeric(20,6) not null,
+      product_id uuid references catalog.products(id), variant_id uuid references catalog.product_variants(id), sku_snapshot text not null, product_title_snapshot text not null, variant_title_snapshot text,
+      order_date date not null, committed_at timestamptz not null, currency_code text not null, quantity numeric(20,6) not null,
       gross_amount numeric(20,4) not null, discount_amount numeric(20,4) not null, net_amount numeric(20,4) not null, refund_attributed_amount numeric(20,4) not null default 0, acquisition_cost_amount numeric(20,4), gross_margin_amount numeric(20,4), projection_version integer not null default 1, updated_at timestamptz not null default now(),
       check(net_amount=gross_amount-discount_amount), check(gross_margin_amount is null or acquisition_cost_amount is not null)
     );

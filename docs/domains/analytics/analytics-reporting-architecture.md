@@ -1,8 +1,9 @@
 # Maevelle Ecommerce — Analytics & Reporting Architecture
 
 **Document:** `docs/domains/analytics/analytics-reporting-architecture.md`
-**Status:** Initial Domain Design / Living Document
-**Version:** 0.1
+**Status:** Implemented backend architecture / living document
+**Version:** 1.0
+**Current evidence:** See `production-completion.md` for implemented contracts, verification, and remaining external/frontend boundaries.
 **Related:** All transactional domains, `finance-operations-architecture.md`, `access-control-architecture.md`, `storefront-commerce-architecture.md`
 
 ---

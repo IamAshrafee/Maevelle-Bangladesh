@@ -61,9 +61,9 @@ export async function rebuildSalesFacts(
           select order_line_id,sum(amount)::numeric amount from cost_effects group by order_line_id
         )
         insert into analytics.sales_facts(
-          organization_id,source_order_line_id,order_id,customer_id,product_id,variant_id,order_date,committed_at,currency_code,quantity,gross_amount,discount_amount,net_amount,acquisition_cost_amount,gross_margin_amount
+          organization_id,source_order_line_id,order_id,customer_id,product_id,variant_id,sku_snapshot,product_title_snapshot,variant_title_snapshot,order_date,committed_at,currency_code,quantity,gross_amount,discount_amount,net_amount,acquisition_cost_amount,gross_margin_amount
         )
-        select line.organization_id,line.id,ord.id,ord.customer_id,line.product_id,line.variant_id,
+        select line.organization_id,line.id,ord.id,ord.customer_id,line.product_id,line.variant_id,line.sku_snapshot,line.product_title_snapshot,line.variant_title_snapshot,
                (ord.created_at at time zone organization.timezone)::date,ord.created_at,ord.currency_code,line.quantity,line.gross_amount,line.discount_amount,line.net_amount,
                cost.amount,case when cost.amount is null then null else line.net_amount-cost.amount end
         from orders.order_lines line
@@ -176,10 +176,10 @@ export async function rebuildAnalyticsProjections(
     );
     const orders = await sql<{
       id: string;
-    }>`insert into analytics.order_facts(organization_id,source_order_id,canonical_customer_id,order_number,order_status,source,currency_code,gross_amount,discount_amount,net_amount,refund_amount,order_at,local_order_date) select o.organization_id,o.id,coalesce(alias.canonical_customer_id,o.customer_id),o.order_number,o.order_status,o.source,o.currency_code,o.subtotal_amount,o.discount_amount,o.total_amount,coalesce(refund.amount,0),o.created_at,(o.created_at at time zone organization.timezone)::date from orders.orders o join platform.organizations organization on organization.id=o.organization_id left join customers.customer_aliases alias on alias.organization_id=o.organization_id and alias.alias_customer_id=o.customer_id left join (select order_id,sum(amount) amount from payments.refunds where organization_id=${organizationId} and status='COMPLETED' group by order_id) refund on refund.order_id=o.id where o.organization_id=${organizationId} returning source_order_id::text id`.execute(
+    }>`insert into analytics.order_facts(organization_id,source_order_id,canonical_customer_id,order_number,order_status,source,sales_channel,payment_method,currency_code,merchandise_gross_amount,discount_amount,delivery_charge_amount,order_total_amount,refund_amount,order_at,confirmed_at,completed_at,cancelled_at,local_order_date) select o.organization_id,o.id,coalesce(alias.canonical_customer_id,o.customer_id),o.order_number,o.order_status,o.source,o.sales_channel,o.payment_method,o.currency_code,o.subtotal_amount,o.discount_amount,o.delivery_amount,o.total_amount,coalesce(refund.amount,0),o.created_at,o.confirmed_at,o.completed_at,o.cancelled_at,(o.created_at at time zone organization.timezone)::date from orders.orders o join platform.organizations organization on organization.id=o.organization_id left join customers.customer_aliases alias on alias.organization_id=o.organization_id and alias.alias_customer_id=o.customer_id left join (select order_id,sum(amount) amount from payments.refunds where organization_id=${organizationId} and status='COMPLETED' group by order_id) refund on refund.order_id=o.id where o.organization_id=${organizationId} returning source_order_id::text id`.execute(
       tx,
     );
-    await sql`insert into analytics.customer_facts(organization_id,canonical_customer_id,order_count,currency_code,lifetime_net_amount,first_order_at,last_order_at) select organization_id,canonical_customer_id,count(*),currency_code,sum(net_amount-refund_amount),min(order_at),max(order_at) from analytics.order_facts where organization_id=${organizationId} and canonical_customer_id is not null group by organization_id,canonical_customer_id,currency_code`.execute(
+    await sql`insert into analytics.customer_facts(organization_id,canonical_customer_id,order_count,currency_code,lifetime_net_amount,first_order_at,last_order_at) select organization_id,canonical_customer_id,count(*) filter(where order_status<>'CANCELLED'),currency_code,sum(case when order_status='CANCELLED' then 0 else order_total_amount-refund_amount end),min(order_at) filter(where order_status<>'CANCELLED'),max(order_at) filter(where order_status<>'CANCELLED') from analytics.order_facts where organization_id=${organizationId} and canonical_customer_id is not null group by organization_id,canonical_customer_id,currency_code`.execute(
       tx,
     );
     const deliveries = await sql<{
@@ -226,6 +226,9 @@ export async function rebuildAnalyticsProjections(
       cash: cash.rows.length,
     };
   });
+  await sql`insert into analytics.projection_state(organization_id,projection_name,projection_version,status,last_processed_at,last_success_at) values(${organizationId},'business_facts',2,'CURRENT',now(),now()) on conflict(organization_id,projection_name) do update set projection_version=excluded.projection_version,status='CURRENT',last_processed_at=now(),last_success_at=now(),last_failure_at=null,last_error_code=null,last_error_detail=null`.execute(
+    db,
+  );
   return { salesFacts: salesFacts.inserted, ...counts };
 }
 
@@ -238,9 +241,12 @@ export async function consumeAnalyticsOutbox(db: Kysely<DatabaseSchema>, outboxE
   const organizationId = claimed.rows[0]?.organization_id;
   if (!organizationId) return { processed: false };
   try {
+    await sql`insert into analytics.projection_state(organization_id,projection_name,projection_version,status,last_processed_at) values(${organizationId},'business_facts',2,'REBUILDING',now()) on conflict(organization_id,projection_name) do update set status='REBUILDING',last_processed_at=now(),last_error_code=null,last_error_detail=null`.execute(db);
     await rebuildAnalyticsProjections(db, organizationId);
+    await sql`update analytics.projection_state state set status='CURRENT',source_high_watermark=${outboxEventId},last_event_occurred_at=event.occurred_at,last_processed_at=now(),last_success_at=now(),last_failure_at=null,last_error_code=null,last_error_detail=null from platform.outbox_events event where state.organization_id=${organizationId} and state.projection_name='business_facts' and event.id=${outboxEventId}`.execute(db);
     return { processed: true };
   } catch (error) {
+    await sql`update analytics.projection_state set status='FAILED',last_failure_at=now(),last_error_code='PROJECTION_REBUILD_FAILED',last_error_detail=${error instanceof Error ? error.message.slice(0, 1000) : 'Unknown projection failure'} where organization_id=${organizationId} and projection_name='business_facts'`.execute(db);
     await sql`delete from analytics.projection_event_receipts where outbox_event_id=${outboxEventId} and projection_name='all_facts_v1'`.execute(
       db,
     );
@@ -251,19 +257,27 @@ export async function consumeAnalyticsOutbox(db: Kysely<DatabaseSchema>, outboxE
 export async function processAnalyticsOutbox(db: Kysely<DatabaseSchema>, limit = 10) {
   const events = await sql<{
     id: string;
-  }>`select event.id::text from platform.outbox_events event left join analytics.projection_event_receipts receipt on receipt.outbox_event_id=event.id and receipt.projection_name='all_facts_v1' where event.organization_id is not null and receipt.outbox_event_id is null order by event.id limit ${limit}`.execute(
+    organization_id: string;
+  }>`select event.id::text,event.organization_id::text from platform.outbox_events event left join analytics.projection_event_receipts receipt on receipt.outbox_event_id=event.id and receipt.projection_name='all_facts_v1' where event.organization_id is not null and receipt.outbox_event_id is null and split_part(event.event_type,'.',1) in ('orders','payments','fulfillment','delivery','returns','inventory','costing','finance','customers','procurement','reviews','notifications','assets') order by event.id limit ${limit}`.execute(
     db,
   );
   let processed = 0;
-  for (const event of events.rows) {
-    if ((await consumeAnalyticsOutbox(db, Number(event.id))).processed) processed++;
+  const byOrganization = Map.groupBy(events.rows, (event) => event.organization_id);
+  for (const [organizationId, organizationEvents] of byOrganization) {
+    const latest = organizationEvents.at(-1);
+    if (!latest || !(await consumeAnalyticsOutbox(db, Number(latest.id))).processed) continue;
+    const ids = organizationEvents.map((event) => Number(event.id));
+    await sql`insert into analytics.projection_event_receipts(outbox_event_id,projection_name,organization_id) select event.id,'all_facts_v1',event.organization_id from platform.outbox_events event where event.organization_id=${organizationId} and event.id=any(${ids}::bigint[]) on conflict do nothing`.execute(
+      db,
+    );
+    processed += organizationEvents.length;
   }
   return processed;
 }
 
 export async function getAnalyticsDashboards(db: Kysely<DatabaseSchema>, organizationId: string) {
   const [sales, products, customers, deliveryReturns, finance, metrics] = await Promise.all([
-    sql`select currency_code,sum(gross_amount)::text gross_sales,sum(discount_amount)::text discounts,sum(net_amount-refund_amount)::text net_sales,sum(refund_amount)::text refunds from analytics.order_facts where organization_id=${organizationId} group by currency_code order by currency_code`.execute(
+    sql`select currency_code,sum(merchandise_gross_amount) filter(where order_status<>'CANCELLED')::text gross_sales,sum(discount_amount) filter(where order_status<>'CANCELLED')::text discounts,sum(order_total_amount-refund_amount) filter(where order_status<>'CANCELLED')::text net_sales,sum(refund_amount)::text refunds from analytics.order_facts where organization_id=${organizationId} group by currency_code order by currency_code`.execute(
       db,
     ),
     sql`select coalesce(variant.sku,fact.source_order_line_id::text) sku,sum(fact.quantity)::text quantity,sum(fact.net_amount)::text net_sales,fact.currency_code from analytics.sales_facts fact left join catalog.product_variants variant on variant.id=fact.variant_id where fact.organization_id=${organizationId} group by coalesce(variant.sku,fact.source_order_line_id::text),fact.currency_code order by sum(fact.net_amount) desc limit 50`.execute(
@@ -312,7 +326,7 @@ export async function analyticsDrilldown(
       )
     ).rows;
   return (
-    await sql`select source_order_id,order_number,order_status,currency_code,gross_amount::text,discount_amount::text,net_amount::text,refund_amount::text,order_at::text from analytics.order_facts where organization_id=${organizationId} ${metric === 'REFUNDS' ? sql`and refund_amount<>0` : sql``} order by order_at desc limit 200`.execute(
+    await sql`select source_order_id,order_number,order_status,currency_code,merchandise_gross_amount::text,discount_amount::text,delivery_charge_amount::text,order_total_amount::text,refund_amount::text,order_at::text from analytics.order_facts where organization_id=${organizationId} ${metric === 'REFUNDS' ? sql`and refund_amount<>0` : sql``} order by order_at desc limit 200`.execute(
       db,
     )
   ).rows;
@@ -343,7 +357,7 @@ export async function verifyAnalyticsIntegrity(db: Kysely<DatabaseSchema>, organ
     });
   const checks = await sql<{ code: string; detail: string }>`
     select 'MISSING_ORDER_FACT' code,'An authoritative Order is absent from order_facts.' detail where exists(select 1 from orders.orders o where o.organization_id=${organizationId} and not exists(select 1 from analytics.order_facts f where f.organization_id=o.organization_id and f.source_order_id=o.id))
-    union all select 'ORDER_FACT_SOURCE_MISMATCH','An Order projection no longer matches its immutable commercial snapshot.' where exists(select 1 from analytics.order_facts f join orders.orders o on o.id=f.source_order_id where f.organization_id=${organizationId} and (f.gross_amount<>o.subtotal_amount or f.discount_amount<>o.discount_amount or f.net_amount<>o.total_amount or f.currency_code<>o.currency_code))
+    union all select 'ORDER_FACT_SOURCE_MISMATCH','An Order projection no longer matches its immutable commercial snapshot.' where exists(select 1 from analytics.order_facts f join orders.orders o on o.id=f.source_order_id where f.organization_id=${organizationId} and (f.merchandise_gross_amount<>o.subtotal_amount or f.discount_amount<>o.discount_amount or f.delivery_charge_amount<>o.delivery_amount or f.order_total_amount<>o.total_amount or f.currency_code<>o.currency_code))
     union all select 'REFUND_DOUBLE_COUNT','Projected completed refunds differ from authoritative completed Refund totals.' where exists(select 1 from (select currency_code,sum(refund_amount) amount from analytics.order_facts where organization_id=${organizationId} group by currency_code) f full join (select currency_code,sum(amount) amount from payments.refunds where organization_id=${organizationId} and status='COMPLETED' group by currency_code) r using(currency_code) where coalesce(f.amount,0)<>coalesce(r.amount,0))
     union all select 'COSTING_FACT_MISMATCH','Analytics COGS facts differ from authoritative Costing facts.' where (select count(*) from analytics.cost_facts where organization_id=${organizationId})<>(select count(*) from costing.cogs_recognitions where organization_id=${organizationId})+(select count(*) from costing.cogs_adjustments where organization_id=${organizationId})+(select count(*) from costing.cogs_recoveries where organization_id=${organizationId})
     union all select 'CUSTOMER_CANONICALIZATION_MISMATCH','A projected Order uses a noncanonical merged Customer identity.' where exists(select 1 from analytics.order_facts fact join customers.customer_aliases alias on alias.organization_id=fact.organization_id and alias.alias_customer_id=fact.canonical_customer_id where fact.organization_id=${organizationId})
@@ -351,3 +365,7 @@ export async function verifyAnalyticsIntegrity(db: Kysely<DatabaseSchema>, organ
   findings.push(...checks.rows);
   return findings;
 }
+
+export * from './analytics/behavioral.js';
+export * from './analytics/reporting.js';
+export * from './analytics/exports.js';

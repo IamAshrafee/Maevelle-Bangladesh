@@ -15,7 +15,7 @@ import {
   processNotificationOutbox,
 } from '@maevelle/database/notifications';
 import type { EncryptionKey } from '@maevelle/security';
-import { processAnalyticsOutbox } from '@maevelle/database/analytics';
+import { processAnalyticsExports, processAnalyticsOutbox } from '@maevelle/database/analytics';
 import { processCatalogImports } from '@maevelle/database/admin-operations';
 import { processIntegrityRuns, scheduleDueIntegrityRuns } from '@maevelle/database/integrity';
 import { deliverPendingInvitationEmails } from '@maevelle/database/iam';
@@ -114,6 +114,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         smsPolls,
         webhookEvents,
         analytics,
+        analyticsExports,
         imports,
         search,
         orders,
@@ -176,6 +177,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           : Promise.resolve(0),
         runJob(() => createWebhookEventsFromOutbox(options.database.db)),
         runJob(() => processAnalyticsOutbox(options.database.db)),
+        runJob(() => processAnalyticsExports(options.database.db, `worker:${process.pid}`, 1)),
         runJob(() => processCatalogImports(options.database.db)),
         runJob(() => processStorefrontSearchOutbox(options.database.db)),
         runJob(() => processOrderOutbox(options.database.db)),
@@ -219,6 +221,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           smsPolls,
           webhookEvents,
           analytics,
+          analyticsExports,
           imports,
           search,
           orders,

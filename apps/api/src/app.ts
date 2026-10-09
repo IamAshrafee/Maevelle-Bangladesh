@@ -74,6 +74,7 @@ export function buildApi(options: BuildApiOptions) {
       { prefix: '/auth/', maximum: 20 },
       { prefix: '/invitations/', maximum: 12 },
       { prefix: '/storefront/v1/reviews', maximum: 15 },
+      { prefix: '/storefront/v1/analytics/events', maximum: 120 },
       { prefix: '/storefront/v1/orders/confirmation', maximum: 60 },
       { prefix: '/integrations/', maximum: 120 },
       { prefix: '/webhooks/resend', maximum: 240 },

@@ -1013,6 +1013,10 @@ export type CommerceEventDto<Name extends CommerceEventNameDto = CommerceEventNa
     readonly eventId: string;
     readonly occurredAt: string;
     readonly origin: CommerceEventOriginDto;
+    /** Pseudonymous per-tab/session identifier; required for browser funnel measurement. */
+    readonly sessionId?: string;
+    /** Optional longer-lived pseudonymous identifier, never a Customer identifier. */
+    readonly anonymousId?: string;
     readonly consent: CommerceConsentStateDto;
     readonly attribution?: CommerceAttributionDto;
     readonly data: CommerceEventDataMapDto[EventName];
@@ -5120,4 +5124,3 @@ export interface IntegrityOverviewDto {
     readonly failedRuns: number;
   };
 }
-
