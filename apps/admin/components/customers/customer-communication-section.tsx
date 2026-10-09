@@ -109,7 +109,16 @@ export function CustomerCommunicationSection({
     <section className="rounded-xl border bg-card shadow-sm" aria-label="Customer Communications">
       <div className="flex flex-col gap-3 border-b px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Communication History</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold text-foreground">Communication History</h2>
+            <Link
+              href={`/notifications?tab=history&sourceId=${customerId}`}
+              className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
+            >
+              Notifications Center
+              <ExternalLink className="size-3" />
+            </Link>
+          </div>
           <p className="text-xs text-muted-foreground">
             Authoritative log of SMS notifications, order emails, and OTP dispatches sent to this customer.
           </p>

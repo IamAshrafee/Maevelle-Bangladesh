@@ -1070,18 +1070,27 @@ export async function listRecipientInboxPage(
   },
 ) {
   const offset = (input.page - 1) * input.pageSize;
-  const rows = await sql<Record<string, unknown> & { total_count: string }>`select
-      n.id,n.notification_type,n.rendered_subject,n.rendered_body,n.category,n.priority,n.action_path,
-      n.status,n.source_domain,n.source_id,n.created_at::text,n.read_at::text,count(*) over()::text total_count
-    from notifications.notifications n
-    join iam.organization_memberships membership on membership.id=n.membership_id
-      and membership.organization_id=n.organization_id and membership.status='ACTIVE'
-    where n.organization_id=${input.organizationId} and n.membership_id=${input.membershipId}::uuid
-      and n.channel='IN_APP' and n.status<>'CANCELLED'
-      and (${input.unreadOnly ?? false}=false or n.read_at is null)
-      and (${input.category ?? null}::text is null or n.category=${input.category ?? null})
-    order by n.created_at desc,n.id desc limit ${input.pageSize} offset ${offset}`.execute(db);
+  const [rows, unread] = await Promise.all([
+    sql<Record<string, unknown> & { total_count: string }>`select
+        n.id,n.notification_type,n.rendered_subject,n.rendered_body,n.category,n.priority,n.action_path,
+        n.status,n.source_domain,n.source_id,n.created_at::text,n.read_at::text,count(*) over()::text total_count
+      from notifications.notifications n
+      join iam.organization_memberships membership on membership.id=n.membership_id
+        and membership.organization_id=n.organization_id and membership.status='ACTIVE'
+      where n.organization_id=${input.organizationId} and n.membership_id=${input.membershipId}::uuid
+        and n.channel='IN_APP' and n.status<>'CANCELLED'
+        and (${input.unreadOnly ?? false}=false or n.read_at is null)
+        and (${input.category ?? null}::text is null or n.category=${input.category ?? null})
+      order by n.created_at desc,n.id desc limit ${input.pageSize} offset ${offset}`.execute(db),
+    sql<{ count: string }>`select count(*)::text as count
+      from notifications.notifications n
+      join iam.organization_memberships membership on membership.id=n.membership_id
+        and membership.organization_id=n.organization_id and membership.status='ACTIVE'
+      where n.organization_id=${input.organizationId} and n.membership_id=${input.membershipId}::uuid
+        and n.channel='IN_APP' and n.status<>'CANCELLED' and n.read_at is null`.execute(db),
+  ]);
   const totalItems = Number(rows.rows[0]?.total_count ?? 0);
+  const unreadCount = Number(unread.rows[0]?.count ?? 0);
   return {
     data: rows.rows.map((source) => {
       const row = { ...source };
@@ -1094,7 +1103,21 @@ export async function listRecipientInboxPage(
       totalItems,
       totalPages: Math.ceil(totalItems / input.pageSize),
     },
+    unreadCount,
   };
+}
+
+export async function getRecipientUnreadCount(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; membershipId: string },
+): Promise<number> {
+  const result = await sql<{ count: string }>`select count(*)::text as count
+    from notifications.notifications n
+    join iam.organization_memberships membership on membership.id=n.membership_id
+      and membership.organization_id=n.organization_id and membership.status='ACTIVE'
+    where n.organization_id=${input.organizationId} and n.membership_id=${input.membershipId}::uuid
+      and n.channel='IN_APP' and n.status<>'CANCELLED' and n.read_at is null`.execute(db);
+  return Number(result.rows[0]?.count ?? 0);
 }
 
 export async function markAllNotificationsRead(
@@ -1148,6 +1171,111 @@ export async function listNotificationHistory(
       totalItems,
       totalPages: Math.ceil(totalItems / input.pageSize),
     },
+  };
+}
+
+export interface DetailedNotificationRecord {
+  id: string;
+  intent_id: string | null;
+  notification_type: string;
+  recipient_type: 'MEMBERSHIP' | 'CUSTOMER';
+  customer_id: string | null;
+  membership_id: string | null;
+  channel: 'IN_APP' | 'EMAIL' | 'SMS';
+  category: NotificationCategory;
+  priority: NotificationPriority;
+  status: string;
+  trigger_type: string;
+  provider: string | null;
+  provider_message_id: string | null;
+  failure_code: string | null;
+  skip_reason: string | null;
+  source_domain: string;
+  source_id: string;
+  intended_recipient: string | null;
+  effective_recipient: string | null;
+  rendered_subject: string | null;
+  rendered_body: string;
+  action_path: string | null;
+  scheduled_for: string;
+  expires_at: string | null;
+  created_at: string;
+  sent_at: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  updated_at: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  membership_user_name: string | null;
+  membership_user_email: string | null;
+  revision_number: number | null;
+  attempts: readonly Record<string, unknown>[];
+  timeline: readonly Record<string, unknown>[];
+}
+
+export async function getNotificationDetail(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  notificationId: string,
+): Promise<DetailedNotificationRecord & { canRetry: boolean; canCancel: boolean; canSchedule: boolean }> {
+  const row = await sql<DetailedNotificationRecord>`select
+      n.id,n.intent_id,n.notification_type,n.recipient_type,n.customer_id,n.membership_id,n.channel,
+      n.category,n.priority,n.status,n.trigger_type,n.provider,n.provider_message_id,n.failure_code,
+      n.skip_reason,n.source_domain,n.source_id,n.intended_recipient,n.effective_recipient,
+      n.rendered_subject,n.rendered_body,n.action_path,n.scheduled_for::text,n.expires_at::text,
+      n.created_at::text,n.sent_at::text,n.delivered_at::text,n.read_at::text,n.cancelled_at::text,
+      n.cancellation_reason,n.updated_at::text,
+      c.display_name as customer_name,
+      c.email as customer_email,
+      c.phone as customer_phone,
+      u.name as membership_user_name,
+      u.email as membership_user_email,
+      r.revision_number,
+      coalesce((select jsonb_agg(
+        jsonb_build_object(
+          'id', a.id,
+          'attemptNumber', a.attempt_number,
+          'provider', a.provider,
+          'providerMessageId', a.provider_message_id,
+          'status', a.status,
+          'startedAt', a.started_at,
+          'completedAt', a.completed_at,
+          'nextRetryAt', a.next_retry_at,
+          'errorCode', a.error_code,
+          'errorCategory', a.error_category
+        ) order by a.attempt_number) from notifications.delivery_attempts a where a.notification_id=n.id),'[]'::jsonb) attempts,
+      coalesce((select jsonb_agg(
+        jsonb_build_object(
+          'id', e.id,
+          'event_type', e.event_type,
+          'event_at', e.event_at,
+          'source', e.source,
+          'provider_event_id', e.provider_event_id,
+          'metadata', e.metadata
+        ) order by e.event_at, e.id) from notifications.delivery_events e where e.notification_id=n.id),'[]'::jsonb) timeline
+    from notifications.notifications n
+    left join customers.customers c on c.id = n.customer_id
+    left join iam.organization_memberships m on m.id = n.membership_id
+    left join iam.users u on u.id = m.user_id
+    left join notifications.template_revisions r on r.id = n.template_revision_id
+    where n.organization_id=${organizationId} and n.id=${notificationId}::uuid`.execute(db);
+  if (!row.rows[0]) {
+    throw new NotificationDomainError('NOT_FOUND', 'Notification was not found.');
+  }
+  const item = row.rows[0];
+  const status = String(item.status);
+  const channel = String(item.channel);
+  const canRetry = status === 'FAILED' && (channel === 'EMAIL' || channel === 'SMS');
+  const canCancel = ['QUEUED', 'PENDING_MANUAL', 'FAILED'].includes(status) && item.intent_id !== null;
+  const canSchedule = ['QUEUED', 'PENDING_MANUAL', 'FAILED'].includes(status);
+  return {
+    ...item,
+    canRetry,
+    canCancel,
+    canSchedule,
   };
 }
 

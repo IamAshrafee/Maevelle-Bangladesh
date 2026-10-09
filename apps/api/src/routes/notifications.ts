@@ -131,6 +131,18 @@ export function registerNotificationRoutes(
       });
     },
   );
+  app.get('/admin/notifications/inbox/unread-count', async (req, reply) => {
+    const a = await admin(database, auth, req.headers, 'notifications.view');
+    if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+    return {
+      data: {
+        unreadCount: await notifications.getRecipientUnreadCount(database.db, {
+          organizationId: a.organizationId,
+          membershipId: a.membershipId,
+        }),
+      },
+    };
+  });
   app.post('/admin/notifications/inbox/read-all', async (req, reply) => {
     const a = await admin(database, auth, req.headers, 'notifications.view');
     if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
@@ -190,6 +202,73 @@ export function registerNotificationRoutes(
         ...(query.category ? { category: query.category } : {}),
         ...(query.sourceId ? { sourceId: query.sourceId } : {}),
       });
+    },
+  );
+  app.get(
+    '/admin/notifications/history/:notificationId',
+    { schema: { params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }) } },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.view');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      try {
+        return {
+          data: await notifications.getNotificationDetail(
+            database.db,
+            a.organizationId,
+            (req.params as { notificationId: string }).notificationId,
+          ),
+        };
+      } catch (error) {
+        return failure(reply, error);
+      }
+    },
+  );
+  app.post(
+    '/admin/notifications/history/:notificationId/retry',
+    {
+      schema: {
+        params: Type.Object({ notificationId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object({ reason: Type.String({ minLength: 3, maxLength: 500 }) }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'notifications.retry');
+      if (!a) return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Forbidden.' } });
+      const notificationId = (req.params as { notificationId: string }).notificationId;
+      const body = req.body as { reason: string };
+      try {
+        const item = await notifications.getNotificationDetail(
+          database.db,
+          a.organizationId,
+          notificationId,
+        );
+        if (item.channel === 'EMAIL') {
+          await notifications.retryEmailNotification(database.db, {
+            organizationId: a.organizationId,
+            notificationId,
+            actorId: a.actorId,
+            reason: body.reason,
+          });
+          return reply.code(204).send();
+        }
+        if (item.channel === 'SMS') {
+          await notifications.retrySmsNotification(database.db, {
+            organizationId: a.organizationId,
+            notificationId,
+            actorId: a.actorId,
+            reason: body.reason,
+          });
+          return reply.code(204).send();
+        }
+        return reply.code(422).send({
+          error: {
+            code: 'UNRETRYABLE_CHANNEL',
+            message: 'In-app notifications cannot be retried via delivery provider.',
+          },
+        });
+      } catch (error) {
+        return failure(reply, error);
+      }
     },
   );
   app.get('/admin/notifications/catalog', async (req, reply) => {

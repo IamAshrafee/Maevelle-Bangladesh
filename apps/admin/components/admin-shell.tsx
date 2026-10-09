@@ -59,6 +59,7 @@ import { AdminCapabilitiesProvider } from './admin-capabilities';
 import { TwoFactorRequiredGate } from './security/two-factor-required-gate';
 import { UserMenu } from './user-menu';
 import { getInitials } from './account/account-utils';
+import { NotificationBell } from './notifications/notification-bell';
 import { cn } from '@/lib/utils';
 
 type AdminContext = AdminContextDto;
@@ -266,40 +267,25 @@ const navigation: readonly NavGroup[] = [
     label: 'Communication',
     items: [
       {
-        label: 'SMS campaigns',
-        href: '/sms/campaigns',
-        icon: MessageSquareText,
-        capability: 'notifications.sms.view',
+        label: 'Notifications Center',
+        href: '/notifications',
+        icon: Bell,
+        capability: 'notifications.view',
+        keywords: 'inbox history alerts templates rules channels dispatch operations',
       },
       {
-        label: 'SMS templates',
-        href: '/sms/templates',
-        icon: MessageSquareText,
-        capability: 'notifications.sms.view',
-      },
-      {
-        label: 'SMS delivery',
-        href: '/sms/deliveries',
-        icon: Activity,
-        capability: 'notifications.sms.view',
-      },
-      {
-        label: 'SMS analytics',
-        href: '/sms/analytics',
-        icon: ChartNoAxesCombined,
-        capability: 'notifications.sms.view',
-      },
-      {
-        label: 'Email templates',
-        href: '/email/templates',
+        label: 'Email Operations',
+        href: '/email',
         icon: Mail,
         capability: 'notifications.view',
+        keywords: 'resend deliverability transactional sender identity logs',
       },
       {
-        label: 'Email logs',
-        href: '/email/logs',
-        icon: Activity,
-        capability: 'notifications.view',
+        label: 'SMS Operations',
+        href: '/sms',
+        icon: MessageSquareText,
+        capability: 'notifications.sms.view',
+        keywords: 'sms gateway campaigns broadcast mask operator',
       },
     ],
   },
@@ -934,13 +920,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
           {/* Topbar Right Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              href="/notifications"
-              className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              aria-label="Open notifications"
-            >
-              <Bell className="size-4" />
-            </Link>
+            <NotificationBell />
 
             <div className="hidden sm:flex flex-col items-end leading-none border-l border-border pl-3">
               <span className="text-[10px] uppercase font-semibold text-muted-foreground">Workspace</span>

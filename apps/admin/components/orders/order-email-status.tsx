@@ -500,6 +500,13 @@ export function OrderEmailStatus({ orderId }: OrderEmailStatusProps) {
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 All Dispatched Email Records ({historyRows.length})
               </h4>
+              <Link
+                href={`/notifications?tab=history&sourceId=${orderId}`}
+                className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
+              >
+                Notifications Center
+                <ExternalLink className="size-3" />
+              </Link>
             </div>
             <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
               {historyRows.map((row) => (

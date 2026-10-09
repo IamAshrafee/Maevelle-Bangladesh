@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Clock, Laptop, Shield, User } from 'lucide-react';
+import { Bell, Clock, Laptop, Shield, User } from 'lucide-react';
 import type {
   AccountSecurityActivityItemDto,
   AccountSessionItemDto,
@@ -16,6 +16,7 @@ import {
   ErrorState,
   LoadingState,
 } from '@/components/ui/page-shell';
+import { NotificationPreferencesTab } from '@/components/notifications/notification-preferences-tab';
 import { AccountIdentityHeader } from './account-identity-header';
 import { ProfileTab } from './profile-tab';
 import { SecurityTab } from './security-tab';
@@ -23,7 +24,7 @@ import { SessionsTab } from './sessions-tab';
 import { SecurityActivityTab } from './security-activity-tab';
 import { getAccountErrorMessage } from './account-utils';
 
-export type AccountTabId = 'profile' | 'security' | 'sessions' | 'activity';
+export type AccountTabId = 'profile' | 'security' | 'sessions' | 'activity' | 'notifications';
 
 export function MyAccountConsole() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export function MyAccountConsole() {
   // Tab state synced with URL parameter
   const tabParam = searchParams.get('tab') as AccountTabId | null;
   const [activeTab, setActiveTab] = useState<AccountTabId>(
-    tabParam === 'security' || tabParam === 'sessions' || tabParam === 'activity'
+    tabParam && ['security', 'sessions', 'activity', 'notifications'].includes(tabParam)
       ? tabParam
       : 'profile',
   );
@@ -53,7 +54,7 @@ export function MyAccountConsole() {
 
   // Keep state in sync if browser back/forward is used
   useEffect(() => {
-    if (tabParam && ['profile', 'security', 'sessions', 'activity'].includes(tabParam)) {
+    if (tabParam && ['profile', 'security', 'sessions', 'activity', 'notifications'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -209,6 +210,21 @@ export function MyAccountConsole() {
           <Clock className="size-3.5" aria-hidden="true" />
           Security Timeline
         </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'notifications'}
+          onClick={() => switchTab('notifications')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors duration-150 cursor-pointer shrink-0 ${
+            activeTab === 'notifications'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+          }`}
+        >
+          <Bell className="size-3.5" aria-hidden="true" />
+          Notification Alerts
+        </button>
       </div>
 
       {/* Tab Panels */}
@@ -247,6 +263,10 @@ export function MyAccountConsole() {
             activities={activities}
             loading={activitiesLoading}
           />
+        ) : null}
+
+        {activeTab === 'notifications' ? (
+          <NotificationPreferencesTab />
         ) : null}
       </div>
     </AdminPage>

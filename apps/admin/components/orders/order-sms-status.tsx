@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  ExternalLink,
   Eye,
   MessageSquareText,
   RefreshCw,
@@ -148,9 +150,15 @@ export function OrderSmsStatus({ orderId }: { readonly orderId: string }) {
                 <MessageSquareText aria-hidden="true" className="size-5" />
                 Customer Communications / SMS
               </CardTitle>
-              <CardDescription>
-                Uses the immutable order phone snapshot. SMS delivery never changes the order’s
-                business state.
+              <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>Uses the immutable order phone snapshot. SMS delivery never changes the order’s business state.</span>
+                <Link
+                  href={`/notifications?tab=history&sourceId=${orderId}`}
+                  className="text-[11px] text-primary hover:underline inline-flex items-center gap-1 font-medium whitespace-nowrap"
+                >
+                  View in Notifications Center
+                  <ExternalLink className="size-3" />
+                </Link>
               </CardDescription>
             </div>
             <Button

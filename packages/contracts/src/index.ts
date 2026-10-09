@@ -3887,6 +3887,63 @@ export interface NotificationHistoryRowDto {
   readonly delivered_at: string | null;
 }
 
+export interface NotificationAttemptDto {
+  readonly id?: string;
+  readonly attemptNumber: number;
+  readonly provider: string;
+  readonly providerMessageId?: string | null;
+  readonly status: string;
+  readonly startedAt?: string | null;
+  readonly completedAt?: string | null;
+  readonly nextRetryAt?: string | null;
+  readonly errorCode?: string | null;
+  readonly errorCategory?: string | null;
+  readonly retryable?: boolean;
+}
+
+export interface NotificationTimelineEventDto {
+  readonly id: string;
+  readonly event_type: string;
+  readonly event_at: string;
+  readonly source: string;
+  readonly provider_event_id?: string | null;
+  readonly metadata?: Record<string, unknown> | null;
+}
+
+export interface NotificationDetailDto extends NotificationHistoryRowDto {
+  readonly provider_message_id: string | null;
+  readonly intended_recipient: string | null;
+  readonly effective_recipient: string | null;
+  readonly rendered_subject: string | null;
+  readonly rendered_body: string;
+  readonly action_path: string | null;
+  readonly read_at: string | null;
+  readonly cancelled_at: string | null;
+  readonly cancellation_reason: string | null;
+  readonly updated_at: string;
+  readonly customer_name?: string | null;
+  readonly customer_email?: string | null;
+  readonly customer_phone?: string | null;
+  readonly membership_user_name?: string | null;
+  readonly membership_user_email?: string | null;
+  readonly revision_number?: number | null;
+  readonly attempts: readonly NotificationAttemptDto[];
+  readonly timeline: readonly NotificationTimelineEventDto[];
+  readonly canRetry: boolean;
+  readonly canCancel: boolean;
+  readonly canSchedule: boolean;
+}
+
+export interface NotificationPreferenceDto {
+  readonly notification_type: string;
+  readonly channel: 'IN_APP' | 'EMAIL';
+  readonly enabled: boolean;
+}
+
+export interface NotificationUnreadCountDto {
+  readonly unreadCount: number;
+}
+
 export interface NotificationEventCatalogItemDto {
   readonly eventType: string;
   readonly notificationType: string;
