@@ -16,7 +16,7 @@ import { PdpGallery } from './pdp-gallery';
 import { PdpCommercialHeader } from './pdp-commercial-header';
 import { PdpVariantSelector } from './pdp-variant-selector';
 import { PdpTrustGrid } from './pdp-trust-grid';
-import { PdpEditorialAccordions } from './pdp-editorial-accordions';
+import { PdpProductDetails } from './pdp-product-details';
 import { PdpStickyBar } from './pdp-sticky-bar';
 import { PdpCrossSells } from './pdp-cross-sells';
 import type { CrossSellProduct } from './pdp-cross-sells';
@@ -346,11 +346,13 @@ export function PdpView({
         {/* Trust grid */}
         <PdpTrustGrid />
 
-        {/* Editorial accordions */}
-        <PdpEditorialAccordions
+        {/* Product Details, Specs & FAQs (uncollapsed) */}
+        <PdpProductDetails
+          description={product.description}
           productDetails={product.details}
           productFaqs={product.faqs}
           {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
+          className="px-4 pt-6"
         />
 
         {/* Reviews */}
@@ -416,10 +418,12 @@ export function PdpView({
                 />
               </div>
 
-              {/* Accordions */}
-              <PdpEditorialAccordions
+              {/* Product Details, Specs & FAQs (uncollapsed) */}
+              <PdpProductDetails
+                description={product.description}
                 productDetails={product.details}
                 productFaqs={product.faqs}
+                {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
               />
 
               {/* Reviews */}

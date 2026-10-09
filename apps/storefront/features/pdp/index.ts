@@ -4,6 +4,7 @@ export { PdpCommercialHeader } from './pdp-commercial-header';
 export { PdpVariantSelector } from './pdp-variant-selector';
 export { PdpTrustGrid } from './pdp-trust-grid';
 export { PdpEditorialAccordions } from './pdp-editorial-accordions';
+export { PdpProductDetails } from './pdp-product-details';
 export { PdpStickyBar } from './pdp-sticky-bar';
 export { PdpCrossSells } from './pdp-cross-sells';
 export type { CrossSellProduct } from './pdp-cross-sells';
