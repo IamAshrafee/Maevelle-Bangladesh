@@ -4163,6 +4163,12 @@ export interface StorefrontProduct {
     width?: number | null;
     height?: number | null;
   }[];
+  readonly primaryCategory?: {
+    readonly id: string;
+    readonly name: string;
+    readonly handle: string;
+    readonly path: string;
+  } | null;
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
 }
@@ -4215,11 +4221,13 @@ export async function getStorefrontCatalogProduct(
     height_value: string | null;
     dimension_unit: string | null;
     product_type_id: string;
+    primary_category_id: string | null;
   }>`
     select product.id,product.handle,product.title,product.description,product.seo_title,product.seo_description,
       product.product_type_id::text,
       product.weight_value::text,product.weight_unit,product.length_value::text,product.width_value::text,
-      product.height_value::text,product.dimension_unit
+      product.height_value::text,product.dimension_unit,
+      product.primary_category_id::text
     from catalog.products product
     where product.organization_id = ${organizationId} and product.handle = ${handle}
       and product.status = 'ACTIVE' and product.publication_status = 'PUBLISHED'
@@ -4375,6 +4383,42 @@ export async function getStorefrontCatalogProduct(
     select question,answer from catalog.product_faqs
     where organization_id=${organizationId} and product_id=${row.id} order by position,id
   `.execute(db);
+
+  const effectiveCategoryId =
+    row.primary_category_id ??
+    (
+      await sql<{ category_id: string }>`
+        select category_id::text from catalog.product_categories
+        where organization_id = ${organizationId} and product_id = ${row.id}::uuid
+        limit 1
+      `.execute(db)
+    ).rows[0]?.category_id ??
+    null;
+
+  const categoryResult = effectiveCategoryId
+    ? await sql<{ id: string; name: string; handle: string; path: string }>`
+        with recursive tree as (
+          select id, name, handle, parent_category_id, handle::text as path
+          from catalog.categories
+          where organization_id = ${organizationId} and parent_category_id is null and status = 'ACTIVE'
+          union all
+          select child.id, child.name, child.handle, child.parent_category_id, tree.path || '/' || child.handle
+          from catalog.categories child join tree on tree.id = child.parent_category_id
+          where child.organization_id = ${organizationId} and child.status = 'ACTIVE'
+        )
+        select id::text, name, handle, path from tree where id = ${effectiveCategoryId}::uuid
+      `.execute(db)
+    : { rows: [] };
+
+  const primaryCategory = categoryResult.rows[0]
+    ? {
+        id: categoryResult.rows[0].id,
+        name: categoryResult.rows[0].name,
+        handle: categoryResult.rows[0].handle,
+        path: categoryResult.rows[0].path,
+      }
+    : null;
+
   return {
     id: row.id,
     handle: row.handle,
@@ -4382,6 +4426,7 @@ export async function getStorefrontCatalogProduct(
     description: row.description,
     seoTitle: row.seo_title,
     seoDescription: row.seo_description,
+    primaryCategory,
     shipping: baseShipping,
     options,
     variants: variants.rows.map((variant) => {

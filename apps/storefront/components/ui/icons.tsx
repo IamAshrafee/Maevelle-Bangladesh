@@ -734,6 +734,46 @@ export function ChevronDownIcon({ className, size = 16, ...props }: IconProps) {
   );
 }
 
+export function ChevronRightIcon({ className, size = 16, ...props }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={size}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width={size}
+      className={cx('shrink-0', className)}
+      {...props}
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+export function ChevronLeftIcon({ className, size = 16, ...props }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height={size}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width={size}
+      className={cx('shrink-0', className)}
+      {...props}
+    >
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
 export function EyeIcon({ className, size = 18, ...props }: IconProps) {
   return (
     <svg

@@ -11,6 +11,7 @@ import type {
 import { ProductReviews } from '@/components/product-reviews';
 import { SizeGuideDialog } from '@/components/size-guide-dialog';
 import { StarIcon, ShoppingBagIcon, TruckIcon } from '@/components/ui/icons';
+import { Breadcrumb, type BreadcrumbItemDef } from '@/components/ui/breadcrumb';
 import { PdpGallery } from './pdp-gallery';
 import { PdpCommercialHeader } from './pdp-commercial-header';
 import { PdpVariantSelector } from './pdp-variant-selector';
@@ -30,6 +31,7 @@ export interface PdpViewProps {
   readonly initialReviews?: readonly PublicReviewDto[] | undefined;
   readonly initialSummary?: ProductRatingSummaryDto | undefined;
   readonly crossSells?: readonly CrossSellProduct[] | undefined;
+  readonly breadcrumbs?: readonly BreadcrumbItemDef[] | undefined;
   readonly wishlisted?: boolean;
   readonly onWishlistToggle?: () => void;
   readonly onAddToCart: (variantId: string, quantity: number) => Promise<void>;
@@ -45,12 +47,29 @@ export function PdpView({
   initialReviews,
   initialSummary,
   crossSells,
+  breadcrumbs,
   wishlisted = false,
   onWishlistToggle,
   onAddToCart,
   busy,
   cartMessage,
 }: PdpViewProps) {
+  const fallbackBreadcrumbs = useMemo((): readonly BreadcrumbItemDef[] => {
+    const items: BreadcrumbItemDef[] = [
+      { label: 'Shop', href: '/categories' },
+    ];
+    if (product.primaryCategory) {
+      items.push({
+        label: product.primaryCategory.name,
+        href: `/categories/${product.primaryCategory.path}`,
+      });
+    }
+    items.push({ label: product.title, current: true });
+    return items;
+  }, [product]);
+
+  const effectiveBreadcrumbs = breadcrumbs ?? fallbackBreadcrumbs;
+
   const [selected, setSelected] = useState<Record<string, string>>(() => {
     const visualAxis = product.options.find((opt) => opt.isVisual);
     if (!visualAxis) return {};
@@ -291,6 +310,11 @@ export function PdpView({
     <>
       {/* ═══════════════ MOBILE LAYOUT (< lg) ═══════════════ */}
       <div className="lg:hidden flex flex-col w-full pb-28 bg-[#fff8f5] min-h-screen">
+        {/* Mobile breadcrumb */}
+        <div className="px-4 pt-3 pb-2 bg-[#fff8f5]">
+          <Breadcrumb items={effectiveBreadcrumbs} />
+        </div>
+
         {/* Gallery */}
         <PdpGallery
           media={shownMedia}
@@ -371,7 +395,12 @@ export function PdpView({
 
       {/* ═══════════════ DESKTOP LAYOUT (lg+) ═══════════════ */}
       <div className="hidden lg:block w-full bg-[#fff8f5] min-h-screen">
-        <div className="max-w-[1200px] mx-auto px-8 py-10">
+        <div className="max-w-[1200px] mx-auto px-8 pt-6 pb-10">
+          {/* Desktop breadcrumb */}
+          <div className="mb-6">
+            <Breadcrumb items={effectiveBreadcrumbs} />
+          </div>
+
           <div className="grid grid-cols-12 gap-12 items-start">
             {/* Left column – Gallery + Accordions + Reviews */}
             <div className="col-span-7 flex flex-col gap-8">

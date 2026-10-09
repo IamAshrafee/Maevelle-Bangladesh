@@ -834,6 +834,12 @@ export interface StorefrontProductDto {
     width?: number | null;
     height?: number | null;
   }[];
+  readonly primaryCategory?: {
+    readonly id: string;
+    readonly name: string;
+    readonly handle: string;
+    readonly path: string;
+  } | null;
   readonly details: readonly { group: string; label: string; value: string }[];
   readonly faqs: readonly { question: string; answer: string }[];
   readonly ratingSummary?: ProductRatingSummaryDto | null;

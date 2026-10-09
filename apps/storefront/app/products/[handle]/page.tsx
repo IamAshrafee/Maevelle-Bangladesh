@@ -6,12 +6,14 @@ import { publicMediaPath } from '@/lib/media/url';
 import { absoluteStorefrontUrl } from '@/lib/seo/url';
 import { breadcrumbJsonLd, faqJsonLd, productJsonLd, safeJsonLd } from '@/lib/seo/structured-data';
 import {
+  loadPublicCategories,
   loadPublicProduct,
   loadPublicProductReviews,
   loadPublicSizeGuide,
   loadPublicStorefrontContext,
   searchPublicCatalog,
 } from '@/lib/api/server/catalog';
+import { buildProductBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 
 type ProductRoute = { readonly params: Promise<{ handle: string }> };
 
@@ -58,13 +60,14 @@ export default async function ProductPage({ params }: ProductRoute) {
   if (!product) notFound();
   if (product.handle !== handle) permanentRedirect(`/products/${product.handle}`);
 
-  const [reviewsData, sizeGuide, searchResult] = await Promise.all([
+  const [reviewsData, sizeGuide, searchResult, categories] = await Promise.all([
     loadPublicProductReviews(product.id, context.organizationId, 5),
     loadPublicSizeGuide(product.handle, context.organizationId),
     searchPublicCatalog(context.organizationId, {
       sort: 'RELEVANCE',
       page: 1,
     }).catch(() => null),
+    loadPublicCategories(context.organizationId).catch(() => []),
   ]);
 
   const crossSells = (searchResult?.items ?? [])
@@ -93,11 +96,14 @@ export default async function ProductPage({ params }: ProductRoute) {
     datePublished: r.submittedAt,
   }));
 
-  const breadcrumb = breadcrumbJsonLd([
-    { name: 'Home', url: absoluteStorefrontUrl('/') },
-    { name: 'Shop', url: absoluteStorefrontUrl('/categories') },
-    { name: product.title, url: canonical },
-  ]);
+  const breadcrumbItems = buildProductBreadcrumbs(product, categories);
+
+  const breadcrumb = breadcrumbJsonLd(
+    breadcrumbItems.map((item) => ({
+      name: item.label,
+      url: item.href ? absoluteStorefrontUrl(item.href) : canonical,
+    })),
+  );
 
   return (
     <>
@@ -125,6 +131,7 @@ export default async function ProductPage({ params }: ProductRoute) {
         initialReviews={reviewsData?.reviews}
         initialSummary={reviewsData?.summary ?? product?.ratingSummary ?? undefined}
         crossSells={crossSells}
+        breadcrumbs={breadcrumbItems}
       />
     </>
   );
