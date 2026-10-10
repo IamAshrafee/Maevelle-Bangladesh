@@ -419,7 +419,7 @@ describe('My Account / Self-Service Account Frontend', () => {
   });
 
   describe('Sidebar Navigation & User Profile Integration', () => {
-    it('renders the dedicated My Account profile card in the sidebar footer and keeps Overview clean', () => {
+    it('houses user profile in topbar user menu and removes redundant sidebar footer card', () => {
       const html = renderToStaticMarkup(
         <AdminShell>
           <div data-testid="workspace-content">Workspace Active</div>
@@ -429,11 +429,12 @@ describe('My Account / Self-Service Account Frontend', () => {
       // Verify workspace content renders
       expect(html).toContain('data-testid="workspace-content"');
 
-      // Verify the dedicated user profile footer card exists with link to /account
-      expect(html).toContain('href="/account"');
-      expect(html).toContain('My Account');
+      // Verify the topbar user profile menu renders with the operator identity
       expect(html).toContain('Maevelle Operator');
-      expect(html).toContain('Operator · My Account');
+      expect(html).toContain('Operator · Maevelle BD');
+
+      // Verify the sidebar footer does NOT contain the redundant profile card
+      expect(html).not.toContain('Operator · My Account');
 
       // Verify Overview section contains only Dashboard and Attention
       expect(html).toContain('Overview');

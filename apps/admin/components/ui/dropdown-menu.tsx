@@ -1,6 +1,8 @@
+"use client"
+
 import * as React from "react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
@@ -54,15 +56,35 @@ function DropdownMenuLabel({
   className,
   inset,
   ...props
-}: MenuPrimitive.GroupLabel.Props & {
+}: React.ComponentProps<"div"> & {
   inset?: boolean
 }) {
   return (
-    <MenuPrimitive.GroupLabel
+    <div
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(
         "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function DropdownMenuLinkItem({
+  className,
+  inset,
+  ...props
+}: MenuPrimitive.LinkItem.Props & {
+  inset?: boolean
+}) {
+  return (
+    <MenuPrimitive.LinkItem
+      data-slot="dropdown-menu-link-item"
+      data-inset={inset}
+      className={cn(
+        "group/dropdown-menu-item relative flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -254,6 +276,7 @@ export {
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuItem,
+  DropdownMenuLinkItem,
   DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,

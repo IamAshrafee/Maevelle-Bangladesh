@@ -10,6 +10,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuLinkItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -113,7 +114,7 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
 
         {/* Account Quick Links */}
         <DropdownMenuGroup>
-          <DropdownMenuItem
+          <DropdownMenuLinkItem
             render={<Link href="/account" className="flex items-center gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs" />}
           >
             <UserRoundCog className="size-4 text-primary shrink-0" aria-hidden="true" />
@@ -121,9 +122,9 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
               <span className="font-medium text-foreground">My Account</span>
               <span className="text-[10px] text-muted-foreground">Personal profile & settings</span>
             </div>
-          </DropdownMenuItem>
+          </DropdownMenuLinkItem>
 
-          <DropdownMenuItem
+          <DropdownMenuLinkItem
             render={<Link href="/account?tab=security" className="flex items-center justify-between gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs" />}
           >
             <div className="flex items-center gap-2.5">
@@ -134,14 +135,14 @@ export function UserMenu({ context, onLogout, defaultOpen }: UserMenuProps) {
               status={is2faEnabled ? '2FA ON' : '2FA OFF'}
               tone={is2faEnabled ? 'success' : 'warning'}
             />
-          </DropdownMenuItem>
+          </DropdownMenuLinkItem>
 
-          <DropdownMenuItem
+          <DropdownMenuLinkItem
             render={<Link href="/account?tab=sessions" className="flex items-center gap-2.5 w-full cursor-pointer py-1.5 px-2 text-xs" />}
           >
             <Laptop className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
             <span className="font-medium text-foreground">Active Sessions</span>
-          </DropdownMenuItem>
+          </DropdownMenuLinkItem>
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />

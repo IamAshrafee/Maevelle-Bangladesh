@@ -58,7 +58,6 @@ import type { AdminContextDto, ApiEnvelope } from '@maevelle/contracts';
 import { AdminCapabilitiesProvider } from './admin-capabilities';
 import { TwoFactorRequiredGate } from './security/two-factor-required-gate';
 import { UserMenu } from './user-menu';
-import { getInitials } from './account/account-utils';
 import { NotificationBell } from './notifications/notification-bell';
 import { cn } from '@/lib/utils';
 
@@ -697,15 +696,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
-  const userName = context?.user?.name || 'Maevelle Operator';
-  const userRole =
-    context?.membershipType === 'OWNER'
-      ? 'Owner'
-      : context?.membershipType === 'STANDARD'
-        ? 'Team Member'
-        : 'Operator';
-  const initials = getInitials(context?.user?.name);
-  const isAccountActive = pathname.startsWith('/account');
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row relative">
@@ -802,55 +792,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        {/* Sidebar Footer: User Profile, Quick Settings & Collapse */}
+        {/* Sidebar Footer: Quick Settings & Collapse */}
         <div className="flex flex-col gap-1 border-t border-sidebar-border p-2 shrink-0">
-          <Link
-            href="/account"
-            onClick={() => setMobileOpen(false)}
-            aria-current={isAccountActive ? 'page' : undefined}
-            title={collapsed ? `${userName} (My Account)` : undefined}
-            className={cn(
-              'group flex items-center gap-2.5 rounded-lg text-xs font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-              collapsed
-                ? 'justify-center size-9 mx-auto p-0'
-                : 'px-2 py-1.5',
-              isAccountActive
-                ? 'bg-primary/10 text-primary border border-primary/20 font-semibold shadow-2xs'
-                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-            )}
-          >
-            {context?.user?.image ? (
-              <img
-                src={context.user.image}
-                alt={userName}
-                className={cn(
-                  'rounded-full object-cover shrink-0 size-7',
-                  isAccountActive ? 'ring-2 ring-primary/40' : 'border border-primary/30',
-                )}
-              />
-            ) : (
-              <div
-                className={cn(
-                  'rounded-full font-bold flex items-center justify-center shrink-0 select-none text-[11px] size-7',
-                  isAccountActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-primary/10 text-primary border border-primary/25',
-                )}
-                aria-hidden="true"
-              >
-                {initials ? initials : <User className="size-3.5" />}
-              </div>
-            )}
-
-            <div className={cn('min-w-0 flex-1 flex flex-col text-left leading-tight', collapsed && 'hidden')}>
-              <strong className="text-xs font-semibold text-sidebar-foreground truncate group-hover:text-sidebar-accent-foreground">
-                {userName}
-              </strong>
-              <span className="text-[10px] text-muted-foreground truncate">
-                {userRole} · My Account
-              </span>
-            </div>
-          </Link>
 
           <Link
             href="/settings"

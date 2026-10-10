@@ -1,8 +1,11 @@
+import * as React from 'react';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
 import { MyAccountConsole } from '@/components/account/my-account-console';
 import { LoadingState } from '@/components/ui/page-shell';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'My Account · Maevelle Admin',
