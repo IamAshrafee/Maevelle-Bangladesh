@@ -39,7 +39,11 @@ Implemented behavior includes:
   and
 - accessible, mobile-conscious Supply worklists with URL-backed filters,
   announced feedback, touch-friendly tabs and a corrected global inbound
-  shipment route/capability.
+  shipment route/capability; and
+- one canonical shipment-level landed-cost workflow: the global Landed Cost
+  workspace is now an oversight queue, while charge entry, allocation review,
+  revisions and finalization live only in the shipment's URL-addressable
+  `Landed Cost & Valuation` tab.
 
 ## Verification completed
 
@@ -53,6 +57,9 @@ Implemented behavior includes:
 - The frontend completion pass additionally passed the Database Catalog integration
   suite (8 tests), Admin Supply helper suites (5 tests), Admin production build and
   a complete Docker build/start with healthy PostgreSQL, API and Admin services.
+- The landed-cost workflow consolidation passed a fresh Admin production build;
+  old `/landed-cost?shipment=...` bookmarks redirect to the canonical shipment
+  costing tab.
 - Browser verification confirmed the local Admin route and responsive 390×844
   authentication shell. The authenticated operator walkthrough remains an owner
   review gate rather than being represented as complete.
