@@ -2,15 +2,22 @@
 
 ## Active area
 
-Analytics — external destinations, complete Storefront event emission, advanced domain metrics, and later Admin reporting workspace.
+Analytics — Complete Frontend Product Development & Business Intelligence Workspace.
 
 ## Evidence state
 
-`DURABLE REPORTING AND INGESTION FOUNDATION COMPLETE / EXTERNAL DESTINATIONS AND FULL EVENT EMISSION REQUIRED`
+`ANALYTICS MODULE COMPLETE (FRONTEND + BACKEND) / OPERATIONAL INTELLIGENCE WORKSPACE DELIVERED`
 
-Checkpoint `d099345` replaces the narrow all-time Analytics MVP with a tenant-scoped reporting and measurement foundation. Transactional domains remain authoritative; Analytics owns only rebuildable projections, normalized consented observations, report contracts, freshness metadata, and exports.
+The Analytics module has transitioned from a backend reporting foundation + MVP table dump into a complete, production-grade Analytics & Business Intelligence workspace across Maevelle Admin (`apps/admin/app/analytics/`).
 
-Implemented evidence includes canonical separation of merchandise gross, applied discount, customer delivery charge, Order total, completed Refunds, confirmed Payments, Finance account movement, COGS, and margin; historical sale snapshots; batch-coalesced outbox projection rebuilds; consent-aware session/event ingestion and UTM attribution; 15 bounded report families with timezone boundaries and prior-period comparisons; restricted financial capabilities; and leased audited CSV exports.
+Implemented surfaces include:
+- Executive Overview with live commercial indicators, top product rankings, and operational health summaries.
+- Specialized domain workspaces: Sales, Products & Variants, Customers, Inventory, Finance & Profitability, Supply & Procurement, Delivery & Logistics, Storefront Behavioral Tracking, Marketing Attribution, Operations (Returns, Reviews, Notifications, Assets), and Settings/Data Status.
+- Uniform date filter toolbar with 7 presets, custom dates, granularity selector, `Asia/Dhaka (UTC+6)` boundary alignment, and prior-period baseline comparisons.
+- Strict authoritative business truth: transactional records remain authoritative; no simulated traffic, no fake cohort heatmaps, no calculating Finance profit in React floating-point, honest unconfigured states for GA4 & Meta CAPI.
+- Capability-aware masking: non-financial staff can view Product sales while recognized cost and gross margin are masked to `RESTRICTED`. Full cash and margin facts require `analytics.financial.view`.
+- Leased background CSV export generation and download center.
+- Self-healing projection rebuild trigger and System Integrity drift detection.
 
 ## Verification completed
 

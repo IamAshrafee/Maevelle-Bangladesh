@@ -5124,3 +5124,299 @@ export interface IntegrityOverviewDto {
     readonly failedRuns: number;
   };
 }
+
+// ============================================================================
+// Analytics Domain Contracts & DTOs
+// ============================================================================
+
+export type AnalyticsReportKeyDto =
+  | 'SALES'
+  | 'ORDERS'
+  | 'PRODUCTS'
+  | 'CUSTOMERS'
+  | 'INVENTORY'
+  | 'SUPPLY'
+  | 'PAYMENTS'
+  | 'FINANCE'
+  | 'DELIVERY'
+  | 'RETURNS'
+  | 'REVIEWS'
+  | 'NOTIFICATIONS'
+  | 'STOREFRONT'
+  | 'MARKETING'
+  | 'ASSETS';
+
+export type AnalyticsGranularityDto = 'DAY' | 'WEEK' | 'MONTH';
+
+export interface AnalyticsReportQueryDto {
+  readonly from: string;
+  readonly to: string;
+  readonly granularity?: AnalyticsGranularityDto;
+  readonly currency?: string;
+  readonly page?: number;
+  readonly pageSize?: number;
+}
+
+export interface AnalyticsNormalizedQueryDto extends AnalyticsReportQueryDto {
+  readonly timezone: string;
+  readonly toExclusive: string;
+  readonly boundary: '[from,to)';
+  readonly granularity: AnalyticsGranularityDto;
+  readonly page: number;
+  readonly pageSize: number;
+}
+
+export interface AnalyticsFreshnessDto {
+  readonly status: 'CURRENT' | 'LAGGING' | 'REBUILDING' | 'FAILED' | 'NOT_BUILT' | string;
+  readonly lastProcessedAt: string | null;
+  readonly lastSuccessAt: string | null;
+  readonly errorCode: string | null;
+}
+
+export interface AnalyticsAvailabilityDto {
+  readonly status: 'AVAILABLE' | 'NOT_TRACKED';
+  readonly reason: string | null;
+}
+
+export interface AnalyticsCompletenessDto {
+  readonly isPartialPeriod: boolean;
+  readonly historicalBehavioralDataExistsOnlyAfterCollectionStarted: boolean;
+}
+
+export interface AnalyticsReportPaginationDto {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly totalItems: number;
+  readonly totalPages: number;
+}
+
+export interface AnalyticsReportComparisonDto<TTotals = unknown> {
+  readonly from: string;
+  readonly toExclusive: string;
+  readonly totals: readonly TTotals[];
+}
+
+export interface AnalyticsReportEnvelopeDto<
+  TTotals = unknown,
+  TSeries = unknown,
+  TBreakdown = unknown,
+> {
+  readonly report: AnalyticsReportKeyDto;
+  readonly query: AnalyticsNormalizedQueryDto;
+  readonly freshness: AnalyticsFreshnessDto;
+  readonly availability: AnalyticsAvailabilityDto;
+  readonly completeness: AnalyticsCompletenessDto;
+  readonly totals: readonly TTotals[];
+  readonly series: readonly TSeries[];
+  readonly breakdown: readonly TBreakdown[];
+  readonly comparison: AnalyticsReportComparisonDto<TTotals>;
+  readonly pagination: AnalyticsReportPaginationDto;
+}
+
+export interface SalesReportTotalsDto {
+  readonly currency_code: string;
+  readonly merchandise_gross: string;
+  readonly discounts: string;
+  readonly delivery_charges: string;
+  readonly order_total: string;
+  readonly refunds: string;
+  readonly net_after_refunds: string;
+  readonly eligible_orders: string;
+}
+
+export interface SalesReportSeriesDto {
+  readonly period: string;
+  readonly currency_code: string;
+  readonly order_total: string;
+  readonly refunds: string;
+  readonly orders: string;
+}
+
+export interface OrdersReportTotalsDto {
+  readonly order_status: string;
+  readonly orders: string;
+}
+
+export interface OrdersReportBreakdownDto {
+  readonly sales_channel?: string;
+  readonly payment_method?: string;
+  readonly orders: string;
+}
+
+export interface ProductsReportBreakdownDto {
+  readonly product_id: string;
+  readonly variant_id: string;
+  readonly sku_snapshot: string;
+  readonly product_title_snapshot: string;
+  readonly variant_title_snapshot: string;
+  readonly currency_code: string;
+  readonly quantity: string;
+  readonly net_sales: string;
+  readonly recognized_cost: string | null;
+  readonly gross_margin: string | null;
+  readonly profitability_status: 'AVAILABLE' | 'PARTIAL' | 'RESTRICTED';
+}
+
+export interface CustomersReportBreakdownDto {
+  readonly canonical_customer_id: string;
+  readonly display_name: string;
+  readonly currency_code: string;
+  readonly orders: string;
+  readonly net_sales: string;
+  readonly first_order_at: string;
+  readonly last_order_at: string;
+  readonly returning_customer: boolean;
+}
+
+export interface InventoryReportTotalsDto {
+  readonly snapshot_date: string;
+  readonly location_name: string;
+  readonly sku_positions: string;
+  readonly available_to_sell: string;
+  readonly reserved: string;
+}
+
+export interface InventorySnapshotItemDto {
+  readonly snapshot_date: string;
+  readonly sku: string;
+  readonly location_name: string;
+  readonly sellable_quantity: string;
+  readonly reserved_quantity: string;
+  readonly available_to_sell: string;
+}
+
+export interface SupplyReportTotalsDto {
+  readonly supplier_id: string;
+  readonly supplier_name: string;
+  readonly currency_code: string;
+  readonly purchases: string;
+  readonly units: string | null;
+  readonly purchase_value: string | null;
+}
+
+export interface PaymentsReportTotalsDto {
+  readonly fact_type: 'ATTEMPT' | 'PAYMENT' | 'REFUND';
+  readonly status: string;
+  readonly currency_code: string;
+  readonly records: string;
+  readonly amount: string;
+}
+
+export interface FinanceReportTotalsDto {
+  readonly transaction_type: string;
+  readonly currency_code: string;
+  readonly transactions: string;
+  readonly account_movement: string;
+}
+
+export interface DeliveryReportTotalsDto {
+  readonly outcome_status: string;
+  readonly deliveries: string;
+  readonly attempts: string;
+  readonly delivered_quantity: string;
+  readonly failed_quantity: string;
+  readonly average_delivery_hours: string | null;
+}
+
+export interface ReturnsReportTotalsDto {
+  readonly case_type: string;
+  readonly case_status: string;
+  readonly receipt_status: string;
+  readonly commercial_resolution_status: string;
+  readonly currency_code: string;
+  readonly cases: string;
+  readonly requested_quantity: string;
+  readonly received_quantity: string;
+  readonly refunds: string;
+}
+
+export interface ReviewsReportTotalsDto {
+  readonly visibility_status: string;
+  readonly moderation_status: string;
+  readonly rating: number | string;
+  readonly reviews: string;
+}
+
+export interface NotificationsReportTotalsDto {
+  readonly channel: string;
+  readonly status: string;
+  readonly provider: string;
+  readonly notifications: string;
+}
+
+export interface StorefrontReportTotalsDto {
+  readonly eligible_sessions: string;
+  readonly product_view_sessions: string;
+  readonly cart_sessions: string;
+  readonly checkout_sessions: string;
+  readonly observed_order_sessions: string;
+  readonly product_view_to_cart_rate: string | null;
+  readonly cart_to_checkout_rate: string | null;
+  readonly checkout_completion_rate: string | null;
+  readonly observed_session_conversion_rate: string | null;
+}
+
+export interface MarketingReportTotalsDto {
+  readonly source: string;
+  readonly medium: string;
+  readonly campaign: string;
+  readonly sessions: string;
+  readonly observed_orders: string;
+}
+
+export interface AssetsReportTotalsDto {
+  readonly status: string;
+  readonly condition: string;
+  readonly currency_code: string;
+  readonly assets: string;
+  readonly acquisition_cost: string | null;
+  readonly valuation_status: 'AVAILABLE' | 'PARTIAL';
+}
+
+export interface AnalyticsMetricDefinitionDto {
+  readonly metric_key: string;
+  readonly semantic_version: number;
+  readonly display_name: string;
+  readonly description: string;
+  readonly grain: string;
+  readonly time_basis: string;
+  readonly currency_treatment: string;
+  readonly included_states?: string;
+  readonly source_domains?: string[] | string;
+  readonly calculation_semantics: string;
+  readonly status?: string;
+}
+
+export interface AnalyticsReportExportDto {
+  readonly id: string;
+  readonly report_key: AnalyticsReportKeyDto;
+  readonly status: 'QUEUED' | 'PROCESSING' | 'READY' | 'FAILED' | 'EXPIRED';
+  readonly row_count: string | null;
+  readonly content_type: string | null;
+  readonly file_name: string | null;
+  readonly error_code: string | null;
+  readonly created_at: string;
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly expires_at: string | null;
+}
+
+export interface AnalyticsIntegrityFindingDto {
+  readonly code: string;
+  readonly detail: string;
+}
+
+export interface AnalyticsOverviewMetricDto {
+  readonly currencyCode: string;
+  readonly grossSales: string;
+  readonly discounts: string;
+  readonly netSales: string;
+  readonly recognizedCost: string | null;
+  readonly grossMargin: string | null;
+  readonly orderLines: string;
+}
+
+export interface AnalyticsOverviewDto {
+  readonly metrics: readonly AnalyticsOverviewMetricDto[];
+  readonly refreshedAt: string | null;
+}

@@ -177,9 +177,7 @@ export function registerAnalyticsRoutes(
           error: { code: 'REPORT_NOT_FOUND', message: 'Analytics report was not found.' },
         });
       const capability =
-        report === 'FINANCE' || report === 'PRODUCTS'
-          ? 'analytics.financial.view'
-          : 'analytics.view';
+        report === 'FINANCE' ? 'analytics.financial.view' : 'analytics.view';
       const active = await admin(database, auth, request.headers, capability);
       if (!active)
         return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
@@ -192,14 +190,25 @@ export function registerAnalyticsRoutes(
         pageSize?: number;
       };
       try {
-        return {
-          data: await getAnalyticsReport(
-            database.db,
-            active.organizationId,
-            report as AnalyticsReportKey,
-            query,
-          ),
-        };
+        const reportData = await getAnalyticsReport(
+          database.db,
+          active.organizationId,
+          report as AnalyticsReportKey,
+          query,
+        );
+        const hasFinancial = active.capabilities.includes('analytics.financial.view');
+        if (report === 'PRODUCTS' && !hasFinancial) {
+          const sanitizedBreakdown = (reportData.breakdown as readonly Record<string, unknown>[]).map(
+            (item) => ({
+              ...item,
+              recognized_cost: null,
+              gross_margin: null,
+              profitability_status: 'RESTRICTED',
+            }),
+          );
+          return { data: { ...reportData, breakdown: sanitizedBreakdown } };
+        }
+        return { data: reportData };
       } catch (error) {
         return reportError(reply, error);
       }
@@ -234,6 +243,41 @@ export function registerAnalyticsRoutes(
     if (!active)
       return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
     return { data: await listInventorySnapshots(database.db, active.organizationId) };
+  });
+  app.get('/admin/analytics/destinations', async (request, reply) => {
+    const active = await admin(database, auth, request.headers, 'analytics.view');
+    if (!active)
+      return reply.code(403).send({ error: { code: 'FORBIDDEN', message: 'Access denied.' } });
+    return {
+      data: [
+        {
+          providerCode: 'GA4',
+          name: 'Google Analytics 4',
+          category: 'MARKETING_MEASUREMENT',
+          status: 'EXTERNALLY_UNCONFIGURED',
+          description:
+            'Client-side and server-side Measurement Protocol dispatch of commerce events to GA4.',
+          browserTracking: { status: 'NOT_ACTIVE', measurementId: null },
+          serverTracking: { status: 'NOT_ACTIVE', apiSecretConfigured: false },
+          eventDeduplication: { status: 'FOUNDATION_READY', stableEventIdContract: 'ENABLED' },
+          notes:
+            'GA4 is an external marketing observation system and never replaces internal transactional sales truth. Purchases require client consent.',
+        },
+        {
+          providerCode: 'META',
+          name: 'Meta Pixel & Conversions API (CAPI)',
+          category: 'MARKETING_MEASUREMENT',
+          status: 'EXTERNALLY_UNCONFIGURED',
+          description:
+            'Meta Pixel browser tracking and server-side Conversions API for catalog browsing, cart, and purchase attribution.',
+          browserTracking: { status: 'NOT_ACTIVE', pixelId: null },
+          serverTracking: { status: 'NOT_ACTIVE', accessTokenConfigured: false },
+          eventDeduplication: { status: 'FOUNDATION_READY', sharedEventIdMapping: 'ENABLED' },
+          notes:
+            'Meta Conversions API is an external advertising measurement destination. Organic Facebook/social orders are captured as internal channel facts regardless of Meta ad tracking.',
+        },
+      ],
+    };
   });
   app.get('/admin/analytics/integrity', async (request, reply) => {
     const active = await admin(database, auth, request.headers, 'analytics.view');
