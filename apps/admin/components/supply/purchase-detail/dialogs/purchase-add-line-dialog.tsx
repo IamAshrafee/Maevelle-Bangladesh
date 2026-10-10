@@ -244,7 +244,7 @@ export function PurchaseAddLineDialog({
 
               {/* Transient feedback banner when adding sequentially */}
               {transientFeedback && (
-                <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs text-emerald-700 dark:text-emerald-400 shrink-0">
+                <div className="flex shrink-0 items-center gap-1.5 rounded-md border border-success/20 bg-success/10 px-2 py-0.5 text-xs text-success sm:px-2.5 sm:py-1">
                   <CheckCircle2 className="size-3.5 shrink-0" />
                   <span className="font-medium truncate max-w-[200px] sm:max-w-xs">
                     {transientFeedback}
@@ -482,7 +482,7 @@ export function PurchaseAddLineDialog({
                           {onHandStock <= 0 ? (
                             <Badge
                               variant="outline"
-                              className="text-[10px] px-1.5 py-0 font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/30"
+                              className="border-warning/30 bg-warning/10 px-1.5 py-0 text-[10px] font-medium text-warning"
                             >
                               0 in stock
                             </Badge>

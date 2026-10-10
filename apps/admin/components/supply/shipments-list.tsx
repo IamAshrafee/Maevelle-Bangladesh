@@ -4,7 +4,6 @@ import { type FormEvent, useEffect, useState, useDeferredValue } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertCircle,
   Building2,
   Calendar,
   Check,
@@ -30,6 +29,7 @@ import type { InboundReceiptDto, InboundShipmentDto, SupplyOverviewDto } from '@
 import type { PagedEnvelope } from '@/lib/supply/types';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
+import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -81,9 +81,9 @@ const SHIPMENT_STATUS_TABS = [
 
 function TransportIcon({ mode }: { mode: string }) {
   const m = mode.toUpperCase();
-  if (m === 'AIR') return <Plane className="size-4 text-sky-600 dark:text-sky-400" />;
-  if (m === 'ROAD') return <Truck className="size-4 text-amber-600 dark:text-amber-400" />;
-  if (m === 'RAIL') return <Train className="size-4 text-purple-600 dark:text-purple-400" />;
+  if (m === 'AIR') return <Plane className="size-4 text-info" />;
+  if (m === 'ROAD') return <Truck className="size-4 text-warning" />;
+  if (m === 'RAIL') return <Train className="size-4 text-success" />;
   return <Ship className="size-4 text-primary" />;
 }
 
@@ -352,7 +352,7 @@ export function ShipmentsList() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">In Transit</span>
-            <span className="rounded-md bg-sky-500/10 p-1.5 text-sky-600 dark:text-sky-400">
+            <span className="rounded-md bg-info/10 p-1.5 text-info">
               <Truck className="size-4" />
             </span>
           </div>
@@ -367,7 +367,7 @@ export function ShipmentsList() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Awaiting Intake</span>
-            <span className="rounded-md bg-emerald-500/10 p-1.5 text-emerald-600 dark:text-emerald-400">
+            <span className="rounded-md bg-success/10 p-1.5 text-success">
               <PackageCheck className="size-4" />
             </span>
           </div>
@@ -410,30 +410,27 @@ export function ShipmentsList() {
 
       {/* Notifications / Feedback */}
       {error ? (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="size-4 shrink-0" />
-          <span>{error}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>
-            Dismiss
-          </button>
-        </div>
+        <OperationalFeedback tone="danger" onDismiss={() => setError(null)}>
+          {error}
+        </OperationalFeedback>
       ) : null}
 
       {success ? (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-          <Check className="size-4 shrink-0" />
-          <span>{success}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>
-            Dismiss
-          </button>
-        </div>
+        <OperationalFeedback onDismiss={() => setSuccess(null)}>{success}</OperationalFeedback>
       ) : null}
 
       {/* Main Tabs Navigation */}
-      <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+      <div
+        role="tablist"
+        aria-label="Shipment workspace view"
+        className="flex flex-wrap items-center gap-2 border-b pb-2"
+      >
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'shipments'}
           onClick={() => updateFilter({ tab: 'shipments', status: null })}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'shipments'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -443,8 +440,11 @@ export function ShipmentsList() {
         </button>
 
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'queue'}
           onClick={() => updateFilter({ tab: 'queue', status: null })}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`min-h-10 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'queue'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -459,8 +459,11 @@ export function ShipmentsList() {
         </button>
 
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'receipts'}
           onClick={() => updateFilter({ tab: 'receipts', status: null })}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'receipts'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -475,6 +478,7 @@ export function ShipmentsList() {
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label={activeTab === 'receipts' ? 'Search receipts' : 'Search inbound shipments'}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -489,6 +493,8 @@ export function ShipmentsList() {
           />
           {query ? (
             <button
+              type="button"
+              aria-label="Clear shipment search"
               onClick={() => {
                 setQuery('');
                 updateFilter({ q: null });
@@ -503,6 +509,7 @@ export function ShipmentsList() {
         {activeTab === 'shipments' ? (
           <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
+              aria-label="Filter shipments by status"
               value={currentStatus}
               onChange={(e) => updateFilter({ status: e.target.value || null })}
               size="sm"
@@ -516,6 +523,7 @@ export function ShipmentsList() {
             </NativeSelect>
 
             <NativeSelect
+              aria-label="Filter shipments by transport mode"
               value={currentMode}
               onChange={(e) => updateFilter({ mode: e.target.value || null })}
               size="sm"
@@ -646,7 +654,7 @@ export function ShipmentsList() {
                             {quarantineCount > 0 ? (
                               <Badge
                                 variant="secondary"
-                                className="bg-amber-500/10 text-amber-700 text-[10px]"
+                                className="bg-warning/10 text-warning text-[10px]"
                               >
                                 {quarantineCount} Quarantine
                               </Badge>
@@ -759,6 +767,9 @@ export function ShipmentsList() {
                       <TableCell className="p-2 text-center">
                         {shipment.allocations.length > 0 ? (
                           <button
+                            type="button"
+                            aria-label={`${isExpanded ? 'Hide' : 'Show'} allocated goods for ${shipment.shipmentNumber}`}
+                            aria-expanded={isExpanded}
                             onClick={() => setExpandedShipmentId(isExpanded ? null : shipment.id)}
                             className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                             title="Show allocated goods"
@@ -885,7 +896,7 @@ export function ShipmentsList() {
                             <Button
                               size="xs"
                               onClick={() => openReceiveDialog(shipment)}
-                              className="gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                              className="gap-1 bg-success text-xs text-white hover:bg-success/90"
                             >
                               <PackageOpen className="size-3.5" />
                               <span>Receive Goods</span>
@@ -963,7 +974,7 @@ export function ShipmentsList() {
                         </span>
                         <span>
                           Received:{' '}
-                          <strong className="text-emerald-600 dark:text-emerald-400">
+                          <strong className="text-success">
                             {formatSupplyNumber(alloc.receivedQuantity)}
                           </strong>
                         </span>

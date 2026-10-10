@@ -180,9 +180,9 @@ const navigation: readonly NavGroup[] = [
       },
       {
         label: 'Shipments',
-        href: '/shipments',
+        href: '/inbound-shipments',
         icon: Truck,
-        capability: 'shipment.view',
+        capability: 'inbound_shipment.view',
       },
       {
         label: 'Suppliers',
@@ -244,7 +244,12 @@ const navigation: readonly NavGroup[] = [
     items: [
       { label: 'Overview', href: '/finance', icon: LayoutDashboard, capability: 'finance.view' },
       { label: 'Accounts', href: '/finance/accounts', icon: Landmark, capability: 'finance.view' },
-      { label: 'Expenses', href: '/finance/expenses', icon: ReceiptText, capability: 'finance.view' },
+      {
+        label: 'Expenses',
+        href: '/finance/expenses',
+        icon: ReceiptText,
+        capability: 'finance.view',
+      },
       {
         label: 'Ledger journal',
         href: '/finance/journal',
@@ -258,7 +263,12 @@ const navigation: readonly NavGroup[] = [
         capability: 'reconciliation.view',
       },
       { label: 'Payments', href: '/payments', icon: CreditCard, capability: 'payments.view' },
-      { label: 'Payouts', href: '/finance/payouts', icon: CircleDollarSign, capability: 'finance.view' },
+      {
+        label: 'Payouts',
+        href: '/finance/payouts',
+        icon: CircleDollarSign,
+        capability: 'finance.view',
+      },
       { label: 'Capital', href: '/finance/capital', icon: Landmark, capability: 'finance.view' },
     ],
   },
@@ -330,7 +340,8 @@ const navigation: readonly NavGroup[] = [
         label: 'Settings',
         href: '/settings',
         icon: Settings,
-        keywords: 'general organization security integrations health system configuration design system',
+        keywords:
+          'general organization security integrations health system configuration design system',
       },
       {
         label: 'Organization',
@@ -567,9 +578,15 @@ function CommandPalette({
                   onClick={() => go(item.href)}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left text-foreground hover:bg-muted/60 transition-colors group cursor-pointer"
                 >
-                  <Icon className="size-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" aria-hidden="true" />
+                  <Icon
+                    className="size-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0"
+                    aria-hidden="true"
+                  />
                   <span className="flex-1 truncate">{item.label}</span>
-                  <ChevronRight className="size-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0" aria-hidden="true" />
+                  <ChevronRight
+                    className="size-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0"
+                    aria-hidden="true"
+                  />
                 </button>
               );
             })}
@@ -587,21 +604,31 @@ function CommandPalette({
                   onClick={() => go(result.href)}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left text-foreground hover:bg-muted/60 transition-colors group cursor-pointer"
                 >
-                  <Search className="size-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" aria-hidden="true" />
+                  <Search
+                    className="size-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0"
+                    aria-hidden="true"
+                  />
                   <span className="flex-1 min-w-0">
-                    <strong className="block text-sm font-medium text-foreground truncate">{result.label}</strong>
+                    <strong className="block text-sm font-medium text-foreground truncate">
+                      {result.label}
+                    </strong>
                     <small className="block text-xs text-muted-foreground truncate">
                       {result.kind} · {result.detail}
                     </small>
                   </span>
-                  <ChevronRight className="size-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0" aria-hidden="true" />
+                  <ChevronRight
+                    className="size-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0"
+                    aria-hidden="true"
+                  />
                 </button>
               ))}
             </div>
           ) : null}
 
           {busy ? (
-            <p className="px-3 py-4 text-xs text-center text-muted-foreground">Searching authoritative records…</p>
+            <p className="px-3 py-4 text-xs text-center text-muted-foreground">
+              Searching authoritative records…
+            </p>
           ) : null}
           {!busy && query && local.length === 0 && remote.length === 0 ? (
             <p className="px-3 py-6 text-sm text-center text-muted-foreground">
@@ -696,7 +723,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row relative">
       {/* Mobile Backdrop */}
@@ -718,10 +744,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
         )}
       >
         {/* Brand Lockup */}
-        <div className={cn(
-          'h-14 flex items-center gap-3 px-4 border-b border-sidebar-border bg-sidebar shrink-0',
-          collapsed && 'md:justify-center md:px-2',
-        )}>
+        <div
+          className={cn(
+            'h-14 flex items-center gap-3 px-4 border-b border-sidebar-border bg-sidebar shrink-0',
+            collapsed && 'md:justify-center md:px-2',
+          )}
+        >
           <div
             className="size-8 rounded-lg bg-primary text-primary-foreground font-bold flex items-center justify-center text-sm shadow-xs shrink-0 tracking-tight"
             aria-hidden="true"
@@ -729,8 +757,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
             M
           </div>
           <div className={cn('min-w-0 flex flex-col leading-tight', collapsed && 'md:hidden')}>
-            <strong className="text-sm font-bold tracking-tight text-sidebar-foreground">Maevelle</strong>
-            <span className="text-[11px] text-muted-foreground font-normal">Business operations</span>
+            <strong className="text-sm font-bold tracking-tight text-sidebar-foreground">
+              Maevelle
+            </strong>
+            <span className="text-[11px] text-muted-foreground font-normal">
+              Business operations
+            </span>
           </div>
           <button
             className="ml-auto md:hidden p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-sidebar-accent"
@@ -752,10 +784,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
             if (visible.length === 0) return null;
             return (
               <section key={group.label} className="space-y-0.5">
-                <p className={cn(
-                  'px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80',
-                  collapsed && 'md:hidden',
-                )}>
+                <p
+                  className={cn(
+                    'px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80',
+                    collapsed && 'md:hidden',
+                  )}
+                >
                   {group.label}
                 </p>
                 {visible.map((item) => {
@@ -779,7 +813,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
                       <Icon
                         className={cn(
                           'size-4 shrink-0 transition-colors',
-                          active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+                          active
+                            ? 'text-primary'
+                            : 'text-muted-foreground group-hover:text-foreground',
                         )}
                         aria-hidden="true"
                       />
@@ -794,7 +830,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
         {/* Sidebar Footer: Quick Settings & Collapse */}
         <div className="flex flex-col gap-1 border-t border-sidebar-border p-2 shrink-0">
-
           <Link
             href="/settings"
             onClick={() => setMobileOpen(false)}
@@ -811,7 +846,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <Settings
               className={cn(
                 'size-4 shrink-0 transition-colors',
-                isNavActive(pathname, '/settings') ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+                isNavActive(pathname, '/settings')
+                  ? 'text-primary'
+                  : 'text-muted-foreground group-hover:text-foreground',
               )}
               aria-hidden="true"
             />
@@ -827,8 +864,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
             )}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            {collapsed ? <ChevronRight className="size-4 shrink-0" /> : <PanelLeftClose className="size-4 shrink-0" />}
-            <span className={cn(collapsed && 'hidden')}>{collapsed ? 'Expand' : 'Collapse sidebar'}</span>
+            {collapsed ? (
+              <ChevronRight className="size-4 shrink-0" />
+            ) : (
+              <PanelLeftClose className="size-4 shrink-0" />
+            )}
+            <span className={cn(collapsed && 'hidden')}>
+              {collapsed ? 'Expand' : 'Collapse sidebar'}
+            </span>
           </button>
         </div>
       </aside>
@@ -866,7 +909,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <NotificationBell />
 
             <div className="hidden sm:flex flex-col items-end leading-none border-l border-border pl-3">
-              <span className="text-[10px] uppercase font-semibold text-muted-foreground">Workspace</span>
+              <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                Workspace
+              </span>
               <strong className="text-xs font-semibold text-foreground">Maevelle BD</strong>
             </div>
 
@@ -883,7 +928,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               <ShieldAlert className="size-4 text-warning shrink-0" />
               <span>
-                <strong>Authenticator setup required:</strong> Your account must configure two-factor authentication before{' '}
+                <strong>Authenticator setup required:</strong> Your account must configure
+                two-factor authentication before{' '}
                 {context.twoFactor.enrollmentDeadline
                   ? new Date(context.twoFactor.enrollmentDeadline).toLocaleDateString(undefined, {
                       dateStyle: 'medium',
@@ -903,10 +949,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
         {/* Inner Content Area */}
         <div className="flex-1 min-w-0">
-          <AdminCapabilitiesProvider
-            capabilities={context?.capabilities ?? []}
-            context={context}
-          >
+          <AdminCapabilitiesProvider capabilities={context?.capabilities ?? []} context={context}>
             {children}
           </AdminCapabilitiesProvider>
         </div>
@@ -968,7 +1011,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
           aria-label="Operations and Alerts"
           className={cn(
             'flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-lg transition-colors',
-            pathname.startsWith('/operations') ? 'text-primary font-semibold' : 'hover:text-foreground',
+            pathname.startsWith('/operations')
+              ? 'text-primary font-semibold'
+              : 'hover:text-foreground',
           )}
         >
           <Gauge className="size-4" aria-hidden="true" />

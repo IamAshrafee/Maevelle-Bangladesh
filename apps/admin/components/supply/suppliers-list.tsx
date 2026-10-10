@@ -4,10 +4,8 @@ import { useEffect, useState, useDeferredValue } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertCircle,
   Building2,
   Calendar,
-  Check,
   Download,
   Edit3,
   ExternalLink,
@@ -31,6 +29,7 @@ import type {
 import type { PagedEnvelope } from '@/lib/supply/types';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
+import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -282,7 +281,7 @@ export function SuppliersList() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Open POs</span>
-            <span className="rounded-md bg-emerald-500/10 p-1.5 text-emerald-600 dark:text-emerald-400">
+            <span className="rounded-md bg-success/10 p-1.5 text-success">
               <Receipt className="size-4" />
             </span>
           </div>
@@ -295,7 +294,7 @@ export function SuppliersList() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">In Transit</span>
-            <span className="rounded-md bg-sky-500/10 p-1.5 text-sky-600 dark:text-sky-400">
+            <span className="rounded-md bg-info/10 p-1.5 text-info">
               <Calendar className="size-4" />
             </span>
           </div>
@@ -310,7 +309,7 @@ export function SuppliersList() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Draft POs</span>
-            <span className="rounded-md bg-amber-500/10 p-1.5 text-amber-600 dark:text-amber-400">
+            <span className="rounded-md bg-warning/10 p-1.5 text-warning">
               <Building2 className="size-4" />
             </span>
           </div>
@@ -323,36 +322,33 @@ export function SuppliersList() {
 
       {/* Notifications / Feedback */}
       {error ? (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="size-4 shrink-0" />
-          <span>{error}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>
-            Dismiss
-          </button>
-        </div>
+        <OperationalFeedback tone="danger" onDismiss={() => setError(null)}>
+          {error}
+        </OperationalFeedback>
       ) : null}
 
       {success ? (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-          <Check className="size-4 shrink-0" />
-          <span>{success}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>
-            Dismiss
-          </button>
-        </div>
+        <OperationalFeedback onDismiss={() => setSuccess(null)}>{success}</OperationalFeedback>
       ) : null}
 
       {/* Filters Toolbar */}
       <div className="space-y-3">
         {/* Status Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 border-b pb-2">
+        <div
+          role="tablist"
+          aria-label="Supplier status"
+          className="flex flex-wrap items-center gap-1.5 border-b pb-2"
+        >
           {STATUS_TABS.map((tab) => {
             const isSelected = currentStatus === tab.value;
             return (
               <button
                 key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
                 onClick={() => updateFilter({ status: tab.value === 'ALL' ? null : tab.value })}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   isSelected
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -369,6 +365,7 @@ export function SuppliersList() {
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              aria-label="Search suppliers"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -379,6 +376,8 @@ export function SuppliersList() {
             />
             {query ? (
               <button
+                type="button"
+                aria-label="Clear supplier search"
                 onClick={() => {
                   setQuery('');
                   updateFilter({ q: null });
@@ -392,6 +391,7 @@ export function SuppliersList() {
 
           <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
+              aria-label="Filter suppliers by type"
               value={currentType}
               onChange={(e) => updateFilter({ type: e.target.value || null })}
               size="sm"

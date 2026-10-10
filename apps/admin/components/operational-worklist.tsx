@@ -7,6 +7,7 @@ import {
   ListFilter,
   Search,
   SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import React, { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -186,7 +187,9 @@ export function OperationalPageHeader({
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{title}</h1>
         <p className="text-sm text-muted-foreground max-w-3xl">{description}</p>
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2.5 shrink-0">{actions}</div> : null}
+      {actions ? (
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">{actions}</div>
+      ) : null}
     </header>
   );
 }
@@ -194,23 +197,36 @@ export function OperationalPageHeader({
 export function OperationalFeedback({
   children,
   tone = 'success',
+  onDismiss,
 }: {
   readonly children: ReactNode;
   readonly tone?: 'success' | 'warning' | 'danger';
+  readonly onDismiss?: (() => void) | undefined;
 }) {
   const Icon = tone === 'success' ? CheckCircle2 : AlertTriangle;
   return (
     <div
       className={cn(
         'flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-xs sm:text-sm font-medium',
-        tone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
-        tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
-        tone === 'danger' && 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300',
+        tone === 'success' && 'border-success/30 bg-success/10 text-success',
+        tone === 'warning' && 'border-warning/30 bg-warning/10 text-warning',
+        tone === 'danger' && 'border-destructive/30 bg-destructive/10 text-destructive',
       )}
       role={tone === 'danger' ? 'alert' : 'status'}
+      aria-live={tone === 'danger' ? 'assertive' : 'polite'}
     >
       <Icon className="size-4 shrink-0" aria-hidden="true" />
-      <span>{children}</span>
+      <span className="min-w-0 flex-1">{children}</span>
+      {onDismiss ? (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss message"
+          className="grid size-8 shrink-0 place-items-center rounded-md transition-colors hover:bg-current/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <X aria-hidden="true" className="size-4" />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -272,7 +288,10 @@ export function OperationalWorklistToolbar({
     <div className="flex flex-wrap items-center gap-3 p-3 sm:p-4 rounded-xl border border-border bg-card shadow-2xs">
       {/* Search Input */}
       <div className="relative flex-1 min-w-[220px]">
-        <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" aria-hidden="true" />
+        <Search
+          className="absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+          aria-hidden="true"
+        />
         <span className="sr-only">{searchLabel}</span>
         <input
           type="search"
@@ -306,7 +325,10 @@ export function OperationalWorklistToolbar({
       {/* Sort Worklist */}
       <div className="relative shrink-0">
         <label className="flex items-center gap-1.5 h-9 rounded-lg border border-input bg-card px-2.5 text-xs text-foreground shadow-2xs hover:bg-muted/40 transition-colors cursor-pointer">
-          <SlidersHorizontal className="size-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+          <SlidersHorizontal
+            className="size-3.5 text-muted-foreground shrink-0"
+            aria-hidden="true"
+          />
           <span className="sr-only">Sort worklist</span>
           <select
             value={sort}
@@ -321,14 +343,19 @@ export function OperationalWorklistToolbar({
       </div>
 
       {/* Density Toggle */}
-      <div className="flex items-center rounded-lg border border-input bg-muted/30 p-0.5 text-xs" aria-label="Table density">
+      <div
+        className="flex items-center rounded-lg border border-input bg-muted/30 p-0.5 text-xs"
+        aria-label="Table density"
+      >
         <button
           type="button"
           aria-pressed={density === 'comfortable'}
           onClick={() => onDensityChange('comfortable')}
           className={cn(
             'px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer',
-            density === 'comfortable' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground',
+            density === 'comfortable'
+              ? 'bg-card text-foreground shadow-2xs'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           Comfortable
@@ -339,7 +366,9 @@ export function OperationalWorklistToolbar({
           onClick={() => onDensityChange('compact')}
           className={cn(
             'px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer',
-            density === 'compact' ? 'bg-card text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground',
+            density === 'compact'
+              ? 'bg-card text-foreground shadow-2xs'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           Compact
@@ -361,9 +390,13 @@ export function OperationalWorklistToolbar({
                 onChange={(event) => onApplyView(event.target.value)}
                 className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none"
               >
-                <option value="" disabled>Choose a view…</option>
+                <option value="" disabled>
+                  Choose a view…
+                </option>
                 {savedViews.map((view) => (
-                  <option key={view.name} value={view.name}>{view.name}</option>
+                  <option key={view.name} value={view.name}>
+                    {view.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -397,7 +430,10 @@ export function OperationalWorklistToolbar({
       </details>
 
       {/* Result Count */}
-      <span className="ml-auto text-xs text-muted-foreground tabular-nums shrink-0" aria-live="polite">
+      <span
+        className="ml-auto text-xs text-muted-foreground tabular-nums shrink-0"
+        aria-live="polite"
+      >
         {resultCount} result{resultCount === 1 ? '' : 's'}
       </span>
     </div>

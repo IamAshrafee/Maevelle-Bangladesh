@@ -49,19 +49,35 @@ export function PurchasePayDialog({
   const [accountId, setAccountId] = useState('');
   const [contributorId, setContributorId] = useState('');
   const [contributors, setContributors] = useState<readonly CapitalContributorDto[]>([]);
+  const [contributorsLoading, setContributorsLoading] = useState(false);
+  const [contributorsError, setContributorsError] = useState('');
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
 
   useEffect(() => {
-    if (!canManageCapital) return;
-    void fetchApiData<readonly CapitalContributorDto[]>('/admin/finance/capital/contributors')
+    if (!canManageCapital || !invoice) return;
+    const controller = new AbortController();
+    setContributorsLoading(true);
+    setContributorsError('');
+    void fetchApiData<readonly CapitalContributorDto[]>('/admin/finance/capital/contributors', {
+      signal: controller.signal,
+    })
       .then((data) => {
         setContributors(data);
         const firstActive = data.find((c) => c.status === 'ACTIVE');
         if (firstActive) setContributorId(firstActive.id);
       })
-      .catch(() => {});
-  }, [canManageCapital]);
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setContributorsError(
+          error instanceof Error ? error.message : 'Capital contributors could not be loaded.',
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setContributorsLoading(false);
+      });
+    return () => controller.abort();
+  }, [canManageCapital, invoice]);
 
   const activeContributors = contributors.filter((c) => c.status === 'ACTIVE');
 
@@ -123,7 +139,7 @@ export function PurchasePayDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-success/10 text-success">
               <CreditCard className="size-4" />
             </div>
             <div>
@@ -156,7 +172,7 @@ export function PurchasePayDialog({
               </span>
               <span>
                 Due:{' '}
-                <strong className="text-amber-600 dark:text-amber-400">
+                <strong className="text-warning">
                   {formatSupplyMoney(invoice.outstanding, invoice.currency_code)}
                 </strong>
               </span>
@@ -245,14 +261,16 @@ export function PurchasePayDialog({
                 name="contributorId"
                 value={contributorId}
                 required
-                disabled={busy || !activeContributors.length}
+                disabled={busy || contributorsLoading || !activeContributors.length}
                 className="w-full"
                 onChange={(e) => setContributorId(e.target.value)}
               >
                 <NativeSelectOption value="" disabled>
-                  {activeContributors.length
-                    ? 'Choose contributor'
-                    : 'No active capital contributors found'}
+                  {contributorsLoading
+                    ? 'Loading contributors…'
+                    : activeContributors.length
+                      ? 'Choose contributor'
+                      : 'No active capital contributors found'}
                 </NativeSelectOption>
                 {activeContributors.map((c) => (
                   <NativeSelectOption key={c.id} value={c.id}>
@@ -263,6 +281,11 @@ export function PurchasePayDialog({
               <FieldDescription>
                 The owner or investor who personally paid this supplier obligation.
               </FieldDescription>
+              {contributorsError ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {contributorsError}
+                </p>
+              ) : null}
             </Field>
           )}
 

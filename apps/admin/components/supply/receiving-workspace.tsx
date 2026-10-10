@@ -4,11 +4,9 @@ import { type FormEvent, useEffect, useState, useDeferredValue } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  AlertCircle,
   AlertTriangle,
   Building2,
   Calendar,
-  Check,
   CheckCircle,
   ExternalLink,
   Eye,
@@ -35,6 +33,7 @@ import type {
 import type { PagedEnvelope } from '@/lib/supply/types';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
+import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
 import { Badge } from '@/components/ui/badge';
@@ -333,7 +332,7 @@ export function ReceivingWorkspace() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Ready to Count</span>
-            <span className="rounded-md bg-emerald-500/10 p-1.5 text-emerald-600 dark:text-emerald-400">
+            <span className="rounded-md bg-success/10 p-1.5 text-success">
               <PackageCheck className="size-4" />
             </span>
           </div>
@@ -361,7 +360,7 @@ export function ReceivingWorkspace() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">In Transit</span>
-            <span className="rounded-md bg-sky-500/10 p-1.5 text-sky-600 dark:text-sky-400">
+            <span className="rounded-md bg-info/10 p-1.5 text-info">
               <Ship className="size-4" />
             </span>
           </div>
@@ -376,7 +375,7 @@ export function ReceivingWorkspace() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Condition Attention</span>
-            <span className="rounded-md bg-amber-500/10 p-1.5 text-amber-600 dark:text-amber-400">
+            <span className="rounded-md bg-warning/10 p-1.5 text-warning">
               <AlertTriangle className="size-4" />
             </span>
           </div>
@@ -389,30 +388,27 @@ export function ReceivingWorkspace() {
 
       {/* Notifications / Feedback */}
       {error ? (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="size-4 shrink-0" />
-          <span>{error}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>
-            Dismiss
-          </button>
-        </div>
+        <OperationalFeedback tone="danger" onDismiss={() => setError(null)}>
+          {error}
+        </OperationalFeedback>
       ) : null}
 
       {success ? (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-          <Check className="size-4 shrink-0" />
-          <span>{success}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>
-            Dismiss
-          </button>
-        </div>
+        <OperationalFeedback onDismiss={() => setSuccess(null)}>{success}</OperationalFeedback>
       ) : null}
 
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+      <div
+        role="tablist"
+        aria-label="Receiving workspace view"
+        className="flex flex-wrap items-center gap-2 border-b pb-2"
+      >
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'intake'}
           onClick={() => updateFilter({ tab: 'intake' })}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`min-h-10 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'intake'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -427,8 +423,11 @@ export function ReceivingWorkspace() {
         </button>
 
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'history'}
           onClick={() => updateFilter({ tab: 'history' })}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'history'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -438,8 +437,11 @@ export function ReceivingWorkspace() {
         </button>
 
         <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'resolution'}
           onClick={() => updateFilter({ tab: 'resolution' })}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`min-h-10 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'resolution'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -458,6 +460,7 @@ export function ReceivingWorkspace() {
       <div className="relative max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          aria-label="Search receiving workspace"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -472,6 +475,8 @@ export function ReceivingWorkspace() {
         />
         {query ? (
           <button
+            type="button"
+            aria-label="Clear receiving search"
             onClick={() => {
               setQuery('');
               updateFilter({ q: null });
@@ -511,7 +516,7 @@ export function ReceivingWorkspace() {
                 <TableRow>
                   <TableCell colSpan={6} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <PackageCheck className="size-8 text-emerald-600/70" />
+                      <PackageCheck className="size-8 text-success/70" />
                       <p className="font-heading text-sm font-semibold">
                         Receiving queue is clear!
                       </p>
@@ -593,7 +598,7 @@ export function ReceivingWorkspace() {
                             <Button
                               size="sm"
                               onClick={() => openReceiveDialog(shipment)}
-                              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              className="gap-1.5 bg-success text-white hover:bg-success/90"
                             >
                               <PackageOpen className="size-4" />
                               <span>Count & Receive</span>
@@ -707,7 +712,7 @@ export function ReceivingWorkspace() {
                             {quarantine > 0 ? (
                               <Badge
                                 variant="secondary"
-                                className="bg-amber-500/10 text-amber-700 text-[10px]"
+                                className="bg-warning/10 text-warning text-[10px]"
                               >
                                 {quarantine} Quarantine
                               </Badge>
@@ -771,7 +776,7 @@ export function ReceivingWorkspace() {
                 <TableRow>
                   <TableCell colSpan={6} className="h-44 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <CheckCircle className="size-8 text-emerald-600/70" />
+                      <CheckCircle className="size-8 text-success/70" />
                       <p className="font-heading text-sm font-semibold">
                         No quarantine or inspection items pending!
                       </p>
@@ -832,7 +837,7 @@ export function ReceivingWorkspace() {
                         variant={line.condition === 'DAMAGED' ? 'destructive' : 'secondary'}
                         className={
                           line.condition === 'QUARANTINE' || line.condition === 'INSPECTION'
-                            ? 'bg-amber-500/10 text-amber-700'
+                            ? 'bg-warning/10 text-warning'
                             : ''
                         }
                       >
