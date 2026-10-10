@@ -218,14 +218,14 @@ export function ProductDetails({ productId }: { productId: string }) {
       />
       <header className="flex flex-col gap-4 border-b pb-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="flex min-w-0 items-center gap-4">
-          <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/10">
+          <span className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/10">
             {primaryMedia ? (
               <img
                 alt={primaryMedia.altText ?? workspace.title}
                 className="size-full object-cover"
-                height={64}
+                height={96}
                 src={productMediaUrl(primaryMedia.assetId, primaryMedia.visibility)}
-                width={64}
+                width={96}
               />
             ) : (
               <PackageOpen className="size-6 text-muted-foreground" aria-hidden="true" />
@@ -258,11 +258,7 @@ export function ProductDetails({ productId }: { productId: string }) {
               </Button>
               <Button
                 variant="outline"
-                render={
-                  <Link
-                    href={`/inventory/stock?q=${encodeURIComponent(workspace.title)}`}
-                  />
-                }
+                render={<Link href={`/inventory/stock?q=${encodeURIComponent(workspace.title)}`} />}
               >
                 <PackageOpen aria-hidden="true" /> View Inventory
               </Button>
@@ -572,7 +568,9 @@ export function ProductDetails({ productId }: { productId: string }) {
                             <Star className="size-3 fill-amber-400 text-amber-400 shrink-0" />
                           ) : null}
                           <span>{value.label}</span>
-                          {value.isPrimary ? <span className="text-[10px] text-primary">· Cover</span> : null}
+                          {value.isPrimary ? (
+                            <span className="text-[10px] text-primary">· Cover</span>
+                          ) : null}
                           {value.sizeDefinitionId ? ' · Normalized' : ''}
                         </span>
                       ))}
@@ -598,8 +596,16 @@ export function ProductDetails({ productId }: { productId: string }) {
               </thead>
               <tbody className="divide-y">
                 {workspace.variants.map((variant) => {
-                  const priceNum = variant.currentPrice ? parseFloat(variant.currentPrice.amount) : null;
-                  const costNum = variant.estimatedCostAmount ? parseFloat(variant.estimatedCostAmount) : null;
+                  const priceNum = variant.currentPrice
+                    ? parseFloat(variant.currentPrice.amount)
+                    : null;
+                  const marginCost =
+                    variant.latestAcquisitionCost?.amount ?? variant.estimatedCostAmount;
+                  const costNum = marginCost ? parseFloat(marginCost) : null;
+                  const variantMedia =
+                    variant.media.find((item) => item.isPrimary) ??
+                    variant.media[0] ??
+                    primaryMedia;
                   const marginPercent =
                     priceNum !== null && costNum !== null && priceNum > 0
                       ? Math.round(((priceNum - costNum) / priceNum) * 1000) / 10
@@ -608,13 +614,37 @@ export function ProductDetails({ productId }: { productId: string }) {
                   return (
                     <tr key={variant.id}>
                       <td className="px-4 py-3">
-                        <strong className="block font-medium">{variant.title ?? variant.sku}</strong>
-                        <span className="font-mono text-xs text-muted-foreground">{variant.sku}</span>
-                        {variant.barcode ? (
-                          <span className="block font-mono text-xs text-muted-foreground">
-                            Barcode {variant.barcode}
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+                            {variantMedia ? (
+                              <img
+                                alt={variantMedia.altText ?? variant.title ?? variant.sku}
+                                className="size-full object-cover"
+                                height={64}
+                                src={productMediaUrl(variantMedia.assetId, variantMedia.visibility)}
+                                width={64}
+                              />
+                            ) : (
+                              <ImageIcon
+                                className="size-5 text-muted-foreground"
+                                aria-hidden="true"
+                              />
+                            )}
                           </span>
-                        ) : null}
+                          <div className="min-w-0">
+                            <strong className="block font-medium">
+                              {variant.title ?? variant.sku}
+                            </strong>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {variant.sku}
+                            </span>
+                            {variant.barcode ? (
+                              <span className="block font-mono text-xs text-muted-foreground">
+                                Barcode {variant.barcode}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {optionSummary(workspace, variant.optionValueIds)}
@@ -654,9 +684,21 @@ export function ProductDetails({ productId }: { productId: string }) {
                             </span>
                           ) : null}
                         </div>
-                        {variant.estimatedCostAmount ? (
-                          <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <span>Cost: ৳{parseFloat(variant.estimatedCostAmount).toLocaleString('en-BD')}</span>
+                        {variant.latestAcquisitionCost ? (
+                          <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="font-medium text-foreground">
+                                Landed cost:{' '}
+                                {formatCatalogMoney(
+                                  variant.latestAcquisitionCost.amount,
+                                  variant.latestAcquisitionCost.currency,
+                                )}
+                              </span>
+                              <StatusBadge status={variant.latestAcquisitionCost.state} />
+                            </div>
+                            <span className="block font-mono">
+                              Receipt {variant.latestAcquisitionCost.receiptNumber}
+                            </span>
                             {marginPercent !== null && (
                               <span
                                 className={`font-mono text-[10px] font-semibold px-1 rounded ${
@@ -671,19 +713,40 @@ export function ProductDetails({ productId }: { productId: string }) {
                               </span>
                             )}
                           </div>
+                        ) : variant.estimatedCostAmount ? (
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <span>
+                              Planning estimate:{' '}
+                              {formatCatalogMoney(
+                                variant.estimatedCostAmount,
+                                variant.currentPrice?.currency ?? 'BDT',
+                              )}
+                            </span>
+                            {marginPercent !== null ? (
+                              <span className="rounded bg-muted px-1 font-mono text-[10px] font-semibold">
+                                {marginPercent}% est.
+                              </span>
+                            ) : null}
+                          </div>
                         ) : null}
                       </td>
                       <td className="px-4 py-3 text-xs">
                         <span className="block">
                           {variant.weight ? (
                             <span>
-                              {formatMeasurement(variant.weight.value)} {variant.weight.unit.toLowerCase()}{' '}
-                              <span className="text-[10px] text-primary font-medium">(Override)</span>
+                              {formatMeasurement(variant.weight.value)}{' '}
+                              {variant.weight.unit.toLowerCase()}{' '}
+                              <span className="text-[10px] text-primary font-medium">
+                                (Override)
+                              </span>
                             </span>
                           ) : workspace.shipping?.weight ? (
                             <span className="text-muted-foreground">
-                              {formatMeasurement(workspace.shipping.weight.value)} {workspace.shipping.weight.unit.toLowerCase()}{' '}
-                              <span className="text-[10px] text-muted-foreground/70">(Inherited)</span>
+                              {formatMeasurement(workspace.shipping.weight.value)}{' '}
+                              {workspace.shipping.weight.unit.toLowerCase()}{' '}
+                              <span className="text-[10px] text-muted-foreground/70">
+                                (Inherited)
+                              </span>
                             </span>
                           ) : (
                             <span className="text-muted-foreground">No weight</span>
@@ -692,13 +755,23 @@ export function ProductDetails({ productId }: { productId: string }) {
                         <span className="block text-muted-foreground">
                           {variant.dimensions ? (
                             <span>
-                              {formatMeasurement(variant.dimensions.length)} × {formatMeasurement(variant.dimensions.width)} × {formatMeasurement(variant.dimensions.height)} {variant.dimensions.unit.toLowerCase()}{' '}
-                              <span className="text-[10px] text-primary font-medium">(Override)</span>
+                              {formatMeasurement(variant.dimensions.length)} ×{' '}
+                              {formatMeasurement(variant.dimensions.width)} ×{' '}
+                              {formatMeasurement(variant.dimensions.height)}{' '}
+                              {variant.dimensions.unit.toLowerCase()}{' '}
+                              <span className="text-[10px] text-primary font-medium">
+                                (Override)
+                              </span>
                             </span>
                           ) : workspace.shipping?.dimensions ? (
                             <span className="text-muted-foreground/80">
-                              {formatMeasurement(workspace.shipping.dimensions.length)} × {formatMeasurement(workspace.shipping.dimensions.width)} × {formatMeasurement(workspace.shipping.dimensions.height)} {workspace.shipping.dimensions.unit.toLowerCase()}{' '}
-                              <span className="text-[10px] text-muted-foreground/70">(Inherited)</span>
+                              {formatMeasurement(workspace.shipping.dimensions.length)} ×{' '}
+                              {formatMeasurement(workspace.shipping.dimensions.width)} ×{' '}
+                              {formatMeasurement(workspace.shipping.dimensions.height)}{' '}
+                              {workspace.shipping.dimensions.unit.toLowerCase()}{' '}
+                              <span className="text-[10px] text-muted-foreground/70">
+                                (Inherited)
+                              </span>
                             </span>
                           ) : (
                             <span>No dimensions</span>

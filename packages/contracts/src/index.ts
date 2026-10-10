@@ -667,6 +667,13 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
       } | null;
     } | null;
     readonly estimatedCostAmount: string | null;
+    readonly latestAcquisitionCost: {
+      readonly amount: string;
+      readonly currency: string;
+      readonly state: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED';
+      readonly receiptNumber: string;
+      readonly receivedAt: string;
+    } | null;
     readonly currentPrice: {
       readonly amount: string;
       readonly compareAtAmount: string | null;

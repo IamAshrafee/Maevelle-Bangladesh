@@ -99,6 +99,13 @@ export interface CatalogProductWorkspace extends ProductSummary {
       dimensions: { length: string; width: string; height: string; unit: string } | null;
     } | null;
     estimatedCostAmount: string | null;
+    latestAcquisitionCost: {
+      amount: string;
+      currency: string;
+      state: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED';
+      receiptNumber: string;
+      receivedAt: string;
+    } | null;
     currentPrice: { amount: string; compareAtAmount: string | null; currency: string } | null;
     sellableQuantity: string;
     media: readonly CatalogProductMedia[];
@@ -582,7 +589,11 @@ export async function createProductOptionValue(
         actorId: input.actorId,
         eventType: 'catalog.product.option_structure_updated',
         auditAction: 'catalog.product.option_value_created',
-        metadata: { optionAxisId: input.optionAxisId, optionValueId: row.id, isPrimary: input.isPrimary },
+        metadata: {
+          optionAxisId: input.optionAxisId,
+          optionValueId: row.id,
+          isPrimary: input.isPrimary,
+        },
       });
     return row;
   });
@@ -615,7 +626,12 @@ export async function updateProductOptionAxis(
   await db.transaction().execute(async (transaction) => {
     const product = await lockCatalogProduct(transaction, input.organizationId, input.productId);
     if (!product) throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
-    const axis = await sql<{ name: string; is_visual: boolean; status: 'ACTIVE' | 'ARCHIVED'; version: string }>`
+    const axis = await sql<{
+      name: string;
+      is_visual: boolean;
+      status: 'ACTIVE' | 'ARCHIVED';
+      version: string;
+    }>`
       select name,is_visual,status,version::text from catalog.product_option_axes
       where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
         and id=${input.axisId}::uuid
@@ -1496,11 +1512,20 @@ export async function createCatalogProduct(
         );
     }
 
-    const baseWeightVal = input.shipping?.weight?.value ? Number(input.shipping.weight.value) : null;
-    const baseWeightUnit = baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
-    const baseLenVal = input.shipping?.dimensions?.length ? Number(input.shipping.dimensions.length) : null;
-    const baseWidthVal = input.shipping?.dimensions?.width ? Number(input.shipping.dimensions.width) : null;
-    const baseHeightVal = input.shipping?.dimensions?.height ? Number(input.shipping.dimensions.height) : null;
+    const baseWeightVal = input.shipping?.weight?.value
+      ? Number(input.shipping.weight.value)
+      : null;
+    const baseWeightUnit =
+      baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
+    const baseLenVal = input.shipping?.dimensions?.length
+      ? Number(input.shipping.dimensions.length)
+      : null;
+    const baseWidthVal = input.shipping?.dimensions?.width
+      ? Number(input.shipping.dimensions.width)
+      : null;
+    const baseHeightVal = input.shipping?.dimensions?.height
+      ? Number(input.shipping.dimensions.height)
+      : null;
     const baseDimUnit =
       baseLenVal && baseWidthVal && baseHeightVal && input.shipping?.dimensions?.unit
         ? input.shipping.dimensions.unit
@@ -1835,13 +1860,24 @@ export async function createCatalogProduct(
     } else if (input.initialVariant && input.initialVariant.sku) {
       const normalizedSku = input.initialVariant.sku.trim().toUpperCase();
       if (normalizedSku) {
-        const weightVal = input.initialVariant.weight?.value ? Number(input.initialVariant.weight.value) : null;
-        const weightUnit = weightVal && input.initialVariant.weight?.unit ? input.initialVariant.weight.unit : null;
-        const lenVal = input.initialVariant.dimensions?.length ? Number(input.initialVariant.dimensions.length) : null;
-        const widthVal = input.initialVariant.dimensions?.width ? Number(input.initialVariant.dimensions.width) : null;
-        const heightVal = input.initialVariant.dimensions?.height ? Number(input.initialVariant.dimensions.height) : null;
+        const weightVal = input.initialVariant.weight?.value
+          ? Number(input.initialVariant.weight.value)
+          : null;
+        const weightUnit =
+          weightVal && input.initialVariant.weight?.unit ? input.initialVariant.weight.unit : null;
+        const lenVal = input.initialVariant.dimensions?.length
+          ? Number(input.initialVariant.dimensions.length)
+          : null;
+        const widthVal = input.initialVariant.dimensions?.width
+          ? Number(input.initialVariant.dimensions.width)
+          : null;
+        const heightVal = input.initialVariant.dimensions?.height
+          ? Number(input.initialVariant.dimensions.height)
+          : null;
         const dimUnit =
-          lenVal && widthVal && heightVal && input.initialVariant.dimensions?.unit ? input.initialVariant.dimensions.unit : null;
+          lenVal && widthVal && heightVal && input.initialVariant.dimensions?.unit
+            ? input.initialVariant.dimensions.unit
+            : null;
         const estimatedCost = input.initialVariant.estimatedCostAmount
           ? Number(input.initialVariant.estimatedCostAmount)
           : null;
@@ -1911,11 +1947,11 @@ export async function createCatalogProduct(
 
       for (const [pos, m] of input.media.entries()) {
         const optionValueId = m.optionValueRef
-          ? (createdValuesByRef.get(m.optionValueRef)?.id ?? createdValuesById.get(m.optionValueRef)?.id ?? null)
+          ? (createdValuesByRef.get(m.optionValueRef)?.id ??
+            createdValuesById.get(m.optionValueRef)?.id ??
+            null)
           : null;
-        const variantId = m.variantRef
-          ? (createdVariantsByRef.get(m.variantRef) ?? null)
-          : null;
+        const variantId = m.variantRef ? (createdVariantsByRef.get(m.variantRef) ?? null) : null;
 
         if (hasVisualAxis) {
           if (m.role !== 'SIZE_DIAGRAM' && !optionValueId && !variantId) {
@@ -2042,11 +2078,20 @@ export async function updateCatalogProduct(
         );
     }
     const hasShipping = input.shipping !== undefined;
-    const baseWeightVal = input.shipping?.weight?.value ? Number(input.shipping.weight.value) : null;
-    const baseWeightUnit = baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
-    const baseLenVal = input.shipping?.dimensions?.length ? Number(input.shipping.dimensions.length) : null;
-    const baseWidthVal = input.shipping?.dimensions?.width ? Number(input.shipping.dimensions.width) : null;
-    const baseHeightVal = input.shipping?.dimensions?.height ? Number(input.shipping.dimensions.height) : null;
+    const baseWeightVal = input.shipping?.weight?.value
+      ? Number(input.shipping.weight.value)
+      : null;
+    const baseWeightUnit =
+      baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
+    const baseLenVal = input.shipping?.dimensions?.length
+      ? Number(input.shipping.dimensions.length)
+      : null;
+    const baseWidthVal = input.shipping?.dimensions?.width
+      ? Number(input.shipping.dimensions.width)
+      : null;
+    const baseHeightVal = input.shipping?.dimensions?.height
+      ? Number(input.shipping.dimensions.height)
+      : null;
     const baseDimUnit =
       baseLenVal && baseWidthVal && baseHeightVal && input.shipping?.dimensions?.unit
         ? input.shipping.dimensions.unit
@@ -3740,6 +3785,11 @@ export async function getCatalogProductWorkspace(
       height_value: string | null;
       dimension_unit: string | null;
       estimated_cost_amount: string | null;
+      latest_acquisition_cost: string | null;
+      latest_acquisition_currency: string | null;
+      latest_acquisition_state: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
+      latest_acquisition_receipt_number: string | null;
+      latest_acquisition_received_at: string | null;
       current_price_amount: string | null;
       current_compare_at_amount: string | null;
       default_currency: string;
@@ -3758,6 +3808,11 @@ export async function getCatalogProductWorkspace(
         variant.version::text,variant.weight_value::text,variant.weight_unit,
         variant.length_value::text,variant.width_value::text,variant.height_value::text,
         variant.dimension_unit,variant.estimated_cost_amount::text as estimated_cost_amount,
+        acquisition.unit_cost::text as latest_acquisition_cost,
+        acquisition.currency_code as latest_acquisition_currency,
+        acquisition.cost_state as latest_acquisition_state,
+        acquisition.receipt_number as latest_acquisition_receipt_number,
+        acquisition.received_at::text as latest_acquisition_received_at,
         organization.default_currency,
         coalesce((select array_agg(link.option_value_id::text order by link.option_value_id)
           from catalog.variant_option_values link where link.organization_id=variant.organization_id
@@ -3783,6 +3838,29 @@ export async function getCatalogProductWorkspace(
         from inventory.inventory_items item left join inventory.inventory_levels level
           on level.organization_id=item.organization_id and level.inventory_item_id=item.id
         where item.organization_id=variant.organization_id and item.variant_id=variant.id) stock on true
+      left join lateral (
+        select ((layer.base_purchase_cost + coalesce((
+            select sum(adjustment.delta_total_cost)
+            from costing.cost_layer_adjustments adjustment
+            where adjustment.organization_id=layer.organization_id
+              and adjustment.cost_layer_id=layer.id
+          ), 0)) / layer.original_quantity)::numeric(24,8) as unit_cost,
+          layer.currency_code, layer.cost_state, receipt.receipt_number, layer.received_at
+        from inventory.inventory_items inventory_item
+        join costing.cost_layers layer
+          on layer.organization_id=inventory_item.organization_id
+          and layer.inventory_item_id=inventory_item.id
+        join receiving.inbound_receipt_lines receipt_line
+          on receipt_line.organization_id=layer.organization_id
+          and receipt_line.id=layer.inbound_receipt_line_id
+        join receiving.inbound_receipts receipt
+          on receipt.organization_id=receipt_line.organization_id
+          and receipt.id=receipt_line.inbound_receipt_id
+        where inventory_item.organization_id=variant.organization_id
+          and inventory_item.variant_id=variant.id
+        order by layer.received_at desc, layer.id desc
+        limit 1
+      ) acquisition on true
       where variant.organization_id=${organizationId} and variant.product_id=${productId}::uuid
       order by variant.sku,variant.id
     `.execute(db),
@@ -4011,10 +4089,7 @@ export async function getCatalogProductWorkspace(
               height: variant.height_value,
               unit: variant.dimension_unit,
             }
-          : row.length_value &&
-              row.width_value &&
-              row.height_value &&
-              row.dimension_unit
+          : row.length_value && row.width_value && row.height_value && row.dimension_unit
             ? {
                 length: row.length_value,
                 width: row.width_value,
@@ -4025,7 +4100,10 @@ export async function getCatalogProductWorkspace(
       shipping:
         (variant.weight_value && variant.weight_unit) ||
         (row.weight_value && row.weight_unit) ||
-        (variant.length_value && variant.width_value && variant.height_value && variant.dimension_unit) ||
+        (variant.length_value &&
+          variant.width_value &&
+          variant.height_value &&
+          variant.dimension_unit) ||
         (row.length_value && row.width_value && row.height_value && row.dimension_unit)
           ? {
               weight:
@@ -4045,10 +4123,7 @@ export async function getCatalogProductWorkspace(
                       height: variant.height_value,
                       unit: variant.dimension_unit,
                     }
-                  : row.length_value &&
-                      row.width_value &&
-                      row.height_value &&
-                      row.dimension_unit
+                  : row.length_value && row.width_value && row.height_value && row.dimension_unit
                     ? {
                         length: row.length_value,
                         width: row.width_value,
@@ -4059,6 +4134,20 @@ export async function getCatalogProductWorkspace(
             }
           : null,
       estimatedCostAmount: variant.estimated_cost_amount ?? null,
+      latestAcquisitionCost:
+        variant.latest_acquisition_cost &&
+        variant.latest_acquisition_currency &&
+        variant.latest_acquisition_state &&
+        variant.latest_acquisition_receipt_number &&
+        variant.latest_acquisition_received_at
+          ? {
+              amount: variant.latest_acquisition_cost,
+              currency: variant.latest_acquisition_currency,
+              state: variant.latest_acquisition_state,
+              receiptNumber: variant.latest_acquisition_receipt_number,
+              receivedAt: variant.latest_acquisition_received_at,
+            }
+          : null,
       currentPrice: variant.current_price_amount
         ? {
             amount: variant.current_price_amount,
@@ -4490,7 +4579,7 @@ export async function getStorefrontCatalogProduct(
       const effectiveWeight =
         variant.weight_value && variant.weight_unit
           ? { value: variant.weight_value, unit: variant.weight_unit }
-          : baseShipping?.weight ?? null;
+          : (baseShipping?.weight ?? null);
       const effectiveDimensions =
         variant.length_value &&
         variant.width_value &&
@@ -4502,7 +4591,7 @@ export async function getStorefrontCatalogProduct(
               height: variant.height_value,
               unit: variant.dimension_unit,
             }
-          : baseShipping?.dimensions ?? null;
+          : (baseShipping?.dimensions ?? null);
       const effectiveShipping =
         effectiveWeight || effectiveDimensions
           ? {
