@@ -3,23 +3,9 @@
 import { HelpCircle } from 'lucide-react';
 import type { PurchaseDto } from '@maevelle/contracts';
 
-import {
-  Stats,
-  StatsCard,
-  StatsDescription,
-  StatsTitle,
-  StatsValue,
-} from '@/components/ui/stats';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  formatSupplyDate,
-  formatSupplyMoney,
-  formatSupplyNumber,
-} from '@/lib/supply/api';
+import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatSupplyDate, formatSupplyMoney, formatSupplyNumber } from '@/lib/supply/api';
 import { percentage, purchaseQuantities } from '@/lib/supply/status';
 import type { SupplierInvoice } from './types';
 
@@ -47,20 +33,24 @@ export function PurchaseDetailStats({
       {/* 1. Order Value */}
       <StatsCard>
         <div className="flex items-center justify-between">
-          <StatsTitle>Commercial Value</StatsTitle>
+          <StatsTitle>Net Merchandise</StatsTitle>
           <Tooltip>
             <TooltipTrigger render={<span className="cursor-help inline-flex" />}>
               <HelpCircle className="size-3 text-muted-foreground/60 hover:text-muted-foreground" />
             </TooltipTrigger>
             <TooltipContent side="top">
-              Total purchase order amount agreed with the supplier.
+              Product value after supplier discounts, before freight and other landed costs.
             </TooltipContent>
           </Tooltip>
         </div>
-        <StatsValue>{formatSupplyMoney(purchase.totalAmount, purchase.currencyCode)}</StatsValue>
+        <StatsValue>
+          {formatSupplyMoney(purchase.netMerchandiseTotal, purchase.currencyCode)}
+        </StatsValue>
         <StatsDescription>
-          {purchase.lines.length} {purchase.lines.length === 1 ? 'line item' : 'line items'} ·{' '}
-          {formatSupplyNumber(String(totals.ordered))} units
+          Gross {formatSupplyMoney(purchase.grossMerchandiseTotal, purchase.currencyCode)}
+          {Number(purchase.discountTotal) > 0
+            ? ` · Discount ${formatSupplyMoney(purchase.discountTotal, purchase.currencyCode)}`
+            : ''}
         </StatsDescription>
       </StatsCard>
 
@@ -80,13 +70,17 @@ export function PurchaseDetailStats({
         <StatsValue>
           {formatSupplyNumber(String(totals.allocated))}
           <span className="text-xs font-normal text-muted-foreground">
-            {' '}/ {formatSupplyNumber(String(totals.ordered))}
+            {' '}
+            / {formatSupplyNumber(String(totals.ordered))}
           </span>
         </StatsValue>
         <StatsDescription>
           {allocatedPct}% allocated
           {totals.ordered > totals.allocated ? (
-            <span> · {formatSupplyNumber(String(totals.ordered - totals.allocated))} unassigned</span>
+            <span>
+              {' '}
+              · {formatSupplyNumber(String(totals.ordered - totals.allocated))} unassigned
+            </span>
           ) : (
             <span> · all assigned</span>
           )}
@@ -109,7 +103,8 @@ export function PurchaseDetailStats({
         <StatsValue>
           {formatSupplyNumber(String(totals.received))}
           <span className="text-xs font-normal text-muted-foreground">
-            {' '}/ {formatSupplyNumber(String(totals.ordered))}
+            {' '}
+            / {formatSupplyNumber(String(totals.ordered))}
           </span>
         </StatsValue>
         <StatsDescription>
@@ -132,13 +127,12 @@ export function PurchaseDetailStats({
                 <HelpCircle className="size-3 text-muted-foreground/60 hover:text-muted-foreground" />
               </TooltipTrigger>
               <TooltipContent side="top">
-                Authoritative payables and payment disbursements recorded in the Finance cash ledger.
+                Authoritative payables and payment disbursements recorded in the Finance cash
+                ledger.
               </TooltipContent>
             </Tooltip>
           </div>
-          <StatsValue>
-            {formatSupplyMoney(String(invoicedTotal), purchase.currencyCode)}
-          </StatsValue>
+          <StatsValue>{formatSupplyMoney(String(invoicedTotal), purchase.currencyCode)}</StatsValue>
           <StatsDescription>
             Paid: {formatSupplyMoney(String(paidTotal), purchase.currencyCode)} · Due:{' '}
             {formatSupplyMoney(String(outstandingTotal), purchase.currencyCode)}

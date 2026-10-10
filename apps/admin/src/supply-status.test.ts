@@ -17,8 +17,12 @@ function purchase(
     status,
     orderDate: '2026-09-20',
     createdAt: '2026-09-20T00:00:00.000Z',
+    grossMerchandiseTotal: '100.0000',
+    discountTotal: '0.0000',
+    netMerchandiseTotal: '100.0000',
     totalAmount: '100.0000',
     version: 1,
+    discounts: [],
     lines: [
       {
         id: 'line-1',
@@ -30,6 +34,10 @@ function purchase(
         allocatedQuantity: quantities.allocated,
         receivedQuantity: quantities.received,
         unitPrice: '10.0000',
+        grossAmount: '100.0000',
+        discountAmount: '0.0000',
+        netAmount: '100.0000',
+        netUnitCost: '10.00000000',
       },
     ],
   };

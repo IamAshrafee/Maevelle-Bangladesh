@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Edit3, ExternalLink, HelpCircle, Package, PackagePlus, Trash2 } from 'lucide-react';
+import { Edit3, ExternalLink, HelpCircle, Package, PackagePlus, Tag, Trash2 } from 'lucide-react';
 import type { CatalogVariantChoiceDto, PurchaseDto } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
@@ -15,15 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  formatSupplyMoney,
-  formatSupplyNumber,
-} from '@/lib/supply/api';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatSupplyMoney, formatSupplyNumber } from '@/lib/supply/api';
 import type { PurchaseLine } from './types';
 
 export interface PurchaseDetailItemsTableProps {
@@ -32,6 +25,7 @@ export interface PurchaseDetailItemsTableProps {
   readonly canManage: boolean;
   readonly busy: boolean;
   readonly onAddLineClick: () => void;
+  readonly onEditDiscountsClick: () => void;
   readonly onEditLine: (line: PurchaseLine) => void;
   readonly onDeleteLine: (lineId: string) => void;
 }
@@ -42,6 +36,7 @@ export function PurchaseDetailItemsTable({
   canManage,
   busy,
   onAddLineClick,
+  onEditDiscountsClick,
   onEditLine,
   onDeleteLine,
 }: PurchaseDetailItemsTableProps) {
@@ -49,8 +44,14 @@ export function PurchaseDetailItemsTable({
 
   // Calculate totals
   const totalUnits = purchase.lines.reduce((sum, line) => sum + Number(line.quantity), 0);
-  const totalAllocated = purchase.lines.reduce((sum, line) => sum + Number(line.allocatedQuantity), 0);
-  const totalReceived = purchase.lines.reduce((sum, line) => sum + Number(line.receivedQuantity), 0);
+  const totalAllocated = purchase.lines.reduce(
+    (sum, line) => sum + Number(line.allocatedQuantity),
+    0,
+  );
+  const totalReceived = purchase.lines.reduce(
+    (sum, line) => sum + Number(line.receivedQuantity),
+    0,
+  );
 
   if (purchase.lines.length === 0) {
     return (
@@ -60,7 +61,8 @@ export function PurchaseDetailItemsTable({
         </div>
         <h3 className="mt-4 font-heading text-base font-semibold">No purchase items yet</h3>
         <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-          Add at least one product variant with agreed supplier quantity and unit price before placing this order.
+          Add at least one product variant with agreed supplier quantity and unit price before
+          placing this order.
         </p>
         {isDraft && canManage ? (
           <Button className="mt-5" onClick={onAddLineClick} disabled={busy}>
@@ -86,17 +88,23 @@ export function PurchaseDetailItemsTable({
           </p>
         </div>
         {isDraft && canManage ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button variant="outline" size="sm" onClick={onAddLineClick} disabled={busy} />
-              }
-            >
-              <PackagePlus className="size-3.5" />
-              <span>Add item</span>
-            </TooltipTrigger>
-            <TooltipContent side="top">Add another product variant to this draft</TooltipContent>
-          </Tooltip>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={onEditDiscountsClick} disabled={busy}>
+              <Tag className="size-3.5" />
+              <span>{purchase.discounts.length ? 'Edit discounts' : 'Add discount'}</span>
+            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button variant="outline" size="sm" onClick={onAddLineClick} disabled={busy} />
+                }
+              >
+                <PackagePlus className="size-3.5" />
+                <span>Add item</span>
+              </TooltipTrigger>
+              <TooltipContent side="top">Add another product variant to this draft</TooltipContent>
+            </Tooltip>
+          </div>
         ) : null}
       </div>
 
@@ -107,7 +115,8 @@ export function PurchaseDetailItemsTable({
               <TableHead className="min-w-[200px]">Product & SKU</TableHead>
               <TableHead className="text-right">Ordered Qty</TableHead>
               <TableHead className="text-right">Unit Price</TableHead>
-              <TableHead className="text-right">Line Total</TableHead>
+              <TableHead className="text-right">Gross</TableHead>
+              <TableHead className="text-right">Net merchandise</TableHead>
               <TableHead className="text-center">
                 <span className="inline-flex items-center gap-1">
                   Allocated
@@ -142,13 +151,8 @@ export function PurchaseDetailItemsTable({
               const lineOrdered = Number(line.quantity);
               const lineAllocated = Number(line.allocatedQuantity);
               const lineReceived = Number(line.receivedQuantity);
-              const lineTotal = lineOrdered * Number(line.unitPrice);
-
               const variantChoice = variants.find((v) => v.id === line.variantId);
-              const optionSummary =
-                line.optionSummary ||
-                variantChoice?.optionSummary ||
-                '';
+              const optionSummary = line.optionSummary || variantChoice?.optionSummary || '';
               const imageUrl = variantChoice?.primaryImageUrl;
 
               return (
@@ -180,7 +184,9 @@ export function PurchaseDetailItemsTable({
                           </Link>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-xs text-muted-foreground">{line.sku}</span>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {line.sku}
+                          </span>
                           {optionSummary ? (
                             <Badge variant="secondary" className="text-[10px] font-normal">
                               {optionSummary}
@@ -219,7 +225,18 @@ export function PurchaseDetailItemsTable({
 
                   {/* Line Total */}
                   <TableCell className="text-right font-medium font-mono tabular-nums">
-                    {formatSupplyMoney(String(lineTotal), purchase.currencyCode)}
+                    {formatSupplyMoney(line.grossAmount, purchase.currencyCode)}
+                  </TableCell>
+
+                  <TableCell className="text-right font-mono tabular-nums">
+                    <span className="font-semibold">
+                      {formatSupplyMoney(line.netAmount, purchase.currencyCode)}
+                    </span>
+                    {Number(line.discountAmount) > 0 ? (
+                      <span className="block text-[10px] text-success">
+                        −{formatSupplyMoney(line.discountAmount, purchase.currencyCode)} discount
+                      </span>
+                    ) : null}
                   </TableCell>
 
                   {/* Allocation Status */}
@@ -236,7 +253,8 @@ export function PurchaseDetailItemsTable({
                           }
                           className="gap-1 font-mono text-[11px]"
                         >
-                          {formatSupplyNumber(String(lineAllocated))} / {formatSupplyNumber(String(lineOrdered))}
+                          {formatSupplyNumber(String(lineAllocated))} /{' '}
+                          {formatSupplyNumber(String(lineOrdered))}
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent side="top">
@@ -263,7 +281,8 @@ export function PurchaseDetailItemsTable({
                           }
                           className="gap-1 font-mono text-[11px]"
                         >
-                          {formatSupplyNumber(String(lineReceived))} / {formatSupplyNumber(String(lineOrdered))}
+                          {formatSupplyNumber(String(lineReceived))} /{' '}
+                          {formatSupplyNumber(String(lineOrdered))}
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent side="top">
@@ -325,15 +344,27 @@ export function PurchaseDetailItemsTable({
               <TableCell className="text-right font-bold tabular-nums">
                 {formatSupplyNumber(String(totalUnits))}
               </TableCell>
-              <TableCell className="text-right text-muted-foreground font-mono">Avg / Mix</TableCell>
+              <TableCell className="text-right text-muted-foreground font-mono">
+                Avg / Mix
+              </TableCell>
+              <TableCell className="text-right font-semibold font-mono tabular-nums">
+                {formatSupplyMoney(purchase.grossMerchandiseTotal, purchase.currencyCode)}
+              </TableCell>
               <TableCell className="text-right font-bold font-mono tabular-nums">
-                {formatSupplyMoney(purchase.totalAmount, purchase.currencyCode)}
+                {formatSupplyMoney(purchase.netMerchandiseTotal, purchase.currencyCode)}
+                {Number(purchase.discountTotal) > 0 ? (
+                  <span className="block text-[10px] font-medium text-success">
+                    −{formatSupplyMoney(purchase.discountTotal, purchase.currencyCode)}
+                  </span>
+                ) : null}
               </TableCell>
               <TableCell className="text-center font-semibold font-mono tabular-nums">
-                {formatSupplyNumber(String(totalAllocated))} / {formatSupplyNumber(String(totalUnits))}
+                {formatSupplyNumber(String(totalAllocated))} /{' '}
+                {formatSupplyNumber(String(totalUnits))}
               </TableCell>
               <TableCell className="text-center font-semibold font-mono tabular-nums">
-                {formatSupplyNumber(String(totalReceived))} / {formatSupplyNumber(String(totalUnits))}
+                {formatSupplyNumber(String(totalReceived))} /{' '}
+                {formatSupplyNumber(String(totalUnits))}
               </TableCell>
               {isDraft && canManage ? <TableCell /> : null}
             </TableRow>

@@ -9,6 +9,7 @@ import type {
   InboundShipmentDto,
   PaginatedResultDto,
   PurchaseDto,
+  ReplacePurchaseDiscountsInputDto,
   SupplierDto,
   WarehouseLocationDto,
 } from '@maevelle/contracts';
@@ -36,6 +37,7 @@ import { PurchaseCancelInvoiceDialog } from './purchase-detail/dialogs/purchase-
 import { PurchaseCloseDialog } from './purchase-detail/dialogs/purchase-close-dialog';
 import { PurchaseEditDialog } from './purchase-detail/dialogs/purchase-edit-dialog';
 import { PurchaseEditLineDialog } from './purchase-detail/dialogs/purchase-edit-line-dialog';
+import { PurchaseDiscountsDialog } from './purchase-detail/dialogs/purchase-discounts-dialog';
 import { PurchaseInvoiceDialog } from './purchase-detail/dialogs/purchase-invoice-dialog';
 import { PurchasePayDialog } from './purchase-detail/dialogs/purchase-pay-dialog';
 import { PurchaseInvoiceDetailSheet } from './purchase-detail/sheets/purchase-invoice-detail-sheet';
@@ -74,6 +76,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
   // Dialog states
   const [editOpen, setEditOpen] = useState(false);
   const [addLineOpen, setAddLineOpen] = useState(false);
+  const [discountsOpen, setDiscountsOpen] = useState(false);
   const [editingLine, setEditingLine] = useState<PurchaseLine>();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -249,6 +252,20 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           method: 'DELETE',
         }),
       'Purchase item removed.',
+    );
+  }
+
+  function handleSaveDiscounts(discounts: ReplacePurchaseDiscountsInputDto['discounts']) {
+    if (!purchase) return;
+    void run(
+      () =>
+        supplyRequest(`/admin/purchases/${purchase.id}/discounts`, {
+          method: 'PUT',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({ version: purchase.version, discounts }),
+        }),
+      discounts.length ? 'Purchase discounts saved.' : 'Purchase discounts cleared.',
+      () => setDiscountsOpen(false),
     );
   }
 
@@ -505,6 +522,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
               canManage={canManage}
               busy={busy}
               onAddLineClick={() => setAddLineOpen(true)}
+              onEditDiscountsClick={() => setDiscountsOpen(true)}
               onEditLine={setEditingLine}
               onDeleteLine={handleDeleteLine}
             />
@@ -574,6 +592,14 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           busy={busy}
           onClose={() => setEditingLine(undefined)}
           onSaveLine={handleSaveLine}
+        />
+
+        <PurchaseDiscountsDialog
+          open={discountsOpen}
+          onOpenChange={setDiscountsOpen}
+          purchase={purchase}
+          busy={busy}
+          onSave={handleSaveDiscounts}
         />
 
         <PurchaseCancelDialog
