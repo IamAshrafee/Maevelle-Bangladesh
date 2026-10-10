@@ -9,6 +9,7 @@ import {
   type InventoryCondition,
 } from './inventory.js';
 import {
+  allocateDeterministically,
   createProvisionalCostLayersForInboundReceiptInTransaction,
   reverseProvisionalCostLayersForInboundReceiptInTransaction,
 } from './costing.js';
@@ -20,6 +21,16 @@ export type PurchaseStatus = 'DRAFT' | 'PLACED' | 'CANCELLED' | 'CLOSED';
 export type ShipmentStatus = 'PLANNED' | 'IN_TRANSIT' | 'ARRIVED' | 'CANCELLED';
 export type ReceivingStatus = 'NOT_RECEIVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED';
 export type InboundReceiptStatus = 'POSTED' | 'REVERSED';
+export type PurchaseDiscountCalculationMethod = 'PERCENTAGE' | 'FIXED_AMOUNT';
+
+export interface PurchaseDiscountView {
+  readonly id: string;
+  readonly title: string;
+  readonly calculationMethod: PurchaseDiscountCalculationMethod;
+  readonly percentage?: string;
+  readonly amount: string;
+  readonly externalReference?: string;
+}
 
 export class ProcurementDomainError extends Error {
   public constructor(
@@ -46,12 +57,7 @@ export interface SupplierView {
   readonly name: string;
   readonly status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'ARCHIVED';
   readonly supplierType:
-    | 'MANUFACTURER'
-    | 'WHOLESALER'
-    | 'DISTRIBUTOR'
-    | 'AGENT'
-    | 'LOCAL_VENDOR'
-    | 'OTHER';
+    'MANUFACTURER' | 'WHOLESALER' | 'DISTRIBUTOR' | 'AGENT' | 'LOCAL_VENDOR' | 'OTHER';
   readonly countryCode?: string;
   readonly preferredCurrencyCode?: PurchaseView['currencyCode'];
   readonly paymentTerms?: string;
@@ -83,8 +89,12 @@ export interface PurchaseView {
   readonly closedByActorId?: string;
   readonly closeReason?: string;
   readonly cancelledAt?: string;
+  readonly grossMerchandiseTotal: string;
+  readonly discountTotal: string;
+  readonly netMerchandiseTotal: string;
   readonly totalAmount: string;
   readonly version: number;
+  readonly discounts: readonly PurchaseDiscountView[];
   readonly lines: readonly {
     id: string;
     variantId: string;
@@ -94,6 +104,10 @@ export interface PurchaseView {
     optionSummary?: string;
     quantity: string;
     unitPrice: string;
+    grossAmount: string;
+    discountAmount: string;
+    netAmount: string;
+    netUnitCost: string;
     allocatedQuantity: string;
     receivedQuantity: string;
   }[];
@@ -553,7 +567,9 @@ export async function listSuppliers(
   } else if (sortBy === 'name') {
     orderClause = sortAsc ? sql`name asc, id desc` : sql`name desc, id desc`;
   } else if (sortBy === 'status') {
-    orderClause = sortAsc ? sql`status asc, name asc, id desc` : sql`status desc, name asc, id desc`;
+    orderClause = sortAsc
+      ? sql`status asc, name asc, id desc`
+      : sql`status desc, name asc, id desc`;
   } else if (sortBy === 'createdAt') {
     orderClause = sortAsc ? sql`created_at asc, id desc` : sql`created_at desc, id desc`;
   }
@@ -581,7 +597,9 @@ export async function listSuppliers(
       where ${where}
       order by ${orderClause}
       limit ${pageSize} offset ${offset}`.execute(db),
-    sql<{ total: string }>`select count(*)::text as total from procurement.suppliers where ${where}`.execute(db),
+    sql<{
+      total: string;
+    }>`select count(*)::text as total from procurement.suppliers where ${where}`.execute(db),
   ]);
 
   const totalItems = Number(countResult.rows[0]?.total ?? 0);
@@ -747,6 +765,79 @@ export async function archiveSupplier(
   });
 }
 
+async function rebuildPurchaseDiscountAllocations(
+  transaction: Transaction<DatabaseSchema>,
+  organizationId: string,
+  purchaseId: string,
+): Promise<void> {
+  const [discounts, lines, totals] = await Promise.all([
+    sql<{ id: string; amount: string }>`select id, amount::text
+      from procurement.purchase_adjustments
+      where organization_id = ${organizationId} and purchase_id = ${purchaseId}
+      order by created_at, id`.execute(transaction),
+    sql<{ id: string; gross_amount: string }>`select id,
+        (quantity * unit_price)::numeric(24,4)::text as gross_amount
+      from procurement.purchase_lines
+      where organization_id = ${organizationId} and purchase_id = ${purchaseId}
+      order by created_at, id`.execute(transaction),
+    sql<{
+      gross_amount: string;
+      discount_amount: string;
+      discount_exceeds_gross: boolean;
+    }>`select
+        coalesce((select sum((quantity * unit_price)::numeric(24,4))
+          from procurement.purchase_lines
+          where organization_id = ${organizationId} and purchase_id = ${purchaseId}), 0)::numeric(24,4)::text as gross_amount,
+        coalesce((select sum(amount) from procurement.purchase_adjustments
+          where organization_id = ${organizationId} and purchase_id = ${purchaseId}), 0)::numeric(24,4)::text as discount_amount,
+        coalesce((select sum(amount) from procurement.purchase_adjustments
+          where organization_id = ${organizationId} and purchase_id = ${purchaseId}), 0)
+          > coalesce((select sum((quantity * unit_price)::numeric(24,4))
+            from procurement.purchase_lines
+            where organization_id = ${organizationId} and purchase_id = ${purchaseId}), 0)
+          as discount_exceeds_gross`.execute(transaction),
+  ]);
+
+  const total = totals.rows[0]!;
+  if (total.discount_exceeds_gross) {
+    throw new ProcurementDomainError(
+      'VALIDATION_FAILED',
+      'Purchase discounts cannot exceed the gross merchandise total.',
+    );
+  }
+  if (discounts.rows.length > 0 && lines.rows.length === 0) {
+    throw new ProcurementDomainError(
+      'VALIDATION_FAILED',
+      'A purchase with discounts must contain at least one item.',
+    );
+  }
+
+  await sql`delete from procurement.purchase_adjustment_allocations allocation
+    using procurement.purchase_adjustments adjustment
+    where allocation.organization_id = ${organizationId}
+      and adjustment.organization_id = allocation.organization_id
+      and adjustment.id = allocation.adjustment_id
+      and adjustment.purchase_id = ${purchaseId}`.execute(transaction);
+
+  for (const discount of discounts.rows) {
+    const allocations = allocateDeterministically(
+      discount.amount,
+      lines.rows.map((line) => ({
+        id: line.id,
+        shipmentAllocationId: line.id,
+        basis: line.gross_amount,
+      })),
+    );
+    for (const allocation of allocations) {
+      await sql`insert into procurement.purchase_adjustment_allocations (
+          organization_id, adjustment_id, purchase_line_id, allocated_amount
+        ) values (
+          ${organizationId}, ${discount.id}, ${allocation.targetId}, ${allocation.amount}::numeric
+        )`.execute(transaction);
+    }
+  }
+}
+
 async function getPurchaseIn(
   db: DatabaseExecutor,
   organizationId: string,
@@ -780,9 +871,7 @@ async function getPurchaseIn(
     from procurement.purchases purchase
     join procurement.suppliers supplier on supplier.id = purchase.supplier_id
     left join warehouse.locations location on location.id = purchase.destination_location_id
-    where purchase.organization_id = ${organizationId} and purchase.id = ${purchaseId}`.execute(
-    db,
-  );
+    where purchase.organization_id = ${organizationId} and purchase.id = ${purchaseId}`.execute(db);
   const row = header.rows[0];
   if (!row) throw new ProcurementDomainError('NOT_FOUND', 'Purchase was not found.');
 
@@ -795,6 +884,10 @@ async function getPurchaseIn(
     option_summary: string | null;
     quantity: string;
     unit_price: string;
+    gross_amount: string;
+    discount_amount: string;
+    net_amount: string;
+    net_unit_cost: string;
     allocated_quantity: string;
     received_quantity: string;
   }>`select line.id, line.variant_id, variant.product_id, line.sku_snapshot, line.product_title_snapshot,
@@ -806,6 +899,31 @@ async function getPurchaseIn(
         where link.variant_id = line.variant_id and link.organization_id = ${organizationId}
       ), '') as option_summary,
       line.quantity::text, line.unit_price::text,
+      (line.quantity * line.unit_price)::numeric(24,4)::text as gross_amount,
+      coalesce((
+        select sum(allocation.allocated_amount)
+        from procurement.purchase_adjustment_allocations allocation
+        join procurement.purchase_adjustments adjustment on adjustment.id = allocation.adjustment_id
+        where allocation.organization_id = ${organizationId}
+          and allocation.purchase_line_id = line.id
+          and adjustment.adjustment_type = 'DISCOUNT'
+      ), 0)::numeric(24,4)::text as discount_amount,
+      ((line.quantity * line.unit_price) - coalesce((
+        select sum(allocation.allocated_amount)
+        from procurement.purchase_adjustment_allocations allocation
+        join procurement.purchase_adjustments adjustment on adjustment.id = allocation.adjustment_id
+        where allocation.organization_id = ${organizationId}
+          and allocation.purchase_line_id = line.id
+          and adjustment.adjustment_type = 'DISCOUNT'
+      ), 0))::numeric(24,4)::text as net_amount,
+      (((line.quantity * line.unit_price) - coalesce((
+        select sum(allocation.allocated_amount)
+        from procurement.purchase_adjustment_allocations allocation
+        join procurement.purchase_adjustments adjustment on adjustment.id = allocation.adjustment_id
+        where allocation.organization_id = ${organizationId}
+          and allocation.purchase_line_id = line.id
+          and adjustment.adjustment_type = 'DISCOUNT'
+      ), 0)) / line.quantity)::numeric(24,8)::text as net_unit_cost,
       coalesce((
         select sum(allocation.allocated_quantity)
         from inbound_shipment.purchase_line_allocations allocation
@@ -824,11 +942,41 @@ async function getPurchaseIn(
     where line.organization_id = ${organizationId} and line.purchase_id = ${purchaseId}
     order by line.created_at, line.id`.execute(db);
 
-  const totals = await sql<{
-    total_amount: string;
-  }>`select coalesce(sum(quantity * unit_price), 0)::numeric(24,4)::text as total_amount from procurement.purchase_lines where organization_id = ${organizationId} and purchase_id = ${purchaseId}`.execute(
-    db,
-  );
+  const [totals, discounts] = await Promise.all([
+    sql<{
+      gross_amount: string;
+      discount_amount: string;
+      net_amount: string;
+    }>`select gross_amount::numeric(24,4)::text,
+        discount_amount::numeric(24,4)::text,
+        (gross_amount - discount_amount)::numeric(24,4)::text as net_amount
+      from (
+        select
+          coalesce((select sum((quantity * unit_price)::numeric(24,4))
+            from procurement.purchase_lines
+            where organization_id = ${organizationId} and purchase_id = ${purchaseId}), 0) as gross_amount,
+          coalesce((select sum(amount) from procurement.purchase_adjustments
+            where organization_id = ${organizationId} and purchase_id = ${purchaseId}
+              and adjustment_type = 'DISCOUNT'), 0) as discount_amount
+      ) totals`.execute(db),
+    sql<{
+      id: string;
+      title: string;
+      calculation_method: PurchaseDiscountCalculationMethod;
+      percentage: string | null;
+      amount: string;
+      external_reference: string | null;
+    }>`select id, title, calculation_method, percentage::text, amount::text, external_reference
+      from procurement.purchase_adjustments
+      where organization_id = ${organizationId} and purchase_id = ${purchaseId}
+        and adjustment_type = 'DISCOUNT'
+      order by created_at, id`.execute(db),
+  ]);
+  const purchaseTotals = totals.rows[0] ?? {
+    gross_amount: '0.0000',
+    discount_amount: '0.0000',
+    net_amount: '0.0000',
+  };
 
   return {
     id: row.id,
@@ -851,8 +999,19 @@ async function getPurchaseIn(
     ...(row.closed_by_actor_id ? { closedByActorId: row.closed_by_actor_id } : {}),
     ...(row.close_reason ? { closeReason: row.close_reason } : {}),
     ...(row.cancelled_at ? { cancelledAt: row.cancelled_at } : {}),
-    totalAmount: totals.rows[0]?.total_amount ?? '0.0000',
+    grossMerchandiseTotal: purchaseTotals.gross_amount,
+    discountTotal: purchaseTotals.discount_amount,
+    netMerchandiseTotal: purchaseTotals.net_amount,
+    totalAmount: purchaseTotals.net_amount,
     version: Number(row.version),
+    discounts: discounts.rows.map((discount) => ({
+      id: discount.id,
+      title: discount.title,
+      calculationMethod: discount.calculation_method,
+      ...(discount.percentage ? { percentage: discount.percentage } : {}),
+      amount: discount.amount,
+      ...(discount.external_reference ? { externalReference: discount.external_reference } : {}),
+    })),
     lines: lines.rows.map((line) => ({
       id: line.id,
       variantId: line.variant_id,
@@ -862,6 +1021,10 @@ async function getPurchaseIn(
       ...(line.option_summary ? { optionSummary: line.option_summary } : {}),
       quantity: line.quantity,
       unitPrice: line.unit_price,
+      grossAmount: line.gross_amount,
+      discountAmount: line.discount_amount,
+      netAmount: line.net_amount,
+      netUnitCost: line.net_unit_cost,
       allocatedQuantity: line.allocated_quantity,
       receivedQuantity: line.received_quantity,
     })),
@@ -903,15 +1066,25 @@ export async function listPurchases(
 
   let orderClause = sql`purchase.created_at desc, purchase.id desc`;
   if (sortBy === 'purchaseNumber') {
-    orderClause = sortAsc ? sql`purchase.purchase_number asc, purchase.id desc` : sql`purchase.purchase_number desc, purchase.id desc`;
+    orderClause = sortAsc
+      ? sql`purchase.purchase_number asc, purchase.id desc`
+      : sql`purchase.purchase_number desc, purchase.id desc`;
   } else if (sortBy === 'orderDate') {
-    orderClause = sortAsc ? sql`purchase.order_date asc, purchase.id desc` : sql`purchase.order_date desc, purchase.id desc`;
+    orderClause = sortAsc
+      ? sql`purchase.order_date asc, purchase.id desc`
+      : sql`purchase.order_date desc, purchase.id desc`;
   } else if (sortBy === 'expectedDate') {
-    orderClause = sortAsc ? sql`purchase.expected_date asc nulls last, purchase.id desc` : sql`purchase.expected_date desc nulls last, purchase.id desc`;
+    orderClause = sortAsc
+      ? sql`purchase.expected_date asc nulls last, purchase.id desc`
+      : sql`purchase.expected_date desc nulls last, purchase.id desc`;
   } else if (sortBy === 'status') {
-    orderClause = sortAsc ? sql`purchase.status asc, purchase.created_at desc` : sql`purchase.status desc, purchase.created_at desc`;
+    orderClause = sortAsc
+      ? sql`purchase.status asc, purchase.created_at desc`
+      : sql`purchase.status desc, purchase.created_at desc`;
   } else if (sortBy === 'createdAt') {
-    orderClause = sortAsc ? sql`purchase.created_at asc, purchase.id desc` : sql`purchase.created_at desc, purchase.id desc`;
+    orderClause = sortAsc
+      ? sql`purchase.created_at asc, purchase.id desc`
+      : sql`purchase.created_at desc, purchase.id desc`;
   }
 
   const [idsResult, countResult] = await Promise.all([
@@ -928,7 +1101,9 @@ export async function listPurchases(
   ]);
 
   const totalItems = Number(countResult.rows[0]?.total ?? 0);
-  const items = await Promise.all(idsResult.rows.map((row) => getPurchaseIn(db, organizationId, row.id)));
+  const items = await Promise.all(
+    idsResult.rows.map((row) => getPurchaseIn(db, organizationId, row.id)),
+  );
   return paginateResult(items, totalItems, page, pageSize);
 }
 
@@ -1120,7 +1295,10 @@ export async function updatePurchase(
     const purchase = current.rows[0];
     if (!purchase) throw new ProcurementDomainError('NOT_FOUND', 'Purchase was not found.');
     if (purchase.status !== 'DRAFT') {
-      throw new ProcurementDomainError('PURCHASE_NOT_EDITABLE', 'Only Draft Purchases can be edited.');
+      throw new ProcurementDomainError(
+        'PURCHASE_NOT_EDITABLE',
+        'Only Draft Purchases can be edited.',
+      );
     }
     if (Number(purchase.version) !== input.expectedVersion) {
       throw new ProcurementDomainError(
@@ -1140,10 +1318,14 @@ export async function updatePurchase(
     }
 
     if (input.supplierId && input.supplierId !== purchase.supplier_id) {
-      const supplier = await sql<{ id: string; status: string }>`select id, status from procurement.suppliers
+      const supplier = await sql<{
+        id: string;
+        status: string;
+      }>`select id, status from procurement.suppliers
         where organization_id = ${input.organizationId} and id = ${input.supplierId}
         for key share`.execute(transaction);
-      if (!supplier.rows[0]) throw new ProcurementDomainError('NOT_FOUND', 'Supplier was not found.');
+      if (!supplier.rows[0])
+        throw new ProcurementDomainError('NOT_FOUND', 'Supplier was not found.');
       if (supplier.rows[0].status !== 'ACTIVE') {
         throw new ProcurementDomainError(
           'SUPPLIER_UNAVAILABLE',
@@ -1205,7 +1387,10 @@ export async function addPurchaseLine(
     );
     if (!purchase.rows[0]) throw new ProcurementDomainError('NOT_FOUND', 'Purchase was not found.');
     if (purchase.rows[0].status !== 'DRAFT') {
-      throw new ProcurementDomainError('PURCHASE_NOT_EDITABLE', 'Only Draft Purchases can be edited.');
+      throw new ProcurementDomainError(
+        'PURCHASE_NOT_EDITABLE',
+        'Only Draft Purchases can be edited.',
+      );
     }
     const variant = await sql<{
       sku: string;
@@ -1219,6 +1404,7 @@ export async function addPurchaseLine(
     await sql`insert into procurement.purchase_lines (organization_id, purchase_id, variant_id, sku_snapshot, product_title_snapshot, quantity, unit_price) values (${input.organizationId}, ${input.purchaseId}, ${input.variantId}, ${variant.rows[0].sku}, ${variant.rows[0].title}, ${input.quantity}::numeric, ${input.unitPrice}::numeric)`.execute(
       transaction,
     );
+    await rebuildPurchaseDiscountAllocations(transaction, input.organizationId, input.purchaseId);
     await sql`update procurement.purchases set version = version + 1, updated_at = now() where id = ${input.purchaseId}`.execute(
       transaction,
     );
@@ -1287,6 +1473,7 @@ export async function updatePurchaseLine(
     if (!updated.rows[0]) {
       throw new ProcurementDomainError('NOT_FOUND', 'Purchase Line was not found.');
     }
+    await rebuildPurchaseDiscountAllocations(transaction, input.organizationId, input.purchaseId);
     await sql`update procurement.purchases set version = version + 1, updated_at = now() where id = ${input.purchaseId}`.execute(
       transaction,
     );
@@ -1329,6 +1516,7 @@ export async function removePurchaseLine(
     if (!removed.rows[0]) {
       throw new ProcurementDomainError('NOT_FOUND', 'Purchase Line was not found.');
     }
+    await rebuildPurchaseDiscountAllocations(transaction, input.organizationId, input.purchaseId);
     await sql`update procurement.purchases set version = version + 1, updated_at = now() where id = ${input.purchaseId}`.execute(
       transaction,
     );
@@ -1341,6 +1529,138 @@ export async function removePurchaseLine(
       targetType: 'procurement.purchase',
       targetId: input.purchaseId,
       metadata: { lineId: input.lineId },
+    });
+    return view;
+  });
+}
+
+export async function replacePurchaseDiscounts(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    purchaseId: string;
+    expectedVersion: number;
+    discounts: readonly {
+      title: string;
+      calculationMethod: PurchaseDiscountCalculationMethod;
+      percentage?: string | undefined;
+      amount: string;
+      externalReference?: string | undefined;
+    }[];
+    idempotencyKey?: string | undefined;
+  },
+): Promise<PurchaseView> {
+  for (const discount of input.discounts) {
+    if (!discount.title.trim()) {
+      throw new ProcurementDomainError('VALIDATION_FAILED', 'Discount title is required.');
+    }
+    if (!/^\d+(?:\.\d{1,4})?$/.test(discount.amount) || Number(discount.amount) <= 0) {
+      throw new ProcurementDomainError(
+        'VALIDATION_FAILED',
+        'Discount amount must be a positive decimal with at most four decimal places.',
+      );
+    }
+    if (discount.calculationMethod === 'PERCENTAGE') {
+      if (
+        !discount.percentage ||
+        !/^\d+(?:\.\d{1,6})?$/.test(discount.percentage) ||
+        Number(discount.percentage) <= 0 ||
+        Number(discount.percentage) > 100
+      ) {
+        throw new ProcurementDomainError(
+          'VALIDATION_FAILED',
+          'Percentage discounts require a percentage greater than zero and no more than 100.',
+        );
+      }
+    } else if (discount.percentage !== undefined) {
+      throw new ProcurementDomainError(
+        'VALIDATION_FAILED',
+        'Fixed-amount discounts cannot include a percentage.',
+      );
+    }
+  }
+
+  return db.transaction().execute(async (transaction) => {
+    let startedRecordId: string | undefined;
+    if (input.idempotencyKey) {
+      const started = await beginIdempotent(transaction, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        operation: 'procurement.purchase.discounts.replace',
+        idempotencyKey: input.idempotencyKey,
+        request: input,
+      });
+      if (started.replay) return started.replay as PurchaseView;
+      startedRecordId = started.recordId;
+    }
+
+    const current = await sql<{
+      status: PurchaseStatus;
+      version: string;
+    }>`select status, version::text
+      from procurement.purchases
+      where organization_id = ${input.organizationId} and id = ${input.purchaseId}
+      for update`.execute(transaction);
+    const purchase = current.rows[0];
+    if (!purchase) throw new ProcurementDomainError('NOT_FOUND', 'Purchase was not found.');
+    if (purchase.status !== 'DRAFT') {
+      throw new ProcurementDomainError(
+        'PURCHASE_NOT_EDITABLE',
+        'Only Draft Purchase discounts can be edited.',
+      );
+    }
+    if (Number(purchase.version) !== input.expectedVersion) {
+      throw new ProcurementDomainError(
+        'STALE_VERSION',
+        'This purchase changed after it was opened. Refresh and try again.',
+      );
+    }
+
+    await sql`delete from procurement.purchase_adjustments
+      where organization_id = ${input.organizationId} and purchase_id = ${input.purchaseId}
+        and adjustment_type = 'DISCOUNT'`.execute(transaction);
+
+    for (const discount of input.discounts) {
+      await sql`insert into procurement.purchase_adjustments (
+          organization_id, purchase_id, adjustment_type, calculation_method, title,
+          percentage, amount, external_reference, created_by_actor_id
+        ) values (
+          ${input.organizationId}, ${input.purchaseId}, 'DISCOUNT', ${discount.calculationMethod},
+          ${discount.title.trim()}, ${discount.percentage ?? null}::numeric, ${discount.amount}::numeric,
+          ${discount.externalReference?.trim() || null}, ${input.actorId}
+        )`.execute(transaction);
+    }
+
+    await rebuildPurchaseDiscountAllocations(transaction, input.organizationId, input.purchaseId);
+    await sql`update procurement.purchases set version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.purchaseId}`.execute(
+      transaction,
+    );
+    const view = await getPurchaseIn(transaction, input.organizationId, input.purchaseId);
+
+    if (startedRecordId) {
+      await completeIdempotency(
+        transaction,
+        startedRecordId,
+        'procurement.purchase',
+        input.purchaseId,
+        view,
+      );
+    }
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'procurement.purchase.discounts_replaced',
+      eventType: 'procurement.purchase.discounts_replaced',
+      targetType: 'procurement.purchase',
+      targetId: input.purchaseId,
+      metadata: {
+        discountCount: input.discounts.length,
+        discountTotal: view.discountTotal,
+        grossMerchandiseTotal: view.grossMerchandiseTotal,
+        netMerchandiseTotal: view.netMerchandiseTotal,
+      },
     });
     return view;
   });
@@ -1467,7 +1787,10 @@ export async function closePurchase(
       throw new ProcurementDomainError('INVALID_TRANSITION', 'Purchase is already closed.');
     }
     if (purchase.status === 'CANCELLED') {
-      throw new ProcurementDomainError('INVALID_TRANSITION', 'Cancelled purchase cannot be closed.');
+      throw new ProcurementDomainError(
+        'INVALID_TRANSITION',
+        'Cancelled purchase cannot be closed.',
+      );
     }
     if (purchase.status === 'DRAFT') {
       throw new ProcurementDomainError(
@@ -1570,7 +1893,10 @@ export async function cancelPurchase(
       throw new ProcurementDomainError('INVALID_TRANSITION', 'Purchase is already cancelled.');
     }
     if (purchase.rows[0].status === 'CLOSED') {
-      throw new ProcurementDomainError('INVALID_TRANSITION', 'Closed purchase cannot be cancelled.');
+      throw new ProcurementDomainError(
+        'INVALID_TRANSITION',
+        'Closed purchase cannot be cancelled.',
+      );
     }
 
     const activeAllocations = await sql<{
@@ -1765,13 +2091,21 @@ export async function listShipments(
 
   let orderClause = sql`shipment.created_at desc, shipment.id desc`;
   if (sortBy === 'shipmentNumber') {
-    orderClause = sortAsc ? sql`shipment.shipment_number asc, shipment.id desc` : sql`shipment.shipment_number desc, shipment.id desc`;
+    orderClause = sortAsc
+      ? sql`shipment.shipment_number asc, shipment.id desc`
+      : sql`shipment.shipment_number desc, shipment.id desc`;
   } else if (sortBy === 'expectedArrivalDate') {
-    orderClause = sortAsc ? sql`shipment.expected_arrival_date asc nulls last, shipment.id desc` : sql`shipment.expected_arrival_date desc nulls last, shipment.id desc`;
+    orderClause = sortAsc
+      ? sql`shipment.expected_arrival_date asc nulls last, shipment.id desc`
+      : sql`shipment.expected_arrival_date desc nulls last, shipment.id desc`;
   } else if (sortBy === 'status') {
-    orderClause = sortAsc ? sql`shipment.status asc, shipment.created_at desc` : sql`shipment.status desc, shipment.created_at desc`;
+    orderClause = sortAsc
+      ? sql`shipment.status asc, shipment.created_at desc`
+      : sql`shipment.status desc, shipment.created_at desc`;
   } else if (sortBy === 'createdAt') {
-    orderClause = sortAsc ? sql`shipment.created_at asc, shipment.id desc` : sql`shipment.created_at desc, shipment.id desc`;
+    orderClause = sortAsc
+      ? sql`shipment.created_at asc, shipment.id desc`
+      : sql`shipment.created_at desc, shipment.id desc`;
   }
 
   const [idsResult, countResult] = await Promise.all([
@@ -1786,7 +2120,9 @@ export async function listShipments(
   ]);
 
   const totalItems = Number(countResult.rows[0]?.total ?? 0);
-  const items = await Promise.all(idsResult.rows.map((row) => getShipmentIn(db, organizationId, row.id)));
+  const items = await Promise.all(
+    idsResult.rows.map((row) => getShipmentIn(db, organizationId, row.id)),
+  );
   return paginateResult(items, totalItems, page, pageSize);
 }
 
@@ -1992,7 +2328,9 @@ export async function updateShipment(
       transport_mode = case when ${input.transportMode !== undefined} then ${input.transportMode} else transport_mode end,
       version = version + 1,
       updated_at = now()
-      where id = ${input.shipmentId} and organization_id = ${input.organizationId}`.execute(transaction);
+      where id = ${input.shipmentId} and organization_id = ${input.organizationId}`.execute(
+      transaction,
+    );
 
     const view = await getShipmentIn(transaction, input.organizationId, input.shipmentId);
     await emit(transaction, {
@@ -2003,8 +2341,12 @@ export async function updateShipment(
       targetType: 'inbound_shipment.shipment',
       targetId: view.id,
       metadata: {
-        ...(input.trackingReference !== undefined ? { trackingReference: input.trackingReference } : {}),
-        ...(input.expectedArrivalDate !== undefined ? { expectedArrivalDate: input.expectedArrivalDate } : {}),
+        ...(input.trackingReference !== undefined
+          ? { trackingReference: input.trackingReference }
+          : {}),
+        ...(input.expectedArrivalDate !== undefined
+          ? { expectedArrivalDate: input.expectedArrivalDate }
+          : {}),
         ...(input.originText !== undefined ? { originText: input.originText } : {}),
         ...(input.transportMode !== undefined ? { transportMode: input.transportMode } : {}),
       },
@@ -2045,7 +2387,9 @@ export async function updateShipmentAllocations(
       id: string;
       status: ShipmentStatus;
       version: string;
-    }>`select id, status, version::text from inbound_shipment.shipments where organization_id = ${input.organizationId} and id = ${input.shipmentId} for update`.execute(transaction);
+    }>`select id, status, version::text from inbound_shipment.shipments where organization_id = ${input.organizationId} and id = ${input.shipmentId} for update`.execute(
+      transaction,
+    );
     const shipment = shipmentRow.rows[0];
     if (!shipment) throw new ProcurementDomainError('NOT_FOUND', 'Inbound Shipment was not found.');
     if (Number(shipment.version) !== input.expectedVersion) {
@@ -2064,7 +2408,9 @@ export async function updateShipmentAllocations(
     let shipmentCurrency: PurchaseView['currencyCode'] | undefined;
 
     // Delete existing allocations for this shipment so available quantity calculation is clean
-    await sql`delete from inbound_shipment.purchase_line_allocations where organization_id = ${input.organizationId} and shipment_id = ${input.shipmentId}`.execute(transaction);
+    await sql`delete from inbound_shipment.purchase_line_allocations where organization_id = ${input.organizationId} and shipment_id = ${input.shipmentId}`.execute(
+      transaction,
+    );
 
     for (const allocation of [...input.allocations].sort((left, right) =>
       left.purchaseLineId.localeCompare(right.purchaseLineId),
@@ -2105,14 +2451,21 @@ export async function updateShipmentAllocations(
           and other_shipment.status <> 'CANCELLED'
       `.execute(transaction);
 
-      if (integer(assigned.rows[0]?.quantity ?? '0') + integer(allocation.quantity) > integer(purchaseLine.quantity)) {
+      if (
+        integer(assigned.rows[0]?.quantity ?? '0') + integer(allocation.quantity) >
+        integer(purchaseLine.quantity)
+      ) {
         throw new ProcurementDomainError(
           'CONFLICT',
           'Shipment allocation exceeds the unresolved Purchase Line quantity.',
         );
       }
 
-      await ensureInventoryItemForVariantInTransaction(transaction, input.organizationId, purchaseLine.variant_id);
+      await ensureInventoryItemForVariantInTransaction(
+        transaction,
+        input.organizationId,
+        purchaseLine.variant_id,
+      );
       await sql`insert into inbound_shipment.purchase_line_allocations (
         organization_id, shipment_id, purchase_line_id, variant_id, sku_snapshot, product_title_snapshot, allocated_quantity
       ) values (
@@ -2121,7 +2474,9 @@ export async function updateShipmentAllocations(
       )`.execute(transaction);
     }
 
-    await sql`update inbound_shipment.shipments set version = version + 1, updated_at = now() where id = ${input.shipmentId}`.execute(transaction);
+    await sql`update inbound_shipment.shipments set version = version + 1, updated_at = now() where id = ${input.shipmentId}`.execute(
+      transaction,
+    );
     const view = await getShipmentIn(transaction, input.organizationId, input.shipmentId);
 
     await emit(transaction, {
@@ -2367,9 +2722,7 @@ async function getReceiptIn(
     from receiving.inbound_receipts receipt
     join inbound_shipment.shipments shipment on shipment.id = receipt.shipment_id and shipment.organization_id = receipt.organization_id
     join warehouse.locations location on location.id = receipt.receiving_location_id and location.organization_id = receipt.organization_id
-    where receipt.organization_id = ${organizationId} and receipt.id = ${receiptId}`.execute(
-    db,
-  );
+    where receipt.organization_id = ${organizationId} and receipt.id = ${receiptId}`.execute(db);
   const receipt = header.rows[0];
   if (!receipt) throw new ProcurementDomainError('NOT_FOUND', 'Inbound Receipt was not found.');
 
@@ -2460,11 +2813,17 @@ export async function listInboundReceipts(
 
   let orderClause = sql`receipt.posted_at desc, receipt.id desc`;
   if (sortBy === 'receiptNumber') {
-    orderClause = sortAsc ? sql`receipt.receipt_number asc, receipt.id desc` : sql`receipt.receipt_number desc, receipt.id desc`;
+    orderClause = sortAsc
+      ? sql`receipt.receipt_number asc, receipt.id desc`
+      : sql`receipt.receipt_number desc, receipt.id desc`;
   } else if (sortBy === 'postedAt') {
-    orderClause = sortAsc ? sql`receipt.posted_at asc, receipt.id desc` : sql`receipt.posted_at desc, receipt.id desc`;
+    orderClause = sortAsc
+      ? sql`receipt.posted_at asc, receipt.id desc`
+      : sql`receipt.posted_at desc, receipt.id desc`;
   } else if (sortBy === 'createdAt') {
-    orderClause = sortAsc ? sql`receipt.created_at asc, receipt.id desc` : sql`receipt.created_at desc, receipt.id desc`;
+    orderClause = sortAsc
+      ? sql`receipt.created_at asc, receipt.id desc`
+      : sql`receipt.created_at desc, receipt.id desc`;
   }
 
   const [idsResult, countResult] = await Promise.all([
@@ -2479,7 +2838,9 @@ export async function listInboundReceipts(
   ]);
 
   const totalItems = Number(countResult.rows[0]?.total ?? 0);
-  const items = await Promise.all(idsResult.rows.map((row) => getReceiptIn(db, organizationId, row.id)));
+  const items = await Promise.all(
+    idsResult.rows.map((row) => getReceiptIn(db, organizationId, row.id)),
+  );
   return paginateResult(items, totalItems, page, pageSize);
 }
 
@@ -2729,7 +3090,10 @@ export async function reverseInboundReceipt(
     const receipt = receiptRow.rows[0];
     if (!receipt) throw new ProcurementDomainError('NOT_FOUND', 'Inbound Receipt was not found.');
     if (receipt.status === 'REVERSED') {
-      throw new ProcurementDomainError('INVALID_TRANSITION', 'Inbound receipt is already reversed.');
+      throw new ProcurementDomainError(
+        'INVALID_TRANSITION',
+        'Inbound receipt is already reversed.',
+      );
     }
 
     const finalizedLandedCost = await sql<{ count: string }>`
@@ -2754,7 +3118,9 @@ export async function reverseInboundReceipt(
       quantity: string;
     }>`select variant_id, condition_code, quantity::text
       from receiving.inbound_receipt_lines
-      where inbound_receipt_id = ${input.receiptId} and organization_id = ${input.organizationId}`.execute(transaction);
+      where inbound_receipt_id = ${input.receiptId} and organization_id = ${input.organizationId}`.execute(
+      transaction,
+    );
 
     const reversalTx = await reverseInboundInventoryInTransaction(transaction, {
       organizationId: input.organizationId,
@@ -2887,7 +3253,9 @@ export async function resolveReceiptLineCondition(
       quantity: string;
     }>`select id, variant_id, condition_code, quantity::text
       from receiving.inbound_receipt_lines
-      where organization_id = ${input.organizationId} and inbound_receipt_id = ${input.receiptId} and id = ${input.lineId}`.execute(transaction);
+      where organization_id = ${input.organizationId} and inbound_receipt_id = ${input.receiptId} and id = ${input.lineId}`.execute(
+      transaction,
+    );
     const line = lineRow.rows[0];
     if (!line) throw new ProcurementDomainError('NOT_FOUND', 'Receipt line was not found.');
     if (line.condition_code !== 'INSPECTION' && line.condition_code !== 'QUARANTINE') {

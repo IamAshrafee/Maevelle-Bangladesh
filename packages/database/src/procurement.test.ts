@@ -39,6 +39,7 @@ import {
   placePurchase,
   postInboundReceipt,
   removePurchaseLine,
+  replacePurchaseDiscounts,
   resolveReceiptLineCondition,
   reverseInboundReceipt,
   updatePurchase,
@@ -137,6 +138,71 @@ async function shipmentFor(input: Awaited<ReturnType<typeof fixture>>, quantity 
 }
 
 describe('procurement, shipment allocation, and canonical inbound receiving', () => {
+  it('allocates a supplier-authoritative order discount exactly across variant lines', async () => {
+    const input = await fixture();
+    const draft = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: input.supplier.id,
+      currencyCode: 'BDT',
+      supplierReference: 'SKY395285',
+      lines: [
+        { variantId: input.variantId, quantity: '20', unitPrice: '183' },
+        { variantId: input.variantId, quantity: '2', unitPrice: '107' },
+        { variantId: input.variantId, quantity: '2', unitPrice: '114' },
+        { variantId: input.variantId, quantity: '2', unitPrice: '123' },
+      ],
+    });
+
+    const discounted = await replacePurchaseDiscounts(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: draft.id,
+      expectedVersion: draft.version,
+      idempotencyKey: crypto.randomUUID(),
+      discounts: [
+        {
+          title: 'Business Hours Offer',
+          calculationMethod: 'PERCENTAGE',
+          percentage: '7',
+          amount: '304',
+          externalReference: 'BusinessHoursOffer2026',
+        },
+      ],
+    });
+
+    expect(discounted).toMatchObject({
+      supplierReference: 'SKY395285',
+      grossMerchandiseTotal: '4348.0000',
+      discountTotal: '304.0000',
+      netMerchandiseTotal: '4044.0000',
+      totalAmount: '4044.0000',
+    });
+    expect(discounted.discounts).toEqual([
+      expect.objectContaining({
+        title: 'Business Hours Offer',
+        calculationMethod: 'PERCENTAGE',
+        percentage: '7.000000',
+        amount: '304.0000',
+        externalReference: 'BusinessHoursOffer2026',
+      }),
+    ]);
+    expect(discounted.lines.reduce((sum, line) => sum + Number(line.discountAmount), 0)).toBe(304);
+    expect(discounted.lines.reduce((sum, line) => sum + Number(line.netAmount), 0)).toBe(4044);
+
+    await expect(
+      replacePurchaseDiscounts(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        purchaseId: draft.id,
+        expectedVersion: draft.version,
+        discounts: [
+          { title: 'Impossible discount', calculationMethod: 'FIXED_AMOUNT', amount: '5000' },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_VERSION' });
+  });
+
   it('supports supplier setup, draft correction, and controlled cancellation workflows', async () => {
     const input = await fixture();
     const supplier = await updateSupplier(database.db, {
@@ -157,13 +223,16 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       leadTimeDays: 18,
     });
 
+    const expectedDate = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+    const correctedExpectedDate = new Date(Date.now() + 16 * 86_400_000).toISOString().slice(0, 10);
+
     const draft = await createPurchase(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,
       supplierId: supplier.id,
       currencyCode: 'CNY',
       supplierReference: 'SUP-ORDER-42',
-      expectedDate: '2026-09-30',
+      expectedDate,
     });
     const editedDraft = await updatePurchase(database.db, {
       organizationId: input.organizationId,
@@ -174,13 +243,13 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       currencyCode: 'CNY',
       supplierReference: 'SUP-ORDER-43',
       orderDate: draft.orderDate,
-      expectedDate: '2026-10-02',
+      expectedDate: correctedExpectedDate,
       destinationLocationId: input.locationId,
       notes: 'Use reinforced cartons',
     });
     expect(editedDraft).toMatchObject({
       supplierReference: 'SUP-ORDER-43',
-      expectedDate: '2026-10-02',
+      expectedDate: correctedExpectedDate,
       destinationLocationId: input.locationId,
       notes: 'Use reinforced cartons',
     });
@@ -790,21 +859,43 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
   it('rejects a mixed-currency shipment before an uncostable state can be created', async () => {
     const input = await fixture();
     const supplier = await createSupplier(database.db, {
-      organizationId: input.organizationId, actorId: input.actorId, code: `SUP-${crypto.randomUUID().slice(0, 6)}`, name: 'USD supplier',
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      code: `SUP-${crypto.randomUUID().slice(0, 6)}`,
+      name: 'USD supplier',
     });
     const purchase = await createPurchase(database.db, {
-      organizationId: input.organizationId, actorId: input.actorId, supplierId: supplier.id, currencyCode: 'USD',
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: supplier.id,
+      currencyCode: 'USD',
     });
     const line = await addPurchaseLine(database.db, {
-      organizationId: input.organizationId, actorId: input.actorId, purchaseId: purchase.id, variantId: input.variantId, quantity: '1', unitPrice: '5',
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: purchase.id,
+      variantId: input.variantId,
+      quantity: '1',
+      unitPrice: '5',
     });
     const placed = await placePurchase(database.db, {
-      organizationId: input.organizationId, actorId: input.actorId, purchaseId: purchase.id, expectedVersion: line.version,
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: purchase.id,
+      expectedVersion: line.version,
     });
-    await expect(createShipment(database.db, {
-      organizationId: input.organizationId, actorId: input.actorId, receivingLocationId: input.locationId, transportMode: 'SEA',
-      allocations: [{ purchaseLineId: input.purchaseLineId, quantity: '1' }, { purchaseLineId: placed.lines[0]!.id, quantity: '1' }],
-    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(
+      createShipment(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        receivingLocationId: input.locationId,
+        transportMode: 'SEA',
+        allocations: [
+          { purchaseLineId: input.purchaseLineId, quantity: '1' },
+          { purchaseLineId: placed.lines[0]!.id, quantity: '1' },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 
   it('makes concurrent receipt retry canonical and rolls all receipt effects back on a late fault', async () => {
@@ -940,9 +1031,7 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       orderDate: '2026-09-22',
       expectedDate: '2026-10-05',
       destinationLocationId: input.locationId,
-      lines: [
-        { variantId: input.variantId, quantity: '5', unitPrice: '12.50' },
-      ],
+      lines: [{ variantId: input.variantId, quantity: '5', unitPrice: '12.50' }],
     });
 
     expect(purchase.status).toBe('DRAFT');
@@ -1282,13 +1371,17 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
 
     expect(reversed.status).toBe('REVERSED');
     expect(reversed.reversedAt).toBeTruthy();
-    expect(reversed.reversalReason).toBe('Physical inspection failed entire batch upon secondary check');
+    expect(reversed.reversalReason).toBe(
+      'Physical inspection failed entire batch upon secondary check',
+    );
 
     // Inventory balances are rolled back to zero
     const balancesAfterReversal = await listInventoryBalances(database.db, input.organizationId, {
       locationId: input.locationId,
     }).then((res) => res.items);
-    expect(Number(balancesAfterReversal.find((b) => b.condition === 'SELLABLE')?.onHand ?? 0)).toBe(0);
+    expect(Number(balancesAfterReversal.find((b) => b.condition === 'SELLABLE')?.onHand ?? 0)).toBe(
+      0,
+    );
 
     // Shipment receivingStatus is recalculated back to NOT_RECEIVED
     const shipmentAfterReversal = await getShipment(database.db, {
@@ -1337,7 +1430,9 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       supplierReference: 'REF-ALPHA-99',
     });
 
-    const searchPo = await listPurchases(database.db, input.organizationId, { search: 'REF-ALPHA-99' });
+    const searchPo = await listPurchases(database.db, input.organizationId, {
+      search: 'REF-ALPHA-99',
+    });
     expect(searchPo.items).toHaveLength(1);
     expect(searchPo.items[0]!.id).toBe(po1.id);
   });

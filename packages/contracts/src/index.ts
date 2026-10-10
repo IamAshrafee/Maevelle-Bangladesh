@@ -1778,8 +1778,13 @@ export interface PurchaseDto {
   readonly cancelledAt?: string;
   readonly createdAt: string;
   readonly placedAt?: string;
+  readonly grossMerchandiseTotal: string;
+  readonly discountTotal: string;
+  readonly netMerchandiseTotal: string;
+  /** Backwards-compatible alias of netMerchandiseTotal. */
   readonly totalAmount: string;
   readonly version: number;
+  readonly discounts: readonly PurchaseDiscountDto[];
   readonly lines: readonly {
     readonly id: string;
     readonly variantId: string;
@@ -1789,8 +1794,33 @@ export interface PurchaseDto {
     readonly optionSummary?: string;
     readonly quantity: string;
     readonly unitPrice: string;
+    readonly grossAmount: string;
+    readonly discountAmount: string;
+    readonly netAmount: string;
+    readonly netUnitCost: string;
     readonly allocatedQuantity: string;
     readonly receivedQuantity: string;
+  }[];
+}
+
+export interface PurchaseDiscountDto {
+  readonly id: string;
+  readonly title: string;
+  readonly calculationMethod: 'PERCENTAGE' | 'FIXED_AMOUNT';
+  readonly percentage?: string;
+  /** Supplier-authoritative discount amount in the Purchase currency. */
+  readonly amount: string;
+  readonly externalReference?: string;
+}
+
+export interface ReplacePurchaseDiscountsInputDto {
+  readonly version: number;
+  readonly discounts: readonly {
+    readonly title: string;
+    readonly calculationMethod: 'PERCENTAGE' | 'FIXED_AMOUNT';
+    readonly percentage?: string;
+    readonly amount: string;
+    readonly externalReference?: string;
   }[];
 }
 
@@ -4944,12 +4974,7 @@ export type IntegrityCategoryDto =
   | 'STORAGE'
   | 'SECURITY_CONFIGURATION';
 export type IntegrityFindingStatusDto =
-  | 'OPEN'
-  | 'INVESTIGATING'
-  | 'REPAIR_PENDING'
-  | 'REPAIRING'
-  | 'RESOLVED'
-  | 'ACCEPTED';
+  'OPEN' | 'INVESTIGATING' | 'REPAIR_PENDING' | 'REPAIRING' | 'RESOLVED' | 'ACCEPTED';
 export type IntegrityOverallStatusDto =
   | 'HEALTHY_IN_COMPLETED_CHECKS'
   | 'CRITICAL_ISSUES_DETECTED'
@@ -4962,13 +4987,7 @@ export type IntegrityScheduleDto = 'FREQUENT' | 'NIGHTLY' | 'MANUAL_ONLY';
 export type IntegrityRepairabilityDto = 'REBUILDABLE_PROJECTION' | 'DIAGNOSIS_ONLY';
 export type IntegrityTriggerTypeDto = 'SCHEDULED' | 'MANUAL' | 'TARGETED' | 'VERIFICATION';
 export type IntegrityRunStatusDto =
-  | 'QUEUED'
-  | 'RUNNING'
-  | 'SUCCEEDED'
-  | 'PARTIAL'
-  | 'FAILED'
-  | 'INTERRUPTED'
-  | 'CANCELLED';
+  'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'INTERRUPTED' | 'CANCELLED';
 
 export interface IntegrityCheckDto {
   readonly id: string;

@@ -28,6 +28,51 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       add column if not exists closed_by_actor_id uuid,
       add column if not exists cancelled_at timestamptz;
 
+    create table if not exists procurement.purchase_adjustments (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      purchase_id uuid not null,
+      adjustment_type text not null default 'DISCOUNT'
+        check (adjustment_type in ('DISCOUNT')),
+      calculation_method text not null
+        check (calculation_method in ('PERCENTAGE', 'FIXED_AMOUNT')),
+      title text not null check (length(trim(title)) > 0),
+      percentage numeric(9,6)
+        check (percentage is null or (percentage > 0 and percentage <= 100)),
+      amount numeric(20,4) not null check (amount > 0),
+      external_reference text,
+      created_by_actor_id uuid,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1,
+      unique (organization_id, id),
+      foreign key (organization_id, purchase_id)
+        references procurement.purchases(organization_id, id) on delete cascade,
+      check (
+        (calculation_method = 'PERCENTAGE' and percentage is not null)
+        or (calculation_method = 'FIXED_AMOUNT' and percentage is null)
+      )
+    );
+
+    create table if not exists procurement.purchase_adjustment_allocations (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      adjustment_id uuid not null,
+      purchase_line_id uuid not null,
+      allocated_amount numeric(20,4) not null check (allocated_amount >= 0),
+      created_at timestamptz not null default now(),
+      unique (organization_id, adjustment_id, purchase_line_id),
+      foreign key (organization_id, adjustment_id)
+        references procurement.purchase_adjustments(organization_id, id) on delete cascade,
+      foreign key (organization_id, purchase_line_id)
+        references procurement.purchase_lines(organization_id, id) on delete cascade
+    );
+
+    create index if not exists purchase_adjustments_purchase
+      on procurement.purchase_adjustments (organization_id, purchase_id, created_at, id);
+    create index if not exists purchase_adjustment_allocations_line
+      on procurement.purchase_adjustment_allocations (organization_id, purchase_line_id, adjustment_id);
+
     do $$ begin
       if not exists (select 1 from pg_constraint where conname = 'purchases_destination_location_fk') then
         alter table procurement.purchases

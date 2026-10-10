@@ -10,6 +10,7 @@ import {
   getSupplyOverview,
   listPurchases,
   placePurchase,
+  replacePurchaseDiscounts,
   removePurchaseLine,
   updatePurchase,
   updatePurchaseLine,
@@ -22,6 +23,7 @@ import {
   closePurchaseBodySchema,
   createPurchaseBodySchema,
   listPurchasesQuerySchema,
+  replacePurchaseDiscountsBodySchema,
   updatePurchaseBodySchema,
   updatePurchaseLineBodySchema,
   versionBodySchema,
@@ -31,6 +33,7 @@ type CreatePurchaseBody = Static<typeof createPurchaseBodySchema>;
 type UpdatePurchaseBody = Static<typeof updatePurchaseBodySchema>;
 type AddPurchaseLineBody = Static<typeof addPurchaseLineBodySchema>;
 type UpdatePurchaseLineBody = Static<typeof updatePurchaseLineBodySchema>;
+type ReplacePurchaseDiscountsBody = Static<typeof replacePurchaseDiscountsBodySchema>;
 type CancelPurchaseBody = Static<typeof cancelPurchaseBodySchema>;
 type ClosePurchaseBody = Static<typeof closePurchaseBodySchema>;
 type VersionBody = Static<typeof versionBodySchema>;
@@ -209,6 +212,31 @@ export function registerPurchaseRoutes(
       return sendError(reply, error);
     }
   });
+
+  app.put(
+    '/admin/purchases/:purchaseId/discounts',
+    { schema: { body: replacePurchaseDiscountsBodySchema } },
+    async (request, reply) => {
+      const active = await requireAdmin(database, auth, request.headers, 'procurement.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as ReplacePurchaseDiscountsBody;
+        const key = idempotencyKey(request.headers);
+        return {
+          data: await replacePurchaseDiscounts(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            purchaseId: (request.params as { purchaseId: string }).purchaseId,
+            expectedVersion: body.version,
+            discounts: body.discounts,
+            ...(key ? { idempotencyKey: key } : {}),
+          }),
+        };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
 
   app.post(
     '/admin/purchases/:purchaseId/place',

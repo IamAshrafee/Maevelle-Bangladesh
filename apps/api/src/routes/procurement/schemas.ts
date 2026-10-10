@@ -1,10 +1,5 @@
 import { Type } from 'typebox';
-import {
-  conditionSchema,
-  currencySchema,
-  quantitySchema,
-  supplierTypeSchema,
-} from './common.js';
+import { conditionSchema, currencySchema, quantitySchema, supplierTypeSchema } from './common.js';
 
 // Query schemas
 export const listSuppliersQuerySchema = Type.Object({
@@ -175,6 +170,20 @@ export const addPurchaseLineBodySchema = Type.Object({
 export const updatePurchaseLineBodySchema = Type.Object({
   quantity: Type.Optional(quantitySchema),
   unitPrice: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
+});
+
+export const replacePurchaseDiscountsBodySchema = Type.Object({
+  version: Type.Integer({ minimum: 1 }),
+  discounts: Type.Array(
+    Type.Object({
+      title: Type.String({ minLength: 1, maxLength: 160 }),
+      calculationMethod: Type.Union([Type.Literal('PERCENTAGE'), Type.Literal('FIXED_AMOUNT')]),
+      percentage: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' })),
+      amount: Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }),
+      externalReference: Type.Optional(Type.String({ maxLength: 160 })),
+    }),
+    { maxItems: 20 },
+  ),
 });
 
 export const cancelPurchaseBodySchema = Type.Object({
