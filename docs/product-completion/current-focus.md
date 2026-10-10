@@ -31,7 +31,15 @@ Implemented behavior includes:
   FIFO cost layers, Catalog variant acquisition cost and location-weighted
   Inventory cost without replacing manual Catalog estimates; and
 - image-first product/variant selection and cost visibility in Purchase, Catalog
-  and Inventory workflows.
+  and Inventory workflows;
+- a consistent Supply workspace navigation layer across overview, suppliers,
+  purchases, shipments, receiving, landed cost and costing;
+- server-paginated, tenant-scoped Catalog variant search by product title, SKU,
+  barcode and option value, with image-led cards, retry and load-more recovery;
+  and
+- accessible, mobile-conscious Supply worklists with URL-backed filters,
+  announced feedback, touch-friendly tabs and a corrected global inbound
+  shipment route/capability.
 
 ## Verification completed
 
@@ -42,6 +50,12 @@ Implemented behavior includes:
   helper suites passed: 80 tests across 7 files.
 - Supplier policy snapshot regression verifies that placement captures the current
   agreement and later supplier edits do not rewrite committed purchases.
+- The frontend completion pass additionally passed the Database Catalog integration
+  suite (8 tests), Admin Supply helper suites (5 tests), Admin production build and
+  a complete Docker build/start with healthy PostgreSQL, API and Admin services.
+- Browser verification confirmed the local Admin route and responsive 390×844
+  authentication shell. The authenticated operator walkthrough remains an owner
+  review gate rather than being represented as complete.
 
 ## Next implementation boundary
 
