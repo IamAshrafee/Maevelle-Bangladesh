@@ -26,6 +26,7 @@ import {
 } from './inventory.js';
 import {
   addPurchaseLine,
+  addShipmentEvent,
   cancelPurchase,
   cancelShipment,
   closePurchase,
@@ -395,20 +396,51 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
       originText: 'Shenzhen Yantian Port',
       expectedArrivalDate: '2026-11-15',
       transportMode: 'SEA',
+      providerReference: 'CB-A-G-661',
+      grossWeight: '0.83',
+      chargeableWeight: '0.83',
+      weightUnit: 'KG',
+      freightRate: '750',
+      freightRateUnit: 'PER_KG',
+      reportedFreightAmount: '623',
     });
     expect(updated).toMatchObject({
       trackingReference: 'TRK-998877',
       originText: 'Shenzhen Yantian Port',
       expectedArrivalDate: '2026-11-15',
       transportMode: 'SEA',
+      providerReference: 'CB-A-G-661',
+      grossWeight: '0.830000',
+      chargeableWeight: '0.830000',
+      weightUnit: 'KG',
+      freightRate: '750.0000',
+      freightRateUnit: 'PER_KG',
+      reportedFreightAmount: '623.0000',
       version: planned.version + 1,
     });
+
+    const withProviderMilestone = await addShipmentEvent(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: updated.id,
+      expectedVersion: updated.version,
+      eventCode: 'RECEIVED_CHINA_WAREHOUSE',
+      title: 'Received in China warehouse',
+      occurredAt: '2026-11-01T06:04:53.517Z',
+      locationText: 'Guangzhou, China',
+      providerStatusCode: '20',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(withProviderMilestone.events.map((event) => event.eventCode)).toEqual([
+      'PLANNED',
+      'RECEIVED_CHINA_WAREHOUSE',
+    ]);
 
     const cancelled = await cancelShipment(database.db, {
       organizationId: input.organizationId,
       actorId: input.actorId,
       shipmentId: updated.id,
-      expectedVersion: updated.version,
+      expectedVersion: withProviderMilestone.version,
       reason: 'Shipment booking was duplicated',
     });
     expect(cancelled.status).toBe('CANCELLED');

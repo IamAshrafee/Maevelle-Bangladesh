@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Static } from 'typebox';
 import type { DatabaseClient } from '@maevelle/database';
 import {
+  addShipmentEvent,
   cancelShipment,
   createShipment,
   getShipment,
@@ -14,6 +15,7 @@ import {
 
 import { idempotencyKey, requireAdmin, requireKey, sendError, type Auth } from './common.js';
 import {
+  addShipmentEventBodySchema,
   cancelShipmentBodySchema,
   createShipmentBodySchema,
   listShipmentsQuerySchema,
@@ -27,6 +29,7 @@ type UpdateShipmentBody = Static<typeof updateShipmentBodySchema>;
 type UpdateShipmentAllocationsBody = Static<typeof updateShipmentAllocationsBodySchema>;
 type CancelShipmentBody = Static<typeof cancelShipmentBodySchema>;
 type VersionBody = Static<typeof versionBodySchema>;
+type AddShipmentEventBody = Static<typeof addShipmentEventBodySchema>;
 
 export function registerShipmentRoutes(
   app: FastifyInstance,
@@ -49,7 +52,9 @@ export function registerShipmentRoutes(
           ...(pageSize !== undefined ? { pageSize } : {}),
           ...(search !== undefined ? { search } : {}),
           ...(query.status !== undefined ? { status: query.status } : {}),
-          ...(query.receivingStatus !== undefined ? { receivingStatus: query.receivingStatus } : {}),
+          ...(query.receivingStatus !== undefined
+            ? { receivingStatus: query.receivingStatus }
+            : {}),
           ...(query.purchaseId !== undefined ? { purchaseId: query.purchaseId } : {}),
           ...(query.receivingLocationId !== undefined
             ? { receivingLocationId: query.receivingLocationId }
@@ -142,6 +147,33 @@ export function registerShipmentRoutes(
             shipmentId: (request.params as { shipmentId: string }).shipmentId,
             expectedVersion: version,
             allocations,
+          }),
+        };
+      } catch (error) {
+        return sendError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/inbound-shipments/:shipmentId/events',
+    { schema: { body: addShipmentEventBodySchema } },
+    async (request, reply) => {
+      const active = await requireAdmin(database, auth, request.headers, 'inbound_shipment.manage');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const key = requireKey(reply, idempotencyKey(request.headers));
+      if (!key) return;
+      try {
+        const body = request.body as AddShipmentEventBody;
+        const { version, ...event } = body;
+        return {
+          data: await addShipmentEvent(database.db, {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            shipmentId: (request.params as { shipmentId: string }).shipmentId,
+            expectedVersion: version,
+            idempotencyKey: key,
+            ...event,
           }),
         };
       } catch (error) {

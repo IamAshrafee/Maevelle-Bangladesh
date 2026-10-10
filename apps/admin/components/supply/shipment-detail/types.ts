@@ -78,6 +78,13 @@ export interface EditShipmentDialogProps {
     expectedArrivalDate?: string | undefined;
     originText?: string | undefined;
     transportMode: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER';
+    providerReference?: string | undefined;
+    grossWeight?: string | undefined;
+    chargeableWeight?: string | undefined;
+    weightUnit?: 'KG' | 'LB' | undefined;
+    freightRate?: string | undefined;
+    freightRateUnit?: 'PER_KG' | 'PER_LB' | 'FLAT' | undefined;
+    reportedFreightAmount?: string | undefined;
   }) => Promise<void>;
   readonly saving: boolean;
 }
@@ -107,7 +114,8 @@ export interface AddCostComponentInput {
   readonly fxRate?: string | undefined;
   readonly fxSource?: string | undefined;
   readonly valueStatus: 'ESTIMATED' | 'ACTUAL' | 'CREDIT';
-  readonly allocationMethod: 'PURCHASE_VALUE' | 'QUANTITY' | 'EQUAL' | 'WEIGHT' | 'VOLUME' | 'DIRECT';
+  readonly allocationMethod:
+    'PURCHASE_VALUE' | 'QUANTITY' | 'EQUAL' | 'WEIGHT' | 'VOLUME' | 'DIRECT';
   readonly reference?: string | undefined;
   readonly notes?: string | undefined;
 }

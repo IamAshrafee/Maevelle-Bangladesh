@@ -13,17 +13,14 @@ import {
   Ship,
   Train,
   Truck,
+  Weight,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { formatSupplyDate } from '@/lib/supply/api';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatSupplyDate, formatSupplyMoney, formatSupplyNumber } from '@/lib/supply/api';
 import type { ShipmentDetailLogisticsCardProps } from './types';
 
 function getTransportIcon(mode?: string) {
@@ -121,7 +118,9 @@ export function ShipmentDetailLogisticsCard({
           <div className="grid gap-1">
             <span className="text-muted-foreground">Origin Port / Location:</span>
             <span className="font-medium text-foreground">
-              {shipment.originText || <span className="italic text-muted-foreground">Not specified</span>}
+              {shipment.originText || (
+                <span className="italic text-muted-foreground">Not specified</span>
+              )}
             </span>
           </div>
 
@@ -129,6 +128,62 @@ export function ShipmentDetailLogisticsCard({
             <span className="text-muted-foreground">Destination Warehouse:</span>
             <span className="font-medium text-foreground">{shipment.receivingLocationName}</span>
           </div>
+
+          {shipment.providerReference ? (
+            <div className="grid gap-1">
+              <span className="text-muted-foreground">Provider batch:</span>
+              <span className="font-mono font-semibold text-foreground">
+                {shipment.providerReference}
+              </span>
+            </div>
+          ) : null}
+
+          {shipment.grossWeight || shipment.chargeableWeight ? (
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="mb-2 flex items-center gap-1.5 font-semibold text-foreground">
+                <Weight className="size-3.5 text-primary" /> Freight measurement
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="block text-muted-foreground">Gross / received</span>
+                  <span className="font-mono tabular-nums">
+                    {shipment.grossWeight
+                      ? `${formatSupplyNumber(shipment.grossWeight)} ${shipment.weightUnit ?? 'KG'}`
+                      : 'Not recorded'}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-muted-foreground">Chargeable</span>
+                  <span className="font-mono tabular-nums">
+                    {shipment.chargeableWeight
+                      ? `${formatSupplyNumber(shipment.chargeableWeight)} ${shipment.weightUnit ?? 'KG'}`
+                      : 'Not recorded'}
+                  </span>
+                </div>
+                {shipment.freightRate ? (
+                  <div>
+                    <span className="block text-muted-foreground">Rate</span>
+                    <span className="font-mono tabular-nums">
+                      {formatSupplyMoney(shipment.freightRate, shipment.currencyCode)}{' '}
+                      {shipment.freightRateUnit === 'FLAT'
+                        ? 'flat'
+                        : shipment.freightRateUnit === 'PER_LB'
+                          ? '/ lb'
+                          : '/ kg'}
+                    </span>
+                  </div>
+                ) : null}
+                {shipment.reportedFreightAmount ? (
+                  <div>
+                    <span className="block text-muted-foreground">Provider charge</span>
+                    <span className="font-mono font-semibold tabular-nums">
+                      {formatSupplyMoney(shipment.reportedFreightAmount, shipment.currencyCode)}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -195,6 +250,23 @@ export function ShipmentDetailLogisticsCard({
               v{shipment.version} (optimistic locking enforced)
             </span>
           </div>
+
+          {shipment.events.length ? (
+            <div className="border-t pt-3">
+              <p className="mb-2 font-semibold text-foreground">Milestone timeline</p>
+              <ol className="space-y-2">
+                {[...shipment.events].reverse().map((event) => (
+                  <li key={event.id} className="border-l-2 border-primary/30 pl-3">
+                    <p className="font-medium text-foreground">{event.title}</p>
+                    <p className="text-muted-foreground">
+                      {formatSupplyDate(event.occurredAt)}
+                      {event.locationText ? ` · ${event.locationText}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

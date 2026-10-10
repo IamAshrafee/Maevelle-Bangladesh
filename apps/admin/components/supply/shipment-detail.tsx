@@ -148,6 +148,13 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
     expectedArrivalDate?: string | undefined;
     originText?: string | undefined;
     transportMode: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER';
+    providerReference?: string | undefined;
+    grossWeight?: string | undefined;
+    chargeableWeight?: string | undefined;
+    weightUnit?: 'KG' | 'LB' | undefined;
+    freightRate?: string | undefined;
+    freightRateUnit?: 'PER_KG' | 'PER_LB' | 'FLAT' | undefined;
+    reportedFreightAmount?: string | undefined;
   }) => {
     if (!shipment) return;
     await run(
@@ -269,9 +276,12 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
     if (!worksheet) return;
     await run(
       () =>
-        supplyRequest(`/admin/landed-cost/worksheets/${worksheet.id}/revisions/${revisionId}/discard`, {
-          method: 'POST',
-        }),
+        supplyRequest(
+          `/admin/landed-cost/worksheets/${worksheet.id}/revisions/${revisionId}/discard`,
+          {
+            method: 'POST',
+          },
+        ),
       'Draft revision discarded. Worksheet safely restored to prior finalized valuation.',
     );
   };

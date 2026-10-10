@@ -122,6 +122,13 @@ export interface ShipmentView {
   readonly transportMode: string;
   readonly originText?: string;
   readonly trackingReference?: string;
+  readonly providerReference?: string;
+  readonly grossWeight?: string;
+  readonly chargeableWeight?: string;
+  readonly weightUnit?: 'KG' | 'LB';
+  readonly freightRate?: string;
+  readonly freightRateUnit?: 'PER_KG' | 'PER_LB' | 'FLAT';
+  readonly reportedFreightAmount?: string;
   readonly expectedArrivalDate?: string;
   readonly departedAt?: string;
   readonly arrivedAt?: string;
@@ -129,6 +136,15 @@ export interface ShipmentView {
   readonly status: ShipmentStatus;
   readonly receivingStatus: ReceivingStatus;
   readonly version: number;
+  readonly events: readonly {
+    id: string;
+    eventCode: string;
+    title: string;
+    occurredAt: string;
+    locationText?: string;
+    providerStatusCode?: string;
+    notes?: string;
+  }[];
   readonly allocations: readonly {
     id: string;
     purchaseLineId: string;
@@ -341,6 +357,17 @@ function positiveQuantity(value: string, name = 'Quantity'): void {
     throw new ProcurementDomainError(
       'VALIDATION_FAILED',
       `${name} must be a positive decimal with at most six places.`,
+    );
+  }
+}
+
+function nonNegativeMeasure(value: string | undefined, name: string, places: 4 | 6): void {
+  if (value === undefined) return;
+  const pattern = places === 4 ? /^\d+(?:\.\d{1,4})?$/ : /^\d+(?:\.\d{1,6})?$/;
+  if (!pattern.test(value)) {
+    throw new ProcurementDomainError(
+      'VALIDATION_FAILED',
+      `${name} must be a non-negative decimal with at most ${places} places.`,
     );
   }
 }
@@ -1962,6 +1989,13 @@ async function getShipmentIn(
     transport_mode: string;
     origin_text: string | null;
     tracking_reference: string | null;
+    provider_reference: string | null;
+    gross_weight: string | null;
+    chargeable_weight: string | null;
+    weight_unit: 'KG' | 'LB' | null;
+    freight_rate: string | null;
+    freight_rate_unit: 'PER_KG' | 'PER_LB' | 'FLAT' | null;
+    reported_freight_amount: string | null;
     expected_arrival_date: string | null;
     departed_at: string | null;
     arrived_at: string | null;
@@ -1971,6 +2005,9 @@ async function getShipmentIn(
     version: string;
   }>`select shipment.id, shipment.shipment_number, shipment.receiving_location_id, location.name as receiving_location_name,
       min(purchase.currency_code) as currency_code, shipment.transport_mode, shipment.origin_text, shipment.tracking_reference,
+      shipment.provider_reference, shipment.gross_weight::text, shipment.chargeable_weight::text,
+      shipment.weight_unit, shipment.freight_rate::text, shipment.freight_rate_unit,
+      shipment.reported_freight_amount::text,
       shipment.expected_arrival_date::text, shipment.departed_at::text, shipment.arrived_at::text, shipment.created_at::text,
       shipment.status, shipment.receiving_status, shipment.version::text
     from inbound_shipment.shipments shipment
@@ -2020,6 +2057,19 @@ async function getShipmentIn(
     group by allocation.id, purchase.id, purchase.purchase_number, supplier.name, variant.product_id, purchase_line.unit_price
     order by allocation.created_at, allocation.id`.execute(db);
 
+  const events = await sql<{
+    id: string;
+    event_code: string;
+    title: string;
+    occurred_at: string;
+    location_text: string | null;
+    provider_status_code: string | null;
+    notes: string | null;
+  }>`select id, event_code, title, occurred_at::text, location_text, provider_status_code, notes
+    from inbound_shipment.shipment_events
+    where organization_id = ${organizationId} and shipment_id = ${shipmentId}
+    order by occurred_at, id`.execute(db);
+
   return {
     id: row.id,
     shipmentNumber: row.shipment_number,
@@ -2029,6 +2079,13 @@ async function getShipmentIn(
     transportMode: row.transport_mode,
     ...(row.origin_text ? { originText: row.origin_text } : {}),
     ...(row.tracking_reference ? { trackingReference: row.tracking_reference } : {}),
+    ...(row.provider_reference ? { providerReference: row.provider_reference } : {}),
+    ...(row.gross_weight ? { grossWeight: row.gross_weight } : {}),
+    ...(row.chargeable_weight ? { chargeableWeight: row.chargeable_weight } : {}),
+    ...(row.weight_unit ? { weightUnit: row.weight_unit } : {}),
+    ...(row.freight_rate ? { freightRate: row.freight_rate } : {}),
+    ...(row.freight_rate_unit ? { freightRateUnit: row.freight_rate_unit } : {}),
+    ...(row.reported_freight_amount ? { reportedFreightAmount: row.reported_freight_amount } : {}),
     ...(row.expected_arrival_date ? { expectedArrivalDate: row.expected_arrival_date } : {}),
     ...(row.departed_at ? { departedAt: row.departed_at } : {}),
     ...(row.arrived_at ? { arrivedAt: row.arrived_at } : {}),
@@ -2036,6 +2093,15 @@ async function getShipmentIn(
     status: row.status,
     receivingStatus: row.receiving_status,
     version: Number(row.version),
+    events: events.rows.map((event) => ({
+      id: event.id,
+      eventCode: event.event_code,
+      title: event.title,
+      occurredAt: event.occurred_at,
+      ...(event.location_text ? { locationText: event.location_text } : {}),
+      ...(event.provider_status_code ? { providerStatusCode: event.provider_status_code } : {}),
+      ...(event.notes ? { notes: event.notes } : {}),
+    })),
     allocations: allocations.rows.map((allocation) => ({
       id: allocation.id,
       purchaseLineId: allocation.purchase_line_id,
@@ -2052,6 +2118,30 @@ async function getShipmentIn(
       ...(allocation.unit_price ? { unitPrice: allocation.unit_price } : {}),
     })),
   };
+}
+
+async function insertShipmentEvent(
+  db: DatabaseExecutor,
+  input: {
+    organizationId: string;
+    actorId: string;
+    shipmentId: string;
+    eventCode: string;
+    title: string;
+    occurredAt?: string | undefined;
+    locationText?: string | undefined;
+    providerStatusCode?: string | undefined;
+    notes?: string | undefined;
+  },
+): Promise<void> {
+  await sql`insert into inbound_shipment.shipment_events (
+      organization_id, shipment_id, event_code, title, occurred_at, location_text,
+      provider_status_code, notes, created_by_actor_id
+    ) values (
+      ${input.organizationId}, ${input.shipmentId}, ${input.eventCode}, ${input.title},
+      coalesce(${input.occurredAt ?? null}::timestamptz, now()), ${input.locationText?.trim() || null},
+      ${input.providerStatusCode?.trim() || null}, ${input.notes?.trim() || null}, ${input.actorId}
+    )`.execute(db);
 }
 
 export async function getShipment(
@@ -2135,6 +2225,13 @@ export async function createShipment(
     transportMode: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER';
     originText?: string | undefined;
     trackingReference?: string | undefined;
+    providerReference?: string | undefined;
+    grossWeight?: string | undefined;
+    chargeableWeight?: string | undefined;
+    weightUnit?: 'KG' | 'LB' | undefined;
+    freightRate?: string | undefined;
+    freightRateUnit?: 'PER_KG' | 'PER_LB' | 'FLAT' | undefined;
+    reportedFreightAmount?: string | undefined;
     expectedArrivalDate?: string | undefined;
     allocations: readonly { purchaseLineId: string; quantity: string }[];
     idempotencyKey?: string | undefined;
@@ -2156,6 +2253,10 @@ export async function createShipment(
   for (const allocation of input.allocations) {
     positiveQuantity(allocation.quantity, 'Allocation quantity');
   }
+  nonNegativeMeasure(input.grossWeight, 'Gross weight', 6);
+  nonNegativeMeasure(input.chargeableWeight, 'Chargeable weight', 6);
+  nonNegativeMeasure(input.freightRate, 'Freight rate', 4);
+  nonNegativeMeasure(input.reportedFreightAmount, 'Reported freight amount', 4);
 
   return db.transaction().execute(async (transaction) => {
     let startedRecordId: string | undefined;
@@ -2195,13 +2296,27 @@ export async function createShipment(
       id: string;
     }>`insert into inbound_shipment.shipments (
         organization_id, shipment_number, receiving_location_id, transport_mode,
-        origin_text, tracking_reference, expected_arrival_date, created_by_actor_id
+        origin_text, tracking_reference, provider_reference, gross_weight, chargeable_weight,
+        weight_unit, freight_rate, freight_rate_unit, reported_freight_amount,
+        expected_arrival_date, created_by_actor_id
       ) values (
         ${input.organizationId}, ${shipmentNumber}, ${input.receivingLocationId},
         ${input.transportMode}, ${input.originText?.trim() || null}, ${input.trackingReference?.trim() || null},
+        ${input.providerReference?.trim() || null}, ${input.grossWeight ?? null}::numeric,
+        ${input.chargeableWeight ?? null}::numeric, ${input.weightUnit ?? null},
+        ${input.freightRate ?? null}::numeric, ${input.freightRateUnit ?? null},
+        ${input.reportedFreightAmount ?? null}::numeric,
         ${input.expectedArrivalDate ?? null}::date, ${input.actorId}
       ) returning id`.execute(transaction);
     const shipmentId = inserted.rows[0]!.id;
+    await insertShipmentEvent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId,
+      eventCode: 'PLANNED',
+      title: 'Shipment planned',
+      ...(input.originText ? { locationText: input.originText } : {}),
+    });
 
     let shipmentCurrency: PurchaseView['currencyCode'] | undefined;
     for (const allocation of [...input.allocations].sort((left, right) =>
@@ -2296,8 +2411,19 @@ export async function updateShipment(
     expectedArrivalDate?: string | undefined;
     originText?: string | undefined;
     transportMode?: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER' | undefined;
+    providerReference?: string | undefined;
+    grossWeight?: string | undefined;
+    chargeableWeight?: string | undefined;
+    weightUnit?: 'KG' | 'LB' | undefined;
+    freightRate?: string | undefined;
+    freightRateUnit?: 'PER_KG' | 'PER_LB' | 'FLAT' | undefined;
+    reportedFreightAmount?: string | undefined;
   },
 ): Promise<ShipmentView> {
+  nonNegativeMeasure(input.grossWeight, 'Gross weight', 6);
+  nonNegativeMeasure(input.chargeableWeight, 'Chargeable weight', 6);
+  nonNegativeMeasure(input.freightRate, 'Freight rate', 4);
+  nonNegativeMeasure(input.reportedFreightAmount, 'Reported freight amount', 4);
   return db.transaction().execute(async (transaction) => {
     const current = await sql<{
       status: ShipmentStatus;
@@ -2323,9 +2449,16 @@ export async function updateShipment(
 
     await sql`update inbound_shipment.shipments set
       tracking_reference = case when ${input.trackingReference !== undefined} then ${input.trackingReference?.trim() || null} else tracking_reference end,
+      provider_reference = case when ${input.providerReference !== undefined} then ${input.providerReference?.trim() || null} else provider_reference end,
       origin_text = case when ${input.originText !== undefined} then ${input.originText?.trim() || null} else origin_text end,
       expected_arrival_date = case when ${input.expectedArrivalDate !== undefined} then ${input.expectedArrivalDate || null}::date else expected_arrival_date end,
       transport_mode = case when ${input.transportMode !== undefined} then ${input.transportMode} else transport_mode end,
+      gross_weight = case when ${input.grossWeight !== undefined} then ${input.grossWeight}::numeric else gross_weight end,
+      chargeable_weight = case when ${input.chargeableWeight !== undefined} then ${input.chargeableWeight}::numeric else chargeable_weight end,
+      weight_unit = case when ${input.weightUnit !== undefined} then ${input.weightUnit} else weight_unit end,
+      freight_rate = case when ${input.freightRate !== undefined} then ${input.freightRate}::numeric else freight_rate end,
+      freight_rate_unit = case when ${input.freightRateUnit !== undefined} then ${input.freightRateUnit} else freight_rate_unit end,
+      reported_freight_amount = case when ${input.reportedFreightAmount !== undefined} then ${input.reportedFreightAmount}::numeric else reported_freight_amount end,
       version = version + 1,
       updated_at = now()
       where id = ${input.shipmentId} and organization_id = ${input.organizationId}`.execute(
@@ -2349,6 +2482,19 @@ export async function updateShipment(
           : {}),
         ...(input.originText !== undefined ? { originText: input.originText } : {}),
         ...(input.transportMode !== undefined ? { transportMode: input.transportMode } : {}),
+        ...(input.providerReference !== undefined
+          ? { providerReference: input.providerReference }
+          : {}),
+        ...(input.grossWeight !== undefined ? { grossWeight: input.grossWeight } : {}),
+        ...(input.chargeableWeight !== undefined
+          ? { chargeableWeight: input.chargeableWeight }
+          : {}),
+        ...(input.weightUnit !== undefined ? { weightUnit: input.weightUnit } : {}),
+        ...(input.freightRate !== undefined ? { freightRate: input.freightRate } : {}),
+        ...(input.freightRateUnit !== undefined ? { freightRateUnit: input.freightRateUnit } : {}),
+        ...(input.reportedFreightAmount !== undefined
+          ? { reportedFreightAmount: input.reportedFreightAmount }
+          : {}),
       },
     });
     return view;
@@ -2493,6 +2639,96 @@ export async function updateShipmentAllocations(
   });
 }
 
+export async function addShipmentEvent(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    shipmentId: string;
+    expectedVersion: number;
+    eventCode: string;
+    title: string;
+    occurredAt: string;
+    locationText?: string | undefined;
+    providerStatusCode?: string | undefined;
+    notes?: string | undefined;
+    idempotencyKey: string;
+  },
+): Promise<ShipmentView> {
+  if (!input.eventCode.trim() || !input.title.trim()) {
+    throw new ProcurementDomainError(
+      'VALIDATION_FAILED',
+      'Shipment milestone code and title are required.',
+    );
+  }
+  if (Number.isNaN(Date.parse(input.occurredAt))) {
+    throw new ProcurementDomainError(
+      'VALIDATION_FAILED',
+      'Shipment milestone time must be a valid timestamp.',
+    );
+  }
+
+  return db.transaction().execute(async (transaction) => {
+    const started = await beginIdempotent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      operation: 'inbound_shipment.event.add',
+      idempotencyKey: input.idempotencyKey,
+      request: input,
+    });
+    if (started.replay) return started.replay as ShipmentView;
+
+    const shipment = await sql<{ version: string }>`select version::text
+      from inbound_shipment.shipments
+      where organization_id = ${input.organizationId} and id = ${input.shipmentId}
+      for update`.execute(transaction);
+    if (!shipment.rows[0]) {
+      throw new ProcurementDomainError('NOT_FOUND', 'Inbound Shipment was not found.');
+    }
+    if (Number(shipment.rows[0].version) !== input.expectedVersion) {
+      throw new ProcurementDomainError(
+        'STALE_VERSION',
+        'Shipment changed; reload before adding a milestone.',
+      );
+    }
+
+    await insertShipmentEvent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: input.shipmentId,
+      eventCode: input.eventCode.trim().toUpperCase(),
+      title: input.title.trim(),
+      occurredAt: input.occurredAt,
+      ...(input.locationText ? { locationText: input.locationText } : {}),
+      ...(input.providerStatusCode ? { providerStatusCode: input.providerStatusCode } : {}),
+      ...(input.notes ? { notes: input.notes } : {}),
+    });
+    await sql`update inbound_shipment.shipments
+      set version = version + 1, updated_at = now()
+      where organization_id = ${input.organizationId} and id = ${input.shipmentId}`.execute(
+      transaction,
+    );
+    const view = await getShipmentIn(transaction, input.organizationId, input.shipmentId);
+    await completeIdempotency(
+      transaction,
+      started.recordId!,
+      'inbound_shipment.shipment',
+      input.shipmentId,
+      view,
+    );
+    await emit(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      action: 'inbound_shipment.event_added',
+      eventType: 'inbound_shipment.event_added',
+      targetType: 'inbound_shipment.shipment',
+      targetId: input.shipmentId,
+      metadata: { eventCode: input.eventCode.trim().toUpperCase(), occurredAt: input.occurredAt },
+    });
+    return view;
+  });
+}
+
 export async function markShipmentInTransit(
   db: Kysely<DatabaseSchema>,
   input: {
@@ -2533,6 +2769,13 @@ export async function markShipmentInTransit(
     await sql`update inbound_shipment.shipments set status = 'IN_TRANSIT', departed_at = now(), version = version + 1, updated_at = now() where id = ${input.shipmentId}`.execute(
       transaction,
     );
+    await insertShipmentEvent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: input.shipmentId,
+      eventCode: 'IN_TRANSIT',
+      title: 'Shipment departed',
+    });
     const view = await getShipmentIn(transaction, input.organizationId, input.shipmentId);
     await completeIdempotency(
       transaction,
@@ -2605,6 +2848,14 @@ export async function cancelShipment(
     await sql`update inbound_shipment.shipments set status = 'CANCELLED', version = version + 1, updated_at = now() where id = ${input.shipmentId}`.execute(
       transaction,
     );
+    await insertShipmentEvent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: input.shipmentId,
+      eventCode: 'CANCELLED',
+      title: 'Shipment cancelled',
+      notes: input.reason,
+    });
     const view = await getShipmentIn(transaction, input.organizationId, input.shipmentId);
 
     if (startedRecordId) {
@@ -2673,6 +2924,13 @@ export async function markShipmentArrived(
     await sql`update inbound_shipment.shipments set status = 'ARRIVED', arrived_at = now(), version = version + 1, updated_at = now() where id = ${input.shipmentId}`.execute(
       transaction,
     );
+    await insertShipmentEvent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: input.shipmentId,
+      eventCode: 'ARRIVED',
+      title: 'Shipment arrived at destination',
+    });
     const view = await getShipmentIn(transaction, input.organizationId, input.shipmentId);
     await completeIdempotency(
       transaction,

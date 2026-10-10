@@ -1850,6 +1850,13 @@ export interface InboundShipmentDto {
   readonly transportMode: string;
   readonly originText?: string;
   readonly trackingReference?: string;
+  readonly providerReference?: string;
+  readonly grossWeight?: string;
+  readonly chargeableWeight?: string;
+  readonly weightUnit?: 'KG' | 'LB';
+  readonly freightRate?: string;
+  readonly freightRateUnit?: 'PER_KG' | 'PER_LB' | 'FLAT';
+  readonly reportedFreightAmount?: string;
   readonly expectedArrivalDate?: string;
   readonly departedAt?: string;
   readonly arrivedAt?: string;
@@ -1857,6 +1864,7 @@ export interface InboundShipmentDto {
   readonly status: 'PLANNED' | 'IN_TRANSIT' | 'ARRIVED' | 'CANCELLED';
   readonly receivingStatus: 'NOT_RECEIVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED';
   readonly version: number;
+  readonly events: readonly ShipmentEventDto[];
   readonly allocations: readonly {
     readonly id: string;
     readonly purchaseLineId: string;
@@ -1874,12 +1882,29 @@ export interface InboundShipmentDto {
   }[];
 }
 
+export interface ShipmentEventDto {
+  readonly id: string;
+  readonly eventCode: string;
+  readonly title: string;
+  readonly occurredAt: string;
+  readonly locationText?: string;
+  readonly providerStatusCode?: string;
+  readonly notes?: string;
+}
+
 export interface UpdateInboundShipmentInputDto {
   readonly version: number;
   readonly trackingReference?: string;
   readonly expectedArrivalDate?: string;
   readonly originText?: string;
   readonly transportMode?: 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER';
+  readonly providerReference?: string;
+  readonly grossWeight?: string;
+  readonly chargeableWeight?: string;
+  readonly weightUnit?: 'KG' | 'LB';
+  readonly freightRate?: string;
+  readonly freightRateUnit?: 'PER_KG' | 'PER_LB' | 'FLAT';
+  readonly reportedFreightAmount?: string;
 }
 
 export interface InboundReceiptLineDto {

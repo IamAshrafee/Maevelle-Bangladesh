@@ -208,6 +208,15 @@ export const createShipmentBodySchema = Type.Object({
   ]),
   originText: Type.Optional(Type.String()),
   trackingReference: Type.Optional(Type.String()),
+  providerReference: Type.Optional(Type.String()),
+  grossWeight: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' })),
+  chargeableWeight: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' })),
+  weightUnit: Type.Optional(Type.Union([Type.Literal('KG'), Type.Literal('LB')])),
+  freightRate: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
+  freightRateUnit: Type.Optional(
+    Type.Union([Type.Literal('PER_KG'), Type.Literal('PER_LB'), Type.Literal('FLAT')]),
+  ),
+  reportedFreightAmount: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
   expectedArrivalDate: Type.Optional(Type.String({ format: 'date' })),
   allocations: Type.Array(
     Type.Object({ purchaseLineId: Type.String({ minLength: 1 }), quantity: quantitySchema }),
@@ -218,6 +227,15 @@ export const createShipmentBodySchema = Type.Object({
 export const updateShipmentBodySchema = Type.Object({
   version: Type.Integer({ minimum: 1 }),
   trackingReference: Type.Optional(Type.String()),
+  providerReference: Type.Optional(Type.String()),
+  grossWeight: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' })),
+  chargeableWeight: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' })),
+  weightUnit: Type.Optional(Type.Union([Type.Literal('KG'), Type.Literal('LB')])),
+  freightRate: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
+  freightRateUnit: Type.Optional(
+    Type.Union([Type.Literal('PER_KG'), Type.Literal('PER_LB'), Type.Literal('FLAT')]),
+  ),
+  reportedFreightAmount: Type.Optional(Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' })),
   expectedArrivalDate: Type.Optional(Type.String({ format: 'date' })),
   originText: Type.Optional(Type.String()),
   transportMode: Type.Optional(
@@ -229,6 +247,16 @@ export const updateShipmentBodySchema = Type.Object({
       Type.Literal('OTHER'),
     ]),
   ),
+});
+
+export const addShipmentEventBodySchema = Type.Object({
+  version: Type.Integer({ minimum: 1 }),
+  eventCode: Type.String({ minLength: 1, maxLength: 80 }),
+  title: Type.String({ minLength: 1, maxLength: 160 }),
+  occurredAt: Type.String({ format: 'date-time' }),
+  locationText: Type.Optional(Type.String({ maxLength: 240 })),
+  providerStatusCode: Type.Optional(Type.String({ maxLength: 120 })),
+  notes: Type.Optional(Type.String({ maxLength: 2000 })),
 });
 
 export const updateShipmentAllocationsBodySchema = Type.Object({
