@@ -715,6 +715,11 @@ export interface CatalogVariantChoiceDto {
   readonly inventoryOnHand?: number | null;
 }
 
+export interface CatalogVariantChoicePageDto {
+  readonly items: readonly CatalogVariantChoiceDto[];
+  readonly pagination: PaginationDto;
+}
+
 export interface CatalogVariantMatrixDto {
   readonly product: {
     readonly id: string;

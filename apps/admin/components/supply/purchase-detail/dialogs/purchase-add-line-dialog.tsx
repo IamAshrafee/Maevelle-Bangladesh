@@ -7,7 +7,6 @@ import {
   Check,
   CheckCircle2,
   ChevronRight,
-  Filter,
   Image as ImageIcon,
   Loader2,
   Minus,
@@ -19,17 +18,11 @@ import {
   X,
   ZoomIn,
 } from 'lucide-react';
-import {
-  type FormEvent,
-  type KeyboardEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogVariantChoiceDto, PurchaseDto } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
+import { useCatalogVariantChoices } from '@/components/supply/use-catalog-variant-choices';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -48,7 +41,6 @@ export interface PurchaseAddLineDialogProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly purchase: PurchaseDto;
-  readonly variants: readonly CatalogVariantChoiceDto[];
   readonly busy: boolean;
   readonly onAddLine: (
     data: { variantId: string; quantity: string; unitPrice: string },
@@ -60,14 +52,10 @@ export function PurchaseAddLineDialog({
   open,
   onOpenChange,
   purchase,
-  variants,
   busy,
   onAddLine,
 }: PurchaseAddLineDialogProps) {
   // Discovery & Filtering state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [stockFilter, setStockFilter] = useState<'ALL' | 'OUT_OF_STOCK' | 'IN_PO'>('ALL');
 
   // Procurement form state
   const [selectedVariantId, setSelectedVariantId] = useState('');
@@ -80,16 +68,17 @@ export function PurchaseAddLineDialog({
   // UI state
   const [transientFeedback, setTransientFeedback] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+  const variantChoices = useCatalogVariantChoices({ open });
+  const searchQuery = variantChoices.query;
+  const setSearchQuery = variantChoices.setQuery;
+  const [selectedVariant, setSelectedVariant] = useState<CatalogVariantChoiceDto>();
 
   // Focus management refs
   const searchInputRef = useRef<HTMLInputElement>(null);
   const quantityInputRef = useRef<HTMLInputElement>(null);
 
   // Active variants filter
-  const activeVariants = useMemo(
-    () => variants.filter((v) => v.status === 'ACTIVE'),
-    [variants],
-  );
+  const activeVariants = variantChoices.items;
 
   // Map of existing variants already on this purchase order
   const poLinesMap = useMemo(() => {
@@ -100,23 +89,6 @@ export function PurchaseAddLineDialog({
     }
     return map;
   }, [purchase.lines]);
-
-  // Distinct category list
-  const categories = useMemo(() => {
-    const set = new Set<string>();
-    for (const v of activeVariants) {
-      if (v.categoryName?.trim()) {
-        set.add(v.categoryName.trim());
-      }
-    }
-    return Array.from(set).sort();
-  }, [activeVariants]);
-
-  // Selected variant snapshot
-  const selectedVariant = useMemo(
-    () => activeVariants.find((v) => v.id === selectedVariantId),
-    [activeVariants, selectedVariantId],
-  );
 
   // Auto-focus search input when dialog opens (on desktop/tablet)
   useEffect(() => {
@@ -132,6 +104,7 @@ export function PurchaseAddLineDialog({
   // Auto-fill price with estimated cost when selecting a variant
   function selectVariant(variant: CatalogVariantChoiceDto) {
     setSelectedVariantId(variant.id);
+    setSelectedVariant(variant);
     if (variant.estimatedCostAmount && Number(variant.estimatedCostAmount) > 0) {
       setUnitPrice(variant.estimatedCostAmount);
     } else if (Number(unitPrice || 0) === 0) {
@@ -148,36 +121,7 @@ export function PurchaseAddLineDialog({
     }, 50);
   }
 
-  // Filtered variants
-  const filteredVariants = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-
-    return activeVariants.filter((item) => {
-      // Category filter
-      if (selectedCategory !== 'ALL' && item.categoryName !== selectedCategory) {
-        return false;
-      }
-
-      // Stock status filter
-      if (stockFilter === 'OUT_OF_STOCK') {
-        const stock = item.inventoryOnHand ?? 0;
-        if (stock > 0) return false;
-      } else if (stockFilter === 'IN_PO') {
-        if (!poLinesMap.has(item.id)) return false;
-      }
-
-      // Query filter
-      if (!q) return true;
-
-      const titleMatch = item.productTitle.toLowerCase().includes(q);
-      const skuMatch = item.sku.toLowerCase().includes(q);
-      const barcodeMatch = Boolean(item.barcode?.toLowerCase().includes(q));
-      const optionsMatch = Boolean(item.optionSummary?.toLowerCase().includes(q));
-      const categoryMatch = Boolean(item.categoryName?.toLowerCase().includes(q));
-
-      return titleMatch || skuMatch || barcodeMatch || optionsMatch || categoryMatch;
-    });
-  }, [activeVariants, searchQuery, selectedCategory, stockFilter, poLinesMap]);
+  const filteredVariants = activeVariants;
 
   // Handle barcode scanner exact hit (sub-second rapid workflow)
   function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -188,9 +132,7 @@ export function PurchaseAddLineDialog({
 
       // Check exact barcode or SKU match
       const exactMatch = activeVariants.find(
-        (v) =>
-          v.sku.toLowerCase() === q ||
-          (v.barcode && v.barcode.toLowerCase() === q),
+        (v) => v.sku.toLowerCase() === q || (v.barcode && v.barcode.toLowerCase() === q),
       );
 
       if (exactMatch) {
@@ -206,6 +148,7 @@ export function PurchaseAddLineDialog({
 
   function resetSelection() {
     setSelectedVariantId('');
+    setSelectedVariant(undefined);
     setQuantity('1');
     setUnitPrice('0');
     setTransientFeedback(null);
@@ -215,8 +158,6 @@ export function PurchaseAddLineDialog({
   function handleFullReset() {
     resetSelection();
     setSearchQuery('');
-    setSelectedCategory('ALL');
-    setStockFilter('ALL');
     setMobileStep('browse');
   }
 
@@ -283,10 +224,16 @@ export function PurchaseAddLineDialog({
                   <DialogTitle className="text-base sm:text-lg font-heading font-semibold text-foreground">
                     Add Purchase Item
                   </DialogTitle>
-                  <Badge variant="outline" className="font-mono text-[11px] sm:text-xs tabular-nums">
+                  <Badge
+                    variant="outline"
+                    className="font-mono text-[11px] sm:text-xs tabular-nums"
+                  >
                     PO #{purchase.id.slice(0, 8)}
                   </Badge>
-                  <Badge variant="secondary" className="font-mono text-[11px] sm:text-xs font-semibold">
+                  <Badge
+                    variant="secondary"
+                    className="font-mono text-[11px] sm:text-xs font-semibold"
+                  >
                     {purchase.currencyCode}
                   </Badge>
                 </div>
@@ -299,7 +246,9 @@ export function PurchaseAddLineDialog({
               {transientFeedback && (
                 <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs text-emerald-700 dark:text-emerald-400 shrink-0">
                   <CheckCircle2 className="size-3.5 shrink-0" />
-                  <span className="font-medium truncate max-w-[200px] sm:max-w-xs">{transientFeedback}</span>
+                  <span className="font-medium truncate max-w-[200px] sm:max-w-xs">
+                    {transientFeedback}
+                  </span>
                 </div>
               )}
             </div>
@@ -353,7 +302,7 @@ export function PurchaseAddLineDialog({
                   <Input
                     ref={searchInputRef}
                     type="text"
-                    placeholder="Search title, SKU, barcode, color, size..."
+                    placeholder="Search title, SKU, barcode, color, size…"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
@@ -376,98 +325,56 @@ export function PurchaseAddLineDialog({
                   )}
                 </div>
 
-                {/* Filter Controls: Category & Stock Filter Chips (Horizontal Scroll on Mobile) */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
-                  {/* Category Pills (Touch scrollable) */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 [scrollbar-width:none] [-ms-overflow-style:none]">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCategory('ALL')}
-                      className={cn(
-                        'h-7 sm:h-6 px-2.5 sm:px-2 rounded-md font-medium transition-colors text-xs shrink-0',
-                        selectedCategory === 'ALL'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted hover:bg-muted/80 text-muted-foreground',
-                      )}
-                    >
-                      All ({activeVariants.length})
-                    </button>
-                    {categories.map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setSelectedCategory(cat)}
-                        className={cn(
-                          'h-7 sm:h-6 px-2.5 sm:px-2 rounded-md transition-colors text-xs shrink-0',
-                          selectedCategory === cat
-                            ? 'bg-primary text-primary-foreground font-medium'
-                            : 'bg-muted hover:bg-muted/80 text-muted-foreground',
-                        )}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Stock Quick Filters */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setStockFilter((prev) => (prev === 'OUT_OF_STOCK' ? 'ALL' : 'OUT_OF_STOCK'))
-                      }
-                      className={cn(
-                        'h-7 sm:h-6 px-2.5 sm:px-2 rounded-md text-[11px] font-medium border transition-colors flex items-center gap-1 shrink-0',
-                        stockFilter === 'OUT_OF_STOCK'
-                          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'
-                          : 'border-border text-muted-foreground hover:bg-muted',
-                      )}
-                    >
-                      <AlertCircle className="size-3" />
-                      <span>Out of Stock</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setStockFilter((prev) => (prev === 'IN_PO' ? 'ALL' : 'IN_PO'))
-                      }
-                      className={cn(
-                        'h-7 sm:h-6 px-2.5 sm:px-2 rounded-md text-[11px] font-medium border transition-colors shrink-0',
-                        stockFilter === 'IN_PO'
-                          ? 'bg-primary-subtle text-primary border-primary'
-                          : 'border-border text-muted-foreground hover:bg-muted',
-                      )}
-                    >
-                      In this PO
-                    </button>
-                  </div>
-                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Search is server-backed across product titles, SKUs, barcodes, colors, and sizes.
+                </p>
               </div>
 
               {/* Scrollable Variant Cards List */}
               <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-2">
-                {filteredVariants.length === 0 ? (
+                {variantChoices.loading && filteredVariants.length === 0 ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex min-h-40 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground"
+                  >
+                    <Loader2 aria-hidden="true" className="size-6 animate-spin text-primary" />
+                    <p className="text-sm">Searching Catalog variants…</p>
+                  </div>
+                ) : variantChoices.error && filteredVariants.length === 0 ? (
+                  <div
+                    role="alert"
+                    className="flex min-h-40 flex-col items-center justify-center gap-3 p-8 text-center text-destructive"
+                  >
+                    <AlertCircle aria-hidden="true" className="size-7" />
+                    <p className="max-w-sm text-sm">{variantChoices.error}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={variantChoices.retry}
+                    >
+                      Retry Catalog search
+                    </Button>
+                  </div>
+                ) : filteredVariants.length === 0 ? (
                   <div className="flex flex-col items-center justify-center p-8 sm:p-12 text-center text-muted-foreground">
                     <Package className="size-8 opacity-40 mb-2" />
-                    <p className="text-sm font-medium">No catalog variants found</p>
+                    <p className="text-sm font-medium">No Catalog variants found</p>
                     <p className="text-xs text-muted-foreground/80 mt-1 max-w-xs">
-                      Try relaxing your search query or reset the category/stock filters.
+                      Try a product title, SKU, barcode, color, or size.
                     </p>
-                    {(searchQuery || selectedCategory !== 'ALL' || stockFilter !== 'ALL') && (
+                    {searchQuery ? (
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         className="mt-3 text-xs"
-                        onClick={() => {
-                          setSearchQuery('');
-                          setSelectedCategory('ALL');
-                          setStockFilter('ALL');
-                        }}
+                        onClick={() => setSearchQuery('')}
                       >
-                        Reset filters
+                        Clear search
                       </Button>
-                    )}
+                    ) : null}
                   </div>
                 ) : (
                   filteredVariants.map((item) => {
@@ -488,7 +395,7 @@ export function PurchaseAddLineDialog({
                           }
                         }}
                         className={cn(
-                          'group flex items-center gap-3 p-2.5 sm:p-3 rounded-xl border text-left cursor-pointer transition-colors active:scale-[0.99]',
+                          'group flex items-center gap-3 p-2.5 sm:p-3 rounded-xl border text-left cursor-pointer transition-colors active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                           isSelected
                             ? 'border-primary bg-primary-subtle/30 ring-1 ring-primary shadow-xs'
                             : 'border-border/70 bg-card hover:border-primary/50 hover:bg-card/90',
@@ -500,6 +407,8 @@ export function PurchaseAddLineDialog({
                             <img
                               src={item.primaryImageUrl}
                               alt={item.productTitle}
+                              width={60}
+                              height={60}
                               className="size-full object-cover"
                               loading="lazy"
                               onError={(e) => {
@@ -557,7 +466,10 @@ export function PurchaseAddLineDialog({
                             )}
 
                             {item.optionSummary && (
-                              <Badge variant="secondary" className="text-[10px] py-0 px-1.5 font-normal">
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] py-0 px-1.5 font-normal"
+                              >
                                 {item.optionSummary}
                               </Badge>
                             )}
@@ -586,7 +498,8 @@ export function PurchaseAddLineDialog({
                           {/* Reference Cost */}
                           {item.estimatedCostAmount && (
                             <span className="text-[10px] sm:text-[11px] font-mono text-muted-foreground hidden sm:inline">
-                              Est: {formatSupplyMoney(item.estimatedCostAmount, purchase.currencyCode)}
+                              Est:{' '}
+                              {formatSupplyMoney(item.estimatedCostAmount, purchase.currencyCode)}
                             </span>
                           )}
 
@@ -622,11 +535,25 @@ export function PurchaseAddLineDialog({
               {/* Bottom List Footer / Count */}
               <div className="px-3 sm:px-4 py-2 border-t bg-card text-[11px] text-muted-foreground flex items-center justify-between shrink-0">
                 <span>
-                  Showing {filteredVariants.length} of {activeVariants.length} variants
+                  Showing {filteredVariants.length} of {variantChoices.totalItems} variants
                 </span>
-                <span className="font-mono">
-                  {purchase.lines.length} items in PO
-                </span>
+                <div className="flex items-center gap-2">
+                  {variantChoices.hasMore ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={variantChoices.loading}
+                      onClick={variantChoices.loadMore}
+                    >
+                      {variantChoices.loading ? (
+                        <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+                      ) : null}
+                      Load more
+                    </Button>
+                  ) : null}
+                  <span className="font-mono">{purchase.lines.length} items in PO</span>
+                </div>
               </div>
             </div>
 
@@ -651,9 +578,7 @@ export function PurchaseAddLineDialog({
                       <ArrowLeft className="size-3.5" />
                       <span>Back to variant list</span>
                     </Button>
-                    <span className="text-[11px] font-mono text-muted-foreground">
-                      Step 2 of 2
-                    </span>
+                    <span className="text-[11px] font-mono text-muted-foreground">Step 2 of 2</span>
                   </div>
 
                   {/* Selected Hero Card */}
@@ -665,6 +590,8 @@ export function PurchaseAddLineDialog({
                           <img
                             src={selectedVariant.primaryImageUrl}
                             alt={selectedVariant.productTitle}
+                            width={72}
+                            height={72}
                             className="size-full object-cover"
                           />
                         ) : (
@@ -694,7 +621,9 @@ export function PurchaseAddLineDialog({
                         </h4>
 
                         <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                          <span className="font-semibold text-foreground">{selectedVariant.sku}</span>
+                          <span className="font-semibold text-foreground">
+                            {selectedVariant.sku}
+                          </span>
                           {selectedVariant.barcode && (
                             <span className="text-[10px] text-muted-foreground">
                               · Barcode: {selectedVariant.barcode}
@@ -770,9 +699,7 @@ export function PurchaseAddLineDialog({
                         size="icon"
                         className="size-10 sm:size-9 shrink-0"
                         disabled={busy}
-                        onClick={() =>
-                          setQuantity((prev) => String(Number(prev || 0) + 1))
-                        }
+                        onClick={() => setQuantity((prev) => String(Number(prev || 0) + 1))}
                       >
                         <Plus className="size-4" />
                       </Button>
@@ -786,9 +713,7 @@ export function PurchaseAddLineDialog({
                           key={preset}
                           type="button"
                           disabled={busy}
-                          onClick={() =>
-                            setQuantity((prev) => String(Number(prev || 0) + preset))
-                          }
+                          onClick={() => setQuantity((prev) => String(Number(prev || 0) + preset))}
                           className="h-7 sm:h-5 px-2.5 sm:px-1.5 rounded-md border border-border bg-muted/40 hover:bg-muted text-xs sm:text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors active:scale-95"
                         >
                           +{preset}
@@ -842,7 +767,8 @@ export function PurchaseAddLineDialog({
                     <div className="flex items-baseline justify-between text-xs text-muted-foreground">
                       <span>Calculation preview:</span>
                       <span className="font-mono">
-                        {quantity || 0} × {formatSupplyMoney(unitPrice || '0', purchase.currencyCode)}
+                        {quantity || 0} ×{' '}
+                        {formatSupplyMoney(unitPrice || '0', purchase.currencyCode)}
                       </span>
                     </div>
                     <div className="flex items-baseline justify-between pt-1 border-t border-border/40">
@@ -861,7 +787,11 @@ export function PurchaseAddLineDialog({
                         disabled={busy || !selectedVariantId || Number(quantity) <= 0}
                         className="h-10 sm:h-9 flex-1"
                       >
-                        {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                        {busy ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Plus className="size-4" />
+                        )}
                         <span>Add item</span>
                       </Button>
 
@@ -878,7 +808,8 @@ export function PurchaseAddLineDialog({
                     </div>
 
                     <p className="text-[11px] text-center text-muted-foreground">
-                      Press <strong>Add & continue</strong> to quickly add multiple items in sequence.
+                      Press <strong>Add & continue</strong> to quickly add multiple items in
+                      sequence.
                     </p>
                   </div>
                 </form>
@@ -892,7 +823,8 @@ export function PurchaseAddLineDialog({
                     No variant selected
                   </h4>
                   <p className="mt-1 text-xs text-muted-foreground max-w-xs leading-relaxed">
-                    Pick a product variant from the catalog on the left to configure quantity and supplier price.
+                    Pick a product variant from the catalog on the left to configure quantity and
+                    supplier price.
                   </p>
 
                   <div className="mt-6 rounded-lg border border-border/60 bg-muted/20 p-3 text-left text-xs space-y-1.5 max-w-xs">
@@ -902,8 +834,11 @@ export function PurchaseAddLineDialog({
                     </p>
                     <ul className="list-disc pl-4 space-y-1 text-muted-foreground text-[11px]">
                       <li>Scan a physical barcode to automatically select and jump to quantity.</li>
-                      <li>Filter by <strong>Out of Stock</strong> to quickly find items that need reordering.</li>
-                      <li>Use <strong>Add & continue</strong> to populate purchase orders without closing the popup.</li>
+                      <li>Search by color or size to find the exact visual variant quickly.</li>
+                      <li>
+                        Use <strong>Add & continue</strong> to populate purchase orders without
+                        closing the popup.
+                      </li>
                     </ul>
                   </div>
                 </div>
@@ -911,7 +846,9 @@ export function PurchaseAddLineDialog({
 
               {/* Bottom Cancel Button */}
               <div className="pt-3 sm:pt-4 border-t mt-4 flex justify-end">
-                <DialogClose render={<Button variant="ghost" size="sm" type="button" disabled={busy} />}>
+                <DialogClose
+                  render={<Button variant="ghost" size="sm" type="button" disabled={busy} />}
+                >
                   Close
                 </DialogClose>
               </div>
@@ -928,12 +865,12 @@ export function PurchaseAddLineDialog({
               <img
                 src={previewImage.url}
                 alt={previewImage.title}
+                width={640}
+                height={640}
                 className="size-full object-contain"
               />
             </div>
-            <p className="text-xs font-mono text-muted-foreground truncate">
-              {previewImage.title}
-            </p>
+            <p className="text-xs font-mono text-muted-foreground truncate">{previewImage.title}</p>
           </DialogContent>
         </Dialog>
       )}

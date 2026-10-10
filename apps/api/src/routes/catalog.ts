@@ -24,6 +24,7 @@ import {
   listStorefrontCatalogProducts,
   listCatalogProductWorkItems,
   listCatalogProducts,
+  listCatalogVariantChoicePage,
   listCatalogVariantChoices,
   listCatalogProductTypes,
   listCatalogColors,
@@ -355,6 +356,39 @@ export function registerCatalogRoutes(
     };
   });
 
+  app.get(
+    '/admin/catalog/variant-choices',
+    {
+      schema: {
+        querystring: Type.Object({
+          q: Type.Optional(Type.String({ maxLength: 200 })),
+          status: Type.Optional(Type.Union([Type.Literal('ACTIVE'), Type.Literal('ARCHIVED')])),
+          page: Type.Optional(Type.Integer({ minimum: 1 })),
+          pageSize: Type.Optional(Type.Integer({ minimum: 10, maximum: 60 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.view');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const query = request.query as {
+        q?: string;
+        status?: 'ACTIVE' | 'ARCHIVED';
+        page?: number;
+        pageSize?: number;
+      };
+      return {
+        data: await listCatalogVariantChoicePage(database.db, {
+          organizationId: context.organizationId,
+          query: query.q,
+          status: query.status,
+          page: query.page,
+          pageSize: query.pageSize,
+        }),
+      };
+    },
+  );
+
   app.put(
     '/admin/catalog/products/:productId/categories',
     {
@@ -565,7 +599,11 @@ export function registerCatalogRoutes(
                       length: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
                       width: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
                       height: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
-                      unit: Type.Union([Type.Literal('MM'), Type.Literal('CM'), Type.Literal('IN')]),
+                      unit: Type.Union([
+                        Type.Literal('MM'),
+                        Type.Literal('CM'),
+                        Type.Literal('IN'),
+                      ]),
                     }),
                     Type.Null(),
                   ]),
@@ -650,7 +688,11 @@ export function registerCatalogRoutes(
                       length: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
                       width: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
                       height: Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' }),
-                      unit: Type.Union([Type.Literal('MM'), Type.Literal('CM'), Type.Literal('IN')]),
+                      unit: Type.Union([
+                        Type.Literal('MM'),
+                        Type.Literal('CM'),
+                        Type.Literal('IN'),
+                      ]),
                     }),
                     Type.Null(),
                   ]),
@@ -745,7 +787,12 @@ export function registerCatalogRoutes(
             organizationId: context.organizationId,
             actorId: context.actorId,
             productId: (request.params as { productId: string }).productId,
-            ...(request.body as { code: string; name: string; position?: number; isVisual?: boolean }),
+            ...(request.body as {
+              code: string;
+              name: string;
+              position?: number;
+              isVisual?: boolean;
+            }),
           }),
         });
       } catch (error) {

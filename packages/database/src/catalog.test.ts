@@ -11,6 +11,7 @@ import {
   getStorefrontCatalogProduct,
   listCatalogCategoryChoices,
   listCatalogProductWorkItems,
+  listCatalogVariantChoicePage,
   moveCatalogCategory,
   publishCatalogProduct,
   replaceCatalogProductContent,
@@ -678,6 +679,57 @@ describe('catalog invariants', () => {
       await getStorefrontCatalogProduct(database.db, fixture.organizationId, handle),
     ).toMatchObject({
       title: 'Private until published',
+    });
+  });
+
+  it('pages operational variant choices and searches option values within the tenant', async () => {
+    const fixture = await catalogFixture();
+    const product = await createCatalogProduct(database.db, {
+      ...fixture,
+      title: 'Image-first knit top',
+      handle: `variant-picker-${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const axis = await sql<{ id: string }>`
+      insert into catalog.product_option_axes (organization_id, product_id, code, name)
+      values (${fixture.organizationId}, ${product.id}, 'color', 'Color') returning id
+    `.execute(database.db);
+    const colors = await sql<{ id: string; display_value: string }>`
+      insert into catalog.product_option_values
+        (organization_id, option_axis_id, code, display_value)
+      values
+        (${fixture.organizationId}, ${axis.rows[0]!.id}, 'sunflower-yellow', 'Sunflower Yellow'),
+        (${fixture.organizationId}, ${axis.rows[0]!.id}, 'rose-pink', 'Rose Pink')
+      returning id, display_value
+    `.execute(database.db);
+    for (const color of colors.rows) {
+      await createCatalogVariant(database.db, {
+        organizationId: fixture.organizationId,
+        productId: product.id,
+        sku: `KNIT-${color.display_value.startsWith('Sunflower') ? 'YELLOW' : 'PINK'}-${crypto.randomUUID().slice(0, 6)}`,
+        optionValueIds: [color.id],
+      });
+    }
+
+    const page = await listCatalogVariantChoicePage(database.db, {
+      organizationId: fixture.organizationId,
+      status: 'ACTIVE',
+      page: 1,
+      pageSize: 10,
+    });
+    expect(page.pagination).toMatchObject({ page: 1, pageSize: 10, totalItems: 2, totalPages: 1 });
+    expect(page.items).toHaveLength(2);
+
+    const searched = await listCatalogVariantChoicePage(database.db, {
+      organizationId: fixture.organizationId,
+      status: 'ACTIVE',
+      query: 'sunflower',
+      page: 1,
+      pageSize: 10,
+    });
+    expect(searched.pagination.totalItems).toBe(1);
+    expect(searched.items[0]).toMatchObject({
+      productTitle: 'Image-first knit top',
+      optionSummary: 'Color: Sunflower Yellow',
     });
   });
 });

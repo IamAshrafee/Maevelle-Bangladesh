@@ -5,7 +5,6 @@ import { ArrowLeft, DollarSign, FileText, Package, Ship } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type {
   ApiEnvelope,
-  CatalogVariantChoiceDto,
   InboundShipmentDto,
   PaginatedResultDto,
   PurchaseDto,
@@ -61,7 +60,6 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
 
   const [purchase, setPurchase] = useState<PurchaseDto>();
   const [shipments, setShipments] = useState<readonly InboundShipmentDto[]>([]);
-  const [variants, setVariants] = useState<readonly CatalogVariantChoiceDto[]>([]);
   const [suppliers, setSuppliers] = useState<readonly SupplierDto[]>([]);
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
   const [invoices, setInvoices] = useState<readonly SupplierInvoice[]>([]);
@@ -96,7 +94,6 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
       const [
         purchaseResult,
         shipmentResult,
-        variantResult,
         expenseResult,
         categoryResult,
         accountResult,
@@ -110,12 +107,6 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
               init,
             )
           : Promise.resolve({ data: [] as readonly InboundShipmentDto[] }),
-        canManage
-          ? supplyRequest<ApiEnvelope<readonly CatalogVariantChoiceDto[]>>(
-              '/admin/catalog/variants',
-              init,
-            )
-          : Promise.resolve({ data: [] as readonly CatalogVariantChoiceDto[] }),
         canViewFinance
           ? supplyRequest<ApiEnvelope<PaginatedResultDto<SupplierInvoice>>>(
               `/admin/finance/expenses?sourceDomain=procurement.purchase&sourceId=${encodeURIComponent(purchaseId)}&pageSize=100`,
@@ -149,7 +140,6 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
 
       setPurchase(purchaseResult.data);
       setShipments(shipmentResult.data);
-      setVariants(variantResult.data);
       setInvoices(
         expenseResult.data.items.filter(
           (invoice) =>
@@ -518,7 +508,6 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           <TabsContent value="items" className="space-y-4 pt-1 outline-none">
             <PurchaseDetailItemsTable
               purchase={purchase}
-              variants={variants}
               canManage={canManage}
               busy={busy}
               onAddLineClick={() => setAddLineOpen(true)}
@@ -581,7 +570,6 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           open={addLineOpen}
           onOpenChange={setAddLineOpen}
           purchase={purchase}
-          variants={variants}
           busy={busy}
           onAddLine={handleAddLine}
         />

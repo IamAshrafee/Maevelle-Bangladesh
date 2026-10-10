@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Edit3, ExternalLink, HelpCircle, Package, PackagePlus, Tag, Trash2 } from 'lucide-react';
-import type { CatalogVariantChoiceDto, PurchaseDto } from '@maevelle/contracts';
+import type { PurchaseDto } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ import type { PurchaseLine } from './types';
 
 export interface PurchaseDetailItemsTableProps {
   readonly purchase: PurchaseDto;
-  readonly variants: readonly CatalogVariantChoiceDto[];
   readonly canManage: boolean;
   readonly busy: boolean;
   readonly onAddLineClick: () => void;
@@ -32,7 +31,6 @@ export interface PurchaseDetailItemsTableProps {
 
 export function PurchaseDetailItemsTable({
   purchase,
-  variants,
   canManage,
   busy,
   onAddLineClick,
@@ -151,9 +149,8 @@ export function PurchaseDetailItemsTable({
               const lineOrdered = Number(line.quantity);
               const lineAllocated = Number(line.allocatedQuantity);
               const lineReceived = Number(line.receivedQuantity);
-              const variantChoice = variants.find((v) => v.id === line.variantId);
-              const optionSummary = line.optionSummary || variantChoice?.optionSummary || '';
-              const imageUrl = line.primaryImageUrl ?? variantChoice?.primaryImageUrl;
+              const optionSummary = line.optionSummary || '';
+              const imageUrl = line.primaryImageUrl;
 
               return (
                 <TableRow key={line.id} className="group">

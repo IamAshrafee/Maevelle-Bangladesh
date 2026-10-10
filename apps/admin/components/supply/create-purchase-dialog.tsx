@@ -21,6 +21,7 @@ import type {
 } from '@maevelle/contracts';
 
 import { PurchaseFormFields } from '@/components/supply/purchase-form-fields';
+import { useCatalogVariantChoices } from '@/components/supply/use-catalog-variant-choices';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -98,9 +99,6 @@ export function CreatePurchaseDialog({
   const [loadedLocations, setLoadedLocations] = useState<readonly WarehouseLocationDto[]>(
     propLocations ?? [],
   );
-  const [loadedVariants, setLoadedVariants] = useState<readonly CatalogVariantChoiceDto[]>(
-    propVariants ?? [],
-  );
   const [referenceLoading, setReferenceLoading] = useState(false);
 
   useEffect(() => {
@@ -110,10 +108,6 @@ export function CreatePurchaseDialog({
   useEffect(() => {
     if (propLocations) setLoadedLocations(propLocations);
   }, [propLocations]);
-
-  useEffect(() => {
-    if (propVariants) setLoadedVariants(propVariants);
-  }, [propVariants]);
 
   useEffect(() => {
     if (!open) return;
@@ -134,14 +128,6 @@ export function CreatePurchaseDialog({
         }).then((res) => setLoadedLocations(res.data)),
       );
     }
-    if (!propVariants || propVariants.length === 0) {
-      tasks.push(
-        supplyRequest<{ data: readonly CatalogVariantChoiceDto[] }>('/admin/catalog/variants', {
-          signal: controller.signal,
-        }).then((res) => setLoadedVariants(res.data)),
-      );
-    }
-
     if (tasks.length === 0) {
       setReferenceLoading(false);
       return () => controller.abort();
@@ -153,17 +139,17 @@ export function CreatePurchaseDialog({
       setReferenceLoading(false);
       if (results.some((result) => result.status === 'rejected')) {
         setError(
-          'Some supplier, warehouse, or Catalog choices could not be loaded. Close and reopen the form to retry.',
+          'Some supplier or warehouse choices could not be loaded. Close and reopen the form to retry.',
         );
       }
     });
 
     return () => controller.abort();
-  }, [open, propSuppliers, propLocations, propVariants]);
+  }, [open, propSuppliers, propLocations]);
 
   const suppliers = loadedSuppliers;
   const locations = loadedLocations;
-  const variants = loadedVariants;
+  const variantChoices = useCatalogVariantChoices({ open, initialItems: propVariants });
 
   // Commercial & Header state
   const [supplierId, setSupplierId] = useState(defaultSupplierId);
@@ -177,9 +163,9 @@ export function CreatePurchaseDialog({
   // Inline Line Items state
   const [lines, setLines] = useState<DraftPurchaseLine[]>([]);
   const [addingVariantId, setAddingVariantId] = useState('');
+  const [addingVariant, setAddingVariant] = useState<CatalogVariantChoiceDto>();
   const [addingQuantity, setAddingQuantity] = useState('1');
   const [addingUnitPrice, setAddingUnitPrice] = useState('0');
-  const [variantFilter, setVariantFilter] = useState('');
 
   // Workflow state
   const [openAfterCreate, setOpenAfterCreate] = useState(true);
@@ -209,27 +195,8 @@ export function CreatePurchaseDialog({
     }
   }, [open, defaultSupplierId, suppliers]);
 
-  const activeVariants = useMemo(
-    () => variants.filter((item) => item.status === 'ACTIVE'),
-    [variants],
-  );
-
-  const filteredVariants = useMemo(() => {
-    if (!variantFilter.trim()) return activeVariants;
-    const q = variantFilter.trim().toLowerCase();
-    return activeVariants.filter(
-      (v) =>
-        v.sku.toLowerCase().includes(q) ||
-        v.productTitle.toLowerCase().includes(q) ||
-        v.optionSummary?.toLowerCase().includes(q),
-    );
-  }, [activeVariants, variantFilter]);
-
-  // Pending variant selection calculation
-  const pendingVariant = useMemo(
-    () => (addingVariantId ? activeVariants.find((v) => v.id === addingVariantId) : undefined),
-    [addingVariantId, activeVariants],
-  );
+  const activeVariants = variantChoices.items;
+  const pendingVariant = addingVariant;
 
   const pendingAmount = useMemo(() => {
     if (!pendingVariant) return 0;
@@ -252,6 +219,7 @@ export function CreatePurchaseDialog({
 
   function selectVariant(variant: CatalogVariantChoiceDto) {
     setAddingVariantId(variant.id);
+    setAddingVariant(variant);
     setAddingUnitPrice(
       variant.estimatedCostAmount && Number(variant.estimatedCostAmount) > 0
         ? variant.estimatedCostAmount
@@ -269,7 +237,7 @@ export function CreatePurchaseDialog({
 
   function handleAddLine() {
     if (!addingVariantId) return;
-    const variant = activeVariants.find((v) => v.id === addingVariantId);
+    const variant = addingVariant;
     if (!variant) return;
 
     const parsedQty = parseFloat(addingQuantity);
@@ -312,6 +280,7 @@ export function CreatePurchaseDialog({
     }
 
     setAddingVariantId('');
+    setAddingVariant(undefined);
     setAddingQuantity('1');
     setAddingUnitPrice('0');
     setError(null);
@@ -342,7 +311,7 @@ export function CreatePurchaseDialog({
     // Auto-commit any currently typed/selected variant in the inputs
     const allLinesToSubmit: DraftPurchaseLine[] = [...lines];
     if (addingVariantId) {
-      const variant = activeVariants.find((v) => v.id === addingVariantId);
+      const variant = addingVariant;
       if (variant) {
         const parsedQty = parseFloat(addingQuantity);
         const parsedPrice = parseFloat(addingUnitPrice);
@@ -454,7 +423,7 @@ export function CreatePurchaseDialog({
                 className="flex items-center gap-2 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground"
               >
                 <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-                <span>Loading suppliers, warehouses, and Catalog variants…</span>
+                <span>Loading suppliers and warehouses…</span>
               </div>
             ) : null}
 
@@ -511,16 +480,16 @@ export function CreatePurchaseDialog({
                 </FieldLabel>
                 <Input
                   id="variant-search"
-                  value={variantFilter}
-                  onChange={(event) => setVariantFilter(event.target.value)}
+                  value={variantChoices.query}
+                  onChange={(event) => variantChoices.setQuery(event.target.value)}
                   placeholder="Search title, SKU, color, or size…"
-                  disabled={saving || referenceLoading || !activeVariants.length}
+                  disabled={saving || referenceLoading}
                 />
               </Field>
 
               <div className="mt-3 grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                {filteredVariants.length ? (
-                  filteredVariants.map((item) => {
+                {activeVariants.length ? (
+                  activeVariants.map((item) => {
                     const isSelected = addingVariantId === item.id;
                     return (
                       <button
@@ -564,12 +533,43 @@ export function CreatePurchaseDialog({
                   })
                 ) : (
                   <div className="col-span-full rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
-                    {activeVariants.length
-                      ? 'No variants match this search.'
-                      : 'No active catalog variants are available.'}
+                    {variantChoices.loading
+                      ? 'Searching Catalog variants…'
+                      : variantChoices.query
+                        ? 'No variants match this search.'
+                        : 'No active Catalog variants are available.'}
                   </div>
                 )}
               </div>
+
+              {variantChoices.error ? (
+                <div
+                  role="alert"
+                  className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive"
+                >
+                  <span>{variantChoices.error}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={variantChoices.retry}>
+                    Retry
+                  </Button>
+                </div>
+              ) : null}
+
+              {variantChoices.hasMore ? (
+                <div className="mt-3 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={variantChoices.loading}
+                    onClick={variantChoices.loadMore}
+                  >
+                    {variantChoices.loading ? (
+                      <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                    ) : null}
+                    Load more variants ({activeVariants.length} of {variantChoices.totalItems})
+                  </Button>
+                </div>
+              ) : null}
 
               <div className="mt-3 grid grid-cols-1 items-end gap-3 sm:grid-cols-6">
                 <div className="sm:col-span-2">
