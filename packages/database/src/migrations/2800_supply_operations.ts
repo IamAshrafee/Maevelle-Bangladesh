@@ -13,6 +13,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       add column country_code text check (country_code is null or country_code ~ '^[A-Z]{2}$'),
       add column preferred_currency_code text check (preferred_currency_code is null or preferred_currency_code in ('BDT', 'CNY', 'USD')),
       add column payment_terms text,
+      add column default_advance_percentage numeric(7,4)
+        check (default_advance_percentage is null or (default_advance_percentage >= 0 and default_advance_percentage <= 100)),
+      add column balance_due_event text
+        check (balance_due_event is null or balance_due_event in ('BEFORE_DISPATCH', 'CHINA_WAREHOUSE_RECEIPT', 'BANGLADESH_WAREHOUSE_RECEIPT', 'DOORSTEP_DELIVERY', 'NET_TERMS', 'CUSTOM')),
+      add column service_scope text[] not null default '{}'
+        check (service_scope <@ array['SOURCING','PURCHASING','CHINA_LOCAL_DELIVERY','INTERNATIONAL_FREIGHT','IMPORT_CLEARANCE','BANGLADESH_FINAL_MILE']::text[]),
       add column lead_time_days integer check (lead_time_days is null or lead_time_days >= 0),
       add column website_url text;
 
@@ -27,6 +33,17 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       add column if not exists closed_at timestamptz,
       add column if not exists closed_by_actor_id uuid,
       add column if not exists cancelled_at timestamptz;
+    alter table procurement.purchases
+      add column supplier_payment_terms_snapshot text,
+      add column supplier_advance_percentage_snapshot numeric(7,4),
+      add column supplier_balance_due_event_snapshot text,
+      add column supplier_service_scope_snapshot text[] not null default '{}',
+      add constraint purchases_supplier_advance_snapshot_check
+        check (supplier_advance_percentage_snapshot is null or (supplier_advance_percentage_snapshot >= 0 and supplier_advance_percentage_snapshot <= 100)),
+      add constraint purchases_supplier_due_event_snapshot_check
+        check (supplier_balance_due_event_snapshot is null or supplier_balance_due_event_snapshot in ('BEFORE_DISPATCH', 'CHINA_WAREHOUSE_RECEIPT', 'BANGLADESH_WAREHOUSE_RECEIPT', 'DOORSTEP_DELIVERY', 'NET_TERMS', 'CUSTOM')),
+      add constraint purchases_supplier_scope_snapshot_check
+        check (supplier_service_scope_snapshot <@ array['SOURCING','PURCHASING','CHINA_LOCAL_DELIVERY','INTERNATIONAL_FREIGHT','IMPORT_CLEARANCE','BANGLADESH_FINAL_MILE']::text[]);
 
     create table if not exists procurement.purchase_adjustments (
       id uuid primary key default uuidv7(),

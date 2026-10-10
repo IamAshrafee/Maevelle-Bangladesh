@@ -1756,6 +1756,20 @@ export interface InventoryReservationDto {
 export type SupplierStatusDto = 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'ARCHIVED';
 export type SupplierTypeDto =
   'MANUFACTURER' | 'WHOLESALER' | 'DISTRIBUTOR' | 'AGENT' | 'LOCAL_VENDOR' | 'OTHER';
+export type SupplierBalanceDueEventDto =
+  | 'BEFORE_DISPATCH'
+  | 'CHINA_WAREHOUSE_RECEIPT'
+  | 'BANGLADESH_WAREHOUSE_RECEIPT'
+  | 'DOORSTEP_DELIVERY'
+  | 'NET_TERMS'
+  | 'CUSTOM';
+export type SupplierServiceScopeDto =
+  | 'SOURCING'
+  | 'PURCHASING'
+  | 'CHINA_LOCAL_DELIVERY'
+  | 'INTERNATIONAL_FREIGHT'
+  | 'IMPORT_CLEARANCE'
+  | 'BANGLADESH_FINAL_MILE';
 
 export interface SupplierDto {
   readonly id: string;
@@ -1766,6 +1780,9 @@ export interface SupplierDto {
   readonly countryCode?: string;
   readonly preferredCurrencyCode?: 'BDT' | 'CNY' | 'USD';
   readonly paymentTerms?: string;
+  readonly defaultAdvancePercentage?: string;
+  readonly balanceDueEvent?: SupplierBalanceDueEventDto;
+  readonly serviceScope: readonly SupplierServiceScopeDto[];
   readonly leadTimeDays?: number;
   readonly websiteUrl?: string;
   readonly contactName?: string;
@@ -1794,6 +1811,10 @@ export interface PurchaseDto {
   readonly cancelledAt?: string;
   readonly createdAt: string;
   readonly placedAt?: string;
+  readonly supplierPaymentTermsSnapshot?: string;
+  readonly supplierAdvancePercentageSnapshot?: string;
+  readonly supplierBalanceDueEventSnapshot?: SupplierBalanceDueEventDto;
+  readonly supplierServiceScopeSnapshot: readonly SupplierServiceScopeDto[];
   readonly grossMerchandiseTotal: string;
   readonly discountTotal: string;
   readonly netMerchandiseTotal: string;

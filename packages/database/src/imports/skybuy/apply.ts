@@ -263,8 +263,9 @@ async function resolveSupplier(
       name: string;
       status: SupplierView['status'];
       supplier_type: SupplierView['supplierType'];
+      service_scope: SupplierView['serviceScope'];
       version: string;
-    }>`select id::text, code, name, status, supplier_type, version::text
+    }>`select id::text, code, name, status, supplier_type, service_scope, version::text
       from procurement.suppliers
       where organization_id=${input.organizationId} and id=${linkedId}::uuid`.execute(db);
     const row = existing.rows[0];
@@ -275,6 +276,7 @@ async function resolveSupplier(
       name: row.name,
       status: row.status,
       supplierType: row.supplier_type,
+      serviceScope: row.service_scope,
       version: Number(row.version),
     };
   }
@@ -293,6 +295,16 @@ async function resolveSupplier(
           countryCode: 'BD',
           preferredCurrencyCode: 'BDT',
           paymentTerms: '70% advance; balance and actual freight/customs on delivery',
+          defaultAdvancePercentage: '70',
+          balanceDueEvent: 'DOORSTEP_DELIVERY',
+          serviceScope: [
+            'SOURCING',
+            'PURCHASING',
+            'CHINA_LOCAL_DELIVERY',
+            'INTERNATIONAL_FREIGHT',
+            'IMPORT_CLEARANCE',
+            'BANGLADESH_FINAL_MILE',
+          ],
           websiteUrl: 'https://skybuybd.com',
           notes: 'China sourcing, consolidation, customs, and door-to-door delivery intermediary.',
         })
@@ -311,8 +323,9 @@ async function resolveSupplier(
     name: string;
     status: SupplierView['status'];
     supplier_type: SupplierView['supplierType'];
+    service_scope: SupplierView['serviceScope'];
     version: string;
-  }>`select id::text, code, name, status, supplier_type, version::text
+  }>`select id::text, code, name, status, supplier_type, service_scope, version::text
     from procurement.suppliers where id=${supplierId}::uuid`.execute(db);
   const row = created.rows[0]!;
   return {
@@ -321,6 +334,7 @@ async function resolveSupplier(
     name: row.name,
     status: row.status,
     supplierType: row.supplier_type,
+    serviceScope: row.service_scope,
     version: Number(row.version),
   };
 }

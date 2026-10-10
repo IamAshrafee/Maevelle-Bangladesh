@@ -1,6 +1,28 @@
 import { Type } from 'typebox';
 import { conditionSchema, currencySchema, quantitySchema, supplierTypeSchema } from './common.js';
 
+const supplierBalanceDueEventSchema = Type.Union([
+  Type.Literal('BEFORE_DISPATCH'),
+  Type.Literal('CHINA_WAREHOUSE_RECEIPT'),
+  Type.Literal('BANGLADESH_WAREHOUSE_RECEIPT'),
+  Type.Literal('DOORSTEP_DELIVERY'),
+  Type.Literal('NET_TERMS'),
+  Type.Literal('CUSTOM'),
+]);
+
+const supplierServiceScopeSchema = Type.Union([
+  Type.Literal('SOURCING'),
+  Type.Literal('PURCHASING'),
+  Type.Literal('CHINA_LOCAL_DELIVERY'),
+  Type.Literal('INTERNATIONAL_FREIGHT'),
+  Type.Literal('IMPORT_CLEARANCE'),
+  Type.Literal('BANGLADESH_FINAL_MILE'),
+]);
+
+const advancePercentageSchema = Type.String({
+  pattern: '^(?:100(?:\\.0{1,4})?|\\d{1,2}(?:\\.\\d{1,4})?)$',
+});
+
 // Query schemas
 export const listSuppliersQuerySchema = Type.Object({
   page: Type.Optional(Type.String()),
@@ -97,6 +119,11 @@ export const createSupplierBodySchema = Type.Object({
   countryCode: Type.Optional(Type.String({ minLength: 2, maxLength: 2 })),
   preferredCurrencyCode: Type.Optional(currencySchema),
   paymentTerms: Type.Optional(Type.String()),
+  defaultAdvancePercentage: Type.Optional(advancePercentageSchema),
+  balanceDueEvent: Type.Optional(supplierBalanceDueEventSchema),
+  serviceScope: Type.Optional(
+    Type.Array(supplierServiceScopeSchema, { maxItems: 6, uniqueItems: true }),
+  ),
   leadTimeDays: Type.Optional(Type.Integer({ minimum: 0 })),
   websiteUrl: Type.Optional(Type.String()),
 });
@@ -118,6 +145,11 @@ export const updateSupplierBodySchema = Type.Object({
   ),
   preferredCurrencyCode: Type.Optional(Type.Union([currencySchema, Type.Null()])),
   paymentTerms: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  defaultAdvancePercentage: Type.Optional(Type.Union([advancePercentageSchema, Type.Null()])),
+  balanceDueEvent: Type.Optional(Type.Union([supplierBalanceDueEventSchema, Type.Null()])),
+  serviceScope: Type.Optional(
+    Type.Array(supplierServiceScopeSchema, { maxItems: 6, uniqueItems: true }),
+  ),
   leadTimeDays: Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
   websiteUrl: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   contactName: Type.Optional(Type.Union([Type.String(), Type.Null()])),

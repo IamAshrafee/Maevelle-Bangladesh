@@ -17,6 +17,7 @@ import { DetailMetric, DetailSection, DetailSkeleton } from '@/components/supply
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { formatSupplyDate, formatSupplyMoney, supplyRequest } from '@/lib/supply/api';
 import { nextPurchaseAction, purchaseWorkflowStatus } from '@/lib/supply/status';
 import type { PagedEnvelope } from '@/lib/supply/types';
@@ -27,6 +28,24 @@ type SupplierInvoice = {
   outstanding: string;
   source_domain: string | null;
   source_id: string | null;
+};
+
+const SUPPLIER_SCOPE_LABELS: Record<SupplierDto['serviceScope'][number], string> = {
+  SOURCING: 'Product sourcing',
+  PURCHASING: 'Supplier purchasing',
+  CHINA_LOCAL_DELIVERY: 'China local delivery',
+  INTERNATIONAL_FREIGHT: 'International freight',
+  IMPORT_CLEARANCE: 'Import clearance',
+  BANGLADESH_FINAL_MILE: 'Bangladesh final mile',
+};
+
+const BALANCE_DUE_LABELS: Record<NonNullable<SupplierDto['balanceDueEvent']>, string> = {
+  BEFORE_DISPATCH: 'Before supplier dispatch',
+  CHINA_WAREHOUSE_RECEIPT: 'At China warehouse receipt',
+  BANGLADESH_WAREHOUSE_RECEIPT: 'At Bangladesh warehouse receipt',
+  DOORSTEP_DELIVERY: 'At doorstep delivery',
+  NET_TERMS: 'On agreed net terms',
+  CUSTOM: 'Custom agreed event',
 };
 
 export function SupplierDetail({ supplierId }: { supplierId: string }) {
@@ -190,6 +209,9 @@ export function SupplierDetail({ supplierId }: { supplierId: string }) {
                 ? undefined
                 : `${supplier.leadTimeDays} day lead time`,
               supplier.paymentTerms,
+              supplier.defaultAdvancePercentage
+                ? `${supplier.defaultAdvancePercentage}% advance`
+                : undefined,
             ]
               .filter(Boolean)
               .join(' · ') || 'Terms not set'
@@ -221,6 +243,36 @@ export function SupplierDetail({ supplierId }: { supplierId: string }) {
                   )}
                 </dd>
               </div>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <dt className="text-xs text-muted-foreground">Commercial policy</dt>
+              <dd className="mt-1 font-medium">
+                {supplier.defaultAdvancePercentage
+                  ? `${supplier.defaultAdvancePercentage}% merchandise advance`
+                  : 'No default advance set'}
+              </dd>
+              <dd className="text-xs text-muted-foreground">
+                {supplier.balanceDueEvent
+                  ? `Balance due: ${BALANCE_DUE_LABELS[supplier.balanceDueEvent]}`
+                  : 'Balance due event not specified'}
+              </dd>
+              {supplier.paymentTerms ? (
+                <dd className="mt-2 text-xs text-muted-foreground">{supplier.paymentTerms}</dd>
+              ) : null}
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Services provided</dt>
+              <dd className="mt-2 flex flex-wrap gap-1.5">
+                {supplier.serviceScope.length ? (
+                  supplier.serviceScope.map((scope) => (
+                    <Badge key={scope} variant="secondary">
+                      {SUPPLIER_SCOPE_LABELS[scope]}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-sm">No service scope recorded</span>
+                )}
+              </dd>
             </div>
             <div className="flex gap-3">
               <Phone className="mt-0.5 size-4 text-muted-foreground" />

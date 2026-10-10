@@ -2,9 +2,17 @@
 
 import { type FormEvent, useEffect, useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import type { ApiEnvelope, SupplierDto, SupplierStatusDto, SupplierTypeDto } from '@maevelle/contracts';
+import type {
+  ApiEnvelope,
+  SupplierBalanceDueEventDto,
+  SupplierDto,
+  SupplierServiceScopeDto,
+  SupplierStatusDto,
+  SupplierTypeDto,
+} from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogClose,
@@ -43,12 +51,25 @@ const SUPPLIER_STATUSES: { value: SupplierStatusDto; label: string }[] = [
   { value: 'ARCHIVED', label: 'Archived' },
 ];
 
-export function SupplierDialog({
-  open,
-  onOpenChange,
-  supplier,
-  onSuccess,
-}: SupplierDialogProps) {
+const BALANCE_DUE_EVENTS: { value: SupplierBalanceDueEventDto; label: string }[] = [
+  { value: 'BEFORE_DISPATCH', label: 'Before supplier dispatch' },
+  { value: 'CHINA_WAREHOUSE_RECEIPT', label: 'At China warehouse receipt' },
+  { value: 'BANGLADESH_WAREHOUSE_RECEIPT', label: 'At Bangladesh warehouse receipt' },
+  { value: 'DOORSTEP_DELIVERY', label: 'At doorstep delivery' },
+  { value: 'NET_TERMS', label: 'On agreed net terms' },
+  { value: 'CUSTOM', label: 'Custom event (describe below)' },
+];
+
+const SERVICE_SCOPES: { value: SupplierServiceScopeDto; label: string }[] = [
+  { value: 'SOURCING', label: 'Product sourcing' },
+  { value: 'PURCHASING', label: 'Supplier purchasing' },
+  { value: 'CHINA_LOCAL_DELIVERY', label: 'China local delivery' },
+  { value: 'INTERNATIONAL_FREIGHT', label: 'International freight' },
+  { value: 'IMPORT_CLEARANCE', label: 'Import & customs clearance' },
+  { value: 'BANGLADESH_FINAL_MILE', label: 'Bangladesh final-mile delivery' },
+];
+
+export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: SupplierDialogProps) {
   const isEditing = Boolean(supplier);
 
   const [name, setName] = useState('');
@@ -56,9 +77,14 @@ export function SupplierDialog({
   const [status, setStatus] = useState<SupplierStatusDto>('ACTIVE');
   const [supplierType, setSupplierType] = useState<SupplierTypeDto>('MANUFACTURER');
   const [countryCode, setCountryCode] = useState('CN');
-  const [preferredCurrencyCode, setPreferredCurrencyCode] = useState<'BDT' | 'CNY' | 'USD' | ''>('CNY');
+  const [preferredCurrencyCode, setPreferredCurrencyCode] = useState<'BDT' | 'CNY' | 'USD' | ''>(
+    'CNY',
+  );
   const [leadTimeDays, setLeadTimeDays] = useState<string>('14');
   const [paymentTerms, setPaymentTerms] = useState('');
+  const [defaultAdvancePercentage, setDefaultAdvancePercentage] = useState('');
+  const [balanceDueEvent, setBalanceDueEvent] = useState<SupplierBalanceDueEventDto | ''>('');
+  const [serviceScope, setServiceScope] = useState<readonly SupplierServiceScopeDto[]>([]);
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -80,6 +106,9 @@ export function SupplierDialog({
         setPreferredCurrencyCode(supplier.preferredCurrencyCode ?? '');
         setLeadTimeDays(supplier.leadTimeDays !== undefined ? String(supplier.leadTimeDays) : '');
         setPaymentTerms(supplier.paymentTerms ?? '');
+        setDefaultAdvancePercentage(supplier.defaultAdvancePercentage ?? '');
+        setBalanceDueEvent(supplier.balanceDueEvent ?? '');
+        setServiceScope(supplier.serviceScope);
         setWebsiteUrl(supplier.websiteUrl ?? '');
         setContactName(supplier.contactName ?? '');
         setContactEmail(supplier.contactEmail ?? '');
@@ -94,6 +123,9 @@ export function SupplierDialog({
         setPreferredCurrencyCode('CNY');
         setLeadTimeDays('14');
         setPaymentTerms('30% deposit, 70% before dispatch');
+        setDefaultAdvancePercentage('30');
+        setBalanceDueEvent('BEFORE_DISPATCH');
+        setServiceScope(['PURCHASING']);
         setWebsiteUrl('');
         setContactName('');
         setContactEmail('');
@@ -102,6 +134,24 @@ export function SupplierDialog({
       }
     }
   }, [open, supplier]);
+
+  function applyIntermediaryPreset() {
+    setSupplierType('AGENT');
+    setCountryCode('BD');
+    setPreferredCurrencyCode('BDT');
+    setDefaultAdvancePercentage('70');
+    setBalanceDueEvent('DOORSTEP_DELIVERY');
+    setServiceScope(SERVICE_SCOPES.map((scope) => scope.value));
+    setPaymentTerms(
+      '70% merchandise advance; remaining merchandise and logistics charges due after delivery.',
+    );
+  }
+
+  function toggleServiceScope(value: SupplierServiceScopeDto, checked: boolean) {
+    setServiceScope((current) =>
+      checked ? [...new Set([...current, value])] : current.filter((scope) => scope !== value),
+    );
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -125,6 +175,9 @@ export function SupplierDialog({
       preferredCurrencyCode: preferredCurrencyCode || undefined,
       leadTimeDays: leadTimeDays ? Math.max(0, parseInt(leadTimeDays, 10)) : undefined,
       paymentTerms: paymentTerms.trim() || undefined,
+      defaultAdvancePercentage: defaultAdvancePercentage || undefined,
+      balanceDueEvent: balanceDueEvent || undefined,
+      serviceScope,
       websiteUrl: websiteUrl.trim() || undefined,
       contactName: contactName.trim() || undefined,
       contactEmail: contactEmail.trim() || undefined,
@@ -182,6 +235,20 @@ export function SupplierDialog({
             </div>
           ) : null}
 
+          {!isEditing ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-primary/25 bg-primary-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">Using a sourcing and import intermediary?</p>
+                <p className="text-xs text-muted-foreground">
+                  Apply an editable SkyBuy-style payment and end-to-end service setup.
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={applyIntermediaryPreset}>
+                Apply intermediary preset
+              </Button>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="supplier-name">Supplier Name *</FieldLabel>
@@ -209,7 +276,9 @@ export function SupplierDialog({
               {isEditing ? (
                 <FieldDescription>Supplier code is permanent once assigned.</FieldDescription>
               ) : (
-                <FieldDescription>Unique identifier used across POs and shipments.</FieldDescription>
+                <FieldDescription>
+                  Unique identifier used across POs and shipments.
+                </FieldDescription>
               )}
             </Field>
           </div>
@@ -317,6 +386,72 @@ export function SupplierDialog({
               placeholder="e.g. Net 30, or 30% deposit, 70% before dispatch"
               disabled={saving}
             />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="supplier-advance">Default Advance (%)</FieldLabel>
+              <Input
+                id="supplier-advance"
+                inputMode="decimal"
+                value={defaultAdvancePercentage}
+                onChange={(event) => setDefaultAdvancePercentage(event.target.value)}
+                placeholder="70"
+                pattern="^(?:100(?:\.0{1,4})?|\d{1,2}(?:\.\d{1,4})?)$"
+                disabled={saving}
+                className="font-mono tabular-nums"
+              />
+              <FieldDescription>
+                Planning default only; Finance records actual payments.
+              </FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="supplier-balance-event">Balance Due Event</FieldLabel>
+              <NativeSelect
+                id="supplier-balance-event"
+                value={balanceDueEvent}
+                onChange={(event) =>
+                  setBalanceDueEvent(event.target.value as SupplierBalanceDueEventDto | '')
+                }
+                disabled={saving}
+                className="w-full"
+              >
+                <NativeSelectOption value="">Not specified</NativeSelectOption>
+                {BALANCE_DUE_EVENTS.map((event) => (
+                  <NativeSelectOption key={event.value} value={event.value}>
+                    {event.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+          </div>
+
+          <Field>
+            <FieldLabel>Services Provided</FieldLabel>
+            <div className="grid gap-2 rounded-lg border bg-card p-3 sm:grid-cols-2">
+              {SERVICE_SCOPES.map((scope) => {
+                const checked = serviceScope.includes(scope.value);
+                return (
+                  <label
+                    key={scope.value}
+                    className="flex min-h-10 cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(nextChecked) =>
+                        toggleServiceScope(scope.value, nextChecked === true)
+                      }
+                      disabled={saving}
+                    />
+                    <span>{scope.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <FieldDescription>
+              Defines which costs and logistics evidence this supplier can legitimately provide.
+            </FieldDescription>
           </Field>
 
           <div className="rounded-lg border bg-muted/30 p-3">

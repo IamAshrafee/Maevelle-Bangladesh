@@ -22,6 +22,29 @@ export type ShipmentStatus = 'PLANNED' | 'IN_TRANSIT' | 'ARRIVED' | 'CANCELLED';
 export type ReceivingStatus = 'NOT_RECEIVED' | 'PARTIALLY_RECEIVED' | 'RECEIVED';
 export type InboundReceiptStatus = 'POSTED' | 'REVERSED';
 export type PurchaseDiscountCalculationMethod = 'PERCENTAGE' | 'FIXED_AMOUNT';
+export type SupplierBalanceDueEvent =
+  | 'BEFORE_DISPATCH'
+  | 'CHINA_WAREHOUSE_RECEIPT'
+  | 'BANGLADESH_WAREHOUSE_RECEIPT'
+  | 'DOORSTEP_DELIVERY'
+  | 'NET_TERMS'
+  | 'CUSTOM';
+export type SupplierServiceScope =
+  | 'SOURCING'
+  | 'PURCHASING'
+  | 'CHINA_LOCAL_DELIVERY'
+  | 'INTERNATIONAL_FREIGHT'
+  | 'IMPORT_CLEARANCE'
+  | 'BANGLADESH_FINAL_MILE';
+
+const SUPPLIER_SERVICE_SCOPES: readonly SupplierServiceScope[] = [
+  'SOURCING',
+  'PURCHASING',
+  'CHINA_LOCAL_DELIVERY',
+  'INTERNATIONAL_FREIGHT',
+  'IMPORT_CLEARANCE',
+  'BANGLADESH_FINAL_MILE',
+];
 
 export interface PurchaseDiscountView {
   readonly id: string;
@@ -61,6 +84,9 @@ export interface SupplierView {
   readonly countryCode?: string;
   readonly preferredCurrencyCode?: PurchaseView['currencyCode'];
   readonly paymentTerms?: string;
+  readonly defaultAdvancePercentage?: string;
+  readonly balanceDueEvent?: SupplierBalanceDueEvent;
+  readonly serviceScope: readonly SupplierServiceScope[];
   readonly leadTimeDays?: number;
   readonly websiteUrl?: string;
   readonly notes?: string;
@@ -85,6 +111,10 @@ export interface PurchaseView {
   readonly notes?: string;
   readonly createdAt: string;
   readonly placedAt?: string;
+  readonly supplierPaymentTermsSnapshot?: string;
+  readonly supplierAdvancePercentageSnapshot?: string;
+  readonly supplierBalanceDueEventSnapshot?: SupplierBalanceDueEvent;
+  readonly supplierServiceScopeSnapshot: readonly SupplierServiceScope[];
   readonly closedAt?: string;
   readonly closedByActorId?: string;
   readonly closeReason?: string;
@@ -467,6 +497,9 @@ function mapSupplier(row: {
   country_code: string | null;
   preferred_currency_code: PurchaseView['currencyCode'] | null;
   payment_terms: string | null;
+  default_advance_percentage: string | null;
+  balance_due_event: SupplierBalanceDueEvent | null;
+  service_scope: SupplierServiceScope[];
   lead_time_days: number | null;
   website_url: string | null;
   notes: string | null;
@@ -481,6 +514,11 @@ function mapSupplier(row: {
     ...(row.country_code ? { countryCode: row.country_code } : {}),
     ...(row.preferred_currency_code ? { preferredCurrencyCode: row.preferred_currency_code } : {}),
     ...(row.payment_terms ? { paymentTerms: row.payment_terms } : {}),
+    ...(row.default_advance_percentage
+      ? { defaultAdvancePercentage: row.default_advance_percentage }
+      : {}),
+    ...(row.balance_due_event ? { balanceDueEvent: row.balance_due_event } : {}),
+    serviceScope: row.service_scope,
     ...(row.lead_time_days !== null ? { leadTimeDays: row.lead_time_days } : {}),
     ...(row.website_url ? { websiteUrl: row.website_url } : {}),
     ...(row.notes ? { notes: row.notes } : {}),
@@ -489,6 +527,35 @@ function mapSupplier(row: {
     ...(row.contact_phone ? { contactPhone: row.contact_phone } : {}),
     version: Number(row.version),
   };
+}
+
+function validateSupplierPolicy(input: {
+  defaultAdvancePercentage?: string | null;
+  serviceScope?: readonly SupplierServiceScope[];
+}): void {
+  if (
+    input.defaultAdvancePercentage !== undefined &&
+    input.defaultAdvancePercentage !== null &&
+    (!/^\d{1,3}(?:\.\d{1,4})?$/.test(input.defaultAdvancePercentage) ||
+      Number(input.defaultAdvancePercentage) > 100)
+  ) {
+    throw new ProcurementDomainError(
+      'VALIDATION_FAILED',
+      'Default advance percentage must be between 0 and 100 with at most four decimals.',
+    );
+  }
+  if (input.serviceScope) {
+    const uniqueScopes = new Set(input.serviceScope);
+    if (
+      uniqueScopes.size !== input.serviceScope.length ||
+      input.serviceScope.some((scope) => !SUPPLIER_SERVICE_SCOPES.includes(scope))
+    ) {
+      throw new ProcurementDomainError(
+        'VALIDATION_FAILED',
+        'Supplier service scope contains duplicate or unsupported values.',
+      );
+    }
+  }
 }
 
 export async function createSupplier(
@@ -506,6 +573,9 @@ export async function createSupplier(
     countryCode?: string;
     preferredCurrencyCode?: PurchaseView['currencyCode'];
     paymentTerms?: string;
+    defaultAdvancePercentage?: string;
+    balanceDueEvent?: SupplierBalanceDueEvent;
+    serviceScope?: readonly SupplierServiceScope[];
     leadTimeDays?: number;
     websiteUrl?: string;
   },
@@ -513,6 +583,7 @@ export async function createSupplier(
   if (!input.name.trim()) {
     throw new ProcurementDomainError('VALIDATION_FAILED', 'Supplier name is required.');
   }
+  validateSupplierPolicy(input);
   return db.transaction().execute(async (transaction) => {
     let code = input.code?.trim().toUpperCase();
     if (!code) {
@@ -537,21 +608,28 @@ export async function createSupplier(
       country_code: string | null;
       preferred_currency_code: PurchaseView['currencyCode'] | null;
       payment_terms: string | null;
+      default_advance_percentage: string | null;
+      balance_due_event: SupplierBalanceDueEvent | null;
+      service_scope: SupplierServiceScope[];
       lead_time_days: number | null;
       website_url: string | null;
       notes: string | null;
       version: string;
     }>`insert into procurement.suppliers (
         organization_id, code, name, contact_name, contact_email, contact_phone, notes,
-        supplier_type, country_code, preferred_currency_code, payment_terms, lead_time_days, website_url
+        supplier_type, country_code, preferred_currency_code, payment_terms,
+        default_advance_percentage, balance_due_event, service_scope, lead_time_days, website_url
       ) values (
         ${input.organizationId}, ${code}, ${input.name.trim()},
         ${input.contactName?.trim() || null}, ${input.contactEmail?.trim() || null}, ${input.contactPhone?.trim() || null},
         ${input.notes?.trim() || null}, ${input.supplierType ?? 'OTHER'},
         ${input.countryCode?.trim().toUpperCase() || null}, ${input.preferredCurrencyCode ?? null},
-        ${input.paymentTerms?.trim() || null}, ${input.leadTimeDays ?? null}, ${input.websiteUrl?.trim() || null}
+        ${input.paymentTerms?.trim() || null}, ${input.defaultAdvancePercentage ?? null}::numeric,
+        ${input.balanceDueEvent ?? null}, ${input.serviceScope ?? []}::text[],
+        ${input.leadTimeDays ?? null}, ${input.websiteUrl?.trim() || null}
       ) returning id, code, name, status, contact_name, contact_email, contact_phone, supplier_type,
-        country_code, preferred_currency_code, payment_terms, lead_time_days, website_url, notes, version::text`.execute(
+        country_code, preferred_currency_code, payment_terms, default_advance_percentage::text,
+        balance_due_event, service_scope, lead_time_days, website_url, notes, version::text`.execute(
       transaction,
     );
     const supplier = mapSupplier(result.rows[0]!);
@@ -614,12 +692,16 @@ export async function listSuppliers(
       country_code: string | null;
       preferred_currency_code: PurchaseView['currencyCode'] | null;
       payment_terms: string | null;
+      default_advance_percentage: string | null;
+      balance_due_event: SupplierBalanceDueEvent | null;
+      service_scope: SupplierServiceScope[];
       lead_time_days: number | null;
       website_url: string | null;
       notes: string | null;
       version: string;
     }>`select id, code, name, status, contact_name, contact_email, contact_phone, supplier_type,
-        country_code, preferred_currency_code, payment_terms, lead_time_days, website_url, notes, version::text
+        country_code, preferred_currency_code, payment_terms, default_advance_percentage::text,
+        balance_due_event, service_scope, lead_time_days, website_url, notes, version::text
       from procurement.suppliers
       where ${where}
       order by ${orderClause}
@@ -649,11 +731,17 @@ export async function getSupplier(
     country_code: string | null;
     preferred_currency_code: PurchaseView['currencyCode'] | null;
     payment_terms: string | null;
+    default_advance_percentage: string | null;
+    balance_due_event: SupplierBalanceDueEvent | null;
+    service_scope: SupplierServiceScope[];
     lead_time_days: number | null;
     website_url: string | null;
     notes: string | null;
     version: string;
-  }>`select id, code, name, status, contact_name, contact_email, contact_phone, supplier_type, country_code, preferred_currency_code, payment_terms, lead_time_days, website_url, notes, version::text from procurement.suppliers where organization_id = ${input.organizationId} and id = ${input.supplierId}`.execute(
+  }>`select id, code, name, status, contact_name, contact_email, contact_phone, supplier_type,
+    country_code, preferred_currency_code, payment_terms, default_advance_percentage::text,
+    balance_due_event, service_scope, lead_time_days, website_url, notes, version::text
+    from procurement.suppliers where organization_id = ${input.organizationId} and id = ${input.supplierId}`.execute(
     db,
   );
   if (!suppliers.rows[0]) throw new ProcurementDomainError('NOT_FOUND', 'Supplier was not found.');
@@ -673,6 +761,9 @@ export async function updateSupplier(
     countryCode?: string | null;
     preferredCurrencyCode?: PurchaseView['currencyCode'] | null;
     paymentTerms?: string | null;
+    defaultAdvancePercentage?: string | null;
+    balanceDueEvent?: SupplierBalanceDueEvent | null;
+    serviceScope?: readonly SupplierServiceScope[];
     leadTimeDays?: number | null;
     websiteUrl?: string | null;
     contactName?: string | null;
@@ -681,6 +772,7 @@ export async function updateSupplier(
     notes?: string | null;
   },
 ): Promise<SupplierView> {
+  validateSupplierPolicy(input);
   return db.transaction().execute(async (transaction) => {
     const result = await sql<{
       id: string;
@@ -694,6 +786,9 @@ export async function updateSupplier(
       country_code: string | null;
       preferred_currency_code: PurchaseView['currencyCode'] | null;
       payment_terms: string | null;
+      default_advance_percentage: string | null;
+      balance_due_event: SupplierBalanceDueEvent | null;
+      service_scope: SupplierServiceScope[];
       lead_time_days: number | null;
       website_url: string | null;
       notes: string | null;
@@ -706,6 +801,9 @@ export async function updateSupplier(
         country_code = ${input.countryCode === undefined ? sql.ref('country_code') : input.countryCode?.trim().toUpperCase() || null},
         preferred_currency_code = ${input.preferredCurrencyCode === undefined ? sql.ref('preferred_currency_code') : input.preferredCurrencyCode},
         payment_terms = ${input.paymentTerms === undefined ? sql.ref('payment_terms') : input.paymentTerms?.trim() || null},
+        default_advance_percentage = ${input.defaultAdvancePercentage === undefined ? sql.ref('default_advance_percentage') : input.defaultAdvancePercentage}::numeric,
+        balance_due_event = ${input.balanceDueEvent === undefined ? sql.ref('balance_due_event') : input.balanceDueEvent},
+        service_scope = ${input.serviceScope === undefined ? sql.ref('service_scope') : input.serviceScope}::text[],
         lead_time_days = ${input.leadTimeDays === undefined ? sql.ref('lead_time_days') : input.leadTimeDays},
         website_url = ${input.websiteUrl === undefined ? sql.ref('website_url') : input.websiteUrl?.trim() || null},
         contact_name = ${input.contactName === undefined ? sql.ref('contact_name') : input.contactName?.trim() || null},
@@ -716,7 +814,8 @@ export async function updateSupplier(
         updated_at = now()
       where organization_id = ${input.organizationId} and id = ${input.supplierId} and version = ${input.expectedVersion}
       returning id, code, name, status, contact_name, contact_email, contact_phone, supplier_type,
-        country_code, preferred_currency_code, payment_terms, lead_time_days, website_url, notes, version::text
+        country_code, preferred_currency_code, payment_terms, default_advance_percentage::text,
+        balance_due_event, service_scope, lead_time_days, website_url, notes, version::text
     `.execute(transaction);
     if (!result.rows[0]) {
       const exists = await sql<{
@@ -760,11 +859,14 @@ export async function archiveSupplier(
       country_code: string | null;
       preferred_currency_code: PurchaseView['currencyCode'] | null;
       payment_terms: string | null;
+      default_advance_percentage: string | null;
+      balance_due_event: SupplierBalanceDueEvent | null;
+      service_scope: SupplierServiceScope[];
       lead_time_days: number | null;
       website_url: string | null;
       notes: string | null;
       version: string;
-    }>`update procurement.suppliers set status = 'ARCHIVED', version = version + 1, updated_at = now() where organization_id = ${input.organizationId} and id = ${input.supplierId} and version = ${input.expectedVersion} returning id, code, name, status, contact_name, contact_email, contact_phone, supplier_type, country_code, preferred_currency_code, payment_terms, lead_time_days, website_url, notes, version::text`.execute(
+    }>`update procurement.suppliers set status = 'ARCHIVED', version = version + 1, updated_at = now() where organization_id = ${input.organizationId} and id = ${input.supplierId} and version = ${input.expectedVersion} returning id, code, name, status, contact_name, contact_email, contact_phone, supplier_type, country_code, preferred_currency_code, payment_terms, default_advance_percentage::text, balance_due_event, service_scope, lead_time_days, website_url, notes, version::text`.execute(
       transaction,
     );
     const supplier = result.rows[0];
@@ -885,6 +987,10 @@ async function getPurchaseIn(
     notes: string | null;
     created_at: string;
     placed_at: string | null;
+    supplier_payment_terms_snapshot: string | null;
+    supplier_advance_percentage_snapshot: string | null;
+    supplier_balance_due_event_snapshot: SupplierBalanceDueEvent | null;
+    supplier_service_scope_snapshot: SupplierServiceScope[];
     closed_at: string | null;
     closed_by_actor_id: string | null;
     close_reason: string | null;
@@ -894,6 +1000,8 @@ async function getPurchaseIn(
       purchase.currency_code, purchase.status, purchase.supplier_reference, purchase.order_date::text,
       purchase.expected_date::text, purchase.destination_location_id, location.name as destination_location_name,
       purchase.notes, purchase.created_at::text, purchase.placed_at::text, purchase.closed_at::text,
+      purchase.supplier_payment_terms_snapshot, purchase.supplier_advance_percentage_snapshot::text,
+      purchase.supplier_balance_due_event_snapshot, purchase.supplier_service_scope_snapshot,
       purchase.closed_by_actor_id, purchase.close_reason, purchase.cancelled_at::text, purchase.version::text
     from procurement.purchases purchase
     join procurement.suppliers supplier on supplier.id = purchase.supplier_id
@@ -1022,6 +1130,16 @@ async function getPurchaseIn(
     ...(row.notes ? { notes: row.notes } : {}),
     createdAt: row.created_at,
     ...(row.placed_at ? { placedAt: row.placed_at } : {}),
+    ...(row.supplier_payment_terms_snapshot
+      ? { supplierPaymentTermsSnapshot: row.supplier_payment_terms_snapshot }
+      : {}),
+    ...(row.supplier_advance_percentage_snapshot
+      ? { supplierAdvancePercentageSnapshot: row.supplier_advance_percentage_snapshot }
+      : {}),
+    ...(row.supplier_balance_due_event_snapshot
+      ? { supplierBalanceDueEventSnapshot: row.supplier_balance_due_event_snapshot }
+      : {}),
+    supplierServiceScopeSnapshot: row.supplier_service_scope_snapshot,
     ...(row.closed_at ? { closedAt: row.closed_at } : {}),
     ...(row.closed_by_actor_id ? { closedByActorId: row.closed_by_actor_id } : {}),
     ...(row.close_reason ? { closeReason: row.close_reason } : {}),
@@ -1192,9 +1310,13 @@ export async function createPurchase(
     const supplier = await sql<{
       id: string;
       status: string;
-    }>`select id, status from procurement.suppliers where organization_id = ${input.organizationId} and id = ${input.supplierId} for key share`.execute(
-      transaction,
-    );
+      payment_terms: string | null;
+      default_advance_percentage: string | null;
+      balance_due_event: SupplierBalanceDueEvent | null;
+      service_scope: SupplierServiceScope[];
+    }>`select id, status, payment_terms, default_advance_percentage::text, balance_due_event, service_scope
+      from procurement.suppliers where organization_id = ${input.organizationId} and id = ${input.supplierId}
+      for key share`.execute(transaction);
     if (!supplier.rows[0]) {
       throw new ProcurementDomainError('NOT_FOUND', 'Supplier was not found.');
     }
@@ -1231,12 +1353,16 @@ export async function createPurchase(
       id: string;
     }>`insert into procurement.purchases (
         organization_id, purchase_number, supplier_id, currency_code, notes,
-        supplier_reference, order_date, expected_date, destination_location_id, created_by_actor_id
+        supplier_reference, order_date, expected_date, destination_location_id, created_by_actor_id,
+        supplier_payment_terms_snapshot, supplier_advance_percentage_snapshot,
+        supplier_balance_due_event_snapshot, supplier_service_scope_snapshot
       ) values (
         ${input.organizationId}, ${purchaseNumber}, ${input.supplierId}, ${input.currencyCode},
         ${input.notes?.trim() || null}, ${input.supplierReference?.trim() || null},
         coalesce(${input.orderDate ?? null}::date, current_date), ${input.expectedDate ?? null}::date,
-        ${input.destinationLocationId ?? null}::uuid, ${input.actorId}
+        ${input.destinationLocationId ?? null}::uuid, ${input.actorId},
+        ${supplier.rows[0].payment_terms}, ${supplier.rows[0].default_advance_percentage}::numeric,
+        ${supplier.rows[0].balance_due_event}, ${supplier.rows[0].service_scope}::text[]
       ) returning id`.execute(transaction);
     const purchaseId = created.rows[0]!.id;
 
@@ -1344,11 +1470,23 @@ export async function updatePurchase(
       );
     }
 
+    let replacementSupplier:
+      | {
+          payment_terms: string | null;
+          default_advance_percentage: string | null;
+          balance_due_event: SupplierBalanceDueEvent | null;
+          service_scope: SupplierServiceScope[];
+        }
+      | undefined;
     if (input.supplierId && input.supplierId !== purchase.supplier_id) {
       const supplier = await sql<{
         id: string;
         status: string;
-      }>`select id, status from procurement.suppliers
+        payment_terms: string | null;
+        default_advance_percentage: string | null;
+        balance_due_event: SupplierBalanceDueEvent | null;
+        service_scope: SupplierServiceScope[];
+      }>`select id, status, payment_terms, default_advance_percentage::text, balance_due_event, service_scope from procurement.suppliers
         where organization_id = ${input.organizationId} and id = ${input.supplierId}
         for key share`.execute(transaction);
       if (!supplier.rows[0])
@@ -1359,10 +1497,15 @@ export async function updatePurchase(
           'Supplier is not ACTIVE and cannot accept purchase orders.',
         );
       }
+      replacementSupplier = supplier.rows[0];
     }
 
     const updated = await sql<{ id: string }>`update procurement.purchases set
         supplier_id = coalesce(${input.supplierId ?? null}, supplier_id),
+        supplier_payment_terms_snapshot = case when ${replacementSupplier !== undefined} then ${replacementSupplier?.payment_terms ?? null} else supplier_payment_terms_snapshot end,
+        supplier_advance_percentage_snapshot = case when ${replacementSupplier !== undefined} then ${replacementSupplier?.default_advance_percentage ?? null}::numeric else supplier_advance_percentage_snapshot end,
+        supplier_balance_due_event_snapshot = case when ${replacementSupplier !== undefined} then ${replacementSupplier?.balance_due_event ?? null} else supplier_balance_due_event_snapshot end,
+        supplier_service_scope_snapshot = case when ${replacementSupplier !== undefined} then ${replacementSupplier?.service_scope ?? []}::text[] else supplier_service_scope_snapshot end,
         currency_code = coalesce(${input.currencyCode ?? null}, currency_code),
         supplier_reference = case when ${input.supplierReference !== undefined} then ${input.supplierReference?.trim() || null} else supplier_reference end,
         order_date = coalesce(${input.orderDate ?? null}::date, order_date),
@@ -1744,9 +1887,20 @@ export async function placePurchase(
     if (Number(lines.rows[0]?.count ?? 0) === 0) {
       throw new ProcurementDomainError('VALIDATION_FAILED', 'A Purchase needs at least one line.');
     }
-    await sql`update procurement.purchases set status = 'PLACED', placed_at = now(), version = version + 1, updated_at = now() where id = ${input.purchaseId}`.execute(
-      transaction,
-    );
+    await sql`update procurement.purchases purchase set
+        status = 'PLACED',
+        placed_at = now(),
+        supplier_payment_terms_snapshot = supplier.payment_terms,
+        supplier_advance_percentage_snapshot = supplier.default_advance_percentage,
+        supplier_balance_due_event_snapshot = supplier.balance_due_event,
+        supplier_service_scope_snapshot = supplier.service_scope,
+        version = purchase.version + 1,
+        updated_at = now()
+      from procurement.suppliers supplier
+      where purchase.id = ${input.purchaseId}
+        and purchase.organization_id = ${input.organizationId}
+        and supplier.id = purchase.supplier_id
+        and supplier.organization_id = purchase.organization_id`.execute(transaction);
     const view = await getPurchaseIn(transaction, input.organizationId, input.purchaseId);
 
     if (startedRecordId) {

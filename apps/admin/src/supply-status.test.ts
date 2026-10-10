@@ -17,6 +17,7 @@ function purchase(
     status,
     orderDate: '2026-09-20',
     createdAt: '2026-09-20T00:00:00.000Z',
+    supplierServiceScopeSnapshot: [],
     grossMerchandiseTotal: '100.0000',
     discountTotal: '0.0000',
     netMerchandiseTotal: '100.0000',

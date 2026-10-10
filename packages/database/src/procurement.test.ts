@@ -144,6 +144,82 @@ async function shipmentFor(input: Awaited<ReturnType<typeof fixture>>, quantity 
 }
 
 describe('procurement, shipment allocation, and canonical inbound receiving', () => {
+  it('snapshots an intermediary supplier policy when the purchase is placed', async () => {
+    const input = await fixture();
+    const supplier = await createSupplier(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      code: `SKY-${crypto.randomUUID().slice(0, 6)}`,
+      name: 'SkyBuy-style intermediary',
+      supplierType: 'AGENT',
+      countryCode: 'BD',
+      preferredCurrencyCode: 'BDT',
+      paymentTerms: '70% advance; balance and logistics charges on delivery',
+      defaultAdvancePercentage: '70',
+      balanceDueEvent: 'DOORSTEP_DELIVERY',
+      serviceScope: [
+        'SOURCING',
+        'PURCHASING',
+        'CHINA_LOCAL_DELIVERY',
+        'INTERNATIONAL_FREIGHT',
+        'IMPORT_CLEARANCE',
+        'BANGLADESH_FINAL_MILE',
+      ],
+    });
+    const draft = await createPurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: supplier.id,
+      currencyCode: 'BDT',
+      supplierReference: 'SKY363126',
+      lines: [{ variantId: input.variantId, quantity: '1', unitPrice: '749' }],
+    });
+    expect(draft).toMatchObject({
+      supplierAdvancePercentageSnapshot: '70.0000',
+      supplierBalanceDueEventSnapshot: 'DOORSTEP_DELIVERY',
+    });
+
+    const revisedSupplier = await updateSupplier(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: supplier.id,
+      expectedVersion: supplier.version,
+      defaultAdvancePercentage: '65',
+      paymentTerms: '65% advance under the current commercial agreement',
+    });
+    const placed = await placePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: draft.id,
+      expectedVersion: draft.version,
+    });
+    expect(placed).toMatchObject({
+      supplierPaymentTermsSnapshot: '65% advance under the current commercial agreement',
+      supplierAdvancePercentageSnapshot: '65.0000',
+      supplierBalanceDueEventSnapshot: 'DOORSTEP_DELIVERY',
+      supplierServiceScopeSnapshot: supplier.serviceScope,
+    });
+
+    await updateSupplier(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      supplierId: supplier.id,
+      expectedVersion: revisedSupplier.version,
+      defaultAdvancePercentage: '50',
+      balanceDueEvent: 'NET_TERMS',
+      serviceScope: ['PURCHASING'],
+    });
+    const committed = await getPurchase(database.db, {
+      organizationId: input.organizationId,
+      purchaseId: placed.id,
+    });
+    expect(committed).toMatchObject({
+      supplierAdvancePercentageSnapshot: '65.0000',
+      supplierBalanceDueEventSnapshot: 'DOORSTEP_DELIVERY',
+      supplierServiceScopeSnapshot: supplier.serviceScope,
+    });
+  });
+
   it('allocates a supplier-authoritative order discount exactly across variant lines', async () => {
     const input = await fixture();
     const draft = await createPurchase(database.db, {

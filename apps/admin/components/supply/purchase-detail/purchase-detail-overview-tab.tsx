@@ -29,6 +29,18 @@ export interface PurchaseDetailOverviewTabProps {
   readonly locations: readonly WarehouseLocationDto[];
 }
 
+const BALANCE_DUE_LABELS: Record<
+  NonNullable<PurchaseDto['supplierBalanceDueEventSnapshot']>,
+  string
+> = {
+  BEFORE_DISPATCH: 'before supplier dispatch',
+  CHINA_WAREHOUSE_RECEIPT: 'at China warehouse receipt',
+  BANGLADESH_WAREHOUSE_RECEIPT: 'at Bangladesh warehouse receipt',
+  DOORSTEP_DELIVERY: 'at doorstep delivery',
+  NET_TERMS: 'on agreed net terms',
+  CUSTOM: 'at the custom agreed event',
+};
+
 export function PurchaseDetailOverviewTab({
   purchase,
   suppliers,
@@ -47,7 +59,8 @@ export function PurchaseDetailOverviewTab({
           <div className="space-y-1 text-sm">
             <p className="font-semibold text-foreground">Purchase Order Cancelled</p>
             <p className="text-muted-foreground">
-              This purchase order was marked as cancelled. Quantities cannot be allocated to new shipments.
+              This purchase order was marked as cancelled. Quantities cannot be allocated to new
+              shipments.
             </p>
           </div>
         </div>
@@ -125,15 +138,40 @@ export function PurchaseDetailOverviewTab({
                   {supplier.leadTimeDays}d lead time
                 </Badge>
               ) : null}
-              {supplier?.paymentTerms ? (
+              {purchase.supplierPaymentTermsSnapshot ? (
                 <Badge variant="outline" className="text-[11px]">
-                  Terms: {supplier.paymentTerms}
+                  Terms: {purchase.supplierPaymentTermsSnapshot}
+                </Badge>
+              ) : null}
+              {purchase.supplierAdvancePercentageSnapshot ? (
+                <Badge variant="secondary" className="text-[11px] tabular-nums">
+                  {purchase.supplierAdvancePercentageSnapshot}% advance
                 </Badge>
               ) : null}
               <Badge variant="outline" className="text-[11px]">
                 Currency: {purchase.currencyCode}
               </Badge>
             </div>
+            {purchase.supplierBalanceDueEventSnapshot ||
+            purchase.supplierServiceScopeSnapshot.length ? (
+              <div className="rounded-lg border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">Committed supplier policy</p>
+                {purchase.supplierBalanceDueEventSnapshot ? (
+                  <p className="mt-1">
+                    Balance due {BALANCE_DUE_LABELS[purchase.supplierBalanceDueEventSnapshot]}.
+                  </p>
+                ) : null}
+                {purchase.supplierServiceScopeSnapshot.length ? (
+                  <p className="mt-1">
+                    Services:{' '}
+                    {purchase.supplierServiceScopeSnapshot
+                      .map((scope) => scope.replaceAll('_', ' ').toLowerCase())
+                      .join(', ')}
+                    .
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -150,7 +188,9 @@ export function PurchaseDetailOverviewTab({
             <div>
               <p className="text-xs text-muted-foreground">Destination Facility</p>
               <p className="font-semibold text-foreground">
-                {purchase.destinationLocationName ?? location?.name ?? 'Not assigned (Select at shipment stage)'}
+                {purchase.destinationLocationName ??
+                  location?.name ??
+                  'Not assigned (Select at shipment stage)'}
               </p>
               {location?.code ? (
                 <p className="font-mono text-xs text-muted-foreground">{location.code}</p>
@@ -171,7 +211,9 @@ export function PurchaseDetailOverviewTab({
                   Expected Delivery
                 </p>
                 <p className="mt-0.5 font-medium">
-                  {purchase.expectedDate ? formatSupplyDate(purchase.expectedDate) : 'Not scheduled'}
+                  {purchase.expectedDate
+                    ? formatSupplyDate(purchase.expectedDate)
+                    : 'Not scheduled'}
                 </p>
               </div>
             </div>
