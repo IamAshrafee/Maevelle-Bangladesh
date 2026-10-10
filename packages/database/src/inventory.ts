@@ -63,6 +63,9 @@ export interface InventoryPosition {
   readonly sku: string;
   readonly productTitle: string;
   readonly optionSummary: string | null;
+  readonly imageAssetId: string | null;
+  readonly imageVisibility: 'PUBLIC' | 'PRIVATE' | null;
+  readonly imageAltText: string | null;
   readonly inventoryStatus: 'ACTIVE' | 'ARCHIVED';
   readonly variantStatus: 'ACTIVE' | 'ARCHIVED';
   readonly unitCode: string;
@@ -82,6 +85,9 @@ export interface InventoryPosition {
   readonly incomingSupply: string;
   readonly activeReservationCount: number;
   readonly lastMovementAt: Date | null;
+  readonly unitAcquisitionCost: string | null;
+  readonly costCurrency: string | null;
+  readonly costState: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
 }
 
 function fingerprint(input: unknown): string {
@@ -1440,6 +1446,60 @@ export async function listInventoryPositions(
         and reservation.location_id = level.location_id
         and reservation.status in ('ACTIVE', 'PARTIALLY_CONSUMED')
     ) active_reservations on true
+    left join lateral (
+      select placement.asset_id::text, asset.visibility_class,
+        coalesce(placement.alt_text_override, asset.alt_text) as alt_text
+      from catalog.product_media placement
+      join media.media_assets asset
+        on asset.organization_id=placement.organization_id and asset.id=placement.asset_id
+      where placement.organization_id=variant.organization_id
+        and placement.product_id=variant.product_id
+        and (placement.variant_id=variant.id or (
+          placement.variant_id is null and placement.option_value_id is null
+        ))
+        and asset.status in ('READY','ARCHIVED')
+      order by (placement.variant_id=variant.id) desc, placement.is_primary desc,
+        placement.position, placement.id
+      limit 1
+    ) primary_media on true
+    left join lateral (
+      select case when count(*) > 0 and count(distinct source.currency_code)=1
+          and sum(source.quantity) > 0
+          then (sum(source.value) / sum(source.quantity))::numeric(24,8)
+        end as unit_cost,
+        case when count(distinct source.currency_code)=1 then min(source.currency_code) end as currency_code,
+        case when count(*)=0 then null
+          when bool_and(source.is_finalized) then 'FINALIZED'
+          else 'PROVISIONAL'
+        end as cost_state
+      from (
+        select position.remaining_quantity as quantity,
+          ((layer.base_purchase_cost + coalesce((
+            select sum(adjustment.delta_total_cost)
+            from costing.cost_layer_adjustments adjustment
+            where adjustment.organization_id=layer.organization_id
+              and adjustment.cost_layer_id=layer.id
+          ), 0)) / layer.original_quantity) * position.remaining_quantity as value,
+          layer.currency_code, layer.cost_state <> 'PROVISIONAL' as is_finalized
+        from costing.cost_layers layer
+        join costing.cost_layer_positions position
+          on position.organization_id=layer.organization_id and position.cost_layer_id=layer.id
+        where layer.organization_id=level.organization_id
+          and layer.inventory_item_id=level.inventory_item_id
+          and position.location_id=level.location_id and position.remaining_quantity > 0
+        union all
+        select position.remaining_quantity,
+          layer.unit_cost * position.remaining_quantity,
+          layer.currency_code, true
+        from costing.return_cost_layers layer
+        join costing.return_cost_layer_positions position
+          on position.organization_id=layer.organization_id
+          and position.return_cost_layer_id=layer.id
+        where layer.organization_id=level.organization_id
+          and layer.inventory_item_id=level.inventory_item_id
+          and position.location_id=level.location_id and position.remaining_quantity > 0
+      ) source
+    ) current_cost on true
     where level.organization_id = ${organizationId}
       and ${locationFilter} and ${itemFilter} and ${searchFilter}
       and ${catalogStatusFilter} and ${conditionFilter} and ${availabilityFilter}
@@ -1454,6 +1514,9 @@ export async function listInventoryPositions(
     sku: string;
     product_title: string;
     option_summary: string | null;
+    image_asset_id: string | null;
+    image_visibility: 'PUBLIC' | 'PRIVATE' | null;
+    image_alt_text: string | null;
     inventory_status: 'ACTIVE' | 'ARCHIVED';
     variant_status: 'ACTIVE' | 'ARCHIVED';
     unit_code: string;
@@ -1473,6 +1536,9 @@ export async function listInventoryPositions(
     incoming_supply: string;
     active_reservation_count: string;
     last_movement_at: Date | null;
+    unit_acquisition_cost: string | null;
+    cost_currency: string | null;
+    cost_state: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
   }>`
     select level.inventory_item_id, item.variant_id, variant.product_id, variant.sku,
       product.title as product_title, coalesce(nullif(variant.title, ''), (
@@ -1482,7 +1548,11 @@ export async function listInventoryPositions(
         join catalog.product_option_axes axis on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
         where link.organization_id=item.organization_id and link.variant_id=variant.id
       )) as option_summary, item.status as inventory_status,
-      variant.status as variant_status, item.unit_code, level.location_id, location.code as location_code,
+      variant.status as variant_status, item.unit_code, primary_media.asset_id as image_asset_id,
+      primary_media.visibility_class as image_visibility, primary_media.alt_text as image_alt_text,
+      current_cost.unit_cost::text as unit_acquisition_cost,
+      current_cost.currency_code as cost_currency, current_cost.cost_state,
+      level.location_id, location.code as location_code,
       location.name as location_name, (level.sellable_quantity + level.unavailable_quantity)::text as on_hand,
       level.sellable_quantity::text as sellable, level.reserved_quantity::text as reserved,
       (level.sellable_quantity - level.reserved_quantity)::text as available_to_sell,
@@ -1505,6 +1575,9 @@ export async function listInventoryPositions(
       sku: row.sku,
       productTitle: row.product_title,
       optionSummary: row.option_summary,
+      imageAssetId: row.image_asset_id,
+      imageVisibility: row.image_visibility,
+      imageAltText: row.image_alt_text,
       inventoryStatus: row.inventory_status,
       variantStatus: row.variant_status,
       unitCode: row.unit_code,
@@ -1524,6 +1597,9 @@ export async function listInventoryPositions(
       incomingSupply: subtract(row.incoming_supply, '0'),
       activeReservationCount: Number(row.active_reservation_count),
       lastMovementAt: row.last_movement_at,
+      unitAcquisitionCost: row.unit_acquisition_cost,
+      costCurrency: row.cost_currency,
+      costState: row.cost_state,
     })),
     totalCount: Number(countResult.rows[0]?.count ?? '0'),
   };
@@ -3613,6 +3689,9 @@ export async function getInventoryItemDetail(
       sku: string;
       productTitle: string;
       optionSummary?: string;
+      imageAssetId: string | null;
+      imageVisibility: 'PUBLIC' | 'PRIVATE' | null;
+      imageAltText: string | null;
       inventoryStatus: 'ACTIVE' | 'ARCHIVED';
       variantStatus: 'ACTIVE' | 'ARCHIVED';
       trackingMode: 'STANDARD' | 'LOT' | 'SERIAL';
@@ -3645,6 +3724,9 @@ export async function getInventoryItemDetail(
     sku: string;
     product_title: string;
     option_summary: string | null;
+    image_asset_id: string | null;
+    image_visibility: 'PUBLIC' | 'PRIVATE' | null;
+    image_alt_text: string | null;
     inventory_status: 'ACTIVE' | 'ARCHIVED';
     variant_status: 'ACTIVE' | 'ARCHIVED';
     tracking_mode: 'STANDARD' | 'LOT' | 'SERIAL';
@@ -3658,10 +3740,29 @@ export async function getInventoryItemDetail(
         join catalog.product_option_values value on value.id=link.option_value_id and value.organization_id=link.organization_id
         join catalog.product_option_axes axis on axis.id=link.option_axis_id and axis.organization_id=link.organization_id
         where link.organization_id=item.organization_id and link.variant_id=variant.id
-      )) as option_summary, product.title as product_title
+      )) as option_summary, product.title as product_title,
+      primary_media.asset_id as image_asset_id,
+      primary_media.visibility_class as image_visibility,
+      primary_media.alt_text as image_alt_text
     from inventory.inventory_items item
     join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
     join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
+    left join lateral (
+      select placement.asset_id::text, asset.visibility_class,
+        coalesce(placement.alt_text_override, asset.alt_text) as alt_text
+      from catalog.product_media placement
+      join media.media_assets asset
+        on asset.organization_id=placement.organization_id and asset.id=placement.asset_id
+      where placement.organization_id=variant.organization_id
+        and placement.product_id=variant.product_id
+        and (placement.variant_id=variant.id or (
+          placement.variant_id is null and placement.option_value_id is null
+        ))
+        and asset.status in ('READY','ARCHIVED')
+      order by (placement.variant_id=variant.id) desc, placement.is_primary desc,
+        placement.position, placement.id
+      limit 1
+    ) primary_media on true
     where item.id = ${inventoryItemId} and item.organization_id = ${organizationId}
   `.execute(db);
   const item = itemResult.rows[0];
@@ -3701,6 +3802,9 @@ export async function getInventoryItemDetail(
     sku: item.sku,
     productTitle: item.product_title,
     ...(item.option_summary === null ? {} : { optionSummary: item.option_summary }),
+    imageAssetId: item.image_asset_id,
+    imageVisibility: item.image_visibility,
+    imageAltText: item.image_alt_text,
     inventoryStatus: item.inventory_status,
     variantStatus: item.variant_status,
     trackingMode: item.tracking_mode,

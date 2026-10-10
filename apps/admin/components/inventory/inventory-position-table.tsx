@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
+import { formatCatalogMoney, productMediaUrl } from '@/lib/catalog/api';
 
 import { InventoryEmptyState } from './inventory-page-ui';
 
@@ -101,19 +102,57 @@ export function InventoryPositionTable({
           <Card key={`${position.inventoryItemId}-${position.locationId}`}>
             <CardContent className="space-y-4 p-4">
               <div className="flex min-w-0 items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <Link
-                    className="line-clamp-2 font-semibold hover:underline"
-                    href={`/inventory/stock/${position.inventoryItemId}`}
-                  >
-                    {position.productTitle}
-                  </Link>
-                  {position.optionSummary ? (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {position.optionSummary}
+                <div className="flex min-w-0 gap-3">
+                  <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+                    {position.imageAssetId && position.imageVisibility ? (
+                      <img
+                        alt={
+                          position.imageAltText ?? position.optionSummary ?? position.productTitle
+                        }
+                        className="size-full object-cover"
+                        height={80}
+                        src={productMediaUrl(position.imageAssetId, position.imageVisibility)}
+                        width={80}
+                      />
+                    ) : (
+                      <PackageOpen className="size-6 text-muted-foreground" aria-hidden="true" />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <Link
+                      className="line-clamp-2 font-semibold hover:underline"
+                      href={`/inventory/stock/${position.inventoryItemId}`}
+                    >
+                      {position.productTitle}
+                    </Link>
+                    {position.optionSummary ? (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {position.optionSummary}
+                      </p>
+                    ) : null}
+                    <p className="truncate font-mono text-xs text-muted-foreground">
+                      {position.sku}
                     </p>
-                  ) : null}
-                  <p className="truncate font-mono text-xs text-muted-foreground">{position.sku}</p>
+                    <p className="mt-1 text-xs">
+                      {position.unitAcquisitionCost && position.costCurrency ? (
+                        <>
+                          <span className="font-mono font-semibold tabular-nums">
+                            {formatCatalogMoney(
+                              position.unitAcquisitionCost,
+                              position.costCurrency,
+                            )}
+                          </span>{' '}
+                          <span className="text-muted-foreground">
+                            {position.costState === 'FINALIZED'
+                              ? 'landed / unit'
+                              : 'provisional / unit'}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-warning">Cost not established</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
                 {position.inventoryStatus === 'ARCHIVED' ? (
                   <Badge variant="secondary">Archived</Badge>
@@ -165,6 +204,7 @@ export function InventoryPositionTable({
               <TableHead className="text-right">On Hand</TableHead>
               <TableHead className="text-right">Reserved</TableHead>
               <TableHead className="text-right">Available</TableHead>
+              <TableHead className="text-right">Unit Cost</TableHead>
               <TableHead>Unavailable</TableHead>
               <TableHead>Moving</TableHead>
               <TableHead>Last Change</TableHead>
@@ -174,23 +214,40 @@ export function InventoryPositionTable({
             {positions.map((position) => (
               <TableRow key={`${position.inventoryItemId}-${position.locationId}`}>
                 <TableCell className="max-w-64 whitespace-normal">
-                  <div className="min-w-0">
-                    <Link
-                      className="font-semibold hover:underline"
-                      href={`/inventory/stock/${position.inventoryItemId}`}
-                    >
-                      {position.productTitle}
-                    </Link>
-                    {position.optionSummary ? (
-                      <p className="text-xs text-muted-foreground">{position.optionSummary}</p>
-                    ) : null}
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <Badge variant="outline" className="font-mono">
-                        {position.sku}
-                      </Badge>
-                      {position.inventoryStatus === 'ARCHIVED' ? (
-                        <Badge variant="secondary">Archived</Badge>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+                      {position.imageAssetId && position.imageVisibility ? (
+                        <img
+                          alt={
+                            position.imageAltText ?? position.optionSummary ?? position.productTitle
+                          }
+                          className="size-full object-cover"
+                          height={56}
+                          src={productMediaUrl(position.imageAssetId, position.imageVisibility)}
+                          width={56}
+                        />
+                      ) : (
+                        <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <Link
+                        className="font-semibold hover:underline"
+                        href={`/inventory/stock/${position.inventoryItemId}`}
+                      >
+                        {position.productTitle}
+                      </Link>
+                      {position.optionSummary ? (
+                        <p className="text-xs text-muted-foreground">{position.optionSummary}</p>
                       ) : null}
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline" className="font-mono">
+                          {position.sku}
+                        </Badge>
+                        {position.inventoryStatus === 'ARCHIVED' ? (
+                          <Badge variant="secondary">Archived</Badge>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </TableCell>
@@ -211,6 +268,20 @@ export function InventoryPositionTable({
                 </TableCell>
                 <TableCell className="text-right font-semibold text-emerald-600 tabular-nums">
                   {formatInventoryNumber(position.availableToSell)}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {position.unitAcquisitionCost && position.costCurrency ? (
+                    <div>
+                      <span className="font-semibold">
+                        {formatCatalogMoney(position.unitAcquisitionCost, position.costCurrency)}
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        {position.costState === 'FINALIZED' ? 'Final landed' : 'Provisional'}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-warning">Missing</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <ConditionSignals position={position} />

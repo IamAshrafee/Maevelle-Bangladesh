@@ -1456,6 +1456,9 @@ export interface InventoryPositionDto {
   readonly sku: string;
   readonly productTitle: string;
   readonly optionSummary: string | null;
+  readonly imageAssetId: string | null;
+  readonly imageVisibility: 'PUBLIC' | 'PRIVATE' | null;
+  readonly imageAltText: string | null;
   readonly inventoryStatus: 'ACTIVE' | 'ARCHIVED';
   readonly variantStatus: 'ACTIVE' | 'ARCHIVED';
   readonly unitCode: string;
@@ -1475,6 +1478,9 @@ export interface InventoryPositionDto {
   readonly incomingSupply: string;
   readonly activeReservationCount: number;
   readonly lastMovementAt: string | null;
+  readonly unitAcquisitionCost: string | null;
+  readonly costCurrency: string | null;
+  readonly costState: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
 }
 
 /** Catalog-backed inventory identity used by stock operations before a SKU has any movement. */
@@ -1583,6 +1589,9 @@ export interface InventoryItemDetailDto {
   readonly sku: string;
   readonly productTitle: string;
   readonly optionSummary?: string;
+  readonly imageAssetId: string | null;
+  readonly imageVisibility: 'PUBLIC' | 'PRIVATE' | null;
+  readonly imageAltText: string | null;
   readonly inventoryStatus: 'ACTIVE' | 'ARCHIVED';
   readonly variantStatus: 'ACTIVE' | 'ARCHIVED';
   readonly trackingMode: 'STANDARD' | 'LOT' | 'SERIAL';

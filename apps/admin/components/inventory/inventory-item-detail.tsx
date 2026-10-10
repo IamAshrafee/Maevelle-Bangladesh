@@ -7,6 +7,7 @@ import Link from 'next/link';
 import type { InventoryItemDetailDto } from '@maevelle/contracts';
 
 import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
+import { productMediaUrl } from '@/lib/catalog/api';
 import { InventoryConditionBadge, InventoryEmptyState } from './inventory-page-ui';
 import { InventorySourceLink } from './inventory-source-link';
 import { StockTable } from './stock-table';
@@ -82,21 +83,38 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-pretty text-2xl font-bold tracking-tight">
-              <Link className="hover:underline" href={`/products/${item.productId}`}>
-                {item.productTitle}
-              </Link>
-            </h1>
-            <Badge variant="secondary" className="font-mono">
-              {item.sku}
-            </Badge>
-            <Badge variant="outline">{item.trackingMode}</Badge>
-            {item.inventoryStatus === 'ARCHIVED' ? (
-              <Badge variant="secondary">Archived</Badge>
-            ) : null}
+          <div className="flex min-w-0 items-center gap-4">
+            <span className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted">
+              {item.imageAssetId && item.imageVisibility ? (
+                <img
+                  alt={item.imageAltText ?? item.optionSummary ?? item.productTitle}
+                  className="size-full object-cover"
+                  height={96}
+                  src={productMediaUrl(item.imageAssetId, item.imageVisibility)}
+                  width={96}
+                />
+              ) : (
+                <Package className="size-8 text-muted-foreground" aria-hidden="true" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-pretty text-2xl font-bold tracking-tight">
+                  <Link className="hover:underline" href={`/products/${item.productId}`}>
+                    {item.productTitle}
+                  </Link>
+                </h1>
+                <Badge variant="secondary" className="font-mono">
+                  {item.sku}
+                </Badge>
+                <Badge variant="outline">{item.trackingMode}</Badge>
+                {item.inventoryStatus === 'ARCHIVED' ? (
+                  <Badge variant="secondary">Archived</Badge>
+                ) : null}
+              </div>
+              <p className="text-muted-foreground">{item.optionSummary || 'Default variant'}</p>
+            </div>
           </div>
-          <p className="text-muted-foreground">{item.optionSummary || 'Default variant'}</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
           {canAdjust ? (

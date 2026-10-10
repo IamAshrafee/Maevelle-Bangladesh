@@ -19,6 +19,7 @@ import {
   verifyCostingIntegrity,
 } from './costing.js';
 import { createDatabase } from './index.js';
+import { listInventoryPositions } from './inventory.js';
 import {
   createDelivery,
   dispatchDelivery,
@@ -411,6 +412,19 @@ describe('landed-cost deterministic allocation', () => {
       worksheetId: worksheet.id,
     });
     expect(detail.components[0]?.finance_expense_id).toBe(expense.id);
+    const positions = await listInventoryPositions(database.db, input.organizationId, {
+      inventoryItemId: (
+        await sql<{ id: string }>`select id from inventory.inventory_items
+          where organization_id=${input.organizationId} and variant_id=${input.variantId}`.execute(
+          database.db,
+        )
+      ).rows[0]!.id,
+    });
+    expect(positions.items[0]).toMatchObject({
+      unitAcquisitionCost: '102.30000000',
+      costCurrency: 'CNY',
+      costState: 'FINALIZED',
+    });
   });
 
   it('preserves finalized evidence through an append-only credit revision and adjusts both receipt layers', async () => {
