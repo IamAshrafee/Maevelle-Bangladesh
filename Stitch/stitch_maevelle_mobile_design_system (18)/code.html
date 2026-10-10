@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_stack" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "primary-container": "#9e2a4b", "on-surface": "#1e1b19", "surface-container": "#f4ece8", "tertiary": "#443e40", "inverse-on-surface": "#f7efeb", "outline": "#8a7174", "surface-container-highest": "#e9e1dd", "primary": "#7e0e35", "on-secondary-container": "#740734", "on-primary-fixed": "#3f0015", "on-background": "#1e1b19", "surface-dim": "#e0d8d5", "on-secondary-fixed": "#3f0018", "on-error-container": "#93000a", "on-tertiary-fixed": "#1f1a1c", "surface": "#fff8f5", "surface-container-high": "#eee7e3", "outline-variant": "#ddbfc3", "surface-container-low": "#faf2ee", "error-container": "#ffdad6", "on-primary-container": "#ffbbc6", "inverse-surface": "#33302d", "on-tertiary": "#ffffff", "secondary-fixed": "#ffd9e0", "on-secondary-fixed-variant": "#871a42", "primary-fixed-dim": "#ffb2bf", "tertiary-container": "#5c5557", "surface-container-lowest": "#ffffff", "surface-tint": "#a83252", "primary-fixed": "#ffd9de", "tertiary-fixed-dim": "#cec4c6", "on-secondary": "#ffffff", "surface-variant": "#e9e1dd", "secondary-container": "#fd779d", "background": "#fff8f5", "on-primary-fixed-variant": "#88183c", "secondary": "#a63359", "secondary-fixed-dim": "#ffb1c2", "inverse-primary": "#ffb2bf", "error": "#ba1a1a", "on-primary": "#ffffff", "surface-bright": "#fff8f5", "on-surface-variant": "#574144", "on-tertiary-fixed-variant": "#4b4547", "tertiary-fixed": "#eae0e2", "on-error": "#ffffff", "on-tertiary-container": "#d4cacc" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "space-xs": "0.25rem", "space-sm": "0.5rem", "gutter": "0.75rem", "space-xl": "1.5rem", "margin": "1rem", "space-md": "0.75rem", "space-lg": "1rem" }, fontFamily: { "label-md": ["Plus Jakarta Sans"], "price-lg": ["Plus Jakarta Sans"], "headline-lg": ["Playfair Display"], "label-sm": ["Plus Jakarta Sans"], "headline-lg-mobile": ["Playfair Display"], "headline-sm": ["Plus Jakarta Sans"], "headline-md": ["Plus Jakarta Sans"], "display-hero": ["Playfair Display"], "display-hero-mobile": ["Playfair Display"], "body-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "price-md": ["Plus Jakarta Sans"] }, fontSize: { "label-md": ["13px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "600" }], "price-lg": ["20px", { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "700" }], "headline-lg": ["28px", { lineHeight: "36px", letterSpacing: "-0.01em", fontWeight: "500" }], "label-sm": ["11px", { lineHeight: "14px", letterSpacing: "0.04em", fontWeight: "600" }], "headline-lg-mobile": ["22px", { lineHeight: "28px", letterSpacing: "0em", fontWeight: "500" }], "headline-sm": ["16px", { lineHeight: "22px", letterSpacing: "0em", fontWeight: "600" }], "headline-md": ["18px", { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "600" }], "display-hero": ["36px", { lineHeight: "44px", letterSpacing: "-0.02em", fontWeight: "600" }], "display-hero-mobile": ["28px", { lineHeight: "34px", letterSpacing: "-0.01em", fontWeight: "600" }], "body-lg": ["16px", { lineHeight: "24px", letterSpacing: "0em", fontWeight: "400" }], "body-md": ["14px", { lineHeight: "20px", letterSpacing: "0em", fontWeight: "400" }], "body-sm": ["12px", { lineHeight: "16px", letterSpacing: "0.01em", fontWeight: "400" }], "price-md": ["15px", { lineHeight: "18px", letterSpacing: "0em", fontWeight: "700" }] } } } }</script><style>@layer base { body { overscroll-behavior-y: none; } .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); } } ::-webkit-scrollbar { display: none; }</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface min-h-full flex flex-col antialiased selection:bg-secondary-fixed relative"><div class="fixed inset-0 z-0 bg-inverse-surface/40 backdrop-blur-sm pointer-events-none transition-opacity"></div><div class="fixed inset-x-0 top-0 h-28 z-10 px-margin pt-safe flex items-center justify-between opacity-30 pointer-events-none"><div class="h-9 w-9 rounded-full bg-surface-container-high flex items-center justify-center"><span class="material-symbols-outlined text-[20px] text-on-surface">arrow_back</span></div><div class="h-5 w-24 bg-surface-container-highest rounded-full"></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div><div class="relative z-20 mt-auto min-h-[663px] max-h-[813px] flex flex-col bg-surface rounded-t-xl shadow-[0_-8px_32px_rgba(28,25,23,0.18)]"><header class="fixed top-0 w-full z-50 bg-surface/95 backdrop-blur-md rounded-t-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="flex flex-col items-center pt-2.5 pb-1"><div class="w-10 h-1 rounded-full bg-outline-variant/60"></div></div><div class="h-14 px-margin flex items-center justify-between gap-space-sm"><div class="flex items-center min-w-0 flex-1"><h1 class="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight truncate">Size &amp; Fit Guide</h1></div><div class="flex items-center gap-space-xs shrink-0"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center mr-1"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><button aria-label="Close Drawer" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[22px]">close</span></button></div></div></header><main class="flex-1 w-full bg-surface pt-14 pb-safe overflow-y-auto px-margin"><div class="flex flex-col w-full pb-28">
+<!-- Modal Header Editorial Section -->
+<div class="flex flex-col gap-space-xs pt-1 pb-space-md">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm uppercase tracking-wider">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">straighten</span>
+        Atelier Spec
+      </span>
+<span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+        Maevelle Tailored Fit
+      </span>
+</div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface pt-1">
+      Size Chart &amp; Measurement Guide
+    </h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+      Tailored for Maevelle Women’s Apparel &amp; Relaxed Silhouette
+    </p>
+</div>
+<!-- Segmented Unit Switcher & Standards Pill -->
+<div class="flex flex-col gap-space-xs p-space-sm rounded-xl bg-surface-container-low shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Measurement Unit</span>
+<span class="font-label-sm text-label-sm text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">public</span>
+        BD &amp; Global Standard
+      </span>
+</div>
+<div class="grid grid-cols-2 p-1 rounded-lg bg-surface-container gap-1" id="unit-segmented-control">
+<button aria-pressed="true" class="w-full py-2 rounded-lg font-label-md text-label-md transition-all flex items-center justify-center gap-1.5 bg-surface text-primary shadow-sm" id="unit-btn-in" onclick="switchUnit('in')" type="button">
+<span>Inches (in)</span>
+<span class="text-[10px] px-1.5 py-0.2 rounded-full bg-primary-fixed text-on-primary-fixed">Active</span>
+</button>
+<button aria-pressed="false" class="w-full py-2 rounded-lg font-label-md text-label-md transition-all flex items-center justify-center gap-1.5 text-on-surface-variant hover:text-on-surface" id="unit-btn-cm" onclick="switchUnit('cm')" type="button">
+<span>Centimeters (cm)</span>
+</button>
+</div>
+</div>
+<!-- Editorial Fit Predictor & Model Reference -->
+<div class="mt-space-md p-space-md rounded-xl bg-surface-container-low flex flex-col gap-space-sm shadow-sm relative overflow-hidden">
+<div class="flex items-start gap-space-sm">
+<div class="w-9 h-9 rounded-full bg-primary-fixed flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-on-surface">Maevelle Fit Advice</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+          This atelier piece runs true to a feminine, relaxed silhouette. For an effortless, languid dawat drape over formal trousers or sarees, consider sizing up one size.
+        </p>
+</div>
+</div>
+<!-- Micro Model Stats Card with Image Snippet -->
+<div class="flex items-center gap-space-sm p-space-sm rounded-lg bg-surface-container-lowest mt-1">
+<img class="w-11 h-11 rounded-lg object-cover shrink-0" data-alt="Editorial portrait close-up of a graceful South Asian female model with delicate silk blouse collar against warm terracotta and alabaster background studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCl-t7D33eTRuaC4NpH7qMqV_B9Pm2WimcpgeBzzMbwN6W9824WxC8u7zKprJwmJj--7pI2-ZGPTBz06C7Bj1I-N4DTcTqBC8sowruUFEq2NYdVYOWvO_MAO3-79P-l_YBgri8jLVrvonD00w7o_08Py034mvCDSfNPWXRr4eIZcvyw8PXXC00I7S7RpESwbFKaMAyOD32RIQ6WV6-Ue4CbDTuaTsY1A_jtTLpLFMocNj3XsTI25Naf"/>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-secondary font-semibold uppercase tracking-wider">Model Reference</span>
+<p class="font-body-sm text-body-sm text-on-surface truncate">
+          5’7” (170cm) • Bust 34” • Wearing Size <strong class="text-primary font-semibold">S</strong>
+</p>
+</div>
+</div>
+</div>
+<!-- Interactive Measurement Matrix -->
+<div class="mt-space-lg flex flex-col gap-space-xs">
+<div class="flex items-center justify-between px-1">
+<span class="font-headline-sm text-headline-sm text-on-surface">Precision Garment Specs</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Tap row to select</span>
+</div>
+<!-- Table Container -->
+<div class="w-full rounded-xl bg-surface-container-lowest shadow-sm overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left" id="sizing-table">
+<thead>
+<tr class="bg-surface-container-high text-on-surface">
+<th class="py-3 px-3 font-label-md text-label-md uppercase tracking-wider" scope="col">Size</th>
+<th class="py-3 px-2 font-label-md text-label-md uppercase tracking-wider" scope="col">Bust</th>
+<th class="py-3 px-2 font-label-md text-label-md uppercase tracking-wider" scope="col">Length</th>
+<th class="py-3 px-2 font-label-md text-label-md uppercase tracking-wider" scope="col">Shoulder</th>
+<th class="py-3 px-3 font-label-md text-label-md uppercase tracking-wider text-right" scope="col">Sleeve</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm divide-y-0 text-on-surface">
+<!-- Row XS -->
+<tr class="size-row cursor-pointer transition-colors bg-surface-container-lowest hover:bg-surface-container-low" onclick="selectSizeRow('XS', 'UK 6 / US 2', '34', '86', this)">
+<td class="py-3 px-3 font-label-md text-label-md text-on-surface">
+<span class="block text-primary font-bold">XS</span>
+<span class="text-[11px] text-on-surface-variant">UK 6 • US 2</span>
+</td>
+<td class="py-3 px-2 val-bust" data-cm="86.0 cm" data-in='34.0"'>34.0"</td>
+<td class="py-3 px-2 val-len" data-cm="62.2 cm" data-in='24.5"'>24.5"</td>
+<td class="py-3 px-2 val-shld" data-cm="38.1 cm" data-in='15.0"'>15.0"</td>
+<td class="py-3 px-3 text-right val-slv" data-cm="17.8 cm" data-in='7.0"'>7.0"</td>
+</tr>
+<!-- Row S (Selected Default / Recommended) -->
+<tr class="size-row cursor-pointer transition-colors bg-secondary-fixed/40 text-on-surface" onclick="selectSizeRow('S', 'UK 8 / US 4', '36', '91', this)">
+<td class="py-3 px-3 font-label-md text-label-md text-on-surface">
+<div class="flex items-center gap-1.5">
+<span class="text-primary font-bold">S</span>
+<span class="px-1.5 py-0.5 rounded-full bg-primary text-on-primary text-[10px] uppercase font-semibold">Recommended</span>
+</div>
+<span class="text-[11px] text-on-surface-variant">UK 8 • US 4</span>
+</td>
+<td class="py-3 px-2 font-semibold text-primary val-bust" data-cm="91.4 cm" data-in='36.0"'>36.0"</td>
+<td class="py-3 px-2 val-len" data-cm="63.5 cm" data-in='25.0"'>25.0"</td>
+<td class="py-3 px-2 val-shld" data-cm="39.4 cm" data-in='15.5"'>15.5"</td>
+<td class="py-3 px-3 text-right val-slv" data-cm="18.3 cm" data-in='7.2"'>7.2"</td>
+</tr>
+<!-- Row M -->
+<tr class="size-row cursor-pointer transition-colors bg-surface-container-lowest hover:bg-surface-container-low" onclick="selectSizeRow('M', 'UK 10 / US 6', '38', '96', this)">
+<td class="py-3 px-3 font-label-md text-label-md text-on-surface">
+<span class="block text-on-surface font-bold">M</span>
+<span class="text-[11px] text-on-surface-variant">UK 10 • US 6</span>
+</td>
+<td class="py-3 px-2 val-bust" data-cm="96.5 cm" data-in='38.0"'>38.0"</td>
+<td class="py-3 px-2 val-len" data-cm="64.8 cm" data-in='25.5"'>25.5"</td>
+<td class="py-3 px-2 val-shld" data-cm="40.6 cm" data-in='16.0"'>16.0"</td>
+<td class="py-3 px-3 text-right val-slv" data-cm="19.0 cm" data-in='7.5"'>7.5"</td>
+</tr>
+<!-- Row L -->
+<tr class="size-row cursor-pointer transition-colors bg-surface-container-lowest hover:bg-surface-container-low" onclick="selectSizeRow('L', 'UK 12 / US 8', '40', '101', this)">
+<td class="py-3 px-3 font-label-md text-label-md text-on-surface">
+<span class="block text-on-surface font-bold">L</span>
+<span class="text-[11px] text-on-surface-variant">UK 12 • US 8</span>
+</td>
+<td class="py-3 px-2 val-bust" data-cm="101.6 cm" data-in='40.0"'>40.0"</td>
+<td class="py-3 px-2 val-len" data-cm="66.0 cm" data-in='26.0"'>26.0"</td>
+<td class="py-3 px-2 val-shld" data-cm="41.9 cm" data-in='16.5"'>16.5"</td>
+<td class="py-3 px-3 text-right val-slv" data-cm="19.8 cm" data-in='7.8"'>7.8"</td>
+</tr>
+<!-- Row XL -->
+<tr class="size-row cursor-pointer transition-colors bg-surface-container-lowest hover:bg-surface-container-low" onclick="selectSizeRow('XL', 'UK 14 / US 10', '42', '106', this)">
+<td class="py-3 px-3 font-label-md text-label-md text-on-surface">
+<span class="block text-on-surface font-bold">XL</span>
+<span class="text-[11px] text-on-surface-variant">UK 14 • US 10</span>
+</td>
+<td class="py-3 px-2 val-bust" data-cm="106.7 cm" data-in='42.0"'>42.0"</td>
+<td class="py-3 px-2 val-len" data-cm="67.3 cm" data-in='26.5"'>26.5"</td>
+<td class="py-3 px-2 val-shld" data-cm="43.2 cm" data-in='17.0"'>17.0"</td>
+<td class="py-3 px-3 text-right val-slv" data-cm="20.3 cm" data-in='8.0"'>8.0"</td>
+</tr>
+<!-- Row XXL -->
+<tr class="size-row cursor-pointer transition-colors bg-surface-container-lowest hover:bg-surface-container-low" onclick="selectSizeRow('XXL', 'UK 16 / US 12', '44', '112', this)">
+<td class="py-3 px-3 font-label-md text-label-md text-on-surface">
+<span class="block text-on-surface font-bold">XXL</span>
+<span class="text-[11px] text-on-surface-variant">UK 16 • US 12</span>
+</td>
+<td class="py-3 px-2 val-bust" data-cm="111.8 cm" data-in='44.0"'>44.0"</td>
+<td class="py-3 px-2 val-len" data-cm="68.6 cm" data-in='27.0"'>27.0"</td>
+<td class="py-3 px-2 val-shld" data-cm="44.5 cm" data-in='17.5"'>17.5"</td>
+<td class="py-3 px-3 text-right val-slv" data-cm="20.8 cm" data-in='8.2"'>8.2"</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Visual "How to Measure" Illustrated Vector Guide -->
+<div class="mt-space-xl p-space-md rounded-xl bg-surface-container-low shadow-sm flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">design_services</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">How to Measure</h3>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">4 Key Points</span>
+</div>
+<!-- Garment Line Diagram Card -->
+<div class="w-full bg-surface-container-lowest p-space-md rounded-lg flex flex-col items-center justify-center relative">
+<!-- Minimalist SVG Garment Diagram with Callouts -->
+<svg class="w-full max-w-[280px] h-auto text-primary" fill="none" stroke="currentColor" viewbox="0 0 320 220">
+<!-- Silhouette of Atelier Top -->
+<path d="M 120 30 Q 160 48 200 30 L 250 65 L 225 105 L 195 90 L 195 200 L 125 200 L 125 90 L 95 105 L 70 65 Z" fill="#FAF2EE" fill-opacity="0.6" stroke="#8A7174" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
+<!-- Measurement Indicator 1: Shoulder (3) -->
+<line stroke="#9E2A4B" stroke-dasharray="3 3" stroke-width="2" x1="120" x2="200" y1="32" y2="32"></line>
+<circle cx="120" cy="32" fill="#9E2A4B" r="3"></circle>
+<circle cx="200" cy="32" fill="#9E2A4B" r="3"></circle>
+<rect fill="#9E2A4B" height="14" rx="4" width="20" x="150" y="18"></rect>
+<text fill="#FFFFFF" font-family="Plus Jakarta Sans" font-size="10" font-weight="bold" text-anchor="middle" x="160" y="29">3</text>
+<!-- Measurement Indicator 2: Bust (1) -->
+<line stroke="#9E2A4B" stroke-width="2.5" x1="125" x2="195" y1="92" y2="92"></line>
+<circle cx="125" cy="92" fill="#9E2A4B" r="3.5"></circle>
+<circle cx="195" cy="92" fill="#9E2A4B" r="3.5"></circle>
+<rect fill="#9E2A4B" height="14" rx="4" width="20" x="150" y="85"></rect>
+<text fill="#FFFFFF" font-family="Plus Jakarta Sans" font-size="10" font-weight="bold" text-anchor="middle" x="160" y="96">1</text>
+<!-- Measurement Indicator 3: Sleeve (4) -->
+<line stroke="#9E2A4B" stroke-dasharray="3 3" stroke-width="2" x1="200" x2="250" y1="30" y2="65"></line>
+<circle cx="250" cy="65" fill="#9E2A4B" r="3"></circle>
+<rect fill="#9E2A4B" height="14" rx="4" width="18" x="228" y="38"></rect>
+<text fill="#FFFFFF" font-family="Plus Jakarta Sans" font-size="10" font-weight="bold" text-anchor="middle" x="237" y="49">4</text>
+<!-- Measurement Indicator 4: Length (2) -->
+<line stroke="#9E2A4B" stroke-dasharray="3 3" stroke-width="2" x1="120" x2="120" y1="32" y2="200"></line>
+<circle cx="120" cy="200" fill="#9E2A4B" r="3"></circle>
+<rect fill="#9E2A4B" height="14" rx="4" width="18" x="108" y="115"></rect>
+<text fill="#FFFFFF" font-family="Plus Jakarta Sans" font-size="10" font-weight="bold" text-anchor="middle" x="117" y="126">2</text>
+</svg>
+<div class="mt-2 text-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant italic">Maevelle Atelier Relaxed Pattern Mapping</span>
+</div>
+</div>
+<!-- 4 Measurement Points Legend -->
+<div class="grid grid-cols-1 gap-space-sm">
+<div class="flex items-start gap-space-sm p-2 rounded-lg bg-surface-container-lowest">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center justify-center shrink-0">1</span>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface">Bust / Chest</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Measure around the fullest part of the bust, keeping the measuring tape horizontal under your armpits.</p>
+</div>
+</div>
+<div class="flex items-start gap-space-sm p-2 rounded-lg bg-surface-container-lowest">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center justify-center shrink-0">2</span>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface">Body Length</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">From the highest shoulder point straight down over the apex to the bottom hemline.</p>
+</div>
+</div>
+<div class="flex items-start gap-space-sm p-2 rounded-lg bg-surface-container-lowest">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center justify-center shrink-0">3</span>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface">Shoulder Width</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">From the tip of one shoulder seam straight across your upper back to the opposite shoulder tip.</p>
+</div>
+</div>
+<div class="flex items-start gap-space-sm p-2 rounded-lg bg-surface-container-lowest">
+<span class="w-6 h-6 rounded-full bg-primary text-on-primary font-label-md text-label-md flex items-center justify-center shrink-0">4</span>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface">Sleeve Length</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">From the outer shoulder stitch straight down along the arm to the outer edge of the cuff.</p>
+</div>
+</div>
+</div>
+<!-- Tape Snugness Tip Banner -->
+<div class="p-space-sm rounded-lg bg-surface-container-high flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0" style="font-variation-settings: 'FILL' 1;">tips_and_updates</span>
+<p class="font-body-sm text-body-sm text-on-surface">
+<strong class="font-semibold text-primary">Tape measure tip:</strong> Keep the tape comfortably snug against your body, never pulled tight. Wear the undergarments you intend to style with this piece.
+      </p>
+</div>
+</div>
+<!-- Stretch & Fabric Behavior Guide -->
+<div class="mt-space-lg flex flex-col gap-space-sm">
+<span class="font-headline-sm text-headline-sm text-on-surface px-1">Fabric Dynamics &amp; Touch</span>
+<div class="grid grid-cols-1 gap-space-xs">
+<!-- Stretch Card -->
+<div class="p-space-md rounded-xl bg-surface-container-low shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[18px]">grain</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface">Fabric Stretch</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Organic Combed Cotton • 5% Elastane</span>
+</div>
+</div>
+<div class="flex flex-col items-end shrink-0 pl-2">
+<span class="font-label-md text-label-md text-primary">Medium Stretch</span>
+<div class="flex gap-1 mt-1">
+<span class="w-3.5 h-1.5 rounded-full bg-primary"></span>
+<span class="w-3.5 h-1.5 rounded-full bg-primary"></span>
+<span class="w-3.5 h-1.5 rounded-full bg-surface-container-highest"></span>
+</div>
+</div>
+</div>
+<!-- Shrinkage Card -->
+<div class="p-space-md rounded-xl bg-surface-container-low shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[18px]">water_drop</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface">Wash Behavior</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Pre-shrunk &amp; enzyme washed</span>
+</div>
+</div>
+<div class="flex flex-col items-end shrink-0 pl-2">
+<span class="font-label-md text-label-md text-on-surface">&lt;1% Shrinkage</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Holds true fit</span>
+</div>
+</div>
+<!-- Silhouette Card -->
+<div class="p-space-md rounded-xl bg-surface-container-low shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-[18px]">checkroom</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface">Silhouette Profile</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Breathable climate ease</span>
+</div>
+</div>
+<div class="shrink-0 pl-2">
+<span class="px-2 py-1 rounded-md bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm">
+            Relaxed Feminine
+          </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Concierge Fitting Help Banner (WhatsApp Stylist Desk) -->
+<div class="mt-space-lg p-space-md rounded-xl bg-surface-container-high shadow-sm relative overflow-hidden">
+<div class="flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary shrink-0">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">support_agent</span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface">Banani Atelier Concierge</span>
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+          Unsure about your exact fit across international conventions? Share your measurements on WhatsApp with our stylist team for tailored advice.
+        </p>
+<a class="mt-space-sm inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-surface-container-lowest text-primary hover:bg-primary hover:text-on-primary transition-all font-label-md text-label-md shadow-sm w-fit" href="https://wa.me/8801894000000" rel="noopener noreferrer" target="_blank">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+<span>WhatsApp Stylist Desk (+880 1894-MAEVELLE)</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Persistent Sticky Bottom Action Bar -->
+<div class="fixed inset-x-0 bottom-0 z-40 px-margin pt-space-sm pb-safe bg-surface/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(28,25,23,0.08)]">
+<div class="flex items-center justify-between gap-space-md max-w-lg mx-auto">
+<!-- Selected State Readout -->
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Confirmed Spec</span>
+<div class="flex items-center gap-1.5 truncate">
+<span class="font-headline-sm text-headline-sm text-primary" id="selected-summary">
+            Size S (UK 8)
+          </span>
+<span class="text-on-surface-variant font-body-sm text-body-sm">•</span>
+<span class="font-body-sm text-body-sm text-on-surface font-semibold" id="selected-bust-summary">
+            Bust 36"
+          </span>
+</div>
+</div>
+<!-- Primary CTA Confirmation Action -->
+<button class="h-12 px-6 rounded-lg bg-primary text-on-primary font-label-md text-label-md flex items-center justify-center gap-2 shrink-0 active:scale-[0.98] transition-transform shadow-md hover:bg-primary-container" onclick="confirmSizeAndDismiss()" type="button">
+<span>Apply Size</span>
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  let currentUnit = 'in';
+  let activeSize = 'S';
+  let activeRegion = 'UK 8 / US 4';
+  let activeBust = '36';
+
+  function switchUnit(unit) {
+    if (currentUnit === unit) return;
+    currentUnit = unit;
+
+    const btnIn = document.getElementById('unit-btn-in');
+    const btnCm = document.getElementById('unit-btn-cm');
+
+    if (unit === 'in') {
+      btnIn.className = "w-full py-2 rounded-lg font-label-md text-label-md transition-all flex items-center justify-center gap-1.5 bg-surface text-primary shadow-sm";
+      btnIn.setAttribute('aria-pressed', 'true');
+      btnIn.innerHTML = '<span>Inches (in)</span><span class="text-[10px] px-1.5 py-0.2 rounded-full bg-primary-fixed text-on-primary-fixed">Active</span>';
+
+      btnCm.className = "w-full py-2 rounded-lg font-label-md text-label-md transition-all flex items-center justify-center gap-1.5 text-on-surface-variant hover:text-on-surface";
+      btnCm.setAttribute('aria-pressed', 'false');
+      btnCm.innerHTML = '<span>Centimeters (cm)</span>';
+    } else {
+      btnCm.className = "w-full py-2 rounded-lg font-label-md text-label-md transition-all flex items-center justify-center gap-1.5 bg-surface text-primary shadow-sm";
+      btnCm.setAttribute('aria-pressed', 'true');
+      btnCm.innerHTML = '<span>Centimeters (cm)</span><span class="text-[10px] px-1.5 py-0.2 rounded-full bg-primary-fixed text-on-primary-fixed">Active</span>';
+
+      btnIn.className = "w-full py-2 rounded-lg font-label-md text-label-md transition-all flex items-center justify-center gap-1.5 text-on-surface-variant hover:text-on-surface";
+      btnIn.setAttribute('aria-pressed', 'false');
+      btnIn.innerHTML = '<span>Inches (in)</span>';
+    }
+
+    // Update all table cell units
+    document.querySelectorAll('#sizing-table tbody tr').forEach(row => {
+      row.querySelectorAll('[data-in]').forEach(cell => {
+        cell.textContent = unit === 'in' ? cell.getAttribute('data-in') : cell.getAttribute('data-cm');
+      });
+    });
+
+    updateSummaryDisplay();
+  }
+
+  function selectSizeRow(sizeCode, regionLabel, bustIn, bustCm, clickedRow) {
+    activeSize = sizeCode;
+    activeRegion = regionLabel;
+    activeBust = currentUnit === 'in' ? bustIn + '"' : bustCm + ' cm';
+
+    // Remove active styles from other rows
+    document.querySelectorAll('.size-row').forEach(row => {
+      row.classList.remove('bg-secondary-fixed/40');
+      row.classList.add('bg-surface-container-lowest');
+    });
+
+    // Add active highlight to clicked row
+    clickedRow.classList.remove('bg-surface-container-lowest');
+    clickedRow.classList.add('bg-secondary-fixed/40');
+
+    updateSummaryDisplay();
+  }
+
+  function updateSummaryDisplay() {
+    const summaryLabel = document.getElementById('selected-summary');
+    const bustLabel = document.getElementById('selected-bust-summary');
+
+    if (summaryLabel && bustLabel) {
+      summaryLabel.textContent = `Size ${activeSize} (${activeRegion.split('/')[0].trim()})`;
+      bustLabel.textContent = `Bust ${activeBust}`;
+    }
+  }
+
+  function confirmSizeAndDismiss() {
+    // Graceful interaction feedback
+    const btn = event.currentTarget;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span>Confirmed</span><span class="material-symbols-outlined text-[18px]">done_all</span>';
+    btn.classList.add('bg-secondary');
+
+    setTimeout(() => {
+      if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        btn.innerHTML = originalText;
+        btn.classList.remove('bg-secondary');
+      }
+    }, 450);
+  }
+</script></main></div></body></html>
