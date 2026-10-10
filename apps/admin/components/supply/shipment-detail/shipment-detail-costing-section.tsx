@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import {
   AlertCircle,
   AlertTriangle,
@@ -10,7 +9,6 @@ import {
   CircleDollarSign,
   Coins,
   Copy,
-  ExternalLink,
   HelpCircle,
   History,
   Info,
@@ -380,16 +378,6 @@ export function ShipmentDetailCostingSection({
               </Button>
             </>
           ) : null}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            render={<Link href={`/landed-cost?shipment=${shipment.id}`} />}
-            className="text-xs text-muted-foreground hover:text-foreground gap-1"
-          >
-            <span>Full Console</span>
-            <ExternalLink className="size-3" />
-          </Button>
         </div>
       </div>
 

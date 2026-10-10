@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, CircleDollarSign, Package, PackageCheck, Truck } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 
@@ -31,6 +31,8 @@ import { ShipmentDetailStats } from './shipment-detail/shipment-detail-stats';
 import type { AddCostComponentInput, ShipmentDetailProps } from './shipment-detail/types';
 
 export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
+  const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const canManage = useAdminCapability('inbound_shipment.manage');
   const canViewReceiving = useAdminCapability('receiving.view');
@@ -99,6 +101,29 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
     if (searchParams.get('receive') === '1') setReceiveOpen(true);
     if (searchParams.get('startCosting') === '1') setStartWorksheetOpen(true);
   }, [searchParams]);
+
+  function updateLocation(tab: string, clearIntent = true) {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set('tab', tab);
+    if (clearIntent) {
+      next.delete('receive');
+      next.delete('startCosting');
+    }
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+  }
+
+  function clearIntent(intent: 'receive' | 'startCosting') {
+    if (!searchParams.has(intent)) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete(intent);
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  function openStartWorksheet() {
+    updateLocation('costing');
+    setStartWorksheetOpen(true);
+  }
 
   async function run(action: () => Promise<unknown>, confirmation: string, close?: () => void) {
     setBusy(true);
@@ -303,7 +328,11 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
   }
 
   const worksheet = worksheets[0];
-  const initialTab = searchParams.get('tab') || 'items';
+  const requestedTab = searchParams.get('tab');
+  const activeTab =
+    requestedTab === 'receipts' || requestedTab === 'costing' || requestedTab === 'logistics'
+      ? requestedTab
+      : 'items';
 
   return (
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -320,7 +349,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
         onOpenReceive={() => setReceiveOpen(true)}
         onOpenEdit={() => setEditOpen(true)}
         onOpenCancel={() => setCancelOpen(true)}
-        onOpenStartWorksheet={() => setStartWorksheetOpen(true)}
+        onOpenStartWorksheet={openStartWorksheet}
       />
 
       {/* Operational Alerts */}
@@ -331,8 +360,15 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
       <ShipmentDetailStats shipment={shipment} worksheet={worksheet} />
 
       {/* Tabbed Content Navigation */}
-      <Tabs defaultValue={initialTab} className="space-y-4">
-        <TabsList variant="line" className="w-full justify-start border-b rounded-none px-0">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => updateLocation(value)}
+        className="space-y-4"
+      >
+        <TabsList
+          variant="line"
+          className="w-full justify-start overflow-x-auto border-b rounded-none px-0"
+        >
           <TabsTrigger value="items" className="gap-1.5">
             <Package className="size-3.5" />
             <span>Items & Cargo ({shipment.allocations.length})</span>
@@ -372,7 +408,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
             shipment={shipment}
             worksheet={worksheet}
             canManageCost={canManageCost}
-            onOpenStartWorksheet={() => setStartWorksheetOpen(true)}
+            onOpenStartWorksheet={openStartWorksheet}
             onOpenAddComponent={() => setAddComponentOpen(true)}
             onDeleteComponent={handleDeleteComponent}
             onOpenFinalize={() => setFinalizeOpen(true)}
@@ -398,7 +434,10 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
         open={receiveOpen}
         onOpenChange={(open) => {
           setReceiveOpen(open);
-          if (!open) setReceiptLines([]);
+          if (!open) {
+            setReceiptLines([]);
+            clearIntent('receive');
+          }
         }}
         shipment={shipment}
         lines={receiptLines}
@@ -425,7 +464,10 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
 
       <StartLandedCostDialog
         open={startWorksheetOpen}
-        onOpenChange={setStartWorksheetOpen}
+        onOpenChange={(open) => {
+          setStartWorksheetOpen(open);
+          if (!open) clearIntent('startCosting');
+        }}
         shipment={shipment}
         onStartWorksheet={handleStartWorksheet}
         saving={busy}

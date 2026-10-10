@@ -7,7 +7,6 @@ import {
   CircleDollarSign,
   Copy,
   Edit3,
-  ExternalLink,
   PackageCheck,
   Plane,
   Ship,
@@ -20,23 +19,21 @@ import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { ShipmentDetailHeaderProps } from './types';
 
 const SHIPMENT_STATUS_EXPLANATIONS: Record<string, string> = {
   PLANNED: 'Cargo has been allocated to this shipment. Awaiting carrier pickup and port departure.',
   IN_TRANSIT: 'Shipment has departed origin and is currently en route via freight carrier.',
-  ARRIVED: 'Shipment has docked at the receiving warehouse dock. Awaiting physical count verification.',
+  ARRIVED:
+    'Shipment has docked at the receiving warehouse dock. Awaiting physical count verification.',
   CANCELLED: 'Shipment was cancelled before departure. All allocated quantities were released.',
 };
 
 const RECEIVING_STATUS_EXPLANATIONS: Record<string, string> = {
   NOT_RECEIVED: 'No physical receiving vouchers posted yet. Stock remains uncounted.',
-  PARTIALLY_RECEIVED: 'Some items have been counted and posted to warehouse inventory. Remainder pending.',
+  PARTIALLY_RECEIVED:
+    'Some items have been counted and posted to warehouse inventory. Remainder pending.',
   RECEIVED: 'All expected items have been physically verified and booked into warehouse stock.',
 };
 
@@ -120,10 +117,15 @@ export function ShipmentDetailHeader({
                     size="icon"
                     className="size-7 text-muted-foreground hover:text-foreground"
                     onClick={copyShipmentNumber}
+                    aria-label="Copy shipment number"
                   />
                 }
               >
-                {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                {copied ? (
+                  <Check className="size-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
               </TooltipTrigger>
               <TooltipContent side="top">
                 {copied ? 'Copied to clipboard!' : 'Copy shipment number'}
@@ -145,7 +147,8 @@ export function ShipmentDetailHeader({
                 <StatusBadge status={shipment.receivingStatus} />
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
-                {RECEIVING_STATUS_EXPLANATIONS[shipment.receivingStatus] ?? shipment.receivingStatus}
+                {RECEIVING_STATUS_EXPLANATIONS[shipment.receivingStatus] ??
+                  shipment.receivingStatus}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -159,7 +162,9 @@ export function ShipmentDetailHeader({
             <span>·</span>
             <span>
               {shipment.originText ? `${shipment.originText} → ` : 'Origin → '}
-              <strong className="font-medium text-foreground">{shipment.receivingLocationName}</strong>
+              <strong className="font-medium text-foreground">
+                {shipment.receivingLocationName}
+              </strong>
             </span>
             {shipment.trackingReference ? (
               <>
@@ -208,11 +213,11 @@ export function ShipmentDetailHeader({
             ) : (
               <Button
                 variant="outline"
-                render={<Link href={`/landed-cost?shipment=${shipment.id}`} />}
+                render={<Link href={`/inbound-shipments/${shipment.id}?tab=costing`} />}
                 className="gap-1.5 shadow-sm"
               >
                 <CircleDollarSign className="size-4" />
-                <span>Landed Cost Console</span>
+                <span>Review Landed Cost</span>
               </Button>
             )
           ) : null}
@@ -221,20 +226,26 @@ export function ShipmentDetailHeader({
           {shipment.status !== 'CANCELLED' && canManage ? (
             <Tooltip>
               <TooltipTrigger
-                render={
-                  <Button variant="outline" size="sm" onClick={onOpenEdit} disabled={busy} />
-                }
+                render={<Button variant="outline" size="sm" onClick={onOpenEdit} disabled={busy} />}
               >
                 <Edit3 className="size-3.5" />
                 <span>Edit Logistics</span>
               </TooltipTrigger>
-              <TooltipContent side="top">Update tracking #, ETA, origin port, or transport mode</TooltipContent>
+              <TooltipContent side="top">
+                Update tracking #, ETA, origin port, or transport mode
+              </TooltipContent>
             </Tooltip>
           ) : null}
 
           {/* Action 6: Cancel Shipment (when PLANNED) */}
           {shipment.status === 'PLANNED' && canManage ? (
-            <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={onOpenCancel} disabled={busy}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10"
+              onClick={onOpenCancel}
+              disabled={busy}
+            >
               <XCircle className="size-3.5" />
               <span>Cancel</span>
             </Button>
@@ -294,7 +305,10 @@ export function ShipmentDetailHeader({
       ) : (
         <div className="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
           <XCircle className="size-4 shrink-0" />
-          <span>This shipment has been cancelled. Purchase line quantities were returned to unallocated stock.</span>
+          <span>
+            This shipment has been cancelled. Purchase line quantities were returned to unallocated
+            stock.
+          </span>
         </div>
       )}
     </div>
