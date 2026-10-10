@@ -42,15 +42,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  formatSupplyDate,
-  formatSupplyMoney,
-} from '@/lib/supply/api';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatSupplyDate, formatSupplyMoney } from '@/lib/supply/api';
 import type { SupplierInvoice } from './types';
 
 export interface PurchaseDetailFinanceTabProps {
@@ -97,8 +90,10 @@ export function PurchaseDetailFinanceTab({
   const isOverinvoiced = invoiceTotal > orderTotal && orderTotal > 0;
   const overinvoicedAmount = isOverinvoiced ? invoiceTotal - orderTotal : 0;
 
-  const billingProgress = orderTotal > 0 ? Math.min(100, Math.round((invoiceTotal / orderTotal) * 100)) : 0;
-  const settlementProgress = invoiceTotal > 0 ? Math.min(100, Math.round((paidTotal / invoiceTotal) * 100)) : 0;
+  const billingProgress =
+    orderTotal > 0 ? Math.min(100, Math.round((invoiceTotal / orderTotal) * 100)) : 0;
+  const settlementProgress =
+    invoiceTotal > 0 ? Math.min(100, Math.round((paidTotal / invoiceTotal) * 100)) : 0;
 
   // Filtered invoices
   const filteredInvoices = useMemo(() => {
@@ -140,9 +135,7 @@ export function PurchaseDetailFinanceTab({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-heading text-base font-semibold">
-              Supplier Invoices & Payables
-            </h2>
+            <h2 className="font-heading text-base font-semibold">Supplier Invoices & Payables</h2>
             <Badge variant="secondary" className="h-5 px-1.5 text-xs font-mono">
               {activeInvoices.length} active
             </Badge>
@@ -156,7 +149,12 @@ export function PurchaseDetailFinanceTab({
           <Tooltip>
             <TooltipTrigger
               render={
-                <Button size="sm" onClick={onRecordInvoiceClick} disabled={busy} className="gap-1.5" />
+                <Button
+                  size="sm"
+                  onClick={onRecordInvoiceClick}
+                  disabled={busy}
+                  className="gap-1.5"
+                />
               }
             >
               <ReceiptText className="size-4" />
@@ -230,7 +228,10 @@ export function PurchaseDetailFinanceTab({
                   </TooltipContent>
                 </Tooltip>
               ) : (
-                <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                >
                   Fully billed
                 </Badge>
               )}
@@ -240,7 +241,8 @@ export function PurchaseDetailFinanceTab({
             </p>
             <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
               <span>
-                {activeInvoices.length} {activeInvoices.length === 1 ? 'bill active' : 'bills active'}
+                {activeInvoices.length}{' '}
+                {activeInvoices.length === 1 ? 'bill active' : 'bills active'}
               </span>
               <span className="font-mono">{settlementProgress}% settled</span>
             </div>
@@ -254,7 +256,10 @@ export function PurchaseDetailFinanceTab({
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">Disbursed / Paid</span>
               {settlementProgress === 100 && invoiceTotal > 0 ? (
-                <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                >
                   100% Settled
                 </Badge>
               ) : null}
@@ -272,9 +277,14 @@ export function PurchaseDetailFinanceTab({
         <Card size="sm">
           <CardContent className="p-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Balance Due / Outstanding</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Balance Due / Outstanding
+              </span>
               {outstandingTotal > 0 ? (
-                <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30"
+                >
                   Payment Due
                 </Badge>
               ) : (
@@ -285,7 +295,9 @@ export function PurchaseDetailFinanceTab({
             </div>
             <p
               className={`mt-1 font-mono text-base font-bold tabular-nums ${
-                outstandingTotal > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+                outstandingTotal > 0
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-muted-foreground'
               }`}
             >
               {formatSupplyMoney(String(outstandingTotal), purchase.currencyCode)}
@@ -302,9 +314,12 @@ export function PurchaseDetailFinanceTab({
           <div className="flex size-12 items-center justify-center rounded-full bg-muted">
             <ReceiptText className="size-6 text-muted-foreground" />
           </div>
-          <h3 className="mt-4 font-heading text-base font-semibold">No supplier invoices recorded</h3>
+          <h3 className="mt-4 font-heading text-base font-semibold">
+            No supplier invoices recorded
+          </h3>
           <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-            Record the supplier's commercial bill to track accounts payable, cash disbursements, and landed cost.
+            Record the supplier's commercial bill to track accounts payable, cash disbursements, and
+            landed cost.
           </p>
           {canCreateInvoice ? (
             <Button className="mt-5 gap-1.5" onClick={onRecordInvoiceClick} disabled={busy}>
@@ -335,7 +350,10 @@ export function PurchaseDetailFinanceTab({
               >
                 <span>Needs Payment</span>
                 {outstandingCount > 0 ? (
-                  <Badge variant={filter === 'OUTSTANDING' ? 'secondary' : 'default'} className="h-4 px-1 text-[10px]">
+                  <Badge
+                    variant={filter === 'OUTSTANDING' ? 'secondary' : 'default'}
+                    className="h-4 px-1 text-[10px]"
+                  >
                     {outstandingCount}
                   </Badge>
                 ) : null}
@@ -391,7 +409,10 @@ export function PurchaseDetailFinanceTab({
               <TableBody>
                 {filteredInvoices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-28 text-center text-xs text-muted-foreground">
+                    <TableCell
+                      colSpan={9}
+                      className="h-28 text-center text-xs text-muted-foreground"
+                    >
                       No invoices match the selected filter.
                     </TableCell>
                   </TableRow>
@@ -402,7 +423,8 @@ export function PurchaseDetailFinanceTab({
                     const outstanding = Number(inv.outstanding || 0);
                     const isCancelled = inv.status === 'CANCELLED';
                     const isPaid = outstanding <= 0 && !isCancelled;
-                    const rowProgress = amount > 0 ? Math.min(100, Math.round((paid / amount) * 100)) : 0;
+                    const rowProgress =
+                      amount > 0 ? Math.min(100, Math.round((paid / amount) * 100)) : 0;
                     const canPayRow = !isCancelled && outstanding > 0 && canPayInvoice;
                     const canCancelRow = !isCancelled && paid === 0 && canCreateInvoice;
                     const canAdjustRow = !isCancelled && canCreateInvoice;
@@ -411,7 +433,9 @@ export function PurchaseDetailFinanceTab({
                       <TableRow
                         key={inv.id}
                         className={`group transition-colors ${
-                          isCancelled ? 'opacity-60 bg-muted/20' : 'hover:bg-muted/30 cursor-pointer'
+                          isCancelled
+                            ? 'opacity-60 bg-muted/20'
+                            : 'hover:bg-muted/30 cursor-pointer'
                         }`}
                         onClick={(e) => {
                           // Prevent triggering if clicked button or interactive elements
@@ -432,10 +456,15 @@ export function PurchaseDetailFinanceTab({
                             </button>
                             {inv.notes ? (
                               <Tooltip>
-                                <TooltipTrigger render={<span className="cursor-help inline-flex" />}>
+                                <TooltipTrigger
+                                  render={<span className="cursor-help inline-flex" />}
+                                >
                                   <FileText className="size-3 text-muted-foreground/70 hover:text-foreground" />
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-xs text-xs whitespace-pre-wrap">
+                                <TooltipContent
+                                  side="top"
+                                  className="max-w-xs text-xs whitespace-pre-wrap"
+                                >
                                   {inv.notes}
                                 </TooltipContent>
                               </Tooltip>
@@ -453,11 +482,17 @@ export function PurchaseDetailFinanceTab({
 
                         {/* Description & Payee */}
                         <TableCell className="max-w-[220px]">
-                          <p className="truncate text-xs font-medium text-foreground">{inv.description}</p>
+                          <p className="truncate text-xs font-medium text-foreground">
+                            {inv.description}
+                          </p>
                           {inv.payee_name && inv.payee_name !== purchase.supplierName ? (
-                            <p className="truncate text-[11px] text-muted-foreground">Payee: {inv.payee_name}</p>
+                            <p className="truncate text-[11px] text-muted-foreground">
+                              Payee: {inv.payee_name}
+                            </p>
                           ) : (
-                            <p className="truncate text-[11px] text-muted-foreground/80">{purchase.supplierName}</p>
+                            <p className="truncate text-[11px] text-muted-foreground/80">
+                              {purchase.supplierName}
+                            </p>
                           )}
                         </TableCell>
 
@@ -487,7 +522,7 @@ export function PurchaseDetailFinanceTab({
                             <div className="flex items-center justify-end gap-1">
                               <div className="w-12 h-1 rounded-full bg-muted overflow-hidden">
                                 <div
-                                  className="h-full bg-emerald-500 transition-all"
+                                  className="h-full bg-success transition-[width] duration-150"
                                   style={{ width: `${rowProgress}%` }}
                                 />
                               </div>
@@ -538,7 +573,8 @@ export function PurchaseDetailFinanceTab({
                                   <span>Pay</span>
                                 </TooltipTrigger>
                                 <TooltipContent side="top">
-                                  Record cash payment for {formatSupplyMoney(inv.outstanding, inv.currency_code)}
+                                  Record cash payment for{' '}
+                                  {formatSupplyMoney(inv.outstanding, inv.currency_code)}
                                 </TooltipContent>
                               </Tooltip>
                             ) : (
@@ -609,7 +645,9 @@ export function PurchaseDetailFinanceTab({
                                 ) : null}
 
                                 <DropdownMenuItem
-                                  render={<Link href={`/finance/expenses/${inv.id}`} target="_blank" />}
+                                  render={
+                                    <Link href={`/finance/expenses/${inv.id}`} target="_blank" />
+                                  }
                                 >
                                   <ExternalLink className="size-3.5 mr-2 text-muted-foreground" />
                                   <span>Open in Finance</span>

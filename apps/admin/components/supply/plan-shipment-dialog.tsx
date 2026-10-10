@@ -100,6 +100,8 @@ export function PlanShipmentDialog({
   const [loadedShippableLines, setLoadedShippableLines] = useState<readonly ShippableLineItem[]>(
     propShippableLines ?? [],
   );
+  const [referenceLoading, setReferenceLoading] = useState(false);
+  const [referenceError, setReferenceError] = useState('');
 
   useEffect(() => {
     if (propLocations) setLoadedLocations(propLocations);
@@ -111,23 +113,50 @@ export function PlanShipmentDialog({
 
   useEffect(() => {
     if (!open) return;
+    const controller = new AbortController();
+    const tasks: Promise<unknown>[] = [];
+    setReferenceError('');
+
     if (!propLocations || propLocations.length === 0) {
-      supplyRequest<{ data: readonly WarehouseLocationDto[] }>('/admin/warehouse/locations')
-        .then((res) => setLoadedLocations(res.data))
-        .catch(() => {});
+      tasks.push(
+        supplyRequest<{ data: readonly WarehouseLocationDto[] }>('/admin/warehouse/locations', {
+          signal: controller.signal,
+        }).then((res) => setLoadedLocations(res.data)),
+      );
     }
     if (!propShippableLines || propShippableLines.length === 0) {
-      supplyRequest<{ data: readonly PurchaseDto[] }>('/admin/purchases?status=PLACED&pageSize=100')
-        .then((res) => {
+      tasks.push(
+        supplyRequest<{ data: readonly PurchaseDto[] }>(
+          '/admin/purchases?status=PLACED&pageSize=100',
+          { signal: controller.signal },
+        ).then((res) => {
           const lines = res.data.flatMap((purchase) =>
             purchase.lines
               .filter((line) => Number(line.allocatedQuantity) < Number(line.quantity))
               .map((line) => ({ ...line, purchase })),
           );
           setLoadedShippableLines(lines);
-        })
-        .catch(() => {});
+        }),
+      );
     }
+
+    if (tasks.length === 0) {
+      setReferenceLoading(false);
+      return () => controller.abort();
+    }
+
+    setReferenceLoading(true);
+    void Promise.allSettled(tasks).then((results) => {
+      if (controller.signal.aborted) return;
+      setReferenceLoading(false);
+      if (results.some((result) => result.status === 'rejected')) {
+        setReferenceError(
+          'Some warehouse or purchase-line choices could not be loaded. Close and reopen the form to retry.',
+        );
+      }
+    });
+
+    return () => controller.abort();
   }, [open, propLocations, propShippableLines]);
 
   const locations = loadedLocations;
@@ -413,7 +442,18 @@ export function PlanShipmentDialog({
           </div>
         </DialogHeader>
 
-        {shippableLines.length === 0 ? (
+        {referenceLoading ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center"
+          >
+            <Loader2 aria-hidden="true" className="size-6 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">
+              Loading warehouses and open purchase lines…
+            </p>
+          </div>
+        ) : shippableLines.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center sm:p-10">
             <div className="flex size-12 items-center justify-center rounded-full bg-muted">
               <PackageOpen className="size-6 text-muted-foreground" />
@@ -437,9 +477,23 @@ export function PlanShipmentDialog({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
+            {referenceError ? (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive"
+              >
+                <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
+                <span>{referenceError}</span>
+              </div>
+            ) : null}
             {errorMessage ? (
-              <div className="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-                <AlertCircle className="size-4 shrink-0" />
+              <div
+                role="alert"
+                aria-live="polite"
+                className="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive"
+              >
+                <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
             ) : null}
@@ -522,7 +576,7 @@ export function PlanShipmentDialog({
                     onChange={(e) => setReceivingLocationId(e.target.value)}
                   >
                     <NativeSelectOption value="" disabled>
-                      Choose a receiving warehouse dock...
+                      Choose a receiving warehouse dock…
                     </NativeSelectOption>
                     {receivingLocations.map((item) => (
                       <NativeSelectOption key={item.id} value={item.id}>

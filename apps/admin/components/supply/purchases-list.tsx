@@ -62,6 +62,7 @@ import {
 } from '@/lib/supply/api';
 import { purchaseWorkflowStatus } from '@/lib/supply/status';
 import { CreatePurchaseDialog } from './create-purchase-dialog';
+import { SupplyWorkspaceNav } from './supply-workspace-nav';
 import { PlanShipmentDialog } from './plan-shipment-dialog';
 
 const STATUS_TABS = [
@@ -316,6 +317,8 @@ export function PurchasesList() {
           ) : null}
         </div>
       </div>
+
+      <SupplyWorkspaceNav />
 
       {/* Operational Stats Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -640,7 +643,7 @@ export function PurchasesList() {
                         {/* Progress Bar */}
                         <div className="h-1.5 w-36 overflow-hidden rounded-full bg-muted">
                           <div
-                            className="h-full bg-emerald-500 transition-all"
+                            className="h-full bg-success transition-[width] duration-150"
                             style={{
                               width: `${orderedUnits > 0 ? Math.min(100, (receivedUnits / orderedUnits) * 100) : 0}%`,
                             }}

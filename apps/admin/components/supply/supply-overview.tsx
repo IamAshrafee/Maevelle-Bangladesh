@@ -28,6 +28,7 @@ import type {
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalEmptyState, OperationalFeedback } from '@/components/operational-worklist';
 import { QuantityProgress } from '@/components/supply/supply-entity-ui';
+import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -137,6 +138,8 @@ export function SupplyOverview() {
           ) : null}
         </div>
       </header>
+
+      <SupplyWorkspaceNav />
 
       {message ? <OperationalFeedback tone="danger">{message}</OperationalFeedback> : null}
 
@@ -259,11 +262,7 @@ export function SupplyOverview() {
               </CardTitle>
               <CardDescription>Arrived shipments that still need counting.</CardDescription>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              render={<Link href="/receiving" />}
-            >
+            <Button variant="ghost" size="sm" render={<Link href="/receiving" />}>
               View queue
             </Button>
           </CardHeader>

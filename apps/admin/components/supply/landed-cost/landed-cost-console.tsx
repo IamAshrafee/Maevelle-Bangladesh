@@ -17,14 +17,11 @@ import {
 import type { ApiEnvelope, InboundShipmentDto } from '@maevelle/contracts';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
+import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supplyRequest } from '@/lib/supply/api';
 import type { Worksheet } from '@/lib/supply/costing-types';
 import type { PagedEnvelope } from '@/lib/supply/types';
@@ -107,7 +104,11 @@ export function LandedCostConsole() {
     void loadData();
   }, [requestedShipmentId, requestedWorksheetId]);
 
-  async function runAction(action: () => Promise<unknown>, confirmation: string, close?: () => void) {
+  async function runAction(
+    action: () => Promise<unknown>,
+    confirmation: string,
+    close?: () => void,
+  ) {
     setBusy(true);
     setMessage('');
     setSuccess('');
@@ -232,9 +233,12 @@ export function LandedCostConsole() {
     if (!selectedWorksheet) return;
     await runAction(
       () =>
-        supplyRequest(`/admin/landed-cost/worksheets/${selectedWorksheet.id}/revisions/${revisionId}/discard`, {
-          method: 'POST',
-        }),
+        supplyRequest(
+          `/admin/landed-cost/worksheets/${selectedWorksheet.id}/revisions/${revisionId}/discard`,
+          {
+            method: 'POST',
+          },
+        ),
       'Draft revision discarded. Worksheet safely restored to prior finalized valuation.',
     );
   };
@@ -273,7 +277,8 @@ export function LandedCostConsole() {
             </Tooltip>
           </div>
           <p className="text-xs text-muted-foreground sm:text-sm">
-            Distribute international freight, customs tariffs, import taxes, and terminal handling charges across verified cargo units to establish accurate FIFO inventory asset values.
+            Distribute international freight, customs tariffs, import taxes, and terminal handling
+            charges across verified cargo units to establish accurate FIFO inventory asset values.
           </p>
         </div>
 
@@ -306,6 +311,8 @@ export function LandedCostConsole() {
           ) : null}
         </div>
       </header>
+
+      <SupplyWorkspaceNav />
 
       {/* Operational Feedback Alerts */}
       {message ? <OperationalFeedback tone="danger">{message}</OperationalFeedback> : null}

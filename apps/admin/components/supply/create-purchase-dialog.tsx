@@ -101,6 +101,7 @@ export function CreatePurchaseDialog({
   const [loadedVariants, setLoadedVariants] = useState<readonly CatalogVariantChoiceDto[]>(
     propVariants ?? [],
   );
+  const [referenceLoading, setReferenceLoading] = useState(false);
 
   useEffect(() => {
     if (propSuppliers) setLoadedSuppliers(propSuppliers);
@@ -116,21 +117,48 @@ export function CreatePurchaseDialog({
 
   useEffect(() => {
     if (!open) return;
+    const controller = new AbortController();
+    const tasks: Promise<unknown>[] = [];
+
     if (!propSuppliers || propSuppliers.length === 0) {
-      supplyRequest<{ data: readonly SupplierDto[] }>('/admin/suppliers?pageSize=100')
-        .then((res) => setLoadedSuppliers(res.data))
-        .catch(() => {});
+      tasks.push(
+        supplyRequest<{ data: readonly SupplierDto[] }>('/admin/suppliers?pageSize=100', {
+          signal: controller.signal,
+        }).then((res) => setLoadedSuppliers(res.data)),
+      );
     }
     if (!propLocations || propLocations.length === 0) {
-      supplyRequest<{ data: readonly WarehouseLocationDto[] }>('/admin/warehouse/locations')
-        .then((res) => setLoadedLocations(res.data))
-        .catch(() => {});
+      tasks.push(
+        supplyRequest<{ data: readonly WarehouseLocationDto[] }>('/admin/warehouse/locations', {
+          signal: controller.signal,
+        }).then((res) => setLoadedLocations(res.data)),
+      );
     }
     if (!propVariants || propVariants.length === 0) {
-      supplyRequest<{ data: readonly CatalogVariantChoiceDto[] }>('/admin/catalog/variants')
-        .then((res) => setLoadedVariants(res.data))
-        .catch(() => {});
+      tasks.push(
+        supplyRequest<{ data: readonly CatalogVariantChoiceDto[] }>('/admin/catalog/variants', {
+          signal: controller.signal,
+        }).then((res) => setLoadedVariants(res.data)),
+      );
     }
+
+    if (tasks.length === 0) {
+      setReferenceLoading(false);
+      return () => controller.abort();
+    }
+
+    setReferenceLoading(true);
+    void Promise.allSettled(tasks).then((results) => {
+      if (controller.signal.aborted) return;
+      setReferenceLoading(false);
+      if (results.some((result) => result.status === 'rejected')) {
+        setError(
+          'Some supplier, warehouse, or Catalog choices could not be loaded. Close and reopen the form to retry.',
+        );
+      }
+    });
+
+    return () => controller.abort();
   }, [open, propSuppliers, propLocations, propVariants]);
 
   const suppliers = loadedSuppliers;
@@ -409,11 +437,26 @@ export function CreatePurchaseDialog({
           {/* Scrollable Form Body */}
           <div className="flex-1 space-y-6 overflow-y-auto px-6 py-4">
             {error && (
-              <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                <AlertCircle className="size-4 shrink-0" />
+              <div
+                role="alert"
+                aria-live="polite"
+                className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+              >
+                <AlertCircle aria-hidden="true" className="size-4 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
+
+            {referenceLoading ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-center gap-2 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground"
+              >
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <span>Loading suppliers, warehouses, and Catalog variants…</span>
+              </div>
+            ) : null}
 
             {/* Section 1: Commercials & Vendor Context */}
             <PurchaseFormFields
@@ -433,7 +476,7 @@ export function CreatePurchaseDialog({
               onSupplierReferenceChange={setSupplierReference}
               notes={notes}
               onNotesChange={setNotes}
-              disabled={saving}
+              disabled={saving || referenceLoading}
             />
 
             {/* Section 2: Inline Order Items (Optional & Fast) */}
@@ -470,8 +513,8 @@ export function CreatePurchaseDialog({
                   id="variant-search"
                   value={variantFilter}
                   onChange={(event) => setVariantFilter(event.target.value)}
-                  placeholder="Search title, SKU, color, or size..."
-                  disabled={saving || !activeVariants.length}
+                  placeholder="Search title, SKU, color, or size…"
+                  disabled={saving || referenceLoading || !activeVariants.length}
                 />
               </Field>
 
@@ -484,7 +527,7 @@ export function CreatePurchaseDialog({
                         key={item.id}
                         type="button"
                         onClick={() => selectVariant(item)}
-                        disabled={saving}
+                        disabled={saving || referenceLoading}
                         className={`flex min-h-24 items-center gap-3 rounded-lg border p-2 text-left transition-colors ${
                           isSelected
                             ? 'border-primary bg-primary-subtle'
@@ -496,6 +539,9 @@ export function CreatePurchaseDialog({
                             <img
                               src={item.primaryImageUrl}
                               alt={`${item.productTitle} ${item.optionSummary || item.sku}`}
+                              width={80}
+                              height={80}
+                              loading="lazy"
                               className="size-full object-cover"
                             />
                           ) : (
@@ -537,7 +583,7 @@ export function CreatePurchaseDialog({
                       min="0.000001"
                       step="any"
                       value={addingQuantity}
-                      disabled={saving}
+                      disabled={saving || referenceLoading}
                       className="h-8 font-mono text-xs"
                       onChange={(e) => setAddingQuantity(e.target.value)}
                       onKeyDown={(e) => {
@@ -561,7 +607,7 @@ export function CreatePurchaseDialog({
                       min="0"
                       step="any"
                       value={addingUnitPrice}
-                      disabled={saving}
+                      disabled={saving || referenceLoading}
                       className="h-8 font-mono text-xs"
                       onChange={(e) => setAddingUnitPrice(e.target.value)}
                       onKeyDown={(e) => {
@@ -579,7 +625,7 @@ export function CreatePurchaseDialog({
                     type="button"
                     variant={addingVariantId ? 'default' : 'secondary'}
                     size="sm"
-                    disabled={!addingVariantId || saving}
+                    disabled={!addingVariantId || saving || referenceLoading}
                     onClick={handleAddLine}
                     className="w-full gap-1 text-xs"
                   >
@@ -597,6 +643,8 @@ export function CreatePurchaseDialog({
                         <img
                           src={pendingVariant.primaryImageUrl}
                           alt={`${pendingVariant.productTitle} ${pendingVariant.optionSummary || pendingVariant.sku}`}
+                          width={64}
+                          height={64}
                           className="size-full object-cover"
                         />
                       ) : (
@@ -657,6 +705,9 @@ export function CreatePurchaseDialog({
                                     <img
                                       src={line.primaryImageUrl}
                                       alt={`${line.productTitle} ${line.optionSummary || line.sku}`}
+                                      width={48}
+                                      height={48}
+                                      loading="lazy"
                                       className="size-full object-cover"
                                     />
                                   ) : (
@@ -761,7 +812,7 @@ export function CreatePurchaseDialog({
                   <Plus className="size-4" />
                 )}
                 {saving
-                  ? 'Creating purchase...'
+                  ? 'Creating purchase…'
                   : totalDraftCount > 0
                     ? `Create purchase (${totalDraftCount} ${totalDraftCount === 1 ? 'item' : 'items'})`
                     : 'Create draft purchase'}

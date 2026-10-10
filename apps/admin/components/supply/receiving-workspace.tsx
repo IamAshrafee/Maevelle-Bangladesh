@@ -36,6 +36,7 @@ import type { PagedEnvelope } from '@/lib/supply/types';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { StatusBadge } from '@/components/status-badge';
+import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -324,6 +325,8 @@ export function ReceivingWorkspace() {
           </Button>
         </div>
       </div>
+
+      <SupplyWorkspaceNav />
 
       {/* Operational Metrics Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

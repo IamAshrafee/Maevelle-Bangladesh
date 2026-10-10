@@ -48,6 +48,7 @@ import {
 import { supplyRequest } from '@/lib/supply/api';
 import { SupplierDialog } from './supplier-dialog';
 import { CreatePurchaseDialog } from './create-purchase-dialog';
+import { SupplyWorkspaceNav } from './supply-workspace-nav';
 
 const STATUS_TABS = [
   { value: 'ALL', label: 'All Suppliers' },
@@ -164,7 +165,9 @@ export function SuppliersList() {
       if (currentStatus !== 'ALL') params.set('status', currentStatus);
       if (currentType !== 'ALL') params.set('supplierType', currentType);
 
-      const res = await supplyRequest<PagedEnvelope<SupplierDto>>(`/admin/suppliers?${params.toString()}`);
+      const res = await supplyRequest<PagedEnvelope<SupplierDto>>(
+        `/admin/suppliers?${params.toString()}`,
+      );
       const rows = res.data ?? [];
 
       const headers = [
@@ -206,7 +209,10 @@ export function SuppliersList() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `suppliers-export-${new Date().toISOString().slice(0, 10)}.csv`);
+      link.setAttribute(
+        'download',
+        `suppliers-export-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -229,12 +235,18 @@ export function SuppliersList() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage factory and wholesaler commercial profiles, lead times, preferred currencies, and contact representatives.
+            Manage factory and wholesaler commercial profiles, lead times, preferred currencies, and
+            contact representatives.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => void exportCsv()} disabled={exporting || loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void exportCsv()}
+            disabled={exporting || loading}
+          >
             <Download className="size-4" />
             <span>{exporting ? 'Exporting…' : 'Export CSV'}</span>
           </Button>
@@ -248,6 +260,8 @@ export function SuppliersList() {
         </div>
       </div>
 
+      <SupplyWorkspaceNav />
+
       {/* Operational Stats Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="p-4">
@@ -258,7 +272,9 @@ export function SuppliersList() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.activeSuppliers ?? totalItems}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.activeSuppliers ?? totalItems}
+            </span>
             <span className="text-xs text-muted-foreground">Ready for orders</span>
           </div>
         </Card>
@@ -284,7 +300,9 @@ export function SuppliersList() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.inTransitShipments ?? 0}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.inTransitShipments ?? 0}
+            </span>
             <span className="text-xs text-muted-foreground">Shipments en route</span>
           </div>
         </Card>
@@ -308,7 +326,9 @@ export function SuppliersList() {
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <AlertCircle className="size-4 shrink-0" />
           <span>{error}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>Dismiss</button>
+          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -316,7 +336,9 @@ export function SuppliersList() {
         <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
           <Check className="size-4 shrink-0" />
           <span>{success}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>Dismiss</button>
+          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -382,7 +404,7 @@ export function SuppliersList() {
               ))}
             </NativeSelect>
 
-            {(query || currentStatus !== 'ALL' || currentType !== 'ALL') ? (
+            {query || currentStatus !== 'ALL' || currentType !== 'ALL' ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -434,7 +456,11 @@ export function SuppliersList() {
                         : 'Register your first vendor to start placing purchase orders.'}
                     </p>
                     {canManageProcurement && !query && currentStatus === 'ALL' ? (
-                      <Button size="sm" onClick={() => setCreateDialogOpen(true)} className="mt-2 gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={() => setCreateDialogOpen(true)}
+                        className="mt-2 gap-1.5"
+                      >
                         <Plus className="size-4" />
                         <span>Add Supplier</span>
                       </Button>
@@ -472,7 +498,9 @@ export function SuppliersList() {
                         {supplier.supplierType.replaceAll('_', ' ')}
                       </span>
                       <span className="text-muted-foreground">
-                        {supplier.countryCode ? `Country: ${supplier.countryCode}` : 'Country not set'}
+                        {supplier.countryCode
+                          ? `Country: ${supplier.countryCode}`
+                          : 'Country not set'}
                       </span>
                     </div>
                   </TableCell>
@@ -580,7 +608,8 @@ export function SuppliersList() {
         {totalPages > 1 ? (
           <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
             <span>
-              Showing Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> ({totalItems} total suppliers)
+              Showing Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> (
+              {totalItems} total suppliers)
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -623,8 +652,9 @@ export function SuppliersList() {
           const params = new URLSearchParams();
           params.set('page', String(currentPage));
           params.set('pageSize', String(PAGE_SIZE));
-          supplyRequest<PagedEnvelope<SupplierDto>>(`/admin/suppliers?${params.toString()}`)
-            .then((res) => setSuppliers(res.data ?? []));
+          supplyRequest<PagedEnvelope<SupplierDto>>(`/admin/suppliers?${params.toString()}`).then(
+            (res) => setSuppliers(res.data ?? []),
+          );
         }}
       />
 

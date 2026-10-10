@@ -26,11 +26,7 @@ import {
   Warehouse,
   X,
 } from 'lucide-react';
-import type {
-  InboundReceiptDto,
-  InboundShipmentDto,
-  SupplyOverviewDto,
-} from '@maevelle/contracts';
+import type { InboundReceiptDto, InboundShipmentDto, SupplyOverviewDto } from '@maevelle/contracts';
 import type { PagedEnvelope } from '@/lib/supply/types';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
@@ -63,6 +59,7 @@ import {
 } from '@/lib/supply/api';
 import type { ReceiptDraftLine } from '@/lib/supply/types';
 import { PlanShipmentDialog } from './plan-shipment-dialog';
+import { SupplyWorkspaceNav } from './supply-workspace-nav';
 import { ReceiveGoodsDialog } from './shipment-detail/dialogs/receive-goods-dialog';
 
 const TRANSPORT_MODES = [
@@ -144,7 +141,9 @@ export function ShipmentsList() {
     if (deferredQuery) params.set('q', deferredQuery);
 
     if (activeTab === 'receipts') {
-      supplyRequest<PagedEnvelope<InboundReceiptDto>>(`/admin/inbound-receipts?${params.toString()}`)
+      supplyRequest<PagedEnvelope<InboundReceiptDto>>(
+        `/admin/inbound-receipts?${params.toString()}`,
+      )
         .then((res) => {
           if (!active) return;
           setReceipts(res.data ?? []);
@@ -169,7 +168,9 @@ export function ShipmentsList() {
         if (currentMode) params.set('transportMode', currentMode);
       }
 
-      supplyRequest<PagedEnvelope<InboundShipmentDto>>(`/admin/inbound-shipments?${params.toString()}`)
+      supplyRequest<PagedEnvelope<InboundShipmentDto>>(
+        `/admin/inbound-shipments?${params.toString()}`,
+      )
         .then((res) => {
           if (!active) return;
           setShipments(res.data ?? []);
@@ -224,7 +225,9 @@ export function ShipmentsList() {
       params.set('page', String(currentPage));
       params.set('pageSize', String(PAGE_SIZE));
       if (currentStatus !== 'ALL') params.set('status', currentStatus);
-      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(`/admin/inbound-shipments?${params.toString()}`);
+      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(
+        `/admin/inbound-shipments?${params.toString()}`,
+      );
       setShipments(res.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mark departure.');
@@ -249,7 +252,9 @@ export function ShipmentsList() {
       params.set('page', String(currentPage));
       params.set('pageSize', String(PAGE_SIZE));
       if (currentStatus !== 'ALL') params.set('status', currentStatus);
-      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(`/admin/inbound-shipments?${params.toString()}`);
+      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(
+        `/admin/inbound-shipments?${params.toString()}`,
+      );
       setShipments(res.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to record arrival.');
@@ -302,7 +307,9 @@ export function ShipmentsList() {
       const params = new URLSearchParams();
       params.set('page', String(currentPage));
       params.set('pageSize', String(PAGE_SIZE));
-      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(`/admin/inbound-shipments?${params.toString()}`);
+      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(
+        `/admin/inbound-shipments?${params.toString()}`,
+      );
       setShipments(res.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to post receiving voucher.');
@@ -323,7 +330,8 @@ export function ShipmentsList() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Track freight logistics from vendor dispatch through customs arrival and physical warehouse receipt.
+            Track freight logistics from vendor dispatch through customs arrival and physical
+            warehouse receipt.
           </p>
         </div>
 
@@ -337,6 +345,8 @@ export function ShipmentsList() {
         </div>
       </div>
 
+      <SupplyWorkspaceNav />
+
       {/* Operational Stats Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="p-4">
@@ -347,7 +357,9 @@ export function ShipmentsList() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.inTransitShipments ?? 0}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.inTransitShipments ?? 0}
+            </span>
             <span className="text-xs text-muted-foreground">En route to warehouse</span>
           </div>
         </Card>
@@ -360,7 +372,9 @@ export function ShipmentsList() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.awaitingReceiptShipments ?? 0}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.awaitingReceiptShipments ?? 0}
+            </span>
             <span className="text-xs text-muted-foreground">Arrived at warehouse</span>
           </div>
         </Card>
@@ -373,7 +387,9 @@ export function ShipmentsList() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.plannedShipments ?? 0}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.plannedShipments ?? 0}
+            </span>
             <span className="text-xs text-muted-foreground">Awaiting departure</span>
           </div>
         </Card>
@@ -397,7 +413,9 @@ export function ShipmentsList() {
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <AlertCircle className="size-4 shrink-0" />
           <span>{error}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>Dismiss</button>
+          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -405,7 +423,9 @@ export function ShipmentsList() {
         <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
           <Check className="size-4 shrink-0" />
           <span>{success}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>Dismiss</button>
+          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -508,7 +528,7 @@ export function ShipmentsList() {
               ))}
             </NativeSelect>
 
-            {(query || currentStatus !== 'ALL' || currentMode) ? (
+            {query || currentStatus !== 'ALL' || currentMode ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -555,9 +575,12 @@ export function ShipmentsList() {
                   <TableCell colSpan={6} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <PackageCheck className="size-8 text-muted-foreground/60" />
-                      <p className="font-heading text-sm font-semibold">No receiving vouchers found</p>
+                      <p className="font-heading text-sm font-semibold">
+                        No receiving vouchers found
+                      </p>
                       <p className="max-w-xs text-xs text-muted-foreground">
-                        When warehouse workers count arrived shipments, permanent receipt vouchers appear here.
+                        When warehouse workers count arrived shipments, permanent receipt vouchers
+                        appear here.
                       </p>
                     </div>
                   </TableCell>
@@ -595,7 +618,9 @@ export function ShipmentsList() {
                             {receipt.shipmentNumber}
                           </Link>
                           <span className="text-xs text-muted-foreground">
-                            {receipt.packingSlipReference ? `Slip: ${receipt.packingSlipReference}` : 'No slip recorded'}
+                            {receipt.packingSlipReference
+                              ? `Slip: ${receipt.packingSlipReference}`
+                              : 'No slip recorded'}
                           </span>
                         </div>
                       </TableCell>
@@ -619,7 +644,10 @@ export function ShipmentsList() {
                               </Badge>
                             ) : null}
                             {quarantineCount > 0 ? (
-                              <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 text-[10px]">
+                              <Badge
+                                variant="secondary"
+                                className="bg-amber-500/10 text-amber-700 text-[10px]"
+                              >
                                 {quarantineCount} Quarantine
                               </Badge>
                             ) : null}
@@ -700,7 +728,11 @@ export function ShipmentsList() {
                           : 'Plan a freight shipment from placed purchase orders to start tracking delivery.'}
                       </p>
                       {activeTab !== 'queue' && canManageShipments ? (
-                        <Button size="sm" onClick={() => setPlanOpen(true)} className="mt-2 gap-1.5">
+                        <Button
+                          size="sm"
+                          onClick={() => setPlanOpen(true)}
+                          className="mt-2 gap-1.5"
+                        >
                           <Plus className="size-4" />
                           <span>Plan Inbound Shipment</span>
                         </Button>
@@ -711,8 +743,14 @@ export function ShipmentsList() {
               ) : (
                 shipments.map((shipment) => {
                   const isExpanded = expandedShipmentId === shipment.id;
-                  const totalAllocated = shipment.allocations.reduce((s, a) => s + Number(a.allocatedQuantity), 0);
-                  const totalReceived = shipment.allocations.reduce((s, a) => s + Number(a.receivedQuantity), 0);
+                  const totalAllocated = shipment.allocations.reduce(
+                    (s, a) => s + Number(a.allocatedQuantity),
+                    0,
+                  );
+                  const totalReceived = shipment.allocations.reduce(
+                    (s, a) => s + Number(a.receivedQuantity),
+                    0,
+                  );
                   const remaining = Math.max(0, totalAllocated - totalReceived);
 
                   return (
@@ -757,7 +795,9 @@ export function ShipmentsList() {
                             &rarr; {shipment.receivingLocationName}
                           </span>
                           <span className="text-muted-foreground">
-                            {shipment.originText ? `From: ${shipment.originText}` : 'Origin: Not specified'}
+                            {shipment.originText
+                              ? `From: ${shipment.originText}`
+                              : 'Origin: Not specified'}
                           </span>
                         </div>
                       </TableCell>
@@ -783,15 +823,18 @@ export function ShipmentsList() {
                         <div className="flex flex-col gap-1 text-xs">
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">
-                              {shipment.allocations.length} {shipment.allocations.length === 1 ? 'line' : 'lines'} · {formatSupplyNumber(String(totalAllocated))} units
+                              {shipment.allocations.length}{' '}
+                              {shipment.allocations.length === 1 ? 'line' : 'lines'} ·{' '}
+                              {formatSupplyNumber(String(totalAllocated))} units
                             </span>
                             <span className="font-mono text-xs">
-                              {formatSupplyNumber(String(totalReceived))}/{formatSupplyNumber(String(totalAllocated))}
+                              {formatSupplyNumber(String(totalReceived))}/
+                              {formatSupplyNumber(String(totalAllocated))}
                             </span>
                           </div>
                           <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted">
                             <div
-                              className="h-full bg-emerald-500 transition-all"
+                              className="h-full bg-success transition-[width] duration-150"
                               style={{
                                 width: `${totalAllocated > 0 ? Math.min(100, (totalReceived / totalAllocated) * 100) : 0}%`,
                               }}
@@ -836,7 +879,9 @@ export function ShipmentsList() {
                             </Button>
                           ) : null}
 
-                          {shipment.status === 'ARRIVED' && shipment.receivingStatus !== 'RECEIVED' && canReceive ? (
+                          {shipment.status === 'ARRIVED' &&
+                          shipment.receivingStatus !== 'RECEIVED' &&
+                          canReceive ? (
                             <Button
                               size="xs"
                               onClick={() => openReceiveDialog(shipment)}
@@ -868,7 +913,10 @@ export function ShipmentsList() {
           {shipments
             .filter((s) => expandedShipmentId === s.id)
             .map((shipment) => (
-              <div key={`expanded-shipment-${shipment.id}`} className="border-t bg-muted/20 px-6 py-4">
+              <div
+                key={`expanded-shipment-${shipment.id}`}
+                className="border-t bg-muted/20 px-6 py-4"
+              >
                 <div className="flex items-center justify-between pb-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Shipment Contents ({shipment.allocations.length} line allocations)
@@ -908,10 +956,16 @@ export function ShipmentsList() {
 
                       <div className="mt-3 flex items-center justify-between border-t pt-2 text-muted-foreground">
                         <span>
-                          Allocated: <strong className="text-foreground">{formatSupplyNumber(alloc.allocatedQuantity)}</strong>
+                          Allocated:{' '}
+                          <strong className="text-foreground">
+                            {formatSupplyNumber(alloc.allocatedQuantity)}
+                          </strong>
                         </span>
                         <span>
-                          Received: <strong className="text-emerald-600 dark:text-emerald-400">{formatSupplyNumber(alloc.receivedQuantity)}</strong>
+                          Received:{' '}
+                          <strong className="text-emerald-600 dark:text-emerald-400">
+                            {formatSupplyNumber(alloc.receivedQuantity)}
+                          </strong>
                         </span>
                       </div>
                     </div>
@@ -926,7 +980,8 @@ export function ShipmentsList() {
       {totalPages > 1 ? (
         <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
           <span>
-            Showing Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> ({totalItems} total records)
+            Showing Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> (
+            {totalItems} total records)
           </span>
           <div className="flex items-center gap-2">
             <Button
