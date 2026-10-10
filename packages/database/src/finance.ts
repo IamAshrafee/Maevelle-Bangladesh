@@ -87,7 +87,7 @@ async function nextNumber(
   db: Kysely<DatabaseSchema>,
   org: string,
   prefix: string,
-  table?: 'finance_transactions' | 'expenses' | 'cod_settlements',
+  table?: 'finance_transactions' | 'expenses' | 'expense_settlements' | 'cod_settlements',
 ): Promise<string> {
   const target = table ?? (prefix === 'EXP' ? 'expenses' : 'finance_transactions');
   const r = await sql<{
@@ -1232,29 +1232,55 @@ export async function createExpense(
       throw new FinanceDomainError('CONFLICT', 'Expense creation is already being processed.');
     }
     if (input.sourceDomain && input.sourceId) {
-      if (input.sourceDomain !== 'procurement.purchase')
+      if (
+        input.sourceDomain !== 'procurement.purchase' &&
+        input.sourceDomain !== 'inbound_shipment.shipment'
+      )
         throw new FinanceDomainError(
           'VALIDATION_FAILED',
           'Expense source domain is not supported.',
         );
-      const source = await sql<{
-        currency_code: string;
-        status: string;
-      }>`select currency_code,status from procurement.purchases where organization_id=${input.organizationId} and id=${input.sourceId}`.execute(
-        tx,
-      );
-      if (!source.rows[0])
-        throw new FinanceDomainError('NOT_FOUND', 'Source Purchase was not found.');
-      if (source.rows[0].status !== 'PLACED')
-        throw new FinanceDomainError(
-          'CONFLICT',
-          'Supplier invoices can only be recorded for a placed Purchase.',
+      if (input.sourceDomain === 'inbound_shipment.shipment') {
+        const source = await sql<{ currency_code: string; status: string }>`select
+            min(purchase.currency_code) as currency_code, shipment.status
+          from inbound_shipment.shipments shipment
+          join inbound_shipment.purchase_line_allocations allocation on allocation.shipment_id=shipment.id
+          join procurement.purchase_lines line on line.id=allocation.purchase_line_id
+          join procurement.purchases purchase on purchase.id=line.purchase_id
+          where shipment.organization_id=${input.organizationId} and shipment.id=${input.sourceId}
+          group by shipment.id`.execute(tx);
+        if (!source.rows[0])
+          throw new FinanceDomainError('NOT_FOUND', 'Source inbound shipment was not found.');
+        if (source.rows[0].status === 'CANCELLED')
+          throw new FinanceDomainError(
+            'CONFLICT',
+            'Expenses cannot be recorded against a cancelled inbound shipment.',
+          );
+        if (source.rows[0].currency_code !== input.currencyCode)
+          throw new FinanceDomainError(
+            'VALIDATION_FAILED',
+            'Shipment expense currency must match the shipment purchase currency.',
+          );
+      } else {
+        const source = await sql<{
+          currency_code: string;
+          status: string;
+        }>`select currency_code,status from procurement.purchases where organization_id=${input.organizationId} and id=${input.sourceId}`.execute(
+          tx,
         );
-      if (source.rows[0].currency_code !== input.currencyCode)
-        throw new FinanceDomainError(
-          'VALIDATION_FAILED',
-          'Supplier invoice currency must match the Purchase currency.',
-        );
+        if (!source.rows[0])
+          throw new FinanceDomainError('NOT_FOUND', 'Source Purchase was not found.');
+        if (source.rows[0].status !== 'PLACED')
+          throw new FinanceDomainError(
+            'CONFLICT',
+            'Supplier invoices can only be recorded for a placed Purchase.',
+          );
+        if (source.rows[0].currency_code !== input.currencyCode)
+          throw new FinanceDomainError(
+            'VALIDATION_FAILED',
+            'Supplier invoice currency must match the Purchase currency.',
+          );
+      }
     }
     const category =
       await sql`select id from finance.expense_categories where organization_id=${input.organizationId} and id=${input.categoryId} and status='ACTIVE'`.execute(
@@ -1444,7 +1470,7 @@ export interface FinanceExpenseListFilters {
   readonly paymentState?: 'ALL' | 'OUTSTANDING' | 'PAID';
   readonly from?: string;
   readonly to?: string;
-  readonly sourceDomain?: 'procurement.purchase';
+  readonly sourceDomain?: 'procurement.purchase' | 'inbound_shipment.shipment';
   readonly sourceId?: string;
   readonly page?: number;
   readonly pageSize?: number;
@@ -1471,7 +1497,8 @@ export async function listExpenses(
     sql<FinanceExpenseRow>`select e.id,e.expense_number,e.description,e.amount::text,e.currency_code,
       e.expense_date::text,e.status,c.id as category_id,c.name as category_name,
       c.classification as category_classification,e.source_domain,e.source_id,
-      purchase.purchase_number as source_reference,supplier.name as source_counterparty,
+      coalesce(purchase.purchase_number,shipment.shipment_number) as source_reference,
+      coalesce(supplier.name,case when shipment.id is not null then 'Inbound shipment' end) as source_counterparty,
       e.payee_name,e.external_reference,e.notes,e.created_at::text,e.version::text,
       coalesce(payment.total,0)::numeric(20,4)::text as paid,
       coalesce(adjustment.total,0)::numeric(20,4)::text as adjustments,
@@ -1480,10 +1507,11 @@ export async function listExpenses(
       join finance.expense_categories c on c.id=e.expense_category_id
       left join procurement.purchases purchase on e.source_domain='procurement.purchase' and purchase.organization_id=e.organization_id and purchase.id=e.source_id
       left join procurement.suppliers supplier on supplier.organization_id=purchase.organization_id and supplier.id=purchase.supplier_id
+      left join inbound_shipment.shipments shipment on e.source_domain='inbound_shipment.shipment' and shipment.organization_id=e.organization_id and shipment.id=e.source_id
       left join lateral (select sum(p.amount) as total from finance.expense_payments p where p.organization_id=e.organization_id and p.expense_id=e.id) payment on true
       left join lateral (select sum(a.amount) as total from finance.expense_adjustments a where a.organization_id=e.organization_id and a.expense_id=e.id) adjustment on true
       where e.organization_id=${org}
-        and (${query}::text is null or concat_ws(' ',e.expense_number,e.description,e.payee_name,e.external_reference,c.name,purchase.purchase_number,supplier.name) ilike '%' || ${query}::text || '%')
+        and (${query}::text is null or concat_ws(' ',e.expense_number,e.description,e.payee_name,e.external_reference,c.name,purchase.purchase_number,supplier.name,shipment.shipment_number) ilike '%' || ${query}::text || '%')
         and (${categoryId}::uuid is null or e.expense_category_id=${categoryId}::uuid)
         and (${status}::text='ALL' or e.status=${status}::text)
         and (${paymentState}::text='ALL' or (${paymentState}::text='OUTSTANDING' and greatest(e.amount+coalesce(adjustment.total,0)-coalesce(payment.total,0),0)>0) or (${paymentState}::text='PAID' and greatest(e.amount+coalesce(adjustment.total,0)-coalesce(payment.total,0),0)=0 and e.status<>'CANCELLED'))
@@ -1504,10 +1532,11 @@ export async function listExpenses(
       join finance.expense_categories c on c.id=e.expense_category_id
       left join procurement.purchases purchase on e.source_domain='procurement.purchase' and purchase.organization_id=e.organization_id and purchase.id=e.source_id
       left join procurement.suppliers supplier on supplier.organization_id=purchase.organization_id and supplier.id=purchase.supplier_id
+      left join inbound_shipment.shipments shipment on e.source_domain='inbound_shipment.shipment' and shipment.organization_id=e.organization_id and shipment.id=e.source_id
       left join lateral (select sum(p.amount) as total from finance.expense_payments p where p.organization_id=e.organization_id and p.expense_id=e.id) payment on true
       left join lateral (select sum(a.amount) as total from finance.expense_adjustments a where a.organization_id=e.organization_id and a.expense_id=e.id) adjustment on true
       where e.organization_id=${org}
-        and (${query}::text is null or concat_ws(' ',e.expense_number,e.description,e.payee_name,e.external_reference,c.name,purchase.purchase_number,supplier.name) ilike '%' || ${query}::text || '%')
+        and (${query}::text is null or concat_ws(' ',e.expense_number,e.description,e.payee_name,e.external_reference,c.name,purchase.purchase_number,supplier.name,shipment.shipment_number) ilike '%' || ${query}::text || '%')
         and (${categoryId}::uuid is null or e.expense_category_id=${categoryId}::uuid)
         and (${status}::text='ALL' or e.status=${status}::text)
         and (${paymentState}::text='ALL' or (${paymentState}::text='OUTSTANDING' and greatest(e.amount+coalesce(adjustment.total,0)-coalesce(payment.total,0),0)>0) or (${paymentState}::text='PAID' and greatest(e.amount+coalesce(adjustment.total,0)-coalesce(payment.total,0),0)=0 and e.status<>'CANCELLED'))
@@ -1602,6 +1631,185 @@ export async function payExpense(
   });
 }
 
+/** One real account movement allocated across multiple recorded obligations. */
+export async function settleExpenses(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    accountId: string;
+    allocations: readonly { expenseId: string; amount: string }[];
+    reference?: string;
+    paidAt?: string;
+    idempotencyKey: string;
+  },
+) {
+  if (input.allocations.length < 2) {
+    throw new FinanceDomainError(
+      'VALIDATION_FAILED',
+      'A grouped settlement requires at least two expense allocations.',
+    );
+  }
+  const uniqueIds = new Set(input.allocations.map((allocation) => allocation.expenseId));
+  if (uniqueIds.size !== input.allocations.length) {
+    throw new FinanceDomainError(
+      'VALIDATION_FAILED',
+      'Each expense may appear only once in a grouped settlement.',
+    );
+  }
+  const normalized = input.allocations.map((allocation) => ({
+    expenseId: allocation.expenseId,
+    amount: positive(allocation.amount, 'Settlement allocation'),
+  }));
+  const totalUnits = normalized.reduce(
+    (total, allocation) => total + moneyUnits(allocation.amount),
+    0n,
+  );
+  const total = moneyFromUnits(totalUnits);
+
+  return db.transaction().execute(async (tx) => {
+    const claimResult = await claim(tx, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      operation: 'finance.expense.settle-many',
+      key: input.idempotencyKey,
+      body: { ...input, allocations: normalized },
+    });
+    if (!claimResult.created) {
+      const replay = await sql<{
+        id: string;
+        safe_response: {
+          settlementId: string;
+          financeTransactionId: string;
+          total: string;
+          currency: string;
+        } | null;
+      }>`select result_entity_id::text as id, safe_response
+        from platform.idempotency_records where id=${claimResult.id} and status='SUCCEEDED'`.execute(
+        tx,
+      );
+      if (replay.rows[0]?.id && replay.rows[0].safe_response) return replay.rows[0].safe_response;
+      throw new FinanceDomainError('CONFLICT', 'Expense settlement is already being processed.');
+    }
+
+    const expenses = await sql<{
+      id: string;
+      expense_number: string;
+      currency_code: string;
+      status: string;
+      remaining: string;
+    }>`select e.id, e.expense_number, e.currency_code, e.status,
+        (e.amount + coalesce((select sum(amount) from finance.expense_adjustments where expense_id=e.id),0)
+          - coalesce((select sum(amount) from finance.expense_payments where expense_id=e.id),0))::numeric(20,4)::text as remaining
+      from finance.expenses e
+      where e.organization_id=${input.organizationId}
+        and e.id = any(${normalized.map((allocation) => allocation.expenseId)}::uuid[])
+      order by e.id for update`.execute(tx);
+    if (expenses.rows.length !== normalized.length) {
+      throw new FinanceDomainError('NOT_FOUND', 'One or more settlement expenses were not found.');
+    }
+    const currencies = new Set(expenses.rows.map((expense) => expense.currency_code));
+    if (currencies.size !== 1) {
+      throw new FinanceDomainError(
+        'VALIDATION_FAILED',
+        'A grouped settlement can only pay expenses in one currency.',
+      );
+    }
+    const currency = expenses.rows[0]!.currency_code;
+    for (const allocation of normalized) {
+      const expense = expenses.rows.find((candidate) => candidate.id === allocation.expenseId)!;
+      if (expense.status !== 'RECORDED') {
+        throw new FinanceDomainError('CONFLICT', 'Only recorded Expenses can be settled.');
+      }
+      if (moneyUnits(allocation.amount) > moneyUnits(expense.remaining)) {
+        throw new FinanceDomainError(
+          'CONFLICT',
+          `Settlement allocation exceeds the outstanding amount for ${expense.expense_number}.`,
+        );
+      }
+    }
+
+    const financialAccount = await account(tx, input.organizationId, input.accountId, true);
+    if (financialAccount.status !== 'ACTIVE' || financialAccount.currency_code !== currency) {
+      throw new FinanceDomainError(
+        'VALIDATION_FAILED',
+        'Financial account must be active and use the settlement currency.',
+      );
+    }
+    if (moneyUnits(await balance(tx, input.organizationId, input.accountId)) < totalUnits) {
+      throw new FinanceDomainError('CONFLICT', 'Financial account has insufficient balance.');
+    }
+
+    const settlementId = crypto.randomUUID();
+    const settlementNumber = await nextNumber(
+      tx,
+      input.organizationId,
+      'EPS',
+      'expense_settlements',
+    );
+    const transactionId = await movement(tx, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      accountId: input.accountId,
+      amount: moneyFromUnits(-totalUnits),
+      currency,
+      type: 'EXPENSE_PAYMENT',
+      description: `Grouped expense settlement ${settlementNumber}`,
+      sourceDomain: 'finance.expense_settlement',
+      sourceId: settlementId,
+    });
+    await sql`insert into finance.expense_settlements (
+        id, organization_id, settlement_number, finance_transaction_id, financial_account_id,
+        currency_code, amount, reference, paid_at, created_by
+      ) values (
+        ${settlementId}::uuid, ${input.organizationId}, ${settlementNumber}, ${transactionId}::uuid,
+        ${input.accountId}::uuid, ${currency}, ${total}::numeric, ${input.reference?.trim() || null},
+        coalesce(${input.paidAt ?? null}::timestamptz, now()), ${input.actorId}::uuid
+      )`.execute(tx);
+    for (const allocation of normalized) {
+      await sql`insert into finance.expense_payments (
+          organization_id, expense_id, finance_transaction_id, settlement_id, amount, reference,
+          paid_at, created_by
+        ) values (
+          ${input.organizationId}, ${allocation.expenseId}::uuid, ${transactionId}::uuid,
+          ${settlementId}::uuid, ${allocation.amount}::numeric, ${input.reference?.trim() || null},
+          coalesce(${input.paidAt ?? null}::timestamptz, now()), ${input.actorId}::uuid
+        )`.execute(tx);
+      await appendAuditEvent(tx, {
+        organizationId: input.organizationId,
+        actorType: 'USER',
+        actorId: input.actorId,
+        action: 'finance.expense.paid',
+        targetType: 'finance.expense',
+        targetId: allocation.expenseId,
+        metadata: {
+          amount: allocation.amount,
+          accountId: input.accountId,
+          settlementId,
+          reference: input.reference ?? null,
+        },
+      });
+    }
+    await appendAuditEvent(tx, {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorId: input.actorId,
+      action: 'finance.expense_settlement.created',
+      targetType: 'finance.expense_settlement',
+      targetId: settlementId,
+      metadata: { total, currency, allocationCount: normalized.length, accountId: input.accountId },
+    });
+    await sql`update platform.idempotency_records
+      set status='SUCCEEDED', result_entity_type='finance.expense_settlement',
+        result_entity_id=${settlementId}::uuid,
+        safe_response=${JSON.stringify({ settlementId, financeTransactionId: transactionId, total, currency })}::jsonb,
+        completed_at=now()
+      where id=${claimResult.id}`.execute(tx);
+    await outbox(tx, input.organizationId, 'finance.expense_settlement.created', transactionId);
+    return { settlementId, financeTransactionId: transactionId, total, currency };
+  });
+}
+
 export async function getExpenseDetail(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
@@ -1611,7 +1819,8 @@ export async function getExpenseDetail(
     sql<FinanceExpenseRow>`select e.id,e.expense_number,e.description,e.amount::text,e.currency_code,
       e.expense_date::text,e.status,c.id as category_id,c.name as category_name,
       c.classification as category_classification,e.source_domain,e.source_id,
-      purchase.purchase_number as source_reference,supplier.name as source_counterparty,
+      coalesce(purchase.purchase_number,shipment.shipment_number) as source_reference,
+      coalesce(supplier.name,case when shipment.id is not null then 'Inbound shipment' end) as source_counterparty,
       e.payee_name,e.external_reference,e.notes,e.created_at::text,e.version::text,
       coalesce(payment.total,0)::numeric(20,4)::text as paid,
       coalesce(adjustment.total,0)::numeric(20,4)::text as adjustments,
@@ -1620,6 +1829,7 @@ export async function getExpenseDetail(
       join finance.expense_categories c on c.id=e.expense_category_id
       left join procurement.purchases purchase on e.source_domain='procurement.purchase' and purchase.organization_id=e.organization_id and purchase.id=e.source_id
       left join procurement.suppliers supplier on supplier.organization_id=purchase.organization_id and supplier.id=purchase.supplier_id
+      left join inbound_shipment.shipments shipment on e.source_domain='inbound_shipment.shipment' and shipment.organization_id=e.organization_id and shipment.id=e.source_id
       left join lateral (select sum(p.amount) as total from finance.expense_payments p where p.organization_id=e.organization_id and p.expense_id=e.id) payment on true
       left join lateral (select sum(a.amount) as total from finance.expense_adjustments a where a.organization_id=e.organization_id and a.expense_id=e.id) adjustment on true
       where e.organization_id=${organizationId} and e.id=${expenseId}`.execute(db),

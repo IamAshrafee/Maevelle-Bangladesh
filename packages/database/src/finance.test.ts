@@ -36,6 +36,83 @@ async function account(org: string, name: string, opening: string) {
 afterAll(async () => database.close());
 
 describe('Finance operational cash ledger', () => {
+  it('settles merchandise balance and shipment fees with one real account movement', async () => {
+    const org = await organization('grouped-settlement');
+    const cash = await account(org, 'SkyBuy payment wallet', '5000');
+    const category = await finance.createExpenseCategory(database.db, {
+      organizationId: org,
+      code: `SKY-${crypto.randomUUID().slice(0, 6)}`,
+      name: 'SkyBuy payable',
+    });
+    const merchandise = await finance.createExpense(database.db, {
+      organizationId: org,
+      actorId: actor,
+      categoryId: category!.id,
+      amount: '1213',
+      currencyCode: 'BDT',
+      description: 'Remaining merchandise balance for SKY395285',
+      expenseDate: '2026-09-16',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const landedFees = await finance.createExpense(database.db, {
+      organizationId: org,
+      actorId: actor,
+      categoryId: category!.id,
+      amount: '913',
+      currencyCode: 'BDT',
+      description: 'China courier, air freight, and BD courier charges',
+      expenseDate: '2026-09-16',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const idempotencyKey = crypto.randomUUID();
+    const settlement = await finance.settleExpenses(database.db, {
+      organizationId: org,
+      actorId: actor,
+      accountId: cash.id,
+      reference: 'SP1789978556443',
+      allocations: [
+        { expenseId: merchandise.id, amount: '1213' },
+        { expenseId: landedFees.id, amount: '913' },
+      ],
+      idempotencyKey,
+    });
+    await expect(
+      finance.settleExpenses(database.db, {
+        organizationId: org,
+        actorId: actor,
+        accountId: cash.id,
+        reference: 'SP1789978556443',
+        allocations: [
+          { expenseId: merchandise.id, amount: '1213' },
+          { expenseId: landedFees.id, amount: '913' },
+        ],
+        idempotencyKey,
+      }),
+    ).resolves.toEqual(settlement);
+
+    const evidence = await sql<{
+      entries: string;
+      allocations: string;
+      paid: string;
+    }>`select
+        (select count(*)::text from finance.financial_account_entries where finance_transaction_id=${settlement.financeTransactionId}) as entries,
+        (select count(*)::text from finance.expense_payments where settlement_id=${settlement.settlementId}) as allocations,
+        (select sum(amount)::numeric(20,4)::text from finance.expense_payments where settlement_id=${settlement.settlementId}) as paid`.execute(
+      database.db,
+    );
+    expect(evidence.rows[0]).toEqual({ entries: '1', allocations: '2', paid: '2126.0000' });
+    expect(
+      decimal(
+        (await finance.listFinancialAccounts(database.db, org)).find(
+          (value) => value.id === cash.id,
+        )?.ledger_balance,
+      ),
+    ).toBe('2874.0000');
+    expect(
+      (await finance.listExpenses(database.db, org)).items.map((item) => item.outstanding),
+    ).toEqual(['0.0000', '0.0000']);
+  });
+
   it('derives opening, expense payment, and adjustment balances from immutable entries', async () => {
     const org = await organization('ledger');
     const cash = await account(org, 'Main cash', '10000');
@@ -846,4 +923,3 @@ describe('Finance operational cash ledger', () => {
     });
   });
 });
-

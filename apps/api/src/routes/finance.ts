@@ -339,7 +339,12 @@ export function registerFinanceRoutes(
           ),
           from: Type.Optional(Type.String({ format: 'date' })),
           to: Type.Optional(Type.String({ format: 'date' })),
-          sourceDomain: Type.Optional(Type.Literal('procurement.purchase')),
+          sourceDomain: Type.Optional(
+            Type.Union([
+              Type.Literal('procurement.purchase'),
+              Type.Literal('inbound_shipment.shipment'),
+            ]),
+          ),
           sourceId: Type.Optional(Type.String({ format: 'uuid' })),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
@@ -357,7 +362,7 @@ export function registerFinanceRoutes(
         paymentState?: 'ALL' | 'OUTSTANDING' | 'PAID';
         from?: string;
         to?: string;
-        sourceDomain?: 'procurement.purchase';
+        sourceDomain?: 'procurement.purchase' | 'inbound_shipment.shipment';
         sourceId?: string;
         page?: number;
         pageSize?: number;
@@ -402,7 +407,12 @@ export function registerFinanceRoutes(
           accountId: Type.Optional(Type.String({ format: 'uuid' })),
           capitalContributorId: Type.Optional(Type.String({ format: 'uuid' })),
           paymentReference: Type.Optional(Type.String({ maxLength: 200 })),
-          sourceDomain: Type.Optional(Type.Literal('procurement.purchase')),
+          sourceDomain: Type.Optional(
+            Type.Union([
+              Type.Literal('procurement.purchase'),
+              Type.Literal('inbound_shipment.shipment'),
+            ]),
+          ),
           sourceId: Type.Optional(Type.String()),
           idempotencyKey: key,
         }),
@@ -458,6 +468,44 @@ export function registerFinanceRoutes(
             expenseId: (req.params as { id: string }).id,
           }),
         };
+      } catch (e) {
+        return failure(reply, e);
+      }
+    },
+  );
+  app.post(
+    '/admin/finance/expense-settlements',
+    {
+      schema: {
+        body: Type.Object({
+          accountId: Type.String({ format: 'uuid' }),
+          allocations: Type.Array(
+            Type.Object({
+              expenseId: Type.String({ format: 'uuid' }),
+              amount: Type.String({ minLength: 1, maxLength: 30 }),
+            }),
+            { minItems: 2, maxItems: 100 },
+          ),
+          reference: Type.Optional(Type.String({ maxLength: 200 })),
+          paidAt: Type.Optional(Type.String({ format: 'date-time' })),
+          idempotencyKey: key,
+        }),
+      },
+    },
+    async (req, reply) => {
+      const a = await admin(database, auth, req.headers, 'finance.expenses.pay');
+      if (!a) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const p = body<
+          Omit<Parameters<typeof finance.settleExpenses>[1], 'organizationId' | 'actorId'>
+        >(req.body);
+        return reply.code(201).send({
+          data: await finance.settleExpenses(database.db, {
+            ...p,
+            organizationId: a.organizationId,
+            actorId: a.actorId,
+          }),
+        });
       } catch (e) {
         return failure(reply, e);
       }

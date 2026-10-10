@@ -59,7 +59,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       add foreign key (organization_id, finance_expense_id) references finance.expenses(organization_id, id);
     create table finance.expense_payments (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), expense_id uuid not null references finance.expenses(id),
-      finance_transaction_id uuid not null unique references finance.finance_transactions(id), amount numeric(20,4) not null check (amount <> 0),
+      finance_transaction_id uuid not null references finance.finance_transactions(id), amount numeric(20,4) not null check (amount <> 0),
       payment_source text not null default 'BUSINESS_ACCOUNT' check (payment_source in ('BUSINESS_ACCOUNT','OWNER_CAPITAL','REVERSAL')),
       capital_contributor_id uuid null references finance.capital_contributors(id), reversal_of_payment_id uuid null references finance.expense_payments(id), reversal_reason text null,
       reference text null, paid_at timestamptz not null default now(), created_by uuid null references iam.users(id), created_at timestamptz not null default now(),
@@ -73,7 +73,30 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       foreign key (organization_id,capital_contributor_id) references finance.capital_contributors(organization_id,id),
       foreign key (organization_id,reversal_of_payment_id) references finance.expense_payments(organization_id,id)
     );
+    create index finance_expense_payments_transaction on finance.expense_payments(organization_id,finance_transaction_id);
     create index finance_expense_payments_contributor on finance.expense_payments(organization_id,capital_contributor_id,paid_at desc) where capital_contributor_id is not null;
+
+    create table finance.expense_settlements (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      settlement_number text not null,
+      finance_transaction_id uuid not null unique references finance.finance_transactions(id),
+      financial_account_id uuid not null references finance.financial_accounts(id),
+      currency_code text not null check (currency_code ~ '^[A-Z]{3}$'),
+      amount numeric(20,4) not null check (amount > 0),
+      reference text,
+      paid_at timestamptz not null default now(),
+      created_by uuid references iam.users(id),
+      created_at timestamptz not null default now(),
+      unique (organization_id, settlement_number),
+      unique (organization_id, id),
+      foreign key (organization_id, finance_transaction_id) references finance.finance_transactions(organization_id,id),
+      foreign key (organization_id, financial_account_id) references finance.financial_accounts(organization_id,id)
+    );
+    alter table finance.expense_payments
+      add column settlement_id uuid,
+      add foreign key (organization_id, settlement_id) references finance.expense_settlements(organization_id,id);
+    create index finance_expense_payments_settlement on finance.expense_payments(organization_id,settlement_id) where settlement_id is not null;
     create table finance.capital_events (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), contributor_id uuid not null references finance.capital_contributors(id),
       finance_transaction_id uuid not null unique references finance.finance_transactions(id), event_type text not null check (event_type in ('CONTRIBUTION','OWNER_FUNDED_EXPENSE','WITHDRAWAL','REVERSAL')),
