@@ -36,11 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatSupplyDate, formatSupplyMoney, formatSupplyNumber } from '@/lib/supply/api';
 import { percentage, shipmentQuantities } from '@/lib/supply/status';
 import { CreateRevisionDialog } from './dialogs/create-revision-dialog';
@@ -48,8 +44,10 @@ import { DiscardRevisionDialog } from './dialogs/discard-revision-dialog';
 import type { ShipmentDetailCostingSectionProps } from './types';
 
 const COST_TYPE_LABELS: Record<string, string> = {
+  CHINA_LOCAL_COURIER: 'China Local Courier',
   INTERNATIONAL_FREIGHT: 'International Freight',
   LOCAL_FREIGHT: 'Local Transport',
+  BANGLADESH_DELIVERY: 'Bangladesh Delivery',
   CUSTOMS_DUTY: 'Customs Duty',
   TAX_OR_IMPORT_FEE: 'Import Tax / VAT',
   FORWARDER_FEE: 'Forwarder / C&F Fee',
@@ -84,7 +82,9 @@ export function ShipmentDetailCostingSection({
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(
     worksheet?.current_revision_id ?? null,
   );
-  const [createRevisionKind, setCreateRevisionKind] = useState<'ADJUSTMENT' | 'CREDIT' | null>(null);
+  const [createRevisionKind, setCreateRevisionKind] = useState<'ADJUSTMENT' | 'CREDIT' | null>(
+    null,
+  );
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -99,19 +99,24 @@ export function ShipmentDetailCostingSection({
   const receivedPct = percentage(totals.received, totals.expected);
 
   const currentRev =
-    worksheet?.revisions.find((r) => r.id === (selectedRevisionId || worksheet?.current_revision_id)) ??
-    worksheet?.revisions[0];
+    worksheet?.revisions.find(
+      (r) => r.id === (selectedRevisionId || worksheet?.current_revision_id),
+    ) ?? worksheet?.revisions[0];
 
   const isHeadRevision = currentRev?.id === worksheet?.current_revision_id;
   const isViewingDraft = currentRev?.status === 'DRAFT';
-  const isViewingFinalized = currentRev?.status === 'FINALIZED' || currentRev?.status === 'SUPERSEDED';
+  const isViewingFinalized =
+    currentRev?.status === 'FINALIZED' || currentRev?.status === 'SUPERSEDED';
 
   const priorRev = currentRev?.supersedes_revision_id
     ? worksheet?.revisions.find((r) => r.id === currentRev.supersedes_revision_id)
     : undefined;
 
-  const activeComponents = worksheet?.components.filter((c) => c.revision_id === currentRev?.id) ?? [];
-  const activeResults = worksheet?.results.filter((r) => (r.revision_id ? r.revision_id === currentRev?.id : true)) ?? [];
+  const activeComponents =
+    worksheet?.components.filter((c) => c.revision_id === currentRev?.id) ?? [];
+  const activeResults =
+    worksheet?.results.filter((r) => (r.revision_id ? r.revision_id === currentRev?.id : true)) ??
+    [];
 
   const additionalCostTotal = activeResults.length
     ? activeResults.reduce((sum, res) => sum + Number(res.additional_cost), 0)
@@ -148,7 +153,8 @@ export function ShipmentDetailCostingSection({
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Freight, duties, and port clearance are allocated across verified physical units to establish true inventory asset value.
+              Freight, duties, and port clearance are allocated across verified physical units to
+              establish true inventory asset value.
             </p>
           </div>
         </div>
@@ -174,7 +180,8 @@ export function ShipmentDetailCostingSection({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Received to date:</span>
                 <strong className="font-semibold text-foreground">
-                  {formatSupplyNumber(String(totals.received))} / {formatSupplyNumber(String(totals.expected))} units ({receivedPct}%)
+                  {formatSupplyNumber(String(totals.received))} /{' '}
+                  {formatSupplyNumber(String(totals.expected))} units ({receivedPct}%)
                 </strong>
               </div>
               <Progress value={receivedPct} className="h-2" />
@@ -213,18 +220,27 @@ export function ShipmentDetailCostingSection({
               <h3 className="font-heading text-base font-semibold">
                 Landed Cost & Stock Valuation
               </h3>
-              <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200">
+              <Badge
+                variant="secondary"
+                className="gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200"
+              >
                 <CheckCircle2 className="size-3" />
                 <span>Ready for Landed Cost</span>
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              All physical shipment items have been counted into on-hand stock. You can now start the landed cost worksheet.
+              All physical shipment items have been counted into on-hand stock. You can now start
+              the landed cost worksheet.
             </p>
           </div>
 
           {canManageCost ? (
-            <Button onClick={onOpenStartWorksheet} className="gap-1.5 shadow-sm" size="sm" disabled={busy}>
+            <Button
+              onClick={onOpenStartWorksheet}
+              className="gap-1.5 shadow-sm"
+              size="sm"
+              disabled={busy}
+            >
               <CircleDollarSign className="size-4" />
               <span>Start Landed Cost Worksheet</span>
             </Button>
@@ -243,9 +259,10 @@ export function ShipmentDetailCostingSection({
               </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 All <strong>{formatSupplyNumber(String(totals.received))} units</strong> across{' '}
-                <strong>{receivedItems.length} items</strong> have arrived at {shipment.receivingLocationName}.
-                Initializing a landed cost worksheet will lock these received quantities as cost targets
-                so you can record freight, duties, and port clearance.
+                <strong>{receivedItems.length} items</strong> have arrived at{' '}
+                {shipment.receivingLocationName}. Initializing a landed cost worksheet will lock
+                these received quantities as cost targets so you can record freight, duties, and
+                port clearance.
               </p>
             </div>
 
@@ -281,11 +298,11 @@ export function ShipmentDetailCostingSection({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-heading text-base font-semibold">
-              Landed Cost & Stock Valuation
-            </h3>
+            <h3 className="font-heading text-base font-semibold">Landed Cost & Stock Valuation</h3>
             <StatusBadge status={currentRev?.status ?? worksheet.status} />
-            <span className="font-mono text-xs text-muted-foreground">{worksheet.worksheet_number}</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {worksheet.worksheet_number}
+            </span>
             {currentRev ? (
               <Badge variant="outline" className="text-[11px] font-medium">
                 Rev #{currentRev.revision_number} ({currentRev.revision_kind})
@@ -321,7 +338,9 @@ export function ShipmentDetailCostingSection({
                 className="gap-1.5 shadow-sm"
               >
                 <CheckCircle className="size-3.5" />
-                <span>Finalize {Number(currentRev?.revision_number) > 1 ? 'Adjustment' : 'Landed Cost'}</span>
+                <span>
+                  Finalize {Number(currentRev?.revision_number) > 1 ? 'Adjustment' : 'Landed Cost'}
+                </span>
               </Button>
 
               {Number(currentRev?.revision_number) > 1 ? (
@@ -390,8 +409,8 @@ export function ShipmentDetailCostingSection({
                 rev.revision_kind === 'INITIAL'
                   ? 'Original'
                   : rev.revision_kind === 'ADJUSTMENT'
-                  ? 'Adjustment'
-                  : 'Credit';
+                    ? 'Adjustment'
+                    : 'Credit';
 
               return (
                 <button
@@ -407,12 +426,19 @@ export function ShipmentDetailCostingSection({
                   <span>Rev #{rev.revision_number}</span>
                   <span className="text-[10px] text-muted-foreground">({kindLabel})</span>
                   <Badge
-                    variant={rev.status === 'FINALIZED' ? 'default' : isRevDraft ? 'secondary' : 'outline'}
+                    variant={
+                      rev.status === 'FINALIZED' ? 'default' : isRevDraft ? 'secondary' : 'outline'
+                    }
                     className="h-4 px-1 text-[9px] font-normal"
                   >
                     {rev.status}
                   </Badge>
-                  {isHead ? <span className="size-1.5 rounded-full bg-primary" title="Current Active Version" /> : null}
+                  {isHead ? (
+                    <span
+                      className="size-1.5 rounded-full bg-primary"
+                      title="Current Active Version"
+                    />
+                  ) : null}
                 </button>
               );
             })}
@@ -426,8 +452,12 @@ export function ShipmentDetailCostingSection({
           <div className="flex items-center gap-2">
             <Info className="size-4 text-primary shrink-0" />
             <p className="text-muted-foreground">
-              Viewing <strong className="text-foreground">Finalized Revision #{currentRev?.revision_number}</strong>.
-              Worksheet currently has an open draft (Rev #{worksheet.revisions[0]?.revision_number}) in progress.
+              Viewing{' '}
+              <strong className="text-foreground">
+                Finalized Revision #{currentRev?.revision_number}
+              </strong>
+              . Worksheet currently has an open draft (Rev #
+              {worksheet.revisions[0]?.revision_number}) in progress.
             </p>
           </div>
           <Button
@@ -448,11 +478,13 @@ export function ShipmentDetailCostingSection({
             <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
             <div className="space-y-0.5">
               <p className="font-semibold">
-                Revision #{currentRev?.revision_number} ({currentRev?.revision_kind}): Post-Finalization Draft
+                Revision #{currentRev?.revision_number} ({currentRev?.revision_kind}):
+                Post-Finalization Draft
               </p>
               <p className="text-[11px] opacity-90 leading-relaxed">
-                Record delayed logistics charges (e.g. demurrage, late duties) or vendor credits on top of Finalized Revision #{priorRev?.revision_number ?? '1'}.
-                All prior finalized numbers remain safely intact.
+                Record delayed logistics charges (e.g. demurrage, late duties) or vendor credits on
+                top of Finalized Revision #{priorRev?.revision_number ?? '1'}. All prior finalized
+                numbers remain safely intact.
               </p>
             </div>
           </div>
@@ -521,12 +553,19 @@ export function ShipmentDetailCostingSection({
                 <span>Recorded Cost Components ({activeComponents.length})</span>
               </CardTitle>
               <CardDescription className="text-xs">
-                Freight invoices, customs tariffs, handling fees, and taxes allocated on Revision #{currentRev?.revision_number}.
+                Freight invoices, customs tariffs, handling fees, and taxes allocated on Revision #
+                {currentRev?.revision_number}.
               </CardDescription>
             </div>
 
             {isViewingDraft && isHeadRevision && canManageCost ? (
-              <Button size="sm" variant="outline" onClick={onOpenAddComponent} disabled={busy} className="h-7 text-xs gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onOpenAddComponent}
+                disabled={busy}
+                className="h-7 text-xs gap-1"
+              >
                 <Plus className="size-3" />
                 <span>Add Component</span>
               </Button>
@@ -539,7 +578,13 @@ export function ShipmentDetailCostingSection({
             <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground space-y-2">
               <p>No cost components added to this revision yet.</p>
               {isViewingDraft && isHeadRevision && canManageCost ? (
-                <Button size="sm" variant="outline" onClick={onOpenAddComponent} disabled={busy} className="gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onOpenAddComponent}
+                  disabled={busy}
+                  className="gap-1.5"
+                >
                   <PlusCircle className="size-3.5" />
                   <span>Add Expense (e.g. Freight, Duties)</span>
                 </Button>
@@ -617,7 +662,8 @@ export function ShipmentDetailCostingSection({
                 <span>Unit Acquisition Cost Breakdown (Rev #{currentRev?.revision_number})</span>
               </CardTitle>
               <CardDescription className="text-xs">
-                Comparison of original commercial purchase price vs allocated landed expenses = final inventory valuation.
+                Comparison of original commercial purchase price vs allocated landed expenses =
+                final inventory valuation.
               </CardDescription>
             </div>
           </div>
@@ -638,13 +684,15 @@ export function ShipmentDetailCostingSection({
 
             <TableBody>
               {activeResults.map((result) => {
-                const unitAdded = Number(result.quantity) > 0
-                  ? Number(result.additional_cost) / Number(result.quantity)
-                  : 0;
+                const unitAdded =
+                  Number(result.quantity) > 0
+                    ? Number(result.additional_cost) / Number(result.quantity)
+                    : 0;
 
-                const basePrice = Number(result.quantity) > 0
-                  ? Number(result.purchase_cost) / Number(result.quantity)
-                  : 0;
+                const basePrice =
+                  Number(result.quantity) > 0
+                    ? Number(result.purchase_cost) / Number(result.quantity)
+                    : 0;
 
                 return (
                   <TableRow key={result.allocation_target_id} className="text-xs">
@@ -729,7 +777,9 @@ export function ShipmentDetailCostingSection({
           onOpenChange={setDiscardDialogOpen}
           worksheetNumber={worksheet.worksheet_number}
           revisionNumber={currentRev.revision_number}
-          priorRevisionNumber={priorRev?.revision_number ?? String(Number(currentRev.revision_number) - 1)}
+          priorRevisionNumber={
+            priorRev?.revision_number ?? String(Number(currentRev.revision_number) - 1)
+          }
           onConfirm={async () => {
             setDiscardDialogOpen(false);
             await onDiscardRevision(currentRev.id);

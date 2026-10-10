@@ -117,6 +117,7 @@ export interface AddCostComponentInput {
   readonly allocationMethod:
     'PURCHASE_VALUE' | 'QUANTITY' | 'EQUAL' | 'WEIGHT' | 'VOLUME' | 'DIRECT';
   readonly reference?: string | undefined;
+  readonly financeExpenseId?: string | undefined;
   readonly notes?: string | undefined;
 }
 

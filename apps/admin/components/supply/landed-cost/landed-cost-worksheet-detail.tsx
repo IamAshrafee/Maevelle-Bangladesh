@@ -14,6 +14,7 @@ import {
   History,
   Info,
   Layers3,
+  Link2,
   Loader2,
   PackageCheck,
   Plus,
@@ -37,19 +38,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatSupplyDate, formatSupplyMoney, formatSupplyNumber } from '@/lib/supply/api';
 import { CreateRevisionDialog } from '../shipment-detail/dialogs/create-revision-dialog';
 import { DiscardRevisionDialog } from '../shipment-detail/dialogs/discard-revision-dialog';
 import type { LandedCostWorksheetDetailProps } from './types';
 
 const COST_TYPE_LABELS: Record<string, string> = {
+  CHINA_LOCAL_COURIER: 'China Local Courier',
   INTERNATIONAL_FREIGHT: 'International Freight',
   LOCAL_FREIGHT: 'Local Transport',
+  BANGLADESH_DELIVERY: 'Bangladesh Delivery',
   CUSTOMS_DUTY: 'Customs Duty',
   TAX_OR_IMPORT_FEE: 'Import Tax / VAT',
   FORWARDER_FEE: 'Forwarder / C&F Fee',
@@ -84,7 +83,9 @@ export function LandedCostWorksheetDetail({
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(
     worksheet?.current_revision_id ?? null,
   );
-  const [createRevisionKind, setCreateRevisionKind] = useState<'ADJUSTMENT' | 'CREDIT' | null>(null);
+  const [createRevisionKind, setCreateRevisionKind] = useState<'ADJUSTMENT' | 'CREDIT' | null>(
+    null,
+  );
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -94,26 +95,36 @@ export function LandedCostWorksheetDetail({
   }, [worksheet?.current_revision_id]);
 
   const currentRev =
-    worksheet.revisions.find((r) => r.id === (selectedRevisionId || worksheet.current_revision_id)) ??
-    worksheet.revisions[0];
+    worksheet.revisions.find(
+      (r) => r.id === (selectedRevisionId || worksheet.current_revision_id),
+    ) ?? worksheet.revisions[0];
 
   const isHeadRevision = currentRev?.id === worksheet.current_revision_id;
   const isViewingDraft = currentRev?.status === 'DRAFT';
-  const isViewingFinalized = currentRev?.status === 'FINALIZED' || currentRev?.status === 'SUPERSEDED';
+  const isViewingFinalized =
+    currentRev?.status === 'FINALIZED' || currentRev?.status === 'SUPERSEDED';
 
   const priorRev = currentRev?.supersedes_revision_id
     ? worksheet.revisions.find((r) => r.id === currentRev.supersedes_revision_id)
     : undefined;
 
   const activeComponents = worksheet.components.filter((c) => c.revision_id === currentRev?.id);
-  const activeResults = worksheet.results.filter((r) => (r.revision_id ? r.revision_id === currentRev?.id : true));
+  const activeResults = worksheet.results.filter((r) =>
+    r.revision_id ? r.revision_id === currentRev?.id : true,
+  );
 
   const totalAdditionalCost =
     activeResults.reduce((sum, res) => sum + Number(res.additional_cost), 0) ||
     activeComponents.reduce((sum, comp) => sum + Number(comp.original_amount), 0);
 
-  const totalAcquisitionValue =
-    activeResults.reduce((sum, res) => sum + Number(res.total_acquisition_cost), 0);
+  const totalAcquisitionValue = activeResults.reduce(
+    (sum, res) => sum + Number(res.total_acquisition_cost),
+    0,
+  );
+  const reportedFreight = Number(worksheet.reported_freight_amount ?? 0);
+  const recordedFreight = Number(worksheet.recorded_freight_amount ?? 0);
+  const freightNeedsAttention =
+    isHeadRevision && reportedFreight > 0 && Math.abs(reportedFreight - recordedFreight) >= 0.005;
 
   const handleDelete = async (componentId: string) => {
     setDeletingId(componentId);
@@ -178,7 +189,13 @@ export function LandedCostWorksheetDetail({
         <div className="flex flex-wrap items-center gap-2">
           {isViewingDraft && isHeadRevision && canManageCost ? (
             <>
-              <Button size="sm" variant="outline" onClick={onOpenAddComponent} disabled={busy} className="gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onOpenAddComponent}
+                disabled={busy}
+                className="gap-1"
+              >
                 <Plus className="size-3.5" />
                 <span>Add Component</span>
               </Button>
@@ -190,7 +207,9 @@ export function LandedCostWorksheetDetail({
                   className="gap-1 shadow-xs"
                 >
                   <ShieldCheck className="size-3.5" />
-                  <span>Finalize {Number(currentRev?.revision_number) > 1 ? 'Adjustment' : 'Costing'}</span>
+                  <span>
+                    Finalize {Number(currentRev?.revision_number) > 1 ? 'Adjustment' : 'Costing'}
+                  </span>
                 </Button>
               ) : null}
 
@@ -234,7 +253,13 @@ export function LandedCostWorksheetDetail({
           ) : null}
 
           {onClose ? (
-            <Button size="icon" variant="ghost" className="size-8" onClick={onClose} aria-label="Close details">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-8"
+              onClick={onClose}
+              aria-label="Close details"
+            >
               <X className="size-4" />
             </Button>
           ) : null}
@@ -257,8 +282,8 @@ export function LandedCostWorksheetDetail({
                 rev.revision_kind === 'INITIAL'
                   ? 'Original'
                   : rev.revision_kind === 'ADJUSTMENT'
-                  ? 'Adjustment'
-                  : 'Credit';
+                    ? 'Adjustment'
+                    : 'Credit';
 
               return (
                 <button
@@ -274,12 +299,19 @@ export function LandedCostWorksheetDetail({
                   <span>Rev #{rev.revision_number}</span>
                   <span className="text-[10px] text-muted-foreground">({kindLabel})</span>
                   <Badge
-                    variant={rev.status === 'FINALIZED' ? 'default' : isRevDraft ? 'secondary' : 'outline'}
+                    variant={
+                      rev.status === 'FINALIZED' ? 'default' : isRevDraft ? 'secondary' : 'outline'
+                    }
                     className="h-4 px-1 text-[9px] font-normal"
                   >
                     {rev.status}
                   </Badge>
-                  {isHead ? <span className="size-1.5 rounded-full bg-primary" title="Current Active Version" /> : null}
+                  {isHead ? (
+                    <span
+                      className="size-1.5 rounded-full bg-primary"
+                      title="Current Active Version"
+                    />
+                  ) : null}
                 </button>
               );
             })}
@@ -293,8 +325,12 @@ export function LandedCostWorksheetDetail({
           <div className="flex items-center gap-2">
             <Info className="size-4 text-primary shrink-0" />
             <p className="text-muted-foreground">
-              Viewing <strong className="text-foreground">Finalized Revision #{currentRev?.revision_number}</strong>.
-              Worksheet currently has an open draft (Rev #{worksheet.revisions[0]?.revision_number}) in progress.
+              Viewing{' '}
+              <strong className="text-foreground">
+                Finalized Revision #{currentRev?.revision_number}
+              </strong>
+              . Worksheet currently has an open draft (Rev #
+              {worksheet.revisions[0]?.revision_number}) in progress.
             </p>
           </div>
           <Button
@@ -315,11 +351,13 @@ export function LandedCostWorksheetDetail({
             <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
             <div className="space-y-0.5">
               <p className="font-semibold">
-                Revision #{currentRev?.revision_number} ({currentRev?.revision_kind}): Post-Finalization Draft
+                Revision #{currentRev?.revision_number} ({currentRev?.revision_kind}):
+                Post-Finalization Draft
               </p>
               <p className="text-[11px] opacity-90 leading-relaxed">
-                Record delayed logistics charges or credits on top of Finalized Revision #{priorRev?.revision_number ?? '1'}.
-                All prior finalized numbers remain safely intact.
+                Record delayed logistics charges or credits on top of Finalized Revision #
+                {priorRev?.revision_number ?? '1'}. All prior finalized numbers remain safely
+                intact.
               </p>
             </div>
           </div>
@@ -354,7 +392,9 @@ export function LandedCostWorksheetDetail({
           </p>
         </div>
         <div className="rounded-lg border bg-muted/30 p-2.5">
-          <span className="text-[11px] font-medium text-muted-foreground">Final Cargo Valuation</span>
+          <span className="text-[11px] font-medium text-muted-foreground">
+            Final Cargo Valuation
+          </span>
           <p className="mt-0.5 font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400">
             {totalAcquisitionValue > 0
               ? formatSupplyMoney(totalAcquisitionValue.toString(), worksheet.base_currency_code)
@@ -369,6 +409,32 @@ export function LandedCostWorksheetDetail({
         </div>
       </div>
 
+      {freightNeedsAttention ? (
+        <div className="flex gap-2.5 rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs">
+          <AlertCircle className="mt-0.5 size-4 shrink-0 text-warning" />
+          <div>
+            <p className="font-semibold">Shipment freight evidence is not fully represented</p>
+            <p className="mt-0.5 text-muted-foreground">
+              Shipment reports{' '}
+              <span className="font-mono tabular-nums">
+                {formatSupplyMoney(
+                  worksheet.reported_freight_amount ?? '0',
+                  worksheet.base_currency_code,
+                )}
+              </span>{' '}
+              while the active worksheet records{' '}
+              <span className="font-mono tabular-nums">
+                {formatSupplyMoney(
+                  worksheet.recorded_freight_amount ?? '0',
+                  worksheet.base_currency_code,
+                )}
+              </span>
+              . Add or correct the international freight component before finalizing.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {/* Cost Components Breakdown */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
@@ -376,7 +442,13 @@ export function LandedCostWorksheetDetail({
             Cost Components ({activeComponents.length})
           </h3>
           {isViewingDraft && isHeadRevision && canManageCost ? (
-            <Button size="xs" variant="ghost" onClick={onOpenAddComponent} disabled={busy} className="h-6 gap-1 text-xs text-primary">
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={onOpenAddComponent}
+              disabled={busy}
+              className="h-6 gap-1 text-xs text-primary"
+            >
               <Plus className="size-3" />
               <span>Add</span>
             </Button>
@@ -386,12 +458,19 @@ export function LandedCostWorksheetDetail({
         {activeComponents.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
             <Receipt className="size-8 text-muted-foreground/50" />
-            <p className="mt-2 text-xs font-medium">No cost components recorded on this revision.</p>
+            <p className="mt-2 text-xs font-medium">
+              No cost components recorded on this revision.
+            </p>
             <p className="text-[11px] text-muted-foreground">
               Add freight bills, import tariffs, customs broker fees, or port terminal handling.
             </p>
             {isViewingDraft && isHeadRevision && canManageCost ? (
-              <Button size="sm" variant="outline" onClick={onOpenAddComponent} className="mt-3 gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onOpenAddComponent}
+                className="mt-3 gap-1"
+              >
                 <Plus className="size-3.5" />
                 <span>Add First Component</span>
               </Button>
@@ -402,7 +481,8 @@ export function LandedCostWorksheetDetail({
             {activeComponents.map((comp) => {
               const isDeleting = deletingId === comp.id;
               const isForeignCurrency =
-                comp.original_currency_code.toUpperCase() !== worksheet.base_currency_code.toUpperCase();
+                comp.original_currency_code.toUpperCase() !==
+                worksheet.base_currency_code.toUpperCase();
 
               return (
                 <div
@@ -457,7 +537,17 @@ export function LandedCostWorksheetDetail({
                       {comp.reference ? (
                         <span className="font-mono">Ref: {comp.reference}</span>
                       ) : null}
-                      <span className="capitalize text-foreground/70">{comp.value_status.toLowerCase()}</span>
+                      {comp.finance_expense_id ? (
+                        <Link
+                          href={`/finance/expenses/${comp.finance_expense_id}`}
+                          className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                        >
+                          <Link2 className="size-3" /> Finance evidence
+                        </Link>
+                      ) : null}
+                      <span className="capitalize text-foreground/70">
+                        {comp.value_status.toLowerCase()}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -525,14 +615,17 @@ export function LandedCostWorksheetDetail({
                     )}
                   </TableCell>
                   <TableCell className="text-right font-mono text-amber-600 dark:text-amber-400">
-                    +{formatSupplyMoney(
+                    +
+                    {formatSupplyMoney(
                       activeResults.reduce((s, r) => s + Number(r.additional_cost), 0).toString(),
                       worksheet.base_currency_code,
                     )}
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
                     {formatSupplyMoney(
-                      activeResults.reduce((s, r) => s + Number(r.total_acquisition_cost), 0).toString(),
+                      activeResults
+                        .reduce((s, r) => s + Number(r.total_acquisition_cost), 0)
+                        .toString(),
                       worksheet.base_currency_code,
                     )}
                   </TableCell>
@@ -567,7 +660,9 @@ export function LandedCostWorksheetDetail({
           onOpenChange={setDiscardDialogOpen}
           worksheetNumber={worksheet.worksheet_number}
           revisionNumber={currentRev.revision_number}
-          priorRevisionNumber={priorRev?.revision_number ?? String(Number(currentRev.revision_number) - 1)}
+          priorRevisionNumber={
+            priorRev?.revision_number ?? String(Number(currentRev.revision_number) - 1)
+          }
           onConfirm={async () => {
             setDiscardDialogOpen(false);
             await onDiscardRevision(currentRev.id);

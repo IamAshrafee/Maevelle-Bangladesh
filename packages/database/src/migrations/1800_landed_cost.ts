@@ -71,7 +71,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),
       worksheet_revision_id uuid not null references landed_cost.worksheet_revisions(id) on delete restrict,
-      cost_type text not null check (cost_type in ('PURCHASE_COST', 'INTERNATIONAL_FREIGHT', 'LOCAL_FREIGHT', 'CUSTOMS_DUTY', 'TAX_OR_IMPORT_FEE', 'FORWARDER_FEE', 'HANDLING', 'INSURANCE', 'OTHER_ACQUISITION_COST')),
+      cost_type text not null check (cost_type in ('PURCHASE_COST', 'CHINA_LOCAL_COURIER', 'INTERNATIONAL_FREIGHT', 'LOCAL_FREIGHT', 'BANGLADESH_DELIVERY', 'CUSTOMS_DUTY', 'TAX_OR_IMPORT_FEE', 'FORWARDER_FEE', 'HANDLING', 'INSURANCE', 'OTHER_ACQUISITION_COST')),
       reference text,
       scope text not null check (scope in ('GLOBAL', 'DIRECT')),
       direct_shipment_allocation_id uuid references inbound_shipment.purchase_line_allocations(id),

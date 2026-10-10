@@ -107,11 +107,12 @@ async function assertRevisionMutable(
   const result = await sql<{
     status: string;
     worksheet_id: string;
+    shipment_id: string;
     base_currency_code: string;
     revision_kind: 'INITIAL' | 'ADJUSTMENT' | 'CREDIT';
     supersedes_revision_id: string | null;
   }>`
-    select revision.status, revision.worksheet_id, worksheet.base_currency_code, revision.revision_kind, revision.supersedes_revision_id
+    select revision.status, revision.worksheet_id, worksheet.shipment_id, worksheet.base_currency_code, revision.revision_kind, revision.supersedes_revision_id
     from landed_cost.worksheet_revisions revision join landed_cost.worksheets worksheet on worksheet.id = revision.worksheet_id
     where revision.organization_id = ${organizationId} and revision.id = ${revisionId} for update
   `.execute(executor);
@@ -394,16 +395,29 @@ export async function addLandedCostComponent(
         currency_code: string;
         amount: string;
         status: string;
-      }>`select currency_code, amount::text, status from finance.expenses where organization_id = ${input.organizationId} and id = ${input.financeExpenseId} for key share`.execute(
+        source_domain: string | null;
+        source_id: string | null;
+      }>`select currency_code, amount::text, status, source_domain, source_id::text from finance.expenses where organization_id = ${input.organizationId} and id = ${input.financeExpenseId} for key share`.execute(
         tx,
       );
       const row = expense.rows[0];
       if (!row || row.status === 'CANCELLED')
         throw new CostingDomainError('NOT_FOUND', 'An active Finance expense was not found.');
-      if (row.currency_code !== input.originalCurrencyCode || row.amount !== input.originalAmount)
+      if (
+        row.currency_code !== input.originalCurrencyCode ||
+        cents(row.amount) !== cents(input.originalAmount)
+      )
         throw new CostingDomainError(
           'VALIDATION_FAILED',
           'The linked Finance expense must use the same source currency and amount.',
+        );
+      if (
+        row.source_domain !== 'inbound_shipment.shipment' ||
+        row.source_id !== revision.shipment_id
+      )
+        throw new CostingDomainError(
+          'VALIDATION_FAILED',
+          'The linked Finance expense must belong to this inbound shipment.',
         );
     }
     const original = cents(input.originalAmount);
@@ -1047,6 +1061,31 @@ export async function finalizeLandedCostWorksheet(
 ): Promise<void> {
   await db.transaction().execute(async (tx) => {
     const revision = await assertRevisionMutable(tx, input.organizationId, input.revisionId);
+    const freightEvidence = await sql<{
+      reported_amount: string | null;
+      recorded_amount: string;
+    }>`select shipment.reported_freight_amount::text as reported_amount,
+        coalesce(sum(component.worksheet_amount) filter (
+          where component.cost_type='INTERNATIONAL_FREIGHT'
+        ), 0)::text as recorded_amount
+      from landed_cost.worksheets worksheet
+      join inbound_shipment.shipments shipment
+        on shipment.organization_id=worksheet.organization_id and shipment.id=worksheet.shipment_id
+      left join landed_cost.cost_components component
+        on component.organization_id=worksheet.organization_id
+        and component.worksheet_revision_id=${input.revisionId}
+      where worksheet.organization_id=${input.organizationId}
+        and worksheet.id=${revision.worksheet_id}
+      group by shipment.reported_freight_amount`.execute(tx);
+    const freight = freightEvidence.rows[0];
+    if (
+      freight?.reported_amount &&
+      cents(freight.reported_amount) !== cents(freight.recorded_amount)
+    )
+      throw new CostingDomainError(
+        'VALIDATION_FAILED',
+        `International freight components must reconcile to the shipment-reported amount (${freight.reported_amount} ${revision.base_currency_code}) before finalization.`,
+      );
     const preview = await previewLandedCostWorksheet(tx, {
       organizationId: input.organizationId,
       revisionId: input.revisionId,
@@ -1474,10 +1513,18 @@ export async function getLandedCostWorksheet(
     receiving_location_name: string | null;
     shipment_status: string | null;
     shipment_receiving_status: string | null;
+    reported_freight_amount: string | null;
+    recorded_freight_amount: string;
   }>`
     select w.id, w.shipment_id, w.worksheet_number, w.base_currency_code, w.status, w.current_revision_id,
       w.created_at::text, w.finalized_at::text,
       s.shipment_number, s.status as shipment_status, s.receiving_status as shipment_receiving_status,
+      s.reported_freight_amount::text,
+      coalesce((select sum(component.worksheet_amount)::text
+        from landed_cost.cost_components component
+        where component.organization_id=w.organization_id
+          and component.worksheet_revision_id=w.current_revision_id
+          and component.cost_type='INTERNATIONAL_FREIGHT'), '0') as recorded_freight_amount,
       loc.name as receiving_location_name
     from landed_cost.worksheets w
     left join inbound_shipment.shipments s on s.id = w.shipment_id and s.organization_id = w.organization_id

@@ -30,6 +30,8 @@ export interface Worksheet {
   receiving_location_name?: string | null;
   shipment_status?: string | null;
   shipment_receiving_status?: string | null;
+  reported_freight_amount?: string | null;
+  recorded_freight_amount?: string;
   revisions: readonly {
     id: string;
     revision_number: string;
@@ -54,6 +56,7 @@ export interface Worksheet {
     fx_source: string | null;
     reference: string | null;
     finance_expense_id: string | null;
+    notes?: string | null;
   }[];
   results: readonly {
     allocation_target_id: string;

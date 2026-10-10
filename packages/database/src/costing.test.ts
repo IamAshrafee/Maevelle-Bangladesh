@@ -27,6 +27,7 @@ import {
   recordManualCourierBooking,
 } from './delivery.js';
 import { createFulfillment, dispatchFulfillment, transitionFulfillment } from './fulfillment.js';
+import { createExpense, createExpenseCategory } from './finance.js';
 import {
   createCheckout,
   placeOrder,
@@ -333,6 +334,85 @@ describe('landed-cost deterministic allocation', () => {
     ).toThrow(CostingDomainError);
   });
 
+  it('requires finalized freight to reconcile with shipment-reported evidence', async () => {
+    const input = await receivedShipment();
+    await sql`update inbound_shipment.shipments
+      set reported_freight_amount=623.0000, chargeable_weight=0.830000,
+        weight_unit='KG', freight_rate=750.0000, freight_rate_unit='PER_KG'
+      where organization_id=${input.organizationId} and id=${input.shipmentId}`.execute(
+      database.db,
+    );
+    const worksheet = await createLandedCostWorksheet(database.db, {
+      ...input,
+      baseCurrencyCode: 'CNY',
+    });
+    const category = await createExpenseCategory(database.db, {
+      organizationId: input.organizationId,
+      code: `FREIGHT-${crypto.randomUUID().slice(0, 6)}`,
+      name: 'International freight',
+      classification: 'COST_OF_GOODS',
+    });
+    const expense = await createExpense(database.db, {
+      organizationId: input.organizationId,
+      actorId: undefined as never,
+      categoryId: category!.id,
+      amount: '623',
+      currencyCode: 'CNY',
+      description: 'SkyBuy air freight',
+      expenseDate: '2026-08-08',
+      sourceDomain: 'inbound_shipment.shipment',
+      sourceId: input.shipmentId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await addLandedCostComponent(database.db, {
+      organizationId: input.organizationId,
+      revisionId: worksheet.revisionId,
+      costType: 'INTERNATIONAL_FREIGHT',
+      scope: 'GLOBAL',
+      originalAmount: '622.0000',
+      originalCurrencyCode: 'CNY',
+      valueStatus: 'ACTUAL',
+      allocationMethod: 'QUANTITY',
+    });
+    await expect(
+      finalizeLandedCostWorksheet(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        revisionId: worksheet.revisionId,
+      }),
+    ).rejects.toThrow('must reconcile to the shipment-reported amount');
+    const component = await sql<{ id: string }>`select id from landed_cost.cost_components
+      where organization_id=${input.organizationId} and worksheet_revision_id=${worksheet.revisionId}`.execute(
+      database.db,
+    );
+    await sql`delete from landed_cost.cost_components where id=${component.rows[0]!.id}`.execute(
+      database.db,
+    );
+    await addLandedCostComponent(database.db, {
+      organizationId: input.organizationId,
+      revisionId: worksheet.revisionId,
+      costType: 'INTERNATIONAL_FREIGHT',
+      scope: 'GLOBAL',
+      originalAmount: '623',
+      originalCurrencyCode: 'CNY',
+      valueStatus: 'ACTUAL',
+      allocationMethod: 'QUANTITY',
+      financeExpenseId: expense.id,
+    });
+    await expect(
+      finalizeLandedCostWorksheet(database.db, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        revisionId: worksheet.revisionId,
+      }),
+    ).resolves.toBeUndefined();
+    const detail = await getLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      worksheetId: worksheet.id,
+    });
+    expect(detail.components[0]?.finance_expense_id).toBe(expense.id);
+  });
+
   it('preserves finalized evidence through an append-only credit revision and adjusts both receipt layers', async () => {
     const input = await receivedShipment();
     const worksheet = await createLandedCostWorksheet(database.db, {
@@ -456,7 +536,9 @@ describe('landed-cost deterministic allocation', () => {
     const ws = await sql<{
       status: string;
       current_revision_id: string;
-    }>`select status, current_revision_id from landed_cost.worksheets where id = ${worksheet.id}`.execute(database.db);
+    }>`select status, current_revision_id from landed_cost.worksheets where id = ${worksheet.id}`.execute(
+      database.db,
+    );
     expect(ws.rows[0]?.status).toBe('FINALIZED');
     expect(ws.rows[0]?.current_revision_id).toBe(worksheet.revisionId);
 
@@ -464,7 +546,9 @@ describe('landed-cost deterministic allocation', () => {
     const revisions = await sql<{
       revision_number: string;
       status: string;
-    }>`select revision_number::text, status from landed_cost.worksheet_revisions where worksheet_id = ${worksheet.id}`.execute(database.db);
+    }>`select revision_number::text, status from landed_cost.worksheet_revisions where worksheet_id = ${worksheet.id}`.execute(
+      database.db,
+    );
     expect(revisions.rows).toEqual([{ revision_number: '1', status: 'FINALIZED' }]);
 
     // Verify attempting to discard initial revision fails

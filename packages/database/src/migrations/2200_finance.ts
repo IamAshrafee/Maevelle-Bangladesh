@@ -55,8 +55,11 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       unique (organization_id,id), unique (organization_id,linked_user_id)
     );
     alter table landed_cost.cost_components
-      add column finance_expense_id uuid unique references finance.expenses(id) on delete restrict,
+      add column finance_expense_id uuid references finance.expenses(id) on delete restrict,
       add foreign key (organization_id, finance_expense_id) references finance.expenses(organization_id, id);
+    create unique index landed_cost_components_revision_expense
+      on landed_cost.cost_components(worksheet_revision_id, finance_expense_id)
+      where finance_expense_id is not null;
     create table finance.expense_payments (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), expense_id uuid not null references finance.expenses(id),
       finance_transaction_id uuid not null references finance.finance_transactions(id), amount numeric(20,4) not null check (amount <> 0),

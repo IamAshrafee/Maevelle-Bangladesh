@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Coins, HelpCircle, Loader2, PlusCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link2, Loader2, PlusCircle, ReceiptText, Truck } from 'lucide-react';
+import type { ApiEnvelope, FinanceExpenseDto, PaginatedResultDto } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,17 +14,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SupplyField, supplySelectClassName } from '@/components/supply/supply-field';
+import { supplyRequest } from '@/lib/supply/api';
 import type { AddCostComponentDialogProps } from '../types';
 
 const COST_TYPES = [
+  { value: 'CHINA_LOCAL_COURIER', label: 'China Local Courier (Seller → China Warehouse)' },
   { value: 'INTERNATIONAL_FREIGHT', label: 'International Freight (Ocean / Air Cargo)' },
   { value: 'LOCAL_FREIGHT', label: 'Local Freight (Inland Trucking / Courier)' },
+  { value: 'BANGLADESH_DELIVERY', label: 'Bangladesh Delivery (Warehouse → Maevelle)' },
   { value: 'CUSTOMS_DUTY', label: 'Customs Duty / Tariffs' },
   { value: 'TAX_OR_IMPORT_FEE', label: 'Tax or Import Fee (AIT / VAT / Surcharge)' },
   { value: 'FORWARDER_FEE', label: 'Forwarder / C&F Broker Fee' },
@@ -80,12 +80,37 @@ export function AddCostComponentDialog({
   const [reference, setReference] = useState('');
   const [valueStatus, setValueStatus] = useState<'ESTIMATED' | 'ACTUAL' | 'CREDIT'>('ACTUAL');
   const [notes, setNotes] = useState('');
+  const [financeExpenseId, setFinanceExpenseId] = useState('');
+  const [expenses, setExpenses] = useState<readonly FinanceExpenseDto[]>([]);
+  const [loadingExpenses, setLoadingExpenses] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setLoadingExpenses(true);
+    void supplyRequest<ApiEnvelope<PaginatedResultDto<FinanceExpenseDto>>>(
+      `/admin/finance/expenses?sourceDomain=inbound_shipment.shipment&sourceId=${encodeURIComponent(shipment.id)}&status=RECORDED&pageSize=100`,
+    )
+      .then((response) => {
+        if (active) setExpenses(response.data.items);
+      })
+      .catch(() => {
+        if (active) setExpenses([]);
+      })
+      .finally(() => {
+        if (active) setLoadingExpenses(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, shipment.id]);
 
   const isCrossCurrency = currencyCode.toUpperCase() !== worksheet.base_currency_code.toUpperCase();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || Number(amount) <= 0) return;
+    if (!amount || Number(amount) === 0) return;
+    if (valueStatus === 'CREDIT' ? Number(amount) >= 0 : Number(amount) <= 0) return;
     if (isCrossCurrency && (!fxRate || Number(fxRate) <= 0)) return;
 
     await onAddComponent({
@@ -97,6 +122,7 @@ export function AddCostComponentDialog({
       originalCurrencyCode: currencyCode.trim().toUpperCase(),
       fxRate: isCrossCurrency ? fxRate : undefined,
       reference: reference.trim() || undefined,
+      financeExpenseId: financeExpenseId || undefined,
       valueStatus,
       notes: notes.trim() || undefined,
     });
@@ -116,6 +142,77 @@ export function AddCostComponentDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {shipment.reportedFreightAmount ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-info/30 bg-info/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 gap-2.5">
+                <Truck className="mt-0.5 size-4 shrink-0 text-info" />
+                <div>
+                  <p className="text-xs font-semibold">Shipment-reported freight available</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    <span className="font-mono tabular-nums">
+                      {shipment.reportedFreightAmount} {shipment.currencyCode}
+                    </span>
+                    {shipment.chargeableWeight
+                      ? ` · ${shipment.chargeableWeight} ${shipment.weightUnit ?? ''}`
+                      : ''}
+                    {shipment.freightRate
+                      ? ` at ${shipment.freightRate} ${shipment.currencyCode}`
+                      : ''}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setCostType('INTERNATIONAL_FREIGHT');
+                  setAmount(shipment.reportedFreightAmount ?? '');
+                  setCurrencyCode(shipment.currencyCode);
+                  setReference(shipment.providerReference ?? shipment.trackingReference ?? '');
+                  setValueStatus('ACTUAL');
+                }}
+                disabled={saving}
+              >
+                Use amount
+              </Button>
+            </div>
+          ) : null}
+
+          <SupplyField label="Finance Expense Evidence (Optional)">
+            <div className="relative">
+              <Link2 className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <select
+                className={`${supplySelectClassName} pl-8`}
+                value={financeExpenseId}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  setFinanceExpenseId(id);
+                  const expense = expenses.find((candidate) => candidate.id === id);
+                  if (!expense) return;
+                  setAmount(expense.amount);
+                  setCurrencyCode(expense.currency_code);
+                  setReference(expense.external_reference ?? expense.expense_number);
+                  setValueStatus('ACTUAL');
+                }}
+                disabled={saving || loadingExpenses}
+              >
+                <option value="">
+                  {loadingExpenses ? 'Loading shipment expenses…' : 'No linked Finance expense'}
+                </option>
+                {expenses.map((expense) => (
+                  <option key={expense.id} value={expense.id}>
+                    {expense.expense_number} · {expense.description} · {expense.amount}{' '}
+                    {expense.currency_code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <ReceiptText className="size-3" /> Linking preserves the payable and payment evidence
+              behind this inventory cost.
+            </p>
+          </SupplyField>
           {/* Cost Type and Scope */}
           <div className="grid gap-3 sm:grid-cols-2">
             <SupplyField label="Expense Category">
@@ -194,7 +291,6 @@ export function AddCostComponentDialog({
               <Input
                 type="number"
                 step="0.0001"
-                min="0.0001"
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -224,7 +320,9 @@ export function AddCostComponentDialog({
                 Cross-Currency Conversion: {currencyCode} → {worksheet.base_currency_code}
               </p>
               <div className="mt-2">
-                <SupplyField label={`Exchange Rate (1 ${currencyCode} = X ${worksheet.base_currency_code})`}>
+                <SupplyField
+                  label={`Exchange Rate (1 ${currencyCode} = X ${worksheet.base_currency_code})`}
+                >
                   <Input
                     type="number"
                     step="0.000000000001"
@@ -290,8 +388,16 @@ export function AddCostComponentDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving || !amount} className="gap-1.5">
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <PlusCircle className="size-4" />}
+            <Button
+              type="submit"
+              disabled={saving || !amount || Number(amount) === 0}
+              className="gap-1.5"
+            >
+              {saving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <PlusCircle className="size-4" />
+              )}
               <span>{saving ? 'Adding component...' : 'Add Cost Component'}</span>
             </Button>
           </DialogFooter>

@@ -572,6 +572,14 @@ export function ExpensesSection({
                       {expense.source_reference ?? 'Purchase'}
                       {expense.source_counterparty ? ` · ${expense.source_counterparty}` : ''}
                     </Link>
+                  ) : expense.source_domain === 'inbound_shipment.shipment' && expense.source_id ? (
+                    <Link
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
+                      href={`/inbound-shipments/${expense.source_id}`}
+                    >
+                      <Link2 className="size-3" />
+                      {expense.source_reference ?? 'Inbound shipment'}
+                    </Link>
                   ) : (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Link2 className="size-3" /> {humanizeFinanceCode(expense.source_domain)}
@@ -716,9 +724,7 @@ function renderBusinessOrigin(entry: FinanceLedgerEntryDto) {
         <Link
           className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
           href={
-            entry.source_id
-              ? `/finance/capital?eventId=${entry.source_id}`
-              : '/finance/capital'
+            entry.source_id ? `/finance/capital?eventId=${entry.source_id}` : '/finance/capital'
           }
         >
           <Banknote className="size-3.5" /> Owner capital <ExternalLink className="size-3" />
