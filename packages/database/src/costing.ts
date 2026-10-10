@@ -191,7 +191,9 @@ export async function discardLandedCostDraftRevision(
     const worksheet = await sql<{
       id: string;
       current_revision_id: string | null;
-    }>`select id, current_revision_id from landed_cost.worksheets where organization_id = ${input.organizationId} and id = ${input.worksheetId} for update`.execute(tx);
+    }>`select id, current_revision_id from landed_cost.worksheets where organization_id = ${input.organizationId} and id = ${input.worksheetId} for update`.execute(
+      tx,
+    );
     const current = worksheet.rows[0];
     if (!current) throw new CostingDomainError('NOT_FOUND', 'Landed Cost Worksheet was not found.');
 
@@ -199,7 +201,9 @@ export async function discardLandedCostDraftRevision(
       id: string;
       status: string;
       supersedes_revision_id: string | null;
-    }>`select id, status, supersedes_revision_id from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${input.revisionId} and worksheet_id = ${input.worksheetId} for update`.execute(tx);
+    }>`select id, status, supersedes_revision_id from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${input.revisionId} and worksheet_id = ${input.worksheetId} for update`.execute(
+      tx,
+    );
     const target = revision.rows[0];
     if (!target) throw new CostingDomainError('NOT_FOUND', 'Worksheet revision was not found.');
 
@@ -207,30 +211,47 @@ export async function discardLandedCostDraftRevision(
       throw new CostingDomainError('INVALID_TRANSITION', 'Only a draft revision can be discarded.');
     }
     if (!target.supersedes_revision_id) {
-      throw new CostingDomainError('INVALID_TRANSITION', 'The initial worksheet revision cannot be discarded.');
+      throw new CostingDomainError(
+        'INVALID_TRANSITION',
+        'The initial worksheet revision cannot be discarded.',
+      );
     }
 
     const prior = await sql<{
       id: string;
       status: string;
       finalized_at: string | null;
-    }>`select id, status, finalized_at::text from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${target.supersedes_revision_id} for update`.execute(tx);
+    }>`select id, status, finalized_at::text from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${target.supersedes_revision_id} for update`.execute(
+      tx,
+    );
     const priorRev = prior.rows[0];
     if (!priorRev) {
       throw new CostingDomainError('NOT_FOUND', 'Prior finalized revision was not found.');
     }
 
     // Delete child records for this draft revision
-    await sql`delete from landed_cost.component_allocations where organization_id = ${input.organizationId} and cost_component_id in (select id from landed_cost.cost_components where worksheet_revision_id = ${input.revisionId}::uuid)`.execute(tx);
-    await sql`delete from landed_cost.cost_components where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(tx);
-    await sql`delete from landed_cost.allocation_targets where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(tx);
-    await sql`delete from landed_cost.acquisition_cost_results where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(tx);
+    await sql`delete from landed_cost.component_allocations where organization_id = ${input.organizationId} and cost_component_id in (select id from landed_cost.cost_components where worksheet_revision_id = ${input.revisionId}::uuid)`.execute(
+      tx,
+    );
+    await sql`delete from landed_cost.cost_components where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(
+      tx,
+    );
+    await sql`delete from landed_cost.allocation_targets where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(
+      tx,
+    );
+    await sql`delete from landed_cost.acquisition_cost_results where organization_id = ${input.organizationId} and worksheet_revision_id = ${input.revisionId}::uuid`.execute(
+      tx,
+    );
 
     // Revert worksheet pointer and status
-    await sql`update landed_cost.worksheets set current_revision_id = ${priorRev.id}::uuid, status = 'FINALIZED', finalized_at = ${priorRev.finalized_at}::timestamptz, version = version + 1 where id = ${input.worksheetId}`.execute(tx);
+    await sql`update landed_cost.worksheets set current_revision_id = ${priorRev.id}::uuid, status = 'FINALIZED', finalized_at = ${priorRev.finalized_at}::timestamptz, version = version + 1 where id = ${input.worksheetId}`.execute(
+      tx,
+    );
 
     // Delete the draft revision itself
-    await sql`delete from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${input.revisionId}::uuid`.execute(tx);
+    await sql`delete from landed_cost.worksheet_revisions where organization_id = ${input.organizationId} and id = ${input.revisionId}::uuid`.execute(
+      tx,
+    );
 
     await appendAuditEvent(tx, {
       organizationId: input.organizationId,
@@ -270,12 +291,23 @@ export async function createLandedCostWorksheet(
         'INVALID_TRANSITION',
         'Finish receiving the shipment before starting landed cost.',
       );
-    const currency = await sql<{ currency_code: string; count: string }>`select min(purchase.currency_code) as currency_code, count(distinct purchase.currency_code)::text as count from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines line on line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = line.purchase_id where allocation.organization_id = ${input.organizationId} and allocation.shipment_id = ${input.shipmentId}`.execute(tx);
+    const currency = await sql<{
+      currency_code: string;
+      count: string;
+    }>`select min(purchase.currency_code) as currency_code, count(distinct purchase.currency_code)::text as count from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines line on line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = line.purchase_id where allocation.organization_id = ${input.organizationId} and allocation.shipment_id = ${input.shipmentId}`.execute(
+      tx,
+    );
     const shipmentCurrency = currency.rows[0];
     if (!shipmentCurrency || shipmentCurrency.count !== '1')
-      throw new CostingDomainError('VALIDATION_FAILED', 'A landed-cost worksheet needs one purchase currency per shipment.');
+      throw new CostingDomainError(
+        'VALIDATION_FAILED',
+        'A landed-cost worksheet needs one purchase currency per shipment.',
+      );
     if (input.baseCurrencyCode && input.baseCurrencyCode !== shipmentCurrency.currency_code)
-      throw new CostingDomainError('VALIDATION_FAILED', 'Worksheet currency must match the shipment purchase currency.');
+      throw new CostingDomainError(
+        'VALIDATION_FAILED',
+        'Worksheet currency must match the shipment purchase currency.',
+      );
     const existing = await sql<{
       id: string;
     }>`select id from landed_cost.worksheets where organization_id = ${input.organizationId} and shipment_id = ${input.shipmentId}`.execute(
@@ -301,15 +333,27 @@ export async function createLandedCostWorksheet(
     await sql`update landed_cost.worksheets set current_revision_id = ${revisionId}::uuid where id = ${id}`.execute(
       tx,
     );
-    const targets = await sql<{ id: string; received_quantity: string; unit_price: string }>`
-      select allocation.id, sum(receipt_line.quantity)::text as received_quantity, line.unit_price::text
+    const targets = await sql<{
+      id: string;
+      received_quantity: string;
+      net_unit_cost: string;
+    }>`
+      select allocation.id, sum(receipt_line.quantity)::text as received_quantity,
+        (line.unit_price - coalesce((
+          select sum(discount_allocation.allocated_amount)
+          from procurement.purchase_adjustment_allocations discount_allocation
+          join procurement.purchase_adjustments adjustment on adjustment.id = discount_allocation.adjustment_id
+          where discount_allocation.organization_id = line.organization_id
+            and discount_allocation.purchase_line_id = line.id
+            and adjustment.adjustment_type = 'DISCOUNT'
+        ), 0) / line.quantity)::numeric(24,8)::text as net_unit_cost
       from inbound_shipment.purchase_line_allocations allocation join procurement.purchase_lines line on line.id = allocation.purchase_line_id
       join receiving.inbound_receipt_lines receipt_line on receipt_line.shipment_allocation_id = allocation.id and receipt_line.organization_id = allocation.organization_id
       where allocation.organization_id = ${input.organizationId} and allocation.shipment_id = ${input.shipmentId}
-      group by allocation.id, line.unit_price order by allocation.id
+      group by allocation.id, line.id order by allocation.id
     `.execute(tx);
     for (const target of targets.rows)
-      await sql`insert into landed_cost.allocation_targets (organization_id, worksheet_revision_id, shipment_allocation_id, eligible_quantity, purchase_value) values (${input.organizationId}, ${revisionId}, ${target.id}, ${target.received_quantity}::numeric, (${target.received_quantity}::numeric * ${target.unit_price}::numeric))`.execute(
+      await sql`insert into landed_cost.allocation_targets (organization_id, worksheet_revision_id, shipment_allocation_id, eligible_quantity, purchase_value) values (${input.organizationId}, ${revisionId}, ${target.id}, ${target.received_quantity}::numeric, (${target.received_quantity}::numeric * ${target.net_unit_cost}::numeric))`.execute(
         tx,
       );
     await appendAuditEvent(tx, {
@@ -346,12 +390,21 @@ export async function addLandedCostComponent(
   return db.transaction().execute(async (tx) => {
     const revision = await assertRevisionMutable(tx, input.organizationId, input.revisionId);
     if (input.financeExpenseId) {
-      const expense = await sql<{ currency_code: string; amount: string; status: string }>`select currency_code, amount::text, status from finance.expenses where organization_id = ${input.organizationId} and id = ${input.financeExpenseId} for key share`.execute(tx);
+      const expense = await sql<{
+        currency_code: string;
+        amount: string;
+        status: string;
+      }>`select currency_code, amount::text, status from finance.expenses where organization_id = ${input.organizationId} and id = ${input.financeExpenseId} for key share`.execute(
+        tx,
+      );
       const row = expense.rows[0];
       if (!row || row.status === 'CANCELLED')
         throw new CostingDomainError('NOT_FOUND', 'An active Finance expense was not found.');
       if (row.currency_code !== input.originalCurrencyCode || row.amount !== input.originalAmount)
-        throw new CostingDomainError('VALIDATION_FAILED', 'The linked Finance expense must use the same source currency and amount.');
+        throw new CostingDomainError(
+          'VALIDATION_FAILED',
+          'The linked Finance expense must use the same source currency and amount.',
+        );
     }
     const original = cents(input.originalAmount);
     if (!original || (original < 0n && input.valueStatus !== 'CREDIT'))
@@ -399,13 +452,16 @@ export async function deleteLandedCostComponent(
       where c.organization_id = ${input.organizationId} and c.id = ${input.componentId}
       for update of c
     `.execute(tx);
-    if (!comp.rows[0])
-      throw new CostingDomainError('NOT_FOUND', 'Cost component was not found.');
+    if (!comp.rows[0]) throw new CostingDomainError('NOT_FOUND', 'Cost component was not found.');
     if (comp.rows[0].status !== 'DRAFT')
       throw new CostingDomainError('INVALID_TRANSITION', 'Only draft components can be removed.');
 
-    await sql`delete from landed_cost.component_allocations where organization_id = ${input.organizationId} and cost_component_id = ${input.componentId}`.execute(tx);
-    await sql`delete from landed_cost.cost_components where organization_id = ${input.organizationId} and id = ${input.componentId}`.execute(tx);
+    await sql`delete from landed_cost.component_allocations where organization_id = ${input.organizationId} and cost_component_id = ${input.componentId}`.execute(
+      tx,
+    );
+    await sql`delete from landed_cost.cost_components where organization_id = ${input.organizationId} and id = ${input.componentId}`.execute(
+      tx,
+    );
   });
 }
 
@@ -535,11 +591,20 @@ export async function createProvisionalCostLayersForInboundReceiptInTransaction(
     inventory_item_id: string;
     condition_code: string;
     quantity: string;
-    unit_price: string;
+    net_unit_cost: string;
     currency_code: string;
     posted_at: string;
   }>`
-    select receipt_line.id as receipt_line_id, receipt_line.shipment_allocation_id as allocation_id, item.id as inventory_item_id, receipt_line.condition_code, receipt_line.quantity::text, purchase_line.unit_price::text, purchase.currency_code, receipt.posted_at::text
+    select receipt_line.id as receipt_line_id, receipt_line.shipment_allocation_id as allocation_id, item.id as inventory_item_id, receipt_line.condition_code, receipt_line.quantity::text,
+      (purchase_line.unit_price - coalesce((
+        select sum(discount_allocation.allocated_amount)
+        from procurement.purchase_adjustment_allocations discount_allocation
+        join procurement.purchase_adjustments adjustment on adjustment.id = discount_allocation.adjustment_id
+        where discount_allocation.organization_id = purchase_line.organization_id
+          and discount_allocation.purchase_line_id = purchase_line.id
+          and adjustment.adjustment_type = 'DISCOUNT'
+      ), 0) / purchase_line.quantity)::numeric(24,8)::text as net_unit_cost,
+      purchase.currency_code, receipt.posted_at::text
     from receiving.inbound_receipt_lines receipt_line join receiving.inbound_receipts receipt on receipt.id = receipt_line.inbound_receipt_id
     join inbound_shipment.purchase_line_allocations allocation on allocation.id = receipt_line.shipment_allocation_id
     join procurement.purchase_lines purchase_line on purchase_line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = purchase_line.purchase_id
@@ -549,7 +614,7 @@ export async function createProvisionalCostLayersForInboundReceiptInTransaction(
   for (const line of lines.rows) {
     const inserted = await sql<{
       id: string;
-    }>`insert into costing.cost_layers (organization_id, inbound_receipt_line_id, shipment_allocation_id, inventory_item_id, location_id, condition_code, original_quantity, base_purchase_cost, currency_code, received_at) values (${input.organizationId}, ${line.receipt_line_id}, ${line.allocation_id}, ${line.inventory_item_id}, ${input.locationId}, ${line.condition_code}, ${line.quantity}::numeric, (${line.quantity}::numeric * ${line.unit_price}::numeric)::numeric(24,8), ${line.currency_code}, ${line.posted_at}::timestamptz) returning id`.execute(
+    }>`insert into costing.cost_layers (organization_id, inbound_receipt_line_id, shipment_allocation_id, inventory_item_id, location_id, condition_code, original_quantity, base_purchase_cost, currency_code, received_at) values (${input.organizationId}, ${line.receipt_line_id}, ${line.allocation_id}, ${line.inventory_item_id}, ${input.locationId}, ${line.condition_code}, ${line.quantity}::numeric, (${line.quantity}::numeric * ${line.net_unit_cost}::numeric)::numeric(24,8), ${line.currency_code}, ${line.posted_at}::timestamptz) returning id`.execute(
       tx,
     );
     await sql`insert into costing.cost_layer_positions (organization_id, cost_layer_id, location_id, condition_code, remaining_quantity) values (${input.organizationId}, ${inserted.rows[0]!.id}, ${input.locationId}, ${line.condition_code}, ${line.quantity}::numeric)`.execute(
@@ -1001,7 +1066,18 @@ export async function finalizeLandedCostWorksheet(
       purchase_total: string;
       currency_code: string;
     }>`
-      select target.id, target.shipment_allocation_id, coalesce(sum(receipt_line.quantity), 0)::text as quantity, coalesce(sum(receipt_line.quantity * purchase_line.unit_price), 0)::text as purchase_total, min(purchase.currency_code) as currency_code
+      select target.id, target.shipment_allocation_id, coalesce(sum(receipt_line.quantity), 0)::text as quantity,
+        coalesce(sum(receipt_line.quantity * (
+          purchase_line.unit_price - coalesce((
+            select sum(discount_allocation.allocated_amount)
+            from procurement.purchase_adjustment_allocations discount_allocation
+            join procurement.purchase_adjustments adjustment on adjustment.id = discount_allocation.adjustment_id
+            where discount_allocation.organization_id = purchase_line.organization_id
+              and discount_allocation.purchase_line_id = purchase_line.id
+              and adjustment.adjustment_type = 'DISCOUNT'
+          ), 0) / purchase_line.quantity
+        )), 0)::text as purchase_total,
+        min(purchase.currency_code) as currency_code
       from landed_cost.allocation_targets target join inbound_shipment.purchase_line_allocations allocation on allocation.id = target.shipment_allocation_id
       join procurement.purchase_lines purchase_line on purchase_line.id = allocation.purchase_line_id join procurement.purchases purchase on purchase.id = purchase_line.purchase_id
       left join receiving.inbound_receipt_lines receipt_line on receipt_line.shipment_allocation_id = allocation.id

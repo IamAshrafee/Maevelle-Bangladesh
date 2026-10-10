@@ -2,7 +2,12 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
 
 import { createDatabase } from './index.js';
-import { getInventoryValuation, verifyCostingIntegrity } from './costing.js';
+import {
+  createLandedCostWorksheet,
+  finalizeLandedCostWorksheet,
+  getInventoryValuation,
+  verifyCostingIntegrity,
+} from './costing.js';
 import {
   adjustInventory,
   approveWarehouseTransfer,
@@ -201,6 +206,66 @@ describe('procurement, shipment allocation, and canonical inbound receiving', ()
         ],
       }),
     ).rejects.toMatchObject({ code: 'STALE_VERSION' });
+
+    const placed = await placePurchase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      purchaseId: discounted.id,
+      expectedVersion: discounted.version,
+    });
+    const shipment = await createShipment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      receivingLocationId: input.locationId,
+      transportMode: 'AIR',
+      allocations: placed.lines.map((line) => ({
+        purchaseLineId: line.id,
+        quantity: line.quantity,
+      })),
+    });
+    const arrived = await markShipmentArrived(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: shipment.id,
+      expectedVersion: shipment.version,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await postInboundReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: arrived.id,
+      idempotencyKey: crypto.randomUUID(),
+      lines: arrived.allocations.map((allocation) => ({
+        shipmentAllocationId: allocation.id,
+        condition: 'SELLABLE',
+        quantity: allocation.allocatedQuantity,
+      })),
+    });
+    const provisionalCost = await sql<{ total: string }>`select
+        sum(base_purchase_cost)::numeric(24,4)::text as total
+      from costing.cost_layers
+      where organization_id = ${input.organizationId}
+        and shipment_allocation_id = any(${arrived.allocations.map((allocation) => allocation.id)}::uuid[])`.execute(
+      database.db,
+    );
+    expect(provisionalCost.rows[0]?.total).toBe('4044.0000');
+
+    const worksheet = await createLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      shipmentId: arrived.id,
+    });
+    await finalizeLandedCostWorksheet(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      revisionId: worksheet.revisionId,
+    });
+    const finalizedCost = await sql<{ total: string }>`select
+        sum(purchase_cost)::numeric(24,4)::text as total
+      from landed_cost.acquisition_cost_results
+      where organization_id = ${input.organizationId}
+        and worksheet_revision_id = ${worksheet.revisionId}`.execute(database.db);
+    expect(finalizedCost.rows[0]?.total).toBe('4044.0000');
   });
 
   it('supports supplier setup, draft correction, and controlled cancellation workflows', async () => {
