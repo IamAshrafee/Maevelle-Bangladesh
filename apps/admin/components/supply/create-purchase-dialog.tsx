@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
   Check,
+  Image as ImageIcon,
   Loader2,
   Package,
   Plus,
@@ -34,7 +35,6 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -51,6 +51,7 @@ export interface DraftPurchaseLine {
   readonly sku: string;
   readonly productTitle: string;
   readonly optionSummary: string;
+  readonly primaryImageUrl?: string | null;
   quantity: string;
   unitPrice: string;
 }
@@ -91,9 +92,15 @@ export function CreatePurchaseDialog({
 }: CreatePurchaseDialogProps) {
   const router = useRouter();
 
-  const [loadedSuppliers, setLoadedSuppliers] = useState<readonly SupplierDto[]>(propSuppliers ?? []);
-  const [loadedLocations, setLoadedLocations] = useState<readonly WarehouseLocationDto[]>(propLocations ?? []);
-  const [loadedVariants, setLoadedVariants] = useState<readonly CatalogVariantChoiceDto[]>(propVariants ?? []);
+  const [loadedSuppliers, setLoadedSuppliers] = useState<readonly SupplierDto[]>(
+    propSuppliers ?? [],
+  );
+  const [loadedLocations, setLoadedLocations] = useState<readonly WarehouseLocationDto[]>(
+    propLocations ?? [],
+  );
+  const [loadedVariants, setLoadedVariants] = useState<readonly CatalogVariantChoiceDto[]>(
+    propVariants ?? [],
+  );
 
   useEffect(() => {
     if (propSuppliers) setLoadedSuppliers(propSuppliers);
@@ -133,9 +140,7 @@ export function CreatePurchaseDialog({
   // Commercial & Header state
   const [supplierId, setSupplierId] = useState(defaultSupplierId);
   const [currencyCode, setCurrencyCode] = useState<'BDT' | 'CNY' | 'USD'>('CNY');
-  const [orderDate, setOrderDate] = useState(() =>
-    new Date().toISOString().slice(0, 10),
-  );
+  const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState('');
   const [destinationLocationId, setDestinationLocationId] = useState('');
   const [supplierReference, setSupplierReference] = useState('');
@@ -217,6 +222,15 @@ export function CreatePurchaseDialog({
   const totalAmount = stagedAmount + pendingAmount;
   const totalDraftCount = lines.length + (pendingVariant ? 1 : 0);
 
+  function selectVariant(variant: CatalogVariantChoiceDto) {
+    setAddingVariantId(variant.id);
+    setAddingUnitPrice(
+      variant.estimatedCostAmount && Number(variant.estimatedCostAmount) > 0
+        ? variant.estimatedCostAmount
+        : '0',
+    );
+  }
+
   function handleClose(nextOpen: boolean) {
     if (!nextOpen) {
       removeUrlParams('create', 'supplier');
@@ -262,6 +276,7 @@ export function CreatePurchaseDialog({
           sku: variant.sku,
           productTitle: variant.productTitle,
           optionSummary: variant.optionSummary || '',
+          primaryImageUrl: variant.primaryImageUrl ?? null,
           quantity: addingQuantity,
           unitPrice: addingUnitPrice,
         },
@@ -279,9 +294,7 @@ export function CreatePurchaseDialog({
   }
 
   function handleUpdateLine(index: number, updates: Partial<DraftPurchaseLine>) {
-    setLines((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, ...updates } : item)),
-    );
+    setLines((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)));
   }
 
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
@@ -311,12 +324,9 @@ export function CreatePurchaseDialog({
           !Number.isNaN(parsedPrice) &&
           parsedPrice >= 0
         ) {
-          const existingIndex = allLinesToSubmit.findIndex(
-            (l) => l.variantId === addingVariantId,
-          );
+          const existingIndex = allLinesToSubmit.findIndex((l) => l.variantId === addingVariantId);
           if (existingIndex >= 0) {
-            const prevQty =
-              parseFloat(allLinesToSubmit[existingIndex]!.quantity) || 0;
+            const prevQty = parseFloat(allLinesToSubmit[existingIndex]!.quantity) || 0;
             allLinesToSubmit[existingIndex] = {
               ...allLinesToSubmit[existingIndex]!,
               quantity: String(prevQty + parsedQty),
@@ -329,6 +339,7 @@ export function CreatePurchaseDialog({
               sku: variant.sku,
               productTitle: variant.productTitle,
               optionSummary: variant.optionSummary || '',
+              primaryImageUrl: variant.primaryImageUrl ?? null,
               quantity: addingQuantity,
               unitPrice: addingUnitPrice,
             });
@@ -356,13 +367,10 @@ export function CreatePurchaseDialog({
             : undefined,
       };
 
-      const result = await supplyRequest<ApiEnvelope<PurchaseDto>>(
-        '/admin/purchases',
-        {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        },
-      );
+      const result = await supplyRequest<ApiEnvelope<PurchaseDto>>('/admin/purchases', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
 
       removeUrlParams('create', 'supplier');
       handleClose(false);
@@ -388,11 +396,10 @@ export function CreatePurchaseDialog({
               <Package className="size-4" />
             </span>
             <div>
-              <DialogTitle className="text-lg font-semibold">
-                Create purchase order
-              </DialogTitle>
+              <DialogTitle className="text-lg font-semibold">Create purchase order</DialogTitle>
               <DialogDescription className="text-xs">
-                Draft a supplier order, set expected dates, and optionally include initial product lines.
+                Draft a supplier order, set expected dates, and optionally include initial product
+                lines.
               </DialogDescription>
             </div>
           </div>
@@ -445,53 +452,80 @@ export function CreatePurchaseDialog({
                     {totalDraftCount} {totalDraftCount === 1 ? 'item' : 'items'}
                   </Badge>
                   {totalDraftCount > 0 && (
-                    <Badge variant="outline" className="font-mono text-xs font-semibold text-primary">
+                    <Badge
+                      variant="outline"
+                      className="font-mono text-xs font-semibold text-primary"
+                    >
                       Total: {formatSupplyMoney(totalAmount.toString(), currencyCode)}
                     </Badge>
                   )}
                 </div>
               </div>
 
-              {/* Add item row */}
-              <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-12">
-                <div className="sm:col-span-6">
-                  <Field>
-                    <div className="flex items-center justify-between">
-                      <FieldLabel htmlFor="line-variant" className="text-xs">
-                        Product & Variant
-                      </FieldLabel>
-                      {activeVariants.length > 5 && (
-                        <input
-                          type="text"
-                          placeholder="Filter variants..."
-                          value={variantFilter}
-                          onChange={(e) => setVariantFilter(e.target.value)}
-                          className="h-5 w-28 rounded border border-input bg-transparent px-1.5 text-[11px] outline-none placeholder:text-muted-foreground focus-visible:border-ring"
-                        />
-                      )}
-                    </div>
-                    <NativeSelect
-                      id="line-variant"
-                      value={addingVariantId}
-                      disabled={saving || !activeVariants.length}
-                      className="w-full text-xs"
-                      onChange={(e) => setAddingVariantId(e.target.value)}
-                    >
-                      <NativeSelectOption value="" disabled>
-                        {activeVariants.length
-                          ? 'Select product SKU to add'
-                          : 'No active catalog variants available'}
-                      </NativeSelectOption>
-                      {filteredVariants.map((item) => (
-                        <NativeSelectOption key={item.id} value={item.id}>
-                          {item.productTitle} · {item.sku}
-                          {item.optionSummary ? ` (${item.optionSummary})` : ''}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                </div>
+              <Field>
+                <FieldLabel htmlFor="variant-search" className="text-xs">
+                  Find product & variant
+                </FieldLabel>
+                <Input
+                  id="variant-search"
+                  value={variantFilter}
+                  onChange={(event) => setVariantFilter(event.target.value)}
+                  placeholder="Search title, SKU, color, or size..."
+                  disabled={saving || !activeVariants.length}
+                />
+              </Field>
 
+              <div className="mt-3 grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                {filteredVariants.length ? (
+                  filteredVariants.map((item) => {
+                    const isSelected = addingVariantId === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => selectVariant(item)}
+                        disabled={saving}
+                        className={`flex min-h-24 items-center gap-3 rounded-lg border p-2 text-left transition-colors ${
+                          isSelected
+                            ? 'border-primary bg-primary-subtle'
+                            : 'border-border bg-card hover:border-primary/50 hover:bg-muted/40'
+                        }`}
+                      >
+                        <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
+                          {item.primaryImageUrl ? (
+                            <img
+                              src={item.primaryImageUrl}
+                              alt={`${item.productTitle} ${item.optionSummary || item.sku}`}
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="size-6 text-muted-foreground" />
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="line-clamp-2 text-xs font-medium text-foreground">
+                            {item.productTitle}
+                          </span>
+                          <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
+                            {item.sku}
+                          </span>
+                          <span className="mt-1 line-clamp-2 block text-[11px] text-muted-foreground">
+                            {item.optionSummary || 'Default variant'}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-full rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+                    {activeVariants.length
+                      ? 'No variants match this search.'
+                      : 'No active catalog variants are available.'}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 items-end gap-3 sm:grid-cols-6">
                 <div className="sm:col-span-2">
                   <Field>
                     <FieldLabel htmlFor="line-quantity" className="text-xs">
@@ -556,10 +590,31 @@ export function CreatePurchaseDialog({
               </div>
 
               {pendingVariant && (
-                <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
-                  <span>
-                    Selected: <strong>{pendingVariant.productTitle}</strong> ({pendingVariant.sku}) · {addingQuantity} units @ {formatSupplyMoney(addingUnitPrice, currencyCode)}
-                  </span>
+                <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary-subtle p-3 text-xs">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
+                      {pendingVariant.primaryImageUrl ? (
+                        <img
+                          src={pendingVariant.primaryImageUrl}
+                          alt={`${pendingVariant.productTitle} ${pendingVariant.optionSummary || pendingVariant.sku}`}
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <ImageIcon className="size-5 text-muted-foreground" />
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <strong className="line-clamp-2 text-foreground">
+                        {pendingVariant.productTitle}
+                      </strong>
+                      <span className="block truncate text-muted-foreground">
+                        {pendingVariant.sku} · {pendingVariant.optionSummary || 'Default variant'}
+                      </span>
+                      <span className="mt-1 block font-mono text-primary">
+                        {addingQuantity} units @ {formatSupplyMoney(addingUnitPrice, currencyCode)}
+                      </span>
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-medium">
                       = {formatSupplyMoney(pendingAmount.toString(), currencyCode)}
@@ -592,15 +647,29 @@ export function CreatePurchaseDialog({
                     <TableBody>
                       {lines.map((line, idx) => {
                         const lineSubtotal =
-                          (parseFloat(line.quantity) || 0) *
-                          (parseFloat(line.unitPrice) || 0);
+                          (parseFloat(line.quantity) || 0) * (parseFloat(line.unitPrice) || 0);
                         return (
                           <TableRow key={line.id} className="text-xs">
                             <TableCell className="font-medium">
-                              <div>{line.productTitle}</div>
-                              <div className="text-[11px] text-muted-foreground">
-                                {line.sku}
-                                {line.optionSummary ? ` · ${line.optionSummary}` : ''}
+                              <div className="flex min-w-56 items-center gap-2.5">
+                                <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
+                                  {line.primaryImageUrl ? (
+                                    <img
+                                      src={line.primaryImageUrl}
+                                      alt={`${line.productTitle} ${line.optionSummary || line.sku}`}
+                                      className="size-full object-cover"
+                                    />
+                                  ) : (
+                                    <ImageIcon className="size-4 text-muted-foreground" />
+                                  )}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="line-clamp-2 block">{line.productTitle}</span>
+                                  <span className="block text-[11px] text-muted-foreground">
+                                    {line.sku}
+                                    {line.optionSummary ? ` · ${line.optionSummary}` : ''}
+                                  </span>
+                                </span>
                               </div>
                             </TableCell>
                             <TableCell className="text-right font-mono">
@@ -683,11 +752,7 @@ export function CreatePurchaseDialog({
                   </Button>
                 }
               />
-              <Button
-                type="submit"
-                disabled={saving || !supplierId}
-                className="gap-1.5"
-              >
+              <Button type="submit" disabled={saving || !supplierId} className="gap-1.5">
                 {saving ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : totalDraftCount > 0 ? (
