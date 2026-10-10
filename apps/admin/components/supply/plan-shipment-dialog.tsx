@@ -6,6 +6,7 @@ import {
   Box,
   Check,
   HelpCircle,
+  Image as ImageIcon,
   Info,
   Loader2,
   PackageOpen,
@@ -93,8 +94,12 @@ export function PlanShipmentDialog({
   defaultPurchaseId,
   onSuccess,
 }: PlanShipmentDialogProps) {
-  const [loadedLocations, setLoadedLocations] = useState<readonly WarehouseLocationDto[]>(propLocations ?? []);
-  const [loadedShippableLines, setLoadedShippableLines] = useState<readonly ShippableLineItem[]>(propShippableLines ?? []);
+  const [loadedLocations, setLoadedLocations] = useState<readonly WarehouseLocationDto[]>(
+    propLocations ?? [],
+  );
+  const [loadedShippableLines, setLoadedShippableLines] = useState<readonly ShippableLineItem[]>(
+    propShippableLines ?? [],
+  );
 
   useEffect(() => {
     if (propLocations) setLoadedLocations(propLocations);
@@ -130,7 +135,9 @@ export function PlanShipmentDialog({
 
   // Form fields
   const [receivingLocationId, setReceivingLocationId] = useState('');
-  const [transportMode, setTransportMode] = useState<'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER'>('SEA');
+  const [transportMode, setTransportMode] = useState<'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER'>(
+    'SEA',
+  );
   const [originText, setOriginText] = useState('');
   const [trackingReference, setTrackingReference] = useState('');
   const [expectedArrivalDate, setExpectedArrivalDate] = useState('');
@@ -255,7 +262,9 @@ export function PlanShipmentDialog({
 
   const activeLineToAddMax = useMemo(() => {
     if (!activeLineToAdd) return 0;
-    return Number(remainingSupplyQuantity(activeLineToAdd.quantity, activeLineToAdd.allocatedQuantity));
+    return Number(
+      remainingSupplyQuantity(activeLineToAdd.quantity, activeLineToAdd.allocatedQuantity),
+    );
   }, [activeLineToAdd]);
 
   const handleLineToAddChange = (newLineId: string) => {
@@ -271,11 +280,17 @@ export function PlanShipmentDialog({
 
   const parsedQtyToAdd = Number(quantityToAdd);
   const isQtyToAddInvalid =
-    !activeLineToAdd || parsedQtyToAdd <= 0 || isNaN(parsedQtyToAdd) || parsedQtyToAdd > activeLineToAddMax;
+    !activeLineToAdd ||
+    parsedQtyToAdd <= 0 ||
+    isNaN(parsedQtyToAdd) ||
+    parsedQtyToAdd > activeLineToAddMax;
 
   const handleAddSingleLine = () => {
     if (isQtyToAddInvalid || !selectedLineToAdd) return;
-    setLines((prev) => [...prev, { purchaseLineId: selectedLineToAdd, quantity: String(parsedQtyToAdd) }]);
+    setLines((prev) => [
+      ...prev,
+      { purchaseLineId: selectedLineToAdd, quantity: String(parsedQtyToAdd) },
+    ]);
     setSelectedLineToAdd('');
     setQuantityToAdd('1');
   };
@@ -356,10 +371,13 @@ export function PlanShipmentDialog({
         })),
       };
 
-      const result = await supplyRequest<ApiEnvelope<InboundShipmentDto>>('/admin/inbound-shipments', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
+      const result = await supplyRequest<ApiEnvelope<InboundShipmentDto>>(
+        '/admin/inbound-shipments',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+      );
 
       cleanUrlParams('create', 'purchase');
       onSuccess?.(result.data);
@@ -400,10 +418,12 @@ export function PlanShipmentDialog({
             <div className="flex size-12 items-center justify-center rounded-full bg-muted">
               <PackageOpen className="size-6 text-muted-foreground" />
             </div>
-            <h3 className="mt-3 font-heading text-base font-semibold">No open purchase lines to ship</h3>
+            <h3 className="mt-3 font-heading text-base font-semibold">
+              No open purchase lines to ship
+            </h3>
             <p className="mt-1.5 max-w-sm text-xs text-muted-foreground">
-              Inbound shipments group placed purchase orders. Purchases must be in <strong>PLACED</strong> status
-              with unallocated items before they can be shipped.
+              Inbound shipments group placed purchase orders. Purchases must be in{' '}
+              <strong>PLACED</strong> status with unallocated items before they can be shipped.
             </p>
             <Button
               className="mt-4 gap-1.5"
@@ -481,11 +501,14 @@ export function PlanShipmentDialog({
                   <div className="flex items-center justify-between">
                     <FieldLabel htmlFor="shipment-warehouse">Receiving Warehouse Dock</FieldLabel>
                     <Tooltip>
-                      <TooltipTrigger render={<span className="cursor-help text-muted-foreground inline-flex" />}>
+                      <TooltipTrigger
+                        render={<span className="cursor-help text-muted-foreground inline-flex" />}
+                      >
                         <HelpCircle className="size-3" />
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs max-w-xs">
-                        Only active warehouse facilities with "Purchase Receiving" capability are eligible.
+                        Only active warehouse facilities with "Purchase Receiving" capability are
+                        eligible.
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -529,10 +552,18 @@ export function PlanShipmentDialog({
                       setTransportMode(e.target.value as 'AIR' | 'SEA' | 'ROAD' | 'RAIL' | 'OTHER')
                     }
                   >
-                    <NativeSelectOption value="SEA">Sea Freight (Ocean container / vessel)</NativeSelectOption>
-                    <NativeSelectOption value="AIR">Air Freight (Express / Air cargo flight)</NativeSelectOption>
-                    <NativeSelectOption value="ROAD">Road Freight (Truck / Lorry dispatch)</NativeSelectOption>
-                    <NativeSelectOption value="RAIL">Rail Freight (Intermodal rail)</NativeSelectOption>
+                    <NativeSelectOption value="SEA">
+                      Sea Freight (Ocean container / vessel)
+                    </NativeSelectOption>
+                    <NativeSelectOption value="AIR">
+                      Air Freight (Express / Air cargo flight)
+                    </NativeSelectOption>
+                    <NativeSelectOption value="ROAD">
+                      Road Freight (Truck / Lorry dispatch)
+                    </NativeSelectOption>
+                    <NativeSelectOption value="RAIL">
+                      Rail Freight (Intermodal rail)
+                    </NativeSelectOption>
                     <NativeSelectOption value="OTHER">Other Freight Mode</NativeSelectOption>
                   </NativeSelect>
                 </Field>
@@ -549,7 +580,9 @@ export function PlanShipmentDialog({
                     disabled={saving}
                     onChange={(e) => setOriginText(e.target.value)}
                   />
-                  <FieldDescription>Port of departure, supplier warehouse, or forwarder hub.</FieldDescription>
+                  <FieldDescription>
+                    Port of departure, supplier warehouse, or forwarder hub.
+                  </FieldDescription>
                 </Field>
 
                 {/* Tracking Reference / Bill of Lading */}
@@ -566,7 +599,9 @@ export function PlanShipmentDialog({
                     disabled={saving}
                     onChange={(e) => setTrackingReference(e.target.value)}
                   />
-                  <FieldDescription>Master carrier B/L, ocean container code, or AWB tracking ID.</FieldDescription>
+                  <FieldDescription>
+                    Master carrier B/L, ocean container code, or AWB tracking ID.
+                  </FieldDescription>
                 </Field>
 
                 {/* Expected Arrival Date */}
@@ -607,7 +642,9 @@ export function PlanShipmentDialog({
                 {/* Purchase Order Filter Dropdown */}
                 {purchasesWithShippable.length > 1 ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Filter PO:</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      Filter PO:
+                    </span>
                     <NativeSelect
                       value={purchaseFilter}
                       className="h-8 text-xs w-auto min-w-[160px]"
@@ -646,27 +683,51 @@ export function PlanShipmentDialog({
                       </TableHeader>
                       <TableBody>
                         {lines.map((draftLine) => {
-                          const orig = shippableLines.find((l) => l.id === draftLine.purchaseLineId);
+                          const orig = shippableLines.find(
+                            (l) => l.id === draftLine.purchaseLineId,
+                          );
                           const maxOpen = orig
                             ? Number(remainingSupplyQuantity(orig.quantity, orig.allocatedQuantity))
                             : 0;
                           const currentQty = Number(draftLine.quantity);
-                          const isLineInvalid = isNaN(currentQty) || currentQty <= 0 || currentQty > maxOpen;
+                          const isLineInvalid =
+                            isNaN(currentQty) || currentQty <= 0 || currentQty > maxOpen;
 
                           return (
                             <TableRow key={draftLine.purchaseLineId}>
                               {/* Item & Variant */}
-                              <TableCell className="space-y-0.5">
-                                <p className="font-medium text-xs text-foreground truncate max-w-[220px]">
-                                  {orig?.productTitle ?? 'Product line'}
-                                </p>
-                                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
-                                  <span>SKU: {orig?.sku}</span>
-                                  {orig?.optionSummary ? (
-                                    <Badge variant="outline" className="text-[10px] font-normal py-0 h-4">
-                                      {orig.optionSummary}
-                                    </Badge>
-                                  ) : null}
+                              <TableCell>
+                                <div className="flex min-w-60 items-center gap-2.5">
+                                  <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                                    {orig?.primaryImageUrl ? (
+                                      <img
+                                        src={orig.primaryImageUrl}
+                                        alt={`${orig.productTitle} ${orig.optionSummary || orig.sku}`}
+                                        width={80}
+                                        height={80}
+                                        loading="lazy"
+                                        className="size-full object-cover"
+                                      />
+                                    ) : (
+                                      <ImageIcon className="size-4 text-muted-foreground" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 space-y-0.5">
+                                    <p className="line-clamp-2 text-xs font-medium text-foreground">
+                                      {orig?.productTitle ?? 'Product line'}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                                      <span>SKU: {orig?.sku}</span>
+                                      {orig?.optionSummary ? (
+                                        <Badge
+                                          variant="outline"
+                                          className="h-4 py-0 text-[10px] font-normal"
+                                        >
+                                          {orig.optionSummary}
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+                                  </div>
                                 </div>
                               </TableCell>
 
@@ -699,7 +760,9 @@ export function PlanShipmentDialog({
                                       handleUpdateLineQty(draftLine.purchaseLineId, e.target.value)
                                     }
                                     className={`h-7 w-20 text-right text-xs font-mono tabular-nums ${
-                                      isLineInvalid ? 'border-destructive ring-1 ring-destructive' : ''
+                                      isLineInvalid
+                                        ? 'border-destructive ring-1 ring-destructive'
+                                        : ''
                                     }`}
                                   />
                                   {currentQty !== maxOpen ? (
@@ -762,9 +825,12 @@ export function PlanShipmentDialog({
               ) : (
                 <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground space-y-1">
                   <Box className="size-6 mx-auto opacity-40 mb-1" />
-                  <p className="font-medium text-foreground">No purchase lines added to this shipment yet</p>
+                  <p className="font-medium text-foreground">
+                    No purchase lines added to this shipment yet
+                  </p>
                   <p className="text-[11px]">
-                    Use the selector below to add lines individually, or click "Add all lines" above.
+                    Use the selector below to add lines individually, or click "Add all lines"
+                    above.
                   </p>
                 </div>
               )}
@@ -775,24 +841,56 @@ export function PlanShipmentDialog({
                   <span className="text-[11px] font-medium text-muted-foreground block">
                     Add additional line to shipment:
                   </span>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <NativeSelect
-                      value={selectedLineToAdd}
-                      className="flex-1 text-xs"
-                      disabled={saving}
-                      onChange={(e) => handleLineToAddChange(e.target.value)}
-                    >
-                      <option value="">Choose an open purchase line to add...</option>
-                      {displayedAvailableLines.map((line) => {
-                        const openQty = remainingSupplyQuantity(line.quantity, line.allocatedQuantity);
-                        return (
-                          <option key={line.id} value={line.id}>
-                            {line.purchase.purchaseNumber} · {line.productTitle} (SKU: {line.sku}) — Open: {openQty}
-                          </option>
-                        );
-                      })}
-                    </NativeSelect>
+                  <div className="grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                    {displayedAvailableLines.map((line) => {
+                      const openQty = remainingSupplyQuantity(
+                        line.quantity,
+                        line.allocatedQuantity,
+                      );
+                      const selected = selectedLineToAdd === line.id;
+                      return (
+                        <button
+                          key={line.id}
+                          type="button"
+                          disabled={saving}
+                          onClick={() => handleLineToAddChange(line.id)}
+                          className={`flex min-h-24 items-center gap-3 rounded-lg border p-2 text-left transition-colors ${
+                            selected
+                              ? 'border-primary bg-primary-subtle'
+                              : 'border-border bg-background hover:border-primary/50 hover:bg-muted/40'
+                          }`}
+                        >
+                          <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
+                            {line.primaryImageUrl ? (
+                              <img
+                                src={line.primaryImageUrl}
+                                alt={`${line.productTitle} ${line.optionSummary || line.sku}`}
+                                width={112}
+                                height={112}
+                                loading="lazy"
+                                className="size-full object-cover"
+                              />
+                            ) : (
+                              <ImageIcon className="size-5 text-muted-foreground" />
+                            )}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="line-clamp-2 text-xs font-medium text-foreground">
+                              {line.productTitle}
+                            </span>
+                            <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
+                              {line.sku} · {line.purchase.purchaseNumber}
+                            </span>
+                            <span className="mt-1 block text-[11px] text-primary">
+                              Open: {formatSupplyNumber(openQty)}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                     <div className="flex items-center gap-1.5">
                       <div className="relative">
                         <Input
@@ -800,7 +898,7 @@ export function PlanShipmentDialog({
                           min="0.000001"
                           max={activeLineToAddMax > 0 ? activeLineToAddMax : undefined}
                           step="any"
-                          placeholder="Qty"
+                          placeholder="Qty…"
                           value={quantityToAdd}
                           disabled={saving || !activeLineToAdd}
                           className="h-8 w-24 text-right text-xs pr-8"
@@ -846,7 +944,10 @@ export function PlanShipmentDialog({
               >
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Ship className="size-4" />}
                 <span>
-                  Plan shipment {lines.length > 0 ? `(${formatSupplyNumber(String(totalUnitsPlanned))} units)` : ''}
+                  Plan shipment{' '}
+                  {lines.length > 0
+                    ? `(${formatSupplyNumber(String(totalUnitsPlanned))} units)`
+                    : ''}
                 </span>
               </Button>
             </DialogFooter>

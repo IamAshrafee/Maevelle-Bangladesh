@@ -131,6 +131,7 @@ export interface PurchaseView {
     productId: string;
     sku: string;
     productTitle: string;
+    primaryImageUrl?: string;
     optionSummary?: string;
     quantity: string;
     unitPrice: string;
@@ -185,6 +186,7 @@ export interface ShipmentView {
     productId: string;
     sku: string;
     productTitle: string;
+    primaryImageUrl?: string;
     allocatedQuantity: string;
     receivedQuantity: string;
     optionSummary?: string;
@@ -216,6 +218,7 @@ export interface InboundReceiptView {
     inventoryItemId?: string;
     sku: string;
     productTitle: string;
+    primaryImageUrl?: string;
     condition: InventoryCondition;
     quantity: string;
   }[];
@@ -1017,6 +1020,7 @@ async function getPurchaseIn(
     sku_snapshot: string;
     product_title_snapshot: string;
     option_summary: string | null;
+    primary_image_url: string | null;
     quantity: string;
     unit_price: string;
     gross_amount: string;
@@ -1033,6 +1037,17 @@ async function getPurchaseIn(
         join catalog.product_option_values val on val.id = link.option_value_id
         where link.variant_id = line.variant_id and link.organization_id = ${organizationId}
       ), '') as option_summary,
+      (select case
+         when asset.visibility_class = 'PUBLIC' then '/api/media/public/' || asset.id::text || '?rendition=thumbnail'
+         else '/api/admin/media/' || asset.id::text || '/content?rendition=thumbnail'
+       end
+       from catalog.product_media media
+       join media.media_assets asset on asset.id = media.asset_id and asset.organization_id = media.organization_id
+       where media.organization_id = line.organization_id
+         and media.product_id = variant.product_id
+         and (media.variant_id = line.variant_id or media.variant_id is null)
+       order by case when media.variant_id = line.variant_id then 0 else 1 end, media.position asc
+       limit 1) as primary_image_url,
       line.quantity::text, line.unit_price::text,
       (line.quantity * line.unit_price)::numeric(24,4)::text as gross_amount,
       coalesce((
@@ -1163,6 +1178,7 @@ async function getPurchaseIn(
       productId: line.product_id,
       sku: line.sku_snapshot,
       productTitle: line.product_title_snapshot,
+      ...(line.primary_image_url ? { primaryImageUrl: line.primary_image_url } : {}),
       ...(line.option_summary ? { optionSummary: line.option_summary } : {}),
       quantity: line.quantity,
       unitPrice: line.unit_price,
@@ -2188,6 +2204,7 @@ async function getShipmentIn(
     received_quantity: string;
     unit_price: string;
     option_summary: string | null;
+    primary_image_url: string | null;
   }>`select allocation.id, allocation.purchase_line_id, purchase.id as purchase_id, purchase.purchase_number,
       supplier.name as supplier_name, allocation.variant_id, variant.product_id, allocation.sku_snapshot,
       allocation.product_title_snapshot, allocation.allocated_quantity::text,
@@ -2199,7 +2216,18 @@ async function getShipmentIn(
         join catalog.product_option_axes axis on axis.id = link.option_axis_id
         join catalog.product_option_values val on val.id = link.option_value_id
         where link.variant_id = allocation.variant_id and link.organization_id = ${organizationId}
-      ), '') as option_summary
+      ), '') as option_summary,
+      (select case
+         when asset.visibility_class = 'PUBLIC' then '/api/media/public/' || asset.id::text || '?rendition=thumbnail'
+         else '/api/admin/media/' || asset.id::text || '/content?rendition=thumbnail'
+       end
+       from catalog.product_media media
+       join media.media_assets asset on asset.id = media.asset_id and asset.organization_id = media.organization_id
+       where media.organization_id = allocation.organization_id
+         and media.product_id = variant.product_id
+         and (media.variant_id = allocation.variant_id or media.variant_id is null)
+       order by case when media.variant_id = allocation.variant_id then 0 else 1 end, media.position asc
+       limit 1) as primary_image_url
     from inbound_shipment.purchase_line_allocations allocation
     join procurement.purchase_lines purchase_line on purchase_line.id = allocation.purchase_line_id
     join procurement.purchases purchase on purchase.id = purchase_line.purchase_id
@@ -2266,6 +2294,7 @@ async function getShipmentIn(
       productId: allocation.product_id,
       sku: allocation.sku_snapshot,
       productTitle: allocation.product_title_snapshot,
+      ...(allocation.primary_image_url ? { primaryImageUrl: allocation.primary_image_url } : {}),
       allocatedQuantity: allocation.allocated_quantity,
       receivedQuantity: allocation.received_quantity,
       ...(allocation.option_summary ? { optionSummary: allocation.option_summary } : {}),
@@ -3146,10 +3175,23 @@ async function getReceiptIn(
     inventory_item_id: string | null;
     sku_snapshot: string;
     product_title_snapshot: string;
+    primary_image_url: string | null;
     condition_code: InventoryCondition;
     quantity: string;
   }>`select line.id, line.shipment_allocation_id, line.variant_id, variant.product_id, item.id as inventory_item_id,
-      allocation.sku_snapshot, allocation.product_title_snapshot, line.condition_code, line.quantity::text
+      allocation.sku_snapshot, allocation.product_title_snapshot,
+      (select case
+         when asset.visibility_class = 'PUBLIC' then '/api/media/public/' || asset.id::text || '?rendition=thumbnail'
+         else '/api/admin/media/' || asset.id::text || '/content?rendition=thumbnail'
+       end
+       from catalog.product_media media
+       join media.media_assets asset on asset.id = media.asset_id and asset.organization_id = media.organization_id
+       where media.organization_id = line.organization_id
+         and media.product_id = variant.product_id
+         and (media.variant_id = line.variant_id or media.variant_id is null)
+       order by case when media.variant_id = line.variant_id then 0 else 1 end, media.position asc
+       limit 1) as primary_image_url,
+      line.condition_code, line.quantity::text
     from receiving.inbound_receipt_lines line
     join inbound_shipment.purchase_line_allocations allocation on allocation.id = line.shipment_allocation_id and allocation.organization_id = line.organization_id
     join catalog.product_variants variant on variant.id = line.variant_id
@@ -3185,6 +3227,7 @@ async function getReceiptIn(
       ...(line.inventory_item_id ? { inventoryItemId: line.inventory_item_id } : {}),
       sku: line.sku_snapshot,
       productTitle: line.product_title_snapshot,
+      ...(line.primary_image_url ? { primaryImageUrl: line.primary_image_url } : {}),
       condition: line.condition_code,
       quantity: line.quantity,
     })),

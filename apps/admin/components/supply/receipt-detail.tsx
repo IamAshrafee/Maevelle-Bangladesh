@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Boxes, CheckCircle, ExternalLink, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Boxes, CheckCircle, ExternalLink, Package, RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { ApiEnvelope, InboundReceiptDto, InboundReceiptLineDto } from '@maevelle/contracts';
@@ -63,7 +63,9 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
         body: JSON.stringify({ reason }),
       });
       setReverseOpen(false);
-      setSuccess('Inbound receipt successfully reversed. Inventory and landed costs have been rolled back.');
+      setSuccess(
+        'Inbound receipt successfully reversed. Inventory and landed costs have been rolled back.',
+      );
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to reverse receipt.');
@@ -89,7 +91,9 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
         body: JSON.stringify(data),
       });
       setResolvingLine(undefined);
-      setSuccess(`Condition resolved: ${data.quantity} units reclassified as ${data.targetCondition}.`);
+      setSuccess(
+        `Condition resolved: ${data.quantity} units reclassified as ${data.targetCondition}.`,
+      );
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to resolve condition.');
@@ -189,7 +193,11 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
         <DetailMetric
           label="Warehouse"
           value={receipt.locationName}
-          hint={receipt.status === 'REVERSED' ? 'Stock reversed from here' : 'Inventory was increased here'}
+          hint={
+            receipt.status === 'REVERSED'
+              ? 'Stock reversed from here'
+              : 'Inventory was increased here'
+          }
         />
         <DetailMetric
           label="Total received"
@@ -220,22 +228,38 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
                 className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center"
                 key={line.id}
               >
-                <div className="min-w-0">
-                  <Link
-                    className="truncate font-medium hover:underline"
-                    href={`/products/${line.productId}`}
-                  >
-                    {line.productTitle}
-                  </Link>
-                  <p className="font-mono text-xs text-muted-foreground">{line.sku}</p>
-                  {line.inventoryItemId ? (
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                    {line.primaryImageUrl ? (
+                      <img
+                        src={line.primaryImageUrl}
+                        alt={`${line.productTitle} ${line.sku}`}
+                        width={120}
+                        height={120}
+                        loading="lazy"
+                        className="size-full object-cover"
+                      />
+                    ) : (
+                      <Package className="size-6 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
                     <Link
-                      className="text-xs text-primary hover:underline"
-                      href={`/inventory/stock/${line.inventoryItemId}`}
+                      className="truncate font-medium hover:underline"
+                      href={`/products/${line.productId}`}
                     >
-                      View stock item
+                      {line.productTitle}
                     </Link>
-                  ) : null}
+                    <p className="font-mono text-xs text-muted-foreground">{line.sku}</p>
+                    {line.inventoryItemId ? (
+                      <Link
+                        className="text-xs text-primary hover:underline"
+                        href={`/inventory/stock/${line.inventoryItemId}`}
+                      >
+                        View stock item
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
 
                 <StatusBadge status={line.condition} />

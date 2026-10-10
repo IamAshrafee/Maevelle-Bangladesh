@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Layers3,
   PackageCheck,
+  Package,
   PackageOpen,
   RefreshCw,
   RotateCcw,
@@ -115,7 +116,9 @@ export function ReceivingWorkspace() {
       params.set('status', 'ARRIVED');
       params.set('receivingStatus', 'NOT_RECEIVED,PARTIALLY_RECEIVED');
 
-      supplyRequest<PagedEnvelope<InboundShipmentDto>>(`/admin/inbound-shipments?${params.toString()}`)
+      supplyRequest<PagedEnvelope<InboundShipmentDto>>(
+        `/admin/inbound-shipments?${params.toString()}`,
+      )
         .then((res) => {
           if (!active) return;
           setArrivedShipments(res.data ?? []);
@@ -133,7 +136,9 @@ export function ReceivingWorkspace() {
         });
     } else {
       // 'history' or 'resolution'
-      supplyRequest<PagedEnvelope<InboundReceiptDto>>(`/admin/inbound-receipts?${params.toString()}`)
+      supplyRequest<PagedEnvelope<InboundReceiptDto>>(
+        `/admin/inbound-receipts?${params.toString()}`,
+      )
         .then((res) => {
           if (!active) return;
           setReceipts(res.data ?? []);
@@ -216,7 +221,9 @@ export function ReceivingWorkspace() {
       params.set('pageSize', String(PAGE_SIZE));
       params.set('status', 'ARRIVED');
       params.set('receivingStatus', 'NOT_RECEIVED,PARTIALLY_RECEIVED');
-      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(`/admin/inbound-shipments?${params.toString()}`);
+      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(
+        `/admin/inbound-shipments?${params.toString()}`,
+      );
       setArrivedShipments(res.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to post receiving voucher.');
@@ -241,7 +248,9 @@ export function ReceivingWorkspace() {
         body: JSON.stringify(data),
       });
 
-      setSuccess(`Condition resolved: ${data.quantity} units reclassified to ${data.targetCondition}.`);
+      setSuccess(
+        `Condition resolved: ${data.quantity} units reclassified to ${data.targetCondition}.`,
+      );
       setResolvingLine(null);
       setResolvingReceipt(null);
       router.refresh();
@@ -263,7 +272,11 @@ export function ReceivingWorkspace() {
   for (const receipt of receipts) {
     if (receipt.status === 'POSTED') {
       for (const line of receipt.lines) {
-        if (line.condition === 'DAMAGED' || line.condition === 'QUARANTINE' || line.condition === 'INSPECTION') {
+        if (
+          line.condition === 'DAMAGED' ||
+          line.condition === 'QUARANTINE' ||
+          line.condition === 'INSPECTION'
+        ) {
           nonSellableLines.push({ receipt, line });
         }
       }
@@ -276,13 +289,16 @@ export function ReceivingWorkspace() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-heading text-2xl font-bold tracking-tight">Inbound Receiving & Inspection</h1>
+            <h1 className="font-heading text-2xl font-bold tracking-tight">
+              Inbound Receiving & Inspection
+            </h1>
             <Badge variant="outline" className="font-mono text-xs">
               Physical Intake
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Count physical arrivals, inspect condition (sellable, damaged, quarantine), and commit authoritative stock increases to Inventory.
+            Count physical arrivals, inspect condition (sellable, damaged, quarantine), and commit
+            authoritative stock increases to Inventory.
           </p>
         </div>
 
@@ -319,7 +335,9 @@ export function ReceivingWorkspace() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.awaitingReceiptShipments ?? 0}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.awaitingReceiptShipments ?? 0}
+            </span>
             <span className="text-xs text-muted-foreground">Arrived shipments</span>
           </div>
         </Card>
@@ -345,7 +363,9 @@ export function ReceivingWorkspace() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.inTransitShipments ?? 0}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.inTransitShipments ?? 0}
+            </span>
             <span className="text-xs text-muted-foreground">Expected soon</span>
           </div>
         </Card>
@@ -369,7 +389,9 @@ export function ReceivingWorkspace() {
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <AlertCircle className="size-4 shrink-0" />
           <span>{error}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>Dismiss</button>
+          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -377,7 +399,9 @@ export function ReceivingWorkspace() {
         <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
           <Check className="size-4 shrink-0" />
           <span>{success}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>Dismiss</button>
+          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -485,9 +509,12 @@ export function ReceivingWorkspace() {
                   <TableCell colSpan={6} className="h-48 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <PackageCheck className="size-8 text-emerald-600/70" />
-                      <p className="font-heading text-sm font-semibold">Receiving queue is clear!</p>
+                      <p className="font-heading text-sm font-semibold">
+                        Receiving queue is clear!
+                      </p>
                       <p className="max-w-xs text-xs text-muted-foreground">
-                        All arrived shipments have been physically counted. When new shipments arrive at a warehouse, they will appear here.
+                        All arrived shipments have been physically counted. When new shipments
+                        arrive at a warehouse, they will appear here.
                       </p>
                       <Button
                         variant="outline"
@@ -502,8 +529,14 @@ export function ReceivingWorkspace() {
                 </TableRow>
               ) : (
                 arrivedShipments.map((shipment) => {
-                  const totalAllocated = shipment.allocations.reduce((s, a) => s + Number(a.allocatedQuantity), 0);
-                  const totalReceived = shipment.allocations.reduce((s, a) => s + Number(a.receivedQuantity), 0);
+                  const totalAllocated = shipment.allocations.reduce(
+                    (s, a) => s + Number(a.allocatedQuantity),
+                    0,
+                  );
+                  const totalReceived = shipment.allocations.reduce(
+                    (s, a) => s + Number(a.receivedQuantity),
+                    0,
+                  );
                   const pending = Math.max(0, totalAllocated - totalReceived);
 
                   return (
@@ -517,7 +550,8 @@ export function ReceivingWorkspace() {
                             {shipment.shipmentNumber}
                           </Link>
                           <span className="text-xs text-muted-foreground capitalize">
-                            {shipment.transportMode.toLowerCase()} &bull; {shipment.trackingReference || 'No tracking'}
+                            {shipment.transportMode.toLowerCase()} &bull;{' '}
+                            {shipment.trackingReference || 'No tracking'}
                           </span>
                         </div>
                       </TableCell>
@@ -525,7 +559,9 @@ export function ReceivingWorkspace() {
                       <TableCell>
                         <div className="flex items-center gap-1.5 text-xs">
                           <Warehouse className="size-3.5 text-muted-foreground" />
-                          <span className="font-medium text-foreground">{shipment.receivingLocationName}</span>
+                          <span className="font-medium text-foreground">
+                            {shipment.receivingLocationName}
+                          </span>
                         </div>
                       </TableCell>
 
@@ -641,7 +677,9 @@ export function ReceivingWorkspace() {
                           {receipt.shipmentNumber}
                         </Link>
                         <div className="text-xs text-muted-foreground">
-                          {receipt.packingSlipReference ? `Slip: ${receipt.packingSlipReference}` : 'No slip recorded'}
+                          {receipt.packingSlipReference
+                            ? `Slip: ${receipt.packingSlipReference}`
+                            : 'No slip recorded'}
                         </div>
                       </TableCell>
 
@@ -664,7 +702,10 @@ export function ReceivingWorkspace() {
                               </Badge>
                             ) : null}
                             {quarantine > 0 ? (
-                              <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 text-[10px]">
+                              <Badge
+                                variant="secondary"
+                                className="bg-amber-500/10 text-amber-700 text-[10px]"
+                              >
                                 {quarantine} Quarantine
                               </Badge>
                             ) : null}
@@ -728,9 +769,12 @@ export function ReceivingWorkspace() {
                   <TableCell colSpan={6} className="h-44 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <CheckCircle className="size-8 text-emerald-600/70" />
-                      <p className="font-heading text-sm font-semibold">No quarantine or inspection items pending!</p>
+                      <p className="font-heading text-sm font-semibold">
+                        No quarantine or inspection items pending!
+                      </p>
                       <p className="max-w-xs text-xs text-muted-foreground">
-                        All counted goods across recent receipts are either classified as Sellable or have completed resolution.
+                        All counted goods across recent receipts are either classified as Sellable
+                        or have completed resolution.
                       </p>
                     </div>
                   </TableCell>
@@ -751,14 +795,32 @@ export function ReceivingWorkspace() {
                     </TableCell>
 
                     <TableCell>
-                      <div className="flex flex-col">
-                        <Link
-                          href={`/products/${line.productId}`}
-                          className="font-medium hover:underline hover:text-primary truncate"
-                        >
-                          {line.productTitle}
-                        </Link>
-                        <span className="font-mono text-xs text-muted-foreground">{line.sku}</span>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                          {line.primaryImageUrl ? (
+                            <img
+                              src={line.primaryImageUrl}
+                              alt={`${line.productTitle} ${line.sku}`}
+                              width={80}
+                              height={80}
+                              loading="lazy"
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <Package className="size-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <Link
+                            href={`/products/${line.productId}`}
+                            className="font-medium hover:underline hover:text-primary truncate"
+                          >
+                            {line.productTitle}
+                          </Link>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {line.sku}
+                          </span>
+                        </div>
                       </div>
                     </TableCell>
 

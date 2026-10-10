@@ -15,16 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  formatSupplyMoney,
-  formatSupplyNumber,
-  remainingSupplyQuantity,
-} from '@/lib/supply/api';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatSupplyMoney, formatSupplyNumber, remainingSupplyQuantity } from '@/lib/supply/api';
 import { percentage } from '@/lib/supply/status';
 import type { ShipmentDetailItemsTableProps } from './types';
 
@@ -69,7 +61,8 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
             Shipment Cargo Items ({shipment.allocations.length})
           </h3>
           <p className="text-xs text-muted-foreground">
-            Specific purchase order line quantities consolidated into this physical transit container.
+            Specific purchase order line quantities consolidated into this physical transit
+            container.
           </p>
         </div>
 
@@ -113,31 +106,47 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
                 <TableRow key={allocation.id} className="text-xs">
                   {/* Product & Variant Column */}
                   <TableCell className="align-top">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Link
-                          href={`/products/${allocation.productId}`}
-                          className="font-medium text-foreground hover:text-primary hover:underline"
-                        >
-                          {allocation.productTitle}
-                        </Link>
-                        {allocation.optionSummary ? (
-                          <Badge variant="secondary" className="text-[10px] font-normal">
-                            {allocation.optionSummary}
-                          </Badge>
-                        ) : null}
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                        {allocation.primaryImageUrl ? (
+                          <img
+                            src={allocation.primaryImageUrl}
+                            alt={`${allocation.productTitle} ${allocation.optionSummary || allocation.sku}`}
+                            width={96}
+                            height={96}
+                            loading="lazy"
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <Package className="size-5 text-muted-foreground" />
+                        )}
                       </div>
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Link
+                            href={`/products/${allocation.productId}`}
+                            className="font-medium text-foreground hover:text-primary hover:underline"
+                          >
+                            {allocation.productTitle}
+                          </Link>
+                          {allocation.optionSummary ? (
+                            <Badge variant="secondary" className="text-[10px] font-normal">
+                              {allocation.optionSummary}
+                            </Badge>
+                          ) : null}
+                        </div>
 
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                        <span className="font-mono">{allocation.sku}</span>
-                        <span>·</span>
-                        <Link
-                          href={`/inventory/stock?q=${encodeURIComponent(allocation.sku)}`}
-                          className="inline-flex items-center gap-0.5 text-primary hover:underline"
-                        >
-                          <span>Check stock</span>
-                          <ExternalLink className="size-2.5" />
-                        </Link>
+                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                          <span className="font-mono">{allocation.sku}</span>
+                          <span>·</span>
+                          <Link
+                            href={`/inventory/stock?q=${encodeURIComponent(allocation.sku)}`}
+                            className="inline-flex items-center gap-0.5 text-primary hover:underline"
+                          >
+                            <span>Check stock</span>
+                            <ExternalLink className="size-2.5" />
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   </TableCell>
@@ -165,7 +174,11 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
                           {formatSupplyMoney(allocation.unitPrice, shipment.currencyCode)}
                         </span>
                         <p className="text-[11px] text-muted-foreground tabular-nums">
-                          Total: {formatSupplyMoney(String(Number(allocation.unitPrice) * allocated), shipment.currencyCode)}
+                          Total:{' '}
+                          {formatSupplyMoney(
+                            String(Number(allocation.unitPrice) * allocated),
+                            shipment.currencyCode,
+                          )}
                         </p>
                       </div>
                     ) : (
@@ -228,11 +241,11 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
           {filteredAllocations.length > 0 ? (
             <TableFooter>
               <TableRow className="bg-muted/50 font-semibold text-xs">
-                <TableCell colSpan={2}>
-                  Total Cargo ({shipment.allocations.length} items)
-                </TableCell>
+                <TableCell colSpan={2}>Total Cargo ({shipment.allocations.length} items)</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {totalValue > 0 ? formatSupplyMoney(String(totalValue), shipment.currencyCode) : '—'}
+                  {totalValue > 0
+                    ? formatSupplyMoney(String(totalValue), shipment.currencyCode)
+                    : '—'}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatSupplyNumber(String(totalAllocated))}

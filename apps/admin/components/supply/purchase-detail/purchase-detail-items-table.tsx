@@ -153,7 +153,7 @@ export function PurchaseDetailItemsTable({
               const lineReceived = Number(line.receivedQuantity);
               const variantChoice = variants.find((v) => v.id === line.variantId);
               const optionSummary = line.optionSummary || variantChoice?.optionSummary || '';
-              const imageUrl = variantChoice?.primaryImageUrl;
+              const imageUrl = line.primaryImageUrl ?? variantChoice?.primaryImageUrl;
 
               return (
                 <TableRow key={line.id} className="group">
@@ -165,6 +165,8 @@ export function PurchaseDetailItemsTable({
                           <img
                             src={imageUrl}
                             alt={line.productTitle}
+                            width={64}
+                            height={64}
                             className="size-full object-cover"
                             loading="lazy"
                           />

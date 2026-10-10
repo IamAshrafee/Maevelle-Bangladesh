@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Info, PackageCheck } from 'lucide-react';
+import { Check, Image as ImageIcon, Info, PackageCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -98,8 +98,8 @@ export function ReceiveGoodsDialog({
             </Badge>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            Verify physical quantities delivered to {shipment.receivingLocationName}. Posting creates
-            immutable inventory receipt transactions and updates on-hand stock.
+            Verify physical quantities delivered to {shipment.receivingLocationName}. Posting
+            creates immutable inventory receipt transactions and updates on-hand stock.
           </DialogDescription>
         </DialogHeader>
 
@@ -152,7 +152,10 @@ export function ReceiveGoodsDialog({
             <div className="divide-y rounded-xl border">
               {remainingAllocations.map((allocation) => {
                 const remaining = Number(
-                  remainingSupplyQuantity(allocation.allocatedQuantity, allocation.receivedQuantity),
+                  remainingSupplyQuantity(
+                    allocation.allocatedQuantity,
+                    allocation.receivedQuantity,
+                  ),
                 );
                 const counted = countFor(allocation.id);
                 const isOver = counted > remaining;
@@ -160,19 +163,36 @@ export function ReceiveGoodsDialog({
                 return (
                   <div className="space-y-3 p-4 transition-colors" key={allocation.id}>
                     {/* Item Heading */}
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 space-y-0.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-foreground">{allocation.productTitle}</p>
-                          {allocation.optionSummary ? (
-                            <Badge variant="secondary" className="text-[11px] font-normal">
-                              {allocation.optionSummary}
-                            </Badge>
-                          ) : null}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                          {allocation.primaryImageUrl ? (
+                            <img
+                              src={allocation.primaryImageUrl}
+                              alt={`${allocation.productTitle} ${allocation.optionSummary || allocation.sku}`}
+                              width={120}
+                              height={120}
+                              loading="lazy"
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="size-6 text-muted-foreground" />
+                          )}
                         </div>
-                        <p className="font-mono text-xs text-muted-foreground">
-                          SKU: {allocation.sku} · PO: {allocation.purchaseNumber} ({allocation.supplierName})
-                        </p>
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-foreground">{allocation.productTitle}</p>
+                            {allocation.optionSummary ? (
+                              <Badge variant="secondary" className="text-[11px] font-normal">
+                                {allocation.optionSummary}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            SKU: {allocation.sku} · PO: {allocation.purchaseNumber} (
+                            {allocation.supplierName})
+                          </p>
+                        </div>
                       </div>
                       <div className="shrink-0 text-right text-xs">
                         <span className="text-muted-foreground">Remaining to receive: </span>
@@ -181,7 +201,8 @@ export function ReceiveGoodsDialog({
                         </strong>
                         {Number(allocation.receivedQuantity) > 0 ? (
                           <span className="text-muted-foreground">
-                            {' '}({formatSupplyNumber(allocation.receivedQuantity)} prior)
+                            {' '}
+                            ({formatSupplyNumber(allocation.receivedQuantity)} prior)
                           </span>
                         ) : null}
                       </div>
@@ -191,17 +212,24 @@ export function ReceiveGoodsDialog({
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {CONDITIONS.map((cond) => (
                         <div key={cond.key} className="space-y-1">
-                          <label className="text-[11px] font-medium text-muted-foreground">
+                          <label
+                            htmlFor={`receive-${allocation.id}-${cond.key}`}
+                            className="text-[11px] font-medium text-muted-foreground"
+                          >
                             {cond.label}
                           </label>
                           <Input
+                            id={`receive-${allocation.id}-${cond.key}`}
+                            name={`receive-${allocation.id}-${cond.key}`}
                             type="number"
                             min="0"
                             step="1"
                             placeholder="0"
                             className={`h-9 text-xs tabular-nums ${isOver ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                             value={quantityFor(allocation.id, cond.key)}
-                            onChange={(e) => updateQuantity(allocation.id, cond.key, e.target.value)}
+                            onChange={(e) =>
+                              updateQuantity(allocation.id, cond.key, e.target.value)
+                            }
                             disabled={saving}
                           />
                         </div>
@@ -228,7 +256,8 @@ export function ReceiveGoodsDialog({
                               : '0 counted in this session'}
                       </span>
                       <span className="font-mono tabular-nums">
-                        {formatSupplyNumber(String(counted))} / {formatSupplyNumber(String(remaining))}
+                        {formatSupplyNumber(String(counted))} /{' '}
+                        {formatSupplyNumber(String(remaining))}
                       </span>
                     </div>
                   </div>
@@ -257,7 +286,7 @@ export function ReceiveGoodsDialog({
             <SupplyField label="Receiving Session Notes (Optional)">
               <Textarea
                 name="notes"
-                placeholder="Note any carton seal integrity, dock bay #, or container comments..."
+                placeholder="Note any carton seal integrity, dock bay #, or container comments…"
                 rows={2}
                 className="text-xs"
                 disabled={saving}
@@ -290,7 +319,11 @@ export function ReceiveGoodsDialog({
               className="gap-1.5"
             >
               <PackageCheck className="size-4" />
-              <span>{saving ? 'Posting receipt...' : `Post Receipt (${formatSupplyNumber(String(totalCounted))} units)`}</span>
+              <span>
+                {saving
+                  ? 'Posting receipt…'
+                  : `Post Receipt (${formatSupplyNumber(String(totalCounted))} units)`}
+              </span>
             </Button>
           </DialogFooter>
         </form>

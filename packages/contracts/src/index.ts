@@ -1227,6 +1227,7 @@ export interface AdminSizingWorkspaceDto {
   readonly productConfigurations: readonly {
     readonly productId: string;
     readonly productTitle: string;
+    readonly primaryImageUrl?: string;
     readonly productVersion: number;
     readonly sizeSystemId: string;
     readonly sizeGuideId: string | null;
@@ -1828,6 +1829,7 @@ export interface PurchaseDto {
     readonly productId: string;
     readonly sku: string;
     readonly productTitle: string;
+    readonly primaryImageUrl?: string;
     readonly optionSummary?: string;
     readonly quantity: string;
     readonly unitPrice: string;
@@ -1912,6 +1914,7 @@ export interface InboundShipmentDto {
     readonly productId: string;
     readonly sku: string;
     readonly productTitle: string;
+    readonly primaryImageUrl?: string;
     readonly allocatedQuantity: string;
     readonly receivedQuantity: string;
     readonly optionSummary?: string;
@@ -1952,6 +1955,7 @@ export interface InboundReceiptLineDto {
   readonly inventoryItemId?: string;
   readonly sku: string;
   readonly productTitle: string;
+  readonly primaryImageUrl?: string;
   readonly condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
   readonly quantity: string;
 }

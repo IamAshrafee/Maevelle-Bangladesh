@@ -27,11 +27,7 @@ import {
   Truck,
   X,
 } from 'lucide-react';
-import type {
-  PurchaseDto,
-  SupplierDto,
-  SupplyOverviewDto,
-} from '@maevelle/contracts';
+import type { PurchaseDto, SupplierDto, SupplyOverviewDto } from '@maevelle/contracts';
 import type { PagedEnvelope } from '@/lib/supply/types';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
@@ -201,7 +197,9 @@ export function PurchasesList() {
       params.set('pageSize', String(PAGE_SIZE));
       if (deferredQuery) params.set('q', deferredQuery);
       if (currentStatus !== 'ALL') params.set('status', currentStatus);
-      const res = await supplyRequest<PagedEnvelope<PurchaseDto>>(`/admin/purchases?${params.toString()}`);
+      const res = await supplyRequest<PagedEnvelope<PurchaseDto>>(
+        `/admin/purchases?${params.toString()}`,
+      );
       setPurchases(res.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to place purchase order.');
@@ -221,7 +219,9 @@ export function PurchasesList() {
       if (currentSupplier) params.set('supplierId', currentSupplier);
       if (currentCurrency) params.set('currencyCode', currentCurrency);
 
-      const res = await supplyRequest<PagedEnvelope<PurchaseDto>>(`/admin/purchases?${params.toString()}`);
+      const res = await supplyRequest<PagedEnvelope<PurchaseDto>>(
+        `/admin/purchases?${params.toString()}`,
+      );
       const rows = res.data ?? [];
 
       const headers = [
@@ -266,7 +266,10 @@ export function PurchasesList() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `purchases-export-${new Date().toISOString().slice(0, 10)}.csv`);
+      link.setAttribute(
+        'download',
+        `purchases-export-${new Date().toISOString().slice(0, 10)}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -289,12 +292,18 @@ export function PurchasesList() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage vendor purchase contracts, allocate ordered lines into freight shipments, and monitor delivery costs.
+            Manage vendor purchase contracts, allocate ordered lines into freight shipments, and
+            monitor delivery costs.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => void exportCsv()} disabled={exporting || loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void exportCsv()}
+            disabled={exporting || loading}
+          >
             <Download className="size-4" />
             <span>{exporting ? 'Exporting…' : 'Export CSV'}</span>
           </Button>
@@ -344,7 +353,9 @@ export function PurchasesList() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.inTransitShipments ?? 0}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.inTransitShipments ?? 0}
+            </span>
             <span className="text-xs text-muted-foreground">Shipments en route</span>
           </div>
         </Card>
@@ -357,7 +368,9 @@ export function PurchasesList() {
             </span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.awaitingReceiptShipments ?? 0}</span>
+            <span className="font-heading text-2xl font-bold">
+              {overview?.awaitingReceiptShipments ?? 0}
+            </span>
             <span className="text-xs text-muted-foreground">Ready for count</span>
           </div>
         </Card>
@@ -368,7 +381,9 @@ export function PurchasesList() {
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <AlertCircle className="size-4 shrink-0" />
           <span>{error}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>Dismiss</button>
+          <button className="ml-auto text-xs underline" onClick={() => setError(null)}>
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -376,7 +391,9 @@ export function PurchasesList() {
         <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
           <Check className="size-4 shrink-0" />
           <span>{success}</span>
-          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>Dismiss</button>
+          <button className="ml-auto text-xs underline" onClick={() => setSuccess(null)}>
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -455,7 +472,7 @@ export function PurchasesList() {
               <NativeSelectOption value="BDT">BDT</NativeSelectOption>
             </NativeSelect>
 
-            {(query || currentStatus !== 'ALL' || currentSupplier || currentCurrency) ? (
+            {query || currentStatus !== 'ALL' || currentSupplier || currentCurrency ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -509,7 +526,11 @@ export function PurchasesList() {
                         : 'Create your first purchase order to start procuring goods from vendors.'}
                     </p>
                     {canManageProcurement && !query && currentStatus === 'ALL' ? (
-                      <Button size="sm" onClick={() => setCreateOpen(true)} className="mt-2 gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={() => setCreateOpen(true)}
+                        className="mt-2 gap-1.5"
+                      >
                         <Plus className="size-4" />
                         <span>Create Purchase Order</span>
                       </Button>
@@ -522,8 +543,14 @@ export function PurchasesList() {
                 const isExpanded = expandedRows.has(purchase.id);
                 const workflow = purchaseWorkflowStatus(purchase);
                 const orderedUnits = purchase.lines.reduce((s, l) => s + Number(l.quantity), 0);
-                const allocatedUnits = purchase.lines.reduce((s, l) => s + Number(l.allocatedQuantity), 0);
-                const receivedUnits = purchase.lines.reduce((s, l) => s + Number(l.receivedQuantity), 0);
+                const allocatedUnits = purchase.lines.reduce(
+                  (s, l) => s + Number(l.allocatedQuantity),
+                  0,
+                );
+                const receivedUnits = purchase.lines.reduce(
+                  (s, l) => s + Number(l.receivedQuantity),
+                  0,
+                );
                 const unallocatedUnits = Math.max(0, orderedUnits - allocatedUnits);
 
                 return (
@@ -554,7 +581,10 @@ export function PurchasesList() {
                             {purchase.purchaseNumber}
                           </Link>
                           {purchase.supplierReference ? (
-                            <span className="font-mono text-xs text-muted-foreground" title="Supplier Reference">
+                            <span
+                              className="font-mono text-xs text-muted-foreground"
+                              title="Supplier Reference"
+                            >
                               ({purchase.supplierReference})
                             </span>
                           ) : null}
@@ -599,10 +629,12 @@ export function PurchasesList() {
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">
-                            {purchase.lines.length} {purchase.lines.length === 1 ? 'line' : 'lines'} · {formatSupplyNumber(String(orderedUnits))} units
+                            {purchase.lines.length} {purchase.lines.length === 1 ? 'line' : 'lines'}{' '}
+                            · {formatSupplyNumber(String(orderedUnits))} units
                           </span>
                           <span className="font-mono text-xs text-muted-foreground">
-                            {formatSupplyNumber(String(receivedUnits))}/{formatSupplyNumber(String(orderedUnits))} rcvd
+                            {formatSupplyNumber(String(receivedUnits))}/
+                            {formatSupplyNumber(String(orderedUnits))} rcvd
                           </span>
                         </div>
                         {/* Progress Bar */}
@@ -634,7 +666,12 @@ export function PurchasesList() {
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           render={
-                            <Button variant="ghost" size="xs" className="size-8 p-0" title="Order options">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              className="size-8 p-0"
+                              title="Order options"
+                            >
                               <span className="sr-only">Open menu</span>
                               <Eye className="size-4" />
                             </Button>
@@ -642,7 +679,12 @@ export function PurchasesList() {
                         />
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem
-                            render={<Link href={`/purchases/${purchase.id}`} className="w-full flex items-center gap-2" />}
+                            render={
+                              <Link
+                                href={`/purchases/${purchase.id}`}
+                                className="w-full flex items-center gap-2"
+                              />
+                            }
                           >
                             <Eye className="size-4" />
                             <span>View Details</span>
@@ -662,7 +704,9 @@ export function PurchasesList() {
                             </>
                           ) : null}
 
-                          {purchase.status === 'PLACED' && canManageShipments && unallocatedUnits > 0 ? (
+                          {purchase.status === 'PLACED' &&
+                          canManageShipments &&
+                          unallocatedUnits > 0 ? (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
@@ -707,9 +751,23 @@ export function PurchasesList() {
                 {purchase.lines.map((line) => (
                   <div
                     key={line.id}
-                    className="flex flex-col justify-between rounded-lg border bg-card p-3 text-xs shadow-xs"
+                    className="flex gap-3 rounded-lg border bg-card p-3 text-xs shadow-xs"
                   >
-                    <div>
+                    <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                      {line.primaryImageUrl ? (
+                        <img
+                          src={line.primaryImageUrl}
+                          alt={`${line.productTitle} ${line.optionSummary || line.sku}`}
+                          width={96}
+                          height={96}
+                          loading="lazy"
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <Package className="size-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <Link
                           href={`/products/${line.productId}`}
@@ -726,15 +784,24 @@ export function PurchasesList() {
                       ) : null}
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between border-t pt-2 text-muted-foreground">
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-2 text-muted-foreground">
                       <span>
-                        Ordered: <strong className="text-foreground">{formatSupplyNumber(line.quantity)}</strong>
+                        Ordered:{' '}
+                        <strong className="text-foreground">
+                          {formatSupplyNumber(line.quantity)}
+                        </strong>
                       </span>
                       <span>
-                        Allocated: <strong className="text-foreground">{formatSupplyNumber(line.allocatedQuantity)}</strong>
+                        Allocated:{' '}
+                        <strong className="text-foreground">
+                          {formatSupplyNumber(line.allocatedQuantity)}
+                        </strong>
                       </span>
                       <span>
-                        Received: <strong className="text-emerald-600 dark:text-emerald-400">{formatSupplyNumber(line.receivedQuantity)}</strong>
+                        Received:{' '}
+                        <strong className="text-emerald-600 dark:text-emerald-400">
+                          {formatSupplyNumber(line.receivedQuantity)}
+                        </strong>
                       </span>
                       <span className="font-mono text-foreground font-semibold">
                         {formatSupplyMoney(line.unitPrice, purchase.currencyCode)}
@@ -750,7 +817,8 @@ export function PurchasesList() {
         {totalPages > 1 ? (
           <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
             <span>
-              Showing Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> ({totalItems} total orders)
+              Showing Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> (
+              {totalItems} total orders)
             </span>
             <div className="flex items-center gap-2">
               <Button
