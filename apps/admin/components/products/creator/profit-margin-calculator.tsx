@@ -158,9 +158,7 @@ export function ProfitMarginCalculator({
           <div className="flex items-start gap-2">
             <Calculator className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
             <div>
-              <p className="text-xs font-semibold text-foreground">
-                Set selling price by target margin
-              </p>
+              <p className="text-xs font-semibold text-foreground">Quick selling prices</p>
               <p className="text-[11px] text-muted-foreground">
                 Suggestions use the{' '}
                 {effectiveCost.source === 'LANDED_COST' ? 'landed cost' : 'planning estimate'} and

@@ -22,7 +22,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { VariantMatrixRow, VariantStockEntry } from './types';
 import { BarcodeScannerModal } from './barcode-scanner-modal';
-import { grossMarginPercent, merchandisingCost, suggestedSellingPrice } from './utils/pricing';
+import { QuickPriceMapper } from './quick-price-mapper';
+import { grossMarginPercent, merchandisingCost } from './utils/pricing';
 
 interface VariantMatrixTableProps {
   readonly matrix: readonly VariantMatrixRow[];
@@ -54,16 +55,6 @@ export function VariantMatrixTable({
   const enabledCount = useMemo(() => matrix.filter((r) => r.enabled).length, [matrix]);
   const allEnabled = enabledCount === matrix.length && matrix.length > 0;
   const effectiveBaseCost = baseEstimatedCost || baseCost;
-  const costedVariantCount = useMemo(
-    () =>
-      matrix.filter(
-        (row) =>
-          row.enabled &&
-          merchandisingCost(row.estimatedCostAmount, row.latestAcquisitionCost).source !== 'NONE',
-      ).length,
-    [matrix],
-  );
-
   const [bulkStockQuantity, setBulkStockQuantity] = useState('');
   const [showBulkStockPopover, setShowBulkStockPopover] = useState(false);
   const [scanningRowId, setScanningRowId] = useState<string | null>(null);
@@ -106,15 +97,6 @@ export function VariantMatrixTable({
     });
   };
 
-  const handleApplyTargetMargin = (targetMargin: number) => {
-    for (const row of matrix) {
-      if (!row.enabled) continue;
-      const cost = merchandisingCost(row.estimatedCostAmount, row.latestAcquisitionCost);
-      const price = suggestedSellingPrice(cost.amount, targetMargin);
-      if (price) onUpdateRow(row.id, { priceAmount: price });
-    }
-  };
-
   return (
     <div className="space-y-3">
       {/* Top Bar with Bulk Actions */}
@@ -142,30 +124,6 @@ export function VariantMatrixTable({
 
         {/* Bulk Action Buttons */}
         <div className="flex flex-wrap items-center gap-1.5">
-          {basePrice && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => onBulkUpdate({ priceAmount: basePrice }, true)}
-            >
-              Apply Price (৳{basePrice})
-            </Button>
-          )}
-
-          {baseCompareAt && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => onBulkUpdate({ compareAtAmount: baseCompareAt }, true)}
-            >
-              Apply Compare-at (৳{baseCompareAt})
-            </Button>
-          )}
-
           {effectiveBaseCost && (
             <Button
               type="button"
@@ -190,21 +148,6 @@ export function VariantMatrixTable({
               Apply Planning Cost (৳{effectiveBaseCost})
             </Button>
           )}
-
-          {costedVariantCount > 0
-            ? [30, 40, 50].map((margin) => (
-                <Button
-                  key={margin}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 text-xs sm:h-7"
-                  onClick={() => handleApplyTargetMargin(margin)}
-                >
-                  Price for {margin}% margin
-                </Button>
-              ))
-            : null}
 
           {locations.length > 0 && (
             <Popover open={showBulkStockPopover} onOpenChange={setShowBulkStockPopover}>
@@ -256,6 +199,13 @@ export function VariantMatrixTable({
           </Button>
         </div>
       </div>
+
+      <QuickPriceMapper
+        rows={matrix}
+        defaultPrice={basePrice}
+        defaultCompareAtPrice={baseCompareAt}
+        onUpdateRow={onUpdateRow}
+      />
 
       {/* Desktop Spreadsheet Table (hidden md:block) */}
       <div className="hidden md:block overflow-x-auto rounded-lg border bg-background shadow-xs">
