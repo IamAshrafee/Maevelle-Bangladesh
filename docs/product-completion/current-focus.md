@@ -59,6 +59,10 @@ Implemented behavior includes:
 - simple and multi-variant pricing can apply 30%, 40% or 50% target-margin
   suggestions from the effective per-unit cost, rounded upward to the next BDT
   10, while final selling prices remain an explicit merchandising decision.
+- the multi-variant matrix includes a responsive quick price mapper for one
+  shared selling/compare-at price or independent cost-aware pricing with preset
+  and custom target margins, configurable upward rounding, enabled-row scope and
+  explicit reporting when variants lack usable cost data.
 
 ## Verification completed
 
@@ -80,6 +84,9 @@ Implemented behavior includes:
   --check`, and a fresh Admin production build including TypeScript and all 84
   generated routes.
 - The Catalog/Supply pricing handoff at `2ebb571` passed focused ESLint, 5
+  pricing-rule tests, `git diff --check`, and a fresh Admin production build
+  including TypeScript and all 84 generated routes.
+- The quick variant price mapper at `8c52bc1` passed focused ESLint, the same 5
   pricing-rule tests, `git diff --check`, and a fresh Admin production build
   including TypeScript and all 84 generated routes.
 - Browser verification confirmed the local Admin route and responsive 390×844
