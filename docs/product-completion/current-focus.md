@@ -43,7 +43,15 @@ Implemented behavior includes:
 - one canonical shipment-level landed-cost workflow: the global Landed Cost
   workspace is now an oversight queue, while charge entry, allocation review,
   revisions and finalization live only in the shipment's URL-addressable
-  `Landed Cost & Valuation` tab.
+  `Landed Cost & Valuation` tab; and
+- one intentional responsive Supply information architecture: listing pages
+  discover and prioritize work, detail workspaces own record mutations, Receiving
+  owns intake/history/condition resolution, and Costing remains a downstream
+  Inventory valuation surface rather than a duplicate Supply destination.
+- image-led mobile cards now cover Suppliers, Purchases, Shipments, Receiving and
+  Landed Cost queues; long operational forms become full-screen mobile task
+  dialogs; tabs, filters and primary actions use touch-conscious targets; and
+  Receiving exposes its previously missing pagination controls.
 
 ## Verification completed
 
@@ -60,6 +68,10 @@ Implemented behavior includes:
 - The landed-cost workflow consolidation passed a fresh Admin production build;
   old `/landed-cost?shipment=...` bookmarks redirect to the canonical shipment
   costing tab.
+- The complete Supply frontend consolidation at `54e6bfc` passed focused ESLint
+  with zero findings, both Admin Supply helper suites (5 tests), `git diff
+  --check`, and a fresh Admin production build including TypeScript and all 84
+  generated routes.
 - Browser verification confirmed the local Admin route and responsive 390×844
   authentication shell. The authenticated operator walkthrough remains an owner
   review gate rather than being represented as complete.
