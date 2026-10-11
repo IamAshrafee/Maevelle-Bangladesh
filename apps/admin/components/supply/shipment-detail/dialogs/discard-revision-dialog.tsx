@@ -43,7 +43,8 @@ export function DiscardRevisionDialog({
                 Discard Draft Revision #{revisionNumber}?
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Worksheet: <span className="font-mono font-medium text-foreground">{worksheetNumber}</span>
+                Worksheet:{' '}
+                <span className="font-mono font-medium text-foreground">{worksheetNumber}</span>
               </DialogDescription>
             </div>
           </div>
@@ -56,15 +57,18 @@ export function DiscardRevisionDialog({
               <div className="space-y-1">
                 <p className="font-semibold">Unfinalized Draft Charges Will Be Deleted</p>
                 <p className="text-muted-foreground leading-relaxed">
-                  Discarding will delete any unfinalized cost components and adjustments added on Revision #{revisionNumber}.
+                  Discarding will delete any unfinalized cost components and adjustments added on
+                  Revision #{revisionNumber}.
                 </p>
               </div>
             </div>
           </div>
 
           <p className="text-muted-foreground leading-relaxed">
-            The worksheet will cleanly revert to <strong>Finalized Revision #{priorRevisionNumber}</strong>.
-            All previously finalized valuation layers, original components, and COGS calculations remain untouched and fully restored.
+            The worksheet will cleanly revert to{' '}
+            <strong>Finalized Revision #{priorRevisionNumber}</strong>. All previously finalized
+            valuation layers, original components, and COGS calculations remain untouched and fully
+            restored.
           </p>
         </div>
 

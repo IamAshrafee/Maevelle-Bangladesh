@@ -1,20 +1,6 @@
 'use client';
 
-import {
-  Calendar,
-  Check,
-  Clock,
-  Copy,
-  Edit3,
-  Globe,
-  MapPin,
-  Plane,
-  ShieldCheck,
-  Ship,
-  Train,
-  Truck,
-  Weight,
-} from 'lucide-react';
+import { Check, Clock, Copy, Edit3, Plane, Ship, Train, Truck, Weight } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,10 +11,10 @@ import type { ShipmentDetailLogisticsCardProps } from './types';
 
 function getTransportIcon(mode?: string) {
   const m = mode?.toUpperCase();
-  if (m === 'AIR') return <Plane className="size-4 text-sky-500" />;
-  if (m === 'ROAD') return <Truck className="size-4 text-amber-500" />;
-  if (m === 'RAIL') return <Train className="size-4 text-emerald-500" />;
-  return <Ship className="size-4 text-blue-500" />;
+  if (m === 'AIR') return <Plane className="size-4 text-info" />;
+  if (m === 'ROAD') return <Truck className="size-4 text-warning" />;
+  if (m === 'RAIL') return <Train className="size-4 text-success" />;
+  return <Ship className="size-4 text-info" />;
 }
 
 export function ShipmentDetailLogisticsCard({
@@ -100,7 +86,7 @@ export function ShipmentDetailLogisticsCard({
                     }
                   >
                     {copied ? (
-                      <Check className="size-3 text-emerald-600" />
+                      <Check className="size-3 text-success" />
                     ) : (
                       <Copy className="size-3" />
                     )}
@@ -222,7 +208,7 @@ export function ShipmentDetailLogisticsCard({
             <span className="text-muted-foreground">Freight Departure:</span>
             <span className="font-medium text-foreground">
               {shipment.departedAt ? (
-                <span className="text-sky-600 dark:text-sky-400 font-semibold">
+                <span className="font-semibold text-info">
                   Departed on {formatSupplyDate(shipment.departedAt)}
                 </span>
               ) : (
@@ -235,7 +221,7 @@ export function ShipmentDetailLogisticsCard({
             <span className="text-muted-foreground">Actual Dock Arrival:</span>
             <span className="font-medium text-foreground">
               {shipment.arrivedAt ? (
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span className="font-semibold text-success">
                   Arrived on {formatSupplyDate(shipment.arrivedAt)}
                 </span>
               ) : (

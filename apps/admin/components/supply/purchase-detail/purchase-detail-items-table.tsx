@@ -306,6 +306,7 @@ export function PurchaseDetailItemsTable({
                                 variant="ghost"
                                 disabled={busy}
                                 onClick={() => onEditLine(line)}
+                                aria-label={`Edit ${line.productTitle} ${line.optionSummary ?? line.sku}`}
                               />
                             }
                           >
@@ -323,6 +324,7 @@ export function PurchaseDetailItemsTable({
                                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 disabled={busy}
                                 onClick={() => onDeleteLine(line.id)}
+                                aria-label={`Remove ${line.productTitle} ${line.optionSummary ?? line.sku}`}
                               />
                             }
                           >

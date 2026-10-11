@@ -5,11 +5,11 @@ import { AlertCircle, CreditCard, Loader2, Sparkles, Wallet } from 'lucide-react
 import { type FormEvent, useEffect, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -136,7 +136,7 @@ export function PurchasePayDialog({
 
   return (
     <Dialog open={Boolean(invoice)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <SupplyTaskDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="flex size-8 items-center justify-center rounded-lg bg-success/10 text-success">
@@ -185,6 +185,7 @@ export function PurchasePayDialog({
               <FieldLabel htmlFor="pay-method">Payment Source</FieldLabel>
               <NativeSelect
                 id="pay-method"
+                name="paymentMethod"
                 value={paymentMethod}
                 disabled={busy}
                 className="w-full"
@@ -238,7 +239,7 @@ export function PurchasePayDialog({
               </NativeSelect>
 
               {!eligibleAccounts.length ? (
-                <p className="text-xs text-amber-600 mt-1">
+                <p className="mt-1 text-xs text-warning">
                   No active financial accounts found for {invoice.currency_code}. Set one up in{' '}
                   <Link href="/finance/accounts" className="underline font-medium">
                     Finance → Accounts
@@ -246,7 +247,7 @@ export function PurchasePayDialog({
                   .
                 </p>
               ) : hasInsufficientFunds ? (
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                <p className="mt-1 flex items-center gap-1 text-xs text-warning">
                   <AlertCircle className="size-3 shrink-0" />
                   Selected account balance is lower than disbursement. Account will incur negative
                   balance.
@@ -369,7 +370,7 @@ export function PurchasePayDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

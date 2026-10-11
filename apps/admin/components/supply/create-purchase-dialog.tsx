@@ -28,12 +28,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -386,7 +386,7 @@ export function CreatePurchaseDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="flex max-h-[92vh] w-full flex-col overflow-hidden p-0 sm:max-w-3xl">
+      <SupplyTaskDialogContent className="flex max-h-[92vh] w-full flex-col overflow-hidden p-0 sm:max-w-3xl">
         <DialogHeader className="border-b px-6 pt-6 pb-4">
           <div className="flex items-center gap-2">
             <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -480,6 +480,9 @@ export function CreatePurchaseDialog({
                 </FieldLabel>
                 <Input
                   id="variant-search"
+                  name="variantSearch"
+                  type="search"
+                  autoComplete="off"
                   value={variantChoices.query}
                   onChange={(event) => variantChoices.setQuery(event.target.value)}
                   placeholder="Search title, SKU, color, or size…"
@@ -579,6 +582,7 @@ export function CreatePurchaseDialog({
                     </FieldLabel>
                     <Input
                       id="line-quantity"
+                      name="newLineQuantity"
                       type="number"
                       min="0.000001"
                       step="any"
@@ -603,6 +607,7 @@ export function CreatePurchaseDialog({
                     </FieldLabel>
                     <Input
                       id="line-price"
+                      name="newLineUnitPrice"
                       type="number"
                       min="0"
                       step="any"
@@ -725,6 +730,8 @@ export function CreatePurchaseDialog({
                             </TableCell>
                             <TableCell className="text-right font-mono">
                               <Input
+                                name={`line-${idx}-quantity`}
+                                aria-label={`Quantity for ${line.productTitle} ${line.optionSummary ?? line.sku}`}
                                 type="number"
                                 min="0.000001"
                                 step="any"
@@ -738,6 +745,8 @@ export function CreatePurchaseDialog({
                             </TableCell>
                             <TableCell className="text-right font-mono">
                               <Input
+                                name={`line-${idx}-unit-price`}
+                                aria-label={`Unit cost for ${line.productTitle} ${line.optionSummary ?? line.sku}`}
                                 type="number"
                                 min="0"
                                 step="any"
@@ -820,7 +829,7 @@ export function CreatePurchaseDialog({
             </div>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

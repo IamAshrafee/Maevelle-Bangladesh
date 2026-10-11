@@ -6,16 +6,16 @@ import type { ApiEnvelope, FinanceExpenseDto, PaginatedResultDto } from '@maevel
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { SupplyField, supplySelectClassName } from '@/components/supply/supply-field';
+import { SupplyField } from '@/components/supply/supply-field';
 import { supplyRequest } from '@/lib/supply/api';
 import type { AddCostComponentDialogProps } from '../types';
 
@@ -130,7 +130,7 @@ export function AddCostComponentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto sm:max-w-xl">
+      <SupplyTaskDialogContent className="max-h-[92vh] max-w-xl overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold tracking-tight">
             Add Landed Cost Component
@@ -182,8 +182,9 @@ export function AddCostComponentDialog({
           <SupplyField label="Finance Expense Evidence (Optional)">
             <div className="relative">
               <Link2 className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-              <select
-                className={`${supplySelectClassName} pl-8`}
+              <NativeSelect
+                name="financeExpenseId"
+                className="pl-8"
                 value={financeExpenseId}
                 onChange={(event) => {
                   const id = event.target.value;
@@ -197,16 +198,16 @@ export function AddCostComponentDialog({
                 }}
                 disabled={saving || loadingExpenses}
               >
-                <option value="">
+                <NativeSelectOption value="">
                   {loadingExpenses ? 'Loading shipment expenses…' : 'No linked Finance expense'}
-                </option>
+                </NativeSelectOption>
                 {expenses.map((expense) => (
-                  <option key={expense.id} value={expense.id}>
+                  <NativeSelectOption key={expense.id} value={expense.id}>
                     {expense.expense_number} · {expense.description} · {expense.amount}{' '}
                     {expense.currency_code}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
               <ReceiptText className="size-3" /> Linking preserves the payable and payment evidence
@@ -216,55 +217,55 @@ export function AddCostComponentDialog({
           {/* Cost Type and Scope */}
           <div className="grid gap-3 sm:grid-cols-2">
             <SupplyField label="Expense Category">
-              <select
-                className={supplySelectClassName}
+              <NativeSelect
+                name="costType"
                 value={costType}
                 onChange={(e) => setCostType(e.target.value)}
                 disabled={saving}
               >
                 {COST_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
+                  <NativeSelectOption key={type.value} value={type.value}>
                     {type.label}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </SupplyField>
 
             <SupplyField label="Distribution Scope">
-              <select
-                className={supplySelectClassName}
+              <NativeSelect
+                name="scope"
                 value={scope}
                 onChange={(e) => setScope(e.target.value as 'GLOBAL' | 'DIRECT')}
                 disabled={saving}
               >
-                <option value="GLOBAL">Across all received items</option>
-                <option value="DIRECT">Direct to one specific item</option>
-              </select>
+                <NativeSelectOption value="GLOBAL">Across all received items</NativeSelectOption>
+                <NativeSelectOption value="DIRECT">Direct to one specific item</NativeSelectOption>
+              </NativeSelect>
             </SupplyField>
           </div>
 
           {/* Direct Allocation Selector if scope is DIRECT */}
           {scope === 'DIRECT' ? (
             <SupplyField label="Target Cargo Item">
-              <select
-                className={supplySelectClassName}
+              <NativeSelect
+                name="directAllocationId"
                 value={directAllocationId}
                 onChange={(e) => setDirectAllocationId(e.target.value)}
                 disabled={saving}
                 required
               >
                 {shipment.allocations.map((a) => (
-                  <option key={a.id} value={a.id}>
+                  <NativeSelectOption key={a.id} value={a.id}>
                     {a.productTitle} ({a.sku}) · {a.receivedQuantity} received
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </SupplyField>
           ) : (
             /* Allocation Method selector if scope is GLOBAL */
             <SupplyField label="Allocation Method">
-              <select
-                className={supplySelectClassName}
+              <NativeSelect
+                name="allocationMethod"
                 value={allocationMethod}
                 onChange={(e) =>
                   setAllocationMethod(
@@ -274,11 +275,11 @@ export function AddCostComponentDialog({
                 disabled={saving}
               >
                 {ALLOCATION_METHODS.map((m) => (
-                  <option key={m.value} value={m.value}>
+                  <NativeSelectOption key={m.value} value={m.value}>
                     {m.label}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {ALLOCATION_METHODS.find((m) => m.value === allocationMethod)?.hint}
               </p>
@@ -289,6 +290,7 @@ export function AddCostComponentDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <SupplyField label="Expense Amount">
               <Input
+                name="amount"
                 type="number"
                 step="0.0001"
                 placeholder="0.00"
@@ -302,9 +304,11 @@ export function AddCostComponentDialog({
 
             <SupplyField label="Currency Code">
               <Input
+                name="currencyCode"
+                autoComplete="off"
                 value={currencyCode}
                 onChange={(e) => setCurrencyCode(e.target.value.toUpperCase())}
-                placeholder="BDT, USD, CNY..."
+                placeholder="BDT, USD, CNY…"
                 maxLength={3}
                 required
                 disabled={saving}
@@ -315,8 +319,8 @@ export function AddCostComponentDialog({
 
           {/* Cross Currency FX Rate warning & field */}
           {isCrossCurrency ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs dark:border-amber-900/40 dark:bg-amber-950/20">
-              <p className="font-semibold text-amber-800 dark:text-amber-300">
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs">
+              <p className="font-semibold text-warning">
                 Cross-Currency Conversion: {currencyCode} → {worksheet.base_currency_code}
               </p>
               <div className="mt-2">
@@ -324,6 +328,7 @@ export function AddCostComponentDialog({
                   label={`Exchange Rate (1 ${currencyCode} = X ${worksheet.base_currency_code})`}
                 >
                   <Input
+                    name="exchangeRate"
                     type="number"
                     step="0.000000000001"
                     min="0.000000000001"
@@ -343,6 +348,8 @@ export function AddCostComponentDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <SupplyField label="Document / Invoice / AWB Reference #">
               <Input
+                name="reference"
+                autoComplete="off"
                 placeholder="e.g. BL-984102 or INV-DHL-2026"
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
@@ -352,25 +359,28 @@ export function AddCostComponentDialog({
             </SupplyField>
 
             <SupplyField label="Value Status">
-              <select
-                className={supplySelectClassName}
+              <NativeSelect
+                name="valueStatus"
                 value={valueStatus}
                 onChange={(e) =>
                   setValueStatus(e.target.value as 'ESTIMATED' | 'ACTUAL' | 'CREDIT')
                 }
                 disabled={saving}
               >
-                <option value="ACTUAL">Actual (Invoiced Amount)</option>
-                <option value="ESTIMATED">Estimated (Provisional Quote)</option>
-                <option value="CREDIT">Supplier Credit / Rebate</option>
-              </select>
+                <NativeSelectOption value="ACTUAL">Actual (Invoiced Amount)</NativeSelectOption>
+                <NativeSelectOption value="ESTIMATED">
+                  Estimated (Provisional Quote)
+                </NativeSelectOption>
+                <NativeSelectOption value="CREDIT">Supplier Credit / Rebate</NativeSelectOption>
+              </NativeSelect>
             </SupplyField>
           </div>
 
           {/* Notes */}
           <SupplyField label="Notes (Optional)">
             <Textarea
-              placeholder="Vendor notes, port tariff details..."
+              name="notes"
+              placeholder="Vendor notes, port tariff details…"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -402,7 +412,7 @@ export function AddCostComponentDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

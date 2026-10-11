@@ -4,19 +4,14 @@ import Link from 'next/link';
 import {
   AlertCircle,
   Box,
-  Check,
   HelpCircle,
   Image as ImageIcon,
-  Info,
   Loader2,
   PackageOpen,
-  Plane,
   Plus,
   Ship,
   Sparkles,
-  Train,
   Trash2,
-  Truck,
   Warehouse,
 } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
@@ -32,12 +27,12 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -425,7 +420,7 @@ export function PlanShipmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(val) => (!val ? handleDialogClose() : onOpenChange(val))}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
+      <SupplyTaskDialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -528,7 +523,7 @@ export function PlanShipmentDialog({
                     className="gap-1 text-xs h-7"
                     onClick={handleAddAllFromFilteredPO}
                   >
-                    <Sparkles className="size-3 text-amber-500" />
+                    <Sparkles className="size-3 text-warning" />
                     <span>Add all {unaddedLinesForFilter.length} lines</span>
                   </Button>
                 ) : null}
@@ -700,6 +695,7 @@ export function PlanShipmentDialog({
                       Filter PO:
                     </span>
                     <NativeSelect
+                      name="purchaseFilter"
                       value={purchaseFilter}
                       className="h-8 text-xs w-auto min-w-[160px]"
                       onChange={(e) => {
@@ -804,6 +800,8 @@ export function PlanShipmentDialog({
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-1.5">
                                   <Input
+                                    name={`shipment-line-${draftLine.purchaseLineId}-quantity`}
+                                    aria-label={`Ship quantity for ${orig?.productTitle ?? 'purchase line'} ${orig?.optionSummary ?? orig?.sku ?? ''}`}
                                     type="number"
                                     min="0.000001"
                                     max={maxOpen}
@@ -843,6 +841,7 @@ export function PlanShipmentDialog({
                                   className="size-7 text-muted-foreground hover:text-destructive"
                                   disabled={saving}
                                   onClick={() => handleRemoveLine(draftLine.purchaseLineId)}
+                                  aria-label={`Remove ${orig?.productTitle ?? 'purchase line'} ${orig?.optionSummary ?? orig?.sku ?? ''} from shipment`}
                                   title="Remove line from shipment"
                                 >
                                   <Trash2 className="size-3.5" />
@@ -948,6 +947,8 @@ export function PlanShipmentDialog({
                     <div className="flex items-center gap-1.5">
                       <div className="relative">
                         <Input
+                          name="quickAddQuantity"
+                          aria-label="Quantity to add"
                           type="number"
                           min="0.000001"
                           max={activeLineToAddMax > 0 ? activeLineToAddMax : undefined}
@@ -1007,7 +1008,7 @@ export function PlanShipmentDialog({
             </DialogFooter>
           </form>
         )}
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

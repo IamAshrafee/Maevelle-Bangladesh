@@ -5,19 +5,14 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
-  Building2,
-  Calendar,
   CheckCircle,
   ExternalLink,
   Eye,
   FileCheck2,
-  HelpCircle,
-  Layers3,
   PackageCheck,
   Package,
   PackageOpen,
   RefreshCw,
-  RotateCcw,
   Search,
   Ship,
   Sparkles,
@@ -64,9 +59,10 @@ export function ReceivingWorkspace() {
 
   const canReceive = useAdminCapability('receiving.post');
   const canAdjust = useAdminCapability('receiving.adjust');
-  const canViewReceiving = useAdminCapability('receiving.view');
 
-  const activeTab = searchParams.get('tab') ?? 'intake'; // 'intake' | 'history' | 'resolution'
+  const requestedTab = searchParams.get('tab');
+  const activeTab =
+    requestedTab === 'history' || requestedTab === 'resolution' ? requestedTab : 'intake';
   const currentPage = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
   const PAGE_SIZE = 15;
 
@@ -80,7 +76,6 @@ export function ReceivingWorkspace() {
   const [overview, setOverview] = useState<SupplyOverviewDto>();
 
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -408,7 +403,7 @@ export function ReceivingWorkspace() {
           role="tab"
           aria-selected={activeTab === 'intake'}
           onClick={() => updateFilter({ tab: 'intake' })}
-          className={`min-h-10 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          className={`flex min-h-11 touch-manipulation items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'intake'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -427,7 +422,7 @@ export function ReceivingWorkspace() {
           role="tab"
           aria-selected={activeTab === 'history'}
           onClick={() => updateFilter({ tab: 'history' })}
-          className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          className={`min-h-11 touch-manipulation rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'history'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -441,7 +436,7 @@ export function ReceivingWorkspace() {
           role="tab"
           aria-selected={activeTab === 'resolution'}
           onClick={() => updateFilter({ tab: 'resolution' })}
-          className={`min-h-10 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          className={`flex min-h-11 touch-manipulation items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             activeTab === 'resolution'
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -460,6 +455,9 @@ export function ReceivingWorkspace() {
       <div className="relative max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          type="search"
+          name="receiving-search"
+          autoComplete="off"
           aria-label="Search receiving workspace"
           value={query}
           onChange={(e) => {
@@ -481,16 +479,105 @@ export function ReceivingWorkspace() {
               setQuery('');
               updateFilter({ q: null });
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            className="absolute right-1 top-1/2 grid size-9 -translate-y-1/2 touch-manipulation place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-4" />
           </button>
         ) : null}
       </div>
 
+      {activeTab === 'intake' ? (
+        <div className="grid gap-3 md:hidden">
+          {loading ? (
+            <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+              Checking warehouse arrival queue…
+            </p>
+          ) : null}
+          {!loading && arrivedShipments.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center">
+              <PackageCheck aria-hidden="true" className="mx-auto size-8 text-success" />
+              <h2 className="mt-3 font-semibold">Receiving Queue Is Clear</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Arrived shipments will appear here when physical counting can begin.
+              </p>
+            </div>
+          ) : null}
+          {!loading
+            ? arrivedShipments.map((shipment) => {
+                const allocated = shipment.allocations.reduce(
+                  (sum, allocation) => sum + Number(allocation.allocatedQuantity),
+                  0,
+                );
+                const received = shipment.allocations.reduce(
+                  (sum, allocation) => sum + Number(allocation.receivedQuantity),
+                  0,
+                );
+                return (
+                  <article key={shipment.id} className="rounded-xl border bg-card p-4 shadow-2xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/inbound-shipments/${shipment.id}?tab=receipts`}
+                          className="font-mono font-semibold text-primary hover:underline"
+                        >
+                          {shipment.shipmentNumber}
+                        </Link>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {shipment.receivingLocationName} · arrived{' '}
+                          {formatSupplyDate(shipment.arrivedAt)}
+                        </p>
+                      </div>
+                      <StatusBadge status={shipment.receivingStatus} />
+                    </div>
+                    <div className="mt-3 flex gap-2 overflow-hidden">
+                      {shipment.allocations.slice(0, 4).map((allocation) => (
+                        <div
+                          key={allocation.id}
+                          className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted"
+                          title={`${allocation.productTitle} · ${allocation.optionSummary ?? allocation.sku}`}
+                        >
+                          {allocation.primaryImageUrl ? (
+                            <img
+                              src={allocation.primaryImageUrl}
+                              alt={`${allocation.productTitle} ${allocation.optionSummary ?? allocation.sku}`}
+                              width={48}
+                              height={48}
+                              loading="lazy"
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <Package aria-hidden="true" className="size-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 font-mono text-xs text-muted-foreground tabular-nums">
+                      {formatSupplyNumber(String(Math.max(0, allocated - received)))} units
+                      remaining across {shipment.allocations.length} variant lines
+                    </p>
+                    {canReceive ? (
+                      <Button className="mt-4 w-full" onClick={() => openReceiveDialog(shipment)}>
+                        <PackageOpen aria-hidden="true" className="size-4" /> Count & Receive
+                      </Button>
+                    ) : (
+                      <Button
+                        className="mt-4 w-full"
+                        variant="outline"
+                        render={<Link href={`/inbound-shipments/${shipment.id}?tab=receipts`} />}
+                      >
+                        Review Shipment
+                      </Button>
+                    )}
+                  </article>
+                );
+              })
+            : null}
+        </div>
+      ) : null}
+
       {/* Tab Content: Intake Queue */}
       {activeTab === 'intake' ? (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -623,9 +710,84 @@ export function ReceivingWorkspace() {
         </div>
       ) : null}
 
+      {activeTab === 'history' ? (
+        <div className="grid gap-3 md:hidden">
+          {loading ? (
+            <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading receipt vouchers…
+            </p>
+          ) : null}
+          {!loading && receipts.length === 0 ? (
+            <p className="rounded-xl border border-dashed bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+              No receipt vouchers match this search.
+            </p>
+          ) : null}
+          {!loading
+            ? receipts.map((receipt) => {
+                const units = receipt.lines.reduce((sum, line) => sum + Number(line.quantity), 0);
+                return (
+                  <article key={receipt.id} className="rounded-xl border bg-card p-4 shadow-2xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/receiving/${receipt.id}`}
+                          className="font-mono font-semibold text-primary hover:underline"
+                        >
+                          {receipt.receiptNumber}
+                        </Link>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {receipt.shipmentNumber} · {receipt.locationName}
+                        </p>
+                      </div>
+                      <StatusBadge status={receipt.status} />
+                    </div>
+                    <div className="mt-3 flex gap-2 overflow-hidden">
+                      {receipt.lines.slice(0, 4).map((line) => (
+                        <div
+                          key={line.id}
+                          className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted"
+                          title={`${line.productTitle} · ${line.sku}`}
+                        >
+                          {line.primaryImageUrl ? (
+                            <img
+                              src={line.primaryImageUrl}
+                              alt={`${line.productTitle} ${line.sku}`}
+                              width={48}
+                              height={48}
+                              loading="lazy"
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <Package aria-hidden="true" className="size-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
+                      <div className="text-xs text-muted-foreground">
+                        <p className="font-mono tabular-nums">
+                          {formatSupplyNumber(String(units))} units counted
+                        </p>
+                        <p>{formatSupplyDate(receipt.postedAt)}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        render={<Link href={`/receiving/${receipt.id}`} />}
+                      >
+                        Open Receipt
+                      </Button>
+                    </div>
+                  </article>
+                );
+              })
+            : null}
+        </div>
+      ) : null}
+
       {/* Tab Content: History */}
       {activeTab === 'history' ? (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -757,9 +919,77 @@ export function ReceivingWorkspace() {
         </div>
       ) : null}
 
+      {activeTab === 'resolution' ? (
+        <div className="grid gap-3 md:hidden">
+          {nonSellableLines.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center">
+              <CheckCircle aria-hidden="true" className="mx-auto size-8 text-success" />
+              <h2 className="mt-3 font-semibold">No Conditions Need Resolution</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Quarantined and inspection items will appear here.
+              </p>
+            </div>
+          ) : null}
+          {nonSellableLines.map(({ receipt, line }) => (
+            <article
+              key={`${receipt.id}-${line.id}`}
+              className="rounded-xl border bg-card p-4 shadow-2xs"
+            >
+              <div className="flex gap-3">
+                <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                  {line.primaryImageUrl ? (
+                    <img
+                      src={line.primaryImageUrl}
+                      alt={`${line.productTitle} ${line.sku}`}
+                      width={64}
+                      height={64}
+                      loading="lazy"
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    <Package aria-hidden="true" className="size-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 font-medium">{line.productTitle}</p>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">{line.sku}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Badge variant={line.condition === 'DAMAGED' ? 'destructive' : 'secondary'}>
+                      {line.condition}
+                    </Badge>
+                    <span className="font-mono text-xs tabular-nums">
+                      {formatSupplyNumber(line.quantity)} units
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
+                <Link
+                  href={`/receiving/${receipt.id}`}
+                  className="font-mono text-xs text-primary hover:underline"
+                >
+                  {receipt.receiptNumber}
+                </Link>
+                {canAdjust ? (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setResolvingReceipt(receipt);
+                      setResolvingLine(line);
+                    }}
+                  >
+                    Resolve Condition
+                  </Button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
       {/* Tab Content: Inspection Resolution Queue */}
       {activeTab === 'resolution' ? (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -876,6 +1106,35 @@ export function ReceivingWorkspace() {
         </div>
       ) : null}
 
+      {totalPages > 1 ? (
+        <div className="flex flex-col gap-3 border-t pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> · {totalItems}{' '}
+            records
+          </span>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 sm:h-8"
+              disabled={currentPage <= 1 || loading}
+              onClick={() => updateFilter({ page: String(currentPage - 1) })}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 sm:h-8"
+              disabled={currentPage >= totalPages || loading}
+              onClick={() => updateFilter({ page: String(currentPage + 1) })}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Receive Goods Dialog */}
       {receivingShipment ? (
         <ReceiveGoodsDialog
@@ -898,7 +1157,6 @@ export function ReceivingWorkspace() {
       {resolvingReceipt && resolvingLine ? (
         <ReceiptResolveConditionDialog
           line={resolvingLine}
-          receipt={resolvingReceipt}
           busy={resolvingBusy}
           onClose={() => {
             setResolvingLine(null);

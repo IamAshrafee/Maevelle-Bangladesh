@@ -1,38 +1,15 @@
 'use client';
 
-import {
-  Calendar,
-  Check,
-  CircleDollarSign,
-  Copy,
-  HelpCircle,
-  MapPin,
-  PackageCheck,
-  Truck,
-} from 'lucide-react';
+import { Check, Copy, HelpCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Progress } from '@/components/ui/progress';
-import {
-  Stats,
-  StatsCard,
-  StatsDescription,
-  StatsTitle,
-  StatsValue,
-} from '@/components/ui/stats';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  formatSupplyDate,
-  formatSupplyMoney,
-  formatSupplyNumber,
-} from '@/lib/supply/api';
+import { Stats, StatsCard, StatsDescription, StatsTitle, StatsValue } from '@/components/ui/stats';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatSupplyDate, formatSupplyMoney, formatSupplyNumber } from '@/lib/supply/api';
 import { percentage, shipmentQuantities } from '@/lib/supply/status';
 import type { ShipmentDetailStatsProps } from './types';
 
-export function ShipmentDetailStats({ shipment, worksheet }: ShipmentDetailStatsProps) {
+export function ShipmentDetailStats({ shipment }: ShipmentDetailStatsProps) {
   const [copiedTracking, setCopiedTracking] = useState(false);
   const totals = shipmentQuantities(shipment);
   const receivedPct = percentage(totals.received, totals.expected);
@@ -72,7 +49,8 @@ export function ShipmentDetailStats({ shipment, worksheet }: ShipmentDetailStats
         <StatsValue>
           {formatSupplyNumber(String(totals.received))}
           <span className="text-xs font-normal text-muted-foreground">
-            {' '}/ {formatSupplyNumber(String(totals.expected))}
+            {' '}
+            / {formatSupplyNumber(String(totals.expected))}
           </span>
         </StatsValue>
         <div className="mt-1.5 space-y-1">
@@ -82,7 +60,7 @@ export function ShipmentDetailStats({ shipment, worksheet }: ShipmentDetailStats
             {remaining > 0 ? (
               <span>{formatSupplyNumber(String(remaining))} units remaining</span>
             ) : (
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">All units accounted for</span>
+              <span className="font-medium text-success">All units accounted for</span>
             )}
           </StatsDescription>
         </div>
@@ -150,7 +128,7 @@ export function ShipmentDetailStats({ shipment, worksheet }: ShipmentDetailStats
                 }
               >
                 {copiedTracking ? (
-                  <Check className="size-3 text-emerald-600" />
+                  <Check className="size-3 text-success" />
                 ) : (
                   <Copy className="size-3" />
                 )}

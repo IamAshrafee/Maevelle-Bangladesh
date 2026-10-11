@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, DollarSign, FileText, Package, Ship } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type {
@@ -49,6 +50,9 @@ import type {
 } from './purchase-detail/types';
 
 export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const canManage = useAdminCapability('procurement.manage');
   const canViewShipments = useAdminCapability('inbound_shipment.view');
   const canManageShipments = useAdminCapability('inbound_shipment.manage');
@@ -86,6 +90,21 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
   const [planShipmentOpen, setPlanShipmentOpen] = useState(false);
 
   const canCreateInvoice = canCreateInvoiceCapability && purchase?.status === 'PLACED';
+  const requestedTab = searchParams.get('tab');
+  const activeTab =
+    requestedTab === 'shipments' || requestedTab === 'overview'
+      ? requestedTab
+      : requestedTab === 'finance' && canViewFinance
+        ? 'finance'
+        : 'items';
+
+  function changeTab(value: string) {
+    const next = new URLSearchParams(searchParams.toString());
+    if (value === 'items') next.delete('tab');
+    else next.set('tab', value);
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
   async function load(signal?: AbortSignal) {
     setState('loading');
@@ -466,7 +485,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
         />
 
         {/* Tabbed Focused Workspaces */}
-        <Tabs defaultValue="items" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={changeTab} className="space-y-4">
           <TabsList variant="default" className="w-full justify-start overflow-x-auto">
             <TabsTrigger value="items" className="gap-2">
               <Package className="size-4" />
@@ -505,7 +524,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           </TabsList>
 
           {/* Tab 1: Purchase Items */}
-          <TabsContent value="items" className="space-y-4 pt-1 outline-none">
+          <TabsContent value="items" className="space-y-4 pt-1">
             <PurchaseDetailItemsTable
               purchase={purchase}
               canManage={canManage}
@@ -518,7 +537,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           </TabsContent>
 
           {/* Tab 2: Inbound Shipments */}
-          <TabsContent value="shipments" className="space-y-4 pt-1 outline-none">
+          <TabsContent value="shipments" className="space-y-4 pt-1">
             <PurchaseDetailShipmentsTab
               purchase={purchase}
               shipments={shipments}
@@ -529,7 +548,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
 
           {/* Tab 3: Finance & Invoices */}
           {canViewFinance ? (
-            <TabsContent value="finance" className="space-y-4 pt-1 outline-none">
+            <TabsContent value="finance" className="space-y-4 pt-1">
               <PurchaseDetailFinanceTab
                 purchase={purchase}
                 invoices={invoices}
@@ -546,7 +565,7 @@ export function PurchaseDetail({ purchaseId }: { purchaseId: string }) {
           ) : null}
 
           {/* Tab 4: Overview & Details */}
-          <TabsContent value="overview" className="space-y-4 pt-1 outline-none">
+          <TabsContent value="overview" className="space-y-4 pt-1">
             <PurchaseDetailOverviewTab
               purchase={purchase}
               suppliers={suppliers}

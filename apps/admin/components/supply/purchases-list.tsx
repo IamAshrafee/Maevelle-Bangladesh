@@ -4,25 +4,15 @@ import { useEffect, useState, useDeferredValue } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Building2,
-  Calendar,
-  Check,
-  ChevronDown,
   ChevronRight,
   Download,
-  ExternalLink,
-  Eye,
-  FilePlus2,
   FileText,
-  Filter,
   Package,
   PackageCheck,
   PackageOpen,
   Plus,
   RefreshCw,
   Search,
-  Ship,
-  Trash2,
   Truck,
   X,
 } from 'lucide-react';
@@ -34,16 +24,8 @@ import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
   Table,
@@ -53,7 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   formatSupplyDate,
   formatSupplyMoney,
@@ -63,7 +44,6 @@ import {
 import { purchaseWorkflowStatus } from '@/lib/supply/status';
 import { CreatePurchaseDialog } from './create-purchase-dialog';
 import { SupplyWorkspaceNav } from './supply-workspace-nav';
-import { PlanShipmentDialog } from './plan-shipment-dialog';
 
 const STATUS_TABS = [
   { value: 'ALL', label: 'All Orders' },
@@ -78,7 +58,6 @@ export function PurchasesList() {
   const searchParams = useSearchParams();
 
   const canManageProcurement = useAdminCapability('procurement.manage');
-  const canManageShipments = useAdminCapability('inbound_shipment.manage');
 
   const [query, setQuery] = useState(searchParams.get('q') ?? '');
   const deferredQuery = useDeferredValue(query.trim());
@@ -96,14 +75,11 @@ export function PurchasesList() {
   const [suppliers, setSuppliers] = useState<readonly SupplierDto[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   // Dialog states
   const [createOpen, setCreateOpen] = useState(searchParams.get('create') === 'purchase');
-  const [planShipmentOpen, setPlanShipmentOpen] = useState(false);
-  const [targetPurchaseIdForShipment, setTargetPurchaseIdForShipment] = useState<string>();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
 
@@ -177,36 +153,6 @@ export function PurchasesList() {
       else next.add(id);
       return next;
     });
-  }
-
-  async function handlePlaceOrder(purchase: PurchaseDto) {
-    if (!canManageProcurement) return;
-    setBusy(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      await supplyRequest(`/admin/purchases/${purchase.id}/place`, {
-        method: 'POST',
-        headers: { 'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({ version: purchase.version }),
-      });
-      setSuccess(`Purchase order ${purchase.purchaseNumber} placed successfully.`);
-      // Refresh list
-      router.refresh();
-      const params = new URLSearchParams();
-      params.set('page', String(currentPage));
-      params.set('pageSize', String(PAGE_SIZE));
-      if (deferredQuery) params.set('q', deferredQuery);
-      if (currentStatus !== 'ALL') params.set('status', currentStatus);
-      const res = await supplyRequest<PagedEnvelope<PurchaseDto>>(
-        `/admin/purchases?${params.toString()}`,
-      );
-      setPurchases(res.data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to place purchase order.');
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function exportCsv() {
@@ -299,22 +245,22 @@ export function PurchasesList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canManageProcurement ? (
+            <Button size="sm" onClick={() => setCreateOpen(true)} className="h-11 gap-1.5 sm:h-8">
+              <Plus aria-hidden="true" className="size-4" />
+              <span>New Purchase</span>
+            </Button>
+          ) : null}
+
           <Button
             variant="outline"
             size="sm"
             onClick={() => void exportCsv()}
             disabled={exporting || loading}
           >
-            <Download className="size-4" />
+            <Download aria-hidden="true" className="size-4" />
             <span>{exporting ? 'Exporting…' : 'Export CSV'}</span>
           </Button>
-
-          {canManageProcurement ? (
-            <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
-              <Plus className="size-4" />
-              <span>New Purchase Order</span>
-            </Button>
-          ) : null}
         </div>
       </div>
 
@@ -407,7 +353,7 @@ export function PurchasesList() {
                 role="tab"
                 aria-selected={isSelected}
                 onClick={() => updateFilter({ status: tab.value === 'ALL' ? null : tab.value })}
-                className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`min-h-11 touch-manipulation rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   isSelected
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -424,6 +370,9 @@ export function PurchasesList() {
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              type="search"
+              name="purchase-search"
+              autoComplete="off"
               aria-label="Search purchase orders"
               value={query}
               onChange={(e) => {
@@ -441,7 +390,7 @@ export function PurchasesList() {
                   setQuery('');
                   updateFilter({ q: null });
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-1 top-1/2 grid size-9 -translate-y-1/2 touch-manipulation place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="size-4" />
               </button>
@@ -450,11 +399,12 @@ export function PurchasesList() {
 
           <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
+              name="purchase-supplier-filter"
               aria-label="Filter purchases by supplier"
               value={currentSupplier}
               onChange={(e) => updateFilter({ supplier: e.target.value || null })}
               size="sm"
-              className="w-44"
+              className="h-11 w-44 sm:h-8"
             >
               <NativeSelectOption value="">All Suppliers</NativeSelectOption>
               {suppliers.map((s) => (
@@ -465,11 +415,12 @@ export function PurchasesList() {
             </NativeSelect>
 
             <NativeSelect
+              name="purchase-currency-filter"
               aria-label="Filter purchases by currency"
               value={currentCurrency}
               onChange={(e) => updateFilter({ currency: e.target.value || null })}
               size="sm"
-              className="w-32"
+              className="h-11 w-32 sm:h-8"
             >
               <NativeSelectOption value="">All Currencies</NativeSelectOption>
               <NativeSelectOption value="CNY">CNY</NativeSelectOption>
@@ -495,8 +446,105 @@ export function PurchasesList() {
         </div>
       </div>
 
+      <div className="grid gap-3 md:hidden">
+        {loading ? (
+          <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+            Loading purchase orders…
+          </p>
+        ) : null}
+        {!loading && purchases.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center">
+            <Package aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
+            <h2 className="mt-3 font-semibold">No Purchase Orders Found</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Clear the filters or create a purchase for a supplier.
+            </p>
+          </div>
+        ) : null}
+        {!loading
+          ? purchases.map((purchase) => {
+              const workflow = purchaseWorkflowStatus(purchase);
+              const ordered = purchase.lines.reduce((sum, line) => sum + Number(line.quantity), 0);
+              const received = purchase.lines.reduce(
+                (sum, line) => sum + Number(line.receivedQuantity),
+                0,
+              );
+              return (
+                <article key={purchase.id} className="rounded-xl border bg-card p-4 shadow-2xs">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/purchases/${purchase.id}`}
+                        className="block truncate font-mono font-semibold text-primary hover:underline"
+                      >
+                        {purchase.purchaseNumber}
+                      </Link>
+                      <Link
+                        href={`/suppliers/${purchase.supplierId}`}
+                        className="mt-1 block truncate text-sm font-medium hover:underline"
+                      >
+                        {purchase.supplierName}
+                      </Link>
+                    </div>
+                    <StatusBadge status={workflow} />
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2">
+                    {purchase.lines.slice(0, 3).map((line) => (
+                      <div
+                        key={line.id}
+                        className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted"
+                        title={`${line.productTitle} · ${line.optionSummary ?? line.sku}`}
+                      >
+                        {line.primaryImageUrl ? (
+                          <img
+                            src={line.primaryImageUrl}
+                            alt={`${line.productTitle} ${line.optionSummary ?? line.sku}`}
+                            width={48}
+                            height={48}
+                            loading="lazy"
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <Package aria-hidden="true" className="size-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    ))}
+                    <div className="min-w-0 text-xs text-muted-foreground">
+                      <p>
+                        {purchase.lines.length} variant line{purchase.lines.length === 1 ? '' : 's'}
+                      </p>
+                      <p className="font-mono tabular-nums">
+                        {formatSupplyNumber(String(received))} /{' '}
+                        {formatSupplyNumber(String(ordered))} units received
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-end justify-between gap-3 border-t pt-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Purchase Value</p>
+                      <p className="font-mono font-semibold tabular-nums">
+                        {formatSupplyMoney(purchase.totalAmount, purchase.currencyCode)}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      render={<Link href={`/purchases/${purchase.id}`} />}
+                      className="h-11"
+                    >
+                      Open Purchase
+                      <ChevronRight aria-hidden="true" className="size-4" />
+                    </Button>
+                  </div>
+                </article>
+              );
+            })
+          : null}
+      </div>
+
       {/* Main Table */}
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -548,16 +596,10 @@ export function PurchasesList() {
                 const isExpanded = expandedRows.has(purchase.id);
                 const workflow = purchaseWorkflowStatus(purchase);
                 const orderedUnits = purchase.lines.reduce((s, l) => s + Number(l.quantity), 0);
-                const allocatedUnits = purchase.lines.reduce(
-                  (s, l) => s + Number(l.allocatedQuantity),
-                  0,
-                );
                 const receivedUnits = purchase.lines.reduce(
                   (s, l) => s + Number(l.receivedQuantity),
                   0,
                 );
-                const unallocatedUnits = Math.max(0, orderedUnits - allocatedUnits);
-
                 return (
                   <TableRow key={purchase.id} className="group hover:bg-muted/40">
                     {/* Expand Chevron */}
@@ -669,67 +711,17 @@ export function PurchasesList() {
                       </div>
                     </TableCell>
 
-                    {/* Actions Dropdown */}
+                    {/* Mutations live in the purchase detail workspace. */}
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              className="size-8 p-0"
-                              title="Order options"
-                            >
-                              <span className="sr-only">Open menu</span>
-                              <Eye className="size-4" />
-                            </Button>
-                          }
-                        />
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem
-                            render={
-                              <Link
-                                href={`/purchases/${purchase.id}`}
-                                className="w-full flex items-center gap-2"
-                              />
-                            }
-                          >
-                            <Eye className="size-4" />
-                            <span>View Details</span>
-                          </DropdownMenuItem>
-
-                          {purchase.status === 'DRAFT' && canManageProcurement ? (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                disabled={busy || purchase.lines.length === 0}
-                                onClick={() => void handlePlaceOrder(purchase)}
-                                className="text-primary font-medium"
-                              >
-                                <Check className="size-4" />
-                                <span>Place Order</span>
-                              </DropdownMenuItem>
-                            </>
-                          ) : null}
-
-                          {purchase.status === 'PLACED' &&
-                          canManageShipments &&
-                          unallocatedUnits > 0 ? (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setTargetPurchaseIdForShipment(purchase.id);
-                                  setPlanShipmentOpen(true);
-                                }}
-                              >
-                                <Ship className="size-4" />
-                                <span>Plan Shipment</span>
-                              </DropdownMenuItem>
-                            </>
-                          ) : null}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        render={<Link href={`/purchases/${purchase.id}`} />}
+                        className="gap-1.5 whitespace-nowrap"
+                      >
+                        <span>Open Purchase</span>
+                        <ChevronRight aria-hidden="true" className="size-3.5" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
@@ -850,6 +842,33 @@ export function PurchasesList() {
         ) : null}
       </div>
 
+      {totalPages > 1 ? (
+        <div className="flex flex-col gap-3 border-t pt-4 text-xs text-muted-foreground md:hidden">
+          <span>
+            Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> · {totalItems}{' '}
+            purchases
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1 || loading}
+              onClick={() => updateFilter({ page: String(currentPage - 1) })}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages || loading}
+              onClick={() => updateFilter({ page: String(currentPage + 1) })}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Creation Modal */}
       <CreatePurchaseDialog
         open={createOpen}
@@ -857,18 +876,6 @@ export function PurchasesList() {
         onSuccess={(created) => {
           setSuccess(`Purchase order ${created.purchaseNumber} created.`);
           router.push(`/purchases/${created.id}`);
-        }}
-      />
-
-      {/* Plan Shipment Modal */}
-      <PlanShipmentDialog
-        open={planShipmentOpen}
-        onOpenChange={setPlanShipmentOpen}
-        defaultPurchaseId={targetPurchaseIdForShipment}
-        onSuccess={(shipment) => {
-          setPlanShipmentOpen(false);
-          setSuccess(`Inbound shipment ${shipment?.shipmentNumber ?? ''} planned.`);
-          if (shipment?.id) router.push(`/inbound-shipments/${shipment.id}`);
         }}
       />
     </main>

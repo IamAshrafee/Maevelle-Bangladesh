@@ -357,7 +357,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
       {success ? <OperationalFeedback>{success}</OperationalFeedback> : null}
 
       {/* 4-Card Executive KPI Strip */}
-      <ShipmentDetailStats shipment={shipment} worksheet={worksheet} />
+      <ShipmentDetailStats shipment={shipment} />
 
       {/* Tabbed Content Navigation */}
       <Tabs

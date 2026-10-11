@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { ExternalLink, Layers, Package, Search } from 'lucide-react';
+import { ExternalLink, Package, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -15,7 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatSupplyMoney, formatSupplyNumber, remainingSupplyQuantity } from '@/lib/supply/api';
 import { percentage } from '@/lib/supply/status';
 import type { ShipmentDetailItemsTableProps } from './types';
@@ -69,9 +68,12 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
         <div className="relative w-full sm:w-72">
           <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
+            type="search"
+            name="shipment-item-search"
+            autoComplete="off"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter by product, SKU, PO #..."
+            placeholder="Filter by product, SKU, or PO number…"
             className="h-8 pl-8 text-xs"
           />
         </div>
@@ -198,7 +200,7 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
                         <span
                           className={`font-medium tabular-nums ${
                             isFullyReceived
-                              ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                              ? 'font-semibold text-success'
                               : hasStarted
                                 ? 'text-primary'
                                 : 'text-muted-foreground'
@@ -216,9 +218,7 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
                   <TableCell className="text-right align-top">
                     <span
                       className={`font-medium tabular-nums ${
-                        remaining > 0
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-muted-foreground font-normal'
+                        remaining > 0 ? 'text-warning' : 'text-muted-foreground font-normal'
                       }`}
                     >
                       {formatSupplyNumber(String(remaining))}
@@ -250,10 +250,10 @@ export function ShipmentDetailItemsTable({ shipment }: ShipmentDetailItemsTableP
                 <TableCell className="text-right tabular-nums">
                   {formatSupplyNumber(String(totalAllocated))}
                 </TableCell>
-                <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                <TableCell className="text-right text-success tabular-nums">
                   {formatSupplyNumber(String(totalReceived))}
                 </TableCell>
-                <TableCell className="text-right tabular-nums text-amber-600 dark:text-amber-400">
+                <TableCell className="text-right text-warning tabular-nums">
                   {formatSupplyNumber(String(totalRemaining))}
                 </TableCell>
               </TableRow>

@@ -8,14 +8,12 @@ import {
   CostingHelpDialog,
   CostingSummary,
 } from '@/components/supply/costing-page-ui';
-import { LandedCostConsole } from '@/components/supply/landed-cost/landed-cost-console';
 import { Button } from '@/components/ui/button';
 import { supplyRequest as request } from '@/lib/supply/api';
 import type {
   Assignment,
   Cogs,
   CostingNotice as Notice,
-  CostingScreen as Screen,
   Layer,
   Valuation,
 } from '@/lib/supply/costing-types';
@@ -23,11 +21,7 @@ import type {
 const message = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
-export function CostingConsole({ section = 'costing' }: { readonly section?: Screen }) {
-  if (section === 'landed-cost') {
-    return <LandedCostConsole />;
-  }
-
+export function CostingConsole() {
   const [layers, setLayers] = useState<readonly Layer[]>([]);
   const [assignments, setAssignments] = useState<readonly Assignment[]>([]);
   const [cogs, setCogs] = useState<readonly Cogs[]>([]);
@@ -65,12 +59,11 @@ export function CostingConsole({ section = 'costing' }: { readonly section?: Scr
       <div className="mx-auto grid max-w-7xl gap-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-primary">
-              Inventory / Cost & valuation
-            </p>
+            <p className="text-sm font-medium text-primary">Inventory / Cost & valuation</p>
             <h1 className="text-3xl font-semibold tracking-tight">Costing</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Trace receipt-backed FIFO cost, inventory value, outbound assignments, and recognized COGS.
+              Trace receipt-backed FIFO cost, inventory value, outbound assignments, and recognized
+              COGS.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

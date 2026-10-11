@@ -39,10 +39,10 @@ const RECEIVING_STATUS_EXPLANATIONS: Record<string, string> = {
 
 function getTransportModeIcon(mode?: string) {
   const m = mode?.toUpperCase();
-  if (m === 'AIR') return <Plane className="size-3.5 text-sky-500" />;
-  if (m === 'ROAD') return <Truck className="size-3.5 text-amber-500" />;
-  if (m === 'RAIL') return <Train className="size-3.5 text-emerald-500" />;
-  return <Ship className="size-3.5 text-blue-500" />;
+  if (m === 'AIR') return <Plane className="size-3.5 text-info" />;
+  if (m === 'ROAD') return <Truck className="size-3.5 text-warning" />;
+  if (m === 'RAIL') return <Train className="size-3.5 text-success" />;
+  return <Ship className="size-3.5 text-info" />;
 }
 
 export function ShipmentDetailHeader({
@@ -122,7 +122,7 @@ export function ShipmentDetailHeader({
                 }
               >
                 {copied ? (
-                  <Check className="size-3.5 text-emerald-600" />
+                  <Check className="size-3.5 text-success" />
                 ) : (
                   <Copy className="size-3.5" />
                 )}

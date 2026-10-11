@@ -1,10 +1,4 @@
-import type {
-  CatalogVariantChoiceDto,
-  InboundShipmentDto,
-  PurchaseDto,
-  SupplierDto,
-  WarehouseLocationDto,
-} from '@maevelle/contracts';
+import type { PurchaseDto } from '@maevelle/contracts';
 
 export interface SupplierInvoice {
   id: string;

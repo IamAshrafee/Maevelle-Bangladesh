@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { SupplyField } from '@/components/supply/supply-field';
@@ -78,7 +78,7 @@ export function EditShipmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+      <SupplyTaskDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit Logistics Details</DialogTitle>
           <DialogDescription>
@@ -90,6 +90,7 @@ export function EditShipmentDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <SupplyField label="Transport Mode">
             <NativeSelect
+              name="transportMode"
               className="w-full"
               value={transportMode}
               onChange={(e) =>
@@ -107,6 +108,8 @@ export function EditShipmentDialog({
 
           <SupplyField label="Tracking / Bill of Lading / AWB #">
             <Input
+              name="trackingReference"
+              autoComplete="off"
               value={trackingReference}
               onChange={(e) => setTrackingReference(e.target.value)}
               placeholder="e.g. MSKU9281740 or AWB-784-90218"
@@ -116,6 +119,8 @@ export function EditShipmentDialog({
 
           <SupplyField label="Origin Port / City">
             <Input
+              name="originText"
+              autoComplete="off"
               value={originText}
               onChange={(e) => setOriginText(e.target.value)}
               placeholder="e.g. Guangzhou Port, China"
@@ -125,6 +130,7 @@ export function EditShipmentDialog({
 
           <SupplyField label="Expected Arrival Date (ETA)">
             <Input
+              name="expectedArrivalDate"
               type="date"
               value={expectedArrivalDate}
               onChange={(e) => setExpectedArrivalDate(e.target.value)}
@@ -137,6 +143,8 @@ export function EditShipmentDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <SupplyField label="Provider batch / shipment reference">
                 <Input
+                  name="providerReference"
+                  autoComplete="off"
                   value={providerReference}
                   onChange={(event) => setProviderReference(event.target.value)}
                   placeholder="e.g. CB-A-G-661"
@@ -145,6 +153,7 @@ export function EditShipmentDialog({
               </SupplyField>
               <SupplyField label="Weight unit">
                 <NativeSelect
+                  name="weightUnit"
                   className="w-full"
                   value={weightUnit}
                   onChange={(event) => setWeightUnit(event.target.value as 'KG' | 'LB')}
@@ -156,6 +165,7 @@ export function EditShipmentDialog({
               </SupplyField>
               <SupplyField label="Gross / received weight">
                 <Input
+                  name="grossWeight"
                   type="number"
                   min="0"
                   step="0.000001"
@@ -167,6 +177,7 @@ export function EditShipmentDialog({
               </SupplyField>
               <SupplyField label="Chargeable weight">
                 <Input
+                  name="chargeableWeight"
                   type="number"
                   min="0"
                   step="0.000001"
@@ -179,6 +190,7 @@ export function EditShipmentDialog({
               <SupplyField label="Freight rate">
                 <div className="flex gap-2">
                   <Input
+                    name="freightRate"
                     type="number"
                     min="0"
                     step="0.0001"
@@ -188,6 +200,7 @@ export function EditShipmentDialog({
                     disabled={saving}
                   />
                   <NativeSelect
+                    name="freightRateUnit"
                     className="w-32 shrink-0"
                     value={freightRateUnit}
                     onChange={(event) =>
@@ -203,6 +216,7 @@ export function EditShipmentDialog({
               </SupplyField>
               <SupplyField label={`Provider freight amount (${shipment.currencyCode})`}>
                 <Input
+                  name="providerFreightAmount"
                   type="number"
                   min="0"
                   step="0.0001"
@@ -229,11 +243,11 @@ export function EditShipmentDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? 'Saving changes...' : 'Save Logistics Details'}
+              {saving ? 'Saving changes…' : 'Save Logistics Details'}
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

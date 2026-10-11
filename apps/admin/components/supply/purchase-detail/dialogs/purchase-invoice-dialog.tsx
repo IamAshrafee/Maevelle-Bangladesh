@@ -1,13 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import {
   AlertCircle,
   Building2,
-  Calendar,
   CheckCircle2,
   CreditCard,
-  FileText,
   HelpCircle,
   Loader2,
   Receipt,
@@ -23,21 +20,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatSupplyMoney } from '@/lib/supply/api';
 import type { ExpenseCategory, FinancialAccount, SupplierInvoice } from '../types';
 
@@ -86,22 +79,17 @@ export function PurchaseInvoiceDialog({
 
   // Auto-detect default category
   const suggestedCategoryId =
-    activeCategories.find((c) =>
-      /procure|purchase|suppl|inventor|cogs|cost of goods/i.test(c.name),
-    )?.id ??
+    activeCategories.find((c) => /procure|purchase|suppl|inventor|cogs|cost of goods/i.test(c.name))
+      ?.id ??
     activeCategories[0]?.id ??
     '';
 
   const [categoryId, setCategoryId] = useState(suggestedCategoryId);
-  const [description, setDescription] = useState(
-    `Supplier invoice for ${purchase.purchaseNumber}`,
-  );
+  const [description, setDescription] = useState(`Supplier invoice for ${purchase.purchaseNumber}`);
   const [externalReference, setExternalReference] = useState('');
   const [payeeName, setPayeeName] = useState(purchase.supplierName);
   const [amount, setAmount] = useState(
-    remainingBalance > 0
-      ? String(remainingBalance)
-      : purchase.totalAmount || '0',
+    remainingBalance > 0 ? String(remainingBalance) : purchase.totalAmount || '0',
   );
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
@@ -128,7 +116,16 @@ export function PurchaseInvoiceDialog({
         setAccountId(eligibleAccounts[0].id);
       }
     }
-  }, [open, purchase, orderTotal, previouslyInvoiced, suggestedCategoryId, categoryId, eligibleAccounts, accountId]);
+  }, [
+    open,
+    purchase,
+    orderTotal,
+    previouslyInvoiced,
+    suggestedCategoryId,
+    categoryId,
+    eligibleAccounts,
+    accountId,
+  ]);
 
   const numAmount = Number(amount || 0);
   const isOverRemaining = remainingBalance > 0 && numAmount > remainingBalance;
@@ -158,7 +155,7 @@ export function PurchaseInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <SupplyTaskDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -203,9 +200,7 @@ export function PurchaseInvoiceDialog({
               <div className="flex items-center gap-1.5">
                 <strong
                   className={`font-mono text-sm ${
-                    remainingBalance > 0
-                      ? 'text-foreground font-bold'
-                      : 'text-emerald-600 dark:text-emerald-400'
+                    remainingBalance > 0 ? 'text-foreground font-bold' : 'text-success'
                   }`}
                 >
                   {formatSupplyMoney(String(remainingBalance), purchase.currencyCode)}
@@ -220,6 +215,7 @@ export function PurchaseInvoiceDialog({
                           size="icon-xs"
                           className="size-5 text-primary hover:bg-primary/10"
                           onClick={fillRemaining}
+                          aria-label="Fill remaining un-invoiced balance"
                         />
                       }
                     >
@@ -233,10 +229,11 @@ export function PurchaseInvoiceDialog({
           </div>
 
           {isFullyInvoiced ? (
-            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 pt-1">
+            <div className="flex items-center gap-1.5 pt-1 text-warning">
               <AlertCircle className="size-3.5 shrink-0" />
               <span>
-                This purchase order is already fully invoiced. Additional invoices will exceed the original agreed PO value.
+                This purchase order is already fully invoiced. Additional invoices will exceed the
+                original agreed PO value.
               </span>
             </div>
           ) : null}
@@ -336,7 +333,8 @@ export function PurchaseInvoiceDialog({
                     onClick={fillRemaining}
                     className="text-[11px] text-primary hover:underline font-medium"
                   >
-                    Match balance ({formatSupplyMoney(String(remainingBalance), purchase.currencyCode)})
+                    Match balance (
+                    {formatSupplyMoney(String(remainingBalance), purchase.currencyCode)})
                   </button>
                 ) : null}
               </div>
@@ -352,7 +350,7 @@ export function PurchaseInvoiceDialog({
                 onChange={(e) => setAmount(e.target.value)}
               />
               {isOverRemaining ? (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                <p className="mt-1 text-[11px] text-warning">
                   Exceeds remaining PO balance by{' '}
                   {formatSupplyMoney(String(numAmount - remainingBalance), purchase.currencyCode)}.
                 </p>
@@ -406,6 +404,7 @@ export function PurchaseInvoiceDialog({
                     <FieldLabel htmlFor="invoice-pay-account">Disburse From Account</FieldLabel>
                     <NativeSelect
                       id="invoice-pay-account"
+                      name="accountId"
                       value={accountId}
                       required={immediatePayment}
                       disabled={busy}
@@ -414,7 +413,8 @@ export function PurchaseInvoiceDialog({
                     >
                       {eligibleAccounts.map((acc) => (
                         <NativeSelectOption key={acc.id} value={acc.id}>
-                          {acc.name} · Bal: {formatSupplyMoney(acc.ledger_balance, acc.currency_code)}
+                          {acc.name} · Bal:{' '}
+                          {formatSupplyMoney(acc.ledger_balance, acc.currency_code)}
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
@@ -425,13 +425,16 @@ export function PurchaseInvoiceDialog({
                     <FieldLabel htmlFor="invoice-payment-ref">Payment Reference #</FieldLabel>
                     <Input
                       id="invoice-payment-ref"
+                      name="paymentReference"
                       placeholder="e.g. Wire SWIFT ref, Check #, or Cash receipt"
                       value={paymentReference}
                       disabled={busy}
                       className="text-xs"
                       onChange={(e) => setPaymentReference(e.target.value)}
                     />
-                    <FieldDescription>Optional bank / cash confirmation reference.</FieldDescription>
+                    <FieldDescription>
+                      Optional bank / cash confirmation reference.
+                    </FieldDescription>
                   </Field>
                 </div>
               ) : null}
@@ -446,7 +449,7 @@ export function PurchaseInvoiceDialog({
               name="notes"
               value={notes}
               rows={2}
-              placeholder="e.g. Net 30 payment terms, 2% early payment discount, includes shipping and handling fees..."
+              placeholder="e.g. Net 30 payment terms, 2% early payment discount, includes shipping and handling fees…"
               disabled={busy}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -461,7 +464,9 @@ export function PurchaseInvoiceDialog({
             </DialogClose>
             <Button
               type="submit"
-              disabled={busy || !categoryId || !amount || numAmount <= 0 || !activeCategories.length}
+              disabled={
+                busy || !categoryId || !amount || numAmount <= 0 || !activeCategories.length
+              }
             >
               {busy ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -470,13 +475,11 @@ export function PurchaseInvoiceDialog({
               ) : (
                 <ReceiptText className="size-4" />
               )}
-              <span>
-                {immediatePayment ? 'Record & Post Payment' : 'Record Invoice'}
-              </span>
+              <span>{immediatePayment ? 'Record & Post Payment' : 'Record Invoice'}</span>
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

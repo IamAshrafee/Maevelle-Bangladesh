@@ -9,12 +9,12 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 
 export interface PurchaseEditDialogProps {
   readonly open: boolean;
@@ -50,9 +50,7 @@ export function PurchaseEditDialog({
   const [destinationLocationId, setDestinationLocationId] = useState(
     purchase.destinationLocationId ?? '',
   );
-  const [supplierReference, setSupplierReference] = useState(
-    purchase.supplierReference ?? '',
-  );
+  const [supplierReference, setSupplierReference] = useState(purchase.supplierReference ?? '');
   const [notes, setNotes] = useState(purchase.notes ?? '');
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -70,7 +68,7 @@ export function PurchaseEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <SupplyTaskDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit {purchase.purchaseNumber}</DialogTitle>
           <DialogDescription>
@@ -111,7 +109,7 @@ export function PurchaseEditDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

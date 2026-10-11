@@ -2,7 +2,7 @@
 
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
-import type { InboundReceiptDto, InboundReceiptLineDto } from '@maevelle/contracts';
+import type { InboundReceiptLineDto } from '@maevelle/contracts';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -27,7 +27,6 @@ import { Textarea } from '@/components/ui/textarea';
 
 export interface ReceiptResolveConditionDialogProps {
   readonly line: InboundReceiptLineDto | undefined;
-  readonly receipt: InboundReceiptDto;
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onResolve: (data: {
@@ -40,7 +39,6 @@ export interface ReceiptResolveConditionDialogProps {
 
 export function ReceiptResolveConditionDialog({
   line,
-  receipt,
   busy,
   onClose,
   onResolve,
@@ -83,8 +81,8 @@ export function ReceiptResolveConditionDialog({
             <DialogTitle>Resolve {currentLine.condition} Condition</DialogTitle>
           </div>
           <DialogDescription>
-            Reclassify inspected or quarantined stock for {currentLine.productTitle} ({currentLine.sku}).
-            Resolved items will adjust warehouse inventory states accordingly.
+            Reclassify inspected or quarantined stock for {currentLine.productTitle} (
+            {currentLine.sku}). Resolved items will adjust warehouse inventory states accordingly.
           </DialogDescription>
         </DialogHeader>
 
@@ -110,9 +108,12 @@ export function ReceiptResolveConditionDialog({
           </Field>
 
           <Field>
-            <FieldLabel htmlFor="resolve-quantity">Quantity to Resolve (Max: {currentLine.quantity})</FieldLabel>
+            <FieldLabel htmlFor="resolve-quantity">
+              Quantity to Resolve (Max: {currentLine.quantity})
+            </FieldLabel>
             <Input
               id="resolve-quantity"
+              name="quantity"
               type="number"
               min="1"
               max={currentLine.quantity}
@@ -133,7 +134,7 @@ export function ReceiptResolveConditionDialog({
               name="reason"
               value={reason}
               rows={2}
-              placeholder="e.g. Batch passed QC inspection test, visual packaging defect confirmed..."
+              placeholder="e.g. Batch passed QC inspection test, visual packaging defect confirmed…"
               disabled={busy}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -148,7 +149,11 @@ export function ReceiptResolveConditionDialog({
               disabled={busy || !quantity || Number(quantity) <= 0 || Number(quantity) > maxQty}
               className="gap-1.5"
             >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle className="size-4" />}
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <CheckCircle className="size-4" />
+              )}
               <span>Resolve Condition</span>
             </Button>
           </DialogFooter>

@@ -5,7 +5,6 @@ import { ExternalLink, Plane, Ship, Truck } from 'lucide-react';
 import type { InboundShipmentDto, PurchaseDto } from '@maevelle/contracts';
 
 import { StatusBadge } from '@/components/status-badge';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -15,11 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatSupplyDate } from '@/lib/supply/api';
 import { purchaseQuantities } from '@/lib/supply/status';
 
@@ -32,8 +27,8 @@ export interface PurchaseDetailShipmentsTabProps {
 
 function getTransportIcon(mode?: string) {
   const m = mode?.toUpperCase();
-  if (m === 'AIR' || m === 'EXPRESS') return <Plane className="size-3.5 text-sky-600 dark:text-sky-400" />;
-  if (m === 'ROAD' || m === 'COURIER') return <Truck className="size-3.5 text-amber-600 dark:text-amber-400" />;
+  if (m === 'AIR' || m === 'EXPRESS') return <Plane className="size-3.5 text-info" />;
+  if (m === 'ROAD' || m === 'COURIER') return <Truck className="size-3.5 text-warning" />;
   return <Ship className="size-3.5 text-primary" />;
 }
 
@@ -98,11 +93,7 @@ export function PurchaseDetailShipmentsTab({
             <TooltipTrigger
               render={
                 onPlanShipmentClick ? (
-                  <Button
-                    size="sm"
-                    onClick={onPlanShipmentClick}
-                    className="gap-1.5"
-                  />
+                  <Button size="sm" onClick={onPlanShipmentClick} className="gap-1.5" />
                 ) : (
                   <Button
                     size="sm"
@@ -160,7 +151,9 @@ export function PurchaseDetailShipmentsTab({
                 <TableCell>
                   <div className="flex items-center gap-1.5">
                     {getTransportIcon(shipment.transportMode)}
-                    <span className="text-xs font-medium capitalize">{shipment.transportMode.toLowerCase()}</span>
+                    <span className="text-xs font-medium capitalize">
+                      {shipment.transportMode.toLowerCase()}
+                    </span>
                   </div>
                 </TableCell>
 

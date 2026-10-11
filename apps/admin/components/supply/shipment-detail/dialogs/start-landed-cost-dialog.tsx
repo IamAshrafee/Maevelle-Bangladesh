@@ -1,17 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { CircleDollarSign, Coins, Info, Loader2, PackageCheck } from 'lucide-react';
+import { CircleDollarSign, Coins, Info, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import {
   Table,
   TableBody,
@@ -35,9 +35,7 @@ export function StartLandedCostDialog({
 }: StartLandedCostDialogProps) {
   const [notes, setNotes] = useState('');
 
-  const receivedAllocations = shipment.allocations.filter(
-    (a) => Number(a.receivedQuantity) > 0,
-  );
+  const receivedAllocations = shipment.allocations.filter((a) => Number(a.receivedQuantity) > 0);
 
   const totalReceivedUnits = receivedAllocations.reduce(
     (sum, a) => sum + Number(a.receivedQuantity),
@@ -57,7 +55,7 @@ export function StartLandedCostDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto sm:max-w-2xl">
+      <SupplyTaskDialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <div className="flex flex-wrap items-center gap-2">
             <DialogTitle className="text-xl font-bold tracking-tight">
@@ -68,8 +66,8 @@ export function StartLandedCostDialog({
             </Badge>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            Initialize an acquisition costing workspace for this shipment. Verified physical
-            receipt quantities become the baseline targets for apportioning freight and customs duties.
+            Initialize an acquisition costing workspace for this shipment. Verified physical receipt
+            quantities become the baseline targets for apportioning freight and customs duties.
           </DialogDescription>
         </DialogHeader>
 
@@ -85,7 +83,9 @@ export function StartLandedCostDialog({
               <div className="flex items-center gap-1.5">
                 <Coins className="size-3.5 text-primary" />
                 <p className="font-mono font-bold text-foreground">{shipment.currencyCode}</p>
-                <span className="text-[11px] text-muted-foreground">(Locked from purchase lines)</span>
+                <span className="text-[11px] text-muted-foreground">
+                  (Locked from purchase lines)
+                </span>
               </div>
             </div>
           </div>
@@ -130,7 +130,9 @@ export function StartLandedCostDialog({
                           {formatSupplyNumber(alloc.receivedQuantity)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">
-                          {alloc.unitPrice ? formatSupplyMoney(alloc.unitPrice, shipment.currencyCode) : '—'}
+                          {alloc.unitPrice
+                            ? formatSupplyMoney(alloc.unitPrice, shipment.currencyCode)
+                            : '—'}
                         </TableCell>
                         <TableCell className="text-right font-medium tabular-nums text-foreground">
                           {formatSupplyMoney(String(lineValue), shipment.currencyCode)}
@@ -158,6 +160,7 @@ export function StartLandedCostDialog({
           {/* Worksheet Notes Field */}
           <SupplyField label="Worksheet Reference / Forwarder Notes (Optional)">
             <Textarea
+              name="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. Inbound shipment container tracking #MSKU901284. Forwarder: DHL Global."
@@ -186,13 +189,21 @@ export function StartLandedCostDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving || !receivedAllocations.length} className="gap-1.5">
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <CircleDollarSign className="size-4" />}
+            <Button
+              type="submit"
+              disabled={saving || !receivedAllocations.length}
+              className="gap-1.5"
+            >
+              {saving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <CircleDollarSign className="size-4" />
+              )}
               <span>{saving ? 'Creating worksheet...' : 'Initialize Worksheet'}</span>
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

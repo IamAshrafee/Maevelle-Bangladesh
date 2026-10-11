@@ -52,7 +52,9 @@ export function PurchaseCancelInvoiceDialog({
               <Ban className="size-4" />
             </div>
             <div>
-              <DialogTitle className="text-base">Cancel Invoice {invoice.expense_number}</DialogTitle>
+              <DialogTitle className="text-base">
+                Cancel Invoice {invoice.expense_number}
+              </DialogTitle>
               <DialogDescription className="text-xs">
                 Void this supplier bill in Finance. The action will be logged in the audit trail.
               </DialogDescription>
@@ -80,7 +82,7 @@ export function PurchaseCancelInvoiceDialog({
             <Textarea
               id="cancel-invoice-reason"
               name="reason"
-              placeholder="Explain why this invoice is being cancelled (e.g. Duplicated entry, wrong supplier bill number, revised quotation)..."
+              placeholder="Explain why this invoice is being cancelled (e.g. duplicated entry, wrong supplier bill number, or revised quotation)…"
               value={reason}
               required
               minLength={4}
@@ -90,7 +92,8 @@ export function PurchaseCancelInvoiceDialog({
               onChange={(e) => setReason(e.target.value)}
             />
             <FieldDescription>
-              A meaningful reason of at least 4 characters is required for the financial audit record.
+              A meaningful reason of at least 4 characters is required for the financial audit
+              record.
             </FieldDescription>
           </Field>
 
@@ -98,11 +101,7 @@ export function PurchaseCancelInvoiceDialog({
             <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
               Keep invoice
             </DialogClose>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={busy || !isReasonValid}
-            >
+            <Button type="submit" variant="destructive" disabled={busy || !isReasonValid}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
               <span>Confirm cancellation</span>
             </Button>

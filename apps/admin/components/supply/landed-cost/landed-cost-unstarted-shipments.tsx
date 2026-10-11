@@ -48,7 +48,51 @@ export function LandedCostUnstartedShipments({
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border bg-card shadow-2xs">
+      <div className="grid gap-3 md:hidden">
+        {shipments.map((shipment) => {
+          const totalReceivedUnits = shipment.allocations.reduce(
+            (sum, allocation) => sum + Number(allocation.receivedQuantity),
+            0,
+          );
+          const shipmentHref = canManageCost
+            ? `/inbound-shipments/${shipment.id}?tab=costing&startCosting=1`
+            : `/inbound-shipments/${shipment.id}?tab=costing`;
+          return (
+            <article key={shipment.id} className="rounded-xl border bg-card p-4 shadow-2xs">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link
+                    href={shipmentHref}
+                    className="font-mono font-semibold text-primary hover:underline"
+                  >
+                    {shipment.shipmentNumber}
+                  </Link>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {shipment.receivingLocationName}
+                  </p>
+                </div>
+                <Badge variant="outline" className="font-mono text-[11px]">
+                  {shipment.currencyCode}
+                </Badge>
+              </div>
+              <p className="mt-3 font-mono text-xs text-muted-foreground tabular-nums">
+                {formatSupplyNumber(totalReceivedUnits.toString())} units ·{' '}
+                {shipment.allocations.length} variant lines
+              </p>
+              <Button
+                className="mt-4 w-full justify-between"
+                variant={canManageCost ? 'default' : 'outline'}
+                render={<Link href={shipmentHref} />}
+              >
+                <span>{canManageCost ? 'Start Landed Cost' : 'Review Shipment'}</span>
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </Button>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border bg-card shadow-2xs md:block">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 text-xs">

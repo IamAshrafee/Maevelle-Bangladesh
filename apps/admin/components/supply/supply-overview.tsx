@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import {
   AlertTriangle,
-  ArrowRight,
   Boxes,
   Building2,
   CheckCircle2,
@@ -47,7 +46,7 @@ const journey = [
   ['Purchases', 'What you ordered', ClipboardCheck, '/purchases'],
   ['Shipments', 'What is on the way', Ship, '/inbound-shipments'],
   ['Receiving', 'What physically arrived', PackageCheck, '/receiving'],
-  ['Final cost', 'True cost per received unit', CircleDollarSign, '/costing'],
+  ['Landed Cost', 'Allocate import costs to received units', CircleDollarSign, '/landed-cost'],
 ] as const;
 
 export function SupplyOverview() {
@@ -143,28 +142,26 @@ export function SupplyOverview() {
 
       {message ? <OperationalFeedback tone="danger">{message}</OperationalFeedback> : null}
 
-      <section
-        aria-label="Supply workflow"
-        className="overflow-x-auto rounded-xl border bg-card p-3"
-      >
-        <ol className="flex min-w-[680px] items-stretch">
+      <section aria-label="Supply workflow" className="rounded-xl border bg-card p-3">
+        <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           {journey.map(([label, detail, Icon, href], index) => (
-            <li className="flex min-w-0 flex-1 items-center" key={label}>
+            <li className="min-w-0" key={label}>
               <Link
                 href={href}
-                className="group flex min-w-0 flex-1 items-center gap-3 rounded-lg p-2 no-underline hover:bg-muted"
+                aria-label={`Step ${index + 1}: ${label}. ${detail}`}
+                className="group flex min-h-16 min-w-0 items-center gap-3 rounded-lg p-2 no-underline transition-colors duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation"
               >
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
-                  <Icon className="size-4" />
+                <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                  <Icon aria-hidden="true" className="size-4" />
+                  <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-primary font-mono text-[9px] font-semibold text-primary-foreground">
+                    {index + 1}
+                  </span>
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold">{label}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{detail}</span>
+                  <span className="block text-xs leading-4 text-muted-foreground">{detail}</span>
                 </span>
               </Link>
-              {index < journey.length - 1 ? (
-                <ArrowRight className="mx-1 size-4 shrink-0 text-muted-foreground/50" />
-              ) : null}
             </li>
           ))}
         </ol>
@@ -249,14 +246,14 @@ export function SupplyOverview() {
           </CardContent>
         </Card>
 
-        <Card id="receiving" className={receivingQueue.length ? 'border-amber-300/70' : undefined}>
+        <Card id="receiving" className={receivingQueue.length ? 'border-warning/40' : undefined}>
           <CardHeader className="flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 {receivingQueue.length ? (
-                  <AlertTriangle className="size-4 text-amber-600" />
+                  <AlertTriangle className="size-4 text-warning" />
                 ) : (
-                  <CheckCircle2 className="size-4 text-emerald-600" />
+                  <CheckCircle2 className="size-4 text-success" />
                 )}
                 Receiving queue
               </CardTitle>

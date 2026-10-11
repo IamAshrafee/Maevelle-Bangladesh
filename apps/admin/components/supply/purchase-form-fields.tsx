@@ -94,9 +94,7 @@ export function PurchaseFormFields({
               </NativeSelectOption>
             ))}
           </NativeSelect>
-          {commercialFieldsLocked && (
-            <input type="hidden" name="supplierId" value={supplierId} />
-          )}
+          {commercialFieldsLocked && <input type="hidden" name="supplierId" value={supplierId} />}
           <FieldDescription>
             {commercialFieldsLocked
               ? 'Supplier is locked because purchase lines already exist.'
@@ -113,9 +111,7 @@ export function PurchaseFormFields({
             value={currencyCode}
             disabled={commercialFieldsLocked || disabled}
             className="w-full"
-            onChange={(e) =>
-              onCurrencyChange(e.target.value as 'BDT' | 'CNY' | 'USD')
-            }
+            onChange={(e) => onCurrencyChange(e.target.value as 'BDT' | 'CNY' | 'USD')}
           >
             <NativeSelectOption value="BDT">BDT · Bangladeshi Taka</NativeSelectOption>
             <NativeSelectOption value="CNY">CNY · Chinese Yuan</NativeSelectOption>
@@ -262,7 +258,7 @@ export function PurchaseFormFields({
         <Textarea
           id="purchase-notes"
           name="notes"
-          placeholder="Terms, packaging instructions, freight specifications, or notes for receiving..."
+          placeholder="Terms, packaging instructions, freight specifications, or notes for receiving…"
           value={notes}
           disabled={disabled}
           rows={3}

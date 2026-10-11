@@ -5,12 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { SupplyField } from '@/components/supply/supply-field';
@@ -87,7 +87,7 @@ export function ReceiveGoodsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-6 sm:max-w-4xl">
+      <SupplyTaskDialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-6 sm:max-w-4xl">
         <DialogHeader>
           <div className="flex flex-wrap items-center gap-2">
             <DialogTitle className="text-xl font-bold tracking-tight">
@@ -242,7 +242,7 @@ export function ReceiveGoodsDialog({
                         isOver
                           ? 'font-medium text-destructive'
                           : counted === remaining && counted > 0
-                            ? 'text-emerald-600 dark:text-emerald-400'
+                            ? 'text-success'
                             : 'text-muted-foreground'
                       }`}
                     >
@@ -327,7 +327,7 @@ export function ReceiveGoodsDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

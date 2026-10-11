@@ -97,9 +97,7 @@ export function PurchaseEditLineDialog({
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="edit-line-price">
-                Unit Cost ({purchase.currencyCode})
-              </FieldLabel>
+              <FieldLabel htmlFor="edit-line-price">Unit Cost ({purchase.currencyCode})</FieldLabel>
               <Input
                 id="edit-line-price"
                 name="unitPrice"

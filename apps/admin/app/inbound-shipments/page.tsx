@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 import { ShipmentsList } from '@/components/supply/shipments-list';
 
 export const metadata: Metadata = {
@@ -7,7 +8,17 @@ export const metadata: Metadata = {
   description: 'Track freight shipments, arrival notices, and warehouse intake.',
 };
 
-export default function InboundShipmentsPage() {
+interface InboundShipmentsPageProps {
+  readonly searchParams: Promise<{ tab?: string | string[] | undefined }>;
+}
+
+export default async function InboundShipmentsPage({ searchParams }: InboundShipmentsPageProps) {
+  const { tab } = await searchParams;
+  const requestedTab = Array.isArray(tab) ? tab[0] : tab;
+
+  if (requestedTab === 'queue') redirect('/receiving');
+  if (requestedTab === 'receipts') redirect('/receiving?tab=history');
+
   return (
     <Suspense
       fallback={

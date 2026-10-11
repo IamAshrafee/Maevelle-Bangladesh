@@ -2,14 +2,10 @@
 
 import {
   AlertCircle,
-  AlertTriangle,
-  ArrowRight,
   CheckCircle,
   CheckCircle2,
   CircleDollarSign,
   Coins,
-  Copy,
-  HelpCircle,
   History,
   Info,
   PackageCheck,
@@ -146,7 +142,7 @@ export function ShipmentDetailCostingSection({
               <h3 className="font-heading text-base font-semibold">
                 Landed Cost & Stock Valuation
               </h3>
-              <Badge variant="outline" className="text-xs text-amber-600 dark:text-amber-400">
+              <Badge variant="outline" className="text-xs text-warning">
                 Awaiting Full Receipt
               </Badge>
             </div>
@@ -220,7 +216,7 @@ export function ShipmentDetailCostingSection({
               </h3>
               <Badge
                 variant="secondary"
-                className="gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200"
+                className="gap-1 border-success/30 bg-success/10 text-success"
               >
                 <CheckCircle2 className="size-3" />
                 <span>Ready for Landed Cost</span>
@@ -461,9 +457,9 @@ export function ShipmentDetailCostingSection({
 
       {/* Draft Adjustment Banner */}
       {isViewingDraft && Number(currentRev?.revision_number) > 1 ? (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs dark:border-amber-950/40 dark:bg-amber-950/20 text-amber-900 dark:text-amber-300">
+        <div className="flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2.5">
-            <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-warning" />
             <div className="space-y-0.5">
               <p className="font-semibold">
                 Revision #{currentRev?.revision_number} ({currentRev?.revision_kind}):
@@ -624,6 +620,7 @@ export function ShipmentDetailCostingSection({
                               className="size-7 text-muted-foreground hover:text-destructive shrink-0"
                               disabled={isDeleting || busy}
                               onClick={() => void handleDelete(comp.id)}
+                              aria-label={`Remove ${typeLabel} cost component`}
                             />
                           }
                         >
@@ -697,7 +694,7 @@ export function ShipmentDetailCostingSection({
                       {formatSupplyMoney(String(basePrice), result.currency_code)}
                     </TableCell>
 
-                    <TableCell className="text-right tabular-nums font-medium text-amber-600 dark:text-amber-400">
+                    <TableCell className="text-right font-medium text-warning tabular-nums">
                       +{formatSupplyMoney(String(unitAdded), result.currency_code)}
                     </TableCell>
 
@@ -727,7 +724,7 @@ export function ShipmentDetailCostingSection({
               <TableFooter>
                 <TableRow className="bg-muted/50 font-semibold text-xs">
                   <TableCell colSpan={3}>Grand Totals</TableCell>
-                  <TableCell className="text-right tabular-nums text-amber-600 dark:text-amber-400">
+                  <TableCell className="text-right text-warning tabular-nums">
                     +{formatSupplyMoney(String(additionalCostTotal), worksheet.base_currency_code)}
                   </TableCell>
                   <TableCell className="text-right">—</TableCell>

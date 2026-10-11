@@ -1,46 +1,31 @@
 'use client';
 
-import { type FormEvent, useEffect, useState, useDeferredValue } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useDeferredValue, useEffect, useState } from 'react';
 import {
-  Building2,
-  Calendar,
-  Check,
-  ChevronRight,
-  ExternalLink,
-  Eye,
-  Filter,
-  Package,
+  ArrowRight,
+  CalendarClock,
+  Image as ImageIcon,
   PackageCheck,
   PackageOpen,
   Plane,
   Plus,
-  RefreshCw,
-  RotateCcw,
   Search,
   Ship,
   Train,
   Truck,
-  Warehouse,
   X,
 } from 'lucide-react';
-import type { InboundReceiptDto, InboundShipmentDto, SupplyOverviewDto } from '@maevelle/contracts';
-import type { PagedEnvelope } from '@/lib/supply/types';
+import type { InboundShipmentDto, SupplyOverviewDto } from '@maevelle/contracts';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { StatusBadge } from '@/components/status-badge';
+import { SupplyWorkspaceNav } from '@/components/supply/supply-workspace-nav';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
@@ -51,17 +36,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  formatSupplyDate,
-  formatSupplyNumber,
-  remainingSupplyQuantity,
-  supplyRequest,
-} from '@/lib/supply/api';
-import type { ReceiptDraftLine } from '@/lib/supply/types';
+import { formatSupplyDate, formatSupplyNumber, supplyRequest } from '@/lib/supply/api';
+import type { PagedEnvelope } from '@/lib/supply/types';
 import { PlanShipmentDialog } from './plan-shipment-dialog';
-import { SupplyWorkspaceNav } from './supply-workspace-nav';
-import { ReceiveGoodsDialog } from './shipment-detail/dialogs/receive-goods-dialog';
 
+const PAGE_SIZE = 15;
 const TRANSPORT_MODES = [
   { value: 'ALL', label: 'All Modes' },
   { value: 'SEA', label: 'Sea Freight' },
@@ -70,944 +49,448 @@ const TRANSPORT_MODES = [
   { value: 'RAIL', label: 'Rail' },
   { value: 'OTHER', label: 'Other' },
 ] as const;
-
-const SHIPMENT_STATUS_TABS = [
-  { value: 'ALL', label: 'All Shipments' },
+const SHIPMENT_STATUSES = [
+  { value: 'ALL', label: 'All Statuses' },
   { value: 'PLANNED', label: 'Planned' },
   { value: 'IN_TRANSIT', label: 'In Transit' },
-  { value: 'ARRIVED', label: 'Arrived (Intake Ready)' },
+  { value: 'ARRIVED', label: 'Arrived' },
   { value: 'CANCELLED', label: 'Cancelled' },
 ] as const;
 
-function TransportIcon({ mode }: { mode: string }) {
-  const m = mode.toUpperCase();
-  if (m === 'AIR') return <Plane className="size-4 text-info" />;
-  if (m === 'ROAD') return <Truck className="size-4 text-warning" />;
-  if (m === 'RAIL') return <Train className="size-4 text-success" />;
-  return <Ship className="size-4 text-primary" />;
+function TransportIcon({ mode }: { readonly mode: string }) {
+  const normalized = mode.toUpperCase();
+  if (normalized === 'AIR') return <Plane aria-hidden="true" className="size-4 text-info" />;
+  if (normalized === 'ROAD') return <Truck aria-hidden="true" className="size-4 text-warning" />;
+  if (normalized === 'RAIL') return <Train aria-hidden="true" className="size-4 text-success" />;
+  return <Ship aria-hidden="true" className="size-4 text-primary" />;
+}
+
+function shipmentAction(shipment: InboundShipmentDto) {
+  if (shipment.status === 'PLANNED') return { label: 'Open to Record Departure', query: '' };
+  if (shipment.status === 'IN_TRANSIT') return { label: 'Open to Record Arrival', query: '' };
+  if (shipment.status === 'ARRIVED' && shipment.receivingStatus !== 'RECEIVED') {
+    return { label: 'Open Receiving', query: '?tab=receipts' };
+  }
+  if (shipment.receivingStatus === 'RECEIVED') {
+    return { label: 'Review Landed Cost', query: '?tab=costing' };
+  }
+  return { label: 'Open Shipment', query: '' };
+}
+
+function shipmentTotals(shipment: InboundShipmentDto) {
+  const allocated = shipment.allocations.reduce(
+    (sum, allocation) => sum + Number(allocation.allocatedQuantity),
+    0,
+  );
+  const received = shipment.allocations.reduce(
+    (sum, allocation) => sum + Number(allocation.receivedQuantity),
+    0,
+  );
+  return { allocated, received };
 }
 
 export function ShipmentsList() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const canManageShipments = useAdminCapability('inbound_shipment.manage');
-  const canReceive = useAdminCapability('receiving.post');
-  const canViewReceiving = useAdminCapability('receiving.view');
-
-  const activeTab = searchParams.get('tab') ?? 'shipments'; // 'shipments' | 'queue' | 'receipts'
-  const currentStatus = searchParams.get('status') ?? 'ALL';
-  const currentMode = searchParams.get('mode') ?? '';
-  const currentPage = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
-  const PAGE_SIZE = 15;
-
+  const status = searchParams.get('status') ?? 'ALL';
+  const mode = searchParams.get('mode') ?? 'ALL';
+  const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1', 10));
   const [query, setQuery] = useState(searchParams.get('q') ?? '');
   const deferredQuery = useDeferredValue(query.trim());
-
   const [shipments, setShipments] = useState<readonly InboundShipmentDto[]>([]);
-  const [receipts, setReceipts] = useState<readonly InboundReceiptDto[]>([]);
+  const [overview, setOverview] = useState<SupplyOverviewDto>();
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [overview, setOverview] = useState<SupplyOverviewDto>();
-
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  // Dialog states
+  const [error, setError] = useState<string>();
+  const [success, setSuccess] = useState<string>();
   const [planOpen, setPlanOpen] = useState(searchParams.get('create') === 'shipment');
-  const [receivingShipment, setReceivingShipment] = useState<InboundShipmentDto | null>(null);
-  const [receiptLines, setReceiptLines] = useState<ReceiptDraftLine[]>([]);
-  const [savingReceipt, setSavingReceipt] = useState(false);
-  const [expandedShipmentId, setExpandedShipmentId] = useState<string | null>(null);
 
-  // Load overview stats once
-  useEffect(() => {
-    supplyRequest<{ data: SupplyOverviewDto }>('/admin/supply/overview')
-      .then((res) => setOverview(res.data))
-      .catch(() => {});
-  }, []);
-
-  // Fetch data depending on activeTab
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError(null);
-
-    const params = new URLSearchParams();
-    params.set('page', String(currentPage));
-    params.set('pageSize', String(PAGE_SIZE));
-    if (deferredQuery) params.set('q', deferredQuery);
-
-    if (activeTab === 'receipts') {
-      supplyRequest<PagedEnvelope<InboundReceiptDto>>(
-        `/admin/inbound-receipts?${params.toString()}`,
-      )
-        .then((res) => {
-          if (!active) return;
-          setReceipts(res.data ?? []);
-          if (res.pagination) {
-            setTotalItems(res.pagination.totalItems);
-            setTotalPages(res.pagination.totalPages || 1);
-          }
-        })
-        .catch((err) => {
-          if (!active) return;
-          setError(err instanceof Error ? err.message : 'Failed to load receipt history.');
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    } else {
-      if (activeTab === 'queue') {
-        params.set('status', 'ARRIVED');
-        params.set('receivingStatus', 'NOT_RECEIVED,PARTIALLY_RECEIVED');
-      } else {
-        if (currentStatus !== 'ALL') params.set('status', currentStatus);
-        if (currentMode) params.set('transportMode', currentMode);
-      }
-
-      supplyRequest<PagedEnvelope<InboundShipmentDto>>(
-        `/admin/inbound-shipments?${params.toString()}`,
-      )
-        .then((res) => {
-          if (!active) return;
-          setShipments(res.data ?? []);
-          if (res.pagination) {
-            setTotalItems(res.pagination.totalItems);
-            setTotalPages(res.pagination.totalPages || 1);
-          }
-        })
-        .catch((err) => {
-          if (!active) return;
-          setError(err instanceof Error ? err.message : 'Failed to load inbound shipments.');
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    }
-
-    return () => {
-      active = false;
-    };
-  }, [activeTab, currentPage, deferredQuery, currentStatus, currentMode]);
-
-  function updateFilter(updates: Record<string, string | null>) {
+  function updateQuery(updates: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(updates)) {
-      if (value === null || value === '' || value === 'ALL') {
-        next.delete(key);
-      } else {
-        next.set(key, value);
-      }
+      if (!value || value === 'ALL') next.delete(key);
+      else next.set(key, value);
     }
-    if (!('page' in updates)) {
-      next.set('page', '1');
-    }
-    router.replace(`/inbound-shipments?${next.toString()}`, { scroll: false });
+    if (!('page' in updates)) next.delete('page');
+    const nextQuery = next.toString();
+    router.replace(nextQuery ? `/inbound-shipments?${nextQuery}` : '/inbound-shipments', {
+      scroll: false,
+    });
   }
 
-  async function handleDepart(shipment: InboundShipmentDto) {
-    if (!canManageShipments) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await supplyRequest(`/admin/inbound-shipments/${shipment.id}/depart`, {
-        method: 'POST',
-        headers: { 'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({ version: shipment.version }),
-      });
-      setSuccess(`Shipment ${shipment.shipmentNumber} marked as In Transit.`);
-      router.refresh();
-      // Reload current query
-      const params = new URLSearchParams();
-      params.set('page', String(currentPage));
-      params.set('pageSize', String(PAGE_SIZE));
-      if (currentStatus !== 'ALL') params.set('status', currentStatus);
-      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(
+  function setPlanDialog(open: boolean) {
+    setPlanOpen(open);
+    if (!open && searchParams.has('create')) updateQuery({ create: undefined });
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    if (deferredQuery) params.set('q', deferredQuery);
+    if (status !== 'ALL') params.set('status', status);
+    if (mode !== 'ALL') params.set('transportMode', mode);
+
+    setLoading(true);
+    setError(undefined);
+    void Promise.all([
+      supplyRequest<PagedEnvelope<InboundShipmentDto>>(
         `/admin/inbound-shipments?${params.toString()}`,
-      );
-      setShipments(res.data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to mark departure.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleArrive(shipment: InboundShipmentDto) {
-    if (!canManageShipments) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await supplyRequest(`/admin/inbound-shipments/${shipment.id}/arrive`, {
-        method: 'POST',
-        headers: { 'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({ version: shipment.version }),
-      });
-      setSuccess(`Arrival recorded for ${shipment.shipmentNumber}. Ready for warehouse intake.`);
-      router.refresh();
-      const params = new URLSearchParams();
-      params.set('page', String(currentPage));
-      params.set('pageSize', String(PAGE_SIZE));
-      if (currentStatus !== 'ALL') params.set('status', currentStatus);
-      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(
-        `/admin/inbound-shipments?${params.toString()}`,
-      );
-      setShipments(res.data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to record arrival.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function openReceiveDialog(shipment: InboundShipmentDto) {
-    setReceivingShipment(shipment);
-    // Pre-populate sellable lines
-    setReceiptLines(
-      shipment.allocations
-        .filter((a) => Number(a.receivedQuantity) < Number(a.allocatedQuantity))
-        .map((a) => ({
-          shipmentAllocationId: a.id,
-          condition: 'SELLABLE',
-          quantity: remainingSupplyQuantity(a.allocatedQuantity, a.receivedQuantity),
-        })),
-    );
-  }
-
-  async function handlePostReceiptSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!receivingShipment || !receiptLines.length) return;
-    setSavingReceipt(true);
-    setError(null);
-
-    const form = new FormData(event.currentTarget);
-    const packingSlip = form.get('packingSlipReference')?.toString().trim();
-    const notes = form.get('notes')?.toString().trim();
-
-    try {
-      await supplyRequest(`/admin/inbound-shipments/${receivingShipment.id}/receipts`, {
-        method: 'POST',
-        headers: { 'idempotency-key': crypto.randomUUID() },
-        body: JSON.stringify({
-          packingSlipReference: packingSlip || undefined,
-          notes: notes || undefined,
-          lines: receiptLines,
-        }),
+        { signal: controller.signal },
+      ),
+      supplyRequest<{ data: SupplyOverviewDto }>('/admin/supply/overview', {
+        signal: controller.signal,
+      }),
+    ])
+      .then(([shipmentResult, overviewResult]) => {
+        setShipments(shipmentResult.data);
+        setOverview(overviewResult.data);
+        setTotalItems(shipmentResult.pagination?.totalItems ?? shipmentResult.data.length);
+        setTotalPages(shipmentResult.pagination?.totalPages ?? 1);
+      })
+      .catch((loadError: unknown) => {
+        if (loadError instanceof DOMException && loadError.name === 'AbortError') return;
+        setError(
+          loadError instanceof Error ? loadError.message : 'Inbound shipments could not be loaded.',
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
 
-      setSuccess(`Receipt posted! Inventory stock and provisional cost layers updated.`);
-      setReceivingShipment(null);
-      setReceiptLines([]);
-      router.refresh();
+    return () => controller.abort();
+  }, [deferredQuery, mode, page, status]);
 
-      // Refresh shipments list
-      const params = new URLSearchParams();
-      params.set('page', String(currentPage));
-      params.set('pageSize', String(PAGE_SIZE));
-      const res = await supplyRequest<PagedEnvelope<InboundShipmentDto>>(
-        `/admin/inbound-shipments?${params.toString()}`,
-      );
-      setShipments(res.data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to post receiving voucher.');
-    } finally {
-      setSavingReceipt(false);
-    }
-  }
+  const metrics = [
+    ['Planned', overview?.plannedShipments ?? 0, 'Awaiting departure', PackageOpen],
+    ['In Transit', overview?.inTransitShipments ?? 0, 'Moving to warehouse', Truck],
+    ['Overdue', overview?.overdueShipments ?? 0, 'Past expected arrival', CalendarClock],
+    [
+      'Ready to Receive',
+      overview?.awaitingReceiptShipments ?? 0,
+      'Arrived for counting',
+      PackageCheck,
+    ],
+  ] as const;
 
   return (
     <main className="min-w-0 space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-heading text-2xl font-bold tracking-tight">Inbound Shipments</h1>
-            <Badge variant="outline" className="font-mono text-xs">
-              {totalItems} {totalItems === 1 ? 'record' : 'records'}
+      <header className="flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-pretty font-heading text-2xl font-bold tracking-tight">
+              Inbound Shipments
+            </h1>
+            <Badge variant="outline" className="font-mono text-xs tabular-nums">
+              {totalItems}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Track freight logistics from vendor dispatch through customs arrival and physical
-            warehouse receipt.
+          <p className="mt-1 max-w-3xl text-pretty text-sm text-muted-foreground">
+            Plan and monitor freight movement. Open a shipment to record lifecycle events,
+            receiving, and landed cost in one context.
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {canManageShipments ? (
-            <Button size="sm" onClick={() => setPlanOpen(true)} className="gap-1.5">
-              <Plus className="size-4" />
-              <span>Plan Inbound Shipment</span>
-            </Button>
-          ) : null}
-        </div>
-      </div>
+        {canManageShipments ? (
+          <Button
+            size="sm"
+            onClick={() => setPlanDialog(true)}
+            className="gap-1.5 self-start sm:self-auto"
+          >
+            <Plus aria-hidden="true" className="size-4" />
+            <span>Plan Shipment</span>
+          </Button>
+        ) : null}
+      </header>
 
       <SupplyWorkspaceNav />
 
-      {/* Operational Stats Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">In Transit</span>
-            <span className="rounded-md bg-info/10 p-1.5 text-info">
-              <Truck className="size-4" />
-            </span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">
-              {overview?.inTransitShipments ?? 0}
-            </span>
-            <span className="text-xs text-muted-foreground">En route to warehouse</span>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Awaiting Intake</span>
-            <span className="rounded-md bg-success/10 p-1.5 text-success">
-              <PackageCheck className="size-4" />
-            </span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">
-              {overview?.awaitingReceiptShipments ?? 0}
-            </span>
-            <span className="text-xs text-muted-foreground">Arrived at warehouse</span>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Planned</span>
-            <span className="rounded-md bg-muted p-1.5 text-muted-foreground">
-              <PackageOpen className="size-4" />
-            </span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">
-              {overview?.plannedShipments ?? 0}
-            </span>
-            <span className="text-xs text-muted-foreground">Awaiting departure</span>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Receipts Today</span>
-            <span className="rounded-md bg-primary/10 p-1.5 text-primary">
-              <Check className="size-4" />
-            </span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-heading text-2xl font-bold">{overview?.receiptsToday ?? 0}</span>
-            <span className="text-xs text-muted-foreground">Counted into stock</span>
-          </div>
-        </Card>
+        {metrics.map(([label, value, description, Icon]) => (
+          <Card key={label} className="p-3.5 shadow-2xs sm:p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                <p className="mt-1 font-mono text-2xl font-bold tabular-nums">{value}</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{description}</p>
+              </div>
+              <span className="rounded-lg bg-primary/10 p-2 text-primary">
+                <Icon aria-hidden="true" className="size-4" />
+              </span>
+            </div>
+          </Card>
+        ))}
       </div>
 
-      {/* Notifications / Feedback */}
       {error ? (
-        <OperationalFeedback tone="danger" onDismiss={() => setError(null)}>
-          {error}
+        <OperationalFeedback tone="danger" onDismiss={() => setError(undefined)}>
+          {error} Check your filters or retry the page.
         </OperationalFeedback>
       ) : null}
-
       {success ? (
-        <OperationalFeedback onDismiss={() => setSuccess(null)}>{success}</OperationalFeedback>
+        <OperationalFeedback onDismiss={() => setSuccess(undefined)}>{success}</OperationalFeedback>
       ) : null}
 
-      {/* Main Tabs Navigation */}
-      <div
-        role="tablist"
-        aria-label="Shipment workspace view"
-        className="flex flex-wrap items-center gap-2 border-b pb-2"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'shipments'}
-          onClick={() => updateFilter({ tab: 'shipments', status: null })}
-          className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-            activeTab === 'shipments'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
-        >
-          All Logistics Shipments
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'queue'}
-          onClick={() => updateFilter({ tab: 'queue', status: null })}
-          className={`min-h-10 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-            activeTab === 'queue'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
-        >
-          <span>Receiving Queue (Intake Ready)</span>
-          {(overview?.awaitingReceiptShipments ?? 0) > 0 ? (
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-              {overview?.awaitingReceiptShipments}
-            </Badge>
-          ) : null}
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'receipts'}
-          onClick={() => updateFilter({ tab: 'receipts', status: null })}
-          className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-            activeTab === 'receipts'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
-        >
-          Receipts History & Inventory Proofs
-        </button>
-      </div>
-
-      {/* Secondary Controls Bar */}
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label={activeTab === 'receipts' ? 'Search receipts' : 'Search inbound shipments'}
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              updateFilter({ q: e.target.value.trim() || null });
-            }}
-            placeholder={
-              activeTab === 'receipts'
-                ? 'Search receipts by RCV number, packing slip, notes…'
-                : 'Search shipments by number, tracking reference, origin…'
-            }
-            className="pl-9 text-sm"
-          />
-          {query ? (
-            <button
-              type="button"
-              aria-label="Clear shipment search"
-              onClick={() => {
-                setQuery('');
-                updateFilter({ q: null });
+      <section className="space-y-3" aria-label="Shipment filters and results">
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              name="shipment-search"
+              autoComplete="off"
+              aria-label="Search inbound shipments"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                updateQuery({ q: event.target.value.trim() || undefined });
               }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
-          ) : null}
-        </div>
-
-        {activeTab === 'shipments' ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <NativeSelect
-              aria-label="Filter shipments by status"
-              value={currentStatus}
-              onChange={(e) => updateFilter({ status: e.target.value || null })}
-              size="sm"
-              className="w-40"
-            >
-              {SHIPMENT_STATUS_TABS.map((t) => (
-                <NativeSelectOption key={t.value} value={t.value}>
-                  {t.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-
-            <NativeSelect
-              aria-label="Filter shipments by transport mode"
-              value={currentMode}
-              onChange={(e) => updateFilter({ mode: e.target.value || null })}
-              size="sm"
-              className="w-36"
-            >
-              {TRANSPORT_MODES.map((m) => (
-                <NativeSelectOption key={m.value} value={m.value}>
-                  {m.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-
-            {query || currentStatus !== 'ALL' || currentMode ? (
+              placeholder="Search shipment, tracking, provider, or origin…"
+              className="pl-9 pr-9"
+            />
+            {query ? (
               <Button
+                type="button"
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={() => {
                   setQuery('');
-                  updateFilter({ q: null, status: null, mode: null });
+                  updateQuery({ q: undefined });
                 }}
-                className="gap-1 text-xs text-muted-foreground hover:text-foreground"
+                className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+                aria-label="Clear shipment search"
               >
-                <X className="size-3.5" />
-                <span>Reset</span>
+                <X aria-hidden="true" className="size-3.5" />
               </Button>
             ) : null}
           </div>
-        ) : null}
-      </div>
-
-      {/* Table: Receipts Tab */}
-      {activeTab === 'receipts' ? (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Receipt #</TableHead>
-                <TableHead>Shipment Reference</TableHead>
-                <TableHead>Warehouse</TableHead>
-                <TableHead>Counted Quantities</TableHead>
-                <TableHead>Posted Timestamp</TableHead>
-                <TableHead className="text-right">Inventory Proof</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-44 text-center text-sm text-muted-foreground">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <RefreshCw className="size-5 animate-spin text-muted-foreground" />
-                      <span>Loading receipt history…</span>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : receipts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-48 text-center">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <PackageCheck className="size-8 text-muted-foreground/60" />
-                      <p className="font-heading text-sm font-semibold">
-                        No receiving vouchers found
-                      </p>
-                      <p className="max-w-xs text-xs text-muted-foreground">
-                        When warehouse workers count arrived shipments, permanent receipt vouchers
-                        appear here.
-                      </p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                receipts.map((receipt) => {
-                  const totalCounted = receipt.lines.reduce((s, l) => s + Number(l.quantity), 0);
-                  const damagedCount = receipt.lines
-                    .filter((l) => l.condition === 'DAMAGED')
-                    .reduce((s, l) => s + Number(l.quantity), 0);
-                  const quarantineCount = receipt.lines
-                    .filter((l) => l.condition === 'QUARANTINE' || l.condition === 'INSPECTION')
-                    .reduce((s, l) => s + Number(l.quantity), 0);
-
-                  return (
-                    <TableRow key={receipt.id} className="hover:bg-muted/40">
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <Link
-                            href={`/receiving/${receipt.id}`}
-                            className="font-heading font-semibold text-primary hover:underline"
-                          >
-                            {receipt.receiptNumber}
-                          </Link>
-                          <StatusBadge status={receipt.status} />
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <Link
-                            href={`/inbound-shipments/${receipt.shipmentId}`}
-                            className="font-medium hover:text-primary hover:underline"
-                          >
-                            {receipt.shipmentNumber}
-                          </Link>
-                          <span className="text-xs text-muted-foreground">
-                            {receipt.packingSlipReference
-                              ? `Slip: ${receipt.packingSlipReference}`
-                              : 'No slip recorded'}
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <Warehouse className="size-3.5 text-muted-foreground" />
-                          <span>{receipt.locationName}</span>
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium text-xs">
-                            {formatSupplyNumber(String(totalCounted))} total units
-                          </span>
-                          <div className="flex flex-wrap gap-1">
-                            {damagedCount > 0 ? (
-                              <Badge variant="destructive" className="text-[10px]">
-                                {damagedCount} Damaged
-                              </Badge>
-                            ) : null}
-                            {quarantineCount > 0 ? (
-                              <Badge
-                                variant="secondary"
-                                className="bg-warning/10 text-warning text-[10px]"
-                              >
-                                {quarantineCount} Quarantine
-                              </Badge>
-                            ) : null}
-                            {damagedCount === 0 && quarantineCount === 0 ? (
-                              <span className="text-xs text-muted-foreground">All sellable</span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatSupplyDate(receipt.postedAt)}
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Link
-                            href={`/inventory/history?q=${receipt.receiptNumber}`}
-                            className="inline-flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-xs font-medium text-primary hover:bg-muted"
-                            title="Verify stock ledger entry"
-                          >
-                            <span>Ledger Movement</span>
-                            <ExternalLink className="size-3" />
-                          </Link>
-
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            render={<Link href={`/receiving/${receipt.id}`} />}
-                          >
-                            <Eye className="size-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <NativeSelect
+              name="shipment-status-filter"
+              aria-label="Filter shipments by status"
+              value={status}
+              onChange={(event) => updateQuery({ status: event.target.value })}
+              size="sm"
+              className="h-11 w-full sm:h-8 sm:w-40"
+            >
+              {SHIPMENT_STATUSES.map((option) => (
+                <NativeSelectOption key={option.value} value={option.value}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            <NativeSelect
+              name="shipment-mode-filter"
+              aria-label="Filter shipments by transport mode"
+              value={mode}
+              onChange={(event) => updateQuery({ mode: event.target.value })}
+              size="sm"
+              className="h-11 w-full sm:h-8 sm:w-40"
+            >
+              {TRANSPORT_MODES.map((option) => (
+                <NativeSelectOption key={option.value} value={option.value}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
         </div>
-      ) : (
-        /* Table: Shipments Tab (All or Receiving Queue) */
-        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8"></TableHead>
-                <TableHead>Shipment & Mode</TableHead>
-                <TableHead>Origin / Destination</TableHead>
-                <TableHead>Logistics & Tracking</TableHead>
-                <TableHead>Allocated Goods</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-44 text-center text-sm text-muted-foreground">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <RefreshCw className="size-5 animate-spin text-muted-foreground" />
-                      <span>Loading inbound shipments…</span>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : shipments.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-48 text-center">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <Ship className="size-8 text-muted-foreground/60" />
-                      <p className="font-heading text-sm font-semibold">
-                        {activeTab === 'queue' ? 'Receiving queue is clear' : 'No shipments found'}
-                      </p>
-                      <p className="max-w-xs text-xs text-muted-foreground">
-                        {activeTab === 'queue'
-                          ? 'No shipments are currently arrived and waiting for intake.'
-                          : 'Plan a freight shipment from placed purchase orders to start tracking delivery.'}
-                      </p>
-                      {activeTab !== 'queue' && canManageShipments ? (
-                        <Button
-                          size="sm"
-                          onClick={() => setPlanOpen(true)}
-                          className="mt-2 gap-1.5"
+
+        {loading ? (
+          <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+            Loading inbound shipments…
+          </p>
+        ) : null}
+        {!loading && shipments.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center">
+            <Ship aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
+            <h2 className="mt-3 font-semibold">No Shipments Found</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Clear the filters or plan a shipment from placed purchase lines.
+            </p>
+          </div>
+        ) : null}
+
+        {!loading && shipments.length > 0 ? (
+          <>
+            <div className="grid gap-3 md:hidden">
+              {shipments.map((shipment) => {
+                const totals = shipmentTotals(shipment);
+                const action = shipmentAction(shipment);
+                return (
+                  <article key={shipment.id} className="rounded-xl border bg-card p-4 shadow-2xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/inbound-shipments/${shipment.id}`}
+                          className="font-mono font-semibold text-primary hover:underline"
                         >
-                          <Plus className="size-4" />
-                          <span>Plan Inbound Shipment</span>
-                        </Button>
-                      ) : null}
+                          {shipment.shipmentNumber}
+                        </Link>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {shipment.originText ?? 'Origin not recorded'} →{' '}
+                          {shipment.receivingLocationName}
+                        </p>
+                      </div>
+                      <TransportIcon mode={shipment.transportMode} />
                     </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                shipments.map((shipment) => {
-                  const isExpanded = expandedShipmentId === shipment.id;
-                  const totalAllocated = shipment.allocations.reduce(
-                    (s, a) => s + Number(a.allocatedQuantity),
-                    0,
-                  );
-                  const totalReceived = shipment.allocations.reduce(
-                    (s, a) => s + Number(a.receivedQuantity),
-                    0,
-                  );
-                  const remaining = Math.max(0, totalAllocated - totalReceived);
-
-                  return (
-                    <TableRow key={shipment.id} className="group hover:bg-muted/40">
-                      {/* Expand Chevron */}
-                      <TableCell className="p-2 text-center">
-                        {shipment.allocations.length > 0 ? (
-                          <button
-                            type="button"
-                            aria-label={`${isExpanded ? 'Hide' : 'Show'} allocated goods for ${shipment.shipmentNumber}`}
-                            aria-expanded={isExpanded}
-                            onClick={() => setExpandedShipmentId(isExpanded ? null : shipment.id)}
-                            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            title="Show allocated goods"
-                          >
-                            <ChevronRight
-                              className={`size-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <StatusBadge status={shipment.status} />
+                      <StatusBadge status={shipment.receivingStatus} />
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      {shipment.allocations.slice(0, 3).map((allocation) => (
+                        <div
+                          key={allocation.id}
+                          className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted"
+                          title={`${allocation.productTitle} · ${allocation.optionSummary ?? allocation.sku}`}
+                        >
+                          {allocation.primaryImageUrl ? (
+                            <img
+                              src={allocation.primaryImageUrl}
+                              alt={`${allocation.productTitle} ${allocation.optionSummary ?? allocation.sku}`}
+                              width={48}
+                              height={48}
+                              loading="lazy"
+                              className="size-full object-cover"
                             />
-                          </button>
-                        ) : null}
-                      </TableCell>
+                          ) : (
+                            <ImageIcon
+                              aria-hidden="true"
+                              className="size-4 text-muted-foreground"
+                            />
+                          )}
+                        </div>
+                      ))}
+                      <div className="min-w-0 text-xs text-muted-foreground">
+                        <p>
+                          {shipment.allocations.length} variant line
+                          {shipment.allocations.length === 1 ? '' : 's'}
+                        </p>
+                        <p className="font-mono tabular-nums">
+                          {formatSupplyNumber(String(totals.received))} /{' '}
+                          {formatSupplyNumber(String(totals.allocated))} units received
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      render={<Link href={`/inbound-shipments/${shipment.id}${action.query}`} />}
+                      className="mt-4 h-11 w-full justify-between"
+                    >
+                      <span>{action.label}</span>
+                      <ArrowRight aria-hidden="true" className="size-4" />
+                    </Button>
+                  </article>
+                );
+              })}
+            </div>
 
-                      {/* Shipment & Mode */}
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Shipment</TableHead>
+                    <TableHead>Route & Tracking</TableHead>
+                    <TableHead>Contents</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Next Step</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {shipments.map((shipment) => {
+                    const totals = shipmentTotals(shipment);
+                    const action = shipmentAction(shipment);
+                    return (
+                      <TableRow key={shipment.id}>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <TransportIcon mode={shipment.transportMode} />
-                            <Link
-                              href={`/inbound-shipments/${shipment.id}`}
-                              className="font-heading font-semibold text-primary hover:underline"
-                            >
-                              {shipment.shipmentNumber}
-                            </Link>
+                            <div>
+                              <Link
+                                href={`/inbound-shipments/${shipment.id}`}
+                                className="font-mono font-semibold text-primary hover:underline"
+                              >
+                                {shipment.shipmentNumber}
+                              </Link>
+                              <p className="text-xs text-muted-foreground">
+                                {shipment.transportMode} ·{' '}
+                                {formatSupplyDate(shipment.expectedArrivalDate)}
+                              </p>
+                            </div>
                           </div>
-                          <span className="text-xs text-muted-foreground capitalize">
-                            {shipment.transportMode.toLowerCase()} freight
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      {/* Origin & Destination */}
-                      <TableCell>
-                        <div className="flex flex-col text-xs">
-                          <span className="font-medium text-foreground">
-                            &rarr; {shipment.receivingLocationName}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {shipment.originText
-                              ? `From: ${shipment.originText}`
-                              : 'Origin: Not specified'}
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      {/* Tracking & ETA */}
-                      <TableCell>
-                        <div className="flex flex-col text-xs">
-                          <span className="font-mono font-medium text-foreground">
-                            {shipment.trackingReference || 'No tracking reference'}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {shipment.arrivedAt
-                              ? `Arrived: ${formatSupplyDate(shipment.arrivedAt)}`
-                              : shipment.expectedArrivalDate
-                                ? `ETA: ${formatSupplyDate(shipment.expectedArrivalDate)}`
-                                : 'No arrival ETA'}
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      {/* Allocated Goods */}
-                      <TableCell>
-                        <div className="flex flex-col gap-1 text-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">
-                              {shipment.allocations.length}{' '}
-                              {shipment.allocations.length === 1 ? 'line' : 'lines'} ·{' '}
-                              {formatSupplyNumber(String(totalAllocated))} units
-                            </span>
-                            <span className="font-mono text-xs">
-                              {formatSupplyNumber(String(totalReceived))}/
-                              {formatSupplyNumber(String(totalAllocated))}
-                            </span>
+                        </TableCell>
+                        <TableCell>
+                          <p className="max-w-64 truncate">
+                            {shipment.originText ?? 'Origin not recorded'} →{' '}
+                            {shipment.receivingLocationName}
+                          </p>
+                          <p className="max-w-64 truncate font-mono text-xs text-muted-foreground">
+                            {shipment.trackingReference ??
+                              shipment.providerReference ??
+                              'No tracking reference'}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <p>
+                            {shipment.allocations.length} variant line
+                            {shipment.allocations.length === 1 ? '' : 's'}
+                          </p>
+                          <p className="font-mono text-xs text-muted-foreground tabular-nums">
+                            {formatSupplyNumber(String(totals.received))} /{' '}
+                            {formatSupplyNumber(String(totals.allocated))} units received
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col items-start gap-1">
+                            <StatusBadge status={shipment.status} />
+                            <StatusBadge status={shipment.receivingStatus} />
                           </div>
-                          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className="h-full bg-success transition-[width] duration-150"
-                              style={{
-                                width: `${totalAllocated > 0 ? Math.min(100, (totalReceived / totalAllocated) * 100) : 0}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Status Badges */}
-                      <TableCell>
-                        <div className="flex flex-col items-start gap-1">
-                          <StatusBadge status={shipment.status} />
-                          <StatusBadge status={shipment.receivingStatus} />
-                        </div>
-                      </TableCell>
-
-                      {/* Contextual Action Button */}
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {shipment.status === 'PLANNED' && canManageShipments ? (
-                            <Button
-                              size="xs"
-                              variant="outline"
-                              disabled={busy}
-                              onClick={() => void handleDepart(shipment)}
-                              className="gap-1 text-xs"
-                            >
-                              <Truck className="size-3.5" />
-                              <span>Depart</span>
-                            </Button>
-                          ) : null}
-
-                          {shipment.status === 'IN_TRANSIT' && canManageShipments ? (
-                            <Button
-                              size="xs"
-                              disabled={busy}
-                              onClick={() => void handleArrive(shipment)}
-                              className="gap-1 text-xs"
-                            >
-                              <PackageCheck className="size-3.5" />
-                              <span>Mark Arrived</span>
-                            </Button>
-                          ) : null}
-
-                          {shipment.status === 'ARRIVED' &&
-                          shipment.receivingStatus !== 'RECEIVED' &&
-                          canReceive ? (
-                            <Button
-                              size="xs"
-                              onClick={() => openReceiveDialog(shipment)}
-                              className="gap-1 bg-success text-xs text-white hover:bg-success/90"
-                            >
-                              <PackageOpen className="size-3.5" />
-                              <span>Receive Goods</span>
-                            </Button>
-                          ) : null}
-
+                        </TableCell>
+                        <TableCell className="text-right">
                           <Button
-                            variant="ghost"
-                            size="xs"
-                            render={<Link href={`/inbound-shipments/${shipment.id}`} />}
-                            title="View details"
+                            variant="outline"
+                            size="sm"
+                            render={
+                              <Link href={`/inbound-shipments/${shipment.id}${action.query}`} />
+                            }
+                            className="gap-1.5 whitespace-nowrap"
                           >
-                            <Eye className="size-4" />
+                            <span>{action.label}</span>
+                            <ArrowRight aria-hidden="true" className="size-3.5" />
                           </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        ) : null}
+      </section>
 
-          {/* Expanded Shipment Allocations */}
-          {shipments
-            .filter((s) => expandedShipmentId === s.id)
-            .map((shipment) => (
-              <div
-                key={`expanded-shipment-${shipment.id}`}
-                className="border-t bg-muted/20 px-6 py-4"
-              >
-                <div className="flex items-center justify-between pb-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Shipment Contents ({shipment.allocations.length} line allocations)
-                  </span>
-                  <Link
-                    href={`/inbound-shipments/${shipment.id}`}
-                    className="text-xs font-medium text-primary hover:underline"
-                  >
-                    Open shipment inspection &rarr;
-                  </Link>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {shipment.allocations.map((alloc) => (
-                    <div
-                      key={alloc.id}
-                      className="flex flex-col justify-between rounded-lg border bg-card p-3 text-xs shadow-xs"
-                    >
-                      <div>
-                        <div className="flex items-start justify-between gap-2">
-                          <Link
-                            href={`/products/${alloc.productId}`}
-                            className="font-medium text-foreground hover:text-primary hover:underline truncate"
-                          >
-                            {alloc.productTitle}
-                          </Link>
-                          <Badge variant="outline" className="font-mono text-[10px] shrink-0">
-                            {alloc.sku}
-                          </Badge>
-                        </div>
-                        <div className="mt-1 flex items-center gap-1.5 text-muted-foreground">
-                          <span>PO: {alloc.purchaseNumber}</span>
-                          <span>&bull;</span>
-                          <span>{alloc.supplierName}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-between border-t pt-2 text-muted-foreground">
-                        <span>
-                          Allocated:{' '}
-                          <strong className="text-foreground">
-                            {formatSupplyNumber(alloc.allocatedQuantity)}
-                          </strong>
-                        </span>
-                        <span>
-                          Received:{' '}
-                          <strong className="text-success">
-                            {formatSupplyNumber(alloc.receivedQuantity)}
-                          </strong>
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
-
-      {/* Pager Footer */}
       {totalPages > 1 ? (
-        <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+        <div className="flex flex-col gap-3 border-t pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>
-            Showing Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> (
-            {totalItems} total records)
+            Page <strong>{page}</strong> of <strong>{totalPages}</strong> · {totalItems} shipments
           </span>
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage <= 1 || loading}
-              onClick={() => updateFilter({ page: String(currentPage - 1) })}
+              disabled={page <= 1 || loading}
+              onClick={() => updateQuery({ page: String(page - 1) })}
             >
               Previous
             </Button>
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage >= totalPages || loading}
-              onClick={() => updateFilter({ page: String(currentPage + 1) })}
+              disabled={page >= totalPages || loading}
+              onClick={() => updateQuery({ page: String(page + 1) })}
             >
               Next
             </Button>
@@ -1015,34 +498,15 @@ export function ShipmentsList() {
         </div>
       ) : null}
 
-      {/* Plan Shipment Dialog */}
       <PlanShipmentDialog
         open={planOpen}
-        onOpenChange={setPlanOpen}
+        onOpenChange={setPlanDialog}
         onSuccess={(created) => {
-          setPlanOpen(false);
+          setPlanDialog(false);
           setSuccess(`Inbound shipment ${created?.shipmentNumber ?? ''} created.`);
           if (created?.id) router.push(`/inbound-shipments/${created.id}`);
         }}
       />
-
-      {/* Receive Goods Dialog */}
-      {receivingShipment ? (
-        <ReceiveGoodsDialog
-          open={Boolean(receivingShipment)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setReceivingShipment(null);
-              setReceiptLines([]);
-            }
-          }}
-          shipment={receivingShipment}
-          lines={receiptLines}
-          setLines={setReceiptLines}
-          onSubmit={handlePostReceiptSubmit}
-          saving={savingReceipt}
-        />
-      ) : null}
     </main>
   );
 }

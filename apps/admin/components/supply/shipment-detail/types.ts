@@ -25,7 +25,6 @@ export interface ShipmentDetailHeaderProps {
 
 export interface ShipmentDetailStatsProps {
   readonly shipment: InboundShipmentDto;
-  readonly worksheet?: Worksheet | undefined;
 }
 
 export interface ShipmentDetailItemsTableProps {

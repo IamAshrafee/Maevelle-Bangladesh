@@ -8,9 +8,7 @@ import {
   Calendar,
   Download,
   Edit3,
-  ExternalLink,
   Eye,
-  Globe,
   Mail,
   Phone,
   Plus,
@@ -20,12 +18,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import type {
-  PurchaseDto,
-  SupplierDto,
-  SupplierTypeDto,
-  SupplyOverviewDto,
-} from '@maevelle/contracts';
+import type { SupplierDto, SupplierTypeDto, SupplyOverviewDto } from '@maevelle/contracts';
 import type { PagedEnvelope } from '@/lib/supply/types';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
@@ -240,22 +233,26 @@ export function SuppliersList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canManageProcurement ? (
+            <Button
+              size="sm"
+              onClick={() => setCreateDialogOpen(true)}
+              className="h-11 gap-1.5 sm:h-8"
+            >
+              <Plus aria-hidden="true" className="size-4" />
+              <span>Add Supplier</span>
+            </Button>
+          ) : null}
+
           <Button
             variant="outline"
             size="sm"
             onClick={() => void exportCsv()}
             disabled={exporting || loading}
           >
-            <Download className="size-4" />
+            <Download aria-hidden="true" className="size-4" />
             <span>{exporting ? 'Exporting…' : 'Export CSV'}</span>
           </Button>
-
-          {canManageProcurement ? (
-            <Button size="sm" onClick={() => setCreateDialogOpen(true)} className="gap-1.5">
-              <Plus className="size-4" />
-              <span>Add Supplier</span>
-            </Button>
-          ) : null}
         </div>
       </div>
 
@@ -348,7 +345,7 @@ export function SuppliersList() {
                 role="tab"
                 aria-selected={isSelected}
                 onClick={() => updateFilter({ status: tab.value === 'ALL' ? null : tab.value })}
-                className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`min-h-11 touch-manipulation rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   isSelected
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -365,6 +362,9 @@ export function SuppliersList() {
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              type="search"
+              name="supplier-search"
+              autoComplete="off"
               aria-label="Search suppliers"
               value={query}
               onChange={(e) => {
@@ -382,7 +382,7 @@ export function SuppliersList() {
                   setQuery('');
                   updateFilter({ q: null });
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-1 top-1/2 grid size-9 -translate-y-1/2 touch-manipulation place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="size-4" />
               </button>
@@ -391,11 +391,12 @@ export function SuppliersList() {
 
           <div className="flex flex-wrap items-center gap-2">
             <NativeSelect
+              name="supplier-type-filter"
               aria-label="Filter suppliers by type"
               value={currentType}
               onChange={(e) => updateFilter({ type: e.target.value || null })}
               size="sm"
-              className="w-44"
+              className="h-11 w-44 sm:h-8"
             >
               {SUPPLIER_TYPES.map((t) => (
                 <NativeSelectOption key={t.value} value={t.value}>
@@ -422,8 +423,93 @@ export function SuppliersList() {
         </div>
       </div>
 
+      <div className="grid gap-3 md:hidden">
+        {loading ? (
+          <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+            Loading suppliers…
+          </p>
+        ) : null}
+        {!loading && suppliers.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center">
+            <Building2 aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
+            <h2 className="mt-3 font-semibold">No Suppliers Found</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Clear the filters or add the first supplier profile.
+            </p>
+          </div>
+        ) : null}
+        {!loading
+          ? suppliers.map((supplier) => (
+              <article key={supplier.id} className="rounded-xl border bg-card p-4 shadow-2xs">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/suppliers/${supplier.id}`}
+                      className="block truncate font-semibold text-primary hover:underline"
+                    >
+                      {supplier.name}
+                    </Link>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">{supplier.code}</p>
+                  </div>
+                  <StatusBadge status={supplier.status} />
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <dt className="text-muted-foreground">Type</dt>
+                    <dd className="mt-0.5 font-medium">
+                      {supplier.supplierType.replaceAll('_', ' ')}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Buying Currency</dt>
+                    <dd className="mt-0.5 font-mono font-medium">
+                      {supplier.preferredCurrencyCode ?? 'Not Set'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Lead Time</dt>
+                    <dd className="mt-0.5 font-mono font-medium tabular-nums">
+                      {supplier.leadTimeDays !== undefined
+                        ? `${supplier.leadTimeDays} days`
+                        : 'Not Set'}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">Contact</dt>
+                    <dd className="mt-0.5 truncate font-medium">
+                      {supplier.contactName ?? supplier.contactPhone ?? 'Not Set'}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {canManageProcurement && supplier.status === 'ACTIVE' ? (
+                    <Button
+                      size="sm"
+                      className="h-11"
+                      onClick={() => {
+                        setPoSupplierId(supplier.id);
+                        setCreatePoOpen(true);
+                      }}
+                    >
+                      <Plus aria-hidden="true" className="size-4" /> New Purchase
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    render={<Link href={`/suppliers/${supplier.id}`} />}
+                    className={`h-11 ${canManageProcurement && supplier.status === 'ACTIVE' ? '' : 'col-span-2'}`}
+                  >
+                    Open Profile
+                  </Button>
+                </div>
+              </article>
+            ))
+          : null}
+      </div>
+
       {/* Main Table */}
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="hidden overflow-hidden rounded-xl border bg-card shadow-sm md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -632,6 +718,33 @@ export function SuppliersList() {
           </div>
         ) : null}
       </div>
+
+      {totalPages > 1 ? (
+        <div className="flex flex-col gap-3 border-t pt-4 text-xs text-muted-foreground md:hidden">
+          <span>
+            Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> · {totalItems}{' '}
+            suppliers
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1 || loading}
+              onClick={() => updateFilter({ page: String(currentPage - 1) })}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages || loading}
+              onClick={() => updateFilter({ page: String(currentPage + 1) })}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Supplier Create/Edit Dialog */}
       <SupplierDialog

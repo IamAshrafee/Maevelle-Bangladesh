@@ -55,9 +55,9 @@ export function ReceiptReverseDialog({
             <DialogTitle>Reverse Receipt {receipt.receiptNumber}?</DialogTitle>
           </div>
           <DialogDescription>
-            Reversing this receipt will automatically deduct the received stock from warehouse inventory,
-            void provisional landed cost layers, and reopen the shipment receiving quantities. This action
-            is recorded in ledger history and cannot be undone.
+            Reversing this receipt will automatically deduct the received stock from warehouse
+            inventory, void provisional landed cost layers, and reopen the shipment receiving
+            quantities. This action is recorded in ledger history and cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
@@ -70,12 +70,13 @@ export function ReceiptReverseDialog({
               value={reason}
               required
               rows={3}
-              placeholder="e.g. Physical count discrepancy, wrong shipment voucher posted, items rejected upon dock audit..."
+              placeholder="e.g. Physical count discrepancy, wrong shipment voucher posted, items rejected upon dock audit…"
               disabled={busy}
               onChange={(e) => setReason(e.target.value)}
             />
             <FieldDescription>
-              Explain why this receipt is being reversed. This will be permanently recorded in the audit trail.
+              Explain why this receipt is being reversed. This will be permanently recorded in the
+              audit trail.
             </FieldDescription>
           </Field>
 
@@ -89,7 +90,11 @@ export function ReceiptReverseDialog({
               disabled={busy || !reason.trim()}
               className="gap-1.5"
             >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RotateCcw className="size-4" />
+              )}
               <span>Confirm reversal</span>
             </Button>
           </DialogFooter>

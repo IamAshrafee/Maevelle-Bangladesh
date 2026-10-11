@@ -67,7 +67,7 @@ export function PurchaseCloseDialog({
               name="reason"
               value={reason}
               rows={3}
-              placeholder="e.g. All stock received and verified against physical packing slip..."
+              placeholder="e.g. All stock received and verified against physical packing slip…"
               disabled={busy}
               onChange={(e) => setReason(e.target.value)}
             />

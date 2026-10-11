@@ -16,13 +16,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
@@ -218,7 +218,7 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto sm:max-w-2xl">
+      <SupplyTaskDialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Edit Supplier Profile' : 'Add New Supplier'}</DialogTitle>
           <DialogDescription>
@@ -254,6 +254,8 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-name">Supplier Name *</FieldLabel>
               <Input
                 id="supplier-name"
+                name="supplierName"
+                autoComplete="organization"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Guangzhou Silk Garments Co."
@@ -266,6 +268,9 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-code">Supplier Code *</FieldLabel>
               <Input
                 id="supplier-code"
+                name="supplierCode"
+                autoComplete="off"
+                spellCheck={false}
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="e.g. CN-SILK-01"
@@ -288,6 +293,7 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-type">Supplier Type</FieldLabel>
               <NativeSelect
                 id="supplier-type"
+                name="supplierType"
                 value={supplierType}
                 onChange={(e) => setSupplierType(e.target.value as SupplierTypeDto)}
                 disabled={saving}
@@ -305,6 +311,7 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-status">Status</FieldLabel>
               <NativeSelect
                 id="supplier-status"
+                name="supplierStatus"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as SupplierStatusDto)}
                 disabled={saving}
@@ -322,8 +329,11 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-currency">Preferred Currency</FieldLabel>
               <NativeSelect
                 id="supplier-currency"
+                name="preferredCurrencyCode"
                 value={preferredCurrencyCode}
-                onChange={(e) => setPreferredCurrencyCode(e.target.value as any)}
+                onChange={(e) =>
+                  setPreferredCurrencyCode(e.target.value as 'BDT' | 'CNY' | 'USD' | '')
+                }
                 disabled={saving}
                 className="w-full"
               >
@@ -340,6 +350,9 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-country">Country Code</FieldLabel>
               <Input
                 id="supplier-country"
+                name="countryCode"
+                autoComplete="country"
+                spellCheck={false}
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value.toUpperCase().slice(0, 2))}
                 placeholder="CN, BD, VN"
@@ -354,6 +367,7 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-lead-time">Lead Time (Days)</FieldLabel>
               <Input
                 id="supplier-lead-time"
+                name="leadTimeDays"
                 type="number"
                 min="0"
                 value={leadTimeDays}
@@ -368,6 +382,9 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-website">Website URL</FieldLabel>
               <Input
                 id="supplier-website"
+                name="websiteUrl"
+                autoComplete="url"
+                spellCheck={false}
                 type="url"
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
@@ -381,6 +398,8 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
             <FieldLabel htmlFor="supplier-terms">Commercial & Payment Terms</FieldLabel>
             <Input
               id="supplier-terms"
+              name="paymentTerms"
+              autoComplete="off"
               value={paymentTerms}
               onChange={(e) => setPaymentTerms(e.target.value)}
               placeholder="e.g. Net 30, or 30% deposit, 70% before dispatch"
@@ -393,6 +412,8 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-advance">Default Advance (%)</FieldLabel>
               <Input
                 id="supplier-advance"
+                name="defaultAdvancePercentage"
+                autoComplete="off"
                 inputMode="decimal"
                 value={defaultAdvancePercentage}
                 onChange={(event) => setDefaultAdvancePercentage(event.target.value)}
@@ -410,6 +431,7 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
               <FieldLabel htmlFor="supplier-balance-event">Balance Due Event</FieldLabel>
               <NativeSelect
                 id="supplier-balance-event"
+                name="balanceDueEvent"
                 value={balanceDueEvent}
                 onChange={(event) =>
                   setBalanceDueEvent(event.target.value as SupplierBalanceDueEventDto | '')
@@ -461,6 +483,8 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
                 <FieldLabel htmlFor="contact-name">Contact Person</FieldLabel>
                 <Input
                   id="contact-name"
+                  name="contactName"
+                  autoComplete="name"
                   value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
                   placeholder="Manager / Agent name"
@@ -472,7 +496,10 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
                 <FieldLabel htmlFor="contact-email">Email</FieldLabel>
                 <Input
                   id="contact-email"
+                  name="contactEmail"
                   type="email"
+                  autoComplete="email"
+                  spellCheck={false}
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
                   placeholder="sales@supplier.com"
@@ -484,6 +511,9 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
                 <FieldLabel htmlFor="contact-phone">Phone / WhatsApp</FieldLabel>
                 <Input
                   id="contact-phone"
+                  name="contactPhone"
+                  type="tel"
+                  autoComplete="tel"
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   placeholder="+86 138 0000 0000"
@@ -497,9 +527,11 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
             <FieldLabel htmlFor="supplier-notes">Internal Notes</FieldLabel>
             <Textarea
               id="supplier-notes"
+              name="notes"
+              autoComplete="off"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Factory capabilities, production quality notes, bank details, or communication preferences..."
+              placeholder="Factory capabilities, production quality notes, bank details, or communication preferences…"
               rows={3}
               disabled={saving}
             />
@@ -515,7 +547,7 @@ export function SupplierDialog({ open, onOpenChange, supplier, onSuccess }: Supp
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

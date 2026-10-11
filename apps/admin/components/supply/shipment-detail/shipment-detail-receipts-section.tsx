@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
-  ExternalLink,
   FileCheck,
   PackageCheck,
   ShieldAlert,
@@ -35,7 +34,8 @@ export function ShipmentDetailReceiptsSection({
             Warehouse Receiving Sessions ({receipts.length})
           </h3>
           <p className="text-xs text-muted-foreground">
-            Each physical count is an immutable warehouse receiving voucher that increases stock and logs audit provenance.
+            Each physical count is an immutable warehouse receiving voucher that increases stock and
+            logs audit provenance.
           </p>
         </div>
 
@@ -53,7 +53,9 @@ export function ShipmentDetailReceiptsSection({
           <div className="flex size-12 items-center justify-center rounded-full bg-muted">
             <PackageCheck className="size-6 text-muted-foreground" />
           </div>
-          <h4 className="mt-4 font-heading text-base font-semibold">No receiving vouchers posted yet</h4>
+          <h4 className="mt-4 font-heading text-base font-semibold">
+            No receiving vouchers posted yet
+          </h4>
           <p className="mt-1.5 max-w-sm text-xs text-muted-foreground">
             {isArrived
               ? 'Goods have docked at the warehouse. Count delivered items to increase on-hand inventory.'
@@ -69,10 +71,7 @@ export function ShipmentDetailReceiptsSection({
       ) : (
         <div className="space-y-3">
           {receipts.map((receipt) => {
-            const totalUnits = receipt.lines.reduce(
-              (sum, line) => sum + Number(line.quantity),
-              0,
-            );
+            const totalUnits = receipt.lines.reduce((sum, line) => sum + Number(line.quantity), 0);
 
             const conditionCounts = receipt.lines.reduce<Record<string, number>>((acc, line) => {
               acc[line.condition] = (acc[line.condition] ?? 0) + Number(line.quantity);
@@ -80,7 +79,10 @@ export function ShipmentDetailReceiptsSection({
             }, {});
 
             return (
-              <Card key={receipt.id} className="overflow-hidden shadow-xs hover:border-primary/40 transition-colors">
+              <Card
+                key={receipt.id}
+                className="overflow-hidden shadow-xs hover:border-primary/40 transition-colors"
+              >
                 <CardContent className="p-4 space-y-3">
                   {/* Top Bar: Receipt # and Timestamp */}
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -96,7 +98,9 @@ export function ShipmentDetailReceiptsSection({
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Posted {formatSupplyDate(receipt.postedAt)} at{' '}
-                        <strong className="text-foreground font-medium">{receipt.locationName}</strong>
+                        <strong className="text-foreground font-medium">
+                          {receipt.locationName}
+                        </strong>
                       </p>
                     </div>
 
@@ -115,7 +119,9 @@ export function ShipmentDetailReceiptsSection({
                         size="sm"
                         className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
                         render={
-                          <Link href={`/inventory/history?q=${encodeURIComponent(receipt.receiptNumber)}`} />
+                          <Link
+                            href={`/inventory/history?q=${encodeURIComponent(receipt.receiptNumber)}`}
+                          />
                         }
                       >
                         <Boxes className="size-3" />
@@ -131,39 +137,52 @@ export function ShipmentDetailReceiptsSection({
                     </span>
 
                     {conditionCounts['SELLABLE'] ? (
-                      <Badge variant="secondary" className="gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40">
+                      <Badge
+                        variant="secondary"
+                        className="gap-1 border-success/30 bg-success/10 text-success"
+                      >
                         <CheckCircle2 className="size-3" />
-                        <span>{formatSupplyNumber(String(conditionCounts['SELLABLE']))} Sellable</span>
+                        <span>
+                          {formatSupplyNumber(String(conditionCounts['SELLABLE']))} Sellable
+                        </span>
                       </Badge>
                     ) : null}
 
                     {conditionCounts['DAMAGED'] ? (
                       <Badge variant="destructive" className="gap-1">
                         <AlertTriangle className="size-3" />
-                        <span>{formatSupplyNumber(String(conditionCounts['DAMAGED']))} Damaged</span>
+                        <span>
+                          {formatSupplyNumber(String(conditionCounts['DAMAGED']))} Damaged
+                        </span>
                       </Badge>
                     ) : null}
 
                     {conditionCounts['QUARANTINE'] ? (
-                      <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300 dark:text-amber-400">
+                      <Badge variant="outline" className="gap-1 border-warning/30 text-warning">
                         <ShieldAlert className="size-3" />
-                        <span>{formatSupplyNumber(String(conditionCounts['QUARANTINE']))} Quarantine</span>
+                        <span>
+                          {formatSupplyNumber(String(conditionCounts['QUARANTINE']))} Quarantine
+                        </span>
                       </Badge>
                     ) : null}
 
                     {conditionCounts['INSPECTION'] ? (
-                      <Badge variant="outline" className="gap-1 text-sky-600 border-sky-300 dark:text-sky-400">
-                        <span>{formatSupplyNumber(String(conditionCounts['INSPECTION']))} Inspection</span>
+                      <Badge variant="outline" className="gap-1 border-info/30 text-info">
+                        <span>
+                          {formatSupplyNumber(String(conditionCounts['INSPECTION']))} Inspection
+                        </span>
                       </Badge>
                     ) : null}
                   </div>
 
                   {/* Packing Slip & Notes Details */}
-                  {(receipt.packingSlipReference || receipt.notes) ? (
+                  {receipt.packingSlipReference || receipt.notes ? (
                     <div className="rounded-lg bg-muted/40 p-2.5 text-xs text-muted-foreground space-y-1">
                       {receipt.packingSlipReference ? (
                         <p>
-                          <strong className="text-foreground font-medium">Packing Slip / Delivery Note:</strong>{' '}
+                          <strong className="text-foreground font-medium">
+                            Packing Slip / Delivery Note:
+                          </strong>{' '}
                           {receipt.packingSlipReference}
                         </p>
                       ) : null}

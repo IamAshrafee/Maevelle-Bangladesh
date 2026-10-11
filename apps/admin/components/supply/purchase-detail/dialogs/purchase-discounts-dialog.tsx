@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -103,7 +103,7 @@ export function PurchaseDiscountsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+      <SupplyTaskDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-lg bg-primary-subtle text-primary">
@@ -157,6 +157,7 @@ export function PurchaseDiscountsDialog({
                       </FieldLabel>
                       <Input
                         id={`discount-title-${discount.rowId}`}
+                        name={`discount-${index}-title`}
                         value={discount.title}
                         placeholder="Business Hours Offer"
                         disabled={busy}
@@ -168,6 +169,7 @@ export function PurchaseDiscountsDialog({
                       <FieldLabel htmlFor={`discount-method-${discount.rowId}`}>Method</FieldLabel>
                       <NativeSelect
                         id={`discount-method-${discount.rowId}`}
+                        name={`discount-${index}-method`}
                         className="w-full"
                         value={discount.calculationMethod}
                         disabled={busy}
@@ -190,6 +192,7 @@ export function PurchaseDiscountsDialog({
                         </FieldLabel>
                         <Input
                           id={`discount-percentage-${discount.rowId}`}
+                          name={`discount-${index}-percentage`}
                           type="number"
                           min="0.000001"
                           max="100"
@@ -215,6 +218,7 @@ export function PurchaseDiscountsDialog({
                       </FieldLabel>
                       <Input
                         id={`discount-amount-${discount.rowId}`}
+                        name={`discount-${index}-amount`}
                         type="number"
                         min="0.0001"
                         step="0.0001"
@@ -230,6 +234,7 @@ export function PurchaseDiscountsDialog({
                       </FieldLabel>
                       <Input
                         id={`discount-reference-${discount.rowId}`}
+                        name={`discount-${index}-external-reference`}
                         value={discount.externalReference}
                         placeholder="BusinessHoursOffer2026"
                         disabled={busy}
@@ -291,7 +296,7 @@ export function PurchaseDiscountsDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
+      </SupplyTaskDialogContent>
     </Dialog>
   );
 }

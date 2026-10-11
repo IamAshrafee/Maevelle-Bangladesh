@@ -46,7 +46,8 @@ export function CreateRevisionDialog({
                 Create {isAdjustment ? 'Adjustment' : 'Credit'} Revision #{nextRevNumber}
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Worksheet: <span className="font-mono font-medium text-foreground">{worksheetNumber}</span>
+                Worksheet:{' '}
+                <span className="font-mono font-medium text-foreground">{worksheetNumber}</span>
               </DialogDescription>
             </div>
           </div>
@@ -55,14 +56,15 @@ export function CreateRevisionDialog({
         <div className="space-y-4 py-2 text-xs">
           <div className="rounded-lg border bg-muted/30 p-3.5 space-y-2">
             <div className="flex items-start gap-2">
-              <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
               <div className="space-y-1">
                 <p className="font-semibold text-foreground">
                   Revision #{currentRevisionNumber} Data Remains Completely Preserved
                 </p>
                 <p className="text-muted-foreground leading-relaxed">
-                  Your existing finalized unit acquisition costs and inventory layer records are immutable.
-                  Opening a revision will not erase or alter previously finalized numbers.
+                  Your existing finalized unit acquisition costs and inventory layer records are
+                  immutable. Opening a revision will not erase or alter previously finalized
+                  numbers.
                 </p>
               </div>
             </div>
@@ -79,12 +81,13 @@ export function CreateRevisionDialog({
             </p>
           </div>
 
-          <div className="rounded-lg border border-amber-200/60 bg-amber-50/50 p-3 dark:border-amber-950/40 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
+          <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-warning">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="size-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
               <p className="leading-relaxed">
-                You will be able to switch between Revision #{currentRevisionNumber} and Revision #{nextRevNumber} at any time.
-                If you create this draft by mistake, you can discard it to return to Revision #{currentRevisionNumber}.
+                You will be able to switch between Revision #{currentRevisionNumber} and Revision #
+                {nextRevNumber} at any time. If you create this draft by mistake, you can discard it
+                to return to Revision #{currentRevisionNumber}.
               </p>
             </div>
           </div>
@@ -99,12 +102,7 @@ export function CreateRevisionDialog({
           >
             Cancel
           </Button>
-          <Button
-            type="button"
-            onClick={onConfirm}
-            disabled={busy}
-            className="gap-1.5 shadow-sm"
-          >
+          <Button type="button" onClick={onConfirm} disabled={busy} className="gap-1.5 shadow-sm">
             <span>Open Revision #{nextRevNumber}</span>
             <ArrowRight className="size-3.5" />
           </Button>

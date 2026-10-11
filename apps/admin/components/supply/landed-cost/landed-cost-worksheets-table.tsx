@@ -49,6 +49,16 @@ export function LandedCostWorksheetsTable({
     (worksheet) => worksheet.status === 'DRAFT' || worksheet.status === 'CALCULATED',
   ).length;
   const finalizedCount = worksheets.filter((worksheet) => worksheet.status === 'FINALIZED').length;
+  const worksheetRows = filteredWorksheets.map((worksheet) => {
+    const totalAdditionalCost =
+      worksheet.results.reduce((sum, result) => sum + Number(result.additional_cost), 0) ||
+      worksheet.components.reduce((sum, component) => sum + Number(component.original_amount), 0);
+    return {
+      worksheet,
+      totalAdditionalCost,
+      shipmentHref: `/inbound-shipments/${worksheet.shipment_id}?tab=costing`,
+    };
+  });
 
   return (
     <div className="space-y-3">
@@ -98,7 +108,7 @@ export function LandedCostWorksheetsTable({
               type="button"
               aria-pressed={statusFilter === value}
               onClick={() => onStatusFilterChange(value)}
-              className={`min-h-9 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+              className={`min-h-11 touch-manipulation whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 statusFilter === value
                   ? 'bg-background text-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground'
@@ -110,7 +120,54 @@ export function LandedCostWorksheetsTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border bg-card shadow-2xs">
+      <div className="grid gap-3 md:hidden">
+        {worksheetRows.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+            <Layers3 aria-hidden="true" className="mx-auto mb-3 size-7" />
+            {searchQuery
+              ? 'No worksheets match this search.'
+              : 'Received shipments ready for costing appear in Awaiting Costing.'}
+          </div>
+        ) : null}
+        {worksheetRows.map(({ worksheet, totalAdditionalCost, shipmentHref }) => (
+          <article key={worksheet.id} className="rounded-xl border bg-card p-4 shadow-2xs">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-mono text-sm font-semibold">{worksheet.worksheet_number}</p>
+                <Link
+                  href={shipmentHref}
+                  className="mt-1 block truncate font-mono text-xs text-primary hover:underline"
+                >
+                  {worksheet.shipment_number ?? 'Open Shipment'}
+                </Link>
+              </div>
+              <StatusBadge status={worksheet.status} />
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <dt className="text-muted-foreground">Additional Expenses</dt>
+                <dd className="mt-1 font-mono font-semibold tabular-nums">
+                  {formatSupplyMoney(totalAdditionalCost.toString(), worksheet.base_currency_code)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Revisions</dt>
+                <dd className="mt-1 font-mono font-semibold tabular-nums">
+                  {worksheet.revisions.length}
+                </dd>
+              </div>
+            </dl>
+            <Button className="mt-4 w-full justify-between" render={<Link href={shipmentHref} />}>
+              <span>
+                {worksheet.status === 'FINALIZED' ? 'Review Valuation' : 'Continue Costing'}
+              </span>
+              <ArrowRight aria-hidden="true" className="size-4" />
+            </Button>
+          </article>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border bg-card shadow-2xs md:block">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 text-xs">
@@ -139,18 +196,7 @@ export function LandedCostWorksheetsTable({
                 </TableCell>
               </TableRow>
             ) : (
-              filteredWorksheets.map((worksheet) => {
-                const totalAdditionalCost =
-                  worksheet.results.reduce(
-                    (sum, result) => sum + Number(result.additional_cost),
-                    0,
-                  ) ||
-                  worksheet.components.reduce(
-                    (sum, component) => sum + Number(component.original_amount),
-                    0,
-                  );
-                const shipmentHref = `/inbound-shipments/${worksheet.shipment_id}?tab=costing`;
-
+              worksheetRows.map(({ worksheet, totalAdditionalCost, shipmentHref }) => {
                 return (
                   <TableRow key={worksheet.id} className="text-xs hover:bg-muted/40">
                     <TableCell className="font-mono font-semibold">

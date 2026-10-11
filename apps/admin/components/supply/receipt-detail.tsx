@@ -334,7 +334,6 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
 
       <ReceiptResolveConditionDialog
         line={resolvingLine}
-        receipt={receipt}
         busy={busy}
         onClose={() => setResolvingLine(undefined)}
         onResolve={handleResolveCondition}

@@ -50,7 +50,7 @@ export function CancelShipmentDialog({
           <SupplyField label="Cancellation Reason">
             <Textarea
               name="reason"
-              placeholder="e.g. Forwarder cancelled booking, consolidated into another shipment..."
+              placeholder="e.g. Forwarder cancelled booking, consolidated into another shipment…"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               required

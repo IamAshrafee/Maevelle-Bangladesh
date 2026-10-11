@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import {
-  ArrowLeft,
   BriefcaseBusiness,
   Check,
   CheckCheck,
@@ -21,11 +20,7 @@ import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   nextPurchaseAction,
   purchaseQuantities,
@@ -46,13 +41,17 @@ export interface PurchaseDetailHeaderProps {
 }
 
 const statusDescriptions: Record<string, string> = {
-  DRAFT: 'Draft purchase: Items and commercial details are editable. Place order to enable shipment planning.',
+  DRAFT:
+    'Draft purchase: Items and commercial details are editable. Place order to enable shipment planning.',
   ORDERED: 'Order confirmed with supplier. Ready for inbound shipment assignment.',
-  PARTIALLY_SHIPPED: 'Partially shipped: Inbound freight shipments are in progress for some ordered items.',
+  PARTIALLY_SHIPPED:
+    'Partially shipped: Inbound freight shipments are in progress for some ordered items.',
   SHIPPED: 'Fully shipped: All ordered quantities have been allocated to inbound shipments.',
-  PARTIALLY_RECEIVED: 'Partially received: Arrived goods are being received and posted into warehouse inventory.',
+  PARTIALLY_RECEIVED:
+    'Partially received: Arrived goods are being received and posted into warehouse inventory.',
   RECEIVED: 'Fully received: All items have been safely verified and accepted into inventory.',
-  CLOSED: 'Closed purchase order: All receiving is finalized and PO is closed for further operations.',
+  CLOSED:
+    'Closed purchase order: All receiving is finalized and PO is closed for further operations.',
   CANCELLED: 'Cancelled purchase order: Kept for historical audit. No further actions allowed.',
 };
 
@@ -111,7 +110,7 @@ export function PurchaseDetailHeader({
                 }
               >
                 {copied ? (
-                  <CheckCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <CheckCheck className="size-3.5 text-success" />
                 ) : (
                   <Copy className="size-3.5 text-muted-foreground" />
                 )}
@@ -254,7 +253,8 @@ export function PurchaseDetailHeader({
                     <span>Plan shipment</span>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    Create an inbound shipment for the {totals.ordered - totals.allocated} unallocated units
+                    Create an inbound shipment for the {totals.ordered - totals.allocated}{' '}
+                    unallocated units
                   </TooltipContent>
                 </Tooltip>
               ) : null}
@@ -311,7 +311,7 @@ export function PurchaseDetailHeader({
             </Badge>
           ) : null}
 
-          {(purchase.status === 'PLACED' || purchase.status === 'CLOSED') ? (
+          {purchase.status === 'PLACED' || purchase.status === 'CLOSED' ? (
             <Tooltip>
               <TooltipTrigger
                 render={

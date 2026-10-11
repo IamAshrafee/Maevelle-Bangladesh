@@ -69,7 +69,7 @@ export function PurchaseCancelDialog({
               value={reason}
               required
               rows={3}
-              placeholder="e.g. Supplier stock out, price renegotiation, duplicate order..."
+              placeholder="e.g. Supplier stock out, price renegotiation, duplicate order…"
               disabled={busy}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -82,11 +82,7 @@ export function PurchaseCancelDialog({
             <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
               Keep order
             </DialogClose>
-            <Button
-              variant="destructive"
-              type="submit"
-              disabled={busy || !reason.trim()}
-            >
+            <Button variant="destructive" type="submit" disabled={busy || !reason.trim()}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
               <span>Confirm cancellation</span>
             </Button>

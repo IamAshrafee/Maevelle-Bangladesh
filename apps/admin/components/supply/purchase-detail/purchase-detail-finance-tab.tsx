@@ -2,21 +2,15 @@
 
 import Link from 'next/link';
 import {
-  AlertCircle,
   Ban,
-  CheckCircle2,
   CreditCard,
   ExternalLink,
   Eye,
   FileEdit,
   FileText,
-  Filter,
-  HelpCircle,
   MoreHorizontal,
-  Receipt,
   ReceiptText,
   Search,
-  Wallet,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { PurchaseDto } from '@maevelle/contracts';
@@ -228,10 +222,7 @@ export function PurchaseDetailFinanceTab({
                   </TooltipContent>
                 </Tooltip>
               ) : (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                >
+                <Badge variant="outline" className="border-success/30 text-[10px] text-success">
                   Fully billed
                 </Badge>
               )}
@@ -256,15 +247,12 @@ export function PurchaseDetailFinanceTab({
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">Disbursed / Paid</span>
               {settlementProgress === 100 && invoiceTotal > 0 ? (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                >
+                <Badge variant="outline" className="border-success/30 text-[10px] text-success">
                   100% Settled
                 </Badge>
               ) : null}
             </div>
-            <p className="mt-1 font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+            <p className="mt-1 font-mono text-base font-bold text-success tabular-nums">
               {formatSupplyMoney(String(paidTotal), purchase.currencyCode)}
             </p>
             <span className="mt-1.5 block text-[11px] text-muted-foreground">
@@ -281,10 +269,7 @@ export function PurchaseDetailFinanceTab({
                 Balance Due / Outstanding
               </span>
               {outstandingTotal > 0 ? (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30"
-                >
+                <Badge variant="outline" className="border-warning/30 text-[10px] text-warning">
                   Payment Due
                 </Badge>
               ) : (
@@ -295,9 +280,7 @@ export function PurchaseDetailFinanceTab({
             </div>
             <p
               className={`mt-1 font-mono text-base font-bold tabular-nums ${
-                outstandingTotal > 0
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : 'text-muted-foreground'
+                outstandingTotal > 0 ? 'text-warning' : 'text-muted-foreground'
               }`}
             >
               {formatSupplyMoney(String(outstandingTotal), purchase.currencyCode)}
@@ -382,7 +365,10 @@ export function PurchaseDetailFinanceTab({
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search invoice, bill #, payee..."
+                type="search"
+                name="purchase-invoice-search"
+                autoComplete="off"
+                placeholder="Search invoice, bill number, or payee…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-8 pl-8 text-xs"
@@ -515,7 +501,7 @@ export function PurchaseDetailFinanceTab({
 
                         {/* Paid & Mini Progress */}
                         <TableCell className="text-right space-y-1">
-                          <div className="font-mono text-xs tabular-nums text-emerald-600 dark:text-emerald-400 font-medium">
+                          <div className="font-mono text-xs font-medium text-success tabular-nums">
                             {formatSupplyMoney(inv.paid, inv.currency_code)}
                           </div>
                           {!isCancelled && amount > 0 ? (
@@ -536,7 +522,7 @@ export function PurchaseDetailFinanceTab({
                         {/* Outstanding Balance */}
                         <TableCell className="text-right font-mono text-xs tabular-nums">
                           {outstanding > 0 ? (
-                            <span className="font-semibold text-amber-600 dark:text-amber-400">
+                            <span className="font-semibold text-warning">
                               {formatSupplyMoney(inv.outstanding, inv.currency_code)}
                             </span>
                           ) : (
@@ -607,6 +593,7 @@ export function PurchaseDetailFinanceTab({
                                     variant="ghost"
                                     className="size-7 text-muted-foreground hover:text-foreground"
                                     title="More invoice options"
+                                    aria-label={`More options for invoice ${inv.expense_number}`}
                                   />
                                 }
                               >
@@ -620,14 +607,14 @@ export function PurchaseDetailFinanceTab({
 
                                 {canPayRow ? (
                                   <DropdownMenuItem onClick={() => onPayInvoiceClick(inv)}>
-                                    <CreditCard className="size-3.5 mr-2 text-emerald-600" />
+                                    <CreditCard className="mr-2 size-3.5 text-success" />
                                     <span>Record Payment</span>
                                   </DropdownMenuItem>
                                 ) : null}
 
                                 {canAdjustRow ? (
                                   <DropdownMenuItem onClick={() => onAdjustInvoiceClick(inv)}>
-                                    <FileEdit className="size-3.5 mr-2 text-blue-600" />
+                                    <FileEdit className="mr-2 size-3.5 text-info" />
                                     <span>Credit Note / Adjust</span>
                                   </DropdownMenuItem>
                                 ) : null}

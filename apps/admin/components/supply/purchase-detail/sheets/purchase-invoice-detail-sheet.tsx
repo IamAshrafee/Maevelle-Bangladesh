@@ -89,7 +89,8 @@ export function PurchaseInvoiceDetailSheet({
   const amountNumber = Number(detail?.amount || 0);
   const paidNumber = Number(detail?.paid || 0);
   const outstandingNumber = Number(detail?.outstanding || 0);
-  const paymentProgress = amountNumber > 0 ? Math.min(100, Math.round((paidNumber / amountNumber) * 100)) : 0;
+  const paymentProgress =
+    amountNumber > 0 ? Math.min(100, Math.round((paidNumber / amountNumber) * 100)) : 0;
   const isPaid = outstandingNumber <= 0 && detail?.status !== 'CANCELLED';
   const isCancelled = detail?.status === 'CANCELLED';
   const canCancel = !isCancelled && paidNumber === 0 && canCreateInvoice;
@@ -108,7 +109,9 @@ export function PurchaseInvoiceDetailSheet({
                   {detail?.expense_number ?? 'Invoice Details'}
                 </SheetTitle>
                 {detail ? (
-                  <StatusBadge status={isCancelled ? 'CANCELLED' : isPaid ? 'PAID' : 'OUTSTANDING'} />
+                  <StatusBadge
+                    status={isCancelled ? 'CANCELLED' : isPaid ? 'PAID' : 'OUTSTANDING'}
+                  />
                 ) : null}
               </div>
               <SheetDescription className="text-xs text-muted-foreground">
@@ -147,7 +150,9 @@ export function PurchaseInvoiceDetailSheet({
               {/* Financial Snapshot Card */}
               <div className="rounded-xl border bg-card p-4 shadow-xs space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">Settlement Progress</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Settlement Progress
+                  </span>
                   <span className="text-xs font-mono font-semibold">{paymentProgress}% Paid</span>
                 </div>
                 <Progress value={paymentProgress} className="h-1.5 w-full" />
@@ -167,7 +172,7 @@ export function PurchaseInvoiceDetailSheet({
                   </div>
                   <div>
                     <span className="text-[11px] text-muted-foreground block">Total Disbursed</span>
-                    <strong className="font-mono text-xs tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <strong className="font-mono text-xs text-success tabular-nums">
                       {formatSupplyMoney(detail.paid, detail.currency_code)}
                     </strong>
                   </div>
@@ -175,7 +180,7 @@ export function PurchaseInvoiceDetailSheet({
                     <span className="text-[11px] text-muted-foreground block">Balance Due</span>
                     <strong
                       className={`font-mono text-xs tabular-nums ${
-                        outstandingNumber > 0 ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-muted-foreground'
+                        outstandingNumber > 0 ? 'font-bold text-warning' : 'text-muted-foreground'
                       }`}
                     >
                       {formatSupplyMoney(detail.outstanding, detail.currency_code)}
@@ -193,17 +198,25 @@ export function PurchaseInvoiceDetailSheet({
                 <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                   <div>
                     <span className="block text-[10px] uppercase tracking-wider">Bill Date</span>
-                    <span className="text-foreground font-medium">{formatSupplyDate(detail.expense_date)}</span>
+                    <span className="text-foreground font-medium">
+                      {formatSupplyDate(detail.expense_date)}
+                    </span>
                   </div>
                   <div>
-                    <span className="block text-[10px] uppercase tracking-wider">Supplier Bill #</span>
+                    <span className="block text-[10px] uppercase tracking-wider">
+                      Supplier Bill #
+                    </span>
                     <span className="text-foreground font-mono font-medium">
                       {detail.external_reference || 'Not specified'}
                     </span>
                   </div>
                   <div>
-                    <span className="block text-[10px] uppercase tracking-wider">Payee / Entity</span>
-                    <span className="text-foreground truncate block">{detail.payee_name || 'Direct Supplier'}</span>
+                    <span className="block text-[10px] uppercase tracking-wider">
+                      Payee / Entity
+                    </span>
+                    <span className="text-foreground truncate block">
+                      {detail.payee_name || 'Direct Supplier'}
+                    </span>
                   </div>
                   <div>
                     <span className="block text-[10px] uppercase tracking-wider">Category</span>
@@ -215,7 +228,9 @@ export function PurchaseInvoiceDetailSheet({
                     <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
                       Commercial Terms & Notes
                     </span>
-                    <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{detail.notes}</p>
+                    <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                      {detail.notes}
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -224,7 +239,7 @@ export function PurchaseInvoiceDetailSheet({
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <h4 className="font-heading text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <CreditCard className="size-3.5 text-emerald-600" />
+                    <CreditCard className="size-3.5 text-success" />
                     <span>Disbursements & Payments ({detail.payments.length})</span>
                   </h4>
                   {canPay ? (
@@ -259,9 +274,13 @@ export function PurchaseInvoiceDetailSheet({
                           <div>
                             {payment.paymentSource === 'OWNER_CAPITAL' ? (
                               <span className="font-semibold text-foreground flex items-center gap-1.5">
-                                <HandCoins className="size-3.5 text-emerald-600" />
+                                <HandCoins className="size-3.5 text-success" />
                                 <Link
-                                  href={payment.contributorId ? `/finance/capital?contributorId=${payment.contributorId}` : '/finance/capital'}
+                                  href={
+                                    payment.contributorId
+                                      ? `/finance/capital?contributorId=${payment.contributorId}`
+                                      : '/finance/capital'
+                                  }
                                   className="hover:underline text-primary"
                                 >
                                   Paid personally · {payment.contributorName ?? 'Owner Capital'}
@@ -271,20 +290,26 @@ export function PurchaseInvoiceDetailSheet({
                               <span className="font-semibold text-foreground flex items-center gap-1.5">
                                 <Wallet className="size-3.5 text-muted-foreground" />
                                 {payment.accountId ? (
-                                  <Link href={`/finance/accounts/${payment.accountId}`} className="hover:underline">
+                                  <Link
+                                    href={`/finance/accounts/${payment.accountId}`}
+                                    className="hover:underline"
+                                  >
                                     {payment.accountName ?? 'Business Account'}
                                   </Link>
                                 ) : (
-                                  payment.accountName ?? 'Business Account'
+                                  (payment.accountName ?? 'Business Account')
                                 )}
                               </span>
                             )}
                             <span className="text-[11px] text-muted-foreground block mt-0.5">
-                              Trx: <code className="font-mono text-[10px]">{payment.transactionNumber}</code> ·{' '}
-                              {formatSupplyDate(payment.paidAt)}
+                              Trx:{' '}
+                              <code className="font-mono text-[10px]">
+                                {payment.transactionNumber}
+                              </code>{' '}
+                              · {formatSupplyDate(payment.paidAt)}
                             </span>
                           </div>
-                          <strong className="font-mono text-xs tabular-nums text-emerald-600 dark:text-emerald-400">
+                          <strong className="font-mono text-xs text-success tabular-nums">
                             {formatSupplyMoney(payment.amount, detail.currency_code)}
                           </strong>
                         </div>
@@ -306,7 +331,7 @@ export function PurchaseInvoiceDetailSheet({
               {detail.adjustmentHistory.length > 0 ? (
                 <div className="space-y-2.5">
                   <h4 className="font-heading text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <FileEdit className="size-3.5 text-blue-600" />
+                    <FileEdit className="size-3.5 text-info" />
                     <span>Credit Notes & Adjustments ({detail.adjustmentHistory.length})</span>
                   </h4>
                   <div className="space-y-2">

@@ -41,7 +41,9 @@ export function PurchaseAdjustInvoiceDialog({
   onClose,
   onAdjustInvoice,
 }: PurchaseAdjustInvoiceDialogProps) {
-  const [adjustmentType, setAdjustmentType] = useState<'CREDIT' | 'CORRECTION' | 'REVERSAL'>('CREDIT');
+  const [adjustmentType, setAdjustmentType] = useState<'CREDIT' | 'CORRECTION' | 'REVERSAL'>(
+    'CREDIT',
+  );
   const [rawAmount, setRawAmount] = useState('');
   const [reason, setReason] = useState('');
 
@@ -59,11 +61,7 @@ export function PurchaseAdjustInvoiceDialog({
   // We allow operators to enter normal positive numbers and automatically negate for them.
   const numericInput = Math.abs(Number(rawAmount || 0));
   const finalAmountString =
-    adjustmentType === 'CORRECTION'
-      ? rawAmount.trim()
-      : numericInput > 0
-        ? `-${numericInput}`
-        : '';
+    adjustmentType === 'CORRECTION' ? rawAmount.trim() : numericInput > 0 ? `-${numericInput}` : '';
 
   const isReasonValid = reason.trim().length >= 4;
   const isAmountValid = numericInput > 0 && !isNaN(numericInput);
@@ -86,13 +84,16 @@ export function PurchaseAdjustInvoiceDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-info/10 text-info">
               <FileEdit className="size-4" />
             </div>
             <div>
-              <DialogTitle className="text-base">Record Adjustment for {invoice.expense_number}</DialogTitle>
+              <DialogTitle className="text-base">
+                Record Adjustment for {invoice.expense_number}
+              </DialogTitle>
               <DialogDescription className="text-xs">
-                Keep the original supplier bill intact while recording a traceable credit note or correction.
+                Keep the original supplier bill intact while recording a traceable credit note or
+                correction.
               </DialogDescription>
             </div>
           </div>
@@ -110,8 +111,8 @@ export function PurchaseAdjustInvoiceDialog({
               </Badge>
             </div>
             <p className="text-muted-foreground">
-              Original Total: {formatSupplyMoney(invoice.amount, invoice.currency_code)} · Previously Adjusted:{' '}
-              {formatSupplyMoney(invoice.adjustments, invoice.currency_code)}
+              Original Total: {formatSupplyMoney(invoice.amount, invoice.currency_code)} ·
+              Previously Adjusted: {formatSupplyMoney(invoice.adjustments, invoice.currency_code)}
             </p>
           </div>
 
@@ -120,11 +121,14 @@ export function PurchaseAdjustInvoiceDialog({
             <div className="flex items-center justify-between">
               <FieldLabel htmlFor="adjust-type">Adjustment Classification</FieldLabel>
               <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex cursor-help text-muted-foreground" />}>
+                <TooltipTrigger
+                  render={<span className="inline-flex cursor-help text-muted-foreground" />}
+                >
                   <HelpCircle className="size-3.5" />
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs text-xs">
-                  Credit Notes reduce the balance due (e.g. damaged goods rebate). Corrections adjust billing errors.
+                  Credit Notes reduce the balance due (e.g. damaged goods rebate). Corrections
+                  adjust billing errors.
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -167,13 +171,13 @@ export function PurchaseAdjustInvoiceDialog({
             />
             <FieldDescription>
               {adjustmentType === 'CREDIT' ? (
-                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="font-medium text-success">
                   {numericInput > 0
                     ? `Will reduce payable balance by ${formatSupplyMoney(String(numericInput), invoice.currency_code)}.`
                     : 'Enter the credit note value. It will be recorded as a balance reduction.'}
                 </span>
               ) : adjustmentType === 'REVERSAL' ? (
-                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                <span className="font-medium text-warning">
                   Will record a negative adjustment reversal.
                 </span>
               ) : (
@@ -188,7 +192,7 @@ export function PurchaseAdjustInvoiceDialog({
             <Textarea
               id="adjust-reason"
               name="reason"
-              placeholder="e.g. Credit note CN-4021 issued for 12 short-shipped items..."
+              placeholder="e.g. Credit note CN-4021 issued for 12 short-shipped items…"
               value={reason}
               required
               minLength={4}
@@ -198,7 +202,8 @@ export function PurchaseAdjustInvoiceDialog({
               onChange={(e) => setReason(e.target.value)}
             />
             <FieldDescription>
-              Provide clear details for the supplier credit note or accounting correction (min 4 chars).
+              Provide clear details for the supplier credit note or accounting correction (min 4
+              chars).
             </FieldDescription>
           </Field>
 
@@ -206,11 +211,12 @@ export function PurchaseAdjustInvoiceDialog({
             <DialogClose render={<Button variant="outline" type="button" disabled={busy} />}>
               Cancel
             </DialogClose>
-            <Button
-              type="submit"
-              disabled={busy || !isAmountValid || !isReasonValid}
-            >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <DollarSign className="size-4" />}
+            <Button type="submit" disabled={busy || !isAmountValid || !isReasonValid}>
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <DollarSign className="size-4" />
+              )}
               <span>Post adjustment</span>
             </Button>
           </DialogFooter>

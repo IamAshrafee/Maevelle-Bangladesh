@@ -22,6 +22,7 @@ import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useStat
 import type { CatalogVariantChoiceDto, PurchaseDto } from '@maevelle/contracts';
 
 import { Badge } from '@/components/ui/badge';
+import { SupplyTaskDialogContent } from '@/components/supply/supply-task-dialog-content';
 import { useCatalogVariantChoices } from '@/components/supply/use-catalog-variant-choices';
 import { Button } from '@/components/ui/button';
 import {
@@ -207,7 +208,7 @@ export function PurchaseAddLineDialog({
           onOpenChange(next);
         }}
       >
-        <DialogContent
+        <SupplyTaskDialogContent
           className={cn(
             'fixed z-50 flex flex-col p-0 overflow-hidden bg-background shadow-xl duration-100',
             // Mobile: Full screen adaptive viewport
@@ -301,7 +302,9 @@ export function PurchaseAddLineDialog({
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                   <Input
                     ref={searchInputRef}
-                    type="text"
+                    name="variantSearch"
+                    type="search"
+                    autoComplete="off"
                     placeholder="Search title, SKU, barcode, color, size…"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -672,6 +675,7 @@ export function PurchaseAddLineDialog({
                         size="icon"
                         className="size-10 sm:size-9 shrink-0"
                         disabled={busy || Number(quantity) <= 1}
+                        aria-label="Decrease order quantity"
                         onClick={() =>
                           setQuantity((prev) => String(Math.max(1, Number(prev || 1) - 1)))
                         }
@@ -681,6 +685,7 @@ export function PurchaseAddLineDialog({
 
                       <Input
                         id="procure-quantity"
+                        name="quantity"
                         ref={quantityInputRef}
                         type="number"
                         inputMode="decimal"
@@ -699,6 +704,7 @@ export function PurchaseAddLineDialog({
                         size="icon"
                         className="size-10 sm:size-9 shrink-0"
                         disabled={busy}
+                        aria-label="Increase order quantity"
                         onClick={() => setQuantity((prev) => String(Number(prev || 0) + 1))}
                       >
                         <Plus className="size-4" />
@@ -746,6 +752,7 @@ export function PurchaseAddLineDialog({
                       </span>
                       <Input
                         id="procure-price"
+                        name="unitPrice"
                         type="number"
                         inputMode="decimal"
                         min="0"
@@ -854,7 +861,7 @@ export function PurchaseAddLineDialog({
               </div>
             </div>
           </div>
-        </DialogContent>
+        </SupplyTaskDialogContent>
       </Dialog>
 
       {/* Lightbox / Zoom Dialog for high-resolution visual inspection */}
