@@ -130,33 +130,85 @@ export function PdpView({
     [product, selected],
   );
 
+  const [hasInteractedWithVisual, setHasInteractedWithVisual] = useState(false);
+
+  const visualAxis = useMemo(
+    () => product.options.find((opt) => opt.isVisual),
+    [product.options],
+  );
+
+  const sharedCoverMedia = useMemo(
+    () =>
+      product.media.find(
+        (m) =>
+          m.variantId === null &&
+          m.optionValueId === null &&
+          m.isPrimary &&
+          m.role !== 'SIZE_DIAGRAM',
+      ),
+    [product.media],
+  );
+
   const shownMedia = useMemo(() => {
-    const visualAxis = product.options.find((opt) => opt.isVisual);
     const selectedVisualValueId = visualAxis ? selected[visualAxis.id] : null;
 
+    const generalMedia = product.media
+      .filter((a) => a.variantId === null && a.optionValueId === null && a.role !== 'SIZE_DIAGRAM')
+      .toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+
+    // Case 1: Initial view with designated Product Cover before shopper clicks an option
+    if (sharedCoverMedia && !hasInteractedWithVisual) {
+      const remainingMedia = product.media.filter(
+        (a) => a.id !== sharedCoverMedia.id && a.role !== 'SIZE_DIAGRAM',
+      );
+      return [sharedCoverMedia, ...remainingMedia];
+    }
+
+    // Case 2: Variant-exact override
     if (selectedVariant) {
       const exact = product.media.filter((a) => a.variantId === selectedVariant.id);
-      if (exact.length > 0) return exact.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+      if (exact.length > 0) {
+        return [
+          ...exact.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary)),
+          ...generalMedia,
+        ];
+      }
     }
+
+    // Case 3: Visual option gallery (Pattern 1, Pattern 2, Color, etc.)
     if (selectedVisualValueId) {
       const optionMedia = product.media.filter(
         (a) => a.optionValueId === selectedVisualValueId && a.variantId === null,
       );
-      if (optionMedia.length > 0) return optionMedia.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+      if (optionMedia.length > 0) {
+        return [
+          ...optionMedia.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary)),
+          ...generalMedia,
+        ];
+      }
     }
-    const general = product.media.filter((a) => a.variantId === null && a.optionValueId === null);
-    if (general.length > 0) return general.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
-    return product.media.toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
-  }, [product, selected, selectedVariant]);
+
+    // Case 4: General media or fallback
+    if (generalMedia.length > 0) return generalMedia;
+    return product.media
+      .filter((a) => a.role !== 'SIZE_DIAGRAM')
+      .toSorted((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+  }, [
+    product.media,
+    visualAxis,
+    selected,
+    selectedVariant,
+    sharedCoverMedia,
+    hasInteractedWithVisual,
+  ]);
 
   const visualSelectionKey = useMemo(() => {
-    const visualAxis = product.options.find((opt) => opt.isVisual);
     return visualAxis ? (selected[visualAxis.id] ?? '') : '';
-  }, [product, selected]);
+  }, [visualAxis, selected]);
 
   useEffect(() => {
     setActiveMedia(0);
-  }, [visualSelectionKey, selectedVariant?.id]);
+  }, [visualSelectionKey, selectedVariant?.id, hasInteractedWithVisual]);
 
   function valuePossible(axisId: string, valueId: string) {
     return product.variants.some(
@@ -172,6 +224,9 @@ export function PdpView({
   }
 
   function choose(axisId: string, valueId: string) {
+    if (visualAxis && axisId === visualAxis.id) {
+      setHasInteractedWithVisual(true);
+    }
     const next = { ...selected, [axisId]: valueId };
     const compatible = product.variants.some((variant) =>
       product.options.every(
@@ -182,7 +237,6 @@ export function PdpView({
       setSelected(next);
       return;
     }
-    const visualAxis = product.options.find((a) => a.isVisual);
     const fallback: Record<string, string> = { [axisId]: valueId };
     if (visualAxis && axisId !== visualAxis.id && selected[visualAxis.id]) {
       const matchesVisual = product.variants.some(
@@ -192,6 +246,18 @@ export function PdpView({
       if (matchesVisual) fallback[visualAxis.id] = selected[visualAxis.id]!;
     }
     setSelected(fallback);
+  }
+
+  function handleMediaSelect(index: number) {
+    setActiveMedia(index);
+    const mediaItem = shownMedia[index];
+    if (
+      mediaItem?.optionValueId &&
+      visualAxis &&
+      selected[visualAxis.id] !== mediaItem.optionValueId
+    ) {
+      choose(visualAxis.id, mediaItem.optionValueId);
+    }
   }
 
   const sizeAxis = product.options.find(
@@ -320,7 +386,7 @@ export function PdpView({
           media={shownMedia}
           productTitle={product.title}
           activeIndex={activeMedia}
-          onSelect={setActiveMedia}
+          onSelect={handleMediaSelect}
           wishlisted={wishlisted}
           {...(onWishlistToggle ? { onWishlistToggle } : {})}
         />
@@ -412,7 +478,7 @@ export function PdpView({
                   media={shownMedia}
                   productTitle={product.title}
                   activeIndex={activeMedia}
-                  onSelect={setActiveMedia}
+                  onSelect={handleMediaSelect}
                   wishlisted={wishlisted}
                   {...(onWishlistToggle ? { onWishlistToggle } : {})}
                 />

@@ -75,21 +75,34 @@ export interface VariantMatrixRow {
 
 export interface StagedMediaItem {
   readonly id: string;
-  readonly file?: File;
+  readonly file?: File | undefined;
   previewUrl: string;
-  assetId?: string;
+  assetId?: string | undefined;
   isPrimary: boolean;
-  role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
-  variantId?: string | null;
-  optionValueId?: string | null;
-  variantRef?: string | null;
-  optionValueRef?: string | null;
-  position?: number;
+  role?: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM' | undefined;
+  variantId?: string | null | undefined;
+  optionValueId?: string | null | undefined;
+  variantRef?: string | null | undefined;
+  optionValueRef?: string | null | undefined;
+  position?: number | undefined;
   altText: string;
   isUploading: boolean;
-  uploadProgress?: number;
-  processingStage?: 'UPLOADING' | 'PROCESSING';
-  error?: string;
+  uploadProgress?: number | undefined;
+  processingStage?: 'UPLOADING' | 'PROCESSING' | undefined;
+  error?: string | undefined;
+}
+
+export interface MediaCardScopeOption {
+  readonly id: string;
+  readonly label: string;
+  readonly groupLabel?: string | undefined;
+  readonly type: 'GENERAL' | 'COLOR' | 'VARIANT';
+  readonly optionValueId?: string | undefined;
+  readonly optionValueRef?: string | undefined;
+  readonly variantId?: string | undefined;
+  readonly variantRef?: string | undefined;
+  readonly isPrimary?: boolean | undefined;
+  readonly colorHex?: string | null | undefined;
 }
 
 export interface ShippingPreset {

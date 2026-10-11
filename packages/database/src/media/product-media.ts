@@ -61,12 +61,8 @@ export async function attachMediaToProduct(
     `.execute(transaction);
     const hasVisualAxis = Boolean(visualAxis.rows[0]);
 
-    if (hasVisualAxis && !input.variantId && !input.optionValueId && input.role !== 'SIZE_DIAGRAM') {
-      throw new MediaDomainError(
-        'VALIDATION_FAILED',
-        'Products with a visual presentation axis must attach merchandising media to an option value or SKU override.',
-      );
-    }
+    // Visual axis validation: option-value media must belong to the visual axis (checked below),
+    // while shared general media (variantId and optionValueId null) remains fully supported.
 
     if (input.variantId) {
       const variant = await sql<{ id: string }>`select id::text from catalog.product_variants
@@ -169,16 +165,8 @@ export async function syncProductMediaPlacements(
         and product_id=${input.productId}::uuid
         and status='ACTIVE' and is_visual
     `.execute(transaction);
-    const hasVisualAxis = Boolean(visualAxis.rows[0]);
-
-    for (const p of input.placements) {
-      if (hasVisualAxis && !p.variantId && !p.optionValueId && p.role !== 'SIZE_DIAGRAM') {
-        throw new MediaDomainError(
-          'VALIDATION_FAILED',
-          'Products with a visual presentation axis must attach merchandising media to an option value or SKU override.',
-        );
-      }
-    }
+    // Option values must belong to the visual presentation axis (validated below).
+    // Shared general media across all variants/choices remains fully supported.
 
     const uniqueAssetIds = [...new Set(input.placements.map((p) => p.assetId))];
     if (uniqueAssetIds.length > 0) {
@@ -293,23 +281,38 @@ export async function syncProductMediaPlacements(
       };
     });
 
-    const productLevel = normalizedPlacements.filter((p) => !p.variantId && !p.optionValueId);
-    if (productLevel.length > 0 && !productLevel.some((p) => p.isPrimary)) {
+    const productLevel = normalizedPlacements.filter(
+      (p) => !p.variantId && !p.optionValueId && p.role !== 'SIZE_DIAGRAM',
+    );
+    const hasAnyOptionPrimary = normalizedPlacements.some(
+      (p) => (p.optionValueId || p.variantId) && p.isPrimary,
+    );
+    if (!hasAnyOptionPrimary && productLevel.length > 0 && !productLevel.some((p) => p.isPrimary)) {
       productLevel[0]!.isPrimary = true;
       if (productLevel[0]!.role === 'GALLERY') {
         productLevel[0]!.role = 'THUMBNAIL';
       }
     }
 
-    for (const scopeKey of scopePrimaryAssigned) {
-      const [vId, oId] = scopeKey.split(':');
-      await sql`update catalog.product_media set is_primary=false, updated_at=now()
-        where organization_id=${input.organizationId} and product_id=${input.productId}::uuid
-          and variant_id is not distinct from ${vId === 'none' ? null : vId}::uuid
-          and option_value_id is not distinct from ${oId === 'none' ? null : oId}::uuid`.execute(
-        transaction,
+    const optionScopes = new Set(
+      normalizedPlacements
+        .map((p) => p.optionValueId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    for (const optId of optionScopes) {
+      const scopePlacements = normalizedPlacements.filter(
+        (p) => p.optionValueId === optId && p.role !== 'SIZE_DIAGRAM',
       );
+      if (scopePlacements.length > 0 && !scopePlacements.some((p) => p.isPrimary)) {
+        scopePlacements[0]!.isPrimary = true;
+      }
     }
+
+    // Clear existing primaries on the product to prevent multi-scope or updated-scope constraint violations
+    await sql`update catalog.product_media set is_primary=false, updated_at=now()
+      where organization_id=${input.organizationId} and product_id=${input.productId}::uuid`.execute(
+      transaction,
+    );
 
     const activePlacementIds: string[] = [];
     const results: {

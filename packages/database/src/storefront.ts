@@ -251,8 +251,13 @@ export async function searchStorefront(
             or (link.variant_id is null and link.option_value_id is null)
           )
         order by
-          case when poa.is_visual and pov.is_primary then 0 else 1 end,
-          link.is_primary desc,
+          case
+            when link.variant_id is null and link.option_value_id is null and link.is_primary then 0
+            when poa.is_visual and pov.is_primary and link.is_primary then 1
+            when poa.is_visual and pov.is_primary then 2
+            when link.variant_id is null and link.option_value_id is null then 3
+            else 4
+          end,
           link.position,
           link.id
         limit 1
@@ -272,8 +277,13 @@ export async function searchStorefront(
             or (link.variant_id is null and link.option_value_id is null)
           )
         order by
-          case when poa.is_visual and pov.is_primary then 0 else 1 end,
-          link.is_primary desc,
+          case
+            when link.variant_id is null and link.option_value_id is null and link.is_primary then 0
+            when poa.is_visual and pov.is_primary and link.is_primary then 1
+            when poa.is_visual and pov.is_primary then 2
+            when link.variant_id is null and link.option_value_id is null then 3
+            else 4
+          end,
           link.position,
           link.id
         offset 1 limit 1

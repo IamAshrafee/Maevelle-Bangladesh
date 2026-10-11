@@ -11,6 +11,15 @@ import {
   resolveProductRedirect,
   searchStorefront,
 } from './storefront.js';
+import {
+  createCatalogVariant,
+  createProductOptionAxis,
+  createProductOptionValue,
+} from './catalog.js';
+import {
+  registerUploadedMedia,
+  syncProductMediaPlacements,
+} from './media.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -237,4 +246,180 @@ describe('public Storefront projection', () => {
     ).toMatchObject({ available: false });
     expect(await processStorefrontSearchOutbox(database.db, 10_000)).toBe(0);
   });
+
+  it('prioritizes shared product cover photo over default visual option in catalog search when designated as primary', async () => {
+    const owner = await createOrganization(database.db, {
+      code: `cover-${crypto.randomUUID().slice(0, 8)}`,
+      displayName: 'Cover Store',
+      timezone: 'Asia/Dhaka',
+      defaultLocale: 'en',
+      defaultCurrency: 'BDT',
+    });
+    const productType = await sql<{ id: string }>`insert into catalog.product_types
+      (organization_id,code,name) values (${owner.id},'apparel','Apparel') returning id::text`.execute(
+      database.db,
+    );
+    const category = await sql<{ id: string }>`insert into catalog.categories
+      (organization_id,handle,name) values (${owner.id},'bandanas','Bandanas') returning id::text`.execute(
+      database.db,
+    );
+    const product = await sql<{ id: string }>`insert into catalog.products
+      (organization_id,product_type_id,handle,title,description,status,publication_status,published_at,primary_category_id)
+      values (${owner.id},${productType.rows[0]!.id},'bandana-print','Bandana Print','All-weather printed bandana','ACTIVE','UNPUBLISHED',now(),${category.rows[0]!.id})
+      returning id::text`.execute(database.db);
+    const productId = product.rows[0]!.id;
+
+    // 1. Create a visual axis (e.g. Pattern) with 2 options
+    const axis = await createProductOptionAxis(database.db, {
+      organizationId: owner.id,
+      productId,
+      code: 'pattern',
+      name: 'Pattern',
+      isVisual: true,
+    });
+    const pattern1 = await createProductOptionValue(database.db, {
+      organizationId: owner.id,
+      optionAxisId: axis.id,
+      code: 'floral',
+      displayValue: 'Floral Pattern',
+      isPrimary: true,
+    });
+    const pattern2 = await createProductOptionValue(database.db, {
+      organizationId: owner.id,
+      optionAxisId: axis.id,
+      code: 'geometric',
+      displayValue: 'Geometric Pattern',
+      isPrimary: false,
+    });
+
+    // 2. Create variants with these option values
+    const variant1 = await createCatalogVariant(database.db, {
+      organizationId: owner.id,
+      productId,
+      sku: 'BANDANA-FLORAL',
+      optionValueIds: [pattern1.id],
+    });
+    const variant2 = await createCatalogVariant(database.db, {
+      organizationId: owner.id,
+      productId,
+      sku: 'BANDANA-GEOM',
+      optionValueIds: [pattern2.id],
+    });
+
+    // 3. Set prices and inventory so it is coherent
+    for (const vId of [variant1.id, variant2.id]) {
+      await sql`insert into pricing.price_definitions(organization_id,variant_id,currency_code,amount)
+        values(${owner.id},${vId},'BDT',450)`.execute(database.db);
+      const loc = await sql<{ id: string }>`insert into warehouse.locations(organization_id,code,name,location_type,status)
+        values(${owner.id},${crypto.randomUUID().slice(0, 8)},'Main','WAREHOUSE','ACTIVE') returning id::text`.execute(database.db);
+      const item = await sql<{ id: string }>`select id::text from inventory.inventory_items
+        where organization_id=${owner.id} and variant_id=${vId}::uuid`.execute(database.db);
+      await sql`insert into inventory.inventory_levels(organization_id,inventory_item_id,location_id,sellable_quantity)
+        values(${owner.id},${item.rows[0]!.id},${loc.rows[0]!.id},10)`.execute(database.db);
+    }
+
+    // 4. Publish product and build search document
+    await sql`update catalog.products set publication_status='PUBLISHED' where id=${productId}`.execute(database.db);
+    await rebuildStorefrontSearch(database.db, owner.id);
+
+    // 5. Upload 3 assets: Pattern 1 photo, Pattern 2 photo, and Shared group cover photo
+    const [pattern1Asset, pattern2Asset, sharedCoverAsset] = await Promise.all(
+      ['1', '2', '3'].map((checksum) =>
+        registerUploadedMedia(database.db, {
+          organizationId: owner.id,
+          objectKey: `images/bandana-${checksum}-${crypto.randomUUID()}.webp`,
+          mimeType: 'image/webp',
+          byteSize: 100,
+          checksumSha256: checksum.repeat(64),
+          visibility: 'PUBLIC',
+        }),
+      ),
+    );
+
+    const actor = await sql<{ id: string }>`
+      insert into iam.users (name,email,email_normalized)
+      values ('Sync operator',${`sync-${crypto.randomUUID()}@test.local`},${`sync-${crypto.randomUUID()}@test.local`})
+      returning id::text
+    `.execute(database.db);
+    const actorId = actor.rows[0]!.id;
+
+    // 6. Sync placements:
+    // Pattern 1 has lead photo (isPrimary: true in its scope)
+    // Pattern 2 has lead photo (isPrimary: true in its scope)
+    // Shared product has cover photo (isPrimary: true in product scope)
+    await syncProductMediaPlacements(database.db, {
+      organizationId: owner.id,
+      actorId,
+      productId,
+      placements: [
+        {
+          assetId: pattern1Asset!.id,
+          optionValueId: pattern1.id,
+          role: 'COLOR_GALLERY',
+          position: 0,
+          isPrimary: true,
+        },
+        {
+          assetId: pattern2Asset!.id,
+          optionValueId: pattern2.id,
+          role: 'COLOR_GALLERY',
+          position: 0,
+          isPrimary: true,
+        },
+        {
+          assetId: sharedCoverAsset!.id,
+          role: 'GALLERY',
+          position: 0,
+          isPrimary: true,
+        },
+      ],
+    });
+
+    // 7. Search storefront catalog
+    const searchResult = await searchStorefront(database.db, {
+      organizationId: owner.id,
+      query: 'Bandana',
+    });
+    expect(searchResult.items[0]).toBeDefined();
+    // Primary media MUST be the shared cover asset (Photo 3)
+    expect(searchResult.items[0]?.primaryMediaAssetId).toBe(sharedCoverAsset!.id);
+    // Secondary media (for hover flip) MUST be Pattern 1 asset
+    expect(searchResult.items[0]?.secondaryMediaAssetId).toBe(pattern1Asset!.id);
+
+    // 8. Test fallback: If shared photo is NOT primary, default visual option lead becomes primary
+    await syncProductMediaPlacements(database.db, {
+      organizationId: owner.id,
+      actorId,
+      productId,
+      placements: [
+        {
+          assetId: pattern1Asset!.id,
+          optionValueId: pattern1.id,
+          role: 'COLOR_GALLERY',
+          position: 0,
+          isPrimary: true,
+        },
+        {
+          assetId: pattern2Asset!.id,
+          optionValueId: pattern2.id,
+          role: 'COLOR_GALLERY',
+          position: 0,
+          isPrimary: true,
+        },
+        {
+          assetId: sharedCoverAsset!.id,
+          role: 'GALLERY',
+          position: 1,
+          isPrimary: false,
+        },
+      ],
+    });
+
+    const fallbackResult = await searchStorefront(database.db, {
+      organizationId: owner.id,
+      query: 'Bandana',
+    });
+    expect(fallbackResult.items[0]?.primaryMediaAssetId).toBe(pattern1Asset!.id);
+  });
 });
+

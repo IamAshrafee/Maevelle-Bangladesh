@@ -166,6 +166,17 @@ export async function listMediaFolders(): Promise<readonly MediaFolderDto[]> {
   return response.data;
 }
 
+export async function createMediaFolder(input: {
+  readonly name: string;
+  readonly parentId?: string | null;
+}): Promise<MediaFolderDto> {
+  const response = await catalogRequest<ApiEnvelope<MediaFolderDto>>('/admin/media/folders', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
 export async function listMediaTags(): Promise<readonly MediaTagDto[]> {
   const response = await catalogRequest<ApiEnvelope<readonly MediaTagDto[]>>('/admin/media/tags');
   return response.data;

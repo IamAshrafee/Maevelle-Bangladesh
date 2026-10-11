@@ -18,13 +18,13 @@ import { catalogData, CatalogRequestError, productMediaUrl } from '@/lib/catalog
 
 import type {
   OptionAxisState,
+  MediaCardScopeOption,
   ProductCreatorReferences,
   ShippingPreset,
   SizingReferenceData,
   VariantMatrixRow,
   VariantStockEntry,
 } from './types';
-import type { MediaCardScopeOption } from './media-card';
 
 // Sub-modules and utilities
 import { slugify, generateSkuPrefix, generateVariantSku } from './utils/sku-generator';
@@ -276,26 +276,22 @@ export function useProductCreatorState({
       for (const val of visualAxis.values) {
         options.push({
           id: `color-${val.id}`,
-          label: `${visualAxis.name}: ${val.label}${val.isPrimary ? ' (Cover)' : ''}`,
+          label: val.label,
+          groupLabel: visualAxis.name,
           type: 'COLOR',
           optionValueRef: val.id,
           optionValueId: isEditMode && !val.id.startsWith('optval-') ? val.id : undefined,
           isPrimary: Boolean(val.isPrimary),
+          colorHex: val.colorHex ?? null,
         });
       }
-    } else {
-      options.push({
-        id: 'general-product',
-        label: 'Shared Product Gallery (Uniform Photography)',
-        type: 'GENERAL',
-      });
     }
     if (variants.variantMode === 'variants') {
       for (const row of variants.matrixRows) {
         if (row.enabled && row.sku) {
           options.push({
             id: `variant-${row.id}`,
-            label: `Variant: ${row.sku} (${row.optionSelections.map((s) => s.valueDisplay).join(' / ') || row.title})`,
+            label: `${row.sku} · ${row.optionSelections.map((s) => s.valueDisplay).join(' / ') || row.title}`,
             type: 'VARIANT',
             variantRef: row.id,
             variantId:
@@ -416,7 +412,7 @@ export function useProductCreatorState({
                 variantId: m.variantId,
                 optionValueId: m.optionValueId,
                 position: m.position,
-                altText: m.title || m.altText || '',
+                altText: m.altText || m.title || '',
                 isUploading: false,
               })),
             );

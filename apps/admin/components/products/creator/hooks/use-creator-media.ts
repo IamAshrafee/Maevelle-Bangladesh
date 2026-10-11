@@ -63,27 +63,31 @@ export function useCreatorMedia({
     const visualAxis = optionAxes.find((a) => a.isVisual && a.values.length > 0);
     const primaryVisualVal = visualAxis?.values.find((v) => v.isPrimary) || visualAxis?.values[0];
 
-    const resolvedOptionValueRef =
-      targetScope?.optionValueRef ??
-      (visualAxis && !targetScope?.variantRef && !targetScope?.variantId
+    const hasExplicitTarget = targetScope !== undefined;
+    const resolvedOptionValueRef = hasExplicitTarget
+      ? targetScope.optionValueRef ?? null
+      : visualAxis
         ? primaryVisualVal?.id ?? null
-        : null);
+        : null;
 
-    const resolvedOptionValueId =
-      targetScope?.optionValueId ??
-      (visualAxis && !targetScope?.variantRef && !targetScope?.variantId
+    const resolvedOptionValueId = hasExplicitTarget
+      ? targetScope.optionValueId ?? null
+      : visualAxis
         ? primaryVisualVal?.id ?? null
-        : null);
+        : null;
 
     const resolvedVariantRef = targetScope?.variantRef ?? null;
     const resolvedVariantId = targetScope?.variantId ?? null;
 
+    const canBecomePrimary = targetScope?.role !== 'SIZE_DIAGRAM';
     const newItems: StagedMediaItem[] = acceptedFiles.map((file, idx) => ({
       id: `${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
       file,
       previewUrl: URL.createObjectURL(file),
-      isPrimary: mediaItems.length === 0 && idx === 0,
-      role: targetScope?.role ?? (mediaItems.length === 0 && idx === 0 ? 'THUMBNAIL' : 'GALLERY'),
+      isPrimary: canBecomePrimary && mediaItems.length === 0 && idx === 0,
+      role:
+        targetScope?.role ??
+        (canBecomePrimary && mediaItems.length === 0 && idx === 0 ? 'THUMBNAIL' : 'GALLERY'),
       optionValueRef: resolvedOptionValueRef,
       optionValueId: resolvedOptionValueId,
       variantRef: resolvedVariantRef,
@@ -150,12 +154,48 @@ export function useCreatorMedia({
   };
 
   const handleSetPrimaryMedia = (id: string) => {
-    setMediaItems((prev) =>
-      prev.map((m) => ({
-        ...m,
-        isPrimary: m.id === id,
-      })),
-    );
+    setMediaItems((prev) => {
+      const target = prev.find((m) => m.id === id);
+      if (!target) return prev;
+
+      const isTargetShared =
+        !target.optionValueRef && !target.optionValueId && !target.variantRef && !target.variantId;
+
+      return prev.map((m) => {
+        // Setting cover on a shared photo (Product-level Catalog Cover)
+        if (isTargetShared) {
+          const isThisShared =
+            !m.optionValueRef && !m.optionValueId && !m.variantRef && !m.variantId;
+          if (isThisShared) {
+            const isTarget = m.id === id;
+            return {
+              ...m,
+              isPrimary: isTarget,
+              role: isTarget ? ('THUMBNAIL' as const) : ('GALLERY' as const),
+            };
+          }
+          // Preserve option value scope primaries
+          return m;
+        }
+
+        // Setting lead photo on a specific option/variant scope (e.g. Pattern 1, Pattern 2)
+        const sameOptionScope =
+          (Boolean(target.optionValueRef) && m.optionValueRef === target.optionValueRef) ||
+          (Boolean(target.optionValueId) && m.optionValueId === target.optionValueId) ||
+          (Boolean(target.variantRef) && m.variantRef === target.variantRef) ||
+          (Boolean(target.variantId) && m.variantId === target.variantId);
+
+        if (sameOptionScope) {
+          const isTarget = m.id === id;
+          return {
+            ...m,
+            isPrimary: isTarget,
+          };
+        }
+
+        return m;
+      });
+    });
     markDirty();
   };
 
@@ -166,8 +206,21 @@ export function useCreatorMedia({
     setMediaItems((prev) => {
       const filtered = prev.filter((m) => m.id !== id);
       if (filtered.length > 0 && !filtered.some((m) => m.isPrimary)) {
-        const first = filtered[0];
-        if (first) first.isPrimary = true;
+        const replacement = filtered.find((item) => item.role !== 'SIZE_DIAGRAM');
+        if (replacement) {
+          return filtered.map((item) => ({
+            ...item,
+            isPrimary: item.id === replacement.id,
+            role:
+              item.id === replacement.id &&
+              !item.optionValueRef &&
+              !item.optionValueId &&
+              !item.variantRef &&
+              !item.variantId
+                ? 'THUMBNAIL'
+                : item.role,
+          }));
+        }
       }
       return filtered;
     });
@@ -183,8 +236,22 @@ export function useCreatorMedia({
     setMediaItems((prev) => {
       const index = prev.findIndex((m) => m.id === id);
       if (index === -1) return prev;
-      const targetIndex = direction === 'left' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const source = prev[index];
+      if (!source) return prev;
+      const sameGallery = (candidate: StagedMediaItem) =>
+        candidate.role === source.role &&
+        (candidate.optionValueRef || candidate.optionValueId || null) ===
+          (source.optionValueRef || source.optionValueId || null) &&
+        (candidate.variantRef || candidate.variantId || null) ===
+          (source.variantRef || source.variantId || null);
+      const targetIndex = direction === 'left'
+        ? prev.findLastIndex((candidate, candidateIndex) =>
+            candidateIndex < index && sameGallery(candidate),
+          )
+        : prev.findIndex((candidate, candidateIndex) =>
+            candidateIndex > index && sameGallery(candidate),
+          );
+      if (targetIndex < 0) return prev;
       const next = [...prev];
       const [item] = next.splice(index, 1);
       if (item) next.splice(targetIndex, 0, item);
@@ -236,27 +303,31 @@ export function useCreatorMedia({
     const visualAxis = optionAxes.find((a) => a.isVisual && a.values.length > 0);
     const primaryVisualVal = visualAxis?.values.find((v) => v.isPrimary) || visualAxis?.values[0];
 
-    const resolvedOptionValueRef =
-      targetScope?.optionValueRef ??
-      (visualAxis && !targetScope?.variantRef && !targetScope?.variantId
+    const hasExplicitTarget = targetScope !== undefined;
+    const resolvedOptionValueRef = hasExplicitTarget
+      ? targetScope.optionValueRef ?? null
+      : visualAxis
         ? primaryVisualVal?.id ?? null
-        : null);
+        : null;
 
-    const resolvedOptionValueId =
-      targetScope?.optionValueId ??
-      (visualAxis && !targetScope?.variantRef && !targetScope?.variantId
+    const resolvedOptionValueId = hasExplicitTarget
+      ? targetScope.optionValueId ?? null
+      : visualAxis
         ? primaryVisualVal?.id ?? null
-        : null);
+        : null;
 
     const resolvedVariantRef = targetScope?.variantRef ?? null;
     const resolvedVariantId = targetScope?.variantId ?? null;
 
+    const canBecomePrimary = targetScope?.role !== 'SIZE_DIAGRAM';
     const newItems: StagedMediaItem[] = assets.map((asset, idx) => ({
       id: `${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
       assetId: asset.id,
       previewUrl: asset.previewUrl,
-      isPrimary: mediaItems.length === 0 && idx === 0,
-      role: targetScope?.role ?? (mediaItems.length === 0 && idx === 0 ? 'THUMBNAIL' : 'GALLERY'),
+      isPrimary: canBecomePrimary && mediaItems.length === 0 && idx === 0,
+      role:
+        targetScope?.role ??
+        (canBecomePrimary && mediaItems.length === 0 && idx === 0 ? 'THUMBNAIL' : 'GALLERY'),
       optionValueRef: resolvedOptionValueRef,
       optionValueId: resolvedOptionValueId,
       variantRef: resolvedVariantRef,
