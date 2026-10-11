@@ -36,32 +36,32 @@ const sortOptions = [
   {
     id: 'featured' as SortOption,
     title: 'Featured & Curated',
-    subtitle: 'Handpicked heritage picks for Bangladesh',
+    subtitle: 'Curated highlights & staff favorites',
     icon: SparklesIcon,
   },
   {
     id: 'newest' as SortOption,
     title: 'Newest Arrivals',
-    subtitle: 'Freshly dispatched curated drops',
+    subtitle: 'Latest additions to our collection',
     icon: ClockIcon,
   },
   {
     id: 'popular' as SortOption,
     title: 'Most Popular',
-    subtitle: 'Most loved by our patrons across Bangladesh',
+    subtitle: 'Most loved by our customers across Bangladesh',
     badge: 'Trending',
     icon: FlameIcon,
   },
   {
     id: 'price_asc' as SortOption,
     title: 'Price: Low to High',
-    subtitle: 'Starts from ৳550',
+    subtitle: 'Affordable finds first',
     icon: ArrowUpIcon,
   },
   {
     id: 'price_desc' as SortOption,
     title: 'Price: High to Low',
-    subtitle: 'Luxurious fine statement pieces first',
+    subtitle: 'Fine statement pieces first',
     icon: ArrowDownIcon,
   },
   {
@@ -78,7 +78,7 @@ export function SortDrawer({
   onClose,
   onSelectSort,
   selectedSort = 'popular',
-  vaultSubtitle = 'Maevelle Vault',
+  vaultSubtitle = 'Curated Collection',
 }: SortDrawerProps) {
   const [activeSort, setActiveSort] = useState<SortOption>(selectedSort);
 
@@ -145,7 +145,7 @@ export function SortDrawer({
               Sort Collection
             </h2>
             <span className="mt-0.5 font-label-sm text-[12px] font-normal text-on-surface-variant">
-              {itemCount} Heirloom Pieces • {vaultSubtitle}
+              {itemCount} Items · {vaultSubtitle}
             </span>
           </div>
           <button

@@ -12,7 +12,7 @@ export function OrderTrackParcelContents({
   consignment,
 }: OrderTrackParcelContentsProps) {
   const itemCountLabel =
-    consignment.items.length === 1 ? '1 Heirloom' : `${consignment.items.length} Heirlooms`;
+    consignment.items.length === 1 ? '1 Piece' : `${consignment.items.length} Pieces`;
 
   return (
     <section className="w-full bg-surface-container-lowest rounded-2xl p-4 sm:p-5 shadow-sm border border-border-subtle flex flex-col gap-4">

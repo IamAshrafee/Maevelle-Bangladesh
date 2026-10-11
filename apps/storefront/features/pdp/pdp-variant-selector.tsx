@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { CheckIcon } from '@/components/ui/icons';
 
 interface OptionValue {
@@ -24,6 +25,7 @@ export interface PdpVariantSelectorProps {
   readonly onChoose: (axisId: string, valueId: string) => void;
   readonly valuePossible: (axisId: string, valueId: string) => boolean;
   readonly onFittingGuide?: () => void;
+  readonly className?: string;
 }
 
 export function PdpVariantSelector({
@@ -32,12 +34,23 @@ export function PdpVariantSelector({
   onChoose,
   valuePossible,
   onFittingGuide,
+  className = '',
 }: PdpVariantSelectorProps) {
-  if (options.length === 0) return null;
+  const sortedOptions = useMemo(() => {
+    return [...options].sort((a, b) => {
+      const aIsColor = a.values.some((v) => Boolean(v.colorHex)) || a.isVisual;
+      const bIsColor = b.values.some((v) => Boolean(v.colorHex)) || b.isVisual;
+      if (aIsColor && !bIsColor) return -1;
+      if (!aIsColor && bIsColor) return 1;
+      return 0;
+    });
+  }, [options]);
+
+  if (sortedOptions.length === 0) return null;
 
   return (
-    <section className="px-4 pt-5 flex flex-col gap-5">
-      {options.map((axis) => {
+    <section className={`flex flex-col gap-5 ${className}`}>
+      {sortedOptions.map((axis) => {
         const isColor = axis.values.some((v) => v.colorHex);
         const isSize =
           axis.code.toLowerCase().includes('size') || axis.name.toLowerCase().includes('size');
@@ -71,14 +84,12 @@ export function PdpVariantSelector({
                   </svg>
                   <span>Size &amp; Fit Guide</span>
                 </button>
-              ) : isColor ? (
-                <span className="text-[11px] text-[#8a7174]">Pure Silk Velvet</span>
               ) : null}
             </div>
 
             {/* Color swatches */}
             {isColor ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 {axis.values.map((value) => {
                   const active = selected[axis.id] === value.id;
                   const possible = valuePossible(axis.id, value.id);
@@ -92,7 +103,7 @@ export function PdpVariantSelector({
                       disabled={!possible}
                       onClick={() => onChoose(axis.id, value.id)}
                       className={[
-                        'relative w-10 h-10 rounded-full p-0.5 flex items-center justify-center transition-all duration-150',
+                        'relative w-10 h-10 rounded-full p-0.5 flex items-center justify-center transition-[transform,box-shadow] duration-150',
                         active
                           ? 'ring-2 ring-[#9e2a4b] ring-offset-2 ring-offset-[#fff8f5]'
                           : 'ring-2 ring-[#ddbfc3] hover:scale-105',
@@ -128,8 +139,8 @@ export function PdpVariantSelector({
                       disabled={!possible}
                       onClick={() => onChoose(axis.id, value.id)}
                       className={[
-                        'p-3 rounded-xl flex items-center justify-center text-center transition-all duration-150',
-                        'text-[11px] font-semibold',
+                        'p-2.5 sm:p-3 min-h-[44px] rounded-xl flex items-center justify-center text-center transition-colors duration-150',
+                        'text-[12px] font-semibold',
                         active
                           ? 'bg-[#faf2ee] text-[#9e2a4b] ring-2 ring-[#9e2a4b]'
                           : 'bg-[#faf2ee] text-[#1e1b19] ring-1 ring-[#eee7e3] hover:bg-[#f4ece8]',

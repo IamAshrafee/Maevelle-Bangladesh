@@ -16,7 +16,7 @@ export function ProductRatingSummary({
 }: ProductRatingSummaryProps) {
   if (!summary || summary.ratingCount === 0) {
     return (
-      <div className="product-rating-summary-empty">
+      <div className="product-rating-summary-empty !bg-[#faf2ee] !border-border/40 !rounded-2xl !p-6">
         <div className="empty-rating-content">
           <StarRating value={0} size="md" />
           <p className="empty-rating-title">No reviews yet</p>
@@ -65,9 +65,9 @@ export function ProductRatingSummary({
   ];
 
   return (
-    <div className="product-rating-summary-container">
+    <div className="product-rating-summary-container !bg-[#faf2ee] !border-border/40 !rounded-2xl !p-4 sm:!p-6 !grid-cols-1 md:!grid-cols-[16rem_1fr] !gap-5 md:!gap-8">
       {/* Primary Score Column */}
-      <div className="rating-overview-card">
+      <div className="rating-overview-card !border-border/40 !border-r-0 md:!border-r !border-b md:!border-b-0 !pb-5 md:!pb-0 !pr-0 md:!pr-6 !items-center md:!items-start !text-center md:!text-left">
         <div className="rating-big-score" aria-label={`Average rating ${average.toFixed(1)} out of 5 stars`}>
           <span className="score-num">{average.toFixed(1)}</span>
           <span className="score-max">/ 5</span>

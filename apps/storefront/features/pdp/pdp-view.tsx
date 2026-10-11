@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type {
   ProductRatingSummaryDto,
   PublicReviewDto,
@@ -10,8 +11,13 @@ import type {
 } from '@maevelle/contracts';
 import { ProductReviews } from '@/components/product-reviews';
 import { SizeGuideDialog } from '@/components/size-guide-dialog';
-import { StarIcon, ShoppingBagIcon, TruckIcon } from '@/components/ui/icons';
+import {
+  ShoppingBagIcon,
+  StarIcon,
+  TruckIcon,
+} from '@/components/ui/icons';
 import { Breadcrumb, type BreadcrumbItemDef } from '@/components/ui/breadcrumb';
+import { cx } from '@/components/ui/classnames';
 import { PdpGallery } from './pdp-gallery';
 import { PdpCommercialHeader } from './pdp-commercial-header';
 import { PdpVariantSelector } from './pdp-variant-selector';
@@ -82,8 +88,10 @@ export function PdpView({
     return primaryVal ? { [visualAxis.id]: primaryVal.id } : {};
   });
 
+  const router = useRouter();
   const [activeMedia, setActiveMedia] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const sizeDialogRef = useRef<HTMLDialogElement>(null);
 
@@ -269,113 +277,43 @@ export function PdpView({
   ).toFixed(1);
   const ratingCount = product.ratingSummary?.ratingCount ?? 0;
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Desktop right-column actions (inline, not sticky)
-  // ─────────────────────────────────────────────────────────────────────────
-  const DesktopActions = (
-    <div className="flex flex-col gap-4">
-      {/* Trust grid desktop */}
-      <div className="p-4 rounded-2xl bg-[#faf2ee] flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <div className="w-7 h-7 rounded-full bg-[#eee7e3] flex items-center justify-center text-[#9e2a4b] shrink-0">
-            <TruckIcon size={14} />
-          </div>
-          <div>
-            <p className="text-[13px] font-semibold text-[#1e1b19] mb-0.5">Swift City Delivery</p>
-            <p className="text-[12px] text-[#574144]">Dhaka ৳70 (Next-day) · Outside Dhaka ৳130 (2–3 days)</p>
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <div className="w-7 h-7 rounded-full bg-[#eee7e3] flex items-center justify-center text-[#9e2a4b] shrink-0">
-            <ShoppingBagIcon size={14} />
-          </div>
-          <div>
-            <p className="text-[13px] font-semibold text-[#1e1b19] mb-0.5">Cash on Delivery &amp; bKash/Nagad</p>
-            <p className="text-[12px] text-[#574144]">COD across 64 districts · Instant mobile payments accepted</p>
-          </div>
-        </div>
-      </div>
+  const handleAddToCartClick = async () => {
+    if (unselectedAxes.length > 0) {
+      setActionFeedback(`Please select ${unselectedAxes[0]?.name ?? 'option'}`);
+      setTimeout(() => setActionFeedback(null), 3000);
+      return;
+    }
+    if (!selectedVariant || !selectedVariant.available) return;
 
-      {/* Quantity + Add to Bag desktop */}
-      <div className="flex gap-3 items-center">
-        <div className="flex items-center bg-[#f4ece8] rounded-full px-3 py-2 gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-            className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none"
-          >
-            −
-          </button>
-          <span className="w-5 text-center text-[14px] font-semibold text-[#1e1b19]">{quantity}</span>
-          <button
-            type="button"
-            onClick={() => setQuantity((q) => Math.min(10, q + 1))}
-            className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none"
-          >
-            +
-          </button>
-        </div>
-        <button
-          type="button"
-          id="pdp-desktop-add-to-bag"
-          disabled={
-            busy ||
-            unselectedAxes.length > 0 ||
-            !selectedVariant?.price ||
-            !selectedVariant.available
-          }
-          onClick={() => void onAddToCart(selectedVariant!.id, quantity)}
-          className={[
-            'flex-1 h-12 rounded-full flex items-center justify-between px-5 font-semibold transition-all duration-150 active:scale-[0.98] border-0',
-            unselectedAxes.length === 0 && selectedVariant?.available && !busy
-              ? 'bg-[#9e2a4b] hover:bg-[#8b2340] text-white cursor-pointer'
-              : 'bg-[#9e2a4b]/60 text-white/80 cursor-not-allowed',
-          ].join(' ')}
-        >
-          <span className="text-[14px]">
-            {busy
-              ? 'Adding…'
-              : cartMessage?.includes('Added')
-                ? 'Added to Bag ✓'
-                : unselectedAxes.length > 0
-                  ? `Select ${unselectedAxes[0]?.name ?? 'Option'}`
-                  : !selectedVariant?.available
-                    ? 'Out of Stock'
-                    : 'Add to Bag'}
-          </span>
-          {priceDisplay?.amount && unselectedAxes.length === 0 && selectedVariant?.available && (
-            <span className="text-[15px] font-bold tabular-nums">
-              {formatTaka(Number(priceDisplay.amount) * quantity, priceDisplay.currency)}
-            </span>
-          )}
-        </button>
-      </div>
+    try {
+      await onAddToCart(selectedVariant.id, quantity);
+      setActionFeedback('Added to your bag');
+      setTimeout(() => setActionFeedback(null), 3000);
+    } catch {
+      // Error is surfaced by parent cartMessage
+    }
+  };
 
-      {cartMessage ? (
-        <p
-          role="status"
-          className={[
-            'text-[13px] px-3 py-2 rounded-lg',
-            cartMessage.includes('Added')
-              ? 'bg-green-50 text-green-700'
-              : 'bg-red-50 text-red-700',
-          ].join(' ')}
-        >
-          {cartMessage}
-          {cartMessage.includes('Added') && (
-            <Link href="/cart" className="ml-2 underline font-semibold">
-              View Bag
-            </Link>
-          )}
-        </p>
-      ) : null}
-    </div>
-  );
+  const handleBuyNowClick = async () => {
+    if (unselectedAxes.length > 0) {
+      setActionFeedback(`Please select ${unselectedAxes[0]?.name ?? 'option'}`);
+      setTimeout(() => setActionFeedback(null), 3000);
+      return;
+    }
+    if (!selectedVariant || !selectedVariant.available) return;
+
+    try {
+      await onAddToCart(selectedVariant.id, quantity);
+      router.push('/checkout');
+    } catch {
+      router.push('/checkout');
+    }
+  };
 
   return (
     <>
       {/* ═══════════════ MOBILE LAYOUT (< lg) ═══════════════ */}
-      <div className="lg:hidden flex flex-col w-full pb-28 bg-[#fff8f5] min-h-screen">
+      <div className="lg:hidden flex flex-col w-full pb-32 bg-[#fff8f5] min-h-screen">
         {/* Mobile breadcrumb */}
         <div className="px-4 pt-3 pb-2 bg-[#fff8f5]">
           <Breadcrumb items={effectiveBreadcrumbs} />
@@ -407,12 +345,102 @@ export function PdpView({
           onChoose={choose}
           valuePossible={valuePossible}
           {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
+          className="px-4 pt-4"
         />
+
+        {/* Inline Mobile Action Buttons (Stepper + Add to Bag + Buy Now) */}
+        <div className="px-4 pt-4 flex flex-col gap-2.5">
+          <div className="flex items-center gap-2.5 w-full">
+            {/* Stepper */}
+            <div className="flex items-center bg-[#f4ece8] rounded-full px-3 py-2 gap-2.5 shrink-0 h-12">
+              <button
+                type="button"
+                aria-label="Decrease quantity"
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none select-none active:scale-90 transition-transform"
+              >
+                −
+              </button>
+              <span className="w-5 text-center text-[14px] font-semibold text-[#1e1b19] tabular-nums font-mono">
+                {quantity}
+              </span>
+              <button
+                type="button"
+                aria-label="Increase quantity"
+                onClick={() => setQuantity((q) => Math.min(10, q + 1))}
+                className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none select-none active:scale-90 transition-transform"
+              >
+                +
+              </button>
+            </div>
+
+            {/* Add to Bag button */}
+            <button
+              type="button"
+              id="pdp-mobile-inline-add-to-cart"
+              disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available}
+              onClick={handleAddToCartClick}
+              className={cx(
+                'flex-1 h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[13.5px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
+                unselectedAxes.length === 0 && selectedVariant?.available && !busy
+                  ? 'bg-[#9e2a4b] hover:bg-[#8b2340] text-white'
+                  : 'bg-[#9e2a4b]/60 text-white/80 cursor-not-allowed',
+              )}
+            >
+              <span>
+                {busy
+                  ? 'Adding…'
+                  : cartMessage?.includes('Added') || actionFeedback?.includes('Added')
+                    ? 'Added to Bag ✓'
+                    : unselectedAxes.length > 0
+                      ? `Select ${unselectedAxes[0]?.name ?? 'Option'}`
+                      : !selectedVariant?.available
+                        ? 'Out of Stock'
+                        : 'Add to Bag'}
+              </span>
+            </button>
+          </div>
+
+          {/* Buy Now button */}
+          <button
+            type="button"
+            id="pdp-mobile-inline-buy-now"
+            disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available}
+            onClick={handleBuyNowClick}
+            className={cx(
+              'w-full h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[14px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
+              unselectedAxes.length === 0 && selectedVariant?.available && !busy
+                ? 'bg-[#1e1b19] hover:bg-[#332e2c] text-white'
+                : 'bg-[#1e1b19]/60 text-white/80 cursor-not-allowed',
+            )}
+          >
+            <span>Buy Now</span>
+          </button>
+
+          {(actionFeedback || cartMessage) && (
+            <p
+              role="status"
+              className={cx(
+                'text-[12px] font-medium py-1 px-2.5 rounded-lg transition-opacity animate-in fade-in',
+                actionFeedback?.includes('Added') || cartMessage?.includes('Added')
+                  ? 'bg-green-50 text-green-700'
+                  : 'bg-red-50 text-red-700',
+              )}
+            >
+              {actionFeedback ?? cartMessage}
+              {(actionFeedback?.includes('Added') || cartMessage?.includes('Added')) && (
+                <Link href="/cart" className="ml-2 underline font-semibold">
+                  View Bag
+                </Link>
+              )}
+            </p>
+          )}
+        </div>
 
         {/* Trust grid */}
         <PdpTrustGrid />
 
-        {/* Product Details, Specs & FAQs (uncollapsed) */}
+        {/* Product Details, Specs & FAQs */}
         <PdpProductDetails
           description={product.description}
           productDetails={product.details}
@@ -422,10 +450,13 @@ export function PdpView({
         />
 
         {/* Reviews */}
-        <section id="reviews" className="px-4 pt-5 flex flex-col gap-3">
+        <section id="reviews-mobile" className="px-4 pt-8 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-[18px] font-semibold text-[#1e1b19]">Patron Reviews</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#9e2a4b] mb-0.5">
+                Verified Customer Feedback
+              </p>
+              <h2 className="text-[20px] font-serif font-semibold text-[#1e1b19]">Customer Reviews</h2>
               {ratingCount > 0 && (
                 <p className="text-[12px] text-[#574144] mt-0.5">
                   {avg} stars from {ratingCount} verified orders
@@ -438,11 +469,14 @@ export function PdpView({
             organizationId={organizationId}
             initialReviews={initialReviews}
             initialSummary={initialSummary}
+            hideHeader={true}
           />
         </section>
 
-        {/* Cross-sells */}
-        <PdpCrossSells products={crossSells} />
+        {/* Cross-sells (Mobile) */}
+        <div className="px-4 pt-10 pb-6 border-t border-border/40">
+          <PdpCrossSells products={crossSells} title="Complete Your Look" subtitle="Curated Recommendations" />
+        </div>
 
         {/* Sticky bottom bar */}
         <PdpStickyBar
@@ -450,12 +484,11 @@ export function PdpView({
           currency={priceDisplay?.currency ?? currency}
           quantity={quantity}
           onQuantityChange={(delta) => setQuantity((q) => Math.max(1, Math.min(10, q + delta)))}
-          onAddToCart={() => {
-            if (selectedVariant) void onAddToCart(selectedVariant.id, quantity);
-          }}
+          onAddToCart={handleAddToCartClick}
+          onBuyNow={handleBuyNowClick}
           busy={busy}
           available={selectedVariant?.available ?? false}
-          cartMessage={cartMessage}
+          cartMessage={actionFeedback ?? cartMessage}
           unselectedAxesCount={unselectedAxes.length}
           unselectedAxisName={unselectedAxes[0]?.name ?? ''}
         />
@@ -463,17 +496,18 @@ export function PdpView({
 
       {/* ═══════════════ DESKTOP LAYOUT (lg+) ═══════════════ */}
       <div className="hidden lg:block w-full bg-[#fff8f5] min-h-screen">
-        <div className="max-w-[1200px] mx-auto px-8 pt-6 pb-10">
-          {/* Desktop breadcrumb */}
+        <div className="max-w-[1240px] mx-auto px-6 lg:px-8 pt-6 pb-16">
+          {/* Top Breadcrumb */}
           <div className="mb-6">
             <Breadcrumb items={effectiveBreadcrumbs} />
           </div>
 
-          <div className="grid grid-cols-12 gap-12 items-start">
-            {/* Left column – Gallery + Accordions + Reviews */}
-            <div className="col-span-7 flex flex-col gap-8">
-              {/* Gallery */}
-              <div className="rounded-2xl overflow-hidden">
+          {/* TWO-COLUMN LAYOUT: Left (Gallery + Story/Specs/FAQ) & Right (Sticky Core Info + Actions) */}
+          <div className="grid grid-cols-12 gap-10 xl:gap-14 items-start">
+            {/* ─── LEFT COLUMN (col-span-7) ─── */}
+            <div className="col-span-7 flex flex-col gap-10">
+              {/* Product Gallery */}
+              <div className="rounded-2xl overflow-hidden bg-surface-container-low border border-border/40 shadow-xs">
                 <PdpGallery
                   media={shownMedia}
                   productTitle={product.title}
@@ -484,80 +518,60 @@ export function PdpView({
                 />
               </div>
 
-              {/* Product Details, Specs & FAQs (uncollapsed) */}
+              {/* Product Details, Specs & FAQs */}
               <PdpProductDetails
                 description={product.description}
                 productDetails={product.details}
                 productFaqs={product.faqs}
                 {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
               />
-
-              {/* Reviews */}
-              <section id="reviews" className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-[#9e2a4b] mb-1">
-                      Verified Patrons
-                    </p>
-                    <h2 className="text-[24px] font-serif font-semibold text-[#1e1b19]">
-                      Patron Reviews
-                    </h2>
-                  </div>
-                  {ratingCount > 0 && (
-                    <div className="flex items-center gap-2 bg-[#faf2ee] px-4 py-2 rounded-full">
-                      <StarIcon size={16} className="text-[#9e2a4b]" />
-                      <span className="text-[16px] font-bold text-[#1e1b19]">{avg}</span>
-                      <span className="text-[13px] text-[#574144]">({ratingCount} reviews)</span>
-                    </div>
-                  )}
-                </div>
-                <ProductReviews
-                  productId={product.id}
-                  organizationId={organizationId}
-                  initialReviews={initialReviews}
-                  initialSummary={initialSummary}
-                />
-              </section>
             </div>
 
-            {/* Right column – sticky product info + actions */}
+            {/* ─── RIGHT COLUMN (col-span-5) ─── */}
+            {/* Sticky all the way through the end of the left column's FAQ - Unboxed, independent elements */}
             <div className="col-span-5">
-              <div className="sticky top-24 flex flex-col gap-6">
-                {/* Brand + rating */}
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-widest text-[#8a7174]">
-                    Maevelle Bangladesh
-                  </span>
-                  {ratingCount > 0 && (
-                    <a
-                      href="#reviews"
-                      className="flex items-center gap-1 bg-[#eee7e3] px-2.5 py-1 rounded-full no-underline"
-                    >
-                      <StarIcon size={14} className="text-[#9e2a4b]" />
-                      <span className="text-[13px] font-semibold text-[#1e1b19]">{avg}</span>
-                      <span className="text-[12px] text-[#574144]">({ratingCount})</span>
-                    </a>
-                  )}
+              <div className="sticky top-24 self-start flex flex-col gap-6">
+                {/* 1 & 2. Reviews indicator at the top & Product Title closely beneath it */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    {ratingCount > 0 ? (
+                      <a
+                        href="#reviews"
+                        className="inline-flex items-center gap-1.5 py-1 px-3 rounded-full bg-[#faf2ee] hover:bg-[#eee7e3] text-on-surface transition-colors no-underline"
+                      >
+                        <StarIcon size={14} className="text-[#9e2a4b] fill-current" />
+                        <span className="text-[13px] font-bold text-[#1e1b19]">{avg}</span>
+                        <span className="text-[12px] text-[#574144]">({ratingCount} reviews)</span>
+                      </a>
+                    ) : (
+                      <a
+                        href="#reviews"
+                        className="inline-flex items-center gap-1.5 py-1 px-3 rounded-full bg-[#faf2ee] hover:bg-[#eee7e3] text-primary transition-colors no-underline"
+                      >
+                        <StarIcon size={14} className="text-[#9e2a4b]" />
+                        <span className="text-[12px] font-semibold">Be the first reviewer</span>
+                      </a>
+                    )}
+                  </div>
+
+                  <h1 className="text-[28px] xl:text-[32px] leading-tight font-serif font-semibold text-[#1e1b19] tracking-tight">
+                    {product.title}
+                  </h1>
                 </div>
 
-                {/* Title */}
-                <h1 className="text-[28px] leading-tight font-serif font-semibold text-[#1e1b19] tracking-tight">
-                  {product.title}
-                </h1>
-
-                {/* Price */}
-                {priceDisplay?.type === 'exact' && (
+                {/* 3. Price (Price, Compare-at, Save %, strictly no tax/vat) */}
+                {priceDisplay?.amount && (
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <span className="text-[24px] font-bold text-primary tabular-nums">
+                    <span className="text-[26px] font-bold text-primary tabular-nums font-mono">
                       {formatTaka(priceDisplay.amount, priceDisplay.currency)}
                     </span>
                     {priceDisplay.compareAtAmount &&
                       Number(priceDisplay.compareAtAmount) > Number(priceDisplay.amount) && (
                         <>
-                          <span className="text-[18px] font-bold text-outline line-through tabular-nums">
+                          <span className="text-[17px] font-bold text-[#8a7174] line-through tabular-nums font-mono">
                             {formatTaka(priceDisplay.compareAtAmount, priceDisplay.currency)}
                           </span>
-                          <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-container">
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed">
                             SAVE{' '}
                             {Math.round(
                               ((Number(priceDisplay.compareAtAmount) - Number(priceDisplay.amount)) /
@@ -568,30 +582,170 @@ export function PdpView({
                           </span>
                         </>
                       )}
-                    <span className="text-[12px] text-on-surface-variant ml-auto">Tax &amp; VAT incl.</span>
                   </div>
                 )}
 
-                {/* Variant selector */}
-                <div className="px-0">
-                  <PdpVariantSelector
-                    options={product.options}
-                    selected={selected}
-                    onChoose={choose}
-                    valuePossible={valuePossible}
-                    {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
-                  />
+                {/* 4. Options (Color first, then Size, Material, etc.) */}
+                <PdpVariantSelector
+                  options={product.options}
+                  selected={selected}
+                  onChoose={choose}
+                  valuePossible={valuePossible}
+                  {...(guide ? { onFittingGuide: () => setIsSizeGuideOpen(true) } : {})}
+                  className="px-0 pt-0"
+                />
+
+                {/* 5. Information cards (Nationwide Delivery, COD & Mobile Banking) */}
+                <div className="p-4 rounded-xl bg-[#faf2ee] border border-border/40 flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#eee7e3] flex items-center justify-center text-primary shrink-0 mt-0.5">
+                      <TruckIcon size={15} />
+                    </div>
+                    <div className="flex flex-col">
+                      <p className="text-[13px] font-semibold text-[#1e1b19] leading-tight">Nationwide Express Delivery</p>
+                      <p className="text-[12px] text-[#574144] mt-0.5 leading-relaxed">
+                        Inside Dhaka ৳60 (Next Day) · Outside Dhaka ৳120 (2–3 Days)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-border/40" />
+
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#eee7e3] flex items-center justify-center text-primary shrink-0 mt-0.5">
+                      <ShoppingBagIcon size={15} />
+                    </div>
+                    <div className="flex flex-col">
+                      <p className="text-[13px] font-semibold text-[#1e1b19] leading-tight">
+                        Cash on Delivery &amp; Mobile Banking
+                      </p>
+                      <p className="text-[12px] text-[#574144] mt-0.5 leading-relaxed">
+                        Cash on Delivery across all 64 districts · bKash, Nagad &amp; Cards accepted.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Desktop actions */}
-                {DesktopActions}
+                {/* 6. Action buttons (Previous stepper + previous exact button style for both buttons) */}
+                <div className="flex flex-col gap-2.5 pt-1">
+                  <div className="flex items-center gap-2.5 xl:gap-3 w-full">
+                    {/* Previous stepper */}
+                    <div className="flex items-center bg-[#f4ece8] rounded-full px-3 py-2 gap-3 shrink-0">
+                      <button
+                        type="button"
+                        aria-label="Decrease quantity"
+                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                        className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none select-none active:scale-90 transition-transform"
+                      >
+                        −
+                      </button>
+                      <span className="w-5 text-center text-[14px] font-semibold text-[#1e1b19] tabular-nums font-mono">
+                        {quantity}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Increase quantity"
+                        onClick={() => setQuantity((q) => Math.min(10, q + 1))}
+                        className="w-8 h-8 flex items-center justify-center text-[#1e1b19] border-0 bg-transparent cursor-pointer text-xl leading-none select-none active:scale-90 transition-transform"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Add to Bag button */}
+                    <button
+                      type="button"
+                      id="pdp-desktop-add-to-cart"
+                      disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available}
+                      onClick={handleAddToCartClick}
+                      className={cx(
+                        'flex-1 h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[14px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
+                        unselectedAxes.length === 0 && selectedVariant?.available && !busy
+                          ? 'bg-[#9e2a4b] hover:bg-[#8b2340] text-white'
+                          : 'bg-[#9e2a4b]/60 text-white/80 cursor-not-allowed',
+                      )}
+                    >
+                      <span>
+                        {busy
+                          ? 'Adding…'
+                          : cartMessage?.includes('Added') || actionFeedback?.includes('Added')
+                            ? 'Added to Bag ✓'
+                            : unselectedAxes.length > 0
+                              ? `Select ${unselectedAxes[0]?.name ?? 'Option'}`
+                              : !selectedVariant?.available
+                                ? 'Out of Stock'
+                                : 'Add to Bag'}
+                      </span>
+                    </button>
+
+                    {/* Buy Now button */}
+                    <button
+                      type="button"
+                      id="pdp-desktop-buy-now"
+                      disabled={busy || unselectedAxes.length > 0 || !selectedVariant?.available}
+                      onClick={handleBuyNowClick}
+                      className={cx(
+                        'flex-1 h-12 rounded-full flex items-center justify-center px-4 font-semibold text-[14px] transition-[background-color,transform] duration-150 active:scale-[0.98] border-0 shadow-xs cursor-pointer',
+                        unselectedAxes.length === 0 && selectedVariant?.available && !busy
+                          ? 'bg-[#1e1b19] hover:bg-[#332e2c] text-white'
+                          : 'bg-[#1e1b19]/60 text-white/80 cursor-not-allowed',
+                      )}
+                    >
+                      <span>Buy Now</span>
+                    </button>
+                  </div>
+
+                  {(actionFeedback || cartMessage) && (
+                    <p
+                      role="status"
+                      className={cx(
+                        'text-[12px] font-medium py-1 px-2.5 rounded-lg transition-opacity animate-in fade-in',
+                        actionFeedback?.includes('Added') || cartMessage?.includes('Added')
+                          ? 'bg-green-50 text-green-700'
+                          : 'bg-red-50 text-red-700',
+                      )}
+                    >
+                      {actionFeedback ?? cartMessage}
+                      {(actionFeedback?.includes('Added') || cartMessage?.includes('Added')) && (
+                        <Link href="/cart" className="ml-2 underline font-semibold">
+                          View Bag
+                        </Link>
+                      )}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
+          {/* Here the two column layout ends! */}
 
-          {/* Full-width cross-sells */}
-          <div className="mt-12">
-            <PdpCrossSells products={crossSells} />
+          {/* ─── CENTER CONTENT LAYOUT: REVIEWS SECTION ─── */}
+          <section id="reviews" className="w-full max-w-4xl mx-auto pt-20 pb-16 border-t border-border/40 mt-16">
+            <div className="text-center mb-10">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-primary mb-1.5">
+                Verified Customer Feedback
+              </p>
+              <h2 className="text-[28px] sm:text-[32px] font-serif font-semibold text-[#1e1b19] tracking-tight">
+                Customer Reviews
+              </h2>
+              <p className="text-[13px] text-[#574144] mt-2 max-w-md mx-auto">
+                Real ratings and experiences from verified buyers across Bangladesh
+              </p>
+            </div>
+
+            <ProductReviews
+              productId={product.id}
+              organizationId={organizationId}
+              initialReviews={initialReviews}
+              initialSummary={initialSummary}
+              hideHeader={true}
+            />
+          </section>
+          {/* Core of the product details page ends here */}
+
+          {/* ─── RECOMMENDATIONS SECTION (Full Width Multi-Column) ─── */}
+          <div className="w-full pt-16 pb-16 border-t border-border/40 mt-14">
+            <PdpCrossSells products={crossSells} title="Complete Your Look" subtitle="Curated Recommendations" />
           </div>
         </div>
       </div>

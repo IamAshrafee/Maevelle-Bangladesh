@@ -52,7 +52,7 @@ export function PdpProductDetails({
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-primary">
-              The Piece
+              About The Piece
             </p>
             <h3 className="text-[20px] sm:text-[22px] font-serif font-semibold text-on-surface tracking-tight">
               Story &amp; Silhouette
@@ -139,7 +139,7 @@ export function PdpProductDetails({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-primary">
-              Client Inquiries
+              Common Questions
             </p>
             <h3 className="text-[20px] sm:text-[22px] font-serif font-semibold text-on-surface tracking-tight">
               Frequently Asked Questions

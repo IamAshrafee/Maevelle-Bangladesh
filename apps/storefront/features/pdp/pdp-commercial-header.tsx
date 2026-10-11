@@ -44,60 +44,64 @@ export function PdpCommercialHeader({
     : 0;
 
   return (
-    <div className="px-4 pt-4 flex flex-col gap-2">
-      {/* Brand line + rating */}
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-outline">
-          Maevelle Bangladesh
-        </span>
-        {count > 0 && (
+    <div className="px-4 pt-4 flex flex-col gap-1.5">
+      {/* 1. Reviews indicator badge at the top */}
+      <div className="flex items-center gap-2">
+        {count > 0 ? (
           <a
-            href="#reviews"
-            className="flex items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-full no-underline"
+            href="#reviews-mobile"
+            className="inline-flex items-center gap-1.5 bg-[#faf2ee] hover:bg-[#eee7e3] px-2.5 py-1 rounded-full no-underline transition-colors"
             aria-label={`Rated ${avg} out of 5, ${count} reviews`}
           >
-            <StarIcon size={14} className="text-primary fill-primary" />
-            <span className="text-[13px] font-semibold text-on-surface">{avg}</span>
-            <span className="text-[12px] text-on-surface-variant">({count})</span>
+            <StarIcon size={13} className="text-[#9e2a4b] fill-current" />
+            <span className="text-[12px] font-bold text-[#1e1b19]">{avg}</span>
+            <span className="text-[11px] text-[#574144]">({count} reviews)</span>
+          </a>
+        ) : (
+          <a
+            href="#reviews-mobile"
+            className="inline-flex items-center gap-1.5 bg-[#faf2ee] hover:bg-[#eee7e3] px-2.5 py-1 rounded-full no-underline text-primary text-[11px] font-semibold transition-colors"
+          >
+            <StarIcon size={13} className="text-[#9e2a4b]" />
+            <span>Be the first reviewer</span>
           </a>
         )}
       </div>
 
-      {/* Title */}
-      <h1 className="text-[22px] leading-snug font-semibold font-serif text-on-surface tracking-tight">
+      {/* 2. Title positioned closely underneath the review badge */}
+      <h1 className="text-[22px] sm:text-[24px] leading-snug font-semibold font-serif text-[#1e1b19] tracking-tight">
         {title}
       </h1>
 
       {/* Price hierarchy */}
       {price?.type === 'exact' ? (
         <div className="flex items-baseline gap-2.5 pt-1 flex-wrap">
-          <span className="text-[20px] font-bold leading-tight text-primary tabular-nums">
+          <span className="text-[22px] font-bold leading-tight text-[#9e2a4b] tabular-nums font-mono">
             {formatTaka(price.amount, price.currency)}
           </span>
           {price.compareAtAmount && Number(price.compareAtAmount) > Number(price.amount) && (
-            <span className="text-[15px] font-bold text-outline line-through tabular-nums">
+            <span className="text-[16px] font-bold text-[#8a7174] line-through tabular-nums font-mono">
               {formatTaka(price.compareAtAmount, price.currency)}
             </span>
           )}
           {savings > 0 && (
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-container">
-              SAVE {savings}%
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed">
+              {savings}% OFF
             </span>
           )}
-          <span className="ml-auto text-[12px] text-on-surface-variant">Tax &amp; VAT incl.</span>
         </div>
       ) : null}
 
       {/* Dispatch status banner */}
       {(isAvailable || unselectedAxesCount === 0) && (
-        <div className="flex items-center gap-2 mt-1 p-2.5 rounded-xl bg-surface-container-low text-on-surface">
-          <div className="w-7 h-7 rounded-full bg-surface-container-highest flex items-center justify-center text-primary shrink-0">
+        <div className="flex items-center gap-2.5 mt-1 p-3 rounded-2xl bg-[#faf2ee] border border-border/40 text-on-surface">
+          <div className="w-7 h-7 rounded-full bg-[#eee7e3] flex items-center justify-center text-primary shrink-0">
             <TruckIcon size={16} />
           </div>
           <div className="flex flex-col">
-            <span className="text-[13px] font-semibold text-on-surface">Ready to Dispatch</span>
-            <span className="text-[12px] text-on-surface-variant">
-              Online Exclusive &bull; Ships within 24 hrs across Bangladesh
+            <span className="text-[13px] font-semibold text-[#1e1b19]">In Stock &amp; Ready to Ship</span>
+            <span className="text-[12px] text-[#574144] leading-snug">
+              Online Exclusive &middot; Dispatches within 24 hours across Bangladesh
             </span>
           </div>
         </div>

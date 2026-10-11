@@ -31,6 +31,8 @@ export function PdpGallery({
 }: PdpGalleryProps) {
   const lightboxRef = useRef<HTMLDialogElement>(null);
   const [fading, setFading] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
   const current = media[activeIndex];
   const total = media.length;
@@ -44,10 +46,40 @@ export function PdpGallery({
     }, 150);
   }
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+    touchStartY.current = e.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const endX = e.changedTouches[0]?.clientX ?? null;
+    const endY = e.changedTouches[0]?.clientY ?? null;
+    if (endX === null || endY === null) return;
+
+    const diffX = touchStartX.current - endX;
+    const diffY = touchStartY.current - endY;
+
+    // Trigger swipe if horizontal movement is dominant and > 35px
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 35) {
+      if (diffX > 0 && activeIndex < total - 1) {
+        switchTo(activeIndex + 1);
+      } else if (diffX < 0 && activeIndex > 0) {
+        switchTo(activeIndex - 1);
+      }
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
   return (
     <section aria-label="Product images" className="w-full flex flex-col bg-surface-container-low">
-      {/* Hero image container */}
-      <div className="relative w-full aspect-square overflow-hidden bg-surface-container">
+      {/* Hero image container with touch swipe */}
+      <div
+        className="relative w-full aspect-square overflow-hidden bg-surface-container touch-pan-y"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {current ? (
           <>
             <img
@@ -127,8 +159,23 @@ export function PdpGallery({
 
         {/* Slide counter */}
         {total > 1 && (
-          <div className="absolute bottom-4 right-4 px-2.5 py-1 rounded-full bg-inverse-surface/75 text-inverse-on-surface text-[11px] font-semibold tracking-wide backdrop-blur-sm pointer-events-none">
+          <div className="absolute bottom-4 right-4 px-2.5 py-1 rounded-full bg-inverse-surface/75 text-inverse-on-surface text-[11px] font-semibold tracking-wide backdrop-blur-sm pointer-events-none font-mono tabular-nums">
             {activeIndex + 1} / {total}
+          </div>
+        )}
+
+        {/* Subtle mobile pagination dots */}
+        {total > 1 && total <= 6 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 px-2.5 py-1 rounded-full bg-black/35 backdrop-blur-md sm:hidden pointer-events-none">
+            {media.map((_, idx) => (
+              <span
+                key={idx}
+                className={[
+                  'h-1.5 rounded-full transition-[width,background-color] duration-150',
+                  activeIndex === idx ? 'w-3.5 bg-white' : 'w-1.5 bg-white/50',
+                ].join(' ')}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -144,7 +191,7 @@ export function PdpGallery({
               aria-pressed={activeIndex === index}
               onClick={() => switchTo(index)}
               className={[
-                'relative shrink-0 w-14 h-14 rounded-lg overflow-hidden transition-all duration-200 border-0 p-0 cursor-pointer bg-surface-container-high',
+                'relative shrink-0 w-14 h-14 rounded-lg overflow-hidden transition-[opacity,ring-color] duration-150 border-0 p-0 cursor-pointer bg-surface-container-high',
                 activeIndex === index
                   ? 'ring-2 ring-primary opacity-100'
                   : 'opacity-70 hover:opacity-100 ring-0',

@@ -85,7 +85,7 @@ export function WishlistDesktopView({
             </span>
           </div>
           <p className="mt-2 text-body-md text-on-surface-variant max-w-2xl">
-            Saved heirloom accessories and artisanal edits reserved for your personal consideration.
+            Your saved favorites, jewelry, and accessories reserved for your personal selection.
           </p>
         </div>
 

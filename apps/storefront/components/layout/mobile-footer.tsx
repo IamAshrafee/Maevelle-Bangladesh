@@ -155,10 +155,10 @@ export function MobileFooter({
             </p>
           </div>
 
-          {/* Column 2: Patron Services */}
+          {/* Column 2: Customer Care */}
           <div className="space-y-2">
             <span className="block font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
-              Patron Services
+              Customer Care
             </span>
             <ul className="space-y-1.5 text-xs font-label-md text-on-surface-variant">
               <li>
@@ -199,7 +199,7 @@ export function MobileFooter({
           {/* Column 3: Trust & Payments */}
           <div className="space-y-2">
             <span className="block font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
-              White Glove Trust
+              Our Guarantee
             </span>
             <p className="text-xs text-on-surface-variant leading-relaxed">
               Doorstep inspection across all 64 districts in Bangladesh before payment.

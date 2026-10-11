@@ -152,8 +152,8 @@ export function CartDrawer({
               <TruckIcon size={16} />
               <span>
                 {remainingForFreeShipping > 0
-                  ? `Add ${formatMoney(remainingForFreeShipping)} more for Free Dhaka Express!`
-                  : 'You have unlocked Free Dhaka Express!'}
+                  ? `Add ${formatMoney(remainingForFreeShipping)} more for Free Express Delivery!`
+                  : 'You have unlocked Free Express Delivery!'}
               </span>
             </div>
             <span className="font-mono font-medium text-on-surface-variant tabular-nums">
@@ -177,7 +177,7 @@ export function CartDrawer({
                 Your bag is empty
               </p>
               <p className="mt-1 text-body-sm text-[12px] text-on-surface-variant">
-                Explore our handcrafted treasures to add heirloom items.
+                Explore our curated collections to find your next favorite piece.
               </p>
             </div>
           ) : (
@@ -241,7 +241,7 @@ export function CartDrawer({
               <div className="flex items-center justify-between font-body-sm text-[13px] text-on-surface-variant">
                 <span>Delivery</span>
                 <span className="text-[12px] font-medium text-primary">
-                  {deliveryFee === 0 ? 'Free Dhaka Express' : '৳70 Dhaka / Free over ৳3,000'}
+                  {deliveryFee === 0 ? 'Free Express Delivery' : 'Inside Dhaka ৳60 / Outside ৳120 · Free over ৳3,000'}
                 </span>
               </div>
               <div className="flex items-center justify-between border-t border-surface-container pt-1 font-headline-sm font-semibold text-on-surface">
@@ -273,14 +273,14 @@ export function CartDrawer({
                 type="button"
               >
                 <ShoppingBagIcon className="text-primary" size={18} />
-                <span>View Full Cart Page</span>
+                <span>View Shopping Bag</span>
               </button>
             </div>
 
             {/* Local Convenience & Trust Seal */}
             <div className="flex items-center justify-center gap-1.5 pb-2 text-center font-label-sm text-[11px] text-on-surface-variant/80">
               <ShieldCheckIcon className="text-primary" size={14} />
-              <span>Cash on Delivery (COD) &amp; bKash • 7-Day Doorstep Exchange</span>
+              <span>Cash on Delivery across Bangladesh · Instant bKash &amp; Cards Accepted</span>
             </div>
           </div>
         )}

@@ -1,4 +1,3 @@
-import { AnnouncementBar } from '@/components/layout/announcement-bar';
 import { HeaderClientShell } from '@/components/layout/header-client-shell';
 import { loadPublicCategories, loadPublicStorefrontContext } from '@/lib/api/server/catalog';
 
@@ -12,12 +11,10 @@ export async function StorefrontHeader() {
     .catch(() => ({ storeName: 'Maevelle', announcement: undefined, categories: [] }));
 
   return (
-    <>
-      <AnnouncementBar announcement={navigation.announcement} />
-      <HeaderClientShell
-        categories={navigation.categories}
-        storeName={navigation.storeName}
-      />
-    </>
+    <HeaderClientShell
+      announcement={navigation.announcement}
+      categories={navigation.categories}
+      storeName={navigation.storeName}
+    />
   );
 }

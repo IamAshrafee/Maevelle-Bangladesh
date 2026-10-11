@@ -19,8 +19,10 @@ import { useCartCount } from '@/features/cart/use-cart-count';
 import { SEARCH_PLACEHOLDER } from './search-constants';
 import { SearchDropdownPanel } from './search-dropdown-panel';
 import { useRecentSearches } from './use-recent-searches';
+import { AnnouncementBar } from './announcement-bar';
 
 export type DesktopNavbarProps = {
+  announcement?: string | null | undefined;
   cartCount?: number | undefined;
   categories?: readonly StorefrontCategoryDto[] | undefined;
   className?: string | undefined;
@@ -101,7 +103,7 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
     ],
     featured: {
       title: 'Quilted Mini Crossbody Bag',
-      tag: 'Patron Favorite',
+      tag: 'Customer Favorite',
       description: 'Micro-quilted ivory body with heavy brushed gold link chain.',
       price: '৳2,950',
       path: '/categories/handbags',
@@ -132,15 +134,9 @@ const MEGA_MENUS: Record<string, MegaMenuSection> = {
   },
 };
 
-const SEARCH_SUGGESTIONS = [
-  'Freshwater Pearl Drop Earrings',
-  'Plush Velvet Ribbon',
-  'Quilted Crossbody Bag',
-  'Mulberry Silk Scarf',
-  '18K Gold Vermeil',
-];
 
 export function DesktopNavbar({
+  announcement,
   cartCount: initialCartCount,
   className,
   onOpenCart,
@@ -188,12 +184,36 @@ export function DesktopNavbar({
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  // Scroll detection
+  // Scroll detection with requestAnimationFrame and hysteresis to completely eliminate scroll bounce/jitter
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 12);
+    let ticking = false;
+    const COLLAPSE_THRESHOLD = 80;
+    const EXPAND_THRESHOLD = 25;
+
+    const updateScroll = () => {
+      const scrollY = window.scrollY;
+      setIsScrolled((prev) => {
+        if (!prev && scrollY > COLLAPSE_THRESHOLD) {
+          return true;
+        }
+        if (prev && scrollY < EXPAND_THRESHOLD) {
+          return false;
+        }
+        return prev;
+      });
+      ticking = false;
     };
+
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(updateScroll);
+        ticking = true;
+      }
+    };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
+    updateScroll();
+
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -255,6 +275,7 @@ export function DesktopNavbar({
   return (
     <>
       <header
+        style={{ overflowAnchor: 'none' }}
         className={cx(
           'sticky top-0 z-40 w-full transition-[background-color,border-color,box-shadow] duration-200',
           isScrolled
@@ -264,8 +285,23 @@ export function DesktopNavbar({
           className,
         )}
       >
-        {/* ROW 1: PRIMARY BRAND & UTILITIES (Generous luxury height: 76px) */}
-        <div className="border-b border-border/30">
+        {/* MARKETING BAR (Collapses upward smoothly on scroll) */}
+        <div
+          className={cx(
+            'overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out',
+            isScrolled ? 'max-h-0 opacity-0 -translate-y-2 pointer-events-none' : 'max-h-12 opacity-100 translate-y-0'
+          )}
+        >
+          <AnnouncementBar announcement={announcement} />
+        </div>
+
+        {/* ROW 1: PRIMARY BRAND & UTILITIES (Collapses upward smoothly on scroll) */}
+        <div
+          className={cx(
+            'border-b border-border/30 overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out',
+            isScrolled ? 'max-h-0 opacity-0 -translate-y-4 pointer-events-none' : 'max-h-[80px] opacity-100 translate-y-0'
+          )}
+        >
           <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between gap-8 px-6 lg:px-8">
             {/* Brand Logo (Left) */}
             <Link
@@ -345,7 +381,10 @@ export function DesktopNavbar({
             {isSearchFocused && (
               <div
                 aria-hidden="true"
-                className="fixed inset-0 top-[112px] z-30 bg-[#1E1B19]/35 backdrop-blur-2xs transition-opacity duration-200 animate-in fade-in"
+                className={cx(
+                  'fixed inset-0 z-30 bg-[#1E1B19]/35 backdrop-blur-2xs transition-[top,opacity] duration-200 animate-in fade-in',
+                  isScrolled ? 'top-[48px]' : 'top-[124px]',
+                )}
                 onClick={() => setIsSearchFocused(false)}
               />
             )}
@@ -464,25 +503,98 @@ export function DesktopNavbar({
               })}
             </nav>
 
-            {/* Right Utility Buttons (Track Order & Explore Vault) */}
-            <div className="flex items-center gap-4">
-              <Link
-                className="flex items-center gap-1.5 font-label-md text-xs font-medium text-on-surface-variant hover:text-primary transition-colors"
-                href="/orders/track"
+            {/* Right Action Utilities in Row 2 */}
+            <div className="relative flex items-center justify-end h-8 min-w-[210px]">
+              {/* Scrolled State: Wishlist & Bag auto-appear in Row 2 with smooth modern animation */}
+              <div
+                className={cx(
+                  'flex items-center gap-2.5 transition-[opacity,transform] duration-200 ease-out',
+                  isScrolled
+                    ? 'opacity-100 translate-y-0 pointer-events-auto'
+                    : 'opacity-0 translate-y-2 pointer-events-none absolute right-0',
+                )}
               >
-                <TruckIcon size={15} />
-                <span>Track Order</span>
-              </Link>
+                {/* Wishlist Link */}
+                <Link
+                  aria-label={`View Wishlist (${wishlistCount} items)`}
+                  className="group relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-on-surface transition-[background-color,color] hover:bg-surface-container-low hover:text-primary cursor-pointer select-none"
+                  href="/wishlist"
+                >
+                  <div className="relative">
+                    <HeartIcon className="transition-transform group-hover:scale-105" size={18} />
+                    {wishlistCount > 0 && (
+                      <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-secondary-fixed px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-on-secondary-fixed shadow-xs">
+                        {wishlistCount}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-label-md text-xs font-semibold">Wishlist</span>
+                </Link>
 
-              <span className="h-3 w-px bg-border/60" />
+                {/* Shopping Bag Button */}
+                {onOpenCart ? (
+                  <button
+                    aria-label={`View shopping bag (${cartCount} items)`}
+                    className="group relative flex items-center gap-1.5 rounded-lg bg-surface-container-low px-3 py-1.5 text-on-surface transition-[background-color,color] hover:bg-surface-container hover:text-primary active:scale-98 cursor-pointer select-none"
+                    onClick={onOpenCart}
+                    type="button"
+                  >
+                    <div className="relative">
+                      <ShoppingBagIcon className="text-primary transition-transform group-hover:scale-105" size={18} />
+                      {cartCount > 0 && (
+                        <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-white shadow-xs">
+                          {cartCount}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-label-md text-xs font-semibold">Bag</span>
+                  </button>
+                ) : (
+                  <Link
+                    aria-label={`View shopping bag (${cartCount} items)`}
+                    className="group relative flex items-center gap-1.5 rounded-lg bg-surface-container-low px-3 py-1.5 text-on-surface transition-[background-color,color] hover:bg-surface-container hover:text-primary active:scale-98 cursor-pointer select-none"
+                    href="/cart"
+                  >
+                    <div className="relative">
+                      <ShoppingBagIcon className="text-primary transition-transform group-hover:scale-105" size={18} />
+                      {cartCount > 0 && (
+                        <span className="absolute -top-1.5 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 font-label-sm text-[10px] font-bold font-mono tabular-nums text-white shadow-xs">
+                          {cartCount}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-label-md text-xs font-semibold">Bag</span>
+                  </Link>
+                )}
+              </div>
 
-              <Link
-                className="group flex items-center gap-1 font-label-md text-xs font-semibold text-primary hover:underline transition-colors"
-                href="/categories"
+              {/* Default Unscrolled State: Track Order & Explore Vault */}
+              <div
+                className={cx(
+                  'flex items-center gap-4 transition-[opacity,transform] duration-200 ease-out',
+                  !isScrolled
+                    ? 'opacity-100 translate-y-0 pointer-events-auto'
+                    : 'opacity-0 -translate-y-2 pointer-events-none absolute right-0',
+                )}
               >
-                <span>Explore Vault</span>
-                <ArrowRightIcon className="transition-transform group-hover:translate-x-0.5" size={13} />
-              </Link>
+                <Link
+                  className="flex items-center gap-1.5 font-label-md text-xs font-medium text-on-surface-variant hover:text-primary transition-colors"
+                  href="/orders/track"
+                >
+                  <TruckIcon size={15} />
+                  <span>Track Order</span>
+                </Link>
+
+                <span className="h-3 w-px bg-border/60" />
+
+                <Link
+                  className="group flex items-center gap-1 font-label-md text-xs font-semibold text-primary hover:underline transition-colors"
+                  href="/categories"
+                >
+                  <span>All Collections</span>
+                  <ArrowRightIcon className="transition-transform group-hover:translate-x-0.5" size={13} />
+                </Link>
+              </div>
             </div>
           </div>
 

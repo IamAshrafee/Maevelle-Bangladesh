@@ -1,9 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { ArrowRightIcon } from '@/components/ui/icons';
-import { formatTaka } from './pdp-money';
+import { ProductCard } from '@/components/commerce/product-card';
 
 export interface CrossSellProduct {
   readonly id: string;
@@ -18,6 +15,8 @@ export interface CrossSellProduct {
 
 export interface PdpCrossSellsProps {
   readonly products?: readonly CrossSellProduct[] | undefined;
+  readonly title?: string;
+  readonly subtitle?: string;
 }
 
 const DEFAULT_ENSEMBLE: readonly CrossSellProduct[] = [
@@ -28,9 +27,9 @@ const DEFAULT_ENSEMBLE: readonly CrossSellProduct[] = [
     price: '1650',
     currency: 'BDT',
     imageUrl:
-      'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=400&q=80',
+      'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=600&q=80',
     imageAlt: 'Baroque freshwater pearl dangling drop earrings with gold filigree',
-    badge: 'Earrings',
+    badge: 'Editor’s Pick',
   },
   {
     id: 'ensemble-2',
@@ -39,81 +38,91 @@ const DEFAULT_ENSEMBLE: readonly CrossSellProduct[] = [
     price: '720',
     currency: 'BDT',
     imageUrl:
-      'https://images.unsplash.com/photo-1588880331179-bc9b93a8cb5e?auto=format&fit=crop&w=400&q=80',
+      'https://images.unsplash.com/photo-1588880331179-bc9b93a8cb5e?auto=format&fit=crop&w=600&q=80',
     imageAlt: 'Delicate rose gold hair pins encrusted with petite crystal cluster accents',
-    badge: 'Pins',
+    badge: 'Curated Drop',
   },
   {
     id: 'ensemble-3',
     handle: 'french-acetate-oversized-floral-claw-clip',
-    title: 'Mulberry Silk Ribbon Scrunchie',
+    title: 'Mulberry Silk Scrunchie',
     price: '850',
     currency: 'BDT',
     imageUrl:
-      'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?auto=format&fit=crop&w=400&q=80',
+      'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?auto=format&fit=crop&w=600&q=80',
     imageAlt: 'French plush velvet ribbon hair accessory in dusty rose',
-    badge: 'Curated',
+    badge: 'Atelier Favorite',
+  },
+  {
+    id: 'ensemble-4',
+    handle: 'monsoon-garden-silk-scarf',
+    title: 'Monsoon Garden Silk Scarf',
+    price: '2450',
+    currency: 'BDT',
+    imageUrl:
+      'https://images.unsplash.com/photo-1601924994987-69e26d50dc26?auto=format&fit=crop&w=600&q=80',
+    imageAlt: 'Fluid pure mulberry silk scarf with hand-painted botanical lotus foliage',
+    badge: 'New Season',
+  },
+  {
+    id: 'ensemble-5',
+    handle: 'celestial-solitaire-velvet-choker',
+    title: 'Celestial Velvet Choker',
+    price: '1280',
+    currency: 'BDT',
+    imageUrl:
+      'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80',
+    imageAlt: 'Plush midnight black velvet ribbon with solitaire crystal charm',
+    badge: 'Bestseller',
+  },
+  {
+    id: 'ensemble-6',
+    handle: 'artisan-filigree-bangle',
+    title: 'Artisan Filigree Bangle',
+    price: '1950',
+    currency: 'BDT',
+    imageUrl:
+      'https://images.unsplash.com/photo-1611591475152-4c09a1e35d48?auto=format&fit=crop&w=600&q=80',
+    imageAlt: 'Intricate 18k gold vermeil filigree cuff bracelet',
+    badge: 'Signature',
   },
 ];
 
-export function PdpCrossSells({ products }: PdpCrossSellsProps) {
-  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+export function PdpCrossSells({
+  products,
+  title = 'Complete Your Look',
+  subtitle = 'Curated Recommendations',
+}: PdpCrossSellsProps) {
   const items = products && products.length > 0 ? products : DEFAULT_ENSEMBLE;
 
   return (
-    <section className="pt-6 flex flex-col gap-3">
-      <div className="px-4 flex items-center justify-between">
-        <h2 className="text-[18px] font-semibold text-on-surface">Pairs Elegantly With</h2>
-        <span className="text-[11px] font-semibold text-outline">Curated Ensemble</span>
+    <section aria-label="Product recommendations" className="w-full pt-8 pb-4 flex flex-col gap-6">
+      <div className="text-center flex flex-col gap-1 px-4">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-primary">
+          {subtitle}
+        </p>
+        <h2 className="text-[22px] sm:text-[26px] font-serif font-semibold text-on-surface tracking-tight">
+          {title}
+        </h2>
       </div>
-      <div className="flex items-stretch gap-3 px-4 overflow-x-auto no-scrollbar pb-2">
-        {items.map((p) => {
-          const isFailed = Boolean(failedImages[p.id]) || !p.imageUrl;
-          return (
-            <div
-              key={p.id}
-              className="shrink-0 w-44 rounded-xl bg-surface-container-lowest shadow-sm overflow-hidden flex flex-col border border-border/40"
-            >
-              <Link href={`/products/${p.handle}`} className="block">
-                <div className="w-full aspect-square bg-surface-container-high relative overflow-hidden">
-                  {!isFailed ? (
-                    <img
-                      src={p.imageUrl}
-                      alt={p.imageAlt}
-                      className="w-full h-full object-cover"
-                      onError={() => setFailedImages((prev) => ({ ...prev, [p.id]: true }))}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-surface-container-low text-primary p-2">
-                      <span className="text-2xl font-serif font-bold">M</span>
-                      <span className="text-[10px] text-outline text-center mt-1 uppercase tracking-wider">
-                        Maevelle
-                      </span>
-                    </div>
-                  )}
-                  {p.badge && (
-                    <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-surface-bright/90 backdrop-blur-xs text-[10px] font-semibold text-primary">
-                      {p.badge}
-                    </span>
-                  )}
-                </div>
-              </Link>
-              <div className="p-3 flex flex-col gap-1 flex-1">
-                <h3 className="text-[13px] font-semibold text-on-surface truncate">{p.title}</h3>
-                <span className="text-[15px] font-bold text-on-surface tabular-nums">
-                  {formatTaka(p.price, p.currency)}
-                </span>
-                <Link
-                  href={`/products/${p.handle}`}
-                  className="mt-1 w-full py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container-high text-primary text-[11px] font-semibold text-center transition-colors duration-150 flex items-center justify-center gap-1 no-underline"
-                >
-                  <span>View Piece</span>
-                  <ArrowRightIcon size={12} />
-                </Link>
-              </div>
-            </div>
-          );
-        })}
+
+      {/* Multi-Column Product Cards Grid (4, 5, 6 cards in a row on larger screens) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-5 w-full">
+        {items.map((p) => (
+          <ProductCard
+            key={p.id}
+            id={p.id}
+            title={p.title}
+            price={p.price}
+            imageUrl={p.imageUrl}
+            imageAlt={p.imageAlt}
+            href={`/products/${p.handle}`}
+            badge={p.badge}
+            deliveryPill="Dhaka Next-Day"
+            variant="auto"
+            className="w-full"
+          />
+        ))}
       </div>
     </section>
   );

@@ -5,7 +5,7 @@ import { WishlistPageShell } from '@/features/wishlist/components/wishlist-page-
 export const metadata: Metadata = {
   title: 'Your Wishlist',
   description:
-    'Saved heirloom accessories and artisanal edits reserved for your personal consideration at Maevelle Bangladesh.',
+    'Your saved favorites, jewelry, and accessories reserved for your personal selection at Maevelle Bangladesh.',
 };
 
 export default function WishlistPage() {

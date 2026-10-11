@@ -97,7 +97,7 @@ export function WishlistMobileView({
         </div>
 
         <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed max-w-[92%]">
-          Saved heirloom accessories and artisanal edits reserved for your personal consideration.
+          Your saved favorites, jewelry, and accessories reserved for your personal selection.
         </p>
       </section>
 

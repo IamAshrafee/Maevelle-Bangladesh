@@ -15,9 +15,9 @@ export function ReviewEligibilityCta({
   const token = searchParams.get('token');
 
   return (
-    <aside className="review-eligibility-banner" aria-label="Review authenticity information">
+    <aside className="review-eligibility-banner !bg-[#faf2ee] !border-border/40 !rounded-2xl !p-3.5 sm:!p-5 flex-col sm:flex-row items-start sm:items-center" aria-label="Review authenticity information">
       <div className="eligibility-copy">
-        <div className="eligibility-badge-icon" aria-hidden="true">
+        <div className="eligibility-badge-icon !bg-[#eee7e3] !border-border/40 text-primary" aria-hidden="true">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             <polyline points="9 12 11 14 15 10" />

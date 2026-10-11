@@ -14,8 +14,8 @@ export type AnnouncementBarProps = {
 
 const DEFAULT_MESSAGES = [
   'Complimentary Express Delivery across Bangladesh on orders over ৳3,000',
-  'Fast Dispatch Nationwide • 24-48h Dhaka & 2-3 Days Nationwide',
-  'Cash on Delivery & Instant bKash / Nagad Accepted with zero surcharges',
+  'Fast Delivery · Dhaka Next-Day & Nationwide within 2–3 Days',
+  'Cash on Delivery & Instant bKash / Nagad with zero extra fees',
 ];
 
 export function AnnouncementBar({

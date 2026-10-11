@@ -11,7 +11,7 @@ describe('PdpProductDetails', () => {
       />,
     );
 
-    expect(html).toContain('The Piece');
+    expect(html).toContain('About The Piece');
     expect(html).toContain('Story &amp; Silhouette');
     expect(html).toContain('Crafted from handwoven mulberry silk with intricate zardozi embroidery.');
     // Must NOT have any <details> or <summary> or accordion triggers
@@ -63,7 +63,7 @@ describe('PdpProductDetails', () => {
       />,
     );
 
-    expect(html).toContain('Client Inquiries');
+    expect(html).toContain('Common Questions');
     expect(html).toContain('Frequently Asked Questions');
     expect(html).toContain('How long does shipping take within Dhaka?');
     expect(html).toContain('Delivery within Dhaka takes 24 to 48 hours via express courier.');

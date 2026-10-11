@@ -22,7 +22,7 @@ export function ReviewCard({ review, onOpenMedia }: ReviewCardProps) {
   }).format(new Date(review.submittedAt));
 
   return (
-    <article className="storefront-review-card" aria-label={`Review by ${review.publicDisplayName}`}>
+    <article className="storefront-review-card !bg-[#faf2ee] !border-border/40 !rounded-2xl !p-4 sm:!p-6" aria-label={`Review by ${review.publicDisplayName}`}>
       {/* Header: Rating & Verified Purchase */}
       <div className="review-card-top-row">
         <div className="review-rating-block">

@@ -18,6 +18,7 @@ export interface ProductReviewsProps {
   readonly organizationId: string;
   readonly initialReviews?: readonly PublicReviewDto[] | undefined;
   readonly initialSummary?: ProductRatingSummaryDto | null | undefined;
+  readonly hideHeader?: boolean | undefined;
 }
 
 export function ProductReviews({
@@ -25,6 +26,7 @@ export function ProductReviews({
   organizationId,
   initialReviews,
   initialSummary,
+  hideHeader = false,
 }: ProductReviewsProps) {
   const [reviews, setReviews] = useState<readonly PublicReviewDto[]>(initialReviews ?? []);
   const [summary, setSummary] = useState<ProductRatingSummaryDto | null | undefined>(initialSummary);
@@ -145,14 +147,16 @@ export function ProductReviews({
 
   return (
     <section className="product-reviews-section" aria-labelledby="product-reviews-heading">
-      <div className="reviews-section-header">
-        <div className="section-title-wrap">
-          <p className="section-eyebrow">Real Customer Feedback</p>
-          <h2 id="product-reviews-heading" className="section-heading">
-            Verified Reviews & Ratings
-          </h2>
+      {!hideHeader && (
+        <div className="reviews-section-header">
+          <div className="section-title-wrap">
+            <p className="section-eyebrow">Real Customer Feedback</p>
+            <h2 id="product-reviews-heading" className="section-heading">
+              Verified Reviews & Ratings
+            </h2>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Trust & Eligibility Policy CTA */}
       <ReviewEligibilityCta productId={productId} organizationId={organizationId} />
@@ -221,20 +225,6 @@ export function ProductReviews({
         </div>
       ) : null}
 
-      {/* Empty State when no reviews exist overall */}
-      {!loading && reviews.length === 0 && !hasFilterActive ? (
-        <div className="reviews-zero-state">
-          <div className="zero-state-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </div>
-          <h3 className="zero-state-title">No reviews yet</h3>
-          <p className="zero-state-description">
-            Be the first verified buyer to share your thoughts on this piece. Once your order arrives, use your secure delivery link to review.
-          </p>
-        </div>
-      ) : null}
 
       {/* Empty State when filters yield 0 results */}
       {!loading && reviews.length === 0 && hasFilterActive ? (

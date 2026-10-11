@@ -150,10 +150,10 @@ export function DesktopFooter({
             </ul>
           </div>
 
-          {/* Column 2: Patron Services */}
+          {/* Column 2: Customer Care */}
           <div className="col-span-4 space-y-3">
             <span className="block font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
-              Patron Services
+              Customer Care
             </span>
             <ul className="space-y-2 text-xs font-label-md text-on-surface-variant">
               <li>
@@ -184,17 +184,17 @@ export function DesktopFooter({
             </ul>
           </div>
 
-          {/* Column 3: Customer Care & Boutique */}
+          {/* Column 3: Boutique & Concierge */}
           <div className="col-span-4 space-y-3">
             <span className="block font-label-sm text-xs font-bold uppercase tracking-wider text-on-surface">
-              Customer Care
+              Our Boutique
             </span>
             <div className="space-y-2 text-xs leading-relaxed text-on-surface-variant font-label-md">
               <p>
                 <strong className="text-on-surface font-semibold">Online Boutique:</strong> 100% Online E-commerce Store
               </p>
               <p>
-                <strong className="text-on-surface font-semibold">Client Concierge:</strong>{' '}
+                <strong className="text-on-surface font-semibold">Customer Concierge:</strong>{' '}
                 <a
                   className="font-mono tabular-nums text-primary hover:underline transition-colors duration-150"
                   href="tel:+8801700623835"
@@ -203,7 +203,7 @@ export function DesktopFooter({
                 </a>
               </p>
               <p>
-                <strong className="text-on-surface font-semibold">Doorstep Inspection:</strong> Doorstep inspection before payment across all 64 districts in Bangladesh.
+                <strong className="text-on-surface font-semibold">Doorstep Inspection:</strong> Inspect your items upon delivery before payment across all 64 districts in Bangladesh.
               </p>
             </div>
           </div>
