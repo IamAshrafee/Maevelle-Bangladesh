@@ -1,6 +1,6 @@
 'use client';
 
-import { RotateCcw, Trash2, Clock, Sparkles } from 'lucide-react';
+import { RotateCcw, Trash2, Clock } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 
@@ -25,14 +25,14 @@ export function DraftRecoveryAlert({
   });
 
   return (
-    <Alert className="border-amber-200 bg-amber-50/70 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 shadow-xs">
-      <Clock className="size-4 text-amber-600 dark:text-amber-400" />
+    <Alert className="border-warning/30 bg-warning/10 text-warning shadow-xs">
+      <Clock className="size-4 text-warning" />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between w-full">
         <div>
-          <AlertTitle className="text-xs font-semibold text-amber-950 dark:text-amber-100">
+          <AlertTitle className="text-xs font-semibold text-foreground">
             Unsaved Draft Available
           </AlertTitle>
-          <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
+          <AlertDescription className="text-xs text-muted-foreground">
             A previously unsaved product draft was saved on {formattedDate} at {formattedTime}.
           </AlertDescription>
         </div>
@@ -42,7 +42,7 @@ export function DraftRecoveryAlert({
             type="button"
             size="sm"
             variant="default"
-            className="h-7 gap-1 text-xs bg-amber-800 hover:bg-amber-900 text-white dark:bg-amber-700"
+            className="h-7 gap-1 text-xs bg-warning hover:bg-warning/90 text-warning-foreground"
             onClick={onRestore}
           >
             <RotateCcw className="size-3" />
@@ -53,7 +53,7 @@ export function DraftRecoveryAlert({
             type="button"
             size="sm"
             variant="ghost"
-            className="h-7 gap-1 text-xs text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40"
+            className="h-7 gap-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={onDiscard}
           >
             <Trash2 className="size-3" />

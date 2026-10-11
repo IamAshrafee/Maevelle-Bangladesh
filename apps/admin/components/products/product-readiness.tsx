@@ -21,7 +21,7 @@ export function ProductReadiness({
     >
       <header className="flex items-start gap-3 border-b px-4 py-3">
         <span
-          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg ${readiness.blockerCount > 0 ? 'bg-destructive/10 text-destructive' : readiness.warningCount > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}
+          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg ${readiness.blockerCount > 0 ? 'bg-destructive/10 text-destructive' : readiness.warningCount > 0 ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}
         >
           {readiness.blockerCount > 0 ? (
             <CircleAlert aria-hidden="true" />
@@ -50,12 +50,12 @@ export function ProductReadiness({
           >
             {check.state === 'PASS' ? (
               <CheckCircle2
-                className="mt-0.5 size-4 shrink-0 text-emerald-700"
+                className="mt-0.5 size-4 shrink-0 text-success"
                 aria-hidden="true"
               />
             ) : (
               <AlertTriangle
-                className={`mt-0.5 size-4 shrink-0 ${check.state === 'BLOCKER' ? 'text-destructive' : 'text-amber-700'}`}
+                className={`mt-0.5 size-4 shrink-0 ${check.state === 'BLOCKER' ? 'text-destructive' : 'text-warning'}`}
                 aria-hidden="true"
               />
             )}

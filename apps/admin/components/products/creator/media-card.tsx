@@ -1,6 +1,6 @@
 'use client';
 
-import { type ClipboardEvent, type DragEvent, type RefObject, useMemo, useState } from 'react';
+import { type ClipboardEvent, type DragEvent, type RefObject, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import {
   ArrowLeft,
@@ -90,6 +90,7 @@ export function MediaCard({
 }: MediaCardProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('all');
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const colorScopes = useMemo(
     () => scopeOptions.filter((opt) => opt.type === 'COLOR'),
@@ -204,6 +205,30 @@ export function MediaCard({
           </div>
 
           <div className="flex items-center gap-2">
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                onFilesSelected(event.target.files, currentUploadScope);
+                event.currentTarget.value = '';
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs font-medium"
+              onClick={() => cameraInputRef.current?.click()}
+              title="Take photo with phone camera"
+            >
+              <Camera className="size-3.5 text-primary" />
+              <span className="hidden sm:inline">Take Photo</span>
+              <span className="sm:hidden">Photo</span>
+            </Button>
+
             {onAddExistingAssets && (
               <Button
                 type="button"
@@ -257,7 +282,7 @@ export function MediaCard({
                   }`}
                   onClick={() => setActiveTab(opt.id)}
                 >
-                  {opt.isPrimary && <Star className="size-3 fill-amber-300 text-amber-300" />}
+                  {opt.isPrimary && <Star className="size-3 fill-warning text-warning" />}
                   <span>{opt.label}</span>
                   <span className="opacity-70 text-[10px]">({count})</span>
                 </button>

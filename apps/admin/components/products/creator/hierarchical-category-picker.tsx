@@ -33,8 +33,6 @@ export function HierarchicalCategoryPicker({
   recommendedCategoryId,
 }: HierarchicalCategoryPickerProps) {
   const [search, setSearch] = useState('');
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
-
   const pathToCategory = useMemo(
     () => new Map(categories.map((category) => [category.path, category])),
     [categories],
@@ -47,6 +45,45 @@ export function HierarchicalCategoryPicker({
     }
     return counts;
   }, [categories]);
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    for (const category of categories) {
+      if (selectedCategoryIds.includes(category.id) || category.id === recommendedCategoryId) {
+        let parent = parentPath(category);
+        while (parent) {
+          const ancestor = pathToCategory.get(parent);
+          if (ancestor) initial.add(ancestor.id);
+          parent = ancestor ? parentPath(ancestor) : null;
+        }
+      }
+    }
+    return initial;
+  });
+
+  // Keep ancestors expanded whenever selected category IDs change
+  useState(() => {
+    if (selectedCategoryIds.length > 0) {
+      for (const category of categories) {
+        if (selectedCategoryIds.includes(category.id) || category.id === recommendedCategoryId) {
+          let parent = parentPath(category);
+          while (parent) {
+            const ancestor = pathToCategory.get(parent);
+            if (ancestor) expandedIds.add(ancestor.id);
+            parent = ancestor ? parentPath(ancestor) : null;
+          }
+        }
+      }
+    }
+  });
+
+  function expandAll() {
+    setExpandedIds(new Set(categories.map((c) => c.id)));
+  }
+
+  function collapseAll() {
+    setExpandedIds(new Set());
+  }
   const normalizedSearch = search.trim().toLocaleLowerCase('en');
   const visibleCategories = useMemo(() => {
     if (normalizedSearch) {
@@ -171,16 +208,38 @@ export function HierarchicalCategoryPicker({
           </div>
         )}
 
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            aria-label="Search categories"
-            placeholder="Search categories and paths…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-9"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              aria-label="Search categories"
+              placeholder="Search categories and paths…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="pl-9 h-8 text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              onClick={expandAll}
+            >
+              Expand All
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              onClick={collapseAll}
+            >
+              Collapse
+            </Button>
+          </div>
         </div>
 
         <div className="max-h-80 overflow-y-auto rounded-lg border border-border bg-card p-1">
@@ -197,12 +256,10 @@ export function HierarchicalCategoryPicker({
               return (
                 <div
                   key={category.id}
+                  style={{ paddingLeft: `${Math.min(category.depth, 6) * 16 + 6}px` }}
                   className={cn(
-                    'flex min-h-10 items-center gap-1 rounded-md px-1.5 transition-colors duration-150',
+                    'flex min-h-10 items-center gap-1 rounded-md pr-1.5 transition-colors duration-150',
                     selected ? 'bg-primary-subtle' : 'hover:bg-muted',
-                    ['pl-1.5', 'pl-5', 'pl-9', 'pl-13', 'pl-17', 'pl-21'][
-                      Math.min(category.depth, 5)
-                    ],
                   )}
                 >
                   {hasChildren && !normalizedSearch ? (

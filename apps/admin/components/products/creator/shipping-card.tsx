@@ -127,7 +127,7 @@ export function ShippingCard({
         {/* Quick Presets */}
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Sparkles className="size-3 text-amber-500" />
+            <Sparkles className="size-3 text-warning" />
             <span>Quick Courier Presets (Bangladesh)</span>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -245,6 +245,63 @@ export function ShippingCard({
             </div>
           </div>
         </div>
+
+        {/* Live Volumetric Weight and Billable Estimate Banner */}
+        {(() => {
+          const l = parseFloat(lengthValue);
+          const w = parseFloat(widthValue);
+          const h = parseFloat(heightValue);
+          const wt = parseFloat(weightValue);
+
+          let volKg: number | null = null;
+          if (!isNaN(l) && !isNaN(w) && !isNaN(h) && l > 0 && w > 0 && h > 0) {
+            let lCm = l;
+            let wCm = w;
+            let hCm = h;
+            if (dimensionUnit === 'MM') {
+              lCm = l / 10;
+              wCm = w / 10;
+              hCm = h / 10;
+            } else if (dimensionUnit === 'IN') {
+              lCm = l * 2.54;
+              wCm = w * 2.54;
+              hCm = h * 2.54;
+            }
+            volKg = Math.round(((lCm * wCm * hCm) / 5000) * 100) / 100;
+          }
+
+          const actualKg = !isNaN(wt) && wt > 0
+            ? Math.round((weightUnit === 'G' ? wt / 1000 : wt) * 100) / 100
+            : null;
+
+          if (!volKg && !actualKg) return null;
+
+          const billableKg = volKg && actualKg
+            ? Math.max(volKg, actualKg)
+            : volKg ?? actualKg ?? 0;
+
+          const isVolumetricHigher = volKg && actualKg && volKg > actualKg;
+
+          return (
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Package className="size-3.5 text-primary" />
+                  Courier Billable Weight Estimate:
+                  <span className="text-primary font-bold">{billableKg} kg</span>
+                </span>
+                {isVolumetricHigher && (
+                  <span className="text-[11px] font-medium text-warning bg-warning/10 border border-warning/30 px-1.5 py-0.5 rounded">
+                    Volumetric dimensional pricing applies
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Actual Weight: {actualKg ?? '—'} kg • Volumetric: {volKg ?? '—'} kg (formula: L × W × H / 5000)
+              </p>
+            </div>
+          );
+        })()}
       </CardContent>
     </Card>
   );

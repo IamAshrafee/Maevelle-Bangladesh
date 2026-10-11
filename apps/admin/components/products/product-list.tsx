@@ -238,7 +238,7 @@ export function ProductList() {
 
       {message ? (
         <div
-          className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+          className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning"
           role="status"
           aria-live="polite"
         >
@@ -262,16 +262,16 @@ export function ProductList() {
             value: summary?.published ?? '—',
             description: 'Live on storefront',
             icon: CheckCircle2,
-            iconClass: 'text-emerald-500',
-            valueClass: 'text-emerald-600 dark:text-emerald-400',
+            iconClass: 'text-success',
+            valueClass: 'text-success',
           },
           {
             label: 'Drafts',
             value: summary?.drafts ?? '—',
             description: 'Unpublished in progress',
             icon: FileText,
-            iconClass: 'text-amber-500',
-            valueClass: 'text-amber-600 dark:text-amber-400',
+            iconClass: 'text-warning',
+            valueClass: 'text-warning',
           },
           {
             label: 'Archived',

@@ -55,7 +55,7 @@ export function BasicInfoCard({
   onDescriptionChange,
 }: BasicInfoCardProps) {
   return (
-    <Card className="shadow-xs">
+    <Card className="border-border shadow-2xs">
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">

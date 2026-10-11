@@ -3,17 +3,13 @@
 import { useMemo, useState } from 'react';
 import {
   Boxes,
-  Check,
+  Camera,
   CheckSquare,
-  ChevronDown,
-  DollarSign,
   HelpCircle,
-  Layers,
-  Palette,
+  Minus,
+  Plus,
   RefreshCw,
-  Sparkles,
   Square,
-  Tag,
   Warehouse,
 } from 'lucide-react';
 import type { CatalogColorDto, WarehouseLocationDto } from '@maevelle/contracts';
@@ -24,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { VariantMatrixRow, VariantStockEntry } from './types';
+import { BarcodeScannerModal } from './barcode-scanner-modal';
 
 interface VariantMatrixTableProps {
   readonly matrix: readonly VariantMatrixRow[];
@@ -58,6 +55,7 @@ export function VariantMatrixTable({
 
   const [bulkStockQuantity, setBulkStockQuantity] = useState('');
   const [showBulkStockPopover, setShowBulkStockPopover] = useState(false);
+  const [scanningRowId, setScanningRowId] = useState<string | null>(null);
 
   // Active color lookup
   const colorMap = useMemo(() => {
@@ -81,6 +79,17 @@ export function VariantMatrixTable({
       true,
     );
     setShowBulkStockPopover(false);
+  };
+
+  const handleQuantityStep = (rowId: string, currentVal: string, delta: number) => {
+    const currentNum = parseInt(currentVal || '0', 10);
+    const safeCurrent = isNaN(currentNum) ? 0 : currentNum;
+    const nextVal = Math.max(0, safeCurrent + delta);
+    const locId = locations[0]?.id || 'default-location';
+    const locName = locations[0]?.name || 'Main Warehouse';
+    onUpdateRow(rowId, {
+      initialStock: nextVal > 0 ? [{ locationId: locId, locationName: locName, quantity: String(nextVal) }] : [],
+    });
   };
 
   return (
@@ -202,8 +211,8 @@ export function VariantMatrixTable({
         </div>
       </div>
 
-      {/* Responsive Matrix Table */}
-      <div className="overflow-x-auto rounded-lg border bg-background shadow-xs">
+      {/* Desktop Spreadsheet Table (hidden md:block) */}
+      <div className="hidden md:block overflow-x-auto rounded-lg border bg-background shadow-xs">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -230,7 +239,7 @@ export function VariantMatrixTable({
                 </span>
               </th>
               <th className="py-2.5 px-3 min-w-[120px] font-medium">Opening Stock</th>
-              <th className="py-2.5 px-3 min-w-[110px] font-medium">Barcode (GTIN)</th>
+              <th className="py-2.5 px-3 min-w-[130px] font-medium">Barcode (GTIN)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
@@ -379,13 +388,13 @@ export function VariantMatrixTable({
                       </div>
                       {margin !== null && (
                         <Badge
-                          variant="secondary"
-                          className={`text-[10px] font-semibold px-1 py-0.5 ${
+                          variant="outline"
+                          className={`text-[10px] font-mono tabular-nums font-semibold px-1 py-0.5 ${
                             margin >= 35
-                              ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/40'
+                              ? 'text-success bg-success/10 border-success/30'
                               : margin >= 0
-                                ? 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/40'
-                                : 'text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/40'
+                                ? 'text-warning bg-warning/10 border-warning/30'
+                                : 'text-destructive bg-destructive/10 border-destructive/30'
                           }`}
                         >
                           {margin}%
@@ -486,15 +495,28 @@ export function VariantMatrixTable({
                     )}
                   </td>
 
-                  {/* Barcode */}
+                  {/* Barcode + Camera Scan Button */}
                   <td className="py-2 px-3 align-middle">
-                    <Input
-                      value={row.barcode}
-                      placeholder="EAN / Barcode"
-                      disabled={!row.enabled}
-                      className="h-7 font-mono text-xs"
-                      onChange={(e) => onUpdateRow(row.id, { barcode: e.target.value })}
-                    />
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={row.barcode}
+                        placeholder="EAN / Barcode"
+                        disabled={!row.enabled}
+                        className="h-7 font-mono text-xs flex-1"
+                        onChange={(e) => onUpdateRow(row.id, { barcode: e.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={!row.enabled}
+                        className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => setScanningRowId(row.id)}
+                        title="Scan Barcode with Camera"
+                      >
+                        <Camera className="size-3.5" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -502,6 +524,231 @@ export function VariantMatrixTable({
           </tbody>
         </table>
       </div>
+
+      {/* Mobile Touch-First Variant Cards (block md:hidden) */}
+      <div className="block md:hidden space-y-3">
+        {matrix.map((row) => {
+          const matchedColor = row.primaryColorId ? colorMap.get(row.primaryColorId) : null;
+          const priceNum = parseFloat(row.priceAmount);
+          const costAmount = row.estimatedCostAmount || row.costAmount;
+          const costNum = parseFloat(costAmount);
+          const margin =
+            !isNaN(priceNum) && priceNum > 0 && !isNaN(costNum) && costNum > 0
+              ? Math.round(((priceNum - costNum) / priceNum) * 100)
+              : null;
+          const currentStockQty = row.initialStock?.[0]?.quantity || '0';
+
+          return (
+            <div
+              key={row.id}
+              className={`rounded-lg border bg-card p-3 shadow-2xs space-y-3 transition-opacity ${
+                row.enabled ? 'opacity-100' : 'opacity-40 bg-muted/20'
+              }`}
+            >
+              {/* Header with 44px min-height touch toggle */}
+              <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2">
+                <label className="flex items-center gap-2.5 min-h-[44px] cursor-pointer flex-1">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled}
+                    onChange={(e) => onUpdateRow(row.id, { enabled: e.target.checked })}
+                    className="size-5 rounded border-input text-primary accent-primary"
+                  />
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-sm text-foreground">{row.title}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {row.optionSelections.map((s) => `${s.axisName}: ${s.valueDisplay}`).join(' • ')}
+                    </span>
+                  </div>
+                </label>
+
+                {margin !== null && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-mono tabular-nums font-semibold px-2 py-0.5 ${
+                      margin >= 35
+                        ? 'text-success bg-success/10 border-success/30'
+                        : margin >= 0
+                          ? 'text-warning bg-warning/10 border-warning/30'
+                          : 'text-destructive bg-destructive/10 border-destructive/30'
+                    }`}
+                  >
+                    {margin}% margin
+                  </Badge>
+                )}
+              </div>
+
+              {/* Color Swatch Picker */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-muted-foreground">Color Swatch</Label>
+                <div className="flex items-center gap-2">
+                  {matchedColor?.hexValue && (
+                    <span
+                      className="size-4 rounded-full border border-black/20 shrink-0"
+                      style={{ backgroundColor: matchedColor.hexValue }}
+                    />
+                  )}
+                  <select
+                    value={row.primaryColorId || ''}
+                    onChange={(e) =>
+                      onUpdateRow(row.id, { primaryColorId: e.target.value || null })
+                    }
+                    disabled={!row.enabled}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">No Color Swatch</option>
+                    {colors.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.code ? `(${c.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Pricing Grid */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">Price (BDT)</Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+                      ৳
+                    </span>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      placeholder="2500"
+                      value={row.priceAmount}
+                      disabled={!row.enabled}
+                      className="h-10 pl-7 text-xs font-medium tabular-nums"
+                      onChange={(e) => onUpdateRow(row.id, { priceAmount: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">Compare-at (BDT)</Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+                      ৳
+                    </span>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      placeholder="3000"
+                      value={row.compareAtAmount}
+                      disabled={!row.enabled}
+                      className="h-10 pl-7 text-xs tabular-nums"
+                      onChange={(e) => onUpdateRow(row.id, { compareAtAmount: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SKU & Barcode with Camera Button */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">SKU</Label>
+                  <Input
+                    value={row.sku}
+                    placeholder="SKU"
+                    disabled={!row.enabled}
+                    className="h-10 text-xs font-mono uppercase"
+                    onChange={(e) => onUpdateRow(row.id, { sku: e.target.value.toUpperCase() })}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium text-muted-foreground">Barcode</Label>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={row.barcode}
+                      placeholder="EAN / Code"
+                      disabled={!row.enabled}
+                      className="h-10 text-xs font-mono flex-1"
+                      onChange={(e) => onUpdateRow(row.id, { barcode: e.target.value })}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={!row.enabled}
+                      className="size-10 shrink-0"
+                      onClick={() => setScanningRowId(row.id)}
+                      title="Scan with Camera"
+                    >
+                      <Camera className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile Touch Stepper for Opening Stock */}
+              <div className="flex items-center justify-between gap-3 pt-1 border-t border-border/40">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-medium">Opening Stock</Label>
+                  <p className="text-[11px] text-muted-foreground">{locations[0]?.name || 'Main Warehouse'}</p>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!row.enabled || parseInt(currentStockQty, 10) <= 0}
+                    className="size-9 rounded-md shrink-0"
+                    onClick={() => handleQuantityStep(row.id, currentStockQty, -1)}
+                  >
+                    <Minus className="size-3.5" />
+                  </Button>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={currentStockQty}
+                    disabled={!row.enabled}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const locId = locations[0]?.id || 'default-location';
+                      const locName = locations[0]?.name || 'Main Warehouse';
+                      onUpdateRow(row.id, {
+                        initialStock: val ? [{ locationId: locId, locationName: locName, quantity: val }] : [],
+                      });
+                    }}
+                    className="h-9 w-16 text-center text-xs font-mono tabular-nums"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!row.enabled}
+                    className="size-9 rounded-md shrink-0"
+                    onClick={() => handleQuantityStep(row.id, currentStockQty, 1)}
+                  >
+                    <Plus className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Barcode Scanner Camera Modal */}
+      <BarcodeScannerModal
+        open={Boolean(scanningRowId)}
+        onOpenChange={(open) => {
+          if (!open) setScanningRowId(null);
+        }}
+        onScan={(scanned) => {
+          if (scanningRowId) {
+            onUpdateRow(scanningRowId, { barcode: scanned });
+            setScanningRowId(null);
+          }
+        }}
+        title="Scan Variant Barcode"
+      />
     </div>
   );
 }

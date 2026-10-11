@@ -7,6 +7,7 @@ import type {
   CatalogProductUpdateDto,
   CatalogVariantCreateDto,
   CatalogVariantUpdateDto,
+  SaveCatalogProductWorkspaceDto,
 } from '@maevelle/contracts';
 import type { DatabaseClient } from '@maevelle/database';
 import {
@@ -31,6 +32,7 @@ import {
   publishCatalogProduct,
   replaceCatalogProductContent,
   restoreCatalogProduct,
+  saveCatalogProductWorkspace,
   setCatalogProductAttributes,
   setCatalogProductCategories,
   unpublishCatalogProduct,
@@ -624,6 +626,17 @@ export function registerCatalogRoutes(
               estimatedCostAmount: Type.Optional(
                 Type.Union([Type.String({ pattern: '^\\d+(?:\\.\\d{1,4})?$' }), Type.Null()]),
               ),
+              initialStock: Type.Optional(
+                Type.Array(
+                  Type.Object({
+                    locationId: organizationIdParameter,
+                    quantity: Type.Union([
+                      Type.Integer({ minimum: 0 }),
+                      Type.String({ pattern: '^\\d+$' }),
+                    ]),
+                  }),
+                ),
+              ),
             }),
           ),
           options: Type.Optional(
@@ -714,7 +727,10 @@ export function registerCatalogRoutes(
                   Type.Array(
                     Type.Object({
                       locationId: organizationIdParameter,
-                      quantity: Type.String({ pattern: '^\\d+$' }),
+                      quantity: Type.Union([
+                        Type.Integer({ minimum: 0 }),
+                        Type.String({ pattern: '^\\d+$' }),
+                      ]),
                     }),
                   ),
                 ),
@@ -1007,6 +1023,56 @@ export function registerCatalogRoutes(
           expectedVersion: version,
         });
         return { data: product };
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.put(
+    '/admin/catalog/products/:productId/workspace',
+    {
+      preValidation: validateCatalogAttributeValues('attributes'),
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as SaveCatalogProductWorkspaceDto;
+        const productId = (request.params as { productId: string }).productId;
+        const ifMatch = expectedVersion(request.headers['if-match']);
+        const version = ifMatch !== undefined ? ifMatch : body.version;
+
+        const workspace = await saveCatalogProductWorkspace(database.db, {
+          ...body,
+          productId,
+          organizationId: context.organizationId,
+          actorId: context.actorId,
+          ...(version !== undefined ? { version } : {}),
+        });
+        return { data: workspace };
+      } catch (error) {
+        return domainError(reply, error);
+      }
+    },
+  );
+
+  app.post(
+    '/admin/catalog/products/workspace',
+    {
+      preValidation: validateCatalogAttributeValues('attributes'),
+    },
+    async (request, reply) => {
+      const context = await requireCapability(database, auth, request.headers, 'catalog.manage');
+      if (!context) return reply.code(403).send({ error: 'FORBIDDEN' });
+      try {
+        const body = request.body as SaveCatalogProductWorkspaceDto;
+        const workspace = await saveCatalogProductWorkspace(database.db, {
+          ...body,
+          organizationId: context.organizationId,
+          actorId: context.actorId,
+        });
+        return reply.code(201).send({ data: workspace });
       } catch (error) {
         return domainError(reply, error);
       }

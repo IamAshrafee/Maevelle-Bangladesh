@@ -79,6 +79,7 @@ describe('clean PostgreSQL migration path', () => {
         'expense_categories',
         'expense_links',
         'expense_payments',
+        'expense_settlements',
         'expenses',
         'finance_transactions',
         'financial_account_entries',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { HelpCircle, TrendingUp, TrendingDown, Percent } from 'lucide-react';
+import { HelpCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -84,24 +84,28 @@ export function ProfitMarginCalculator({
       {/* Live Financial Metrics Banner */}
       {calculations ? (
         <div
-          className={`rounded-lg border p-3 transition-colors ${
+          className={`rounded-lg border p-3 transition-colors duration-150 ${
             calculations.isLoss
-              ? 'border-red-200 bg-red-50/50 dark:border-red-950 dark:bg-red-950/20'
+              ? 'border-destructive/30 bg-destructive/10 text-destructive'
               : calculations.isHealthy
-                ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-950 dark:bg-emerald-950/20'
-                : 'border-amber-200 bg-amber-50/40 dark:border-amber-950 dark:bg-amber-950/20'
+                ? 'border-success/30 bg-success/10 text-success'
+                : 'border-warning/30 bg-warning/10 text-warning'
           }`}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               {calculations.isLoss ? (
-                <TrendingDown className="size-4 text-red-600 dark:text-red-400" />
+                <TrendingDown className="size-4 text-destructive" />
               ) : (
-                <TrendingUp className="size-4 text-emerald-600 dark:text-emerald-400" />
+                <TrendingUp className="size-4 text-success" />
               )}
               <span className="text-xs font-semibold text-foreground">
                 Est. Profit:{' '}
-                <span className={calculations.isLoss ? 'text-red-600 font-bold' : 'text-emerald-600 font-bold'}>
+                <span
+                  className={`font-mono tabular-nums font-bold ${
+                    calculations.isLoss ? 'text-destructive' : 'text-success'
+                  }`}
+                >
                   ৳{calculations.profit.toLocaleString('en-BD', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </span>
               </span>
@@ -109,20 +113,20 @@ export function ProfitMarginCalculator({
 
             <div className="flex items-center gap-2">
               <Badge
-                variant="secondary"
-                className={`text-[11px] font-semibold ${
+                variant="outline"
+                className={`text-[11px] font-mono tabular-nums font-semibold ${
                   calculations.isLoss
-                    ? 'border-red-300 text-red-700 bg-red-100 dark:bg-red-900/40 dark:text-red-300'
+                    ? 'border-destructive/40 bg-destructive/15 text-destructive'
                     : calculations.isHealthy
-                      ? 'border-emerald-300 text-emerald-700 bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-300'
-                      : 'border-amber-300 text-amber-700 bg-amber-100 dark:bg-amber-900/40 dark:text-amber-300'
+                      ? 'border-success/40 bg-success/15 text-success'
+                      : 'border-warning/40 bg-warning/15 text-warning'
                 }`}
               >
                 {calculations.margin}% Margin
               </Badge>
 
               {!compact && (
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-[11px] font-mono tabular-nums text-muted-foreground">
                   ({calculations.markup}% markup)
                 </span>
               )}

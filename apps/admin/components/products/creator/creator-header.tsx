@@ -31,7 +31,7 @@ export function CreatorHeader({
   const backHref = isEditMode && productId ? `/products/${productId}` : '/products';
 
   return (
-    <header className="sticky top-0 z-20 flex flex-col gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-8">
+    <header className="sticky top-0 z-20 flex flex-col gap-3 border-b border-border bg-background/85 px-4 py-3 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-8">
       {/* Left: Navigation, Title & Status */}
       <div className="flex items-center gap-3">
         <Button
@@ -77,13 +77,13 @@ export function CreatorHeader({
         <div className="hidden items-center gap-1.5 text-[11px] text-muted-foreground md:flex mr-2">
           {isDirty ? (
             <>
-              <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span className="size-1.5 rounded-full bg-warning animate-pulse" />
               <span>Unsaved changes</span>
             </>
           ) : (
             <>
-              <Check className="size-3 text-emerald-600" />
-              <span>{isEditMode ? 'Saved' : 'Draft autosaved'}</span>
+              <Check className="size-3 text-success" />
+              <span>{isEditMode ? 'Saved to server' : 'Draft saved locally'}</span>
             </>
           )}
         </div>

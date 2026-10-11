@@ -79,7 +79,7 @@ export function OrganizationSidebar({
   return (
     <div className="space-y-6">
       {/* Sidebar Card 1: Publication Readiness Checklist */}
-      <Card className="shadow-xs border-primary/20 bg-primary/5">
+      <Card className="border-primary/20 bg-primary/5 shadow-2xs">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold text-foreground">
@@ -143,7 +143,7 @@ export function OrganizationSidebar({
       />
 
       {/* Sidebar Card 3: Sizing System & Size Guide */}
-      <Card className="shadow-xs">
+      <Card className="border-border shadow-2xs">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -266,7 +266,7 @@ export function OrganizationSidebar({
       </Card>
 
       {/* Sidebar Card 4: Tags, Occasions & Collections */}
-      <Card className="shadow-xs">
+      <Card className="border-border shadow-2xs">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold">Taxonomy & Badges</CardTitle>
           <CardDescription className="text-xs">

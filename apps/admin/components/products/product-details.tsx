@@ -25,9 +25,11 @@ import type {
   CatalogVocabularyItemDto,
   CatalogVocabularyListDto,
   ProductSizingDto,
+  WarehouseLocationDto,
 } from '@maevelle/contracts';
 
 import { ProductReadiness } from '@/components/products/product-readiness';
+import { QuickStockAdjustDialog } from '@/components/products/quick-stock-adjust-dialog';
 import { storefrontProductHref } from '@/components/products/product-workspace-links';
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
@@ -70,6 +72,8 @@ export function ProductDetails({ productId }: { productId: string }) {
   }>({ tags: [], occasions: [], collections: [] });
   const [sizing, setSizing] = useState<ProductSizingDto>();
   const [sizingUnavailable, setSizingUnavailable] = useState(false);
+  const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
+  const [adjustingVariant, setAdjustingVariant] = useState<CatalogProductWorkspaceDto['variants'][number] | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -77,7 +81,7 @@ export function ProductDetails({ productId }: { productId: string }) {
   async function load(signal?: AbortSignal) {
     setState('loading');
     try {
-      const [product, categoryChoices, tags, occasions, collections, productSizing] =
+      const [product, categoryChoices, tags, occasions, collections, productSizing, warehouseLocations] =
         await Promise.all([
           catalogData<CatalogProductWorkspaceDto>(
             `/admin/catalog/products/${productId}`,
@@ -103,11 +107,16 @@ export function ProductDetails({ productId }: { productId: string }) {
             `/admin/catalog/products/${productId}/size-configuration`,
             signal ? { signal } : undefined,
           ).catch(() => undefined),
+          catalogData<readonly WarehouseLocationDto[]>(
+            '/admin/warehouse/locations',
+            signal ? { signal } : undefined,
+          ).catch(() => []),
         ]);
       setWorkspace(product);
       setSizing(productSizing);
       setSizingUnavailable(productSizing === undefined && product.sizeSystemId !== null);
       setCategories(categoryChoices);
+      setLocations(warehouseLocations ?? []);
       setVocabulary({
         tags: tags.items,
         occasions: occasions.items,
@@ -343,8 +352,8 @@ export function ProductDetails({ productId }: { productId: string }) {
             value: workspace.operationalSignals.availableVariantCount,
             description: 'Sellable stock',
             icon: CheckCircle2,
-            iconClass: 'text-emerald-500',
-            valueClass: 'text-emerald-600 dark:text-emerald-400',
+            iconClass: 'text-success',
+            valueClass: 'text-success',
           },
           {
             label: 'Public Images',
@@ -565,7 +574,7 @@ export function ProductDetails({ productId }: { productId: string }) {
                             />
                           ) : null}
                           {value.isPrimary ? (
-                            <Star className="size-3 fill-amber-400 text-amber-400 shrink-0" />
+                            <Star className="size-3 fill-warning text-warning shrink-0" />
                           ) : null}
                           <span>{value.label}</span>
                           {value.isPrimary ? (
@@ -701,12 +710,12 @@ export function ProductDetails({ productId }: { productId: string }) {
                             </span>
                             {marginPercent !== null && (
                               <span
-                                className={`font-mono text-[10px] font-semibold px-1 rounded ${
+                                className={`font-mono tabular-nums text-[10px] font-semibold px-1 rounded ${
                                   marginPercent >= 40
-                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                    ? 'bg-success/10 text-success'
                                     : marginPercent >= 20
-                                      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                                      : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
+                                      ? 'bg-warning/10 text-warning'
+                                      : 'bg-destructive/10 text-destructive'
                                 }`}
                               >
                                 {marginPercent}%
@@ -778,7 +787,17 @@ export function ProductDetails({ productId }: { productId: string }) {
                           )}
                         </span>
                       </td>
-                      <td className="px-4 py-3 tabular-nums">{variant.sellableQuantity}</td>
+                      <td className="px-4 py-3 tabular-nums">
+                        <span className="font-semibold text-foreground">{variant.sellableQuantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => setAdjustingVariant(variant)}
+                          className="mt-1 flex items-center gap-1 text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                        >
+                          <Boxes className="size-3" />
+                          <span>Adjust Stock</span>
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-xs">
                         {variant.media.length > 0
                           ? `${variant.media.length} SKU-specific`
@@ -1036,10 +1055,10 @@ export function ProductDetails({ productId }: { productId: string }) {
             </section>
             <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/10">
               <h2 className="font-semibold">Search Preview</h2>
-              <p className="mt-3 text-sm font-medium text-blue-800">
+              <p className="mt-3 text-sm font-medium text-info">
                 {workspace.content.seoTitle || workspace.title}
               </p>
-              <p className="text-xs text-emerald-800">/products/{workspace.handle}</p>
+              <p className="font-mono text-xs tabular-nums text-success">/products/{workspace.handle}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {workspace.content.seoDescription ||
                   workspace.description ||
@@ -1049,6 +1068,20 @@ export function ProductDetails({ productId }: { productId: string }) {
           </div>
         </div>
       ) : null}
+      {adjustingVariant && (
+        <QuickStockAdjustDialog
+          open={Boolean(adjustingVariant)}
+          onOpenChange={(open) => {
+            if (!open) setAdjustingVariant(null);
+          }}
+          variantId={adjustingVariant.id}
+          variantTitle={adjustingVariant.title || adjustingVariant.sku}
+          sku={adjustingVariant.sku}
+          currentSellable={adjustingVariant.sellableQuantity}
+          locations={locations}
+          onSuccess={() => void load()}
+        />
+      )}
     </main>
   );
 }

@@ -31,7 +31,7 @@ export function SeoContentCard({
   onSeoDescriptionChange,
 }: SeoContentCardProps) {
   return (
-    <Card className="shadow-xs">
+    <Card className="border-border shadow-2xs">
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -73,23 +73,35 @@ export function SeoContentCard({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="seo-title" className="text-xs">
-                Search title
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="seo-title" className="text-xs">
+                  Search title
+                </Label>
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {seoTitle.length}/60
+                </span>
+              </div>
               <Input
                 id="seo-title"
                 value={seoTitle}
+                maxLength={70}
                 placeholder={title || 'Optional custom title'}
                 onChange={(event) => onSeoTitleChange(event.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="seo-description" className="text-xs">
-                Search description
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="seo-description" className="text-xs">
+                  Search description
+                </Label>
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {seoDescription.length}/160
+                </span>
+              </div>
               <Input
                 id="seo-description"
                 value={seoDescription}
+                maxLength={320}
                 placeholder="Optional custom description"
                 onChange={(event) => onSeoDescriptionChange(event.target.value)}
               />

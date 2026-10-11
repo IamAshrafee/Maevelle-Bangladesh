@@ -611,6 +611,8 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
   readonly productTypeId: string;
   readonly sizeSystemId: string | null;
   readonly sizeGuideId: string | null;
+  readonly inventoryPolicy?: 'DENY' | 'CONTINUE';
+  readonly shippingProfile?: 'STANDARD' | 'FRAGILE' | 'HEAVY';
   readonly shipping: {
     readonly weight: { readonly value: string; readonly unit: string } | null;
     readonly dimensions: {
@@ -645,6 +647,9 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
     readonly title: string | null;
     readonly sku: string;
     readonly barcode: string | null;
+    readonly barcodeSymbology?: 'EAN13' | 'CODE128' | 'UPCA' | null;
+    readonly inventoryPolicy?: 'DENY' | 'CONTINUE' | null;
+    readonly reorderPoint?: number | null;
     readonly status: 'ACTIVE' | 'ARCHIVED';
     readonly version: number;
     readonly optionValueIds: readonly string[];
@@ -699,6 +704,114 @@ export interface CatalogProductWorkspaceDto extends CatalogProductSummaryDto {
     readonly seoTitle: string | null;
     readonly seoDescription: string | null;
   };
+}
+
+export interface SaveCatalogProductWorkspaceDto {
+  readonly version?: number;
+  readonly targetStatus?: 'DRAFT' | 'ACTIVE';
+  readonly title: string;
+  readonly handle: string;
+  readonly description?: string | null;
+  readonly productTypeId: string;
+  readonly primaryCategoryId?: string | null;
+  readonly categoryIds?: readonly string[];
+  readonly tagIds?: readonly string[];
+  readonly occasionIds?: readonly string[];
+  readonly collectionIds?: readonly string[];
+  readonly sizeSystemId?: string | null;
+  readonly sizeGuideId?: string | null;
+  readonly inventoryPolicy?: 'DENY' | 'CONTINUE';
+  readonly shippingProfile?: 'STANDARD' | 'FRAGILE' | 'HEAVY';
+  readonly shipping?: {
+    readonly weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+    readonly dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
+  } | null;
+  readonly attributes?: readonly {
+    readonly attributeDefinitionId: string;
+    readonly value: string | boolean | null;
+  }[];
+  readonly options?: readonly {
+    readonly id?: string;
+    readonly clientRef?: string;
+    readonly code?: string;
+    readonly name: string;
+    readonly position?: number;
+    readonly isVisual?: boolean;
+    readonly values: readonly {
+      readonly id?: string;
+      readonly clientRef?: string;
+      readonly code?: string;
+      readonly displayValue: string;
+      readonly position?: number;
+      readonly colorId?: string | null;
+      readonly sizeDefinitionId?: string | null;
+      readonly isPrimary?: boolean;
+    }[];
+  }[];
+  readonly variants: readonly {
+    readonly id?: string;
+    readonly clientRef?: string;
+    readonly sku: string;
+    readonly title?: string | null;
+    readonly barcode?: string | null;
+    readonly barcodeSymbology?: 'EAN13' | 'CODE128' | 'UPCA' | null;
+    readonly inventoryPolicy?: 'DENY' | 'CONTINUE' | null;
+    readonly reorderPoint?: number | null;
+    readonly status?: 'ACTIVE' | 'ARCHIVED';
+    readonly optionValueIds?: readonly string[];
+    readonly optionSelections?: readonly {
+      readonly axisName: string;
+      readonly valueDisplay: string;
+    }[];
+    readonly priceAmount?: string | null;
+    readonly compareAtAmount?: string | null;
+    readonly currency?: string;
+    readonly estimatedCostAmount?: string | null;
+    readonly initialStock?: readonly {
+      readonly locationId: string;
+      readonly quantity: number;
+    }[];
+    readonly weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+    readonly dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
+    readonly primaryColorId?: string | null;
+    readonly associatedColorIds?: readonly string[];
+  }[];
+  readonly media?: readonly {
+    readonly id?: string;
+    readonly assetId: string;
+    readonly optionValueId?: string | null;
+    readonly optionValueRef?: string | null;
+    readonly variantId?: string | null;
+    readonly variantRef?: string | null;
+    readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+    readonly altTextOverride?: string | null;
+    readonly isPrimary?: boolean;
+    readonly position?: number;
+  }[];
+  readonly content?: {
+    readonly informationGroups?: readonly {
+      readonly title: string;
+      readonly items: readonly { readonly label: string; readonly value: string }[];
+    }[];
+    readonly faqs?: readonly {
+      readonly question: string;
+      readonly answer: string;
+    }[];
+    readonly seoTitle?: string | null;
+    readonly seoDescription?: string | null;
+  };
+  readonly seoTitle?: string | null;
+  readonly seoDescription?: string | null;
 }
 
 export interface CatalogVariantChoiceDto {

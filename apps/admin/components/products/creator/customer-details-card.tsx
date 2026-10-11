@@ -29,7 +29,7 @@ interface CustomerDetailsCardProps {
     value: string,
   ) => void;
   readonly onRemoveItem: (groupId: string, itemId: string) => void;
-  readonly onAddFaq: () => void;
+  readonly onAddFaq: (question?: string, answer?: string) => void;
   readonly onUpdateFaq: (id: string, field: 'question' | 'answer', value: string) => void;
   readonly onRemoveFaq: (id: string) => void;
 }
@@ -45,6 +45,33 @@ function displayAttributeValue(
   }
   return value;
 }
+
+const FAQ_TEMPLATES = [
+  {
+    name: 'Care & Wash',
+    question: 'How should I wash and care for this product?',
+    answer:
+      'Gentle hand wash in cold water or dry clean recommended. Do not bleach or wring. Air dry in the shade and iron inside-out on medium heat.',
+  },
+  {
+    name: 'Returns & Exchange',
+    question: 'What is your exchange and return policy?',
+    answer:
+      'We offer a 7-day exchange window for unused, unwashed items in original packaging with tags intact. Contact customer support with your order ID.',
+  },
+  {
+    name: 'Delivery Times',
+    question: 'How long does delivery take across Bangladesh?',
+    answer:
+      'Standard delivery inside Dhaka usually takes 24–48 hours. Outside Dhaka takes 2–4 business days via registered courier partners.',
+  },
+  {
+    name: 'Cash on Delivery',
+    question: 'Is Cash on Delivery (COD) available?',
+    answer:
+      'Yes! Cash on Delivery is available nationwide across Bangladesh. You can inspect the packaging before paying the delivery agent.',
+  },
+] as const;
 
 export function CustomerDetailsCard({
   attributes,
@@ -258,10 +285,27 @@ export function CustomerDetailsCard({
               size="sm"
               className="gap-1.5"
               disabled={faqs.length >= 30}
-              onClick={onAddFaq}
+              onClick={() => onAddFaq()}
             >
-              <Plus className="size-3.5" /> Add FAQ
+              <Plus className="size-3.5" /> Add custom FAQ
             </Button>
+          </div>
+
+          {/* Quick FAQ Templates */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[11px] font-medium text-muted-foreground mr-1">Templates:</span>
+            {FAQ_TEMPLATES.map((tmpl) => (
+              <button
+                key={tmpl.name}
+                type="button"
+                onClick={() => onAddFaq(tmpl.question, tmpl.answer)}
+                disabled={faqs.length >= 30}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors duration-150 hover:bg-muted hover:text-primary disabled:opacity-50"
+              >
+                <Plus className="size-2.5 text-primary" />
+                {tmpl.name}
+              </button>
+            ))}
           </div>
           {faqs.map((faq) => (
             <div key={faq.id} className="space-y-2 rounded-xl border border-border p-3">

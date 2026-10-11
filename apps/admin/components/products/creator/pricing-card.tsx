@@ -1,7 +1,8 @@
 'use client';
 
-import { DollarSign, HelpCircle } from 'lucide-react';
+import { AlertCircle, DollarSign, HelpCircle, Tag } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -39,8 +40,17 @@ export function PricingCard({
   onCompareAtChange,
   onCostChange,
 }: PricingCardProps) {
+  const numPrice = Number.parseFloat(priceAmount);
+  const numCompareAt = Number.parseFloat(compareAtAmount);
+  const hasValidNumbers = !Number.isNaN(numPrice) && !Number.isNaN(numCompareAt) && numPrice > 0 && numCompareAt > 0;
+  const discountPercent =
+    hasValidNumbers && numCompareAt > numPrice
+      ? Math.round(((numCompareAt - numPrice) / numCompareAt) * 100)
+      : null;
+  const hasInvalidDiscount = hasValidNumbers && numCompareAt <= numPrice;
+
   return (
-    <Card className="shadow-xs">
+    <Card className="border-border shadow-2xs">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -81,7 +91,7 @@ export function PricingCard({
               </Tooltip>
             </div>
             <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs font-semibold text-muted-foreground">
                 ৳
               </span>
               <Input
@@ -92,7 +102,7 @@ export function PricingCard({
                 placeholder="2450"
                 value={priceAmount}
                 onChange={(e) => onPriceChange(e.target.value)}
-                className="pl-7 text-xs sm:text-sm font-semibold"
+                className="pl-7 font-mono text-xs font-semibold tabular-nums sm:text-sm"
               />
             </div>
             {fieldErrors.price && (
@@ -102,21 +112,32 @@ export function PricingCard({
 
           {/* Compare At Price */}
           <div className="space-y-2">
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor="compare-at-price" className="font-medium text-xs sm:text-sm">
-                Compare-at Price (BDT)
-              </Label>
-              <Tooltip>
-                <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
-                  <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  Original retail price before discount. Displayed as a strikethrough price on the storefront.
-                </TooltipContent>
-              </Tooltip>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="compare-at-price" className="font-medium text-xs sm:text-sm">
+                  Compare-at Price (BDT)
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
+                    <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Original retail price before discount. Displayed as a strikethrough price on the storefront.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              {discountPercent !== null && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-success/30 bg-success/10 font-mono text-[10px] text-success tabular-nums"
+                >
+                  <Tag className="size-2.5" />
+                  {discountPercent}% OFF
+                </Badge>
+              )}
             </div>
             <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs font-semibold text-muted-foreground">
                 ৳
               </span>
               <Input
@@ -127,9 +148,15 @@ export function PricingCard({
                 placeholder="2950"
                 value={compareAtAmount}
                 onChange={(e) => onCompareAtChange(e.target.value)}
-                className="pl-7 text-xs sm:text-sm"
+                className="pl-7 font-mono text-xs tabular-nums sm:text-sm"
               />
             </div>
+            {hasInvalidDiscount && (
+              <p className="flex items-center gap-1 text-[11px] text-warning">
+                <AlertCircle className="size-3 shrink-0" />
+                Compare-at price must exceed selling price to show a discount.
+              </p>
+            )}
           </div>
         </div>
 
@@ -145,3 +172,4 @@ export function PricingCard({
     </Card>
   );
 }
+

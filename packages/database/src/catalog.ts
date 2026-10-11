@@ -6,6 +6,7 @@ import {
   catalogVariantIsStructurallyValid,
 } from './catalog-variant-integrity.js';
 import { adjustInventory } from './inventory.js';
+import { syncProductMediaPlacements } from './media/product-media.js';
 import { appendAuditEvent } from './platform.js';
 
 export class CatalogDomainError extends Error {
@@ -58,6 +59,8 @@ export interface CatalogProductWorkspace extends ProductSummary {
   readonly sizeGuideId: string | null;
   readonly description: string | null;
   readonly productTypeId: string;
+  readonly inventoryPolicy?: 'DENY' | 'CONTINUE';
+  readonly shippingProfile?: 'STANDARD' | 'FRAGILE' | 'HEAVY';
   readonly shipping: {
     readonly weight: { value: string; unit: string } | null;
     readonly dimensions: { length: string; width: string; height: string; unit: string } | null;
@@ -87,6 +90,9 @@ export interface CatalogProductWorkspace extends ProductSummary {
     title: string | null;
     sku: string;
     barcode: string | null;
+    barcodeSymbology?: 'EAN13' | 'CODE128' | 'UPCA' | null;
+    inventoryPolicy?: 'DENY' | 'CONTINUE' | null;
+    reorderPoint?: number | null;
     status: 'ACTIVE' | 'ARCHIVED';
     version: number;
     optionValueIds: readonly string[];
@@ -1422,6 +1428,7 @@ export async function createCatalogProduct(
       title?: string | null;
       barcode?: string | null;
       optionValueRefs?: readonly string[];
+      optionValueIds?: readonly string[];
       optionSelections?: readonly {
         axisName: string;
         valueDisplay: string;
@@ -1739,25 +1746,27 @@ export async function createCatalogProduct(
           }
         }
       }
+    }
 
-      if (input.variants && input.variants.length > 0) {
-        for (const v of input.variants) {
-          const normalizedSku = v.sku.trim().toUpperCase();
-          if (!normalizedSku) continue;
+    if (input.variants && input.variants.length > 0) {
+      for (const v of input.variants) {
+        const normalizedSku = v.sku.trim().toUpperCase();
+        if (!normalizedSku) continue;
 
-          const matchedValues: { axisId: string; valueId: string }[] = [];
-          if (v.optionValueRefs && v.optionValueRefs.length > 0) {
-            for (const ref of v.optionValueRefs) {
-              const match = createdValuesByRef.get(ref) ?? createdValuesById.get(ref);
-              if (!match) {
-                throw new CatalogDomainError(
-                  'VALIDATION_FAILED',
-                  `Option value reference '${ref}' could not be resolved.`,
-                );
-              }
-              matchedValues.push({ axisId: match.axisId, valueId: match.id });
+        const matchedValues: { axisId: string; valueId: string }[] = [];
+        const optValueRefs = v.optionValueIds ?? v.optionValueRefs;
+        if (optValueRefs && optValueRefs.length > 0) {
+          for (const ref of optValueRefs) {
+            const match = createdValuesByRef.get(ref) ?? createdValuesById.get(ref);
+            if (!match) {
+              throw new CatalogDomainError(
+                'VALIDATION_FAILED',
+                `Option value reference '${ref}' could not be resolved.`,
+              );
             }
-          } else if (v.optionSelections) {
+            matchedValues.push({ axisId: match.axisId, valueId: match.id });
+          }
+        } else if (v.optionSelections) {
             for (const sel of v.optionSelections) {
               const key = `${sel.axisName.toLowerCase().trim()}:::${sel.valueDisplay.toLowerCase().trim()}`;
               const match = createdValuesByKey.get(key);
@@ -1857,7 +1866,12 @@ export async function createCatalogProduct(
           }
         }
       }
-    } else if (input.initialVariant && input.initialVariant.sku) {
+
+      if (
+        (!input.variants || input.variants.length === 0) &&
+      input.initialVariant &&
+      input.initialVariant.sku
+    ) {
       const normalizedSku = input.initialVariant.sku.trim().toUpperCase();
       if (normalizedSku) {
         const weightVal = input.initialVariant.weight?.value
@@ -2760,7 +2774,7 @@ export async function replaceCatalogProductContent(
     500,
   );
 
-  return db.transaction().execute(async (transaction) => {
+  return withCatalogTransaction(db, async (transaction) => {
     const updated = await sql<{
       id: string;
       handle: string;
@@ -3814,6 +3828,8 @@ export async function getCatalogProductWorkspace(
     primary_category_id: string | null;
     seo_title: string | null;
     seo_description: string | null;
+    inventory_policy: string | null;
+    shipping_profile: string | null;
     weight_value: string | null;
     weight_unit: string | null;
     length_value: string | null;
@@ -3828,6 +3844,7 @@ export async function getCatalogProductWorkspace(
       product.publication_status,product.version::text,product.product_type_id::text,
       product_type.name as product_type_name,product.primary_category_id::text,
       product.seo_title,product.seo_description,
+      product.inventory_policy,product.shipping_profile,
       product.weight_value::text as weight_value,product.weight_unit,
       product.length_value::text as length_value,product.width_value::text as width_value,
       product.height_value::text as height_value,product.dimension_unit,
@@ -3904,6 +3921,9 @@ export async function getCatalogProductWorkspace(
       title: string | null;
       sku: string;
       barcode: string | null;
+      barcode_symbology: string | null;
+      variant_inventory_policy: string | null;
+      reorder_point: number | null;
       status: 'ACTIVE' | 'ARCHIVED';
       version: string;
       option_value_ids: string[];
@@ -3933,7 +3953,9 @@ export async function getCatalogProductWorkspace(
         role: 'PRIMARY' | 'ASSOCIATED';
       }[];
     }>`
-      select variant.id::text,variant.title,variant.sku,variant.barcode,variant.status,
+      select variant.id::text,variant.title,variant.sku,variant.barcode,
+        variant.barcode_symbology,variant.inventory_policy as variant_inventory_policy,variant.reorder_point,
+        variant.status,
         variant.version::text,variant.weight_value::text,variant.weight_unit,
         variant.length_value::text,variant.width_value::text,variant.height_value::text,
         variant.dimension_unit,variant.estimated_cost_amount::text as estimated_cost_amount,
@@ -4129,6 +4151,8 @@ export async function getCatalogProductWorkspace(
     version: Number(row.version),
     productTypeId: row.product_type_id,
     productTypeName: row.product_type_name,
+    inventoryPolicy: (row.inventory_policy as 'DENY' | 'CONTINUE') ?? 'DENY',
+    shippingProfile: (row.shipping_profile as 'STANDARD' | 'FRAGILE' | 'HEAVY') ?? 'STANDARD',
     sizeSystemId: row.size_system_id,
     sizeGuideId: row.size_guide_id,
     shipping:
@@ -4196,6 +4220,12 @@ export async function getCatalogProductWorkspace(
       title: variant.title,
       sku: variant.sku,
       barcode: variant.barcode,
+      barcodeSymbology: (variant.barcode_symbology as 'EAN13' | 'CODE128' | 'UPCA') ?? null,
+      inventoryPolicy: (variant.variant_inventory_policy as 'DENY' | 'CONTINUE') ?? null,
+      reorderPoint:
+        variant.reorder_point !== null && variant.reorder_point !== undefined
+          ? Number(variant.reorder_point)
+          : null,
       status: variant.status,
       version: Number(variant.version),
       optionValueIds: variant.option_value_ids,
@@ -5033,3 +5063,735 @@ export async function updateCatalogCategory(
     }
   });
 }
+
+export interface CatalogProductWorkspaceWrite {
+  readonly version?: number;
+  readonly targetStatus?: 'DRAFT' | 'ACTIVE';
+  readonly title: string;
+  readonly handle: string;
+  readonly description?: string | null;
+  readonly productTypeId: string;
+  readonly primaryCategoryId?: string | null;
+  readonly categoryIds?: readonly string[];
+  readonly tagIds?: readonly string[];
+  readonly occasionIds?: readonly string[];
+  readonly collectionIds?: readonly string[];
+  readonly sizeSystemId?: string | null;
+  readonly sizeGuideId?: string | null;
+  readonly inventoryPolicy?: 'DENY' | 'CONTINUE';
+  readonly shippingProfile?: 'STANDARD' | 'FRAGILE' | 'HEAVY';
+  readonly shipping?: {
+    readonly weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+    readonly dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
+  } | null;
+  readonly attributes?: readonly {
+    readonly attributeDefinitionId: string;
+    readonly value: string | boolean | null;
+  }[];
+  readonly options?: readonly {
+    readonly id?: string;
+    readonly clientRef?: string;
+    readonly code?: string;
+    readonly name: string;
+    readonly position?: number;
+    readonly isVisual?: boolean;
+    readonly values: readonly {
+      readonly id?: string;
+      readonly clientRef?: string;
+      readonly code?: string;
+      readonly displayValue: string;
+      readonly position?: number;
+      readonly colorId?: string | null;
+      readonly sizeDefinitionId?: string | null;
+      readonly isPrimary?: boolean;
+    }[];
+  }[];
+  readonly variants: readonly {
+    readonly id?: string;
+    readonly clientRef?: string;
+    readonly sku: string;
+    readonly title?: string | null;
+    readonly barcode?: string | null;
+    readonly barcodeSymbology?: 'EAN13' | 'CODE128' | 'UPCA' | null;
+    readonly inventoryPolicy?: 'DENY' | 'CONTINUE' | null;
+    readonly reorderPoint?: number | null;
+    readonly status?: 'ACTIVE' | 'ARCHIVED';
+    readonly optionValueIds?: readonly string[];
+    readonly optionSelections?: readonly {
+      readonly axisName: string;
+      readonly valueDisplay: string;
+    }[];
+    readonly priceAmount?: string | null;
+    readonly compareAtAmount?: string | null;
+    readonly currency?: string;
+    readonly estimatedCostAmount?: string | null;
+    readonly initialStock?: readonly {
+      readonly locationId: string;
+      readonly quantity: number;
+    }[];
+    readonly weight?: { readonly value: string; readonly unit: 'G' | 'KG' | 'OZ' | 'LB' } | null;
+    readonly dimensions?: {
+      readonly length: string;
+      readonly width: string;
+      readonly height: string;
+      readonly unit: 'MM' | 'CM' | 'IN';
+    } | null;
+    readonly primaryColorId?: string | null;
+    readonly associatedColorIds?: readonly string[];
+  }[];
+  readonly media?: readonly {
+    readonly id?: string;
+    readonly assetId: string;
+    readonly optionValueId?: string | null;
+    readonly optionValueRef?: string | null;
+    readonly variantId?: string | null;
+    readonly variantRef?: string | null;
+    readonly role: 'GALLERY' | 'THUMBNAIL' | 'COLOR_GALLERY' | 'SIZE_DIAGRAM';
+    readonly altTextOverride?: string | null;
+    readonly isPrimary?: boolean;
+    readonly position?: number;
+  }[];
+  readonly content?: {
+    readonly informationGroups?: readonly {
+      readonly title: string;
+      readonly items: readonly { readonly label: string; readonly value: string }[];
+    }[];
+    readonly faqs?: readonly {
+      readonly question: string;
+      readonly answer: string;
+    }[];
+    readonly seoTitle?: string | null;
+    readonly seoDescription?: string | null;
+  };
+  readonly seoTitle?: string | null;
+  readonly seoDescription?: string | null;
+}
+
+export async function saveCatalogProductWorkspace(
+  db: Kysely<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    productId?: string;
+  } & CatalogProductWorkspaceWrite,
+): Promise<CatalogProductWorkspace> {
+  return withCatalogTransaction(db, async (transaction) => {
+    let targetProductId = input.productId;
+
+    if (!targetProductId) {
+      const seoTitleVal = input.seoTitle ?? input.content?.seoTitle;
+      const seoDescVal = input.seoDescription ?? input.content?.seoDescription;
+      const created = await createCatalogProduct(transaction, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        productTypeId: input.productTypeId,
+        title: input.title,
+        handle: input.handle,
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.categoryIds ? { categoryIds: input.categoryIds } : {}),
+        ...(input.primaryCategoryId ? { primaryCategoryId: input.primaryCategoryId } : {}),
+        ...(input.tagIds ? { tagIds: input.tagIds } : {}),
+        ...(input.occasionIds ? { occasionIds: input.occasionIds } : {}),
+        ...(input.collectionIds ? { collectionIds: input.collectionIds } : {}),
+        ...(input.sizeSystemId !== undefined ? { sizeSystemId: input.sizeSystemId } : {}),
+        ...(input.sizeGuideId !== undefined ? { sizeGuideId: input.sizeGuideId } : {}),
+        ...(input.attributes ? { attributes: input.attributes } : {}),
+        ...(input.shipping ? { shipping: input.shipping } : {}),
+        ...(input.options ? { options: input.options } : {}),
+        ...(input.variants ? { variants: input.variants } : {}),
+        ...(input.media ? { media: input.media } : {}),
+        ...(seoTitleVal !== undefined ? { seoTitle: seoTitleVal } : {}),
+        ...(seoDescVal !== undefined ? { seoDescription: seoDescVal } : {}),
+      });
+      targetProductId = created.id;
+
+      if (input.content) {
+        await replaceCatalogProductContent(transaction, {
+          organizationId: input.organizationId,
+          actorId: input.actorId,
+          productId: targetProductId,
+          expectedVersion: Number(created.version),
+          informationGroups: input.content.informationGroups ?? [],
+          faqs: input.content.faqs ?? [],
+          seoTitle: input.content.seoTitle ?? input.seoTitle ?? null,
+          seoDescription: input.content.seoDescription ?? input.seoDescription ?? null,
+        });
+      }
+
+      if (input.targetStatus === 'ACTIVE') {
+        const latest = await lockCatalogProduct(transaction, input.organizationId, targetProductId);
+        await publishCatalogProduct(transaction, {
+          organizationId: input.organizationId,
+          productId: targetProductId,
+          actorId: input.actorId,
+          expectedVersion: latest?.version ?? 1,
+        });
+      }
+
+      const workspace = await getCatalogProductWorkspace(transaction, input.organizationId, targetProductId);
+      if (!workspace) throw new Error('Failed to load created product workspace.');
+      return workspace;
+    }
+
+    const product = await lockCatalogProduct(transaction, input.organizationId, targetProductId);
+    if (!product) {
+      throw new CatalogDomainError('NOT_FOUND', 'Product was not found.');
+    }
+    if (input.version !== undefined && product.version !== input.version) {
+      throw new CatalogDomainError(
+        'STALE_VERSION',
+        'Product has been modified by another operation. Please reload before saving.',
+      );
+    }
+
+    const title = input.title.trim();
+    if (!title) throw new CatalogDomainError('VALIDATION_FAILED', 'Product title is required.');
+    const handle = input.handle.trim();
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle)) {
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        'Storefront handle must use lowercase words separated by hyphens.',
+      );
+    }
+
+    const ptRow = await sql<{ id: string }>`
+      select id from catalog.product_types
+      where id = ${input.productTypeId}::uuid and organization_id = ${input.organizationId} and status = 'ACTIVE'
+    `.execute(transaction);
+    if (!ptRow.rows[0]) {
+      throw new CatalogDomainError('VALIDATION_FAILED', 'Choose an active Product Type from this organization.');
+    }
+
+    const baseWeightVal = input.shipping?.weight?.value ? Number(input.shipping.weight.value) : null;
+    const baseWeightUnit = baseWeightVal && input.shipping?.weight?.unit ? input.shipping.weight.unit : null;
+    const baseLenVal = input.shipping?.dimensions?.length ? Number(input.shipping.dimensions.length) : null;
+    const baseWidthVal = input.shipping?.dimensions?.width ? Number(input.shipping.dimensions.width) : null;
+    const baseHeightVal = input.shipping?.dimensions?.height ? Number(input.shipping.dimensions.height) : null;
+    const baseDimUnit =
+      baseLenVal && baseWidthVal && baseHeightVal && input.shipping?.dimensions?.unit
+        ? input.shipping.dimensions.unit
+        : null;
+
+    const handleBefore = await sql<{ handle: string }>`
+      select handle from catalog.products where id = ${targetProductId}::uuid and organization_id = ${input.organizationId}
+    `.execute(transaction);
+    const oldHandle = handleBefore.rows[0]?.handle;
+
+    const updated = await sql<{ id: string; version: string }>`
+      update catalog.products
+      set title = ${title},
+          handle = ${handle},
+          description = ${input.description ?? null},
+          product_type_id = ${input.productTypeId}::uuid,
+          primary_category_id = ${input.primaryCategoryId ?? null}::uuid,
+          seo_title = ${input.seoTitle ?? input.content?.seoTitle ?? null},
+          seo_description = ${input.seoDescription ?? input.content?.seoDescription ?? null},
+          inventory_policy = ${input.inventoryPolicy ?? 'DENY'},
+          shipping_profile = ${input.shippingProfile ?? 'STANDARD'},
+          weight_value = ${baseWeightVal},
+          weight_unit = ${baseWeightUnit},
+          length_value = ${baseLenVal},
+          width_value = ${baseWidthVal},
+          height_value = ${baseHeightVal},
+          dimension_unit = ${baseDimUnit},
+          version = version + 1,
+          updated_at = now()
+      where id = ${targetProductId}::uuid and organization_id = ${input.organizationId}
+      returning id::text, version::text
+    `.execute(transaction);
+
+    if (!updated.rows[0]) {
+      throw new CatalogDomainError('STALE_VERSION', 'Product has changed; reload before saving.');
+    }
+
+    if (oldHandle && oldHandle !== handle) {
+      await sql`
+        insert into catalog.product_handle_history (organization_id, product_id, old_handle)
+        values (${input.organizationId}, ${targetProductId}::uuid, ${oldHandle})
+        on conflict (organization_id, old_handle) do nothing
+      `.execute(transaction);
+    }
+
+    const categoryIds = [...new Set(input.categoryIds ?? [])];
+    if (input.primaryCategoryId && !categoryIds.includes(input.primaryCategoryId)) {
+      throw new CatalogDomainError(
+        'VALIDATION_FAILED',
+        'The primary Category must also be assigned to the Product.',
+      );
+    }
+    if (categoryIds.length > 0) {
+      const categories = await sql<{ id: string }>`with recursive lineage as (
+        select selected.id category_id,category.id ancestor_id,category.parent_category_id,category.status
+        from unnest(${categoryIds}::uuid[]) selected(id)
+        join catalog.categories category on category.id=selected.id
+          and category.organization_id=${input.organizationId}
+        union all
+        select lineage.category_id,parent.id,parent.parent_category_id,parent.status
+        from lineage join catalog.categories parent on parent.id=lineage.parent_category_id
+          and parent.organization_id=${input.organizationId}
+      ) select category_id::text id from lineage group by category_id
+        having bool_and(status='ACTIVE')`.execute(transaction);
+      if (categories.rows.length !== categoryIds.length) {
+        throw new CatalogDomainError(
+          'VALIDATION_FAILED',
+          'Every assigned Category and its parent path must be active.',
+        );
+      }
+    }
+    await sql`delete from catalog.product_categories where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+    for (const catId of categoryIds) {
+      await sql`insert into catalog.product_categories (organization_id, product_id, category_id) values (${input.organizationId}, ${targetProductId}::uuid, ${catId}::uuid)`.execute(transaction);
+    }
+
+    const tagIds = [...new Set(input.tagIds ?? [])];
+    const occasionIds = [...new Set(input.occasionIds ?? [])];
+    const collectionIds = [...new Set(input.collectionIds ?? [])];
+    for (const [table, ids] of [
+      ['tags', tagIds],
+      ['occasions', occasionIds],
+      ['collections', collectionIds],
+    ] as const) {
+      if (ids.length === 0) continue;
+      const source =
+        table === 'tags'
+          ? sql`catalog.tags`
+          : table === 'occasions'
+            ? sql`catalog.occasions`
+            : sql`catalog.collections`;
+      const available = await sql<{ id: string }>`select id::text from ${source}
+        where organization_id=${input.organizationId} and status='ACTIVE' and id=any(${ids}::uuid[])`.execute(transaction);
+      if (available.rows.length !== ids.length) {
+        throw new CatalogDomainError('VALIDATION_FAILED', `Every selected ${table.slice(0, -1)} must be active.`);
+      }
+    }
+    await sql`delete from catalog.product_tags where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+    for (const tId of tagIds) {
+      await sql`insert into catalog.product_tags (organization_id, product_id, tag_id) values (${input.organizationId}, ${targetProductId}::uuid, ${tId}::uuid)`.execute(transaction);
+    }
+    await sql`delete from catalog.product_occasions where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+    for (const oId of occasionIds) {
+      await sql`insert into catalog.product_occasions (organization_id, product_id, occasion_id) values (${input.organizationId}, ${targetProductId}::uuid, ${oId}::uuid)`.execute(transaction);
+    }
+    await sql`delete from catalog.product_collections where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+    for (const [idx, colId] of collectionIds.entries()) {
+      await sql`insert into catalog.product_collections (organization_id, product_id, collection_id, position) values (${input.organizationId}, ${targetProductId}::uuid, ${colId}::uuid, ${idx})`.execute(transaction);
+    }
+
+    if (input.sizeSystemId) {
+      if (input.sizeGuideId) {
+        const guide = await sql<{ size_system_id: string }>`
+          select size_system_id::text from sizing.size_guides
+          where organization_id=${input.organizationId} and id=${input.sizeGuideId}::uuid and status='ACTIVE'
+        `.execute(transaction);
+        if (!guide.rows[0] || guide.rows[0].size_system_id !== input.sizeSystemId) {
+          throw new CatalogDomainError('VALIDATION_FAILED', 'Selected size guide does not match size system.');
+        }
+      }
+      await sql`
+        insert into sizing.product_size_configurations (organization_id, product_id, size_system_id, size_guide_id, status)
+        values (${input.organizationId}, ${targetProductId}::uuid, ${input.sizeSystemId}::uuid, ${input.sizeGuideId ?? null}::uuid, 'ACTIVE')
+        on conflict (organization_id, product_id) do update
+        set size_system_id = excluded.size_system_id, size_guide_id = excluded.size_guide_id, status = 'ACTIVE', updated_at = now()
+      `.execute(transaction);
+    } else {
+      await sql`
+        delete from sizing.product_size_configurations
+        where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid
+      `.execute(transaction);
+    }
+
+    if (input.attributes) {
+      await sql`delete from catalog.product_attribute_values where organization_id=${input.organizationId} and product_id=${targetProductId}::uuid`.execute(transaction);
+      const definitions = await sql<{
+        id: string;
+        name: string;
+        value_type: CatalogProductAttribute['valueType'];
+        is_required: boolean;
+        reference_option_ids: string[];
+      }>`
+        select definition.id::text,definition.name,definition.value_type,binding.is_required,
+          array(select option.id::text from catalog.attribute_reference_options option
+            where option.organization_id=${input.organizationId}
+              and option.attribute_definition_id=definition.id
+              and option.status='ACTIVE') as reference_option_ids
+        from catalog.product_type_attributes binding
+        join catalog.attribute_definitions definition
+          on definition.id=binding.attribute_definition_id
+          and definition.organization_id=${input.organizationId}
+          and definition.scope='PRODUCT' and definition.status='ACTIVE'
+        where binding.organization_id=${input.organizationId} and binding.product_type_id=${input.productTypeId}::uuid
+      `.execute(transaction);
+      const byId = new Map(definitions.rows.map((def) => [def.id, def]));
+      for (const entry of input.attributes) {
+        const def = byId.get(entry.attributeDefinitionId);
+        if (!def) continue;
+        const norm = normalizedAttributeValue(def, entry.value);
+        if (!norm || norm.value === undefined) continue;
+        if (norm.column === 'value_reference_id') {
+          await sql`
+            insert into catalog.product_attribute_values (organization_id, product_id, attribute_definition_id, value_reference_id)
+            values (${input.organizationId}, ${targetProductId}::uuid, ${def.id}::uuid, ${norm.value}::uuid)
+          `.execute(transaction);
+        } else {
+          await sql`
+            insert into catalog.product_attribute_values (organization_id, product_id, attribute_definition_id, ${sql.raw(norm.column)})
+            values (${input.organizationId}, ${targetProductId}::uuid, ${def.id}::uuid, ${norm.value})
+          `.execute(transaction);
+        }
+      }
+    }
+
+    const resolvedValuesByRef = new Map<string, { id: string; axisId: string }>();
+    const resolvedValuesByKey = new Map<string, { id: string; axisId: string }>();
+    const resolvedValuesById = new Map<string, { id: string; axisId: string }>();
+    const resolvedVariantsByRef = new Map<string, string>();
+
+    if (input.options && input.options.length > 0) {
+      const visualAxesCount = input.options.filter((axis) => axis.isVisual).length;
+      if (visualAxesCount > 1) {
+        throw new CatalogDomainError('VALIDATION_FAILED', 'At most one option axis may be designated as visual.');
+      }
+
+      for (const [axisIdx, axis] of input.options.entries()) {
+        const rawCode = (axis.code || axis.name)
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+        const axisCode = rawCode || `opt-${axisIdx + 1}`;
+        let axisId = axis.id;
+
+        if (axisId) {
+          const existingAxis = await sql<{ id: string }>`
+            select id::text from catalog.product_option_axes
+            where id = ${axisId}::uuid and product_id = ${targetProductId}::uuid and organization_id = ${input.organizationId}
+          `.execute(transaction);
+          if (existingAxis.rows[0]) {
+            await sql`
+              update catalog.product_option_axes
+              set name = ${axis.name.trim()}, is_visual = ${axis.isVisual ?? false}, position = ${axis.position ?? axisIdx},
+                  status = 'ACTIVE', version = version + 1, updated_at = now()
+              where id = ${axisId}::uuid and organization_id = ${input.organizationId}
+            `.execute(transaction);
+          } else {
+            axisId = undefined;
+          }
+        }
+
+        if (!axisId) {
+          const newAxis = await sql<{ id: string }>`
+            insert into catalog.product_option_axes (organization_id, product_id, code, name, is_visual, position)
+            values (${input.organizationId}, ${targetProductId}::uuid, ${axisCode}, ${axis.name.trim()}, ${axis.isVisual ?? false}, ${axis.position ?? axisIdx})
+            returning id::text
+          `.execute(transaction);
+          axisId = newAxis.rows[0]?.id;
+        }
+
+        if (!axisId) continue;
+        if (axis.clientRef) {
+          resolvedValuesByRef.set(axis.clientRef, { id: axisId, axisId });
+        }
+
+        for (const [valIdx, val] of axis.values.entries()) {
+          const rawValCode = (val.code || val.displayValue)
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          const valCode = rawValCode || `val-${valIdx + 1}`;
+          let valId = val.id;
+
+          if (valId) {
+            const existingVal = await sql<{ id: string }>`
+              select id::text from catalog.product_option_values
+              where id = ${valId}::uuid and product_id = ${targetProductId}::uuid and organization_id = ${input.organizationId}
+            `.execute(transaction);
+            if (existingVal.rows[0]) {
+              await sql`
+                update catalog.product_option_values
+                set display_value = ${val.displayValue.trim()}, is_primary = ${val.isPrimary ?? false}, position = ${val.position ?? valIdx},
+                    color_id = ${val.colorId ?? null}::uuid, size_definition_id = ${val.sizeDefinitionId ?? null}::uuid,
+                    status = 'ACTIVE', version = version + 1, updated_at = now()
+                where id = ${valId}::uuid and organization_id = ${input.organizationId}
+              `.execute(transaction);
+            } else {
+              valId = undefined;
+            }
+          }
+
+          if (!valId) {
+            const newVal = await sql<{ id: string }>`
+              insert into catalog.product_option_values (
+                organization_id, product_id, option_axis_id, code, display_value, is_primary, position, color_id, size_definition_id
+              ) values (
+                ${input.organizationId}, ${targetProductId}::uuid, ${axisId}::uuid, ${valCode}, ${val.displayValue.trim()},
+                ${val.isPrimary ?? false}, ${val.position ?? valIdx}, ${val.colorId ?? null}::uuid, ${val.sizeDefinitionId ?? null}::uuid
+              ) returning id::text
+            `.execute(transaction);
+            valId = newVal.rows[0]?.id;
+          }
+
+          if (valId) {
+            if (val.clientRef) {
+              resolvedValuesByRef.set(val.clientRef, { id: valId, axisId });
+            }
+            resolvedValuesByKey.set(
+              `${axis.name.toLowerCase().trim()}:::${val.displayValue.toLowerCase().trim()}`,
+              { id: valId, axisId },
+            );
+            resolvedValuesById.set(valId, { id: valId, axisId });
+          }
+        }
+      }
+    }
+
+    const activeVariantIds: string[] = [];
+    if (input.variants && input.variants.length > 0) {
+      for (const v of input.variants) {
+        const normalizedSku = v.sku.trim().toUpperCase();
+        if (!normalizedSku) continue;
+
+        const matchedValues: { axisId: string; valueId: string }[] = [];
+        if (v.optionValueIds && v.optionValueIds.length > 0) {
+          for (const ref of v.optionValueIds) {
+            const match = resolvedValuesByRef.get(ref) ?? resolvedValuesById.get(ref);
+            if (match) {
+              matchedValues.push({ axisId: match.axisId, valueId: match.id });
+            }
+          }
+        } else if (v.optionSelections) {
+          for (const sel of v.optionSelections) {
+            const key = `${sel.axisName.toLowerCase().trim()}:::${sel.valueDisplay.toLowerCase().trim()}`;
+            const match = resolvedValuesByKey.get(key);
+            if (match) {
+              matchedValues.push({ axisId: match.axisId, valueId: match.id });
+            }
+          }
+        }
+
+        const optIds = matchedValues.map((m) => m.valueId);
+        const signature = optIds.length > 0 ? [...optIds].sort().join(':') : 'default';
+
+        const weightVal = v.weight?.value ? Number(v.weight.value) : null;
+        const weightUnit = weightVal && v.weight?.unit ? v.weight.unit : null;
+        const lenVal = v.dimensions?.length ? Number(v.dimensions.length) : null;
+        const widthVal = v.dimensions?.width ? Number(v.dimensions.width) : null;
+        const heightVal = v.dimensions?.height ? Number(v.dimensions.height) : null;
+        const dimUnit = lenVal && widthVal && heightVal && v.dimensions?.unit ? v.dimensions.unit : null;
+        const estimatedCost = v.estimatedCostAmount ? Number(v.estimatedCostAmount) : null;
+
+        let variantId = v.id;
+        if (variantId) {
+          const existingVariant = await sql<{ id: string }>`
+            select id::text from catalog.product_variants
+            where id = ${variantId}::uuid and product_id = ${targetProductId}::uuid and organization_id = ${input.organizationId}
+          `.execute(transaction);
+          if (existingVariant.rows[0]) {
+            await sql`
+              update catalog.product_variants
+              set sku = ${v.sku.trim()},
+                  sku_normalized = ${normalizedSku},
+                  title = ${v.title?.trim() || null},
+                  barcode = ${v.barcode?.trim() || null},
+                  barcode_symbology = ${v.barcodeSymbology ?? null},
+                  inventory_policy = ${v.inventoryPolicy ?? null},
+                  reorder_point = ${v.reorderPoint ?? null},
+                  status = ${v.status ?? 'ACTIVE'},
+                  weight_value = ${weightVal},
+                  weight_unit = ${weightUnit},
+                  length_value = ${lenVal},
+                  width_value = ${widthVal},
+                  height_value = ${heightVal},
+                  dimension_unit = ${dimUnit},
+                  estimated_cost_amount = ${estimatedCost},
+                  ${matchedValues.length > 0 ? sql`option_signature = ${signature},` : sql``}
+                  version = version + 1,
+                  updated_at = now()
+              where id = ${variantId}::uuid and organization_id = ${input.organizationId}
+            `.execute(transaction);
+          } else {
+            variantId = undefined;
+          }
+        }
+
+        if (!variantId) {
+          const newVar = await sql<{ id: string }>`
+            insert into catalog.product_variants (
+              organization_id, product_id, sku, sku_normalized, title, barcode, barcode_symbology,
+              inventory_policy, reorder_point, status, weight_value, weight_unit,
+              length_value, width_value, height_value, dimension_unit, estimated_cost_amount, option_signature
+            ) values (
+              ${input.organizationId}, ${targetProductId}::uuid, ${v.sku.trim()}, ${normalizedSku},
+              ${v.title?.trim() || null}, ${v.barcode?.trim() || null}, ${v.barcodeSymbology ?? null},
+              ${v.inventoryPolicy ?? null}, ${v.reorderPoint ?? null}, ${v.status ?? 'ACTIVE'},
+              ${weightVal}, ${weightUnit}, ${lenVal}, ${widthVal}, ${heightVal}, ${dimUnit},
+              ${estimatedCost}, ${signature}
+            ) returning id::text
+          `.execute(transaction);
+          variantId = newVar.rows[0]?.id;
+        }
+
+        if (!variantId) continue;
+        activeVariantIds.push(variantId);
+
+        if (v.clientRef) {
+          resolvedVariantsByRef.set(v.clientRef, variantId);
+        }
+
+        if (matchedValues.length > 0) {
+          await sql`delete from catalog.variant_option_values where variant_id = ${variantId}::uuid and organization_id = ${input.organizationId}`.execute(transaction);
+          for (const item of matchedValues) {
+            await sql`
+              insert into catalog.variant_option_values (organization_id, variant_id, option_axis_id, option_value_id)
+              values (${input.organizationId}, ${variantId}::uuid, ${item.axisId}::uuid, ${item.valueId}::uuid)
+            `.execute(transaction);
+          }
+        }
+
+        await sql`delete from catalog.variant_colors where variant_id = ${variantId}::uuid and organization_id = ${input.organizationId}`.execute(transaction);
+        if (v.primaryColorId) {
+          await sql`
+            insert into catalog.variant_colors (organization_id, variant_id, color_id, role, position)
+            values (${input.organizationId}, ${variantId}::uuid, ${v.primaryColorId}::uuid, 'PRIMARY', 0)
+          `.execute(transaction);
+        }
+        for (const [pos, colorId] of (v.associatedColorIds ?? []).entries()) {
+          await sql`
+            insert into catalog.variant_colors (organization_id, variant_id, color_id, role, position)
+            values (${input.organizationId}, ${variantId}::uuid, ${colorId}::uuid, 'ASSOCIATED', ${pos})
+          `.execute(transaction);
+        }
+
+        await sql`
+          insert into inventory.inventory_items (organization_id, variant_id)
+          values (${input.organizationId}, ${variantId}::uuid)
+          on conflict (variant_id) do nothing
+        `.execute(transaction);
+
+        if (v.initialStock && v.initialStock.length > 0) {
+          for (const stock of v.initialStock) {
+            if (Number(stock.quantity) > 0) {
+              await adjustInventory(transaction, {
+                organizationId: input.organizationId,
+                actorId: input.actorId,
+                variantId,
+                locationId: stock.locationId,
+                condition: 'SELLABLE',
+                quantityDelta: String(stock.quantity),
+                reasonCode: 'OPENING_BALANCE',
+                note: 'Opening inventory recorded during product edit',
+                idempotencyKey: `init-stock-${variantId}-${stock.locationId}-${Date.now()}`,
+              });
+            }
+          }
+        }
+
+        if (v.priceAmount) {
+          const currency = v.currency || 'BDT';
+          const updatedPrice = await sql`
+            update pricing.price_definitions
+            set amount = ${v.priceAmount}::numeric,
+                compare_at_amount = ${v.compareAtAmount ? sql`${v.compareAtAmount}::numeric` : null},
+                currency_code = ${currency},
+                updated_at = now()
+            where variant_id = ${variantId}::uuid and organization_id = ${input.organizationId} and status = 'ACTIVE'
+          `.execute(transaction);
+          if (Number(updatedPrice.numAffectedRows) === 0) {
+            await sql`
+              insert into pricing.price_definitions (organization_id, variant_id, currency_code, amount, compare_at_amount, status)
+              values (${input.organizationId}, ${variantId}::uuid, ${currency}, ${v.priceAmount}::numeric, ${v.compareAtAmount ? sql`${v.compareAtAmount}::numeric` : null}, 'ACTIVE')
+            `.execute(transaction);
+          }
+        }
+      }
+
+      if (activeVariantIds.length > 0) {
+        await sql`
+          update catalog.product_variants
+          set status = 'ARCHIVED', updated_at = now()
+          where product_id = ${targetProductId}::uuid
+            and organization_id = ${input.organizationId}
+            and not (id = any(${activeVariantIds}::uuid[]))
+            and status = 'ACTIVE'
+        `.execute(transaction);
+      }
+    }
+
+    if (input.media) {
+      const placements = input.media.map((m, index) => {
+        const optionVal = m.optionValueId
+          ? (resolvedValuesById.get(m.optionValueId)?.id ?? m.optionValueId)
+          : m.optionValueRef
+            ? (resolvedValuesByRef.get(m.optionValueRef)?.id ?? null)
+            : null;
+        const varId = m.variantId
+          ? (resolvedVariantsByRef.get(m.variantId) ?? m.variantId)
+          : m.variantRef
+            ? (resolvedVariantsByRef.get(m.variantRef) ?? null)
+            : null;
+
+        return {
+          assetId: m.assetId,
+          role: m.role || (m.isPrimary ? 'THUMBNAIL' : 'GALLERY'),
+          position: m.position ?? index,
+          variantId: varId,
+          optionValueId: optionVal,
+          isPrimary: Boolean(m.isPrimary),
+          altTextOverride: m.altTextOverride || null,
+        };
+      });
+
+      await syncProductMediaPlacements(transaction, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        productId: targetProductId,
+        placements,
+      });
+    }
+
+    if (input.content) {
+      const validFaqs = (input.content.faqs ?? []).filter((f) => f.question.trim() && f.answer.trim());
+      const validGroups = input.content.informationGroups ?? [];
+      const latestProd = await lockCatalogProduct(transaction, input.organizationId, targetProductId);
+      await replaceCatalogProductContent(transaction, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        productId: targetProductId,
+        expectedVersion: latestProd?.version ?? 1,
+        informationGroups: validGroups,
+        faqs: validFaqs,
+        seoTitle: input.content.seoTitle ?? input.seoTitle ?? null,
+        seoDescription: input.content.seoDescription ?? input.seoDescription ?? null,
+      });
+    }
+
+    if (input.targetStatus === 'ACTIVE') {
+      const latestProd = await lockCatalogProduct(transaction, input.organizationId, targetProductId);
+      await publishCatalogProduct(transaction, {
+        organizationId: input.organizationId,
+        productId: targetProductId,
+        actorId: input.actorId,
+        expectedVersion: latestProd?.version ?? 1,
+      });
+    }
+
+    await emitCatalogEvent(transaction, {
+      organizationId: input.organizationId,
+      productId: targetProductId,
+      actorId: input.actorId,
+      eventType: 'catalog.product.workspace_saved',
+      auditAction: 'catalog.product.workspace_saved',
+      metadata: { title: input.title, variantCount: input.variants?.length ?? 0 },
+    });
+
+    const workspace = await getCatalogProductWorkspace(transaction, input.organizationId, targetProductId);
+    if (!workspace) throw new Error('Failed to load updated product workspace.');
+    return workspace;
+  });
+}
+

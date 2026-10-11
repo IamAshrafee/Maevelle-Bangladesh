@@ -3,10 +3,8 @@
 import { useMemo, useState } from 'react';
 import {
   Camera,
-  Check,
   Eye,
   HelpCircle,
-  Info,
   Layers,
   Package,
   Palette,
@@ -42,6 +40,7 @@ import type {
   VariantStockEntry,
 } from './types';
 import { VariantMatrixTable } from './variant-matrix-table';
+import { BarcodeScannerModal } from './barcode-scanner-modal';
 
 export interface VariantsCardProps {
   readonly variantMode: 'simple' | 'variants';
@@ -122,6 +121,7 @@ export function VariantsCard({
   const [newAxisName, setNewAxisName] = useState('');
   const [newAxisIsVisual, setNewAxisIsVisual] = useState(false);
   const [showAddAxis, setShowAddAxis] = useState(false);
+  const [simpleScannerOpen, setSimpleScannerOpen] = useState(false);
 
   // Compute live estimated margin for simple mode
   const simpleMargin = useMemo(() => {
@@ -134,11 +134,6 @@ export function VariantsCard({
     const profit = price - cost;
     return { margin: Math.round(margin * 10) / 10, profit: Math.round(profit) };
   }, [priceAmount, estimatedCostAmount, costAmount]);
-
-  const activeVisualAxis = useMemo(
-    () => optionAxes.find((a) => a.isVisual),
-    [optionAxes],
-  );
 
   const handleAddColor = () => {
     if (newColorInput.trim()) {
@@ -260,13 +255,25 @@ export function VariantsCard({
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <Input
-                  id="barcode-input"
-                  value={barcode}
-                  placeholder="890123456789"
-                  className="font-mono text-xs"
-                  onChange={(e) => onBarcodeChange(e.target.value)}
-                />
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    id="barcode-input"
+                    value={barcode}
+                    placeholder="890123456789"
+                    className="font-mono text-xs flex-1"
+                    onChange={(e) => onBarcodeChange(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-9 shrink-0"
+                    onClick={() => setSimpleScannerOpen(true)}
+                    title="Scan Barcode with Camera"
+                  >
+                    <Camera className="size-4 text-muted-foreground" />
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -290,12 +297,12 @@ export function VariantsCard({
                   {simpleMargin !== null && (
                     <Badge
                       variant="outline"
-                      className={`text-[11px] font-mono font-medium ${
+                      className={`text-[11px] font-mono tabular-nums font-medium ${
                         simpleMargin.margin >= 40
-                          ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          ? 'border-success/30 bg-success/10 text-success'
                           : simpleMargin.margin >= 20
-                            ? 'border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-                            : 'border-red-300 bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300'
+                            ? 'border-warning/30 bg-warning/10 text-warning'
+                            : 'border-destructive/30 bg-destructive/10 text-destructive'
                       }`}
                     >
                       {simpleMargin.margin}% margin (+৳{simpleMargin.profit.toLocaleString('en-BD')})
@@ -363,7 +370,7 @@ export function VariantsCard({
             {/* Quick Presets Bar */}
             <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/25 px-3 py-2 text-xs">
               <span className="font-medium text-muted-foreground flex items-center gap-1">
-                <Sparkles className="size-3.5 text-amber-500" />
+                <Sparkles className="size-3.5 text-warning" />
                 Quick Presets:
               </span>
               <Button
@@ -577,17 +584,17 @@ export function VariantsCard({
                                       render={
                                         <button
                                           type="button"
-                                          className={`rounded-full p-0.5 transition-colors ${
+                                          className={`rounded-full p-0.5 transition-colors duration-150 ${
                                             val.isPrimary
-                                              ? 'text-amber-400 hover:text-amber-300'
-                                              : 'text-muted-foreground hover:text-amber-500'
+                                              ? 'text-warning hover:text-warning/80'
+                                              : 'text-muted-foreground hover:text-warning'
                                           }`}
                                           onClick={() => onSetPrimaryVisualValue?.(axis.id, val.id)}
                                         />
                                       }
                                     >
                                       <Star
-                                        className={`size-3 ${val.isPrimary ? 'fill-amber-400' : ''}`}
+                                        className={`size-3 ${val.isPrimary ? 'fill-warning text-warning' : ''}`}
                                       />
                                     </TooltipTrigger>
                                     <TooltipContent>
@@ -766,6 +773,15 @@ export function VariantsCard({
           </div>
         )}
       </CardContent>
+      <BarcodeScannerModal
+        open={simpleScannerOpen}
+        onOpenChange={setSimpleScannerOpen}
+        onScan={(code) => {
+          onBarcodeChange(code);
+          setSimpleScannerOpen(false);
+        }}
+        title="Scan Product Barcode"
+      />
     </Card>
   );
 }
