@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Package, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Package, AlertCircle, Boxes, Settings2 } from 'lucide-react';
 import Link from 'next/link';
 
 import type { InventoryItemDetailDto } from '@maevelle/contracts';
@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdminCapability } from '@/components/admin-capabilities';
+import { TrackingModeDialog } from './units/tracking-mode-dialog';
 
 export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: string }) {
   const canAdjust = useAdminCapability('inventory.adjust');
@@ -25,6 +26,7 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -117,6 +119,31 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
           </div>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
+          {item.trackingMode === 'SERIAL' ? (
+            <Button
+              variant="default"
+              render={
+                <Link
+                  href={`/inventory/units?variantId=${encodeURIComponent(item.variantId)}`}
+                />
+              }
+              nativeButton={false}
+              className="gap-1.5"
+            >
+              <Boxes className="size-3.5" />
+              <span>View Tracked Units</span>
+            </Button>
+          ) : null}
+
+          <Button
+            variant="outline"
+            onClick={() => setTrackingDialogOpen(true)}
+            className="gap-1.5"
+          >
+            <Settings2 className="size-3.5" />
+            <span>Tracking Mode</span>
+          </Button>
+
           {canAdjust ? (
             <Button
               variant="outline"
@@ -382,6 +409,18 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Tracking Mode Configuration & Conversion Modal */}
+      <TrackingModeDialog
+        open={trackingDialogOpen}
+        onOpenChange={setTrackingDialogOpen}
+        variantId={item.variantId}
+        sku={item.sku}
+        productTitle={item.productTitle}
+        currentTrackingMode={item.trackingMode === 'SERIAL' ? 'SERIAL' : 'STANDARD'}
+        currentOnHand={Number(item.summary.onHand) || 0}
+        onSuccess={() => setReloadKey((k) => k + 1)}
+      />
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  ScanBarcode,
   Search,
   ShieldAlert,
   Truck,
@@ -49,6 +50,7 @@ import {
 } from '@/components/returns/return-action-dialogs';
 import { ReturnCreateDialog } from '@/components/returns/return-create-dialog';
 import { RtoCreateDialog } from '@/components/returns/rto-create-dialog';
+import { ReturnUnitIntakeDialog } from '@/components/returns/return-unit-intake-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -177,6 +179,7 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
   >(null);
   const [linkRefundOpen, setLinkRefundOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [returnUnitScanOpen, setReturnUnitScanOpen] = useState(false);
 
   // Sync tab change to URL
   const handleTabChange = (val: string) => {
@@ -338,6 +341,16 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
               }}
             />
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setReturnUnitScanOpen(true)}
+            className="gap-1.5"
+          >
+            <ScanBarcode className="size-4 text-primary" />
+            <span>Receive Serialized Unit</span>
+          </Button>
         </div>
       </div>
 
@@ -961,6 +974,17 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
               setSuccessMessage('Return case cancelled.');
               await loadCases();
               await fetchCaseDetail(selectedCase.id);
+            }}
+          />
+
+          <ReturnUnitIntakeDialog
+            open={returnUnitScanOpen}
+            onOpenChange={setReturnUnitScanOpen}
+            returnId={selectedCase?.id}
+            returnNumber={selectedCase?.return_number}
+            onSuccess={async () => {
+              setSuccessMessage('Returned physical unit received and quarantined.');
+              await loadCases();
             }}
           />
         </>

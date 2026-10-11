@@ -13,6 +13,7 @@ import {
   PackageCheck,
   PackageOpen,
   RefreshCw,
+  ScanBarcode,
   Search,
   Truck,
   Warehouse,
@@ -41,6 +42,7 @@ import type { FulfillmentDto, WarehouseLocationDto } from '@maevelle/contracts';
 
 import { FulfillmentStatusBadge } from '../delivery/delivery-status-badges';
 import { FulfillmentCreateDialog } from './fulfillment-create-dialog';
+import { FulfillmentUnitPickDialog } from './fulfillment-unit-pick-dialog';
 
 function formatDate(value?: string | null): string {
   if (!value) return '—';
@@ -98,6 +100,7 @@ export function FulfillmentConsole() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'danger' } | null>(null);
+  const [pickScanOpen, setPickScanOpen] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -587,6 +590,17 @@ export function FulfillmentConsole() {
                     Fulfillment Operations
                   </h4>
                   <div className="flex flex-wrap gap-2">
+                    {['DRAFT', 'READY', 'PICKING'].includes(selected.status) ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPickScanOpen(true)}
+                        className="gap-1.5"
+                      >
+                        <ScanBarcode className="size-3.5 text-primary" /> Scan & Verify Units
+                      </Button>
+                    ) : null}
+
                     {['PACKED', 'DISPATCHED'].includes(selected.status) ? (
                       <Button
                         size="sm"
@@ -657,6 +671,14 @@ export function FulfillmentConsole() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Serialized Unit Pick Verification Dialog */}
+            <FulfillmentUnitPickDialog
+              open={pickScanOpen}
+              onOpenChange={setPickScanOpen}
+              fulfillment={selected}
+              onSuccess={() => void reload()}
+            />
           </div>
         ) : null}
       </div>

@@ -35,6 +35,7 @@ import {
   RefreshCw,
   RotateCcw,
   Ruler,
+  ScanBarcode,
   Search,
   Settings,
   ShieldAlert,
@@ -46,6 +47,7 @@ import {
   UserRoundCog,
   Users,
   Warehouse,
+  Wrench,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -124,6 +126,20 @@ const navigation: readonly NavGroup[] = [
         capability: 'inventory.view',
       },
       { label: 'Stock', href: '/inventory/stock', icon: Boxes, capability: 'inventory.view' },
+      {
+        label: 'Physical units',
+        href: '/inventory/units',
+        icon: ScanBarcode,
+        capability: 'inventory.units.view',
+        keywords: 'serial serialized individual barcode tracking units qc inspection physical',
+      },
+      {
+        label: 'Repair queue',
+        href: '/inventory/units/repairs',
+        icon: Wrench,
+        capability: 'inventory.units.view',
+        keywords: 'repairs tailoring defects cleaning sewing',
+      },
       {
         label: 'Warehouses',
         href: '/inventory/warehouses',
@@ -377,6 +393,13 @@ const navigation: readonly NavGroup[] = [
 ];
 
 const quickCommands: readonly NavItem[] = [
+  {
+    label: 'Scan physical unit barcode',
+    href: '/inventory/units/scan',
+    icon: ScanBarcode,
+    capability: 'inventory.units.view',
+    keywords: 'barcode scan unit physical mvu camera',
+  },
   {
     label: 'My account & profile',
     href: '/account',

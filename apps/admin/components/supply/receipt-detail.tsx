@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Boxes, CheckCircle, ExternalLink, Package, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Boxes, CheckCircle, ExternalLink, Package, RotateCcw, Plus, ShieldCheck, Printer } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import type { ApiEnvelope, InboundReceiptDto, InboundReceiptLineDto } from '@maevelle/contracts';
+import type { ApiEnvelope, InboundReceiptDto, InboundReceiptLineDto, InventoryUnitDto } from '@maevelle/contracts';
 
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
@@ -12,8 +12,14 @@ import { DetailMetric, DetailSection, DetailSkeleton } from '@/components/supply
 import { StatusBadge } from '@/components/status-badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatSupplyDate, formatSupplyNumber, supplyRequest } from '@/lib/supply/api';
-
+import { listInventoryUnits } from '@/lib/inventory/units';
+import { UnitStatusBadge } from '@/components/inventory/units/unit-status-badge';
+import { UnitConditionBadge } from '@/components/inventory/units/unit-condition-badge';
+import { UnitBarcodeModal } from '@/components/inventory/units/unit-barcode-modal';
+import { QCInspectionWorkspace } from '@/components/inventory/units/qc-inspection-workspace';
+import { ReceiptRegisterUnitsDialog } from './receipt-register-units-dialog';
 import { ReceiptReverseDialog } from './receipt-reverse-dialog';
 import { ReceiptResolveConditionDialog } from './receipt-resolve-condition-dialog';
 
@@ -29,14 +35,22 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
   // Dialog states
   const [reverseOpen, setReverseOpen] = useState(false);
   const [resolvingLine, setResolvingLine] = useState<InboundReceiptLineDto>();
+  const [registerUnitsOpen, setRegisterUnitsOpen] = useState(false);
+  const [qcWorkspaceOpen, setQcWorkspaceOpen] = useState(false);
+  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
+  const [receiptUnits, setReceiptUnits] = useState<readonly InventoryUnitDto[]>([]);
 
   async function load(signal?: AbortSignal) {
     try {
-      const result = await supplyRequest<ApiEnvelope<InboundReceiptDto>>(
-        `/admin/inbound-receipts/${receiptId}`,
-        signal ? { signal } : undefined,
-      );
-      setReceipt(result.data);
+      const [receiptResult, unitsResult] = await Promise.all([
+        supplyRequest<ApiEnvelope<InboundReceiptDto>>(
+          `/admin/inbound-receipts/${receiptId}`,
+          signal ? { signal } : undefined,
+        ),
+        listInventoryUnits({ sourceReceiptId: receiptId, pageSize: 100 }),
+      ]);
+      setReceipt(receiptResult.data);
+      setReceiptUnits(unitsResult.data);
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError'))
         setMessage(error instanceof Error ? error.message : 'Receipt could not be loaded.');
@@ -164,6 +178,30 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {receipt.status === 'POSTED' ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRegisterUnitsOpen(true)}
+                className="gap-1.5"
+              >
+                <Plus className="size-3.5" />
+                <span>Register Physical Units</span>
+              </Button>
+
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setQcWorkspaceOpen(true)}
+                className="gap-1.5"
+              >
+                <ShieldCheck className="size-3.5" />
+                <span>QC Inspection Workspace</span>
+              </Button>
+            </>
+          ) : null}
+
           {receipt.status === 'POSTED' && canAdjust ? (
             <Button
               variant="outline"
@@ -301,6 +339,87 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
         </div>
       </DetailSection>
 
+      {/* Individually Tracked Physical Units Section */}
+      <DetailSection
+        title={`Individually Tracked Units (${receiptUnits.length})`}
+        description="Physical serialized garment units registered against this receiving voucher."
+      >
+        <div className="p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-semibold text-foreground">
+                {receiptUnits.length} Units Registered
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-amber-700 dark:text-amber-400 font-medium">
+                {receiptUnits.filter((u) => u.status === 'AWAITING_QC').length} Awaiting QC
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                {receiptUnits.filter((u) => u.currentCondition === 'GRADE_A' && u.status !== 'AWAITING_QC').length} Passed
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-amber-700 dark:text-amber-400 font-medium">
+                {receiptUnits.filter((u) => u.currentCondition === 'REPAIR_REQUIRED' || u.status === 'ON_HOLD').length} Repair / Hold
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {receiptUnits.length > 0 ? (
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => setBarcodeModalOpen(true)}
+                  className="gap-1"
+                >
+                  <Printer className="size-3" /> Print Labels
+                </Button>
+              ) : null}
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => setQcWorkspaceOpen(true)}
+                className="gap-1"
+              >
+                <ShieldCheck className="size-3" /> QC Inspection Workspace
+              </Button>
+            </div>
+          </div>
+
+          {receiptUnits.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">
+              No physical units registered yet. Click &apos;Register Physical Units&apos; to generate serialized Unit IDs for this inbound delivery.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+              {receiptUnits.map((u) => (
+                <div
+                  key={u.id}
+                  className="p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-colors flex items-center justify-between gap-2 text-xs"
+                >
+                  <div>
+                    <Link
+                      href={`/inventory/units/${u.id}`}
+                      className="font-mono font-bold text-foreground hover:underline hover:text-primary block"
+                    >
+                      {u.unitCode}
+                    </Link>
+                    <span className="font-mono text-[10px] text-muted-foreground truncate block max-w-[140px]">
+                      {u.sku}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1">
+                    <UnitStatusBadge status={u.status} />
+                    <UnitConditionBadge condition={u.currentCondition} short />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </DetailSection>
+
       {receipt.notes ? (
         <DetailSection title="Receiving note">
           <p className="whitespace-pre-wrap p-4 text-sm text-muted-foreground">{receipt.notes}</p>
@@ -337,6 +456,41 @@ export function ReceiptDetail({ receiptId }: { receiptId: string }) {
         busy={busy}
         onClose={() => setResolvingLine(undefined)}
         onResolve={handleResolveCondition}
+      />
+
+      {/* Serialized Units Registration Dialog */}
+      <ReceiptRegisterUnitsDialog
+        open={registerUnitsOpen}
+        onOpenChange={setRegisterUnitsOpen}
+        receipt={receipt}
+        onSuccess={() => void load()}
+      />
+
+      {/* QC Inspection Workspace Modal */}
+      <Dialog open={qcWorkspaceOpen} onOpenChange={setQcWorkspaceOpen}>
+        <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="border-b pb-3">
+            <DialogTitle className="text-base font-semibold flex items-center gap-2">
+              <ShieldCheck className="size-4 text-primary" />
+              <span>Receiving QC — {receipt.receiptNumber}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="pt-2">
+            <QCInspectionWorkspace
+              sourceReceiptId={receipt.id}
+              initialUnits={receiptUnits}
+              stage="INBOUND_INTAKE"
+              onCompleted={() => void load()}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Print Labels Modal */}
+      <UnitBarcodeModal
+        open={barcodeModalOpen}
+        onOpenChange={setBarcodeModalOpen}
+        units={receiptUnits}
       />
     </main>
   );
