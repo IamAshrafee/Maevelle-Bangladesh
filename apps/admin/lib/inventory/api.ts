@@ -1,3 +1,5 @@
+import { formatQuantity, subtractDecimals } from '@/lib/format/numbers';
+
 export async function inventoryRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const adminPath = path.startsWith('/admin') ? path : `/admin${path}`;
   const response = await fetch(`/api${adminPath}`, {
@@ -18,7 +20,7 @@ export async function inventoryRequest<T>(path: string, init?: RequestInit): Pro
 }
 
 export const formatInventoryNumber = (value: string | number) =>
-  new Intl.NumberFormat('en-BD').format(Number(value));
+  formatQuantity(value);
 
 export const formatInventoryDate = (value?: string) =>
   value
@@ -26,4 +28,4 @@ export const formatInventoryDate = (value?: string) =>
     : 'Not set';
 
 export const calculateAvailableQuantity = (sellable: string, reserved: string) =>
-  Math.max(0, Number(sellable) - Number(reserved)).toString();
+  subtractDecimals(sellable, reserved);

@@ -313,9 +313,10 @@ export function PurchasePayDialog({
               id="pay-amount"
               name="amount"
               type="number"
-              min="0.0001"
+              inputMode="decimal"
+              min="0.01"
               max={invoice.outstanding}
-              step="any"
+              step="0.01"
               value={amount}
               required
               disabled={busy}

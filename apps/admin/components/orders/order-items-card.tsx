@@ -12,19 +12,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { CancelOrderLineDialog } from './cancel-order-line-dialog';
+import { formatMoney, formatQuantity } from '@/lib/format/numbers';
 
 interface OrderItemsCardProps {
   readonly order: OrderDetailDto;
   readonly onUpdated: () => void;
-}
-
-function formatMoney(amount: number | string | undefined | null, currency = 'BDT'): string {
-  const num = Number(amount ?? 0);
-  return new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency: currency || 'BDT',
-    maximumFractionDigits: 0,
-  }).format(Number.isNaN(num) ? 0 : num);
 }
 
 export function OrderItemsCard({ order, onUpdated }: OrderItemsCardProps) {
@@ -115,7 +107,7 @@ export function OrderItemsCard({ order, onUpdated }: OrderItemsCardProps) {
                   </TableCell>
 
                   <TableCell className="text-center font-medium">
-                    {line.quantity}
+                    {formatQuantity(line.quantity)}
                   </TableCell>
 
                   <TableCell className="text-center text-xs">

@@ -36,6 +36,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { fetchApiData } from '@/lib/api';
+import { formatQuantity } from '@/lib/format/numbers';
 import type { FulfillmentDto, WarehouseLocationDto } from '@maevelle/contracts';
 
 import { FulfillmentStatusBadge } from '../delivery/delivery-status-badges';
@@ -567,7 +568,9 @@ export function FulfillmentConsole() {
                                 {line.sku}
                               </span>
                             </td>
-                            <td className="p-2 text-center font-semibold">{line.quantity}</td>
+                            <td className="p-2 text-center font-mono font-semibold tabular-nums">
+                              {formatQuantity(line.quantity)}
+                            </td>
                             <td className="p-2 text-right text-muted-foreground font-mono">
                               {selected.status === 'DISPATCHED' ? line.consumed : '—'}
                             </td>

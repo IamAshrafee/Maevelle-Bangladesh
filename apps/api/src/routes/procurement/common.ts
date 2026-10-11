@@ -7,7 +7,9 @@ import type { createAuth } from '../../auth/auth.js';
 
 export type Auth = ReturnType<typeof createAuth>;
 
-export const quantitySchema = Type.String({ pattern: '^\\d+(?:\\.\\d{1,6})?$' });
+// Supply manages discrete catalog units. Keep weight and dimensional measures on
+// their dedicated decimal fields; item counts must never enter the workflow as fractions.
+export const quantitySchema = Type.String({ pattern: '^[1-9]\\d*(?:\\.0{1,6})?$' });
 
 export const conditionSchema = Type.Union([
   Type.Literal('SELLABLE'),

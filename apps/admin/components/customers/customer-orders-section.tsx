@@ -111,7 +111,7 @@ export function CustomerOrdersSection({ customerId, isReadOnly = false }: Custom
     return new Intl.NumberFormat('en-BD', {
       style: 'currency',
       currency: 'BDT',
-      maximumFractionDigits: 0,
+      maximumFractionDigits: 2,
     }).format(Number(amount));
   }
 

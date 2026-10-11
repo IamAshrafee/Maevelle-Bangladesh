@@ -11,6 +11,7 @@ import {
   VerifiedIcon,
 } from '@/components/ui/icons';
 import type { UseCheckoutReturn } from '../use-checkout';
+import { formatMoney, wholeQuantity } from '@/lib/format/money';
 
 export interface CheckoutOrderSummaryProps {
   readonly checkout: UseCheckoutReturn;
@@ -85,7 +86,7 @@ export function CheckoutOrderSummary({
                   src={item.imageUrl}
                 />
                 <span className="absolute top-1 right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-on-primary shadow-xs">
-                  {item.quantity}
+                  {wholeQuantity(item.quantity)}
                 </span>
               </div>
 
@@ -98,7 +99,7 @@ export function CheckoutOrderSummary({
                   {item.variantDescription}
                 </p>
                 <div className="mt-1 flex items-baseline gap-1.5 font-mono text-sm font-bold text-on-surface tabular-nums">
-                  <span>৳{item.net.toLocaleString('en-BD')}</span>
+                  <span>{formatMoney(item.net)}</span>
                 </div>
               </div>
             </div>
@@ -120,7 +121,7 @@ export function CheckoutOrderSummary({
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-primary tabular-nums">
-                  -৳{voucher.discount.toLocaleString('en-BD')}
+                  -{formatMoney(voucher.discount)}
                 </span>
                 <button
                   aria-label="Remove coupon"
@@ -173,7 +174,7 @@ export function CheckoutOrderSummary({
           <div className="flex justify-between">
             <span>Subtotal</span>
             <span className="font-mono font-semibold text-on-surface tabular-nums">
-              ৳{subtotal.toLocaleString('en-BD')}
+              {formatMoney(subtotal)}
             </span>
           </div>
 
@@ -181,7 +182,7 @@ export function CheckoutOrderSummary({
             <div className="flex justify-between text-primary">
               <span>First Order Voucher</span>
               <span className="font-mono font-semibold tabular-nums">
-                -৳{discount.toLocaleString('en-BD')}
+                -{formatMoney(discount)}
               </span>
             </div>
           ) : null}
@@ -189,7 +190,7 @@ export function CheckoutOrderSummary({
           <div className="flex justify-between">
             <span>{shippingLabel}</span>
             <span className="font-mono font-semibold text-on-surface tabular-nums">
-              ৳{shippingFee.toLocaleString('en-BD')}
+              {formatMoney(shippingFee)}
             </span>
           </div>
 
@@ -302,7 +303,7 @@ export function CheckoutOrderSummary({
                     src={item.imageUrl}
                   />
                   <span className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-on-primary">
-                    {item.quantity}
+                    {wholeQuantity(item.quantity)}
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -313,7 +314,7 @@ export function CheckoutOrderSummary({
                     {item.variantDescription}
                   </p>
                   <span className="font-mono text-xs font-bold text-on-surface tabular-nums">
-                    ৳{item.net.toLocaleString('en-BD')}
+                    {formatMoney(item.net)}
                   </span>
                 </div>
               </div>
@@ -334,7 +335,7 @@ export function CheckoutOrderSummary({
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold text-primary tabular-nums">
-                  -৳{voucher.discount.toLocaleString('en-BD')}
+                  -{formatMoney(voucher.discount)}
                 </span>
                 <button
                   aria-label="Remove coupon"
@@ -373,21 +374,21 @@ export function CheckoutOrderSummary({
             <div className="flex justify-between">
               <span>Subtotal</span>
               <span className="font-mono font-semibold text-on-surface tabular-nums">
-                ৳{subtotal.toLocaleString('en-BD')}
+                {formatMoney(subtotal)}
               </span>
             </div>
             {discount > 0 ? (
               <div className="flex justify-between text-primary">
                 <span>First Order Voucher</span>
                 <span className="font-mono font-semibold tabular-nums">
-                  -৳{discount.toLocaleString('en-BD')}
+                  -{formatMoney(discount)}
                 </span>
               </div>
             ) : null}
             <div className="flex justify-between">
               <span>{shippingLabel}</span>
               <span className="font-mono font-semibold text-on-surface tabular-nums">
-                ৳{shippingFee.toLocaleString('en-BD')}
+                {formatMoney(shippingFee)}
               </span>
             </div>
             <div className="my-1 h-px w-full bg-border-subtle" />

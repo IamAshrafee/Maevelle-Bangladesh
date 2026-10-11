@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button';
 import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/components/ui/stats';
 import { cn } from '@/lib/utils';
 import { catalogData, formatCatalogMoney, productMediaUrl } from '@/lib/catalog/api';
+import { formatQuantity } from '@/lib/format/numbers';
 
 const sections = ['overview', 'variants', 'media', 'organization', 'content'] as const;
 type Section = (typeof sections)[number];
@@ -788,7 +789,9 @@ export function ProductDetails({ productId }: { productId: string }) {
                         </span>
                       </td>
                       <td className="px-4 py-3 tabular-nums">
-                        <span className="font-semibold text-foreground">{variant.sellableQuantity}</span>
+                        <span className="font-mono font-semibold tabular-nums text-foreground">
+                          {formatQuantity(variant.sellableQuantity)}
+                        </span>
                         <button
                           type="button"
                           onClick={() => setAdjustingVariant(variant)}

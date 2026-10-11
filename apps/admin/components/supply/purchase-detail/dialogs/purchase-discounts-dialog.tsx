@@ -194,9 +194,10 @@ export function PurchaseDiscountsDialog({
                           id={`discount-percentage-${discount.rowId}`}
                           name={`discount-${index}-percentage`}
                           type="number"
-                          min="0.000001"
+                          inputMode="decimal"
+                          min="0.01"
                           max="100"
-                          step="any"
+                          step="0.01"
                           value={discount.percentage}
                           disabled={busy}
                           required

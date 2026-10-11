@@ -688,9 +688,9 @@ export function PurchaseAddLineDialog({
                         name="quantity"
                         ref={quantityInputRef}
                         type="number"
-                        inputMode="decimal"
-                        min="0.000001"
-                        step="any"
+                        inputMode="numeric"
+                        min="1"
+                        step="1"
                         required
                         disabled={busy}
                         value={quantity}
@@ -741,7 +741,9 @@ export function PurchaseAddLineDialog({
                           className="text-[11px] text-primary hover:underline transition-colors flex items-center gap-0.5 p-0.5"
                         >
                           <Sparkles className="size-3" />
-                          <span>Use Est ({selectedVariant.estimatedCostAmount})</span>
+                          <span>
+                            Use Est ({formatSupplyMoney(selectedVariant.estimatedCostAmount, purchase.currencyCode)})
+                          </span>
                         </button>
                       )}
                     </div>
@@ -756,7 +758,7 @@ export function PurchaseAddLineDialog({
                         type="number"
                         inputMode="decimal"
                         min="0"
-                        step="any"
+                        step="0.01"
                         required
                         disabled={busy}
                         value={unitPrice}

@@ -1,3 +1,5 @@
+import { formatMoney, formatQuantity, subtractDecimals } from '@/lib/format/numbers';
+
 export async function supplyRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string> | undefined),
@@ -23,14 +25,10 @@ export async function supplyRequest<T>(path: string, init?: RequestInit): Promis
 }
 
 export const formatSupplyNumber = (value: string) =>
-  new Intl.NumberFormat('en-BD').format(Number(value));
+  formatQuantity(value);
 
 export const formatSupplyMoney = (value: string, currency: string) =>
-  new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 4,
-  }).format(Number(value));
+  formatMoney(value, currency);
 
 export const formatSupplyDate = (value?: string) =>
   value
@@ -38,4 +36,4 @@ export const formatSupplyDate = (value?: string) =>
     : 'Not set';
 
 export const remainingSupplyQuantity = (allocated: string, received: string) =>
-  Math.max(0, Number(allocated) - Number(received)).toString();
+  subtractDecimals(allocated, received);

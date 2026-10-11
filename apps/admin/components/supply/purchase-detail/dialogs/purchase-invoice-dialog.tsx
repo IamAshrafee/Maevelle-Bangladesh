@@ -342,8 +342,9 @@ export function PurchaseInvoiceDialog({
                 id="invoice-amount"
                 name="amount"
                 type="number"
-                min="0.0001"
-                step="any"
+                inputMode="decimal"
+                min="0.01"
+                step="0.01"
                 value={amount}
                 required
                 disabled={busy}

@@ -27,6 +27,7 @@ import {
   VerifiedIcon,
 } from '@/components/ui/icons';
 import type { UseCheckoutReturn } from '../use-checkout';
+import { formatMoney, wholeQuantity } from '@/lib/format/money';
 
 export interface ConfirmedOrderItem {
   readonly id: string;
@@ -572,10 +573,10 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
                 {item.productTitle}
               </span>
               <span className="font-sans text-xs text-on-surface-variant">
-                {item.variantDescription} · Qty: {item.quantity}
+                {item.variantDescription} · Qty: {wholeQuantity(item.quantity)}
               </span>
               <span className="font-mono text-xs sm:text-sm font-bold text-on-surface tabular-nums mt-0.5">
-                ৳{item.net.toLocaleString('en-BD')}
+                {formatMoney(item.net)}
               </span>
             </div>
           </div>
@@ -643,7 +644,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
         <div className="flex justify-between items-center">
           <span>Subtotal</span>
           <span className="font-mono font-semibold text-on-surface tabular-nums">
-            ৳{subtotal.toLocaleString('en-BD')}
+            {formatMoney(subtotal)}
           </span>
         </div>
 
@@ -656,7 +657,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
               </span>
             </span>
             <span className="font-mono font-semibold tabular-nums">
-              -৳{discount.toLocaleString('en-BD')}
+              -{formatMoney(discount)}
             </span>
           </div>
         ) : null}
@@ -664,7 +665,7 @@ export function CheckoutConfirmedStep({ checkout, orderData }: CheckoutConfirmed
         <div className="flex justify-between items-center">
           <span>{deliveryModeLabel}</span>
           <span className="font-mono font-semibold text-on-surface tabular-nums">
-            ৳{shippingFee.toLocaleString('en-BD')}
+            {formatMoney(shippingFee)}
           </span>
         </div>
 

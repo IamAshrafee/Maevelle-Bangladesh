@@ -33,7 +33,7 @@ import {
   type OrderView,
 } from './types.js';
 
-const positiveDecimalPattern = /^(?:(?:[1-9]\d*)(?:\.\d{1,4})?|(?:0\.\d*[1-9]\d*))$/;
+const positiveWholeQuantityPattern = /^[1-9]\d*(?:\.0{1,4})?$/;
 
 /**
  * Creates an order initiated by an admin operator, bypassing the storefront
@@ -97,8 +97,11 @@ export async function createManualOrder(
   for (const line of input.lines) {
     const qty = line.quantity.trim();
     const price = line.unitPrice?.trim();
-    if (!positiveDecimalPattern.test(qty))
-      throw new OrderDomainError('VALIDATION_FAILED', 'Line quantity must be a positive decimal.');
+    if (!positiveWholeQuantityPattern.test(qty))
+      throw new OrderDomainError(
+        'VALIDATION_FAILED',
+        'Line quantity must be a positive whole number of units.',
+      );
     if (price !== undefined && !decimalPattern.test(price))
       throw new OrderDomainError(
         'VALIDATION_FAILED',

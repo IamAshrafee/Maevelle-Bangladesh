@@ -28,6 +28,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatQuantity } from '@/lib/format/numbers';
 
 import {
   InventoryDispositionBadge,
@@ -704,10 +705,11 @@ export function ReturnsConsole({ initialTab }: ReturnsConsoleProps) {
                         </div>
                         <div className="text-right shrink-0 space-y-0.5">
                           <p className="font-mono">
-                            Requested: <strong>{line.requested_quantity}</strong>
+                            Requested: <strong>{formatQuantity(line.requested_quantity)}</strong>
                           </p>
                           <p className="font-mono text-muted-foreground text-[11px]">
-                            Auth: {line.authorized_quantity} · Recv: {line.received_quantity}
+                            Auth: {formatQuantity(line.authorized_quantity)} · Recv:{' '}
+                            {formatQuantity(line.received_quantity)}
                           </p>
                         </div>
                       </div>

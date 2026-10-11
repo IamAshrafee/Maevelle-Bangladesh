@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import type { ApiEnvelope } from '@maevelle/contracts';
+import { formatQuantity } from '@/lib/format/numbers';
 
 interface ReadyFulfillment {
   id: string;
@@ -203,7 +204,9 @@ export function DeliveryCreateDialog({ onSuccess }: DeliveryCreateDialogProps) {
                         Order: {f.orderNumber} • Warehouse: {f.locationName}
                       </p>
                       <p className="text-xs text-muted-foreground truncate mt-1">
-                        {f.lines.map((l) => `${l.quantity}× ${l.productTitle}`).join(', ')}
+                        {f.lines
+                          .map((line) => `${formatQuantity(line.quantity)}× ${line.productTitle}`)
+                          .join(', ')}
                       </p>
                     </div>
                   </label>

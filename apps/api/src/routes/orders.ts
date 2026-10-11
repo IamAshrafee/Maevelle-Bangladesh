@@ -1223,7 +1223,7 @@ export function registerOrderRoutes(
             Type.Object({
               variantId: Type.String({ minLength: 1 }),
               quantity: Type.String({
-                pattern: '^(?:(?:[1-9]\\d*)(?:\\.\\d{1,4})?|(?:0\\.\\d*[1-9]\\d*))$',
+                pattern: '^[1-9]\\d*(?:\\.0{1,4})?$',
               }),
               unitPrice: Type.Optional(
                 Type.String({ pattern: '^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$' }),

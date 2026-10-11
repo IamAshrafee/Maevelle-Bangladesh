@@ -177,7 +177,7 @@ export function registerFulfillmentDeliveryRoutes(
           lines: Type.Array(
             Type.Object({
               orderLineId: Type.String({ minLength: 1 }),
-              quantity: Type.String({ minLength: 1 }),
+              quantity: Type.String({ pattern: '^[1-9]\\d*(?:\\.0{1,6})?$' }),
             }),
             { minItems: 1 },
           ),

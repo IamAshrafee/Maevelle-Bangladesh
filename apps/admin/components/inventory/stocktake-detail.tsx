@@ -234,7 +234,8 @@ function ConditionBreakdownModal({
                     <Input
                       type="number"
                       min="0"
-                      step="any"
+                      inputMode="numeric"
+                      step="1"
                       placeholder="0"
                       disabled={disabled || isSaving}
                       value={val}
@@ -1122,7 +1123,8 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                               <Input
                                 type="number"
                                 min="0"
-                                step="any"
+                                inputMode="numeric"
+                                step="1"
                                 placeholder="0"
                                 disabled={stocktake.status !== 'COUNTING' || isSaving}
                                 value={rawCounted}
@@ -1292,7 +1294,8 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                           <Input
                             type="number"
                             min="0"
-                            step="any"
+                            inputMode="numeric"
+                            step="1"
                             placeholder="0"
                             disabled={stocktake.status !== 'COUNTING' || isSaving}
                             value={rawCounted}

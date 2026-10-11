@@ -225,7 +225,8 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                     <Input
                       type="number"
                       min="0"
-                      step="any"
+                      inputMode="numeric"
+                      step="1"
                       className="h-8 text-sm"
                       {...form.register(`lines.${index}.sellableQuantity`)}
                       disabled={!lineWatch.selected}
@@ -236,7 +237,8 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                     <Input
                       type="number"
                       min="0"
-                      step="any"
+                      inputMode="numeric"
+                      step="1"
                       className="h-8 text-sm"
                       {...form.register(`lines.${index}.damagedQuantity`)}
                       disabled={!lineWatch.selected}
@@ -247,7 +249,8 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                     <Input
                       type="number"
                       min="0"
-                      step="any"
+                      inputMode="numeric"
+                      step="1"
                       className="h-8 text-sm"
                       {...form.register(`lines.${index}.quarantineQuantity`)}
                       disabled={!lineWatch.selected}
@@ -258,7 +261,8 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                     <Input
                       type="number"
                       min="0"
-                      step="any"
+                      inputMode="numeric"
+                      step="1"
                       className="h-8 text-sm"
                       {...form.register(`lines.${index}.inspectionQuantity`)}
                       disabled={!lineWatch.selected}

@@ -460,7 +460,10 @@ export function CreateManualOrderDialog({
                   <Label htmlFor={`quantity-${line.key}`}>Quantity</Label>
                   <Input
                     id={`quantity-${line.key}`}
-                    inputMode="decimal"
+                    inputMode="numeric"
+                    min="1"
+                    step="1"
+                    type="number"
                     required
                     value={line.quantity}
                     onChange={(event) => updateLine(line.key, { quantity: event.target.value })}
@@ -471,7 +474,10 @@ export function CreateManualOrderDialog({
                   <Input
                     id={`price-${line.key}`}
                     inputMode="decimal"
+                    min="0"
                     placeholder="Catalog"
+                    step="0.01"
+                    type="number"
                     value={line.unitPrice}
                     onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })}
                   />

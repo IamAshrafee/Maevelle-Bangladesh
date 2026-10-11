@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
 import { LockIcon, ShieldCheckIcon } from '@/components/ui/icons';
+import { formatMoney } from '@/lib/format/money';
 import {
   CheckoutConfirmedStep,
   type ConfirmedOrderData,
@@ -187,7 +188,7 @@ export default function OrderConfirmationPage() {
         discount: Number(order.discountTotal) || 0,
         shippingFee: Number(order.deliveryAmount) || 70,
         total: Number(order.total) || 0,
-        formattedTotal: `৳${(Number(order.total) || 0).toLocaleString('en-BD')}`,
+        formattedTotal: formatMoney(order.total),
         paymentMethodName:
           payment?.instructions?.name ??
           (order.paymentMethod === 'COD'

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ApiEnvelope } from '@maevelle/contracts';
+import { formatMoney } from '@/lib/format/money';
 import {
   BANGLADESH_DISTRICTS,
   type CheckoutAddress,
@@ -233,7 +234,7 @@ export function useCheckout() {
   }, [subtotal, discount, shippingFee]);
 
   const formattedTotal = useMemo(() => {
-    return '৳' + total.toLocaleString('en-BD');
+    return formatMoney(total);
   }, [total]);
 
   // Dynamic Call-To-Action Button Label

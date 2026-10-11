@@ -1,6 +1,7 @@
 'use client';
 
 import { cx } from '@/components/ui/classnames';
+import { wholeQuantity } from '@/lib/format/money';
 
 export type QuantityStepperSize = 'sm' | 'md' | 'lg';
 export type QuantityStepperVariant = 'bordered' | 'pill';
@@ -55,15 +56,19 @@ export function QuantityStepper({
   value,
   variant = 'bordered',
 }: QuantityStepperProps) {
+  const safeMin = Math.max(0, Math.trunc(min));
+  const safeMax = Math.max(safeMin, Math.trunc(max));
+  const safeValue = wholeQuantity(value, safeMin, safeMax);
+
   const handleDecrement = () => {
-    if (value > min && !disabled) {
-      onChange(value - 1);
+    if (safeValue > safeMin && !disabled) {
+      onChange(safeValue - 1);
     }
   };
 
   const handleIncrement = () => {
-    if (value < max && !disabled) {
-      onChange(value + 1);
+    if (safeValue < safeMax && !disabled) {
+      onChange(safeValue + 1);
     }
   };
 
@@ -89,7 +94,7 @@ export function QuantityStepper({
           'disabled:cursor-not-allowed disabled:opacity-30 disabled:active:scale-100',
           currentSize.btn,
         )}
-        disabled={disabled || value <= min}
+        disabled={disabled || safeValue <= safeMin}
         onClick={handleDecrement}
         type="button"
       >
@@ -103,7 +108,7 @@ export function QuantityStepper({
           currentSize.val,
         )}
       >
-        {value}
+        {safeValue}
       </span>
 
       <button
@@ -115,7 +120,7 @@ export function QuantityStepper({
           'disabled:cursor-not-allowed disabled:opacity-30 disabled:active:scale-100',
           currentSize.btn,
         )}
-        disabled={disabled || value >= max}
+        disabled={disabled || safeValue >= safeMax}
         onClick={handleIncrement}
         type="button"
       >

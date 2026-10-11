@@ -162,7 +162,8 @@ export function PurchaseAdjustInvoiceDialog({
               id="adjust-amount"
               name="amount"
               type="number"
-              step="any"
+              inputMode="decimal"
+              step="0.01"
               placeholder={adjustmentType === 'CORRECTION' ? 'e.g. -500 or 500' : 'e.g. 500'}
               value={rawAmount}
               required

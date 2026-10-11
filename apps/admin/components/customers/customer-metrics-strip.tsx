@@ -22,7 +22,7 @@ function formatBdt(amount: string | number | null | undefined): string {
   return new Intl.NumberFormat('en-BD', {
     style: 'currency',
     currency: 'BDT',
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(numeric);
 }
 

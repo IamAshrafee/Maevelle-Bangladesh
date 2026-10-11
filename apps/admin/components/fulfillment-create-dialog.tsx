@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { ApiEnvelope, OrderLineDto, WarehouseLocationDto } from '@maevelle/contracts';
+import { formatMoney, formatQuantity } from '@/lib/format/numbers';
 
 interface EligibleOrder {
   id: string;
@@ -243,7 +244,8 @@ export function FulfillmentCreateDialog({ locations, onSuccess }: FulfillmentCre
               </option>
               {filteredOrders.map((order) => (
                 <option key={order.id} value={order.id}>
-                  {order.orderNumber} • {order.customerName || 'Customer'} • ৳{order.totalAmount} ({order.fulfillmentStatus})
+                  {order.orderNumber} • {order.customerName || 'Customer'} •{' '}
+                  {formatMoney(order.totalAmount)} ({order.fulfillmentStatus})
                 </option>
               ))}
             </select>
@@ -307,7 +309,7 @@ export function FulfillmentCreateDialog({ locations, onSuccess }: FulfillmentCre
                             {line.productTitle}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            SKU: {line.sku} • Ordered: {line.quantity}
+                            SKU: {line.sku} • Ordered: {formatQuantity(line.quantity)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">

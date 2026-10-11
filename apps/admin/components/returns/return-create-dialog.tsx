@@ -26,6 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchApiData } from '@/lib/api';
+import { formatMoney } from '@/lib/format/numbers';
 import type { OrderDetailDto, OrderLineDto } from '@maevelle/contracts';
 
 interface OrderSummary {
@@ -220,7 +221,9 @@ export function ReturnCreateDialog({
                         <span>{ord.orderNumber}</span> · <span className="text-muted-foreground">{ord.customerName}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground">{ord.totalAmount} ৳</span>
+                        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                          {formatMoney(ord.totalAmount)}
+                        </span>
                         <ChevronRight className="size-3 text-muted-foreground" />
                       </div>
                     </button>

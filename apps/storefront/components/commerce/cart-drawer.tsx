@@ -10,6 +10,7 @@ import {
   TruckIcon,
 } from '@/components/ui/icons';
 import { QuantityStepper } from '@/components/commerce/quantity-stepper';
+import { formatMoney, wholeQuantity } from '@/lib/format/money';
 
 export type CartItem = {
   id: string;
@@ -79,7 +80,9 @@ export function CartDrawer({
 
   const updateItemQty = (id: string, newQty: number) => {
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity: newQty } : item)),
+      prev.map((item) =>
+        item.id === id ? { ...item, quantity: wholeQuantity(newQty) } : item,
+      ),
     );
   };
 
@@ -149,12 +152,12 @@ export function CartDrawer({
               <TruckIcon size={16} />
               <span>
                 {remainingForFreeShipping > 0
-                  ? `Add ৳${remainingForFreeShipping.toLocaleString()} more for Free Dhaka Express!`
+                  ? `Add ${formatMoney(remainingForFreeShipping)} more for Free Dhaka Express!`
                   : 'You have unlocked Free Dhaka Express!'}
               </span>
             </div>
             <span className="font-mono font-medium text-on-surface-variant tabular-nums">
-              ৳{subtotal.toLocaleString()} / ৳{freeShippingThreshold.toLocaleString()}
+              {formatMoney(subtotal)} / {formatMoney(freeShippingThreshold)}
             </span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-highest">
@@ -214,7 +217,7 @@ export function CartDrawer({
                     />
                     <div className="flex items-baseline gap-1">
                       <span className="font-price-md font-mono text-price-md font-bold text-on-surface tabular-nums">
-                        ৳{(item.price * item.quantity).toLocaleString()}
+                        {formatMoney(item.price * item.quantity)}
                       </span>
                     </div>
                   </div>
@@ -232,7 +235,7 @@ export function CartDrawer({
               <div className="flex items-center justify-between font-body-sm text-[13px] text-on-surface-variant">
                 <span>Subtotal</span>
                 <span className="font-mono font-medium text-on-surface tabular-nums">
-                  ৳{subtotal.toLocaleString()}
+                  {formatMoney(subtotal)}
                 </span>
               </div>
               <div className="flex items-center justify-between font-body-sm text-[13px] text-on-surface-variant">
@@ -244,7 +247,7 @@ export function CartDrawer({
               <div className="flex items-center justify-between border-t border-surface-container pt-1 font-headline-sm font-semibold text-on-surface">
                 <span>Estimated Total</span>
                 <span className="font-price-lg font-mono text-price-lg font-bold text-primary tabular-nums">
-                  ৳{estimatedTotal.toLocaleString()}
+                  {formatMoney(estimatedTotal)}
                 </span>
               </div>
             </div>
@@ -257,7 +260,7 @@ export function CartDrawer({
                 type="button"
               >
                 <span className="font-price-md font-mono font-bold tabular-nums text-white">
-                  ৳{estimatedTotal.toLocaleString()}
+                  {formatMoney(estimatedTotal)}
                 </span>
                 <span className="flex items-center gap-1.5 text-white">
                   <span>Continue to Checkout</span>

@@ -63,6 +63,9 @@ Implemented behavior includes:
   shared selling/compare-at price or independent cost-aware pricing with preset
   and custom target margins, configurable upward rounding, enabled-row scope and
   explicit reporting when variants lack usable cost data.
+- quantity controls now use whole sellable units consistently across Admin,
+  Storefront and server boundaries, while money and calculated quantity displays
+  use bounded decimal formatting instead of exposing floating-point noise.
 
 ## Verification completed
 
@@ -89,6 +92,11 @@ Implemented behavior includes:
 - The quick variant price mapper at `8c52bc1` passed focused ESLint, the same 5
   pricing-rule tests, `git diff --check`, and a fresh Admin production build
   including TypeScript and all 84 generated routes.
+- The numeric-integrity pass passed Admin, Storefront, API and Database
+  typechecking; 5 focused formatting tests; 54 Order, Procurement and
+  Fulfillment/Delivery integration tests against the migrated test database;
+  focused ESLint; `git diff --check`; and fresh Admin and Storefront production
+  builds, including all 84 Admin routes.
 - Browser verification confirmed the local Admin route and responsive 390×844
   authentication shell. The authenticated operator walkthrough remains an owner
   review gate rather than being represented as complete.

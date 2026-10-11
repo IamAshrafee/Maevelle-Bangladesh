@@ -26,6 +26,7 @@ import {
 } from './operational-worklist';
 import { FulfillmentCreateDialog } from './fulfillment-create-dialog';
 import { StatusBadge } from './status-badge';
+import { formatQuantity } from '@/lib/format/numbers';
 
 interface Fulfillment {
   id: string;
@@ -387,7 +388,9 @@ export function FulfillmentConsole() {
                               <div className="font-medium text-foreground">{line.productTitle}</div>
                               <span className="text-xs text-muted-foreground">{line.sku}</span>
                             </TableCell>
-                            <TableCell className="text-right tabular-nums">{line.quantity}</TableCell>
+                            <TableCell className="text-right font-mono tabular-nums">
+                              {formatQuantity(line.quantity)}
+                            </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {selected.status === 'DISPATCHED' ? line.consumed : '—'}
                             </TableCell>

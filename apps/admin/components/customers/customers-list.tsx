@@ -208,7 +208,7 @@ export function CustomersList() {
     return new Intl.NumberFormat('en-BD', {
       style: 'currency',
       currency: 'BDT',
-      maximumFractionDigits: 0,
+      maximumFractionDigits: 2,
     }).format(Number(amount ?? 0));
   }
 

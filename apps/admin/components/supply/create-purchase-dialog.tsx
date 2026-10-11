@@ -584,8 +584,9 @@ export function CreatePurchaseDialog({
                       id="line-quantity"
                       name="newLineQuantity"
                       type="number"
-                      min="0.000001"
-                      step="any"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
                       value={addingQuantity}
                       disabled={saving || referenceLoading}
                       className="h-8 font-mono text-xs"
@@ -610,7 +611,8 @@ export function CreatePurchaseDialog({
                       name="newLineUnitPrice"
                       type="number"
                       min="0"
-                      step="any"
+                      inputMode="decimal"
+                      step="0.01"
                       value={addingUnitPrice}
                       disabled={saving || referenceLoading}
                       className="h-8 font-mono text-xs"
@@ -733,8 +735,9 @@ export function CreatePurchaseDialog({
                                 name={`line-${idx}-quantity`}
                                 aria-label={`Quantity for ${line.productTitle} ${line.optionSummary ?? line.sku}`}
                                 type="number"
-                                min="0.000001"
-                                step="any"
+                                inputMode="numeric"
+                                min="1"
+                                step="1"
                                 value={line.quantity}
                                 disabled={saving}
                                 className="h-7 w-20 text-right font-mono text-xs ml-auto"
@@ -749,7 +752,8 @@ export function CreatePurchaseDialog({
                                 aria-label={`Unit cost for ${line.productTitle} ${line.optionSummary ?? line.sku}`}
                                 type="number"
                                 min="0"
-                                step="any"
+                                inputMode="decimal"
+                                step="0.01"
                                 value={line.unitPrice}
                                 disabled={saving}
                                 className="h-7 w-24 text-right font-mono text-xs ml-auto"

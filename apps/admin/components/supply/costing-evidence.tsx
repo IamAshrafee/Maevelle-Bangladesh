@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { formatSupplyMoney as money } from '@/lib/supply/api';
+import { formatQuantity } from '@/lib/format/numbers';
 import type { Assignment, Cogs, CostingTab, Layer, Valuation } from '@/lib/supply/costing-types';
 
 const date = (value: string | null) =>
@@ -125,7 +126,7 @@ export function CostingEvidence({
                     <br />
                     <span className="text-muted-foreground">{item.sku}</span>
                   </td>
-                  <td className="p-3">{item.quantity}</td>
+                  <td className="p-3 font-mono tabular-nums">{formatQuantity(item.quantity)}</td>
                   <td className="p-3">{money(item.total_cost, item.currency_code)}</td>
                   <td className="p-3">{item.status}</td>
                   <td className="p-3">{date(item.created_at)}</td>
@@ -182,7 +183,7 @@ export function CostingEvidence({
                   </td>
                   <td className="p-3">{item.location_name}</td>
                   <td className="p-3">{item.condition_code}</td>
-                  <td className="p-3">{item.quantity}</td>
+                  <td className="p-3 font-mono tabular-nums">{formatQuantity(item.quantity)}</td>
                   <td className="p-3">{money(item.value, item.currency_code)}</td>
                 </tr>
               ))}

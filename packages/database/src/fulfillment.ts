@@ -59,10 +59,10 @@ function assertLines(lines: readonly { orderLineId: string; quantity: string }[]
     if (!line.orderLineId || ids.has(line.orderLineId))
       throw new FulfillmentDomainError('VALIDATION_FAILED', 'Fulfillment lines must be unique.');
     ids.add(line.orderLineId);
-    if (!/^\d+(?:\.\d{1,6})?$/.test(line.quantity) || /^0(?:\.0{1,6})?$/.test(line.quantity))
+    if (!/^[1-9]\d*(?:\.0{1,6})?$/.test(line.quantity))
       throw new FulfillmentDomainError(
         'VALIDATION_FAILED',
-        'Fulfillment quantity must be a positive decimal with at most six places.',
+        'Fulfillment quantity must be a positive whole number of units.',
       );
   }
 }

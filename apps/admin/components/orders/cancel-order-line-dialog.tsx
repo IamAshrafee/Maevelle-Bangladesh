@@ -18,6 +18,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { fetchApiData } from '@/lib/api';
+import { formatQuantity } from '@/lib/format/numbers';
 
 export function CancelOrderLineDialog({
   orderId,
@@ -71,7 +72,7 @@ export function CancelOrderLineDialog({
         <DialogHeader>
           <DialogTitle>Cancel order item</DialogTitle>
           <DialogDescription>
-            {line.quantity} × {line.productTitle} ({line.sku}) will remain visible as cancelled
+            {formatQuantity(line.quantity)} × {line.productTitle} ({line.sku}) will remain visible as cancelled
             history. Its stock reservation and unpaid payment obligation will be reduced atomically.
           </DialogDescription>
         </DialogHeader>

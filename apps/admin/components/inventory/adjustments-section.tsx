@@ -1336,8 +1336,9 @@ export function AdjustmentsSection() {
                     <Input
                       id="cond-qty"
                       type="number"
-                      min="0.000001"
-                      step="any"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
                       placeholder="e.g. 3"
                       className={`h-9 text-xs font-mono ${
                         condExceedsFrom ? 'border-destructive focus-visible:ring-destructive' : ''

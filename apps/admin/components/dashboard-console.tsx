@@ -69,7 +69,7 @@ function money(amount: string | null | undefined, currency = 'BDT') {
     ? new Intl.NumberFormat('en-BD', {
         style: 'currency',
         currency,
-        maximumFractionDigits: 0,
+        maximumFractionDigits: 2,
       }).format(value)
     : `${currency} ${amount}`;
 }

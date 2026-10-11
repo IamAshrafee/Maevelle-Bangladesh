@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { type FormEvent, useEffect, useState } from 'react';
 import type { ApiEnvelope } from '@maevelle/contracts';
+import { QuantityStepper } from '@/components/commerce/quantity-stepper';
 import { notifyCartChanged } from '@/features/cart/cart-events';
+import { formatMoney, wholeQuantity } from '@/lib/format/money';
 import {
   ShoppingBagIcon,
   CloseIcon,
@@ -37,14 +39,6 @@ interface CartView {
     net: string;
     availability: string;
   }[];
-}
-
-function money(value: string, currency: string) {
-  return new Intl.NumberFormat('en-BD', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number(value));
 }
 
 const availabilityMessage: Record<string, string> = {
@@ -185,7 +179,7 @@ export default function CartPage() {
           </p>
 
           <Link
-            className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-primary text-on-primary font-sans text-xs sm:text-sm font-semibold hover:bg-primary-hover active:scale-[0.98] transition-all shadow-sm"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 font-sans text-xs font-semibold text-on-primary shadow-sm transition-[background-color,transform] duration-150 hover:bg-primary-hover active:scale-[0.98] sm:text-sm"
             href="/categories"
           >
             <StorefrontIcon size={18} />
@@ -254,6 +248,7 @@ export default function CartPage() {
               {cart.lines.map((line) => {
                 const isBusy = busyLine === line.id;
                 const isUnavailable = line.availability !== 'AVAILABLE';
+                const quantity = wholeQuantity(line.quantity);
 
                 return (
                   <article className="py-4 first:pt-0 last:pb-0 flex flex-col gap-3" key={line.id}>
@@ -291,7 +286,7 @@ export default function CartPage() {
 
                             <button
                               aria-label={`Remove ${line.productTitle} from bag`}
-                              className="text-on-surface-variant hover:text-error active:scale-95 transition-all p-1 -mr-1"
+                              className="-mr-1 p-1 text-on-surface-variant transition-[color,transform] duration-150 hover:text-error active:scale-95"
                               disabled={isBusy}
                               onClick={() => void remove(line.id)}
                               title="Remove item"
@@ -319,40 +314,23 @@ export default function CartPage() {
                             <label className="sr-only" htmlFor={`qty-${line.id}`}>
                               Quantity
                             </label>
-                            <div className="flex items-center h-8 rounded-lg bg-surface-container-low border border-border-subtle">
-                              <button
-                                aria-label="Decrease quantity"
-                                className="size-8 flex items-center justify-center text-on-surface hover:text-primary disabled:opacity-30 transition-colors"
-                                disabled={isBusy || Number(line.quantity) <= 1}
-                                onClick={() => void update(line.id, String(Math.max(1, Number(line.quantity) - 1)))}
-                                type="button"
-                              >
-                                −
-                              </button>
-                              <span className="w-8 text-center font-mono text-xs font-semibold tabular-nums text-on-surface">
-                                {line.quantity}
-                              </span>
-                              <button
-                                aria-label="Increase quantity"
-                                className="size-8 flex items-center justify-center text-on-surface hover:text-primary disabled:opacity-30 transition-colors"
-                                disabled={isBusy}
-                                onClick={() => void update(line.id, String(Number(line.quantity) + 1))}
-                                type="button"
-                              >
-                                +
-                              </button>
-                            </div>
+                            <QuantityStepper
+                              disabled={isBusy}
+                              onChange={(next) => void update(line.id, String(next))}
+                              size="sm"
+                              value={quantity}
+                            />
                           </div>
 
                           {/* Line Price */}
                           <div className="text-right">
                             {line.compareAtUnitPrice && (
                               <del className="font-mono text-[11px] text-on-surface-variant tabular-nums block">
-                                {money(line.compareAtUnitPrice, cart.currency)}
+                                {formatMoney(line.compareAtUnitPrice, cart.currency)}
                               </del>
                             )}
                             <span className="font-mono text-sm sm:text-base font-bold text-on-surface tabular-nums">
-                              {money(line.net, cart.currency)}
+                              {formatMoney(line.net, cart.currency)}
                             </span>
                           </div>
                         </div>
@@ -403,7 +381,7 @@ export default function CartPage() {
               <div className="flex justify-between items-center">
                 <span>Merchandise Subtotal</span>
                 <span className="font-mono font-semibold text-on-surface tabular-nums">
-                  {money(cart.merchandiseGross, cart.currency)}
+                  {formatMoney(cart.merchandiseGross, cart.currency)}
                 </span>
               </div>
 
@@ -411,7 +389,7 @@ export default function CartPage() {
                 <div className="flex justify-between items-center text-primary font-medium">
                   <span>Applied Discounts</span>
                   <span className="font-mono font-semibold tabular-nums">
-                    −{money(cart.discountTotal, cart.currency)}
+                    −{formatMoney(cart.discountTotal, cart.currency)}
                   </span>
                 </div>
               ) : null}
@@ -432,7 +410,7 @@ export default function CartPage() {
                 </span>
                 <div className="text-right">
                   <span className="font-mono text-xl sm:text-2xl font-bold text-primary tabular-nums">
-                    {money(cart.merchandiseNet, cart.currency)}
+                    {formatMoney(cart.merchandiseNet, cart.currency)}
                   </span>
                   <p className="font-sans text-[10px] text-on-surface-variant">VAT inclusive</p>
                 </div>
@@ -457,7 +435,7 @@ export default function CartPage() {
                   />
                 </div>
                 <button
-                  className="h-10 px-4 rounded-xl bg-surface-container-high text-on-surface font-sans text-xs font-semibold hover:bg-surface-container-highest active:scale-95 transition-all border border-border-subtle cursor-pointer shrink-0"
+                  className="h-10 shrink-0 cursor-pointer rounded-xl border border-border-subtle bg-surface-container-high px-4 font-sans text-xs font-semibold text-on-surface transition-[background-color,transform] duration-150 hover:bg-surface-container-highest active:scale-95"
                   type="submit"
                 >
                   Apply
@@ -491,7 +469,7 @@ export default function CartPage() {
             <div className="pt-2 flex flex-col gap-2">
               <Link
                 aria-disabled={!canCheckout}
-                className={`w-full h-12 rounded-xl bg-primary text-on-primary font-sans text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-all duration-150 ${
+                className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-sans text-sm font-semibold text-on-primary shadow-sm transition-[background-color,opacity,transform] duration-150 ${
                   canCheckout
                     ? 'hover:bg-primary-hover active:scale-[0.98] cursor-pointer'
                     : 'opacity-50 pointer-events-none cursor-not-allowed'

@@ -16,7 +16,7 @@ function formatMoney(amount: number | string | undefined | null, currency = 'BDT
   return new Intl.NumberFormat('en-BD', {
     style: 'currency',
     currency: currency || 'BDT',
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(Number.isNaN(num) ? 0 : num);
 }
 

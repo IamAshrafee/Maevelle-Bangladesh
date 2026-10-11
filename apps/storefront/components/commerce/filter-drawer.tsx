@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import { cx } from '@/components/ui/classnames';
+import { formatMoney } from '@/lib/format/money';
 import {
   CheckIcon,
   CloseIcon,
@@ -197,7 +198,7 @@ export function FilterDrawer({
                 Price Budget
               </span>
               <span className="font-price-md text-price-md font-bold font-mono tabular-nums text-primary">
-                ৳{filters.minPrice.toLocaleString()} – ৳{filters.maxPrice.toLocaleString()}
+                {formatMoney(filters.minPrice)} – {formatMoney(filters.maxPrice)}
               </span>
             </div>
             <div className="relative w-full py-2">

@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { formatMoney } from '@/lib/format/numbers';
 
 type Product = { readonly id: string; readonly title: string; readonly handle: string };
 type ProductWorkspace = Product & {
@@ -335,10 +336,12 @@ export function PricingConsole() {
                         <StatusBadge status={price.status} />
                       </td>
                       <td className="numeric">
-                        {price.amount} {price.currency}
+                        {formatMoney(price.amount, price.currency)}
                       </td>
                       <td className="numeric">
-                        {price.compareAtAmount ? `${price.compareAtAmount} ${price.currency}` : '—'}
+                        {price.compareAtAmount
+                          ? formatMoney(price.compareAtAmount, price.currency)
+                          : '—'}
                       </td>
                       <td>{new Date(price.effectiveFrom).toLocaleString()}</td>
                       <td>

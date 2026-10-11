@@ -386,10 +386,10 @@ async function nextProcurementSequenceNumber(
 }
 
 function positiveQuantity(value: string, name = 'Quantity'): void {
-  if (!/^\d+(?:\.\d{1,6})?$/.test(value) || /^0(?:\.0{1,6})?$/.test(value)) {
+  if (!/^[1-9]\d*(?:\.0{1,6})?$/.test(value)) {
     throw new ProcurementDomainError(
       'VALIDATION_FAILED',
-      `${name} must be a positive decimal with at most six places.`,
+      `${name} must be a positive whole number of units.`,
     );
   }
 }

@@ -2,6 +2,7 @@
 
 import type { ConsignmentData } from '../types';
 import { ShoppingBagIcon, ReceiptIcon } from '@/components/ui/icons';
+import { formatMoney, wholeQuantity } from '@/lib/format/money';
 
 export interface OrderTrackParcelContentsProps {
   readonly consignment: ConsignmentData;
@@ -72,10 +73,10 @@ export function OrderTrackParcelContents({
               </p>
               <div className="flex items-center justify-between mt-1">
                 <span className="font-sans text-[11px] text-on-surface-variant">
-                  Qty: {item.quantity}
+                  Qty: {wholeQuantity(item.quantity)}
                 </span>
                 <span className="font-mono text-xs sm:text-sm font-bold text-primary tabular-nums">
-                  ৳{item.netPrice.toLocaleString('en-BD')}
+                  {formatMoney(item.netPrice)}
                 </span>
               </div>
             </div>
@@ -97,7 +98,7 @@ export function OrderTrackParcelContents({
             Total Settled
           </span>
           <span className="font-mono text-base sm:text-lg text-on-surface font-bold tabular-nums">
-            ৳{consignment.totalSettled.toLocaleString('en-BD')}
+            {formatMoney(consignment.totalSettled)}
           </span>
         </div>
       </div>

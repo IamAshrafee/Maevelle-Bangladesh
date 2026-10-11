@@ -86,8 +86,9 @@ export function PurchaseEditLineDialog({
                 id="edit-line-quantity"
                 name="quantity"
                 type="number"
-                min="0.000001"
-                step="any"
+                inputMode="numeric"
+                min="1"
+                step="1"
                 value={quantity}
                 required
                 disabled={busy}
@@ -103,7 +104,8 @@ export function PurchaseEditLineDialog({
                 name="unitPrice"
                 type="number"
                 min="0"
-                step="any"
+                inputMode="decimal"
+                step="0.01"
                 value={unitPrice}
                 required
                 disabled={busy}

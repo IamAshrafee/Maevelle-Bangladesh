@@ -32,6 +32,7 @@ import { Stats, StatsCard, StatsTitle, StatsValue, StatsDescription } from '@/co
 import { cn } from '@/lib/utils';
 import { catalogData, formatCatalogMoney } from '@/lib/catalog/api';
 import { getAdminMediaUrl } from '@/lib/media/api';
+import { formatQuantity } from '@/lib/format/numbers';
 
 const statuses = ['ALL', 'DRAFT', 'ACTIVE', 'PUBLISHED', 'ARCHIVED'] as const;
 const readinessStates = ['ALL', 'READY', 'BLOCKED', 'ATTENTION'] as const;
@@ -506,7 +507,9 @@ export function ProductList() {
                   </td>
                   <td className="px-3 py-2.5 tabular-nums">{product.variantCount ?? 0}</td>
                   <td className="px-3 py-2.5 font-medium tabular-nums">{productPrice(product)}</td>
-                  <td className="px-3 py-2.5 tabular-nums">{product.availableQuantity}</td>
+                  <td className="px-3 py-2.5 font-mono tabular-nums">
+                    {formatQuantity(product.availableQuantity)}
+                  </td>
                   <td className="px-3 py-2.5">
                     <div className="space-y-1">
                       <StatusBadge status={product.readinessState} />

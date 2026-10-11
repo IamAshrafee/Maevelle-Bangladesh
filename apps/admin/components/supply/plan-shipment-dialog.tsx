@@ -803,9 +803,10 @@ export function PlanShipmentDialog({
                                     name={`shipment-line-${draftLine.purchaseLineId}-quantity`}
                                     aria-label={`Ship quantity for ${orig?.productTitle ?? 'purchase line'} ${orig?.optionSummary ?? orig?.sku ?? ''}`}
                                     type="number"
-                                    min="0.000001"
+                                    inputMode="numeric"
+                                    min="1"
                                     max={maxOpen}
-                                    step="any"
+                                    step="1"
                                     value={draftLine.quantity}
                                     disabled={saving}
                                     onChange={(e) =>
@@ -950,9 +951,10 @@ export function PlanShipmentDialog({
                           name="quickAddQuantity"
                           aria-label="Quantity to add"
                           type="number"
-                          min="0.000001"
+                          inputMode="numeric"
+                          min="1"
                           max={activeLineToAddMax > 0 ? activeLineToAddMax : undefined}
-                          step="any"
+                          step="1"
                           placeholder="Qty…"
                           value={quantityToAdd}
                           disabled={saving || !activeLineToAdd}

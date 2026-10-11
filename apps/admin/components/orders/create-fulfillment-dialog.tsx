@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { fetchApiData } from '@/lib/api';
+import { formatQuantity } from '@/lib/format/numbers';
 import type { OrderLineDto, WarehouseLocationDto } from '@maevelle/contracts';
 import {
   Dialog,
@@ -146,7 +147,7 @@ export function CreateFulfillmentDialog({ orderId, currentVersion, lines }: { or
                     <div className="flex flex-col">
                       <span className="text-sm font-medium">{line.productTitle}</span>
                       <span className="text-xs text-muted-foreground">
-                        {line.sku} • {line.quantity} ordered
+                        {line.sku} • {formatQuantity(line.quantity)} ordered
                         {fulfilled > 0 ? ` (${fulfilled} already fulfilled)` : ''}
                       </span>
                     </div>
