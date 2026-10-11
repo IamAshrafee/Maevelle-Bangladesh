@@ -14,6 +14,7 @@ import { registerCatalogRoutes } from './catalog.js';
 import { registerMediaRoutes } from './media.js';
 import { registerSizingRoutes } from './sizing.js';
 import { registerInventoryRoutes } from './inventory.js';
+import { registerInventoryUnitRoutes } from './inventory-units.js';
 import { registerWarehouseRoutes } from './warehouse.js';
 import { registerCustomerRoutes } from './customers.js';
 import { registerPricingRoutes } from './pricing.js';
@@ -188,6 +189,7 @@ export function registerAuthRoutes(
   });
   registerSizingRoutes(app, database, auth);
   registerInventoryRoutes(app, database, auth);
+  registerInventoryUnitRoutes(app, database, auth);
   registerWarehouseRoutes(app, database, auth);
   registerCustomerRoutes(app, database, auth);
   registerPricingRoutes(app, database, auth);

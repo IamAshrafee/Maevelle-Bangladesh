@@ -5,6 +5,10 @@ import { consumeReservationAllocationInTransaction, InventoryDomainError } from 
 import { assignOutboundCostsForFulfillmentInTransaction, CostingDomainError } from './costing.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { requireActiveLocationCapability } from './warehouse.js';
+import {
+  dispatchFulfillmentUnitsInTransaction,
+  releaseFulfillmentUnitAllocations,
+} from './inventory-units.js';
 
 export type FulfillmentStatus =
   'DRAFT' | 'READY' | 'PICKING' | 'PACKED' | 'DISPATCHED' | 'CANCELLED';
@@ -602,6 +606,11 @@ export async function dispatchFulfillmentInTransaction(
   await sql`update fulfillment.fulfillments set status = 'DISPATCHED', dispatched_at = now(), version = version + 1, updated_at = now() where id = ${input.fulfillmentId}`.execute(
     transaction,
   );
+  await dispatchFulfillmentUnitsInTransaction(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    fulfillmentId: input.fulfillmentId,
+  });
   await emit(transaction, {
     organizationId: input.organizationId,
     actorId: input.actorId,
@@ -696,6 +705,11 @@ export async function cancelFulfillment(
     await sql`update fulfillment.fulfillments set status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now() where id = ${input.fulfillmentId}`.execute(
       transaction,
     );
+    await releaseFulfillmentUnitAllocations(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      fulfillmentId: input.fulfillmentId,
+    });
     await completeIdempotency(
       transaction,
       started.recordId!,
@@ -775,6 +789,11 @@ export async function cancelOpenFulfillmentsForOrderInTransaction(
       set status = 'CANCELLED', cancelled_at = now(), version = version + 1, updated_at = now()
       where organization_id = ${input.organizationId} and id = ${fulfillment.id}
     `.execute(transaction);
+    await releaseFulfillmentUnitAllocations(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId ?? 'system',
+      fulfillmentId: fulfillment.id,
+    });
     await emit(transaction, {
       organizationId: input.organizationId,
       ...(input.actorId ? { actorId: input.actorId } : {}),

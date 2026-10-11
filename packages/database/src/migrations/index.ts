@@ -47,6 +47,7 @@ import * as operationalControls from './2701_operational_controls.js';
 import * as supplyOperations from './2800_supply_operations.js';
 import * as assetManagement from './2900_asset_management.js';
 import * as centralizedRuntimeSettings from './3000_centralized_runtime_settings.js';
+import * as unitTraceability from './3100_unit_traceability.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -100,6 +101,7 @@ export const migrations = {
   '2800_supply_operations': supplyOperations,
   '2900_asset_management': assetManagement,
   '3000_centralized_runtime_settings': centralizedRuntimeSettings,
+  '3100_unit_traceability': unitTraceability,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

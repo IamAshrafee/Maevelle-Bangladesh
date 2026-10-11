@@ -52,6 +52,10 @@
       "types": "./src/inventory.ts",
       "default": "./dist/src/inventory.js"
     },
+    "./inventory-units": {
+      "types": "./src/inventory-units.ts",
+      "default": "./dist/src/inventory-units.js"
+    },
     "./geography": {
       "types": "./src/geography.ts",
       "default": "./dist/src/geography.js"

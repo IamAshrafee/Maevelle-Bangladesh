@@ -5623,3 +5623,199 @@ export interface AnalyticsOverviewDto {
   readonly metrics: readonly AnalyticsOverviewMetricDto[];
   readonly refreshedAt: string | null;
 }
+
+// ============================================================================
+// INDIVIDUAL UNIT TRACEABILITY & QUALITY CONTROL CONTRACTS
+// ============================================================================
+
+export type UnitConditionDto =
+  | 'GRADE_A'
+  | 'GRADE_B'
+  | 'REPAIR_REQUIRED'
+  | 'DAMAGED_UNSELLABLE';
+
+export type UnitStatusDto =
+  | 'AWAITING_QC'
+  | 'AVAILABLE'
+  | 'RESERVED'
+  | 'IN_FULFILLMENT'
+  | 'DISPATCHED'
+  | 'ON_HOLD'
+  | 'RETURNED'
+  | 'WRITTEN_OFF';
+
+export type UnitSourceTypeDto =
+  | 'INBOUND_RECEIPT'
+  | 'STOCK_CONVERSION'
+  | 'RETURN_RECEIPT'
+  | 'MANUAL_INTAKE';
+
+export type InspectionStageDto =
+  | 'INBOUND_INTAKE'
+  | 'REINSPECTION'
+  | 'RETURN_INSPECTION'
+  | 'ROUTINE_AUDIT';
+
+export type InspectionOutcomeDto =
+  | 'PASSED'
+  | 'PASSED_WITH_DEFECT'
+  | 'HOLD_FOR_REPAIR'
+  | 'QUARANTINE_DAMAGED';
+
+export type InspectionDispositionDto =
+  | 'RELEASE_SELLABLE'
+  | 'RESTRICTED_SALE'
+  | 'MOVE_TO_REPAIR'
+  | 'WRITE_OFF'
+  | 'HOLD';
+
+export type RepairStatusDto =
+  | 'REQUESTED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export type UnitEventTypeDto =
+  | 'REGISTERED'
+  | 'INSPECTED'
+  | 'CONDITION_CHANGED'
+  | 'STATUS_CHANGED'
+  | 'REPAIR_REQUESTED'
+  | 'REPAIR_STARTED'
+  | 'REPAIR_COMPLETED'
+  | 'LOCATION_MOVED'
+  | 'REPACKAGED'
+  | 'ALLOCATED_TO_FULFILLMENT'
+  | 'RELEASED_FROM_FULFILLMENT'
+  | 'PICKED'
+  | 'PACKED'
+  | 'DISPATCHED'
+  | 'RETURNED'
+  | 'RETURN_INSPECTED'
+  | 'RELEASED_FOR_SALE'
+  | 'QUARANTINED'
+  | 'WRITTEN_OFF'
+  | 'AUTHORIZED_CORRECTION';
+
+export type VariantTrackingModeDto = 'STANDARD' | 'SERIAL';
+
+export interface InventoryUnitDto {
+  readonly id: string;
+  readonly unitCode: string;
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly productId: string;
+  readonly productTitle: string;
+  readonly sku: string;
+  readonly optionSummary: string | null;
+  readonly locationId: string;
+  readonly locationName: string;
+  readonly locationCode: string;
+  readonly currentCondition: UnitConditionDto;
+  readonly status: UnitStatusDto;
+  readonly sourceType: UnitSourceTypeDto;
+  readonly sourceReceiptId: string | null;
+  readonly sourceReceiptNumber: string | null;
+  readonly sourceReceiptLineId: string | null;
+  readonly sourceReturnReceiptId: string | null;
+  readonly packageReference: string | null;
+  readonly storageNotes: string | null;
+  readonly barcodePayload: string;
+  readonly currentFulfillmentId: string | null;
+  readonly currentFulfillmentNumber: string | null;
+  readonly currentOrderId: string | null;
+  readonly currentOrderNumber: string | null;
+  readonly registeredByActorId: string | null;
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly latestInspection?: UnitInspectionDto | null;
+  readonly activeRepair?: UnitRepairDto | null;
+}
+
+export interface UnitInspectionDto {
+  readonly id: string;
+  readonly unitId: string;
+  readonly unitCode: string;
+  readonly inspectionNumber: string;
+  readonly inspectorActorId: string | null;
+  readonly inspectorName: string | null;
+  readonly inspectionStage: InspectionStageDto;
+  readonly conditionResult: UnitConditionDto;
+  readonly defectDescription: string | null;
+  readonly notes: string | null;
+  readonly mediaAssetIds: readonly string[];
+  readonly inspectionOutcome: InspectionOutcomeDto;
+  readonly disposition: InspectionDispositionDto | null;
+  readonly createdAt: string;
+}
+
+export interface UnitRepairDto {
+  readonly id: string;
+  readonly unitId: string;
+  readonly unitCode: string;
+  readonly repairNumber: string;
+  readonly repairStatus: RepairStatusDto;
+  readonly defectDescription: string;
+  readonly actionRequired: string | null;
+  readonly actionPerformed: string | null;
+  readonly technicianName: string | null;
+  readonly costAmount: string | null;
+  readonly costCurrency: string;
+  readonly mediaAssetIds: readonly string[];
+  readonly notes: string | null;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface UnitEventDto {
+  readonly id: string;
+  readonly eventId: string;
+  readonly unitId: string;
+  readonly unitCode: string;
+  readonly eventType: UnitEventTypeDto;
+  readonly actorType: string;
+  readonly actorId: string | null;
+  readonly fromStatus: string | null;
+  readonly toStatus: string | null;
+  readonly fromCondition: string | null;
+  readonly toCondition: string | null;
+  readonly fromLocationId: string | null;
+  readonly toLocationId: string | null;
+  readonly referenceType: string | null;
+  readonly referenceId: string | null;
+  readonly reason: string | null;
+  readonly metadata: Record<string, unknown>;
+  readonly createdAt: string;
+}
+
+export interface UnitBarcodeLookupDto {
+  readonly unit: InventoryUnitDto;
+  readonly scannableCode: string;
+  readonly barcodePayload: string;
+  readonly code128Svg?: string;
+  readonly permittedTransitions: readonly UnitStatusDto[];
+}
+
+export interface SerializedStockReconciliationDto {
+  readonly inventoryItemId: string;
+  readonly variantId: string;
+  readonly sku: string;
+  readonly locationId: string;
+  readonly locationName: string;
+  readonly trackingMode: VariantTrackingModeDto;
+  readonly onHandUnitsCount: number;
+  readonly availableUnitsCount: number;
+  readonly onHoldUnitsCount: number;
+  readonly reservedUnitsCount: number;
+  readonly inFulfillmentUnitsCount: number;
+  readonly ledgerSellableQuantity: string;
+  readonly ledgerUnavailableQuantity: string;
+  readonly ledgerReservedQuantity: string;
+  readonly isConsistent: boolean;
+  readonly discrepancies: readonly string[];
+}
