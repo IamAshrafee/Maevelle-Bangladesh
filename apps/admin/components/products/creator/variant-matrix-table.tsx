@@ -8,6 +8,7 @@ import {
   HelpCircle,
   Minus,
   Plus,
+  ReceiptText,
   RefreshCw,
   Square,
   Warehouse,
@@ -21,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { VariantMatrixRow, VariantStockEntry } from './types';
 import { BarcodeScannerModal } from './barcode-scanner-modal';
+import { grossMarginPercent, merchandisingCost, suggestedSellingPrice } from './utils/pricing';
 
 interface VariantMatrixTableProps {
   readonly matrix: readonly VariantMatrixRow[];
@@ -52,6 +54,15 @@ export function VariantMatrixTable({
   const enabledCount = useMemo(() => matrix.filter((r) => r.enabled).length, [matrix]);
   const allEnabled = enabledCount === matrix.length && matrix.length > 0;
   const effectiveBaseCost = baseEstimatedCost || baseCost;
+  const costedVariantCount = useMemo(
+    () =>
+      matrix.filter(
+        (row) =>
+          row.enabled &&
+          merchandisingCost(row.estimatedCostAmount, row.latestAcquisitionCost).source !== 'NONE',
+      ).length,
+    [matrix],
+  );
 
   const [bulkStockQuantity, setBulkStockQuantity] = useState('');
   const [showBulkStockPopover, setShowBulkStockPopover] = useState(false);
@@ -88,8 +99,20 @@ export function VariantMatrixTable({
     const locId = locations[0]?.id || 'default-location';
     const locName = locations[0]?.name || 'Main Warehouse';
     onUpdateRow(rowId, {
-      initialStock: nextVal > 0 ? [{ locationId: locId, locationName: locName, quantity: String(nextVal) }] : [],
+      initialStock:
+        nextVal > 0
+          ? [{ locationId: locId, locationName: locName, quantity: String(nextVal) }]
+          : [],
     });
+  };
+
+  const handleApplyTargetMargin = (targetMargin: number) => {
+    for (const row of matrix) {
+      if (!row.enabled) continue;
+      const cost = merchandisingCost(row.estimatedCostAmount, row.latestAcquisitionCost);
+      const price = suggestedSellingPrice(cost.amount, targetMargin);
+      if (price) onUpdateRow(row.id, { priceAmount: price });
+    }
   };
 
   return (
@@ -149,16 +172,39 @@ export function VariantMatrixTable({
               variant="outline"
               size="sm"
               className="h-7 text-xs"
-              onClick={() =>
-                onBulkUpdate(
-                  { costAmount: effectiveBaseCost, estimatedCostAmount: effectiveBaseCost },
-                  true,
-                )
-              }
+              onClick={() => {
+                for (const row of matrix) {
+                  if (
+                    row.enabled &&
+                    merchandisingCost(row.estimatedCostAmount, row.latestAcquisitionCost).source !==
+                      'LANDED_COST'
+                  ) {
+                    onUpdateRow(row.id, {
+                      costAmount: effectiveBaseCost,
+                      estimatedCostAmount: effectiveBaseCost,
+                    });
+                  }
+                }
+              }}
             >
-              Apply Est. Cost (৳{effectiveBaseCost})
+              Apply Planning Cost (৳{effectiveBaseCost})
             </Button>
           )}
+
+          {costedVariantCount > 0
+            ? [30, 40, 50].map((margin) => (
+                <Button
+                  key={margin}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 text-xs sm:h-7"
+                  onClick={() => handleApplyTargetMargin(margin)}
+                >
+                  Price for {margin}% margin
+                </Button>
+              ))
+            : null}
 
           {locations.length > 0 && (
             <Popover open={showBulkStockPopover} onOpenChange={setShowBulkStockPopover}>
@@ -224,7 +270,7 @@ export function VariantMatrixTable({
               <th className="py-2.5 px-3 min-w-[100px] font-medium">Compare-at</th>
               <th className="py-2.5 px-3 min-w-[130px] font-medium">
                 <span className="flex items-center gap-1">
-                  <span>Est. Cost / Margin</span>
+                  <span>Unit Cost / Margin</span>
                   <Tooltip>
                     <TooltipTrigger
                       render={<span tabIndex={0} className="inline-flex cursor-help" />}
@@ -232,8 +278,8 @@ export function VariantMatrixTable({
                       <HelpCircle className="size-3 text-muted-foreground" aria-hidden="true" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      Internal merchandising estimated cost used for gross margin calculations. Not
-                      used for accounting FIFO COGS.
+                      Receipt-backed landed cost is loaded automatically and remains read-only.
+                      Until it exists, a planning estimate can be entered here.
                     </TooltipContent>
                   </Tooltip>
                 </span>
@@ -245,13 +291,12 @@ export function VariantMatrixTable({
           <tbody className="divide-y divide-border/60">
             {matrix.map((row) => {
               const matchedColor = row.primaryColorId ? colorMap.get(row.primaryColorId) : null;
-              const priceNum = parseFloat(row.priceAmount);
-              const costAmount = row.estimatedCostAmount || row.costAmount;
-              const costNum = parseFloat(costAmount);
-              const margin =
-                !isNaN(priceNum) && priceNum > 0 && !isNaN(costNum) && costNum > 0
-                  ? Math.round(((priceNum - costNum) / priceNum) * 100)
-                  : null;
+              const effectiveCost = merchandisingCost(
+                row.estimatedCostAmount || row.costAmount,
+                row.latestAcquisitionCost,
+              );
+              const costAmount = effectiveCost.amount;
+              const margin = grossMarginPercent(row.priceAmount, costAmount);
 
               const totalStock = (row.initialStock || []).reduce(
                 (sum, entry) => sum + (parseInt(entry.quantity, 10) || 0),
@@ -366,26 +411,44 @@ export function VariantMatrixTable({
                   {/* Cost & Margin */}
                   <td className="py-2 px-3 align-middle">
                     <div className="flex items-center gap-1.5">
-                      <div className="relative w-20">
-                        <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-muted-foreground">
-                          ৳
-                        </span>
-                        <Input
-                          type="number"
-                          step="1"
-                          min="0"
-                          placeholder="Cost"
-                          value={costAmount}
-                          disabled={!row.enabled}
-                          className="h-7 pl-4 text-xs"
-                          onChange={(e) =>
-                            onUpdateRow(row.id, {
-                              costAmount: e.target.value,
-                              estimatedCostAmount: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
+                      {effectiveCost.source === 'LANDED_COST' ? (
+                        <div className="min-w-24 rounded-md border border-primary/20 bg-primary-subtle px-2 py-1">
+                          <div className="flex items-center gap-1 text-[10px] font-medium text-primary">
+                            <ReceiptText className="size-3" aria-hidden="true" />
+                            Landed cost
+                          </div>
+                          <p className="font-mono text-xs font-semibold tabular-nums text-foreground">
+                            ৳
+                            {Number(costAmount).toLocaleString('en-BD', {
+                              maximumFractionDigits: 2,
+                            })}
+                          </p>
+                          <p className="truncate font-mono text-[9px] text-muted-foreground">
+                            {row.latestAcquisitionCost?.receiptNumber}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="relative w-20">
+                          <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-muted-foreground">
+                            ৳
+                          </span>
+                          <Input
+                            type="number"
+                            step="1"
+                            min="0"
+                            placeholder="Cost"
+                            value={costAmount}
+                            disabled={!row.enabled}
+                            className="h-7 pl-4 text-xs"
+                            onChange={(e) =>
+                              onUpdateRow(row.id, {
+                                costAmount: e.target.value,
+                                estimatedCostAmount: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      )}
                       {margin !== null && (
                         <Badge
                           variant="outline"
@@ -529,13 +592,12 @@ export function VariantMatrixTable({
       <div className="block md:hidden space-y-3">
         {matrix.map((row) => {
           const matchedColor = row.primaryColorId ? colorMap.get(row.primaryColorId) : null;
-          const priceNum = parseFloat(row.priceAmount);
-          const costAmount = row.estimatedCostAmount || row.costAmount;
-          const costNum = parseFloat(costAmount);
-          const margin =
-            !isNaN(priceNum) && priceNum > 0 && !isNaN(costNum) && costNum > 0
-              ? Math.round(((priceNum - costNum) / priceNum) * 100)
-              : null;
+          const effectiveCost = merchandisingCost(
+            row.estimatedCostAmount || row.costAmount,
+            row.latestAcquisitionCost,
+          );
+          const costAmount = effectiveCost.amount;
+          const margin = grossMarginPercent(row.priceAmount, costAmount);
           const currentStockQty = row.initialStock?.[0]?.quantity || '0';
 
           return (
@@ -557,7 +619,9 @@ export function VariantMatrixTable({
                   <div className="flex flex-col">
                     <span className="font-semibold text-sm text-foreground">{row.title}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      {row.optionSelections.map((s) => `${s.axisName}: ${s.valueDisplay}`).join(' • ')}
+                      {row.optionSelections
+                        .map((s) => `${s.axisName}: ${s.valueDisplay}`)
+                        .join(' • ')}
                     </span>
                   </div>
                 </label>
@@ -628,7 +692,9 @@ export function VariantMatrixTable({
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-muted-foreground">Compare-at (BDT)</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Compare-at (BDT)
+                  </Label>
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
                       ৳
@@ -645,6 +711,59 @@ export function VariantMatrixTable({
                     />
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-1 rounded-md border bg-muted/20 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs font-medium">
+                    {effectiveCost.source === 'LANDED_COST'
+                      ? 'Landed unit cost'
+                      : 'Planning unit cost'}
+                  </Label>
+                  {row.latestAcquisitionCost && effectiveCost.source === 'LANDED_COST' ? (
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${
+                        row.latestAcquisitionCost.state === 'PROVISIONAL'
+                          ? 'border-warning/30 bg-warning/10 text-warning'
+                          : 'border-success/30 bg-success/10 text-success'
+                      }`}
+                    >
+                      {row.latestAcquisitionCost.state.toLowerCase()}
+                    </Badge>
+                  ) : null}
+                </div>
+                {effectiveCost.source === 'LANDED_COST' ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-mono text-base font-semibold tabular-nums">
+                      ৳{Number(costAmount).toLocaleString('en-BD', { maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      Receipt {row.latestAcquisitionCost?.receiptNumber}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+                      ৳
+                    </span>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      placeholder="Estimated cost"
+                      value={costAmount}
+                      disabled={!row.enabled}
+                      className="h-10 pl-7 font-mono text-xs tabular-nums"
+                      onChange={(e) =>
+                        onUpdateRow(row.id, {
+                          costAmount: e.target.value,
+                          estimatedCostAmount: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                )}
               </div>
 
               {/* SKU & Barcode with Camera Button */}
@@ -689,7 +808,9 @@ export function VariantMatrixTable({
               <div className="flex items-center justify-between gap-3 pt-1 border-t border-border/40">
                 <div className="space-y-0.5">
                   <Label className="text-xs font-medium">Opening Stock</Label>
-                  <p className="text-[11px] text-muted-foreground">{locations[0]?.name || 'Main Warehouse'}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {locations[0]?.name || 'Main Warehouse'}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-1.5">
@@ -713,7 +834,9 @@ export function VariantMatrixTable({
                       const locId = locations[0]?.id || 'default-location';
                       const locName = locations[0]?.name || 'Main Warehouse';
                       onUpdateRow(row.id, {
-                        initialStock: val ? [{ locationId: locId, locationName: locName, quantity: val }] : [],
+                        initialStock: val
+                          ? [{ locationId: locId, locationName: locName, quantity: val }]
+                          : [],
                       });
                     }}
                     className="h-9 w-16 text-center text-xs font-mono tabular-nums"

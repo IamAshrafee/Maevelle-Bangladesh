@@ -34,11 +34,7 @@ import { useCreatorContent } from './hooks/use-creator-content';
 import { useCreatorMedia } from './hooks/use-creator-media';
 import { useCreatorVariantsMatrix } from './hooks/use-creator-variants-matrix';
 import { useCreatorReadiness } from './hooks/use-creator-readiness';
-import {
-  useCreatorDraft,
-  DRAFT_STORAGE_KEY,
-  getDraftStorageKey,
-} from './hooks/use-creator-draft';
+import { useCreatorDraft, DRAFT_STORAGE_KEY, getDraftStorageKey } from './hooks/use-creator-draft';
 
 export {
   DRAFT_STORAGE_KEY,
@@ -93,7 +89,9 @@ export function useProductCreatorState({
   const [isHandleLocked, setIsHandleLocked] = useState(true);
   const [productTypeId, setProductTypeId] = useState('');
   const [description, setDescription] = useState('');
-  const [attributeValues, setAttributeValues] = useState<Record<string, string | boolean | null>>({});
+  const [attributeValues, setAttributeValues] = useState<Record<string, string | boolean | null>>(
+    {},
+  );
 
   // Sizing
   const [sizeSystemId, setSizeSystemId] = useState('');
@@ -431,9 +429,7 @@ export function useProductCreatorState({
               setLengthValue(workspace.shipping.dimensions.length);
               setWidthValue(workspace.shipping.dimensions.width);
               setHeightValue(workspace.shipping.dimensions.height);
-              setDimensionUnit(
-                (workspace.shipping.dimensions.unit as 'CM' | 'MM' | 'IN') || 'CM',
-              );
+              setDimensionUnit((workspace.shipping.dimensions.unit as 'CM' | 'MM' | 'IN') || 'CM');
             }
 
             if (workspace.options.length > 0) {
@@ -481,6 +477,7 @@ export function useProductCreatorState({
                     compareAtAmount: v.currentPrice?.compareAtAmount || '',
                     costAmount: v.estimatedCostAmount || '',
                     estimatedCostAmount: v.estimatedCostAmount || '',
+                    latestAcquisitionCost: v.latestAcquisitionCost,
                     initialStock: [],
                     primaryColorId: v.primaryColor?.id || null,
                     weightValue: v.shipping?.weight?.value || '400',
@@ -768,7 +765,9 @@ export function useProductCreatorState({
 
         variantsPayload = [
           {
-            ...(isEditMode && workspaceData?.variants[0]?.id ? { id: workspaceData.variants[0].id } : {}),
+            ...(isEditMode && workspaceData?.variants[0]?.id
+              ? { id: workspaceData.variants[0].id }
+              : {}),
             clientRef: 'simple_var',
             sku: variants.sku.trim().toUpperCase(),
             barcode: variants.barcode.trim() || null,
@@ -796,10 +795,14 @@ export function useProductCreatorState({
             .filter((s) => Number(s.quantity) > 0)
             .map((s) => ({ locationId: s.locationId, quantity: Math.floor(Number(s.quantity)) }));
 
-          const optionValueRefs = r.optionSelections.map((s) => s.valueRef).filter(Boolean) as string[];
+          const optionValueRefs = r.optionSelections
+            .map((s) => s.valueRef)
+            .filter(Boolean) as string[];
 
           return {
-            ...(isEditMode && workspaceData?.variants.some((v) => v.id === r.id) ? { id: r.id } : {}),
+            ...(isEditMode && workspaceData?.variants.some((v) => v.id === r.id)
+              ? { id: r.id }
+              : {}),
             clientRef: r.id,
             sku: r.sku.trim().toUpperCase(),
             title: r.title.trim() || null,
@@ -989,6 +992,10 @@ export function useProductCreatorState({
     compareAtAmount,
     costAmount,
     estimatedCostAmount,
+    simpleAcquisitionCost:
+      variants.variantMode === 'simple'
+        ? (workspaceData?.variants[0]?.latestAcquisitionCost ?? null)
+        : null,
     setEstimatedCostAmount,
     simpleInitialStock: variants.simpleInitialStock,
     setSimpleInitialStock: variants.setSimpleInitialStock,

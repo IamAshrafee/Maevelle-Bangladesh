@@ -6,6 +6,7 @@ import type {
   SizeGuideSummaryDto,
   WarehouseLocationDto,
 } from '@maevelle/contracts';
+import type { VariantAcquisitionCost } from './utils/pricing';
 
 export interface SizingReferenceData {
   readonly systems: readonly {
@@ -60,6 +61,8 @@ export interface VariantMatrixRow {
   compareAtAmount: string;
   costAmount: string; // backward compat
   estimatedCostAmount: string;
+  /** Receipt-backed supply cost. Display-only: Catalog must not overwrite Costing history. */
+  latestAcquisitionCost?: VariantAcquisitionCost | null;
   initialStock: VariantStockEntry[];
   primaryColorId: string | null;
   weightValue: string;

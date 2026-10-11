@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   Camera,
   Eye,
@@ -18,20 +18,10 @@ import type { CatalogColorDto, WarehouseLocationDto } from '@maevelle/contracts'
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import type {
   OptionAxisState,
@@ -60,7 +50,6 @@ export interface VariantsCardProps {
   readonly onVariantModeChange: (mode: 'simple' | 'variants') => void;
   readonly onSkuChange: (val: string) => void;
   readonly onBarcodeChange: (val: string) => void;
-  readonly onEstimatedCostChange?: (val: string) => void;
   readonly onSimpleInitialStockChange?: (locationId: string, quantity: string) => void;
   readonly onAddOptionValue: (axisName: string, val: string) => void;
   readonly onRemoveOptionValue: (axisName: string, val: string) => void;
@@ -70,14 +59,8 @@ export interface VariantsCardProps {
   readonly onRemoveOptionAxis?: (axisId: string) => void;
   readonly onApplyPresetStructure?: (preset: 'color-size' | 'size-only' | 'single') => void;
   readonly onImportSizesFromSystem: (systemId: string) => void;
-  readonly onUpdateMatrixRow: (
-    id: string,
-    updates: Partial<VariantMatrixRow>,
-  ) => void;
-  readonly onBulkUpdateMatrix: (
-    updates: Partial<VariantMatrixRow>,
-    onlyEnabled?: boolean,
-  ) => void;
+  readonly onUpdateMatrixRow: (id: string, updates: Partial<VariantMatrixRow>) => void;
+  readonly onBulkUpdateMatrix: (updates: Partial<VariantMatrixRow>, onlyEnabled?: boolean) => void;
   readonly onToggleAllVariants: (enabled: boolean) => void;
   readonly onRegenerateAllSkus: () => void;
 }
@@ -100,7 +83,6 @@ export function VariantsCard({
   onVariantModeChange,
   onSkuChange,
   onBarcodeChange,
-  onEstimatedCostChange,
   onSimpleInitialStockChange,
   onAddOptionValue,
   onRemoveOptionValue,
@@ -122,18 +104,6 @@ export function VariantsCard({
   const [newAxisIsVisual, setNewAxisIsVisual] = useState(false);
   const [showAddAxis, setShowAddAxis] = useState(false);
   const [simpleScannerOpen, setSimpleScannerOpen] = useState(false);
-
-  // Compute live estimated margin for simple mode
-  const simpleMargin = useMemo(() => {
-    const price = parseFloat(priceAmount);
-    const cost = parseFloat(estimatedCostAmount || costAmount);
-    if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(cost) || cost < 0) {
-      return null;
-    }
-    const margin = ((price - cost) / price) * 100;
-    const profit = price - cost;
-    return { margin: Math.round(margin * 10) / 10, profit: Math.round(profit) };
-  }, [priceAmount, estimatedCostAmount, costAmount]);
 
   const handleAddColor = () => {
     if (newColorInput.trim()) {
@@ -172,9 +142,7 @@ export function VariantsCard({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <Layers className="size-4 text-primary" aria-hidden="true" />
-            <CardTitle className="text-base font-semibold">
-              Variants & Options
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Variants & Options</CardTitle>
           </div>
 
           {/* Mode Switcher */}
@@ -204,7 +172,8 @@ export function VariantsCard({
           </div>
         </div>
         <CardDescription>
-          Choose whether this product has a single SKU or multiple sellable combinations (e.g. Color, Size).
+          Choose whether this product has a single SKU or multiple sellable combinations (e.g.
+          Color, Size).
         </CardDescription>
       </CardHeader>
 
@@ -220,11 +189,14 @@ export function VariantsCard({
                     SKU Code <span className="text-destructive">*</span>
                   </Label>
                   <Tooltip>
-                    <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
+                    <TooltipTrigger
+                      render={<span tabIndex={0} className="inline-flex cursor-help" />}
+                    >
                       <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      Stock Keeping Unit. Unique identifier used for warehouse inventory and picking.
+                      Stock Keeping Unit. Unique identifier used for warehouse inventory and
+                      picking.
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -235,9 +207,7 @@ export function VariantsCard({
                   className="font-mono text-xs uppercase"
                   onChange={(e) => onSkuChange(e.target.value)}
                 />
-                {fieldErrors.sku && (
-                  <p className="text-xs text-destructive">{fieldErrors.sku}</p>
-                )}
+                {fieldErrors.sku && <p className="text-xs text-destructive">{fieldErrors.sku}</p>}
               </div>
 
               {/* Barcode */}
@@ -247,12 +217,12 @@ export function VariantsCard({
                     Barcode / EAN / GTIN (Optional)
                   </Label>
                   <Tooltip>
-                    <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
+                    <TooltipTrigger
+                      render={<span tabIndex={0} className="inline-flex cursor-help" />}
+                    >
                       <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
                     </TooltipTrigger>
-                    <TooltipContent>
-                      Scannable barcode code for POS and logistics.
-                    </TooltipContent>
+                    <TooltipContent>Scannable barcode code for POS and logistics.</TooltipContent>
                   </Tooltip>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -277,50 +247,7 @@ export function VariantsCard({
               </div>
             </div>
 
-            {/* Estimated Unit Cost & Margin */}
-            <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Label htmlFor="simple-estimated-cost" className="font-medium text-xs sm:text-sm">
-                      Estimated Unit Cost (BDT)
-                    </Label>
-                    <Tooltip>
-                      <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
-                        <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        Estimated production/purchase cost for live gross margin calculations. Kept distinct from accounting FIFO valuation.
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  {simpleMargin !== null && (
-                    <Badge
-                      variant="outline"
-                      className={`text-[11px] font-mono tabular-nums font-medium ${
-                        simpleMargin.margin >= 40
-                          ? 'border-success/30 bg-success/10 text-success'
-                          : simpleMargin.margin >= 20
-                            ? 'border-warning/30 bg-warning/10 text-warning'
-                            : 'border-destructive/30 bg-destructive/10 text-destructive'
-                      }`}
-                    >
-                      {simpleMargin.margin}% margin (+৳{simpleMargin.profit.toLocaleString('en-BD')})
-                    </Badge>
-                  )}
-                </div>
-                <Input
-                  id="simple-estimated-cost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="e.g. 1200.00"
-                  value={estimatedCostAmount || costAmount}
-                  onChange={(e) => onEstimatedCostChange?.(e.target.value)}
-                  className="font-mono text-xs"
-                />
-              </div>
-
+            <div className="border-t pt-4">
               {/* Multi-Location Opening Stock */}
               {locations.length > 0 && (
                 <div className="space-y-2">
@@ -329,23 +256,31 @@ export function VariantsCard({
                       Opening Inventory by Warehouse
                     </Label>
                     <Tooltip>
-                      <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
+                      <TooltipTrigger
+                        render={<span tabIndex={0} className="inline-flex cursor-help" />}
+                      >
                         <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        Record initial opening stock during product creation. Movements are logged atomically with OPENING_BALANCE.
+                        Record initial opening stock during product creation. Movements are logged
+                        atomically with OPENING_BALANCE.
                       </TooltipContent>
                     </Tooltip>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {locations.slice(0, 4).map((loc) => {
                       const entry = simpleInitialStock.find((s) => s.locationId === loc.id);
                       return (
-                        <div key={loc.id} className="flex items-center gap-2 rounded-md border bg-muted/20 px-2.5 py-1.5">
+                        <div
+                          key={loc.id}
+                          className="flex items-center gap-2 rounded-md border bg-muted/20 px-2.5 py-1.5"
+                        >
                           <Package className="size-3.5 text-muted-foreground shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[11px] font-medium text-foreground">{loc.name}</p>
+                            <p className="truncate text-[11px] font-medium text-foreground">
+                              {loc.name}
+                            </p>
                             <p className="text-[10px] text-muted-foreground">{loc.code}</p>
                           </div>
                           <Input
@@ -412,7 +347,8 @@ export function VariantsCard({
                     Configure Option Axes & Visual Grouping
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    Define option axes. Exactly one axis (typically Color) can drive visual photography on the storefront.
+                    Define option axes. Exactly one axis (typically Color) can drive visual
+                    photography on the storefront.
                   </p>
                 </div>
 
@@ -488,11 +424,12 @@ export function VariantsCard({
                       {/* Axis Header */}
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-xs text-foreground">
-                            {axis.name}
-                          </span>
+                          <span className="font-semibold text-xs text-foreground">{axis.name}</span>
                           {axis.isVisual ? (
-                            <Badge variant="default" className="text-[10px] gap-1 py-0 px-2 bg-primary/90 text-primary-foreground">
+                            <Badge
+                              variant="default"
+                              className="text-[10px] gap-1 py-0 px-2 bg-primary/90 text-primary-foreground"
+                            >
                               <Camera className="size-3" />
                               Visual Presentation Axis
                             </Badge>
@@ -738,7 +675,8 @@ export function VariantsCard({
                       Generated Variant Matrix ({matrixRows.length} combinations)
                     </span>
                     <p className="text-[11px] text-muted-foreground">
-                      Configure SKUs, individual prices, estimated cost margins, and initial stock locations.
+                      Configure SKUs, individual prices, estimated cost margins, and initial stock
+                      locations.
                     </p>
                   </div>
                 </div>
@@ -762,7 +700,8 @@ export function VariantsCard({
                 <Layers className="size-6 mx-auto text-muted-foreground/60" />
                 <p className="font-medium">No variant combinations generated</p>
                 <p className="text-[11px]">
-                  Add values to at least one option axis above to generate product variant combinations.
+                  Add values to at least one option axis above to generate product variant
+                  combinations.
                 </p>
               </div>
             )}

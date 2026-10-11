@@ -1,30 +1,23 @@
 'use client';
 
-import { AlertCircle, DollarSign, HelpCircle, Tag } from 'lucide-react';
+import { AlertCircle, DollarSign, HelpCircle, Layers, Tag } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { ProfitMarginCalculator } from './profit-margin-calculator';
+import type { VariantAcquisitionCost } from './utils/pricing';
 
 interface PricingCardProps {
+  readonly variantMode: 'simple' | 'variants';
   readonly priceAmount: string;
   readonly compareAtAmount: string;
   readonly costAmount: string;
+  readonly acquisitionCost?: VariantAcquisitionCost | null;
   readonly fieldErrors: Record<string, string>;
   readonly onPriceChange: (val: string) => void;
   readonly onCompareAtChange: (val: string) => void;
@@ -32,17 +25,21 @@ interface PricingCardProps {
 }
 
 export function PricingCard({
+  variantMode,
   priceAmount,
   compareAtAmount,
   costAmount,
+  acquisitionCost,
   fieldErrors,
   onPriceChange,
   onCompareAtChange,
   onCostChange,
 }: PricingCardProps) {
+  const hasMultipleVariants = variantMode === 'variants';
   const numPrice = Number.parseFloat(priceAmount);
   const numCompareAt = Number.parseFloat(compareAtAmount);
-  const hasValidNumbers = !Number.isNaN(numPrice) && !Number.isNaN(numCompareAt) && numPrice > 0 && numCompareAt > 0;
+  const hasValidNumbers =
+    !Number.isNaN(numPrice) && !Number.isNaN(numCompareAt) && numPrice > 0 && numCompareAt > 0;
   const discountPercent =
     hasValidNumbers && numCompareAt > numPrice
       ? Math.round(((numCompareAt - numPrice) / numCompareAt) * 100)
@@ -55,9 +52,7 @@ export function PricingCard({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <DollarSign className="size-4 text-primary" aria-hidden="true" />
-            <CardTitle className="text-base font-semibold">
-              Pricing & Margins
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Pricing & Margins</CardTitle>
           </div>
           <Tooltip>
             <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
@@ -69,7 +64,9 @@ export function PricingCard({
           </Tooltip>
         </div>
         <CardDescription>
-          Base pricing in Bangladeshi Taka (BDT) and automated gross margin calculation.
+          {hasMultipleVariants
+            ? 'Set optional defaults here, then price each sellable variant from its own landed cost.'
+            : 'Selling price in Bangladeshi Taka (BDT), backed by the best available unit cost.'}
         </CardDescription>
       </CardHeader>
 
@@ -79,7 +76,8 @@ export function PricingCard({
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">
               <Label htmlFor="selling-price" className="font-medium text-xs sm:text-sm">
-                Selling Price (BDT) <span className="text-destructive">*</span>
+                {hasMultipleVariants ? 'Default Selling Price (BDT)' : 'Selling Price (BDT)'}{' '}
+                {!hasMultipleVariants ? <span className="text-destructive">*</span> : null}
               </Label>
               <Tooltip>
                 <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
@@ -105,9 +103,7 @@ export function PricingCard({
                 className="pl-7 font-mono text-xs font-semibold tabular-nums sm:text-sm"
               />
             </div>
-            {fieldErrors.price && (
-              <p className="text-xs text-destructive">{fieldErrors.price}</p>
-            )}
+            {fieldErrors.price && <p className="text-xs text-destructive">{fieldErrors.price}</p>}
           </div>
 
           {/* Compare At Price */}
@@ -118,11 +114,14 @@ export function PricingCard({
                   Compare-at Price (BDT)
                 </Label>
                 <Tooltip>
-                  <TooltipTrigger render={<span tabIndex={0} className="inline-flex cursor-help" />}>
+                  <TooltipTrigger
+                    render={<span tabIndex={0} className="inline-flex cursor-help" />}
+                  >
                     <HelpCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Original retail price before discount. Displayed as a strikethrough price on the storefront.
+                    Original retail price before discount. Displayed as a strikethrough price on the
+                    storefront.
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -162,14 +161,30 @@ export function PricingCard({
 
         <Separator />
 
-        {/* Cost & Gross Margin Calculator */}
-        <ProfitMarginCalculator
-          sellingPrice={priceAmount}
-          costPrice={costAmount}
-          onCostPriceChange={onCostChange}
-        />
+        {hasMultipleVariants ? (
+          <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary-subtle p-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <Layers className="size-4" aria-hidden="true" />
+            </span>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-foreground">Pricing is variant-specific</p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                The variant matrix below automatically loads each receipt-backed landed cost. Use
+                its target-margin actions to set selling prices without forcing every variant to
+                share one cost.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <ProfitMarginCalculator
+            sellingPrice={priceAmount}
+            estimatedCostPrice={costAmount}
+            acquisitionCost={acquisitionCost ?? null}
+            onEstimatedCostPriceChange={onCostChange}
+            onSellingPriceChange={onPriceChange}
+          />
+        )}
       </CardContent>
     </Card>
   );
 }
-

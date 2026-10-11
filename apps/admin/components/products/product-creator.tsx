@@ -32,8 +32,7 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
     if (!state.loading && sectionParam) {
       const normalized = sectionParam.toLowerCase();
       const el =
-        document.getElementById(`section-${normalized}`) ||
-        document.getElementById(normalized);
+        document.getElementById(`section-${normalized}`) || document.getElementById(normalized);
       if (el) {
         // Small delay to ensure browser layout has stabilized after loading state
         const timer = setTimeout(() => {
@@ -98,7 +97,9 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
           <Alert className="border-success/30 bg-success/10 text-success shadow-xs">
             <CheckCircle2 className="size-4 text-success" />
             <AlertTitle className="text-foreground font-semibold">Success</AlertTitle>
-            <AlertDescription className="text-xs text-muted-foreground">{state.successMessage}</AlertDescription>
+            <AlertDescription className="text-xs text-muted-foreground">
+              {state.successMessage}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -157,9 +158,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             {/* Card 3: Pricing & Margins */}
             <section id="section-pricing" className="scroll-mt-28" aria-label="Pricing and Margins">
               <PricingCard
+                variantMode={state.variantMode}
                 priceAmount={state.priceAmount}
                 compareAtAmount={state.compareAtAmount}
                 costAmount={state.costAmount}
+                acquisitionCost={state.simpleAcquisitionCost}
                 fieldErrors={state.fieldErrors}
                 onPriceChange={(val) => {
                   state.setPriceAmount(val);
@@ -171,13 +174,18 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                 }}
                 onCostChange={(val) => {
                   state.setCostAmount(val);
+                  state.setEstimatedCostAmount(val);
                   state.setIsDirty(true);
                 }}
               />
             </section>
 
             {/* Card 4: Variants & Multi-Variant Matrix */}
-            <section id="section-variants" className="scroll-mt-28" aria-label="Variants and Matrix">
+            <section
+              id="section-variants"
+              className="scroll-mt-28"
+              aria-label="Variants and Matrix"
+            >
               <VariantsCard
                 variantMode={state.variantMode}
                 sku={state.sku}
@@ -206,15 +214,13 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
                   state.setBarcode(val);
                   state.setIsDirty(true);
                 }}
-                onEstimatedCostChange={(val) => {
-                  state.setEstimatedCostAmount(val);
-                  state.setIsDirty(true);
-                }}
                 onSimpleInitialStockChange={(locationId, quantity) => {
                   state.setSimpleInitialStock((prev) => {
                     const existing = prev.find((s) => s.locationId === locationId);
                     if (existing) {
-                      return prev.map((s) => (s.locationId === locationId ? { ...s, quantity } : s));
+                      return prev.map((s) =>
+                        s.locationId === locationId ? { ...s, quantity } : s,
+                      );
                     }
                     return [...prev, { locationId, quantity }];
                   });
@@ -236,7 +242,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             </section>
 
             {/* Card 5: Shipping & Logistics */}
-            <section id="section-shipping" className="scroll-mt-28" aria-label="Shipping and Logistics">
+            <section
+              id="section-shipping"
+              className="scroll-mt-28"
+              aria-label="Shipping and Logistics"
+            >
               <ShippingCard
                 weightValue={state.weightValue}
                 onWeightValueChange={(v) => {
@@ -272,7 +282,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             </section>
 
             {/* Customer-facing grouped information and FAQs */}
-            <section id="section-content" className="scroll-mt-28" aria-label="Customer Information and FAQs">
+            <section
+              id="section-content"
+              className="scroll-mt-28"
+              aria-label="Customer Information and FAQs"
+            >
               <CustomerDetailsCard
                 attributes={state.activeAttributes}
                 attributeValues={state.attributeValues}
@@ -292,7 +306,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
             </section>
 
             {/* Optional search metadata */}
-            <section id="section-seo" className="scroll-mt-28" aria-label="Search Engine Optimization">
+            <section
+              id="section-seo"
+              className="scroll-mt-28"
+              aria-label="Search Engine Optimization"
+            >
               <SeoContentCard
                 title={state.title}
                 handle={state.handle}
@@ -317,7 +335,11 @@ export function ProductCreator({ productId }: ProductCreatorProps = {}) {
 
           {/* RIGHT COLUMN: Merchandising Sidebar (Readiness, Categories, Sizing, Tags) */}
           <div className="space-y-6 lg:col-span-4">
-            <section id="section-merchandising" className="scroll-mt-28" aria-label="Merchandising and Organization">
+            <section
+              id="section-merchandising"
+              className="scroll-mt-28"
+              aria-label="Merchandising and Organization"
+            >
               <OrganizationSidebar
                 categories={state.references.categories}
                 selectedCategoryIds={state.selectedCategoryIds}
