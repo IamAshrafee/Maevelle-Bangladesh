@@ -52,6 +52,13 @@ Implemented behavior includes:
   Landed Cost queues; long operational forms become full-screen mobile task
   dialogs; tabs, filters and primary actions use touch-conscious targets; and
   Receiving exposes its previously missing pagination controls.
+- reopening a draft product after receiving now loads each variant's latest
+  receipt-backed acquisition cost into the Catalog pricing experience, including
+  receipt and finalization provenance, without copying that authoritative value
+  into the editable planning estimate; and
+- simple and multi-variant pricing can apply 30%, 40% or 50% target-margin
+  suggestions from the effective per-unit cost, rounded upward to the next BDT
+  10, while final selling prices remain an explicit merchandising decision.
 
 ## Verification completed
 
@@ -72,6 +79,9 @@ Implemented behavior includes:
   with zero findings, both Admin Supply helper suites (5 tests), `git diff
   --check`, and a fresh Admin production build including TypeScript and all 84
   generated routes.
+- The Catalog/Supply pricing handoff at `2ebb571` passed focused ESLint, 5
+  pricing-rule tests, `git diff --check`, and a fresh Admin production build
+  including TypeScript and all 84 generated routes.
 - Browser verification confirmed the local Admin route and responsive 390×844
   authentication shell. The authenticated operator walkthrough remains an owner
   review gate rather than being represented as complete.
