@@ -624,6 +624,24 @@ describe('ledger-backed inventory', () => {
         capabilities: ['TRANSFER_SEND', 'TRANSFER_RECEIVE'],
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    const locationUpdateKey = crypto.randomUUID();
+    const renamed = await updateLocation(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+      expectedVersion: f.main.version,
+      name: 'Primary inventory facility',
+      idempotencyKey: locationUpdateKey,
+    });
+    const replayedRename = await updateLocation(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+      expectedVersion: f.main.version,
+      name: 'Primary inventory facility',
+      idempotencyKey: locationUpdateKey,
+    });
+    expect(replayedRename).toEqual(renamed);
     const balance = (await listInventoryBalances(database.db, f.organizationId)).items.find(
       (row) => row.condition === 'SELLABLE',
     )!;

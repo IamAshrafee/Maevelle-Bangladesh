@@ -148,17 +148,19 @@ Remaining in Stage 3:
 - Location detail now returns those commitment explanations, uses the replenishment-policy hierarchy for low-stock counts, and reports real incoming Transfer plus inbound-supply quantity instead of the former hard-coded zero.
 - Location updates now publish a transactional outbox event in addition to their audit evidence.
 - Rebuilt the Locations list as a responsive operations surface with shared page/table/state primitives, status and capability filters, permission-aware creation, mobile cards, compact desktop rows, and visible on-hand/open-work context. The list projection now returns those operational totals without per-row browser requests.
+- Connected Location detail/edit to the blocker model: active commitments are visible, lifecycle and capability choices are disabled with exact reasons, Draft locations remain editable, incoming stock is real, and Edit/Transfer actions respect operator permissions plus facility capabilities.
+- Location create/update API commands now require idempotency keys; the domain replays completed equivalent requests safely, rejects key reuse with a changed payload, and retains optimistic version protection.
 
 Verification for this slice:
 
 - Database package TypeScript build passed.
 - Focused Admin TypeScript and lint checks passed for the rebuilt Locations list.
-- One focused Inventory integration test passed for Location commitment projection and capability-removal protection.
+- One focused Inventory integration test passed for Location commitment projection, capability-removal protection, and update replay safety.
 
 Remaining in Stage 5:
 
-- Rebuild the Location detail surface around the shared Admin primitives and the new blocker model.
-- Consolidate create/edit onto one shared Location form, then add retry-safe command semantics for Location creation and updates.
+- Finish decomposing the legacy Location detail component onto shared Admin primitives.
+- Consolidate duplicated create/edit Location field and capability definitions onto one shared form foundation.
 
 ---
 

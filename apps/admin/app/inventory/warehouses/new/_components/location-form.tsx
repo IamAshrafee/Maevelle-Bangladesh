@@ -352,6 +352,7 @@ export function LocationForm() {
     try {
       const result = await inventoryRequest<{ data: { id: string } }>('/warehouse/locations', {
         method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify({
           name: values.name.trim(),
           code: values.code.trim().toUpperCase(),

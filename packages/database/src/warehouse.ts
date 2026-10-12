@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
+
 import { sql, type Kysely } from 'kysely';
 
-import { appendAuditEvent } from './platform.js';
+import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import type { DatabaseSchema } from './index.js';
 import { resolveInventorySettings } from './settings.js';
 
@@ -16,12 +18,16 @@ export type LocationCapability =
 
 export class WarehouseDomainError extends Error {
   public constructor(
-    public readonly code: 'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED' | 'STALE_VERSION',
+    public readonly code: 'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED' | 'STALE_VERSION' | 'IDEMPOTENCY_KEY_REUSED',
     message: string,
   ) {
     super(message);
     this.name = 'WarehouseDomainError';
   }
+}
+
+function fingerprint(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 export interface LocationSummary {
@@ -160,6 +166,7 @@ export async function createLocation(
     capabilities: readonly LocationCapability[];
     status?: LocationSummary['status'];
     address?: Record<string, unknown>;
+    idempotencyKey?: string;
   },
 ): Promise<LocationSummary> {
   const code = input.code.trim().toUpperCase();
@@ -181,6 +188,28 @@ export async function createLocation(
       'A Location needs at least one capability.',
     );
   return withWarehouseTransaction(db, async (transaction) => {
+    let idempotencyRecordId: string | undefined;
+    if (input.idempotencyKey) {
+      try {
+        const claim = await claimIdempotencyRecord(transaction, {
+          organizationId: input.organizationId,
+          principalType: 'USER',
+          principalId: input.actorId,
+          operationType: 'warehouse.location.create',
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint: fingerprint({ code, name, locationType: input.locationType, capabilities: [...new Set(input.capabilities)].sort(), status, address: input.address ?? null }),
+        });
+        idempotencyRecordId = claim.id;
+        if (!claim.created) {
+          const replay = await sql<{ status: string; safe_response: LocationSummary | null }>`select status,safe_response from platform.idempotency_records where id=${claim.id}`.execute(transaction);
+          if (replay.rows[0]?.status === 'SUCCEEDED' && replay.rows[0].safe_response) return replay.rows[0].safe_response;
+          throw new WarehouseDomainError('CONFLICT', 'The same location command is already in progress.');
+        }
+      } catch (error) {
+        if (error instanceof IdempotencyKeyReuseError) throw new WarehouseDomainError('IDEMPOTENCY_KEY_REUSED', error.message);
+        throw error;
+      }
+    }
     try {
       const created = await sql<{
         id: string;
@@ -214,10 +243,13 @@ export async function createLocation(
         values (${input.organizationId}, 'warehouse.location.created', 1, 'warehouse.location', ${location.id}, 1, ${JSON.stringify({ locationId: location.id })}::jsonb, now())`.execute(
         transaction,
       );
-      return {
+      const response = {
         ...mapLocation({ ...location, capabilities: [...new Set(input.capabilities)] }),
         version: 1,
       };
+      if (idempotencyRecordId)
+        await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='warehouse.location',result_entity_id=${location.id}::uuid,safe_response=${JSON.stringify(response)}::jsonb,completed_at=now() where id=${idempotencyRecordId}`.execute(transaction);
+      return response;
     } catch (error) {
       if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
         throw new WarehouseDomainError('CONFLICT', `Location with code "${code}" already exists.`);
@@ -281,11 +313,34 @@ export async function updateLocation(
     expectedVersion: number;
     name?: string;
     capabilities?: readonly LocationCapability[];
-    status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+    status?: LocationSummary['status'];
     address?: Record<string, unknown> | null;
+    idempotencyKey?: string;
   },
 ): Promise<LocationSummary> {
   return withWarehouseTransaction(db, async (transaction) => {
+    let idempotencyRecordId: string | undefined;
+    if (input.idempotencyKey) {
+      try {
+        const claim = await claimIdempotencyRecord(transaction, {
+          organizationId: input.organizationId,
+          principalType: 'USER',
+          principalId: input.actorId,
+          operationType: 'warehouse.location.update',
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint: fingerprint({ locationId: input.locationId, expectedVersion: input.expectedVersion, name: input.name, capabilities: input.capabilities ? [...new Set(input.capabilities)].sort() : undefined, status: input.status, address: input.address }),
+        });
+        idempotencyRecordId = claim.id;
+        if (!claim.created) {
+          const replay = await sql<{ status: string; safe_response: LocationSummary | null }>`select status,safe_response from platform.idempotency_records where id=${claim.id}`.execute(transaction);
+          if (replay.rows[0]?.status === 'SUCCEEDED' && replay.rows[0].safe_response) return replay.rows[0].safe_response;
+          throw new WarehouseDomainError('CONFLICT', 'The same location command is already in progress.');
+        }
+      } catch (error) {
+        if (error instanceof IdempotencyKeyReuseError) throw new WarehouseDomainError('IDEMPOTENCY_KEY_REUSED', error.message);
+        throw error;
+      }
+    }
     const existing = await sql<{
       id: string;
       version: string;
@@ -374,7 +429,10 @@ export async function updateLocation(
     });
     await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at)
       values (${input.organizationId}, 'warehouse.location.updated', 1, 'warehouse.location', ${input.locationId}, ${Number(location.version)}, ${JSON.stringify({ locationId: input.locationId, status: location.status })}::jsonb, now())`.execute(transaction);
-    return mapLocation({ ...location, capabilities: [...capabilities] });
+    const response = mapLocation({ ...location, capabilities: [...capabilities] });
+    if (idempotencyRecordId)
+      await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='warehouse.location',result_entity_id=${input.locationId}::uuid,safe_response=${JSON.stringify(response)}::jsonb,completed_at=now() where id=${idempotencyRecordId}`.execute(transaction);
+    return response;
   });
 }
 
