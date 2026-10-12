@@ -6,6 +6,7 @@ import { createOrganization } from './platform.js';
 import {
   adjustInventory,
   approveWarehouseTransfer,
+  closeWarehouseTransferDiscrepancy,
   createInventoryReservation,
   createWarehouseTransfer,
   dispatchWarehouseTransfer,
@@ -612,6 +613,62 @@ describe('Individual Unit Traceability & Quality Control', () => {
       variantId: f.variantId,
       locationId: f.secondaryLocation.id,
     })).isConsistent).toBe(true);
+  });
+
+  it('closes serialized in-transit loss against exact Unit IDs', async () => {
+    const f = await fixture();
+    const [unit] = await registerLedgerBackedUnits(f, {
+      quantity: 1,
+      inventoryCondition: 'SELLABLE',
+      initialStatus: 'AVAILABLE',
+    });
+    const created = await createWarehouseTransfer(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      sourceLocationId: f.mainLocation.id,
+      destinationLocationId: f.secondaryLocation.id,
+      lines: [{ variantId: f.variantId, quantity: '1' }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await approveWarehouseTransfer(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      transferId: created.transferId,
+      expectedVersion: created.version,
+    });
+    await dispatchWarehouseTransfer(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      transferId: created.transferId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const line = await sql<{ id: string }>`
+      select id from warehouse.transfer_lines
+      where organization_id = ${f.organizationId} and transfer_id = ${created.transferId}
+    `.execute(database.db);
+    const closed = await closeWarehouseTransferDiscrepancy(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      transferId: created.transferId,
+      idempotencyKey: crypto.randomUUID(),
+      lines: [{
+        transferLineId: line.rows[0]!.id,
+        dispositionCode: 'LOST',
+        quantity: '1',
+        reasonCode: 'CARRIER_LOSS_CONFIRMED',
+        unitIds: [unit!.id],
+      }],
+    });
+    expect(closed.status).toBe('CLOSED_WITH_DISCREPANCY');
+    expect(await getInventoryUnit(database.db, {
+      organizationId: f.organizationId,
+      unitId: unit!.id,
+    })).toMatchObject({ status: 'WRITTEN_OFF', currentCondition: 'DAMAGED_UNSELLABLE' });
+    const allocation = await sql<{ status: string }>`
+      select status from inventory.unit_transfer_allocations
+      where organization_id = ${f.organizationId} and unit_id = ${unit!.id}
+    `.execute(database.db);
+    expect(allocation.rows[0]?.status).toBe('LOST');
   });
 
   it('supports authorized release and permanent write-off', async () => {

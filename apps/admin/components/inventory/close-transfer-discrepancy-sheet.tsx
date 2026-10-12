@@ -30,6 +30,12 @@ interface TransferLine {
   productTitle: string;
   dispatchedQuantity: string;
   receivedQuantity: string;
+  trackingMode: 'STANDARD' | 'SERIAL';
+  serializedUnits?: readonly {
+    unitId: string;
+    unitCode: string;
+    status: 'IN_TRANSIT' | 'RECEIVED' | 'LOST';
+  }[];
   discrepancy?: { quantity: string };
 }
 
@@ -42,6 +48,8 @@ interface DiscrepancyLine {
   dispositionCode: 'MISSING' | 'LOST';
   reasonCode: string;
   notes: string;
+  unitIds: readonly string[];
+  unitCodes: readonly string[];
 }
 
 function remainingFor(line: TransferLine): string {
@@ -63,6 +71,12 @@ function toFormLines(lines: readonly TransferLine[]): DiscrepancyLine[] {
       dispositionCode: 'MISSING' as const,
       reasonCode: '',
       notes: '',
+      unitIds: (line.serializedUnits ?? [])
+        .filter((unit) => unit.status === 'IN_TRANSIT')
+        .map((unit) => unit.unitId),
+      unitCodes: (line.serializedUnits ?? [])
+        .filter((unit) => unit.status === 'IN_TRANSIT')
+        .map((unit) => unit.unitCode),
     }))
     .filter((line) => Number(line.remaining) > 0);
 }
@@ -123,6 +137,7 @@ export function CloseTransferDiscrepancySheet({
               quantity: entry.remaining,
               reasonCode: entry.reasonCode.trim(),
               ...(entry.notes.trim() ? { notes: entry.notes.trim() } : {}),
+              ...(entry.unitIds.length ? { unitIds: entry.unitIds } : {}),
             })),
           }),
         },
@@ -178,6 +193,11 @@ export function CloseTransferDiscrepancySheet({
                       Remaining in transit: <span className="font-medium">{entry.remaining}</span>{' '}
                       units
                     </p>
+                    {entry.unitCodes.length ? (
+                      <p className="mt-2 font-mono text-xs tabular-nums text-foreground">
+                        {entry.unitCodes.join(', ')}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 {entry.selected && (

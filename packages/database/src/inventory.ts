@@ -2859,6 +2859,7 @@ export async function closeWarehouseTransferDiscrepancy(
       quantity: string;
       reasonCode: string;
       notes?: string;
+      unitIds?: readonly string[];
     }[];
     idempotencyKey: string;
   },
@@ -2912,11 +2913,69 @@ export async function closeWarehouseTransferDiscrepancy(
           'VALIDATION_FAILED',
           'A discrepancy must resolve all remaining quantity for its transfer line.',
         );
-      if (line.rows[0].tracking_mode === 'SERIAL')
+      if (line.rows[0].tracking_mode === 'SERIAL') {
+        const unitIds = entry.unitIds ?? [];
+        if (
+          !Number.isInteger(Number(entry.quantity)) ||
+          unitIds.length !== Number(entry.quantity) ||
+          new Set(unitIds).size !== unitIds.length
+        )
+          throw new InventoryDomainError(
+            'VALIDATION_FAILED',
+            'Serialized transfer loss must identify every remaining Unit ID exactly once.',
+          );
+        const allocations = await sql<{ unit_id: string; status: string }>`
+          select allocation.unit_id, unit.status
+          from inventory.unit_transfer_allocations allocation
+          join inventory.inventory_units unit
+            on unit.id = allocation.unit_id and unit.organization_id = allocation.organization_id
+          where allocation.organization_id = ${input.organizationId}
+            and allocation.transfer_id = ${header.id}
+            and allocation.transfer_line_id = ${entry.transferLineId}
+            and allocation.status = 'IN_TRANSIT'
+            and allocation.unit_id = any(${unitIds}::uuid[])
+            and unit.status = 'IN_TRANSFER'
+          order by allocation.unit_id
+          for update of allocation, unit
+        `.execute(transaction);
+        if (allocations.rows.length !== unitIds.length)
+          throw new InventoryDomainError(
+            'VALIDATION_FAILED',
+            'One or more missing Unit IDs are not in transit on this transfer line.',
+          );
+        for (const allocation of allocations.rows) {
+          await sql`
+            update inventory.unit_transfer_allocations
+            set status = 'LOST'
+            where organization_id = ${input.organizationId}
+              and transfer_id = ${header.id} and unit_id = ${allocation.unit_id}
+              and status = 'IN_TRANSIT'
+          `.execute(transaction);
+          await sql`
+            update inventory.inventory_units
+            set status = 'WRITTEN_OFF', current_condition = 'DAMAGED_UNSELLABLE',
+              updated_at = now(), version = version + 1
+            where organization_id = ${input.organizationId} and id = ${allocation.unit_id}
+          `.execute(transaction);
+          await sql`
+            insert into inventory.unit_events (
+              organization_id, unit_id, event_type, actor_type, actor_id,
+              from_status, to_status, reference_type, reference_id, reason,
+              metadata
+            ) values (
+              ${input.organizationId}, ${allocation.unit_id}, 'WRITTEN_OFF', 'USER', ${input.actorId},
+              ${allocation.status}, 'WRITTEN_OFF', 'warehouse.transfer', ${header.id},
+              ${entry.reasonCode.trim()},
+              ${JSON.stringify({ dispositionCode: entry.dispositionCode, notes: entry.notes?.trim() || null })}::jsonb
+            )
+          `.execute(transaction);
+        }
+      } else if (entry.unitIds?.length) {
         throw new InventoryDomainError(
           'VALIDATION_FAILED',
-          'Serialized transfer loss requires exact Unit IDs; receive the located units before recording the remaining identity-aware loss.',
+          'Unit IDs can only be supplied for a serialized transfer discrepancy.',
         );
+      }
       await sql`insert into warehouse.transfer_line_discrepancies (organization_id, transfer_line_id, disposition_code, quantity, reason_code, notes, recorded_by_actor_id) values (${input.organizationId}, ${entry.transferLineId}, ${entry.dispositionCode}, ${entry.quantity}::numeric, ${entry.reasonCode.trim()}, ${entry.notes?.trim() || null}, ${input.actorId})`.execute(
         transaction,
       );

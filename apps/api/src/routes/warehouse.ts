@@ -575,6 +575,7 @@ export function registerWarehouseRoutes(
               quantity,
               reasonCode: Type.String({ minLength: 1 }),
               notes: Type.Optional(Type.String()),
+              unitIds: Type.Optional(Type.Array(Type.String(), { minItems: 1 })),
             }),
             { minItems: 1 },
           ),

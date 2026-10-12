@@ -954,14 +954,16 @@ export async function writeOffTransferCostPositionsInTransaction(
       cost_layer_id: string | null;
       return_cost_layer_id: string | null;
       available: string;
-    }>`select id, cost_layer_id, return_cost_layer_id, (dispatched_quantity - received_quantity - written_off_quantity)::text as available from costing.transfer_cost_allocations where organization_id=${input.organizationId} and transfer_line_id=${line.transferLineId} and dispatched_quantity > received_quantity + written_off_quantity order by created_at, id for update`.execute(
+    }>`select id, cost_layer_id, return_cost_layer_id, (dispatched_quantity - received_quantity - written_off_quantity)::text as available from costing.transfer_cost_allocations where organization_id=${input.organizationId} and transfer_line_id=${line.transferLineId} order by created_at, id for update`.execute(
       tx,
     );
     for (const allocation of allocations.rows) {
       if (required <= 0n) break;
+      const available = fixed(allocation.available, quantityScale);
+      if (available <= 0n) continue;
       const quantityFixed =
-        fixed(allocation.available, quantityScale) < required
-          ? fixed(allocation.available, quantityScale)
+        available < required
+          ? available
           : required;
       const quantity = decimal(quantityFixed, quantityScale);
       await sql`update costing.transfer_cost_allocations set written_off_quantity = written_off_quantity + ${quantity}::numeric, updated_at = now() where id=${allocation.id}`.execute(
@@ -972,7 +974,10 @@ export async function writeOffTransferCostPositionsInTransaction(
       );
       required -= quantityFixed;
     }
-    if (required > 0n)
+    // Opening/found stock can intentionally be unvalued and therefore has no transfer-cost
+    // allocation to write off. A partially or previously allocated line must still fail closed:
+    // its cost evidence no longer agrees with the physical discrepancy being resolved.
+    if (required > 0n && allocations.rows.length > 0)
       throw new CostingDomainError(
         'CONFLICT',
         'Transfer cost allocation no longer covers the discrepancy.',
