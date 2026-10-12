@@ -107,6 +107,7 @@ Implemented in the first Stage 2 slice:
 - Added one shared create/edit policy form with client and server validation, optimistic versions, mobile full-screen behavior, item-wide and Location-specific scopes, safety/target/lead-time inputs, preferred transfer source, and fallback Supplier.
 - Connected recommendation actions to prefilled canonical Transfer and Purchase workflows. The owning forms now accept the suggested SKU, quantity, destination, source, and Supplier context while leaving the operator in control of the resulting business command.
 - Reduced the Inventory sidebar to the six approved operator destinations: Overview, Stock, Locations, Transfers, Counts, and Quality. Replenishment is linked contextually from Overview; adjustments, movement history, repair, and other secondary workflows remain reachable inside their owning workspaces rather than competing as primary navigation.
+- Replaced the legacy Overview's six independent browser requests and partial-failure aggregation with the single scope-aware Inventory Overview snapshot. The page now uses the shared Admin page system for authoritative KPIs, threshold-aware attention, owned work queues, recent ledger movements, Location health, recovery states, and responsive action placement.
 
 Verification for this slice:
 
