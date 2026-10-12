@@ -1747,6 +1747,24 @@ export interface WarehouseLocationDetailDto extends WarehouseLocationDto {
     readonly totalIncoming: string;
     readonly lowStockSkus: number;
   };
+  readonly operationalCommitments: readonly WarehouseLocationCommitmentDto[];
+}
+
+export interface WarehouseLocationCommitmentDto {
+  readonly code:
+    | 'STOCK_ON_HAND'
+    | 'ACTIVE_RESERVATIONS'
+    | 'OUTGOING_TRANSFERS'
+    | 'INCOMING_TRANSFERS'
+    | 'OPEN_STOCKTAKES'
+    | 'INBOUND_SHIPMENTS'
+    | 'OPEN_FULFILLMENTS'
+    | 'REPLENISHMENT_DESTINATION_POLICIES'
+    | 'REPLENISHMENT_SOURCE_POLICIES';
+  readonly label: string;
+  readonly count: number;
+  readonly blocksStatusChange: boolean;
+  readonly requiredCapability?: LocationCapability;
 }
 
 export interface WarehouseTransferDto {

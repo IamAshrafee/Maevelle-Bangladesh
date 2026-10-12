@@ -36,6 +36,7 @@ import {
   getLocationDetail,
   getTransferDetail,
   listWarehouseTransfers,
+  updateLocation,
 } from './warehouse.js';
 import { invalidateSettingsCache, updateSingleSetting } from './settings.js';
 import { getInventoryOverview } from './inventory-overview.js';
@@ -608,6 +609,21 @@ describe('ledger-backed inventory', () => {
       totalOnHand: '1.000000',
       totalReserved: '1.000000',
     });
+    expect(location?.operationalCommitments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'STOCK_ON_HAND', count: 1 }),
+        expect.objectContaining({ code: 'ACTIVE_RESERVATIONS', count: 1 }),
+      ]),
+    );
+    await expect(
+      updateLocation(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        locationId: f.main.id,
+        expectedVersion: f.main.version,
+        capabilities: ['TRANSFER_SEND', 'TRANSFER_RECEIVE'],
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     const balance = (await listInventoryBalances(database.db, f.organizationId)).items.find(
       (row) => row.condition === 'SELLABLE',
     )!;

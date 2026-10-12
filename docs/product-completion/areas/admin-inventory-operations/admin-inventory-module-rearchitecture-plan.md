@@ -141,6 +141,23 @@ Remaining in Stage 3:
 - Consolidate the secondary Stock and Quality routes into tabs/actions, then add compatibility redirects only after their destination behavior is present.
 - Standardize the remaining Locations, Transfers, Counts, and Quality page shells and permission rendering.
 
+#### Batch 4 — Location lifecycle authority — IN PROGRESS
+
+- Added an authoritative Location operational-commitment projection covering stocked SKUs, active reservations, incoming/outgoing Transfers, open Counts, inbound Shipments, open Fulfillments, and replenishment destination/source policies.
+- Location deactivation and archive now reject changes that would strand any active operational work. Capability removal is validated against the exact work that requires that capability, with actionable blocker counts in the domain error.
+- Location detail now returns those commitment explanations, uses the replenishment-policy hierarchy for low-stock counts, and reports real incoming Transfer plus inbound-supply quantity instead of the former hard-coded zero.
+- Location updates now publish a transactional outbox event in addition to their audit evidence.
+
+Verification for this slice:
+
+- Database package TypeScript build passed.
+- One focused Inventory integration test passed for Location commitment projection and capability-removal protection.
+
+Remaining in Stage 5:
+
+- Rebuild the responsive Location list and detail surfaces around the shared Admin primitives and the new blocker model.
+- Consolidate create/edit onto one shared Location form, then add retry-safe command semantics for Location creation and updates.
+
 ---
 
 ## 2. What was reviewed
