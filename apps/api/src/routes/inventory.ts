@@ -27,6 +27,7 @@ import {
   findStocktakeLocation,
 } from '@maevelle/database/inventory';
 import { WarehouseDomainError } from '@maevelle/database/warehouse';
+import { getInventoryOverview } from '@maevelle/database/inventory-overview';
 import { findActiveAdminContext } from '@maevelle/database/platform';
 
 import type { createAuth } from '../auth/auth.js';
@@ -178,6 +179,28 @@ export function registerInventoryRoutes(
   database: DatabaseClient,
   auth: Auth,
 ): void {
+  app.get(
+    '/admin/inventory/overview',
+    {
+      schema: {
+        querystring: Type.Object({
+          attentionLimit: Type.Optional(Type.Integer({ minimum: 1, maximum: 25 })),
+        }),
+      },
+    },
+    async (request, reply) => {
+      const active = await context(database, auth, request.headers, 'inventory.view');
+      if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
+      const scopedLocationIds = locationScopeIds(active, 'inventory.view');
+      return {
+        data: await getInventoryOverview(database.db, active.organizationId, {
+          ...(scopedLocationIds === undefined ? {} : { locationIds: scopedLocationIds }),
+          attentionLimit: (request.query as { attentionLimit?: number }).attentionLimit ?? 10,
+        }),
+      };
+    },
+  );
+
   app.get(
     '/admin/inventory/items',
     {

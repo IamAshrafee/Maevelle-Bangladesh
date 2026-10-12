@@ -52,6 +52,10 @@
       "types": "./src/inventory.ts",
       "default": "./dist/src/inventory.js"
     },
+    "./inventory-overview": {
+      "types": "./src/inventory-overview.ts",
+      "default": "./dist/src/inventory-overview.js"
+    },
     "./inventory-units": {
       "types": "./src/inventory-units.ts",
       "default": "./dist/src/inventory-units.js"

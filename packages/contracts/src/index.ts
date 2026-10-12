@@ -1600,6 +1600,8 @@ export interface InventoryPositionDto {
   readonly unitAcquisitionCost: string | null;
   readonly costCurrency: string | null;
   readonly costState: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
+  readonly replenishmentThreshold: number;
+  readonly replenishmentThresholdSource: 'VARIANT' | 'ORGANIZATION_DEFAULT';
 }
 
 /** Catalog-backed inventory identity used by stock operations before a SKU has any movement. */
@@ -5847,3 +5849,8 @@ export interface SerializedStockReconciliationDto {
   readonly isConsistent: boolean;
   readonly discrepancies: readonly string[];
 }
+export type {
+  InventoryAttentionCode,
+  InventoryOverviewAttentionDto,
+  InventoryOverviewDto,
+} from './inventory/overview.js';

@@ -92,6 +92,10 @@ export interface GeneralSettingsDto {
   readonly sessionTimeoutMinutes: number;
 }
 
+export interface InventorySettingsDto {
+  readonly lowStockThreshold: number;
+}
+
 export interface ModuleSettingsSummaryDto {
   readonly module: string;
   readonly label: string;
@@ -296,7 +300,7 @@ function httpUrlValid(value: unknown): boolean {
 // Central Registry of All Supported Maevelle Settings
 // ---------------------------------------------------------------------------
 
-export const SETTING_DEFINITIONS: Readonly<Record<string, SettingDefinition<any>>> = Object.freeze({
+export const SETTING_DEFINITIONS: Readonly<Record<string, SettingDefinition<unknown>>> = Object.freeze({
   // --- Transactional Email Settings ---
   'email.enabled': {
     key: 'email.enabled',
@@ -760,7 +764,7 @@ export interface DeploymentSettingsFallback {
   readonly mediaDefaultUploadExpirySeconds?: number;
 }
 
-export function resolveSettingEntry<T>(
+export function resolveSettingEntry(
   key: string,
   dbRows: ReadonlyMap<string, { readonly value: unknown; readonly version: number; readonly updatedAt: string; readonly updatedBy: string | null }>,
   deployment?: DeploymentSettingsFallback,
@@ -833,7 +837,7 @@ export function resolveSettingEntry<T>(
   };
 }
 
-export function toSettingMetadataDto(def: SettingDefinition<any>): SettingMetadataDto {
+export function toSettingMetadataDto(def: SettingDefinition<unknown>): SettingMetadataDto {
   return {
     key: def.key,
     module: def.module,
@@ -984,6 +988,20 @@ export async function resolveGeneralSettings(
   };
 }
 
+export async function resolveInventorySettings(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  deployment?: DeploymentSettingsFallback,
+): Promise<InventorySettingsDto> {
+  const rows = await loadOrganizationSettingsRows(db, organizationId);
+  const value = resolveSettingEntry(
+    'inventory.lowStockThreshold',
+    rows,
+    deployment,
+  ).effectiveValue;
+  return { lowStockThreshold: Number(value ?? 5) };
+}
+
 // ---------------------------------------------------------------------------
 // All-Settings List and Module-Specific Responses
 // ---------------------------------------------------------------------------
@@ -1096,8 +1114,10 @@ export async function updateSingleSetting(
     throw new SettingsDomainError('SETTING_NOT_EDITABLE', `Setting ${input.key} cannot be modified at runtime.`);
   }
 
+  const environment = input.deployment?.emailEnvironment ?? input.deployment?.nodeEnv;
   const validation = def.validate(input.value, {
-    environment: input.deployment?.emailEnvironment ?? (input.deployment?.nodeEnv as any) ?? 'development',
+    environment:
+      environment === 'test' || environment === 'production' ? environment : 'development',
   });
   if (!validation.valid) {
     throw new SettingsDomainError('SETTING_INVALID', validation.error ?? `Invalid value for ${input.key}`);
@@ -1105,7 +1125,7 @@ export async function updateSingleSetting(
 
   const finalValue = def.coerce ? def.coerce(input.value) : input.value;
 
-  const updatedRow = await db.transaction().execute(async (tx: MaevelleTransaction) => {
+  await db.transaction().execute(async (tx: MaevelleTransaction) => {
     const existing = await sql<{ version: string; value_json: unknown }>`
       select version, value_json from settings.runtime_settings
       where organization_id = ${input.organizationId}::uuid and setting_key = ${input.key}
@@ -1119,7 +1139,7 @@ export async function updateSingleSetting(
 
     const nextVersion = oldRow ? Number(oldRow.version) + 1 : 1;
 
-    await sql`
+    const saved = await sql<{ id: string }>`
       insert into settings.runtime_settings (
         organization_id, module, setting_key, scope_type, value_json, is_secret, version, updated_by, updated_at
       ) values (
@@ -1131,6 +1151,7 @@ export async function updateSingleSetting(
         version = excluded.version,
         updated_by = excluded.updated_by,
         updated_at = now()
+      returning id
     `.execute(tx);
 
     // Write audit event
@@ -1140,7 +1161,7 @@ export async function updateSingleSetting(
       actorId: input.actorId,
       action: 'settings.updated',
       targetType: 'setting',
-      targetId: input.key,
+      targetId: saved.rows[0]!.id,
       reason: input.reason ?? `Updated setting ${input.key}`,
       beforeDiff: def.sensitive ? { [input.key]: '[REDACTED]' } : { [input.key]: oldRow?.value_json ?? def.defaultValue },
       afterDiff: def.sensitive ? { [input.key]: '[REDACTED]' } : { [input.key]: finalValue },
@@ -1150,10 +1171,13 @@ export async function updateSingleSetting(
     // Write outbox event for inter-service and worker synchronization
     await sql`
       insert into platform.outbox_events (
-        organization_id, event_type, payload
+        organization_id, event_type, event_version, aggregate_type, aggregate_id,
+        aggregate_version, payload, occurred_at
       ) values (
-        ${input.organizationId}::uuid, 'settings.changed',
-        ${JSON.stringify({ key: input.key, module: def.module, version: nextVersion })}::jsonb
+        ${input.organizationId}::uuid, 'settings.changed', 1, 'settings.runtime_setting',
+        ${saved.rows[0]!.id}::uuid, ${nextVersion},
+        ${JSON.stringify({ key: input.key, module: def.module, version: nextVersion })}::jsonb,
+        now()
       )
     `.execute(tx);
 
@@ -1176,7 +1200,7 @@ export async function updateModuleSettings(
   }
 
   // Validate each provided setting
-  const updates: Array<{ readonly def: SettingDefinition<any>; readonly value: unknown }> = [];
+  const updates: Array<{ readonly def: SettingDefinition<unknown>; readonly value: unknown }> = [];
   for (const [key, val] of Object.entries(input.settings)) {
     const def = SETTING_DEFINITIONS[key];
     if (!def || def.module !== input.module) {
@@ -1185,8 +1209,10 @@ export async function updateModuleSettings(
     if (!def.runtimeMutable) {
       throw new SettingsDomainError('SETTING_NOT_EDITABLE', `Setting ${key} cannot be modified at runtime.`);
     }
+    const environment = input.deployment?.emailEnvironment ?? input.deployment?.nodeEnv;
     const validation = def.validate(val, {
-      environment: input.deployment?.emailEnvironment ?? (input.deployment?.nodeEnv as any) ?? 'development',
+      environment:
+        environment === 'test' || environment === 'production' ? environment : 'development',
       allSettings: input.settings,
     });
     if (!validation.valid) {
@@ -1238,7 +1264,7 @@ export async function updateModuleSettings(
       actorId: input.actorId,
       action: 'settings.module_updated',
       targetType: 'module_settings',
-      targetId: input.module,
+      targetId: input.organizationId,
       reason: input.reason ?? `Updated ${input.module} module settings`,
       beforeDiff,
       afterDiff,
@@ -1247,10 +1273,13 @@ export async function updateModuleSettings(
 
     await sql`
       insert into platform.outbox_events (
-        organization_id, event_type, payload
+        organization_id, event_type, event_version, aggregate_type, aggregate_id,
+        aggregate_version, payload, occurred_at
       ) values (
-        ${input.organizationId}::uuid, 'settings.changed',
-        ${JSON.stringify({ module: input.module, keys: updates.map((u) => u.def.key) })}::jsonb
+        ${input.organizationId}::uuid, 'settings.changed', 1, 'settings.module',
+        ${input.organizationId}::uuid, 1,
+        ${JSON.stringify({ module: input.module, keys: updates.map((u) => u.def.key) })}::jsonb,
+        now()
       )
     `.execute(tx);
   });
@@ -1275,8 +1304,8 @@ export async function resetSingleSetting(
   }
 
   await db.transaction().execute(async (tx: MaevelleTransaction) => {
-    const existing = await sql<{ value_json: unknown }>`
-      select value_json from settings.runtime_settings
+    const existing = await sql<{ id: string; value_json: unknown; version: string }>`
+      select id, value_json, version::text from settings.runtime_settings
       where organization_id = ${input.organizationId}::uuid and setting_key = ${input.key}
     `.execute(tx);
 
@@ -1291,7 +1320,7 @@ export async function resetSingleSetting(
       actorId: input.actorId,
       action: 'settings.reset',
       targetType: 'setting',
-      targetId: input.key,
+      ...(existing.rows[0]?.id ? { targetId: existing.rows[0].id } : {}),
       reason: input.reason ?? `Reset setting ${input.key} to default`,
       beforeDiff: existing.rows[0]?.value_json ? { [input.key]: existing.rows[0].value_json } : null,
       afterDiff: { [input.key]: def.defaultValue },
@@ -1300,10 +1329,14 @@ export async function resetSingleSetting(
 
     await sql`
       insert into platform.outbox_events (
-        organization_id, event_type, payload
+        organization_id, event_type, event_version, aggregate_type, aggregate_id,
+        aggregate_version, payload, occurred_at
       ) values (
-        ${input.organizationId}::uuid, 'settings.changed',
-        ${JSON.stringify({ key: input.key, module: def.module, action: 'reset' })}::jsonb
+        ${input.organizationId}::uuid, 'settings.changed', 1, 'settings.runtime_setting',
+        ${existing.rows[0]?.id ?? input.organizationId}::uuid,
+        ${Number(existing.rows[0]?.version ?? 0) + 1},
+        ${JSON.stringify({ key: input.key, module: def.module, action: 'reset' })}::jsonb,
+        now()
       )
     `.execute(tx);
   });
@@ -1340,17 +1373,20 @@ export async function resetModuleSettings(
       actorId: input.actorId,
       action: 'settings.module_reset',
       targetType: 'module_settings',
-      targetId: input.module,
+      targetId: input.organizationId,
       reason: input.reason ?? `Reset all settings for module ${input.module} to defaults`,
       metadata: { module: input.module },
     });
 
     await sql`
       insert into platform.outbox_events (
-        organization_id, event_type, payload
+        organization_id, event_type, event_version, aggregate_type, aggregate_id,
+        aggregate_version, payload, occurred_at
       ) values (
-        ${input.organizationId}::uuid, 'settings.changed',
-        ${JSON.stringify({ module: input.module, action: 'reset_module' })}::jsonb
+        ${input.organizationId}::uuid, 'settings.changed', 1, 'settings.module',
+        ${input.organizationId}::uuid, 1,
+        ${JSON.stringify({ module: input.module, action: 'reset_module' })}::jsonb,
+        now()
       )
     `.execute(tx);
   });
@@ -1393,7 +1429,7 @@ export async function saveIntegrationSecret(
 
     const nextVersion = existing.rows[0] ? Number(existing.rows[0].version) + 1 : 1;
 
-    await sql`
+    const saved = await sql<{ id: string }>`
       insert into settings.integration_secrets (
         organization_id, provider_code, secret_key_name, secret_ciphertext, secret_key_id, version, updated_by, updated_at
       ) values (
@@ -1406,6 +1442,7 @@ export async function saveIntegrationSecret(
         version = excluded.version,
         updated_by = excluded.updated_by,
         updated_at = now()
+      returning id
     `.execute(tx);
 
     await appendAuditEvent(tx, {
@@ -1414,7 +1451,7 @@ export async function saveIntegrationSecret(
       actorId: input.actorId,
       action: 'settings.secret_stored',
       targetType: 'integration_secret',
-      targetId: `${normalizedProvider}.${normalizedKey}`,
+      targetId: saved.rows[0]!.id,
       reason: input.reason ?? `Configured secret ${normalizedKey} for provider ${normalizedProvider}`,
       beforeDiff: existing.rows[0] ? { status: 'configured' } : { status: 'unconfigured' },
       afterDiff: { status: 'configured' },
@@ -1492,11 +1529,12 @@ export async function deleteIntegrationSecret(
   const normalizedKey = input.keyName.toLowerCase().trim();
 
   await db.transaction().execute(async (tx: MaevelleTransaction) => {
-    await sql`
+    const deleted = await sql<{ id: string }>`
       delete from settings.integration_secrets
       where organization_id = ${input.organizationId}::uuid
         and provider_code = ${normalizedProvider}
         and secret_key_name = ${normalizedKey}
+      returning id
     `.execute(tx);
 
     await appendAuditEvent(tx, {
@@ -1505,7 +1543,7 @@ export async function deleteIntegrationSecret(
       actorId: input.actorId,
       action: 'settings.secret_revoked',
       targetType: 'integration_secret',
-      targetId: `${normalizedProvider}.${normalizedKey}`,
+      ...(deleted.rows[0]?.id ? { targetId: deleted.rows[0].id } : {}),
       reason: input.reason ?? `Revoked secret ${normalizedKey} for provider ${normalizedProvider}`,
       metadata: { provider: normalizedProvider, key: normalizedKey },
     });

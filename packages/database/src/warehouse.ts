@@ -2,6 +2,7 @@ import { sql, type Kysely } from 'kysely';
 
 import { appendAuditEvent } from './platform.js';
 import type { DatabaseSchema } from './index.js';
+import { resolveInventorySettings } from './settings.js';
 
 export type LocationCapability =
   | 'STOCK_HOLDING'
@@ -296,6 +297,7 @@ export async function getLocationDetail(
     })
   | undefined
 > {
+  const { lowStockThreshold } = await resolveInventorySettings(db, organizationId);
   const result = await sql<{
     id: string;
     code: string;
@@ -318,7 +320,16 @@ export async function getLocationDetail(
       coalesce((select sum(sellable_quantity - reserved_quantity) from inventory.inventory_levels where organization_id = location.organization_id and location_id = location.id), 0)::text as total_available,
       coalesce((select sum(reserved_quantity) from inventory.inventory_levels where organization_id = location.organization_id and location_id = location.id), 0)::text as total_reserved,
       coalesce((select sum(quantity) from inventory.inventory_level_conditions where organization_id = location.organization_id and location_id = location.id and condition_code = 'DAMAGED'), 0)::text as total_damaged,
-      (select count(case when sellable_quantity - reserved_quantity > 0 and sellable_quantity - reserved_quantity <= 5 then 1 end) from inventory.inventory_levels where organization_id = location.organization_id and location_id = location.id)::text as low_stock_skus
+      (select count(*)
+        from inventory.inventory_levels level
+        join inventory.inventory_items item
+          on item.organization_id=level.organization_id and item.id=level.inventory_item_id
+        join catalog.product_variants variant
+          on variant.organization_id=item.organization_id and variant.id=item.variant_id
+        where level.organization_id=location.organization_id and level.location_id=location.id
+          and level.sellable_quantity-level.reserved_quantity > 0
+          and level.sellable_quantity-level.reserved_quantity <= coalesce(variant.reorder_point, ${lowStockThreshold})
+      )::text as low_stock_skus
     from warehouse.locations location
     left join warehouse.location_capabilities capability on capability.location_id = location.id and capability.organization_id = location.organization_id
     where location.id = ${locationId} and location.organization_id = ${organizationId}

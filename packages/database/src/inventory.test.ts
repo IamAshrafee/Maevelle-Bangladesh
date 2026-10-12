@@ -37,6 +37,8 @@ import {
   getTransferDetail,
   listWarehouseTransfers,
 } from './warehouse.js';
+import { invalidateSettingsCache, updateSingleSetting } from './settings.js';
+import { getInventoryOverview } from './inventory-overview.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -126,6 +128,62 @@ async function opening(f: Awaited<ReturnType<typeof fixture>>, quantity: string)
 }
 
 describe('ledger-backed inventory', () => {
+  it('resolves low-stock status from variant policy before the Inventory organization default', async () => {
+    const f = await fixture();
+    await opening(f, '7');
+
+    expect((await listInventoryPositions(database.db, f.organizationId, {
+      availability: 'LOW_STOCK',
+    })).items).toHaveLength(0);
+
+    await updateSingleSetting(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      key: 'inventory.lowStockThreshold',
+      value: 10,
+    });
+    invalidateSettingsCache(f.organizationId);
+    const organizationPolicy = await listInventoryPositions(database.db, f.organizationId, {
+      availability: 'LOW_STOCK',
+    });
+    expect(organizationPolicy.items[0]).toMatchObject({
+      replenishmentThreshold: 10,
+      replenishmentThresholdSource: 'ORGANIZATION_DEFAULT',
+    });
+    const overview = await getInventoryOverview(database.db, f.organizationId);
+    expect(overview).toMatchObject({
+      scope: { kind: 'ORGANIZATION', locationIds: [] },
+      kpis: { onHand: '7.000000', availableToSell: '7.000000' },
+      attention: {
+        totalCount: 1,
+        items: [expect.objectContaining({
+          code: 'BELOW_REPLENISHMENT_THRESHOLD',
+          locationId: f.main.id,
+          replenishmentThreshold: 10,
+        })],
+      },
+    });
+    const scoped = await getInventoryOverview(database.db, f.organizationId, {
+      locationIds: [f.secondary.id],
+    });
+    expect(scoped.kpis.onHand).toBe('0');
+    expect(scoped.attention.totalCount).toBe(0);
+    expect(scoped.locations.map((location) => location.locationId)).toEqual([f.secondary.id]);
+
+    await sql`
+      update catalog.product_variants set reorder_point=3
+      where organization_id=${f.organizationId} and id=${f.variantId}
+    `.execute(database.db);
+    expect((await listInventoryPositions(database.db, f.organizationId, {
+      availability: 'LOW_STOCK',
+    })).items).toHaveLength(0);
+    const resolved = await listInventoryPositions(database.db, f.organizationId);
+    expect(resolved.items[0]).toMatchObject({
+      replenishmentThreshold: 3,
+      replenishmentThresholdSource: 'VARIANT',
+    });
+  });
+
   it('lists a new inventory identity before its first stock movement', async () => {
     const f = await fixture();
     await sql`insert into inventory.inventory_items (organization_id,variant_id) values (${f.organizationId},${f.variantId})`.execute(

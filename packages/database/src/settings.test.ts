@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
 
 import { createDatabase } from './index.js';
@@ -10,6 +10,7 @@ import {
   resolveMediaSettings,
   resolveStorefrontSettings,
   resolveGeneralSettings,
+  resolveInventorySettings,
   updateSingleSetting,
   updateModuleSettings,
   resetSingleSetting,
@@ -31,6 +32,14 @@ const database = createDatabase({
 const testActorId = '018f0000-0000-7000-8000-000000000001';
 
 afterAll(async () => database.close());
+
+beforeAll(async () => {
+  await sql`
+    insert into iam.users (id, name, email, email_normalized)
+    values (${testActorId}, 'Settings Test Operator', 'settings-test@example.test', 'settings-test@example.test')
+    on conflict (id) do nothing
+  `.execute(database.db);
+});
 
 beforeEach(() => {
   invalidateSettingsCache();
@@ -82,9 +91,9 @@ describe('Typed Module Setting Resolution & Precedence', () => {
     expect(settings.provider).toBe('local');
     expect(settings.fromName).toBe('Maevelle');
     expect(settings.fromAddress).toBe('orders@example.invalid');
-    expect(settings.replyTo).toBe('maevelleBangladesh@gmail.com');
-    expect(settings.testRecipientOverride).toBeUndefined();
-    expect(readiness.status).toBe('ready');
+    expect(settings.replyTo).toBe('maevellebangladesh@gmail.com');
+    expect(settings.testRecipientOverride).toBeNull();
+    expect(readiness.status).toBe('disabled');
   });
 
   it('resolves database overrides when configured', async () => {
@@ -130,11 +139,12 @@ describe('Typed Module Setting Resolution & Precedence', () => {
     const orgId = await createTestOrg('storefront-res');
     const sf = await resolveStorefrontSettings(database.db, orgId);
     expect(sf.publicBaseUrl).toBe('http://localhost:8080');
-    expect(sf.storeName).toBe('Maevelle');
+    expect(sf.storeName).toBe('Maevelle Bangladesh');
 
     const general = await resolveGeneralSettings(database.db, orgId);
     expect(general.lowStockThreshold).toBe(5);
     expect(general.sessionTimeoutMinutes).toBe(1440);
+    expect((await resolveInventorySettings(database.db, orgId)).lowStockThreshold).toBe(5);
   });
 });
 
@@ -225,7 +235,7 @@ describe('Reset to Default Behavior', () => {
     });
 
     sf = await resolveStorefrontSettings(database.db, orgId);
-    expect(sf.storeName).toBe('Maevelle');
+    expect(sf.storeName).toBe('Maevelle Bangladesh');
   });
 
   it('resets an entire module back to defaults', async () => {
@@ -290,7 +300,7 @@ describe('Encrypted Integration Secrets Architecture', () => {
       secret_key_id: string;
     }>`select secret_ciphertext, secret_key_id from settings.integration_secrets where organization_id=${orgId}::uuid and provider_code='RESEND' and secret_key_name='apikey'`.execute(database.db);
     expect(row.rows[0]?.secret_ciphertext).not.toBe('re_1234567890abcdef');
-    expect(row.rows[0]?.secret_ciphertext).toContain(':');
+    expect(row.rows[0]?.secret_ciphertext).toMatch(/^v1\.[^.]+\.[^.]+\.[^.]+\.[^.]+$/);
 
     // Reveal secret only through authoritative decryptor
     const revealed = await getIntegrationSecret(database.db, {

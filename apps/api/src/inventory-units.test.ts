@@ -233,6 +233,21 @@ describe('Inventory Units & Traceability API Routes', () => {
     expect(unit1.currentCondition).toBe('GRADE_A');
     expect(unit1.packageReference).toBe('BOX-EXP-01');
 
+    const overviewRes = await app.inject({
+      method: 'GET',
+      url: '/admin/inventory/overview?attentionLimit=5',
+      headers,
+    });
+    expect(overviewRes.statusCode).toBe(200);
+    expect(overviewRes.json().data).toMatchObject({
+      scope: { kind: 'ORGANIZATION', locationIds: [] },
+      kpis: { onHand: '3.000000', unavailable: '3.000000' },
+      workQueues: { unitsAwaitingQc: 3 },
+      attention: {
+        items: [expect.objectContaining({ code: 'OUT_OF_STOCK', locationId: ctx.locationId })],
+      },
+    });
+
     // 3. Fast Barcode Lookup via GET /admin/inventory/units/lookup
     const lookupRes = await app.inject({
       method: 'GET',

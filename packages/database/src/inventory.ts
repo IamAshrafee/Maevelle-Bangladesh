@@ -11,6 +11,7 @@ import {
 } from './costing.js';
 import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { requireActiveLocationCapability } from './warehouse.js';
+import { resolveInventorySettings } from './settings.js';
 
 export type InventoryCondition = 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
 const inventoryConditions: readonly InventoryCondition[] = [
@@ -88,6 +89,8 @@ export interface InventoryPosition {
   readonly unitAcquisitionCost: string | null;
   readonly costCurrency: string | null;
   readonly costState: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
+  readonly replenishmentThreshold: number;
+  readonly replenishmentThresholdSource: 'VARIANT' | 'ORGANIZATION_DEFAULT';
 }
 
 function fingerprint(input: unknown): string {
@@ -1360,6 +1363,7 @@ export async function listInventoryPositions(
     limit?: number;
   } = {},
 ): Promise<{ items: readonly InventoryPosition[]; totalCount: number }> {
+  const { lowStockThreshold } = await resolveInventorySettings(db, organizationId);
   const page = input.page ?? 1;
   const limit = input.limit ?? 25;
   const offset = (page - 1) * limit;
@@ -1393,7 +1397,7 @@ export async function listInventoryPositions(
     input.availability === 'IN_STOCK'
       ? sql`level.sellable_quantity - level.reserved_quantity > 0`
       : input.availability === 'LOW_STOCK'
-        ? sql`level.sellable_quantity - level.reserved_quantity between 1 and 5`
+        ? sql`level.sellable_quantity - level.reserved_quantity between 1 and coalesce(variant.reorder_point, ${lowStockThreshold})`
         : input.availability === 'OUT_OF_STOCK'
           ? sql`level.sellable_quantity - level.reserved_quantity <= 0`
           : sql`true`;
@@ -1595,6 +1599,8 @@ export async function listInventoryPositions(
     unit_acquisition_cost: string | null;
     cost_currency: string | null;
     cost_state: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
+    replenishment_threshold: string;
+    replenishment_threshold_source: 'VARIANT' | 'ORGANIZATION_DEFAULT';
   }>`
     select level.inventory_item_id, item.variant_id, variant.product_id, variant.sku,
       product.title as product_title, coalesce(nullif(variant.title, ''), (
@@ -1608,6 +1614,8 @@ export async function listInventoryPositions(
       primary_media.visibility_class as image_visibility, primary_media.alt_text as image_alt_text,
       current_cost.unit_cost::text as unit_acquisition_cost,
       current_cost.currency_code as cost_currency, current_cost.cost_state,
+      coalesce(variant.reorder_point, ${lowStockThreshold})::text as replenishment_threshold,
+      case when variant.reorder_point is not null then 'VARIANT' else 'ORGANIZATION_DEFAULT' end as replenishment_threshold_source,
       level.location_id, location.code as location_code,
       location.name as location_name, (level.sellable_quantity + level.unavailable_quantity)::text as on_hand,
       level.sellable_quantity::text as sellable, level.reserved_quantity::text as reserved,
@@ -1656,6 +1664,8 @@ export async function listInventoryPositions(
       unitAcquisitionCost: row.unit_acquisition_cost,
       costCurrency: row.cost_currency,
       costState: row.cost_state,
+      replenishmentThreshold: Number(row.replenishment_threshold),
+      replenishmentThresholdSource: row.replenishment_threshold_source,
     })),
     totalCount: Number(countResult.rows[0]?.count ?? '0'),
   };
@@ -1788,6 +1798,7 @@ export async function listInventoryBalances(
   })[];
   totalCount: number;
 }> {
+  const { lowStockThreshold } = await resolveInventorySettings(db, organizationId);
   const offset = ((input.page || 1) - 1) * (input.limit || 25);
 
   const locationFilter = input.locationId
@@ -1804,7 +1815,7 @@ export async function listInventoryBalances(
     input.availability === 'IN_STOCK'
       ? sql`level.sellable_quantity - level.reserved_quantity > 0`
       : input.availability === 'LOW_STOCK'
-        ? sql`level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= 5`
+        ? sql`level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= coalesce(variant.reorder_point, ${lowStockThreshold})`
         : input.availability === 'OUT_OF_STOCK'
           ? sql`level.sellable_quantity - level.reserved_quantity <= 0`
           : sql`1=1`;
@@ -3877,6 +3888,7 @@ export async function getInventoryStats(
   lowStockCount: number;
   outOfStockCount: number;
 }> {
+  const { lowStockThreshold } = await resolveInventorySettings(db, organizationId);
   const result = await sql<{
     total_on_hand: string;
     total_available: string;
@@ -3892,9 +3904,11 @@ export async function getInventoryStats(
       coalesce(sum(level.reserved_quantity), 0)::text as total_reserved,
       coalesce(sum(level.unavailable_quantity), 0)::text as total_unavailable,
       coalesce((select sum(quantity) from inventory.inventory_level_conditions where organization_id = ${organizationId} and condition_code = 'DAMAGED'), 0)::text as total_damaged,
-      count(case when level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= 5 then 1 end)::text as low_stock_count,
+      count(case when level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= coalesce(variant.reorder_point, ${lowStockThreshold}) then 1 end)::text as low_stock_count,
       count(case when level.sellable_quantity - level.reserved_quantity <= 0 then 1 end)::text as out_of_stock_count
     from inventory.inventory_levels level
+    join inventory.inventory_items item on item.organization_id=level.organization_id and item.id=level.inventory_item_id
+    join catalog.product_variants variant on variant.organization_id=item.organization_id and variant.id=item.variant_id
     where level.organization_id = ${organizationId}
   `.execute(db);
   const row = result.rows[0];

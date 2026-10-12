@@ -87,6 +87,31 @@ Stage 1 completion decision:
 - **COMPLETE.** Every currently supported serialized-unit mutation is ledger-bound, retry-safe at the API command boundary, optimistic-version protected where it edits existing state, and covered by focused cross-domain workflow evidence.
 - The next implementation batch is Stage 2: contract normalization, backend responsibility splits, overview/attention read models, replenishment policy resolution, and capability/location-scope alignment.
 
+#### Batch 2 — Contracts, overview read model, and policy authority — IN PROGRESS
+
+Implemented in the first Stage 2 slice:
+
+- Added a focused Inventory Overview contract module and a separately owned database read service instead of adding more mixed responsibilities to the Inventory ledger service.
+- Added `GET /admin/inventory/overview`, returning one generated-at snapshot with KPIs, bounded risk-ordered stock attention, work-queue counts, recent movements, and Location health.
+- Made the Overview read model honor the caller's `inventory.view` Location scope directly. Scoped operators receive scoped totals and work queues instead of being denied all overview information or receiving organization-wide data.
+- Replaced hard-coded low-stock thresholds in Inventory position filtering, Inventory statistics, and Location detail summaries. Resolution now uses the Catalog variant reorder point when present, then the authoritative `inventory.lowStockThreshold` organization setting.
+- Exposed each position's resolved replenishment threshold and source so the Admin UI can explain why a SKU is considered low stock.
+- Removed the dashboard's false “5 units” copy and show the resolved threshold on attention rows.
+- Repaired clean-database Settings audit/outbox writes discovered by the new policy tests: audit targets now use real UUID entity IDs, and Settings outbox records include the required event and aggregate envelope.
+
+Verification for this slice:
+
+- Root TypeScript project build and Admin TypeScript check: passed.
+- Focused Inventory and Settings database suites: 31 tests passed.
+- Inventory API lifecycle suite, including the new Overview endpoint: 2 tests passed.
+- Focused lint for all touched contracts, database, API, and Admin files: passed.
+
+Remaining in Stage 2:
+
+- Add Location/item replenishment policy persistence and recommendation resolution above the Catalog/default fallback.
+- Continue splitting route/service responsibilities and normalize remaining Inventory envelopes and error semantics.
+- Expand Overview attention beyond the now-authoritative stock, queue, movement, and Location snapshot where owning-domain SLA/configuration evidence is still required.
+
 ---
 
 ## 2. What was reviewed

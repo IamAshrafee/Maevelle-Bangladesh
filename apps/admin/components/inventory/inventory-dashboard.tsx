@@ -210,7 +210,7 @@ export function InventoryDashboard() {
           {
             label: 'Low Stock SKUs',
             value: isLoading ? '—' : lowStockTotal,
-            description: '≤ 5 units available',
+            description: 'Using configured SKU policies',
             icon: TrendingDown,
             iconClass: 'text-amber-500',
             valueClass: 'text-amber-600 dark:text-amber-400',
@@ -309,7 +309,8 @@ export function InventoryDashboard() {
                                 {formatInventoryNumber(item.availableToSell)} avail
                               </div>
                               <div className="text-[11px] text-muted-foreground">
-                                {formatInventoryNumber(item.onHand)} on hand
+                                {formatInventoryNumber(item.onHand)} on hand · threshold{' '}
+                                {formatInventoryNumber(item.replenishmentThreshold)}
                               </div>
                             </div>
                             {canAdjust ? (
