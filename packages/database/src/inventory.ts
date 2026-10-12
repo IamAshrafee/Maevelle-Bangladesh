@@ -3089,9 +3089,14 @@ export async function closeWarehouseTransferDiscrepancy(
 
 export async function startStocktake(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; locationId: string },
+  input: { organizationId: string; actorId: string; locationId: string; idempotencyKey?: string },
 ): Promise<{ stocktakeId: string; version: number }> {
   return db.transaction().execute(async (transaction) => {
+    const started = input.idempotencyKey ? await beginIdempotent(transaction, {
+      organizationId: input.organizationId, actorId: input.actorId,
+      operation: 'inventory.stocktake.start', idempotencyKey: input.idempotencyKey, request: input,
+    }) : {};
+    if (started.replay) return started.replay as { stocktakeId: string; version: number };
     await requireActiveLocationCapability(
       transaction,
       input.organizationId,
@@ -3131,6 +3136,8 @@ export async function startStocktake(
         and unit.location_id = ${input.locationId}
         and unit.status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')
     `.execute(transaction);
+    const response = { stocktakeId, version: 1 };
+    if (started.recordId) await completeIdempotency(transaction, started.recordId, 'inventory.stocktake', stocktakeId, response);
     await emit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -3140,7 +3147,7 @@ export async function startStocktake(
       targetId: stocktakeId,
       metadata: { locationId: input.locationId },
     });
-    return { stocktakeId, version: 1 };
+    return response;
   });
 }
 
@@ -3154,6 +3161,8 @@ export async function recordStocktakeCount(
     countedQuantitiesByCondition?: ConditionQuantities;
     countedUnits?: readonly { unitId: string; condition: InventoryCondition }[];
     expectedVersion: number;
+    actorId?: string;
+    idempotencyKey?: string;
   },
 ): Promise<void> {
   if (!/^\d+(?:\.\d{1,6})?$/.test(input.countedQuantity))
@@ -3172,6 +3181,11 @@ export async function recordStocktakeCount(
       'Condition counts must add up to the total counted quantity.',
     );
   await db.transaction().execute(async (transaction) => {
+    const started = input.idempotencyKey && input.actorId ? await beginIdempotent(transaction, {
+      organizationId: input.organizationId, actorId: input.actorId,
+      operation: 'inventory.stocktake.count', idempotencyKey: input.idempotencyKey, request: input,
+    }) : {};
+    if (started.replay) return;
     const session = await sql<{
       location_id: string;
       status: string;
@@ -3267,9 +3281,11 @@ export async function recordStocktakeCount(
     );
     if (!updated.rows[0])
       throw new InventoryDomainError('NOT_FOUND', 'Stocktake line was not found.');
-    await sql`update inventory.stocktake_sessions set version = version + 1, updated_at = now() where id = ${input.stocktakeId}`.execute(
+    const sessionUpdate = await sql<{ version: string }>`update inventory.stocktake_sessions set version = version + 1, updated_at = now() where id = ${input.stocktakeId} returning version::text`.execute(
       transaction,
     );
+    if (started.recordId)
+      await completeIdempotency(transaction, started.recordId, 'inventory.stocktake', input.stocktakeId, { stocktakeId: input.stocktakeId, inventoryItemId: input.inventoryItemId, version: Number(sessionUpdate.rows[0]?.version) });
   });
 }
 
@@ -3281,9 +3297,16 @@ export async function addFoundStocktakeLine(
     stocktakeId: string;
     variantId: string;
     expectedVersion: number;
+    actorId?: string;
+    idempotencyKey?: string;
   },
 ): Promise<{ inventoryItemId: string; version: number }> {
   return db.transaction().execute(async (transaction) => {
+    const started = input.idempotencyKey && input.actorId ? await beginIdempotent(transaction, {
+      organizationId: input.organizationId, actorId: input.actorId,
+      operation: 'inventory.stocktake.add_found_line', idempotencyKey: input.idempotencyKey, request: input,
+    }) : {};
+    if (started.replay) return started.replay as { inventoryItemId: string; version: number };
     const session = await sql<{
       status: string;
       version: string;
@@ -3310,15 +3333,22 @@ export async function addFoundStocktakeLine(
     }>`update inventory.stocktake_sessions set version = version + 1, updated_at = now() where id = ${input.stocktakeId} returning version::text`.execute(
       transaction,
     );
-    return { inventoryItemId, version: Number(updated.rows[0]?.version) };
+    const response = { inventoryItemId, version: Number(updated.rows[0]?.version) };
+    if (started.recordId) await completeIdempotency(transaction, started.recordId, 'inventory.stocktake', input.stocktakeId, response);
+    return response;
   });
 }
 
 export async function submitStocktakeForReview(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; stocktakeId: string; expectedVersion: number },
+  input: { organizationId: string; actorId: string; stocktakeId: string; expectedVersion: number; idempotencyKey?: string },
 ): Promise<{ stocktakeId: string; version: number }> {
   return db.transaction().execute(async (transaction) => {
+    const started = input.idempotencyKey ? await beginIdempotent(transaction, {
+      organizationId: input.organizationId, actorId: input.actorId,
+      operation: 'inventory.stocktake.submit_review', idempotencyKey: input.idempotencyKey, request: input,
+    }) : {};
+    if (started.replay) return started.replay as { stocktakeId: string; version: number };
     const session = await sql<{
       id: string;
       location_id: string;
@@ -3347,6 +3377,8 @@ export async function submitStocktakeForReview(
       transaction,
     );
     const version = Number(updated.rows[0]?.version);
+    const response = { stocktakeId: header.id, version };
+    if (started.recordId) await completeIdempotency(transaction, started.recordId, 'inventory.stocktake', header.id, response);
     await emit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -3356,15 +3388,20 @@ export async function submitStocktakeForReview(
       targetId: header.id,
       metadata: { locationId: header.location_id },
     });
-    return { stocktakeId: header.id, version };
+    return response;
   });
 }
 
 export async function cancelStocktake(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; stocktakeId: string; expectedVersion: number },
+  input: { organizationId: string; actorId: string; stocktakeId: string; expectedVersion: number; idempotencyKey?: string },
 ): Promise<{ stocktakeId: string; version: number }> {
   return db.transaction().execute(async (transaction) => {
+    const started = input.idempotencyKey ? await beginIdempotent(transaction, {
+      organizationId: input.organizationId, actorId: input.actorId,
+      operation: 'inventory.stocktake.cancel', idempotencyKey: input.idempotencyKey, request: input,
+    }) : {};
+    if (started.replay) return started.replay as { stocktakeId: string; version: number };
     const session = await sql<{
       id: string;
       location_id: string;
@@ -3389,6 +3426,8 @@ export async function cancelStocktake(
       transaction,
     );
     const version = Number(updated.rows[0]?.version);
+    const response = { stocktakeId: header.id, version };
+    if (started.recordId) await completeIdempotency(transaction, started.recordId, 'inventory.stocktake', header.id, response);
     await emit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -3398,7 +3437,7 @@ export async function cancelStocktake(
       targetId: header.id,
       metadata: { locationId: header.location_id },
     });
-    return { stocktakeId: header.id, version };
+    return response;
   });
 }
 

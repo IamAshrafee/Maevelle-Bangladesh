@@ -187,15 +187,18 @@ Remaining in Stage 6:
 - Rebuilt the Counts queue with shared Admin page, filter, state, status, table, and responsive card primitives. Creation is capability-aware, progress is explicit, and pagination is driven by authoritative server totals.
 - Moved session/location/code search into the database query instead of filtering only the current browser page. Location, status, and search filters now operate across the complete authorized count history.
 - Extended the shared status vocabulary for Counting, Review, and Posted states so count lifecycle indicators use the same semantic system as the other operational workspaces.
+- Closed the count concurrency overwrite path: a stale line save now reloads the latest server evidence and asks the operator to review it instead of silently retrying over another operator's count.
+- Start, line count, found-SKU, submit-for-review, cancel, and post commands now require API idempotency keys and use domain-backed replay where applicable. UI command keys remain stable for the exact count version/payload being submitted.
 
 Verification for this slice:
 
 - Focused Database/API/Admin TypeScript and lint checks passed.
+- One focused Inventory integration test passed for idempotent stocktake posting after the command-boundary changes.
 
 Remaining in Stage 7:
 
 - Rework the count detail, line entry, review, cancellation, and posting experience around snapshot truth, movement-after-snapshot explanations, and explicit variance impact.
-- Audit retry and optimistic-concurrency behavior for every count transition and line mutation.
+- Continue decomposing the large count detail component and standardize its visual primitives without weakening the now-authoritative transition behavior.
 
 ---
 

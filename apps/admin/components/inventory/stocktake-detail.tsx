@@ -378,8 +378,8 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           condPersisted[line.inventoryItemId] = line.countedQuantitiesByCondition;
         }
       }
-      setCounts((prev) => ({ ...persisted, ...prev }));
-      setConditionCounts((prev) => ({ ...condPersisted, ...prev }));
+      setCounts(persisted);
+      setConditionCounts(condPersisted);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reload stocktake data.');
     }
@@ -438,12 +438,14 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
       ...(countedUnits ? { countedUnits } : {}),
       version: currentVersionRef.current,
     };
+    const commandKey = crypto.randomUUID();
 
     try {
       await inventoryRequest(
         `/inventory/stocktakes/${stocktakeId}/lines/${inventoryItemId}/count`,
         {
           method: 'POST',
+          headers: { 'idempotency-key': commandKey },
           body: JSON.stringify(payload),
         },
       );
@@ -460,31 +462,14 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Could not save count.';
 
-      // Automatic stale version recovery: refetch current version and retry once
+      // Reload concurrent work for review; never overwrite it automatically.
       if (errorMsg.includes('STALE_VERSION') || errorMsg.includes('no longer current')) {
         try {
-          const refreshed = await inventoryRequest<{ data: EnrichedStocktake }>(
-            `/inventory/stocktakes/${stocktakeId}`,
-          );
-          currentVersionRef.current = refreshed.data.version;
-          setStocktake((prev) => (prev ? { ...prev, version: refreshed.data.version } : prev));
-
-          // Retry with synchronized version
-          await inventoryRequest(
-            `/inventory/stocktakes/${stocktakeId}/lines/${inventoryItemId}/count`,
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                ...payload,
-                version: refreshed.data.version,
-              }),
-            },
-          );
-
-          currentVersionRef.current += 1;
-          setStocktake((prev) => (prev ? { ...prev, version: prev.version + 1 } : prev));
-          setSaveSuccesses((p) => ({ ...p, [inventoryItemId]: true }));
-          return;
+          await reload();
+          setSaveErrors((previous) => ({
+            ...previous,
+            [inventoryItemId]: 'Another operator changed this count. The latest values are loaded; review them before saving again.',
+          }));
         } catch (retryErr) {
           setSaveErrors((p) => ({
             ...p,
@@ -515,7 +500,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     try {
       await inventoryRequest(`/inventory/stocktakes/${stocktakeId}/post`, {
         method: 'POST',
-        headers: { 'idempotency-key': `post-${stocktakeId}-${Date.now()}` },
+        headers: { 'idempotency-key': `post-${stocktakeId}-${currentVersionRef.current}` },
       });
       setSuccessMessage('Stocktake posted successfully. Inventory balances have been reconciled in the ledger.');
       await reload();
@@ -534,6 +519,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     try {
       await inventoryRequest(`/inventory/stocktakes/${stocktakeId}/${action}`, {
         method: 'POST',
+        headers: { 'idempotency-key': `${action}-${stocktakeId}-${currentVersionRef.current}` },
         body: JSON.stringify({ version: currentVersionRef.current }),
       });
       setSuccessMessage(
@@ -578,6 +564,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     try {
       await inventoryRequest(`/inventory/stocktakes/${stocktakeId}/found-lines`, {
         method: 'POST',
+        headers: { 'idempotency-key': `found-${stocktakeId}-${currentVersionRef.current}-${foundVariantId}` },
         body: JSON.stringify({ variantId: foundVariantId, version: currentVersionRef.current }),
       });
       setFoundOpen(false);
