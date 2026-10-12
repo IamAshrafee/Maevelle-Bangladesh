@@ -16,7 +16,6 @@ import {
   RotateCcw,
   Lock,
   AlertTriangle,
-  Boxes,
   ArrowDownLeft,
   Building2,
   RefreshCw,
@@ -29,6 +28,7 @@ import type {
 } from '@maevelle/contracts';
 
 import { inventoryRequest, formatInventoryNumber } from '@/lib/inventory/api';
+import { LOCATION_CAPABILITY_GROUPS } from '@/lib/inventory/location-config';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { StatusBadge } from '@/components/status-badge';
 import { InventoryEmptyState, InventoryFeedback, InventoryPager } from './inventory-page-ui';
@@ -56,74 +56,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-const CAPABILITY_GROUPS = [
-  {
-    group: 'Inventory & Storage',
-    description: 'Physical storage and staging areas',
-    icon: Boxes,
-    items: [
-      { code: 'STOCK_HOLDING', label: 'Stock Holding', desc: 'Can store physical inventory units' },
-      {
-        code: 'INTERNAL_STORAGE',
-        label: 'Internal Storage',
-        desc: 'Dedicated reserve / staging warehouse',
-      },
-    ],
-  },
-  {
-    group: 'Inbound & Receiving',
-    description: 'Inbound intake from vendors and returns',
-    icon: ArrowDownLeft,
-    items: [
-      {
-        code: 'PURCHASE_RECEIVING',
-        label: 'Purchase Receiving',
-        desc: 'Can receive purchase orders from suppliers',
-      },
-      {
-        code: 'RETURN_RECEIVING',
-        label: 'Return Receiving',
-        desc: 'Can accept customer order returns',
-      },
-    ],
-  },
-  {
-    group: 'Fulfillment & Outbound',
-    description: 'Customer order picking, packing, and collection',
-    icon: Building2,
-    items: [
-      {
-        code: 'ORDER_FULFILLMENT',
-        label: 'Order Fulfillment',
-        desc: 'Can pick, pack and ship customer orders',
-      },
-      {
-        code: 'CUSTOMER_PICKUP',
-        label: 'Customer Pickup',
-        desc: 'Supports in-store customer collection',
-      },
-    ],
-  },
-  {
-    group: 'Inter-Warehouse Transfers',
-    description: 'Movement between company facilities',
-    icon: Truck,
-    items: [
-      {
-        code: 'TRANSFER_SEND',
-        label: 'Transfer Send',
-        desc: 'Can dispatch inter-warehouse transfers',
-      },
-      {
-        code: 'TRANSFER_RECEIVE',
-        label: 'Transfer Receive',
-        desc: 'Can receive transfers from other locations',
-      },
-    ],
-  },
-];
-
-const ALL_CAPABILITIES = CAPABILITY_GROUPS.flatMap((g) => g.items);
+const ALL_CAPABILITIES = LOCATION_CAPABILITY_GROUPS.flatMap((group) => group.items);
 
 function addressValue(address: Record<string, unknown> | undefined, key: string): string {
   const value = address?.[key];
@@ -289,7 +222,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
   };
 
   const handleSelectAllCapabilities = () => {
-    const allCodes = CAPABILITY_GROUPS.flatMap((g) => g.items.map((i) => i.code)) as LocationCapability[];
+    const allCodes = LOCATION_CAPABILITY_GROUPS.flatMap((group) => group.items.map((item) => item.code));
     setEditCapabilities(allCodes);
     setEditError('');
   };
@@ -904,7 +837,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
               </div>
 
               <div className="space-y-3">
-                {CAPABILITY_GROUPS.map((group) => {
+                {LOCATION_CAPABILITY_GROUPS.map((group) => {
                   const GroupIcon = group.icon;
                   return (
                     <div key={group.group} className="rounded-lg border bg-card p-3 space-y-2">

@@ -4,16 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowDownLeft,
   ArrowLeft,
-  Boxes,
-  Building2,
   Check,
   Info,
   Loader2,
   Save,
   Sparkles,
-  Truck,
 } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -21,6 +17,13 @@ import { z } from 'zod';
 
 import type { LocationCapability, LocationType } from '@maevelle/contracts';
 import { inventoryRequest } from '@/lib/inventory/api';
+import {
+  deriveLocationCode,
+  LOCATION_CAPABILITY_GROUPS,
+  LOCATION_STATUS_OPTIONS,
+  LOCATION_TYPES,
+  TYPE_DEFAULT_CAPABILITIES,
+} from '@/lib/inventory/location-config';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { OperationalFeedback } from '@/components/operational-worklist';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
@@ -35,207 +38,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-export const LOCATION_TYPES: readonly {
-  value: LocationType;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: 'WAREHOUSE',
-    label: 'Warehouse',
-    description: 'Primary storage, intake, and replenishment depot',
-  },
-  {
-    value: 'FULFILLMENT_CENTER',
-    label: 'Fulfillment Center',
-    description: 'High-throughput outbound order picking and shipping',
-  },
-  {
-    value: 'RETAIL_STORE',
-    label: 'Retail Store',
-    description: 'Physical shop with walk-in sales and customer pickup',
-  },
-  {
-    value: 'SHOWROOM',
-    label: 'Showroom',
-    description: 'Display space with sample units and collections',
-  },
-  {
-    value: 'RETURN_CENTER',
-    label: 'Return Center',
-    description: 'Inspection and restocking depot for customer returns',
-  },
-  {
-    value: 'THIRD_PARTY',
-    label: 'Third-Party Logistics (3PL)',
-    description: 'Outsourced partner facility holding distributed stock',
-  },
-  {
-    value: 'OTHER',
-    label: 'Other Location',
-    description: 'Specialized facility or temporary staging buffer',
-  },
-];
-
-export const LOCATION_STATUS_OPTIONS = [
-  {
-    value: 'ACTIVE',
-    label: 'Active (Operational)',
-    description: 'Immediately ready to hold stock, receive shipments, and fulfill orders',
-  },
-  {
-    value: 'DRAFT',
-    label: 'Draft (Setup Mode)',
-    description: 'Under setup or physical racking; transactions disabled until activated',
-  },
-] as const;
-
-export const CAPABILITY_GROUPS = [
-  {
-    group: 'Inventory & Storage',
-    description: 'Physical storage and internal buffer capacity',
-    icon: Boxes,
-    items: [
-      {
-        code: 'STOCK_HOLDING' as LocationCapability,
-        label: 'Stock Holding',
-        desc: 'Holds physical inventory units across sellable and damaged conditions',
-      },
-      {
-        code: 'INTERNAL_STORAGE' as LocationCapability,
-        label: 'Internal Storage',
-        desc: 'Dedicated backroom, staging, or buffer area not directly allocated',
-      },
-    ],
-  },
-  {
-    group: 'Inbound & Receiving',
-    description: 'Intake from suppliers and customer returns',
-    icon: ArrowDownLeft,
-    items: [
-      {
-        code: 'PURCHASE_RECEIVING' as LocationCapability,
-        label: 'Purchase Receiving',
-        desc: 'Receives purchase orders and inbound shipments from suppliers',
-      },
-      {
-        code: 'RETURN_RECEIVING' as LocationCapability,
-        label: 'Return Receiving',
-        desc: 'Accepts and restocks customer returns and failed deliveries',
-      },
-    ],
-  },
-  {
-    group: 'Fulfillment & Outbound',
-    description: 'Customer order picking, packing, and dispatch',
-    icon: Building2,
-    items: [
-      {
-        code: 'ORDER_FULFILLMENT' as LocationCapability,
-        label: 'Order Fulfillment',
-        desc: 'Allocates, picks, packs, and dispatches customer orders',
-      },
-      {
-        code: 'CUSTOMER_PICKUP' as LocationCapability,
-        label: 'Customer Pickup',
-        desc: 'Supports click-and-collect and over-the-counter customer handoff',
-      },
-    ],
-  },
-  {
-    group: 'Inter-Warehouse Transfers',
-    description: 'Inventory movement between company locations',
-    icon: Truck,
-    items: [
-      {
-        code: 'TRANSFER_SEND' as LocationCapability,
-        label: 'Transfer Send',
-        desc: 'Dispatches stock transfers to other company warehouses',
-      },
-      {
-        code: 'TRANSFER_RECEIVE' as LocationCapability,
-        label: 'Transfer Receive',
-        desc: 'Receives and confirms incoming transfers from other facilities',
-      },
-    ],
-  },
-] as const;
-
-export const TYPE_DEFAULT_CAPABILITIES: Record<LocationType, readonly LocationCapability[]> = {
-  WAREHOUSE: [
-    'STOCK_HOLDING',
-    'PURCHASE_RECEIVING',
-    'ORDER_FULFILLMENT',
-    'TRANSFER_SEND',
-    'TRANSFER_RECEIVE',
-    'INTERNAL_STORAGE',
-  ],
-  FULFILLMENT_CENTER: [
-    'STOCK_HOLDING',
-    'ORDER_FULFILLMENT',
-    'TRANSFER_SEND',
-    'TRANSFER_RECEIVE',
-  ],
-  RETAIL_STORE: [
-    'STOCK_HOLDING',
-    'ORDER_FULFILLMENT',
-    'CUSTOMER_PICKUP',
-    'TRANSFER_RECEIVE',
-  ],
-  SHOWROOM: [
-    'STOCK_HOLDING',
-    'CUSTOMER_PICKUP',
-    'TRANSFER_RECEIVE',
-  ],
-  RETURN_CENTER: [
-    'STOCK_HOLDING',
-    'RETURN_RECEIVING',
-    'TRANSFER_SEND',
-  ],
-  THIRD_PARTY: [
-    'STOCK_HOLDING',
-    'PURCHASE_RECEIVING',
-    'ORDER_FULFILLMENT',
-    'TRANSFER_SEND',
-    'TRANSFER_RECEIVE',
-  ],
-  OTHER: [
-    'STOCK_HOLDING',
-    'INTERNAL_STORAGE',
-  ],
-};
-
-function deriveCodeFromName(name: string, type: LocationType): string {
-  const prefix =
-    type === 'WAREHOUSE'
-      ? 'WH'
-      : type === 'FULFILLMENT_CENTER'
-        ? 'FC'
-        : type === 'RETAIL_STORE'
-          ? 'STORE'
-          : type === 'SHOWROOM'
-            ? 'SHOW'
-            : type === 'RETURN_CENTER'
-              ? 'RET'
-              : type === 'THIRD_PARTY'
-                ? '3PL'
-                : 'LOC';
-
-  const cleanWords = name
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s]/g, '')
-    .split(/\s+/)
-    .filter(
-      (w) =>
-        w.length > 1 &&
-        !['WAREHOUSE', 'CENTER', 'STORE', 'SHOWROOM', 'DEPOT', 'FACILITY', 'LOCATION'].includes(w),
-    );
-
-  const slug = cleanWords.slice(0, 2).join('-');
-  return slug ? `${prefix}-${slug}` : `${prefix}-01`;
-}
 
 const formSchema = z.object({
   name: z.string().trim().min(2, 'Facility name must be at least 2 characters'),
@@ -331,7 +133,7 @@ export function LocationForm() {
       setErrorMessage('Enter a facility name first to generate a suggested location code.');
       return;
     }
-    const generated = deriveCodeFromName(currentName, selectedType);
+    const generated = deriveLocationCode(currentName, selectedType);
     form.setValue('code', generated, { shouldValidate: true });
     setErrorMessage('');
   };
@@ -624,7 +426,7 @@ export function LocationForm() {
                 size="xs"
                 className="h-7 text-xs"
                 onClick={() =>
-                  handleApplyPreset(CAPABILITY_GROUPS.flatMap((g) => g.items.map((i) => i.code)))
+                  handleApplyPreset(LOCATION_CAPABILITY_GROUPS.flatMap((g) => g.items.map((i) => i.code)))
                 }
                 title="Enable all operational capabilities"
               >
@@ -640,7 +442,7 @@ export function LocationForm() {
               </p>
             ) : null}
 
-            {CAPABILITY_GROUPS.map((group) => {
+            {LOCATION_CAPABILITY_GROUPS.map((group) => {
               const GroupIcon = group.icon;
               return (
                 <div key={group.group} className="space-y-2">

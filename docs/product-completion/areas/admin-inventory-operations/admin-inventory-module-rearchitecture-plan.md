@@ -150,6 +150,7 @@ Remaining in Stage 3:
 - Rebuilt the Locations list as a responsive operations surface with shared page/table/state primitives, status and capability filters, permission-aware creation, mobile cards, compact desktop rows, and visible on-hand/open-work context. The list projection now returns those operational totals without per-row browser requests.
 - Connected Location detail/edit to the blocker model: active commitments are visible, lifecycle and capability choices are disabled with exact reasons, Draft locations remain editable, incoming stock is real, and Edit/Transfer actions respect operator permissions plus facility capabilities.
 - Location create/update API commands now require idempotency keys; the domain replays completed equivalent requests safely, rejects key reuse with a changed payload, and retains optimistic version protection.
+- Extracted the shared Location type catalog, capability groups, type defaults, labels, and code derivation used by create and edit. The two workflows no longer maintain conflicting facility definitions.
 
 Verification for this slice:
 
@@ -160,7 +161,7 @@ Verification for this slice:
 Remaining in Stage 5:
 
 - Finish decomposing the legacy Location detail component onto shared Admin primitives.
-- Consolidate duplicated create/edit Location field and capability definitions onto one shared form foundation.
+- Continue decomposing create/edit presentation into smaller shared field sections where doing so materially improves the workflow.
 
 ---
 
