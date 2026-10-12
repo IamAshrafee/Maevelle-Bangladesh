@@ -105,6 +105,7 @@ const statusSchema = Type.Union([
   Type.Literal('AVAILABLE'),
   Type.Literal('RESERVED'),
   Type.Literal('IN_FULFILLMENT'),
+  Type.Literal('IN_TRANSFER'),
   Type.Literal('DISPATCHED'),
   Type.Literal('ON_HOLD'),
   Type.Literal('RETURNED'),

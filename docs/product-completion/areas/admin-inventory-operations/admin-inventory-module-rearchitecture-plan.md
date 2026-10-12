@@ -56,6 +56,9 @@ Implemented in the first integrity slice:
 - Prevented switching a variant back to standard tracking while live unit identities remain.
 - Corrected the Admin unit client contract: route paths, HTTP methods, registration quantity mapping, inspection outcome/media mapping, repair response shapes, bulk result mapping, stock-conversion response mapping, and reconciliation endpoint now match the Fastify API.
 - Replaced the unsafe Admin "move unit" form with a clear hand-off to the canonical Transfer workflow, preserving the source-location context and explaining why quantity, identity, and cost must move together.
+- Added exact-identity warehouse transfer execution for serialized stock. Dispatch locks concrete available Unit IDs and marks them in transit; receipt requires an arrival condition for every Unit ID and commits identity location/status, aggregate condition quantities, and transfer cost positions together.
+- Added durable unit-to-transfer allocation evidence and exposed tracking mode plus allocated Unit IDs in transfer detail. The Admin receipt sheet now confirms condition per serialized Unit ID instead of inventing anonymous condition quantities.
+- Fail closed on serialized in-transit loss until an operator identifies the exact missing Unit IDs; standard aggregate transfer discrepancies continue using the existing workflow.
 - Fixed the inspection-history query to use the actual IAM user-name column.
 
 Verification completed for this slice:
@@ -63,11 +66,11 @@ Verification completed for this slice:
 - Fresh disposable Compose baseline rebuild through `3100_unit_traceability`: passed.
 - Root TypeScript project build: passed.
 - Admin TypeScript check after client-contract repair: passed.
-- Focused database, API, and Admin unit-client suites: 21 tests passed across 3 files.
+- Focused Inventory, serialized-unit, API, and Admin unit-client suites: 39 tests passed across 4 files.
 
 Remaining before Stage 1 can be marked complete:
 
-- Add exact serialized-unit selection and atomic identity relocation to warehouse transfer dispatch/receipt.
+- Add exact Unit ID selection to the serialized transfer discrepancy/loss workflow (receipt is complete; loss currently fails safely).
 - Add identity-aware serialized stock counting and reconciliation posting.
 - Complete command-level idempotency and optimistic-version coverage for every mutable unit endpoint.
 - Complete successful posted-return-receipt intake coverage with real return fixtures, not only rejection/rollback evidence.

@@ -513,11 +513,12 @@ export async function getTransferDetail(
     variant_id: string;
     sku: string;
     product_title: string;
+    tracking_mode: 'STANDARD' | 'SERIAL';
   }>`
     select tl.id, tl.inventory_item_id, tl.requested_quantity::text, tl.dispatched_quantity::text, tl.received_quantity::text, tl.cancelled_quantity::text,
       discrepancy.disposition_code as discrepancy_disposition_code, discrepancy.quantity::text as discrepancy_quantity,
       discrepancy.reason_code as discrepancy_reason_code, discrepancy.notes as discrepancy_notes, discrepancy.recorded_at as discrepancy_recorded_at,
-      item.variant_id, variant.sku, product.title as product_title
+      item.variant_id, variant.sku, product.title as product_title, item.tracking_mode
     from warehouse.transfer_lines tl
     left join warehouse.transfer_line_discrepancies discrepancy on discrepancy.organization_id = tl.organization_id and discrepancy.transfer_line_id = tl.id
     join inventory.inventory_items item on item.id = tl.inventory_item_id
@@ -535,6 +536,23 @@ export async function getTransferDetail(
     db,
   );
 
+  const unitAllocations = await sql<{
+    transfer_line_id: string;
+    unit_id: string;
+    unit_code: string;
+    status: 'IN_TRANSIT' | 'RECEIVED' | 'LOST';
+    received_condition_code: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION' | null;
+  }>`
+    select allocation.transfer_line_id, allocation.unit_id, unit.unit_code,
+      allocation.status, allocation.received_condition_code
+    from inventory.unit_transfer_allocations allocation
+    join inventory.inventory_units unit
+      on unit.id = allocation.unit_id and unit.organization_id = allocation.organization_id
+    where allocation.organization_id = ${organizationId}
+      and allocation.transfer_id = ${transferId}
+    order by allocation.transfer_line_id, unit.unit_code
+  `.execute(db);
+
   const lines = linesResult.rows.map((line) => ({
     id: line.id,
     inventoryItemId: line.inventory_item_id,
@@ -545,6 +563,17 @@ export async function getTransferDetail(
     dispatchedQuantity: String(line.dispatched_quantity),
     receivedQuantity: String(line.received_quantity),
     cancelledQuantity: String(line.cancelled_quantity),
+    trackingMode: line.tracking_mode,
+    serializedUnits: line.tracking_mode === 'SERIAL'
+      ? unitAllocations.rows
+          .filter((unit) => unit.transfer_line_id === line.id)
+          .map((unit) => ({
+            unitId: unit.unit_id,
+            unitCode: unit.unit_code,
+            status: unit.status,
+            receivedCondition: unit.received_condition_code,
+          }))
+      : undefined,
     discrepancy: line.discrepancy_quantity
       ? {
           dispositionCode: line.discrepancy_disposition_code!,

@@ -3,7 +3,14 @@ import { sql } from 'kysely';
 
 import { createDatabase } from './index.js';
 import { createOrganization } from './platform.js';
-import { adjustInventory, createInventoryReservation } from './inventory.js';
+import {
+  adjustInventory,
+  approveWarehouseTransfer,
+  createInventoryReservation,
+  createWarehouseTransfer,
+  dispatchWarehouseTransfer,
+  receiveWarehouseTransfer,
+} from './inventory.js';
 import { createLocation } from './warehouse.js';
 import {
   allocateUnitsToFulfillment,
@@ -519,6 +526,92 @@ describe('Individual Unit Traceability & Quality Control', () => {
     });
     expect(events.some((e) => e.eventType === 'LOCATION_MOVED')).toBe(false);
     expect(events.some((e) => e.eventType === 'REPACKAGED')).toBe(true);
+  });
+
+  it('moves exact serialized identities with an authoritative warehouse transfer', async () => {
+    const f = await fixture();
+    const units = await registerLedgerBackedUnits(f, {
+      quantity: 2,
+      inventoryCondition: 'SELLABLE',
+      initialStatus: 'AVAILABLE',
+    });
+    const created = await createWarehouseTransfer(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      sourceLocationId: f.mainLocation.id,
+      destinationLocationId: f.secondaryLocation.id,
+      lines: [{ variantId: f.variantId, quantity: '2' }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await approveWarehouseTransfer(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      transferId: created.transferId,
+      expectedVersion: created.version,
+    });
+    await dispatchWarehouseTransfer(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      transferId: created.transferId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const inTransit = await Promise.all(units.map((unit) => getInventoryUnit(database.db, {
+      organizationId: f.organizationId,
+      unitId: unit.id,
+    })));
+    expect(inTransit.map((unit) => unit.status)).toEqual(['IN_TRANSFER', 'IN_TRANSFER']);
+    expect(inTransit.every((unit) => unit.locationId === f.mainLocation.id)).toBe(true);
+    expect((await reconcileSerializedInventory(database.db, {
+      organizationId: f.organizationId,
+      variantId: f.variantId,
+      locationId: f.mainLocation.id,
+    })).isConsistent).toBe(true);
+
+    const line = await sql<{ id: string }>`
+      select id from warehouse.transfer_lines
+      where organization_id = ${f.organizationId} and transfer_id = ${created.transferId}
+    `.execute(database.db);
+    await receiveWarehouseTransfer(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      transferId: created.transferId,
+      idempotencyKey: crypto.randomUUID(),
+      lines: [{
+        transferLineId: line.rows[0]!.id,
+        sellableQuantity: '1',
+        damagedQuantity: '1',
+        unitReceipts: [
+          { unitId: units[0]!.id, condition: 'SELLABLE' },
+          { unitId: units[1]!.id, condition: 'DAMAGED' },
+        ],
+      }],
+    });
+
+    const received = await Promise.all(units.map((unit) => getInventoryUnit(database.db, {
+      organizationId: f.organizationId,
+      unitId: unit.id,
+    })));
+    expect(received[0]).toMatchObject({
+      locationId: f.secondaryLocation.id,
+      inventoryCondition: 'SELLABLE',
+      status: 'AVAILABLE',
+    });
+    expect(received[1]).toMatchObject({
+      locationId: f.secondaryLocation.id,
+      inventoryCondition: 'DAMAGED',
+      status: 'ON_HOLD',
+    });
+    expect((await reconcileSerializedInventory(database.db, {
+      organizationId: f.organizationId,
+      variantId: f.variantId,
+      locationId: f.mainLocation.id,
+    })).isConsistent).toBe(true);
+    expect((await reconcileSerializedInventory(database.db, {
+      organizationId: f.organizationId,
+      variantId: f.variantId,
+      locationId: f.secondaryLocation.id,
+    })).isConsistent).toBe(true);
   });
 
   it('supports authorized release and permanent write-off', async () => {

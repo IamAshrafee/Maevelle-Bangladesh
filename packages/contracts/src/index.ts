@@ -1784,8 +1784,17 @@ export interface WarehouseTransferLineDto {
   readonly dispatchedQuantity: string;
   readonly receivedQuantity: string;
   readonly cancelledQuantity: string;
+  readonly trackingMode: 'STANDARD' | 'SERIAL';
+  readonly serializedUnits?: readonly WarehouseTransferUnitDto[];
   /** Quantity permanently resolved as missing/lost while this transfer was in transit. */
   readonly discrepancy?: WarehouseTransferDiscrepancyDto;
+}
+
+export interface WarehouseTransferUnitDto {
+  readonly unitId: string;
+  readonly unitCode: string;
+  readonly status: 'IN_TRANSIT' | 'RECEIVED' | 'LOST';
+  readonly receivedCondition: InventoryConditionDto | null;
 }
 
 export interface WarehouseTransferDiscrepancyDto {
@@ -5642,6 +5651,7 @@ export type UnitStatusDto =
   | 'AVAILABLE'
   | 'RESERVED'
   | 'IN_FULFILLMENT'
+  | 'IN_TRANSFER'
   | 'DISPATCHED'
   | 'ON_HOLD'
   | 'RETURNED'
@@ -5694,6 +5704,8 @@ export type UnitEventTypeDto =
   | 'PICKED'
   | 'PACKED'
   | 'DISPATCHED'
+  | 'TRANSFER_DISPATCHED'
+  | 'TRANSFER_RECEIVED'
   | 'RETURNED'
   | 'RETURN_INSPECTED'
   | 'RELEASED_FOR_SALE'

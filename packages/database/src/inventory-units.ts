@@ -19,6 +19,7 @@ export type UnitStatus =
   | 'AVAILABLE'
   | 'RESERVED'
   | 'IN_FULFILLMENT'
+  | 'IN_TRANSFER'
   | 'DISPATCHED'
   | 'ON_HOLD'
   | 'RETURNED'
@@ -71,6 +72,8 @@ export type UnitEventType =
   | 'PICKED'
   | 'PACKED'
   | 'DISPATCHED'
+  | 'TRANSFER_DISPATCHED'
+  | 'TRANSFER_RECEIVED'
   | 'RETURNED'
   | 'RETURN_INSPECTED'
   | 'RELEASED_FOR_SALE'
@@ -621,7 +624,7 @@ export async function registerInventoryUnits(
               and registered.inventory_item_id = condition.inventory_item_id
               and registered.location_id = condition.location_id
               and registered.inventory_condition_code = condition.condition_code
-              and registered.status not in ('DISPATCHED', 'WRITTEN_OFF')) as registered_quantity
+              and registered.status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')) as registered_quantity
         from inventory.inventory_level_conditions condition
         where condition.organization_id = ${input.organizationId}
           and condition.inventory_item_id = ${variantInfo.inventory_item_id}
@@ -853,7 +856,7 @@ export async function convertStockToSerialized(
             and unit.inventory_item_id = condition.inventory_item_id
             and unit.location_id = condition.location_id
             and unit.inventory_condition_code = condition.condition_code
-            and unit.status not in ('DISPATCHED', 'WRITTEN_OFF')) as registered_quantity
+            and unit.status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')) as registered_quantity
       from inventory.inventory_level_conditions condition
       where condition.organization_id = ${input.organizationId}
         and condition.inventory_item_id = ${item.id}
@@ -2381,7 +2384,7 @@ export async function reconcileSerializedInventory(
     where organization_id = ${input.organizationId}
       and variant_id = ${input.variantId}
       and location_id = ${input.locationId}
-      and status not in ('DISPATCHED', 'WRITTEN_OFF')
+      and status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')
     group by status
   `.execute(db);
 
@@ -2402,7 +2405,7 @@ export async function reconcileSerializedInventory(
     where organization_id = ${input.organizationId}
       and variant_id = ${input.variantId}
       and location_id = ${input.locationId}
-      and status not in ('DISPATCHED', 'WRITTEN_OFF')
+      and status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')
     group by inventory_condition_code
   `.execute(db);
   const unitConditionMap = new Map<InventoryCondition, number>(

@@ -13,7 +13,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       location_id uuid not null,
       inventory_condition_code text not null check (inventory_condition_code in ('SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION')),
       current_condition text not null default 'GRADE_A' check (current_condition in ('GRADE_A', 'GRADE_B', 'REPAIR_REQUIRED', 'DAMAGED_UNSELLABLE')),
-      status text not null default 'AWAITING_QC' check (status in ('AWAITING_QC', 'AVAILABLE', 'RESERVED', 'IN_FULFILLMENT', 'DISPATCHED', 'ON_HOLD', 'RETURNED', 'WRITTEN_OFF')),
+      status text not null default 'AWAITING_QC' check (status in ('AWAITING_QC', 'AVAILABLE', 'RESERVED', 'IN_FULFILLMENT', 'IN_TRANSFER', 'DISPATCHED', 'ON_HOLD', 'RETURNED', 'WRITTEN_OFF')),
       source_type text not null default 'INBOUND_RECEIPT' check (source_type in ('INBOUND_RECEIPT', 'STOCK_CONVERSION', 'RETURN_RECEIPT', 'MANUAL_INTAKE')),
       source_receipt_id uuid references receiving.inbound_receipts(id),
       source_receipt_line_id uuid references receiving.inbound_receipt_lines(id),
@@ -125,6 +125,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
         'REPAIR_REQUESTED', 'REPAIR_STARTED', 'REPAIR_COMPLETED',
         'LOCATION_MOVED', 'REPACKAGED', 'ALLOCATED_TO_FULFILLMENT',
         'RELEASED_FROM_FULFILLMENT', 'PICKED', 'PACKED', 'DISPATCHED',
+        'TRANSFER_DISPATCHED', 'TRANSFER_RECEIVED',
         'RETURNED', 'RETURN_INSPECTED', 'RELEASED_FOR_SALE', 'QUARANTINED',
         'WRITTEN_OFF', 'AUTHORIZED_CORRECTION'
       )),
@@ -146,6 +147,32 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
 
     create index if not exists unit_events_unit
       on inventory.unit_events (organization_id, unit_id, created_at desc, id desc);
+
+    create table if not exists inventory.unit_transfer_allocations (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      transfer_id uuid not null,
+      transfer_line_id uuid not null,
+      unit_id uuid not null,
+      status text not null check (status in ('IN_TRANSIT', 'RECEIVED', 'LOST')),
+      received_condition_code text check (received_condition_code in ('SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION')),
+      dispatched_by_actor_id uuid references iam.users(id),
+      received_by_actor_id uuid references iam.users(id),
+      dispatched_at timestamptz not null default now(),
+      received_at timestamptz,
+      unique (organization_id, id),
+      unique (organization_id, transfer_id, unit_id),
+      foreign key (organization_id, transfer_id) references warehouse.transfers(organization_id, id),
+      foreign key (organization_id, transfer_line_id) references warehouse.transfer_lines(organization_id, id),
+      foreign key (organization_id, unit_id) references inventory.inventory_units(organization_id, id),
+      check ((status = 'IN_TRANSIT' and received_condition_code is null and received_at is null) or status <> 'IN_TRANSIT'),
+      check ((status = 'RECEIVED' and received_condition_code is not null and received_at is not null) or status <> 'RECEIVED')
+    );
+    create unique index if not exists unit_transfer_allocations_one_active_transfer
+      on inventory.unit_transfer_allocations (organization_id, unit_id)
+      where status = 'IN_TRANSIT';
+    create index if not exists unit_transfer_allocations_transfer_line
+      on inventory.unit_transfer_allocations (organization_id, transfer_line_id, status, unit_id);
 
     create table if not exists fulfillment.fulfillment_unit_allocations (
       id uuid primary key default uuidv7(),

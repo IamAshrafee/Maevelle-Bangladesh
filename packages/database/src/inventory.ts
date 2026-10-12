@@ -2488,11 +2488,62 @@ export async function dispatchWarehouseTransfer(
         'CONFLICT',
         'Transfer has no remaining dispatchable quantity.',
       );
-    if (lines.rows.some((line) => line.tracking_mode === 'SERIAL'))
-      throw new InventoryDomainError(
-        'VALIDATION_FAILED',
-        'Serialized inventory requires exact unit selection before a warehouse transfer can be dispatched.',
-      );
+    for (const line of lines.rows) {
+      if (line.tracking_mode !== 'SERIAL') continue;
+      const quantity = Number(line.quantity);
+      if (!Number.isInteger(quantity))
+        throw new InventoryDomainError(
+          'VALIDATION_FAILED',
+          'Serialized transfer quantities must be whole units.',
+        );
+      const selected = await sql<{ id: string; status: string }>`
+        select unit.id, unit.status
+        from inventory.inventory_units unit
+        where unit.organization_id = ${input.organizationId}
+          and unit.inventory_item_id = ${line.inventory_item_id}
+          and unit.location_id = ${header.source_location_id}
+          and unit.inventory_condition_code = 'SELLABLE'
+          and unit.status = 'AVAILABLE'
+          and not exists (
+            select 1 from inventory.unit_transfer_allocations allocation
+            where allocation.organization_id = unit.organization_id
+              and allocation.unit_id = unit.id
+              and allocation.status = 'IN_TRANSIT'
+          )
+        order by unit.unit_code, unit.id
+        limit ${quantity}
+        for update of unit
+      `.execute(transaction);
+      if (selected.rows.length !== quantity)
+        throw new InventoryDomainError(
+          'VALIDATION_FAILED',
+          'The source location does not have enough available serialized units for this transfer line.',
+        );
+      for (const unit of selected.rows) {
+        await sql`
+          insert into inventory.unit_transfer_allocations (
+            organization_id, transfer_id, transfer_line_id, unit_id, status, dispatched_by_actor_id
+          ) values (
+            ${input.organizationId}, ${header.id}, ${line.id}, ${unit.id}, 'IN_TRANSIT', ${input.actorId}
+          )
+        `.execute(transaction);
+        await sql`
+          update inventory.inventory_units
+          set status = 'IN_TRANSFER', updated_at = now(), version = version + 1
+          where organization_id = ${input.organizationId} and id = ${unit.id}
+        `.execute(transaction);
+        await sql`
+          insert into inventory.unit_events (
+            organization_id, unit_id, event_type, actor_type, actor_id,
+            from_status, to_status, from_location_id, reference_type, reference_id, reason
+          ) values (
+            ${input.organizationId}, ${unit.id}, 'TRANSFER_DISPATCHED', 'USER', ${input.actorId},
+            ${unit.status}, 'IN_TRANSFER', ${header.source_location_id},
+            'warehouse.transfer', ${header.id}, 'Serialized unit dispatched on warehouse transfer'
+          )
+        `.execute(transaction);
+      }
+    }
     const inventoryTransactionId = await postTransaction(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -2557,6 +2608,10 @@ export async function receiveWarehouseTransfer(
       damagedQuantity?: string;
       quarantineQuantity?: string;
       inspectionQuantity?: string;
+      unitReceipts?: readonly {
+        unitId: string;
+        condition: InventoryCondition;
+      }[];
     }[];
     idempotencyKey: string;
   },
@@ -2577,9 +2632,10 @@ export async function receiveWarehouseTransfer(
       };
     const transfer = await sql<{
       id: string;
+      source_location_id: string;
       destination_location_id: string;
       status: string;
-    }>`select id, destination_location_id, status from warehouse.transfers where id = ${input.transferId} and organization_id = ${input.organizationId} for update`.execute(
+    }>`select id, source_location_id, destination_location_id, status from warehouse.transfers where id = ${input.transferId} and organization_id = ${input.organizationId} for update`.execute(
       transaction,
     );
     const header = transfer.rows[0];
@@ -2607,7 +2663,13 @@ export async function receiveWarehouseTransfer(
         id: string;
         inventory_item_id: string;
         remaining: string;
-      }>`select line.id, line.inventory_item_id, (line.dispatched_quantity - line.received_quantity - coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id = line.id), 0))::text as remaining from warehouse.transfer_lines line where line.id = ${receipt.transferLineId} and line.transfer_id = ${header.id} and line.organization_id = ${input.organizationId} for update`.execute(
+        tracking_mode: string;
+      }>`select line.id, line.inventory_item_id, (line.dispatched_quantity - line.received_quantity - coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id = line.id), 0))::text as remaining, item.tracking_mode
+        from warehouse.transfer_lines line
+        join inventory.inventory_items item
+          on item.id = line.inventory_item_id and item.organization_id = line.organization_id
+        where line.id = ${receipt.transferLineId} and line.transfer_id = ${header.id} and line.organization_id = ${input.organizationId}
+        for update of line`.execute(
         transaction,
       );
       const source = line.rows[0];
@@ -2624,6 +2686,91 @@ export async function receiveWarehouseTransfer(
           'VALIDATION_FAILED',
           'Receipt quantity exceeds inventory in transit.',
         );
+      if (source.tracking_mode === 'SERIAL') {
+        if (!Number.isInteger(Number(received)))
+          throw new InventoryDomainError(
+            'VALIDATION_FAILED',
+            'Serialized receipt quantities must be whole units.',
+          );
+        const unitReceipts = receipt.unitReceipts ?? [];
+        const unitIds = unitReceipts.map((unit) => unit.unitId);
+        if (new Set(unitIds).size !== unitIds.length || unitIds.length !== Number(received))
+          throw new InventoryDomainError(
+            'VALIDATION_FAILED',
+            'Select each serialized unit received on this transfer line exactly once.',
+          );
+        for (const [condition, quantity] of quantities) {
+          const selectedForCondition = unitReceipts.filter(
+            (unit) => unit.condition === condition,
+          ).length;
+          if (selectedForCondition !== Number(quantity))
+            throw new InventoryDomainError(
+              'VALIDATION_FAILED',
+              `Serialized ${condition.toLowerCase()} selections must match the received condition quantity.`,
+            );
+        }
+        const allocated = await sql<{ unit_id: string; status: string }>`
+          select unit.id as unit_id, unit.status
+          from inventory.unit_transfer_allocations allocation
+          join inventory.inventory_units unit
+            on unit.id = allocation.unit_id and unit.organization_id = allocation.organization_id
+          where allocation.organization_id = ${input.organizationId}
+            and allocation.transfer_id = ${header.id}
+            and allocation.transfer_line_id = ${source.id}
+            and allocation.status = 'IN_TRANSIT'
+            and unit.id = any(${unitIds}::uuid[])
+            and unit.status = 'IN_TRANSFER'
+            and unit.location_id = ${header.source_location_id}
+          order by unit.id
+          for update of allocation, unit
+        `.execute(transaction);
+        if (allocated.rows.length !== unitIds.length)
+          throw new InventoryDomainError(
+            'VALIDATION_FAILED',
+            'One or more selected units are not in transit on this transfer line.',
+          );
+        const conditionByUnit = new Map(unitReceipts.map((unit) => [unit.unitId, unit.condition]));
+        for (const unit of allocated.rows) {
+          const condition = conditionByUnit.get(unit.unit_id)!;
+          const status = condition === 'SELLABLE'
+            ? 'AVAILABLE'
+            : condition === 'INSPECTION'
+              ? 'AWAITING_QC'
+              : 'ON_HOLD';
+          await sql`
+            update inventory.inventory_units
+            set location_id = ${header.destination_location_id},
+              inventory_condition_code = ${condition}, status = ${status},
+              updated_at = now(), version = version + 1
+            where organization_id = ${input.organizationId} and id = ${unit.unit_id}
+          `.execute(transaction);
+          await sql`
+            update inventory.unit_transfer_allocations
+            set status = 'RECEIVED', received_condition_code = ${condition},
+              received_by_actor_id = ${input.actorId}, received_at = now()
+            where organization_id = ${input.organizationId}
+              and transfer_id = ${header.id} and unit_id = ${unit.unit_id}
+              and status = 'IN_TRANSIT'
+          `.execute(transaction);
+          await sql`
+            insert into inventory.unit_events (
+              organization_id, unit_id, event_type, actor_type, actor_id,
+              from_status, to_status, from_condition, to_condition,
+              from_location_id, to_location_id, reference_type, reference_id, reason
+            ) values (
+              ${input.organizationId}, ${unit.unit_id}, 'TRANSFER_RECEIVED', 'USER', ${input.actorId},
+              ${unit.status}, ${status}, 'SELLABLE', ${condition},
+              ${header.source_location_id}, ${header.destination_location_id},
+              'warehouse.transfer', ${header.id}, 'Serialized unit received from warehouse transfer'
+            )
+          `.execute(transaction);
+        }
+      } else if (receipt.unitReceipts?.length) {
+        throw new InventoryDomainError(
+          'VALIDATION_FAILED',
+          'Unit identities can only be supplied for serialized transfer lines.',
+        );
+      }
       for (const [condition, quantity] of quantities)
         if (quantity !== '0') {
           assertQuantity(quantity);
@@ -2751,13 +2898,24 @@ export async function closeWarehouseTransferDiscrepancy(
       const line = await sql<{
         id: string;
         remaining: string;
-      }>`select line.id, (line.dispatched_quantity - line.received_quantity - coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id=line.id), 0))::text as remaining from warehouse.transfer_lines line where line.id=${entry.transferLineId} and line.transfer_id=${header.id} and line.organization_id=${input.organizationId} for update`.execute(
+        tracking_mode: string;
+      }>`select line.id, (line.dispatched_quantity - line.received_quantity - coalesce((select discrepancy.quantity from warehouse.transfer_line_discrepancies discrepancy where discrepancy.transfer_line_id=line.id), 0))::text as remaining, item.tracking_mode
+        from warehouse.transfer_lines line
+        join inventory.inventory_items item
+          on item.id = line.inventory_item_id and item.organization_id = line.organization_id
+        where line.id=${entry.transferLineId} and line.transfer_id=${header.id} and line.organization_id=${input.organizationId}
+        for update of line`.execute(
         transaction,
       );
       if (!line.rows[0] || subtract(line.rows[0].remaining, entry.quantity) !== '0')
         throw new InventoryDomainError(
           'VALIDATION_FAILED',
           'A discrepancy must resolve all remaining quantity for its transfer line.',
+        );
+      if (line.rows[0].tracking_mode === 'SERIAL')
+        throw new InventoryDomainError(
+          'VALIDATION_FAILED',
+          'Serialized transfer loss requires exact Unit IDs; receive the located units before recording the remaining identity-aware loss.',
         );
       await sql`insert into warehouse.transfer_line_discrepancies (organization_id, transfer_line_id, disposition_code, quantity, reason_code, notes, recorded_by_actor_id) values (${input.organizationId}, ${entry.transferLineId}, ${entry.dispositionCode}, ${entry.quantity}::numeric, ${entry.reasonCode.trim()}, ${entry.notes?.trim() || null}, ${input.actorId})`.execute(
         transaction,

@@ -522,6 +522,19 @@ export function registerWarehouseRoutes(
               damagedQuantity: Type.Optional(quantity),
               quarantineQuantity: Type.Optional(quantity),
               inspectionQuantity: Type.Optional(quantity),
+              unitReceipts: Type.Optional(
+                Type.Array(
+                  Type.Object({
+                    unitId: Type.String(),
+                    condition: Type.Union([
+                      Type.Literal('SELLABLE'),
+                      Type.Literal('DAMAGED'),
+                      Type.Literal('QUARANTINE'),
+                      Type.Literal('INSPECTION'),
+                    ]),
+                  }),
+                ),
+              ),
             }),
             { minItems: 1 },
           ),
