@@ -60,6 +60,8 @@ Implemented in the first integrity slice:
 - Added durable unit-to-transfer allocation evidence and exposed tracking mode plus allocated Unit IDs in transfer detail. The Admin receipt sheet now confirms condition per serialized Unit ID instead of inventing anonymous condition quantities.
 - Completed exact-identity in-transit loss handling. A serialized transfer discrepancy now requires every missing Unit ID, verifies that each identity is still in transit on the selected line, permanently marks its allocation lost and its unit written off, and records the physical and cost evidence in one transaction. The Admin discrepancy sheet shows and submits the affected Unit Codes.
 - Preserved explicit unvalued-stock truth during transfer loss: opening/found stock with no cost position can close operationally without inventing a zero-cost layer, while partially covered or consumed transfer-cost evidence still fails closed.
+- Replaced the serialized-stocktake restriction with an identity-aware count. A stocktake now snapshots exact Unit IDs and conditions, the Admin count sheet records which Unit Codes are physically present plus their observed conditions, and posting atomically corrects unit state, aggregate condition balances, and cost evidence. Missing committed units fail closed until their reservation or fulfillment is resolved.
+- Included live serialized identities discovered after the snapshot as explicit found candidates instead of allowing anonymous quantity additions. Serialized gains therefore require a registered physical identity before they can enter a posted count.
 - Fixed the inspection-history query to use the actual IAM user-name column.
 
 Verification completed for this slice:
@@ -67,14 +69,13 @@ Verification completed for this slice:
 - Fresh disposable Compose baseline rebuild through `3100_unit_traceability`: passed.
 - Root TypeScript project build: passed.
 - Admin TypeScript check after client-contract repair: passed.
-- Focused Inventory, serialized-unit, API, and Admin unit-client suites: 40 tests passed across 4 files.
+- Docker production builds for API, Worker, Admin, and Storefront during the disposable baseline rebuild: passed.
+- Focused Inventory, serialized-unit, API, and Admin unit-client suites: 41 tests passed across 4 files.
 
 Remaining before Stage 1 can be marked complete:
 
-- Add identity-aware serialized stock counting and reconciliation posting.
 - Complete command-level idempotency and optimistic-version coverage for every mutable unit endpoint.
 - Complete successful posted-return-receipt intake coverage with real return fixtures, not only rejection/rollback evidence.
-- Replace the remaining fail-safe serialized-count restriction with the completed identity-aware count workflow.
 
 ---
 

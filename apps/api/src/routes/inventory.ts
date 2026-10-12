@@ -571,6 +571,14 @@ export function registerInventoryRoutes(
               INSPECTION: Type.Optional(quantity),
             }),
           ),
+          countedUnits: Type.Optional(
+            Type.Array(
+              Type.Object({
+                unitId: Type.String(),
+                condition,
+              }),
+            ),
+          ),
           version: Type.Integer({ minimum: 1 }),
         }),
       },
@@ -586,6 +594,10 @@ export function registerInventoryRoutes(
           countedQuantitiesByCondition?: Partial<
             Record<'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION', string>
           >;
+          countedUnits?: {
+            unitId: string;
+            condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+          }[];
           version: number;
         };
         await recordStocktakeCount(database.db, {

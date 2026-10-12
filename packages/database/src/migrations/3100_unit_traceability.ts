@@ -174,6 +174,26 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index if not exists unit_transfer_allocations_transfer_line
       on inventory.unit_transfer_allocations (organization_id, transfer_line_id, status, unit_id);
 
+    create table if not exists inventory.stocktake_unit_counts (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      stocktake_session_id uuid not null,
+      stocktake_line_id uuid not null,
+      unit_id uuid not null,
+      expected_at_snapshot boolean not null default true,
+      expected_condition_code text check (expected_condition_code in ('SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION')),
+      counted_condition_code text check (counted_condition_code in ('SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION')),
+      counted_at timestamptz,
+      unique (organization_id, id),
+      unique (organization_id, stocktake_session_id, unit_id),
+      foreign key (organization_id, stocktake_session_id) references inventory.stocktake_sessions(organization_id, id),
+      foreign key (organization_id, stocktake_line_id) references inventory.stocktake_lines(organization_id, id),
+      foreign key (organization_id, unit_id) references inventory.inventory_units(organization_id, id),
+      check ((counted_condition_code is null and counted_at is null) or (counted_condition_code is not null and counted_at is not null))
+    );
+    create index if not exists stocktake_unit_counts_line
+      on inventory.stocktake_unit_counts (organization_id, stocktake_line_id, expected_at_snapshot, unit_id);
+
     create table if not exists fulfillment.fulfillment_unit_allocations (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),

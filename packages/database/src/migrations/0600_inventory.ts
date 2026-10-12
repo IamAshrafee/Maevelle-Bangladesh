@@ -152,6 +152,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       status text not null default 'PENDING' check (status in ('PENDING', 'COUNTED', 'POSTED')),
       version bigint not null default 1,
       unique (stocktake_session_id, inventory_item_id),
+      unique (organization_id, id),
       foreign key (organization_id, stocktake_session_id) references inventory.stocktake_sessions(organization_id, id),
       foreign key (organization_id, inventory_item_id) references inventory.inventory_items(organization_id, id)
     );

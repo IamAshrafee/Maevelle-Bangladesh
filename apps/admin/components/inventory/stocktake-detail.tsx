@@ -1,18 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertCircle,
-  AlertTriangle,
-  ArrowLeft,
   Check,
   CheckCircle2,
   Clock,
   Copy,
   ExternalLink,
-  Layers,
   MapPin,
   Package,
   Plus,
@@ -20,7 +16,6 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
-  Sparkles,
   X,
 } from 'lucide-react';
 import type { CatalogVariantChoiceDto, StocktakeDetailDto } from '@maevelle/contracts';
@@ -37,6 +32,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  SerializedStocktakeCountDialog,
+  type SerializedCountEntry,
+} from './serialized-stocktake-count-dialog';
 import {
   Dialog,
   DialogContent,
@@ -323,7 +322,6 @@ function ConditionBreakdownModal({
 // ─── Main Stocktake Detail Component ──────────────────────────────────────────
 
 export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
-  const router = useRouter();
   const [stocktake, setStocktake] = useState<EnrichedStocktake | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -344,6 +342,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
 
   // Condition breakdown modal
   const [conditionModalLine, setConditionModalLine] = useState<EnrichedStocktake['lines'][number] | null>(null);
+  const [serializedCountLine, setSerializedCountLine] = useState<EnrichedStocktake['lines'][number] | null>(null);
 
   // Count states
   const [counts, setCounts] = useState<Record<string, string>>({});
@@ -424,6 +423,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     inventoryItemId: string,
     value: string,
     quantitiesByCondition?: Partial<Record<Condition, string>>,
+    countedUnits?: readonly SerializedCountEntry[],
   ) => {
     if (!stocktake || stocktake.status !== 'COUNTING') return;
     if (!value.trim() || !/^\d+(?:\.\d{1,6})?$/.test(value)) return;
@@ -435,6 +435,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     const payload = {
       countedQuantity: value,
       ...(quantitiesByCondition ? { countedQuantitiesByCondition: quantitiesByCondition } : {}),
+      ...(countedUnits ? { countedUnits } : {}),
       version: currentVersionRef.current,
     };
 
@@ -1120,52 +1121,60 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                           {/* Counted Quantity + Condition Trigger */}
                           <td className="py-3 px-3 align-middle">
                             <div className="flex items-center justify-center gap-1.5">
-                              <Input
-                                type="number"
-                                min="0"
-                                inputMode="numeric"
-                                step="1"
-                                placeholder="0"
-                                disabled={stocktake.status !== 'COUNTING' || isSaving}
-                                value={rawCounted}
-                                onChange={(e) =>
-                                  setCounts((prev) => ({
-                                    ...prev,
-                                    [line.inventoryItemId]: e.target.value,
-                                  }))
-                                }
-                                onBlur={() => {
-                                  const v = counts[line.inventoryItemId];
-                                  if (v !== undefined) {
-                                    void saveCount(line.inventoryItemId, v);
-                                  }
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    const v = counts[line.inventoryItemId];
-                                    if (v !== undefined) {
-                                      void saveCount(line.inventoryItemId, v);
-                                    }
-                                  }
-                                }}
-                                className="h-8 w-24 text-right tabular-nums text-sm"
-                              />
-
-                              {/* Condition Breakdown Button */}
-                              <Button
-                                type="button"
-                                variant={hasSplit ? 'secondary' : 'ghost'}
-                                size="sm"
-                                onClick={() => setConditionModalLine(line)}
-                                className={`h-8 px-2 text-xs gap-1 ${
-                                  hasSplit ? 'text-primary border border-primary/20' : 'text-muted-foreground'
-                                }`}
-                                title="Split into Damaged, Quarantine, or Inspection"
-                              >
-                                <SlidersHorizontal className="size-3.5" />
-                                {hasSplit ? 'Split' : 'Cond'}
-                              </Button>
+                              {line.trackingMode === 'SERIAL' ? (
+                                <Button
+                                  type="button"
+                                  variant={line.hasCount ? 'secondary' : 'outline'}
+                                  size="sm"
+                                  disabled={stocktake.status !== 'COUNTING' || isSaving}
+                                  onClick={() => setSerializedCountLine(line)}
+                                  className="h-8 gap-1.5 font-mono text-xs tabular-nums"
+                                >
+                                  <Package className="size-3.5" />
+                                  {line.hasCount ? `${rawCounted} units` : 'Count Unit IDs'}
+                                </Button>
+                              ) : (
+                                <>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    inputMode="numeric"
+                                    step="1"
+                                    placeholder="0"
+                                    disabled={stocktake.status !== 'COUNTING' || isSaving}
+                                    value={rawCounted}
+                                    onChange={(e) => setCounts((prev) => ({
+                                      ...prev,
+                                      [line.inventoryItemId]: e.target.value,
+                                    }))}
+                                    onBlur={() => {
+                                      const v = counts[line.inventoryItemId];
+                                      if (v !== undefined) void saveCount(line.inventoryItemId, v);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const v = counts[line.inventoryItemId];
+                                        if (v !== undefined) void saveCount(line.inventoryItemId, v);
+                                      }
+                                    }}
+                                    className="h-8 w-24 text-right font-mono text-sm tabular-nums"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant={hasSplit ? 'secondary' : 'ghost'}
+                                    size="sm"
+                                    onClick={() => setConditionModalLine(line)}
+                                    className={`h-8 gap-1 px-2 text-xs ${
+                                      hasSplit ? 'border border-primary/20 text-primary' : 'text-muted-foreground'
+                                    }`}
+                                    title="Split into Damaged, Quarantine, or Inspection"
+                                  >
+                                    <SlidersHorizontal className="size-3.5" />
+                                    {hasSplit ? 'Split' : 'Cond'}
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </td>
 
@@ -1205,7 +1214,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                               <Badge variant="outline" className="text-xs py-0 h-5 text-emerald-700 bg-emerald-50/60 border-emerald-200">
                                 Counted
                               </Badge>
-                            ) : stocktake.status === 'COUNTING' ? (
+                            ) : stocktake.status === 'COUNTING' && line.trackingMode !== 'SERIAL' ? (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1471,6 +1480,37 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           await saveCount(itemId, total, conds);
         }}
         disabled={stocktake.status !== 'COUNTING'}
+      />
+      <SerializedStocktakeCountDialog
+        open={Boolean(serializedCountLine)}
+        onOpenChange={(open) => {
+          if (!open) setSerializedCountLine(null);
+        }}
+        line={serializedCountLine}
+        disabled={stocktake.status !== 'COUNTING'}
+        onSave={async (units) => {
+          if (!serializedCountLine) return;
+          const conditionTotals = units.reduce<Partial<Record<Condition, string>>>((totals, unit) => {
+            totals[unit.condition] = String(Number(totals[unit.condition] ?? '0') + 1);
+            return totals;
+          }, {});
+          const total = String(units.length);
+          setCounts((current) => ({
+            ...current,
+            [serializedCountLine.inventoryItemId]: total,
+          }));
+          setConditionCounts((current) => ({
+            ...current,
+            [serializedCountLine.inventoryItemId]: conditionTotals,
+          }));
+          await saveCount(
+            serializedCountLine.inventoryItemId,
+            total,
+            conditionTotals,
+            units,
+          );
+          await reload();
+        }}
       />
     </div>
   );

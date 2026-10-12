@@ -1831,6 +1831,8 @@ export interface StocktakeLineDto {
   readonly sku: string;
   readonly productTitle: string;
   readonly optionSummary: string | null;
+  readonly trackingMode: 'STANDARD' | 'SERIAL';
+  readonly serializedUnits: readonly StocktakeUnitCountDto[];
   readonly expectedQuantityAtSnapshot: string;
   readonly expectedQuantitiesByCondition: Partial<
     Record<'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION', string>
@@ -1843,6 +1845,14 @@ export interface StocktakeLineDto {
   readonly finalExpectedQuantity: string | null;
   readonly varianceQuantity: string | null;
   readonly status: 'PENDING' | 'COUNTED' | 'POSTED';
+}
+
+export interface StocktakeUnitCountDto {
+  readonly unitId: string;
+  readonly unitCode: string;
+  readonly expectedAtSnapshot: boolean;
+  readonly expectedCondition: InventoryConditionDto | null;
+  readonly countedCondition: InventoryConditionDto | null;
 }
 
 export interface InventoryReservationDto {

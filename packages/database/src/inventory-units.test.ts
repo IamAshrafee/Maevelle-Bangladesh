@@ -10,7 +10,12 @@ import {
   createInventoryReservation,
   createWarehouseTransfer,
   dispatchWarehouseTransfer,
+  getStocktakeWorkspace,
+  postStocktake,
+  recordStocktakeCount,
   receiveWarehouseTransfer,
+  startStocktake,
+  submitStocktakeForReview,
 } from './inventory.js';
 import { createLocation } from './warehouse.js';
 import {
@@ -669,6 +674,67 @@ describe('Individual Unit Traceability & Quality Control', () => {
       where organization_id = ${f.organizationId} and unit_id = ${unit!.id}
     `.execute(database.db);
     expect(allocation.rows[0]?.status).toBe('LOST');
+  });
+
+  it('posts an identity-aware stocktake by exact Unit ID and observed condition', async () => {
+    const f = await fixture();
+    const units = await registerLedgerBackedUnits(f, {
+      quantity: 2,
+      inventoryCondition: 'SELLABLE',
+      initialStatus: 'AVAILABLE',
+    });
+    const stocktake = await startStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.mainLocation.id,
+    });
+    const workspace = await getStocktakeWorkspace(
+      database.db,
+      f.organizationId,
+      stocktake.stocktakeId,
+    );
+    expect(workspace?.lines[0]).toMatchObject({
+      trackingMode: 'SERIAL',
+      serializedUnits: expect.arrayContaining([
+        expect.objectContaining({ unitId: units[0]!.id, expectedCondition: 'SELLABLE' }),
+        expect.objectContaining({ unitId: units[1]!.id, expectedCondition: 'SELLABLE' }),
+      ]),
+    });
+    await recordStocktakeCount(database.db, {
+      organizationId: f.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: workspace!.lines[0]!.inventoryItemId,
+      countedQuantity: '1',
+      countedQuantitiesByCondition: { DAMAGED: '1' },
+      countedUnits: [{ unitId: units[0]!.id, condition: 'DAMAGED' }],
+      expectedVersion: stocktake.version,
+    });
+    const reviewed = await submitStocktakeForReview(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
+    });
+    await postStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(reviewed.version).toBe(stocktake.version + 2);
+    expect(await getInventoryUnit(database.db, {
+      organizationId: f.organizationId,
+      unitId: units[0]!.id,
+    })).toMatchObject({ status: 'ON_HOLD', inventoryCondition: 'DAMAGED' });
+    expect(await getInventoryUnit(database.db, {
+      organizationId: f.organizationId,
+      unitId: units[1]!.id,
+    })).toMatchObject({ status: 'WRITTEN_OFF' });
+    expect((await reconcileSerializedInventory(database.db, {
+      organizationId: f.organizationId,
+      variantId: f.variantId,
+      locationId: f.mainLocation.id,
+    })).isConsistent).toBe(true);
   });
 
   it('supports authorized release and permanent write-off', async () => {

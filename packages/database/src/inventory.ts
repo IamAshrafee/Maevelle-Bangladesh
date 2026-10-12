@@ -3039,23 +3039,6 @@ export async function startStocktake(
       input.locationId,
       'STOCK_HOLDING',
     );
-    const serializedStock = await sql<{ exists: boolean }>`
-      select exists (
-        select 1
-        from inventory.inventory_levels level
-        join inventory.inventory_items item
-          on item.id = level.inventory_item_id and item.organization_id = level.organization_id
-        where level.organization_id = ${input.organizationId}
-          and level.location_id = ${input.locationId}
-          and item.tracking_mode = 'SERIAL'
-          and level.sellable_quantity + level.unavailable_quantity > 0
-      ) as exists
-    `.execute(transaction);
-    if (serializedStock.rows[0]?.exists)
-      throw new InventoryDomainError(
-        'VALIDATION_FAILED',
-        'This location contains serialized inventory. Start an identity-aware unit count instead.',
-      );
     const created = await sql<{
       id: string;
     }>`insert into inventory.stocktake_sessions (organization_id, stocktake_number, location_id, status, created_by_actor_id) values (${input.organizationId}, concat('ST-', replace(uuidv7()::text, '-', '')), ${input.locationId}, 'COUNTING', ${input.actorId}) returning id`.execute(
@@ -3070,6 +3053,25 @@ export async function startStocktake(
       where level.organization_id = ${input.organizationId} and level.location_id = ${input.locationId}`.execute(
       transaction,
     );
+    await sql`
+      insert into inventory.stocktake_unit_counts (
+        organization_id, stocktake_session_id, stocktake_line_id, unit_id,
+        expected_at_snapshot, expected_condition_code
+      )
+      select unit.organization_id, ${stocktakeId}, line.id, unit.id, true,
+        unit.inventory_condition_code
+      from inventory.inventory_units unit
+      join inventory.inventory_items item
+        on item.id = unit.inventory_item_id and item.organization_id = unit.organization_id
+        and item.tracking_mode = 'SERIAL'
+      join inventory.stocktake_lines line
+        on line.organization_id = unit.organization_id
+        and line.stocktake_session_id = ${stocktakeId}
+        and line.inventory_item_id = unit.inventory_item_id
+      where unit.organization_id = ${input.organizationId}
+        and unit.location_id = ${input.locationId}
+        and unit.status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')
+    `.execute(transaction);
     await emit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -3091,6 +3093,7 @@ export async function recordStocktakeCount(
     inventoryItemId: string;
     countedQuantity: string;
     countedQuantitiesByCondition?: ConditionQuantities;
+    countedUnits?: readonly { unitId: string; condition: InventoryCondition }[];
     expectedVersion: number;
   },
 ): Promise<void> {
@@ -3099,7 +3102,7 @@ export async function recordStocktakeCount(
       'VALIDATION_FAILED',
       'Counted quantity must be a non-negative decimal with at most six places.',
     );
-  const countedConditions = input.countedQuantitiesByCondition
+  let countedConditions = input.countedQuantitiesByCondition
     ? normalizeConditionQuantities(input.countedQuantitiesByCondition)
     : { SELLABLE: subtract(input.countedQuantity, '0') };
   if (
@@ -3124,6 +3127,80 @@ export async function recordStocktakeCount(
         'STALE_VERSION',
         'Stocktake is no longer current for counting.',
       );
+    const line = await sql<{ id: string; tracking_mode: string }>`
+      select line.id, item.tracking_mode
+      from inventory.stocktake_lines line
+      join inventory.inventory_items item
+        on item.id = line.inventory_item_id and item.organization_id = line.organization_id
+      where line.organization_id = ${input.organizationId}
+        and line.stocktake_session_id = ${input.stocktakeId}
+        and line.inventory_item_id = ${input.inventoryItemId}
+      for update of line
+    `.execute(transaction);
+    const stocktakeLine = line.rows[0];
+    if (!stocktakeLine)
+      throw new InventoryDomainError('NOT_FOUND', 'Stocktake line was not found.');
+    if (stocktakeLine.tracking_mode === 'SERIAL') {
+      const countedUnits = input.countedUnits ?? [];
+      if (
+        !Number.isInteger(Number(input.countedQuantity)) ||
+        Number(input.countedQuantity) !== countedUnits.length ||
+        new Set(countedUnits.map((unit) => unit.unitId)).size !== countedUnits.length
+      )
+        throw new InventoryDomainError(
+          'VALIDATION_FAILED',
+          'A serialized count must identify every counted Unit ID exactly once.',
+        );
+      const unitIds = countedUnits.map((unit) => unit.unitId);
+      const units = unitIds.length
+        ? await sql<{ id: string }>`
+            select unit.id
+            from inventory.inventory_units unit
+            where unit.organization_id = ${input.organizationId}
+              and unit.inventory_item_id = ${input.inventoryItemId}
+              and unit.location_id = ${header.location_id}
+              and unit.id = any(${unitIds}::uuid[])
+              and unit.status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')
+            order by unit.id
+            for update
+          `.execute(transaction)
+        : { rows: [] as { id: string }[] };
+      if (units.rows.length !== countedUnits.length)
+        throw new InventoryDomainError(
+          'VALIDATION_FAILED',
+          'Every counted Unit ID must be a live identity for this SKU at the stocktake location.',
+        );
+      countedConditions = normalizeConditionQuantities(
+        countedUnits.reduce<ConditionQuantities>((totals, unit) => {
+          totals[unit.condition] = sumPositiveQuantities([totals[unit.condition] ?? '0', '1']);
+          return totals;
+        }, {}),
+      );
+      await sql`
+        update inventory.stocktake_unit_counts
+        set counted_condition_code = null, counted_at = null
+        where organization_id = ${input.organizationId}
+          and stocktake_session_id = ${input.stocktakeId}
+          and stocktake_line_id = ${stocktakeLine.id}
+      `.execute(transaction);
+      for (const unit of countedUnits)
+        await sql`
+          insert into inventory.stocktake_unit_counts (
+            organization_id, stocktake_session_id, stocktake_line_id, unit_id,
+            expected_at_snapshot, counted_condition_code, counted_at
+          ) values (
+            ${input.organizationId}, ${input.stocktakeId}, ${stocktakeLine.id}, ${unit.unitId},
+            false, ${unit.condition}, now()
+          )
+          on conflict (organization_id, stocktake_session_id, unit_id) do update
+          set counted_condition_code = excluded.counted_condition_code, counted_at = excluded.counted_at
+        `.execute(transaction);
+    } else if (input.countedUnits?.length) {
+      throw new InventoryDomainError(
+        'VALIDATION_FAILED',
+        'Unit IDs can only be supplied for a serialized stocktake line.',
+      );
+    }
     const updated = await sql<{
       id: string;
     }>`update inventory.stocktake_lines set counted_quantity = ${input.countedQuantity}::numeric, counted_condition_quantities = ${JSON.stringify(countedConditions)}::jsonb, status = 'COUNTED', version = version + 1 where stocktake_session_id = ${input.stocktakeId} and organization_id = ${input.organizationId} and inventory_item_id = ${input.inventoryItemId} returning id`.execute(
@@ -3316,13 +3393,15 @@ export async function postStocktake(
         header.location_id,
       );
     const lines = await sql<{
+      stocktake_line_id: string;
       inventory_item_id: string;
+      tracking_mode: string;
       expected_quantity_at_snapshot: string;
       counted_quantity: string | null;
       counted_condition_quantities: unknown;
       actual_quantity: string;
       actual_condition_quantities: unknown;
-    }>`select line.inventory_item_id, line.expected_quantity_at_snapshot::text, line.counted_quantity::text, line.counted_condition_quantities, (level.sellable_quantity + level.unavailable_quantity)::text as actual_quantity, coalesce(conditions.quantities, '{}'::jsonb) as actual_condition_quantities from inventory.stocktake_lines line join inventory.inventory_levels level on level.organization_id = line.organization_id and level.inventory_item_id = line.inventory_item_id and level.location_id = ${header.location_id} left join lateral (select jsonb_object_agg(condition.condition_code, condition.quantity) as quantities from inventory.inventory_level_conditions condition where condition.organization_id = line.organization_id and condition.inventory_item_id = line.inventory_item_id and condition.location_id = ${header.location_id}) conditions on true where line.stocktake_session_id = ${header.id} and line.organization_id = ${input.organizationId} order by line.inventory_item_id for update of line, level`.execute(
+    }>`select line.id as stocktake_line_id, line.inventory_item_id, item.tracking_mode, line.expected_quantity_at_snapshot::text, line.counted_quantity::text, line.counted_condition_quantities, (level.sellable_quantity + level.unavailable_quantity)::text as actual_quantity, coalesce(conditions.quantities, '{}'::jsonb) as actual_condition_quantities from inventory.stocktake_lines line join inventory.inventory_items item on item.id = line.inventory_item_id and item.organization_id = line.organization_id join inventory.inventory_levels level on level.organization_id = line.organization_id and level.inventory_item_id = line.inventory_item_id and level.location_id = ${header.location_id} left join lateral (select jsonb_object_agg(condition.condition_code, condition.quantity) as quantities from inventory.inventory_level_conditions condition where condition.organization_id = line.organization_id and condition.inventory_item_id = line.inventory_item_id and condition.location_id = ${header.location_id}) conditions on true where line.stocktake_session_id = ${header.id} and line.organization_id = ${input.organizationId} order by line.inventory_item_id for update of line, level`.execute(
       transaction,
     );
     if (lines.rows.some((line) => line.counted_quantity === null))
@@ -3351,6 +3430,104 @@ export async function postStocktake(
       quantity: string;
     }[] = [];
     for (const line of lines.rows) {
+      if (line.tracking_mode === 'SERIAL') {
+        const counted = await sql<{
+          unit_id: string;
+          counted_condition_code: InventoryCondition;
+        }>`
+          select unit_id, counted_condition_code
+          from inventory.stocktake_unit_counts
+          where organization_id = ${input.organizationId}
+            and stocktake_session_id = ${header.id}
+            and stocktake_line_id = ${line.stocktake_line_id}
+            and counted_condition_code is not null
+          order by unit_id
+          for update
+        `.execute(transaction);
+        const current = await sql<{
+          id: string;
+          status: string;
+          inventory_condition_code: InventoryCondition;
+          current_condition: string;
+        }>`
+          select id, status, inventory_condition_code, current_condition
+          from inventory.inventory_units
+          where organization_id = ${input.organizationId}
+            and inventory_item_id = ${line.inventory_item_id}
+            and location_id = ${header.location_id}
+            and status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')
+          order by id
+          for update
+        `.execute(transaction);
+        const currentById = new Map(current.rows.map((unit) => [unit.id, unit]));
+        const countedById = new Map(counted.rows.map((unit) => [unit.unit_id, unit]));
+        const outsideLocation = counted.rows.filter((unit) => !currentById.has(unit.unit_id));
+        if (outsideLocation.length)
+          throw new InventoryDomainError(
+            'CONFLICT',
+            'One or more counted Unit IDs moved or left the location after counting. Recount this serialized line.',
+          );
+        for (const unit of current.rows) {
+          const observation = countedById.get(unit.id);
+          const isCommitted = ['RESERVED', 'IN_FULFILLMENT'].includes(unit.status);
+          if (!observation) {
+            if (isCommitted)
+              throw new InventoryDomainError(
+                'CONFLICT',
+                'A missing serialized unit is committed to an active order or fulfillment. Resolve that allocation before posting the stocktake.',
+              );
+            await sql`
+              update inventory.inventory_units
+              set status = 'WRITTEN_OFF', current_condition = 'DAMAGED_UNSELLABLE',
+                updated_at = now(), version = version + 1
+              where organization_id = ${input.organizationId} and id = ${unit.id}
+            `.execute(transaction);
+            await sql`
+              insert into inventory.unit_events (
+                organization_id, unit_id, event_type, actor_type, actor_id,
+                from_status, to_status, from_condition, to_condition,
+                reference_type, reference_id, reason
+              ) values (
+                ${input.organizationId}, ${unit.id}, 'AUTHORIZED_CORRECTION', 'USER', ${input.actorId},
+                ${unit.status}, 'WRITTEN_OFF', ${unit.current_condition}, 'DAMAGED_UNSELLABLE',
+                'inventory.stocktake', ${header.id}, 'Unit not found during posted stocktake'
+              )
+            `.execute(transaction);
+            continue;
+          }
+          if (observation.counted_condition_code === unit.inventory_condition_code) continue;
+          if (isCommitted)
+            throw new InventoryDomainError(
+              'CONFLICT',
+              'A serialized unit with a changed condition is committed to an active order or fulfillment. Resolve that allocation before posting the stocktake.',
+            );
+          const nextStatus = observation.counted_condition_code === 'SELLABLE'
+            ? 'AVAILABLE'
+            : observation.counted_condition_code === 'INSPECTION'
+              ? 'AWAITING_QC'
+              : 'ON_HOLD';
+          await sql`
+            update inventory.inventory_units
+            set inventory_condition_code = ${observation.counted_condition_code},
+              status = ${nextStatus}, updated_at = now(), version = version + 1
+            where organization_id = ${input.organizationId} and id = ${unit.id}
+          `.execute(transaction);
+          await sql`
+            insert into inventory.unit_events (
+              organization_id, unit_id, event_type, actor_type, actor_id,
+              from_status, to_status, reference_type, reference_id, reason, metadata
+            ) values (
+              ${input.organizationId}, ${unit.id}, 'AUTHORIZED_CORRECTION', 'USER', ${input.actorId},
+              ${unit.status}, ${nextStatus}, 'inventory.stocktake', ${header.id},
+              'Inventory condition corrected by posted stocktake',
+              ${JSON.stringify({
+                fromInventoryCondition: unit.inventory_condition_code,
+                toInventoryCondition: observation.counted_condition_code,
+              })}::jsonb
+            )
+          `.execute(transaction);
+        }
+      }
       const variance = subtract(line.counted_quantity!, line.actual_quantity);
       const countedConditions = readConditionQuantities(line.counted_condition_quantities);
       const actualConditions = readConditionQuantities(line.actual_condition_quantities);
@@ -3509,6 +3686,14 @@ export async function getStocktakeWorkspace(
         sku: string;
         productTitle: string;
         optionSummary: string | null;
+        trackingMode: 'STANDARD' | 'SERIAL';
+        serializedUnits: readonly {
+          unitId: string;
+          unitCode: string;
+          expectedAtSnapshot: boolean;
+          expectedCondition: InventoryCondition | null;
+          countedCondition: InventoryCondition | null;
+        }[];
         expectedQuantityAtSnapshot: string;
         expectedQuantitiesByCondition: ConditionQuantities;
         countedQuantity: string | null;
@@ -3557,6 +3742,7 @@ export async function getStocktakeWorkspace(
     sku: string;
     product_title: string;
     option_summary: string | null;
+    tracking_mode: 'STANDARD' | 'SERIAL';
   }>`
     select
       sl.id, sl.inventory_item_id, item.variant_id,
@@ -3568,12 +3754,12 @@ export async function getStocktakeWorkspace(
       sl.final_expected_quantity::text,
       sl.variance_quantity::text,
       sl.status,
-      variant.sku,
+      variant.sku, item.tracking_mode,
       product.title as product_title,
       (
         select string_agg(ov.display_value, ' / ' order by axis.position)
         from catalog.product_option_axes axis
-        join catalog.product_option_values ov on ov.axis_id = axis.id
+        join catalog.product_option_values ov on ov.option_axis_id = axis.id
         join catalog.variant_option_values vov on vov.option_value_id = ov.id and vov.variant_id = variant.id
         where axis.product_id = product.id
       ) as option_summary
@@ -3584,6 +3770,55 @@ export async function getStocktakeWorkspace(
     where sl.stocktake_session_id = ${header.id} and sl.organization_id = ${organizationId}
     order by product.title, variant.sku
   `.execute(db);
+
+  const serializedUnits = await sql<{
+    stocktake_line_id: string;
+    unit_id: string;
+    unit_code: string;
+    expected_at_snapshot: boolean;
+    expected_condition_code: InventoryCondition | null;
+    counted_condition_code: InventoryCondition | null;
+  }>`
+    select evidence.stocktake_line_id, evidence.unit_id, evidence.unit_code,
+      evidence.expected_at_snapshot, evidence.expected_condition_code,
+      evidence.counted_condition_code
+    from (
+      select count.stocktake_line_id, count.unit_id, unit.unit_code,
+        count.expected_at_snapshot, count.expected_condition_code,
+        count.counted_condition_code
+      from inventory.stocktake_unit_counts count
+      join inventory.inventory_units unit
+        on unit.id = count.unit_id and unit.organization_id = count.organization_id
+      where count.organization_id = ${organizationId}
+        and count.stocktake_session_id = ${header.id}
+      union all
+      select line.id, unit.id, unit.unit_code, false, null, null
+      from inventory.stocktake_lines line
+      join inventory.inventory_items item
+        on item.id = line.inventory_item_id and item.organization_id = line.organization_id
+        and item.tracking_mode = 'SERIAL'
+      join inventory.inventory_units unit
+        on unit.inventory_item_id = line.inventory_item_id
+        and unit.organization_id = line.organization_id
+        and unit.location_id = ${header.location_id}
+        and unit.status not in ('IN_TRANSFER', 'DISPATCHED', 'WRITTEN_OFF')
+      where line.organization_id = ${organizationId}
+        and line.stocktake_session_id = ${header.id}
+        and not exists (
+          select 1 from inventory.stocktake_unit_counts existing
+          where existing.organization_id = line.organization_id
+            and existing.stocktake_session_id = line.stocktake_session_id
+            and existing.unit_id = unit.id
+        )
+    ) evidence
+    order by evidence.stocktake_line_id, evidence.unit_code
+  `.execute(db);
+  const unitsByLine = new Map<string, typeof serializedUnits.rows>();
+  for (const unit of serializedUnits.rows)
+    unitsByLine.set(unit.stocktake_line_id, [
+      ...(unitsByLine.get(unit.stocktake_line_id) ?? []),
+      unit,
+    ]);
 
   return {
     id: header.id,
@@ -3605,6 +3840,14 @@ export async function getStocktakeWorkspace(
       sku: line.sku,
       productTitle: line.product_title,
       optionSummary: line.option_summary,
+      trackingMode: line.tracking_mode,
+      serializedUnits: (unitsByLine.get(line.id) ?? []).map((unit) => ({
+        unitId: unit.unit_id,
+        unitCode: unit.unit_code,
+        expectedAtSnapshot: unit.expected_at_snapshot,
+        expectedCondition: unit.expected_condition_code,
+        countedCondition: unit.counted_condition_code,
+      })),
       expectedQuantityAtSnapshot: subtract(line.expected_quantity_at_snapshot, '0'),
       expectedQuantitiesByCondition: readConditionQuantities(line.expected_condition_quantities),
       countedQuantity: line.counted_quantity === null ? null : subtract(line.counted_quantity, '0'),
