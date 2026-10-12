@@ -385,6 +385,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
       {/* Receive sheet */}
       <ReceiveTransferSheet
         transferId={transferId}
+        transferVersion={transfer.version}
         lines={lines}
         open={receiveOpen}
         onClose={() => setReceiveOpen(false)}
@@ -395,6 +396,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
       />
       <CloseTransferDiscrepancySheet
         transferId={transferId}
+        transferVersion={transfer.version}
         lines={lines}
         open={discrepancyOpen}
         onClose={() => setDiscrepancyOpen(false)}

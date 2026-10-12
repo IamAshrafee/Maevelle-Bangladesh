@@ -169,6 +169,7 @@ Remaining in Stage 5:
 - Added source and destination Location filters alongside status and transfer-number search. Pagination now uses the authoritative server `totalCount` instead of guessing that another page exists whenever the current page happens to contain 25 rows.
 - Transfer detail now uses the shared Admin page, loading/error, status, and compact table primitives. Draft management actions and physical transfer actions render from their distinct capabilities, and success/error treatment uses semantic theme tokens.
 - Draft approval and cancellation now require API idempotency keys and replay equivalent completed commands safely while preserving their optimistic version checks. The UI supplies a stable command key for each transfer version.
+- Fixed partial-receipt recovery: reopening the Receive sheet now rehydrates from the latest server lines instead of retaining its first-render quantities. Receive and discrepancy commands use a stable key for the current Transfer version, and both sheets now use full-width mobile layouts with touch-safe serialized-unit controls.
 
 Verification for this slice:
 

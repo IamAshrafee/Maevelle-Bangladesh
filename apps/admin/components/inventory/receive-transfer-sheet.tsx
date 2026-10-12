@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -42,6 +42,7 @@ export interface ReceivableTransferLine {
 
 interface Props {
   transferId: string;
+  transferVersion: number;
   lines: readonly ReceivableTransferLine[];
   open: boolean;
   onClose: () => void;
@@ -107,7 +108,7 @@ function defaultLine(l: ReceivableTransferLine): FormValues['lines'][number] {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSuccess }: Props) {
+export function ReceiveTransferSheet({ transferId, transferVersion, lines, open, onClose, onSuccess }: Props) {
   const receivableLines = lines.filter(
     (l) =>
       Number(l.dispatchedQuantity) >
@@ -125,6 +126,14 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
 
   const { fields } = useFieldArray({ control: form.control, name: 'lines' });
 
+  useEffect(() => {
+    if (!open) return;
+    form.reset({ lines: lines.filter(
+      (line) => Number(line.dispatchedQuantity) > Number(line.receivedQuantity) + Number(line.discrepancy?.quantity ?? 0),
+    ).map(defaultLine) });
+    setSubmitError('');
+  }, [form, lines, open]);
+
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError('');
     try {
@@ -133,7 +142,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
         {
           method: 'POST',
           headers: {
-            'idempotency-key': `recv-${transferId}-${Date.now()}`,
+            'idempotency-key': `receive-${transferId}-${transferVersion}`,
           },
           body: JSON.stringify({
             lines: values.lines
@@ -187,7 +196,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
   if (receivableLines.length === 0) {
     return (
       <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-        <SheetContent className="sm:max-w-lg">
+        <SheetContent className="w-full sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>Receive Transfer</SheetTitle>
             <SheetDescription>There are no lines remaining to receive.</SheetDescription>
@@ -204,7 +213,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="sm:max-w-2xl overflow-y-auto">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Receive Transfer</SheetTitle>
           <SheetDescription>
@@ -263,7 +272,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                       Confirm each received Unit ID and its arrival condition
                     </p>
                     {lineWatch.unitReceipts.map((unit, unitIndex) => (
-                      <div key={unit.unitId} className="grid grid-cols-[1fr_10rem] items-center gap-3">
+                      <div key={unit.unitId} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_10rem] sm:gap-3">
                         <span className="font-mono text-xs tabular-nums text-foreground">
                           {unit.unitCode}
                         </span>
@@ -296,7 +305,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="space-y-1">
-                    <Label className="text-xs text-emerald-700 font-medium">Sellable</Label>
+                    <Label className="text-xs text-success font-medium">Sellable</Label>
                     <Input
                       type="number"
                       min="0"
@@ -320,7 +329,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-amber-600 font-medium">Quarantine</Label>
+                    <Label className="text-xs text-warning font-medium">Quarantine</Label>
                     <Input
                       type="number"
                       min="0"
@@ -332,7 +341,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-blue-600 font-medium">Inspection</Label>
+                    <Label className="text-xs text-info font-medium">Inspection</Label>
                     <Input
                       type="number"
                       min="0"

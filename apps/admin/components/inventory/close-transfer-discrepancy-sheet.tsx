@@ -84,12 +84,14 @@ function toFormLines(lines: readonly TransferLine[]): DiscrepancyLine[] {
 /** Finalizes stock that cannot arrive. Each selected line is fully reconciled, never silently edited. */
 export function CloseTransferDiscrepancySheet({
   transferId,
+  transferVersion,
   lines,
   open,
   onClose,
   onSuccess,
 }: {
   transferId: string;
+  transferVersion: number;
   lines: readonly TransferLine[];
   open: boolean;
   onClose: () => void;
@@ -129,7 +131,7 @@ export function CloseTransferDiscrepancySheet({
         `/warehouse/transfers/${transferId}/close-discrepancy`,
         {
           method: 'POST',
-          headers: { 'idempotency-key': `transfer-discrepancy-${transferId}-${Date.now()}` },
+          headers: { 'idempotency-key': `transfer-discrepancy-${transferId}-${transferVersion}` },
           body: JSON.stringify({
             lines: selected.map((entry) => ({
               transferLineId: entry.transferLineId,
@@ -157,7 +159,7 @@ export function CloseTransferDiscrepancySheet({
 
   return (
     <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
-      <SheetContent className="overflow-y-auto sm:max-w-2xl">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Resolve missing stock</SheetTitle>
           <SheetDescription>
