@@ -55,6 +55,7 @@ Implemented in the first integrity slice:
 - Reworked serialized reconciliation to compare live unit identities against every condition-level ledger bucket and to compare selected reservation/fulfillment identities against aggregate reserved quantity.
 - Prevented switching a variant back to standard tracking while live unit identities remain.
 - Corrected the Admin unit client contract: route paths, HTTP methods, registration quantity mapping, inspection outcome/media mapping, repair response shapes, bulk result mapping, stock-conversion response mapping, and reconciliation endpoint now match the Fastify API.
+- Replaced the unsafe Admin "move unit" form with a clear hand-off to the canonical Transfer workflow, preserving the source-location context and explaining why quantity, identity, and cost must move together.
 - Fixed the inspection-history query to use the actual IAM user-name column.
 
 Verification completed for this slice:
@@ -70,7 +71,7 @@ Remaining before Stage 1 can be marked complete:
 - Add identity-aware serialized stock counting and reconciliation posting.
 - Complete command-level idempotency and optimistic-version coverage for every mutable unit endpoint.
 - Complete successful posted-return-receipt intake coverage with real return fixtures, not only rejection/rollback evidence.
-- Replace temporary fail-safe UI affordances for direct move/count actions with the completed transfer and count workflows.
+- Replace the remaining fail-safe serialized-count restriction with the completed identity-aware count workflow.
 
 ---
 
