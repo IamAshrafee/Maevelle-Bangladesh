@@ -54,10 +54,13 @@ import { UnitMoveDialog } from './unit-move-dialog';
 import { UnitInspectDialog } from './unit-inspect-dialog';
 import { UnitScanLookupDialog } from './unit-scan-lookup-dialog';
 import { cn } from '@/lib/utils';
+import { useAdminCapability } from '@/components/admin-capabilities';
+import { QualityWorkspaceTabs } from './quality-workspace-tabs';
 
 export function UnitsList() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const canManage = useAdminCapability('inventory.units.manage');
 
   // Query filters from URL or defaults
   const [search, setSearch] = useState(searchParams.get('search') || searchParams.get('q') || '');
@@ -218,7 +221,8 @@ export function UnitsList() {
             <span>Individual Physical Units</span>
           </PageTitle>
           <PageDescription>
-            Permanent serialized tracking for individual garments and accessories across quality control, storage locations, fulfillment, and repairs.
+            Permanent serialized tracking for individual garments and accessories across quality
+            control, storage locations, fulfillment, and repairs.
           </PageDescription>
         </div>
 
@@ -244,6 +248,7 @@ export function UnitsList() {
           </Button>
         </PageActions>
       </PageHeader>
+      <QualityWorkspaceTabs />
 
       {/* Search & Filter Bar */}
       <PageSection>
@@ -251,7 +256,10 @@ export function UnitsList() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Search Input */}
             <div className="lg:col-span-2">
-              <label htmlFor="unit-search" className="text-[11px] font-medium text-muted-foreground block mb-1">
+              <label
+                htmlFor="unit-search"
+                className="text-[11px] font-medium text-muted-foreground block mb-1"
+              >
                 Search Unit Code / Barcode / Title
               </label>
               <div className="relative">
@@ -273,7 +281,10 @@ export function UnitsList() {
 
             {/* Status Filter */}
             <div>
-              <label htmlFor="unit-status-filter" className="text-[11px] font-medium text-muted-foreground block mb-1">
+              <label
+                htmlFor="unit-status-filter"
+                className="text-[11px] font-medium text-muted-foreground block mb-1"
+              >
                 Operational Status
               </label>
               <NativeSelect
@@ -299,7 +310,10 @@ export function UnitsList() {
 
             {/* Condition Filter */}
             <div>
-              <label htmlFor="unit-cond-filter" className="text-[11px] font-medium text-muted-foreground block mb-1">
+              <label
+                htmlFor="unit-cond-filter"
+                className="text-[11px] font-medium text-muted-foreground block mb-1"
+              >
                 QC Condition
               </label>
               <NativeSelect
@@ -321,7 +335,10 @@ export function UnitsList() {
 
             {/* Warehouse Location Filter */}
             <div>
-              <label htmlFor="unit-loc-filter" className="text-[11px] font-medium text-muted-foreground block mb-1">
+              <label
+                htmlFor="unit-loc-filter"
+                className="text-[11px] font-medium text-muted-foreground block mb-1"
+              >
                 Warehouse Location
               </label>
               <NativeSelect
@@ -395,26 +412,30 @@ export function UnitsList() {
               <span>Print Labels</span>
             </Button>
 
-            <Button
-              size="xs"
-              variant="secondary"
-              onClick={() => setMoveModalOpen(true)}
-              className="gap-1.5"
-            >
-              <Boxes className="size-3" />
-              <span>Move Location</span>
-            </Button>
+            {canManage ? (
+              <>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => setMoveModalOpen(true)}
+                  className="gap-1.5"
+                >
+                  <Boxes className="size-3" />
+                  <span>Move Location</span>
+                </Button>
 
-            <Button
-              size="xs"
-              variant="secondary"
-              onClick={handleBulkPass}
-              disabled={busy}
-              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-none"
-            >
-              <ShieldCheck className="size-3" />
-              <span>Mark QC Passed</span>
-            </Button>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={handleBulkPass}
+                  disabled={busy}
+                  className="gap-1.5"
+                >
+                  <ShieldCheck className="size-3" />
+                  <span>Mark QC Passed</span>
+                </Button>
+              </>
+            ) : null}
 
             <Button
               size="xs"
@@ -492,7 +513,10 @@ export function UnitsList() {
                       return (
                         <TableRow
                           key={unit.id}
-                          className={cn('transition-colors', isSelected && 'bg-primary/5 font-medium')}
+                          className={cn(
+                            'transition-colors',
+                            isSelected && 'bg-primary/5 font-medium',
+                          )}
                         >
                           <TableCell className="p-3">
                             <Checkbox
@@ -568,31 +592,35 @@ export function UnitsList() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="xs"
-                                onClick={() => {
-                                  setSingleTargetUnit(unit);
-                                  setInspectModalOpen(true);
-                                }}
-                                title="Inspect Unit"
-                                className="size-7 p-0"
-                              >
-                                <ShieldCheck className="size-3.5 text-blue-600" />
-                              </Button>
+                              {canManage ? (
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => {
+                                    setSingleTargetUnit(unit);
+                                    setInspectModalOpen(true);
+                                  }}
+                                  title="Inspect Unit"
+                                  className="size-7 p-0"
+                                >
+                                  <ShieldCheck className="size-3.5 text-info" />
+                                </Button>
+                              ) : null}
 
-                              <Button
-                                variant="ghost"
-                                size="xs"
-                                onClick={() => {
-                                  setSingleTargetUnit(unit);
-                                  setMoveModalOpen(true);
-                                }}
-                                title="Move Location"
-                                className="size-7 p-0"
-                              >
-                                <Boxes className="size-3.5 text-slate-600" />
-                              </Button>
+                              {canManage ? (
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => {
+                                    setSingleTargetUnit(unit);
+                                    setMoveModalOpen(true);
+                                  }}
+                                  title="Move Location"
+                                  className="size-7 p-0"
+                                >
+                                  <Boxes className="size-3.5 text-muted-foreground" />
+                                </Button>
+                              ) : null}
 
                               <Button
                                 variant="ghost"
@@ -693,26 +721,30 @@ export function UnitsList() {
 
                       <div className="flex items-center justify-between pt-1">
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            onClick={() => {
-                              setSingleTargetUnit(unit);
-                              setInspectModalOpen(true);
-                            }}
-                          >
-                            Inspect
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            onClick={() => {
-                              setSingleTargetUnit(unit);
-                              setMoveModalOpen(true);
-                            }}
-                          >
-                            Move
-                          </Button>
+                          {canManage ? (
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => {
+                                setSingleTargetUnit(unit);
+                                setInspectModalOpen(true);
+                              }}
+                            >
+                              Inspect
+                            </Button>
+                          ) : null}
+                          {canManage ? (
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => {
+                                setSingleTargetUnit(unit);
+                                setMoveModalOpen(true);
+                              }}
+                            >
+                              Move
+                            </Button>
+                          ) : null}
                           <Button
                             variant="outline"
                             size="xs"
@@ -779,18 +811,20 @@ export function UnitsList() {
         units={singleTargetUnit ? [singleTargetUnit] : selectedUnits}
       />
 
-      <UnitMoveDialog
-        open={moveModalOpen}
-        onOpenChange={setMoveModalOpen}
-        units={singleTargetUnit ? [singleTargetUnit] : selectedUnits}
-        onSuccess={() => {
-          setSelectedIds(new Set());
-          setSingleTargetUnit(null);
-          void fetchUnits();
-        }}
-      />
+      {canManage ? (
+        <UnitMoveDialog
+          open={moveModalOpen}
+          onOpenChange={setMoveModalOpen}
+          units={singleTargetUnit ? [singleTargetUnit] : selectedUnits}
+          onSuccess={() => {
+            setSelectedIds(new Set());
+            setSingleTargetUnit(null);
+            void fetchUnits();
+          }}
+        />
+      ) : null}
 
-      {singleTargetUnit ? (
+      {canManage && singleTargetUnit ? (
         <UnitInspectDialog
           open={inspectModalOpen}
           onOpenChange={setInspectModalOpen}
@@ -802,10 +836,7 @@ export function UnitsList() {
         />
       ) : null}
 
-      <UnitScanLookupDialog
-        open={scanLookupOpen}
-        onOpenChange={setScanLookupOpen}
-      />
+      <UnitScanLookupDialog open={scanLookupOpen} onOpenChange={setScanLookupOpen} />
     </AdminPage>
   );
 }

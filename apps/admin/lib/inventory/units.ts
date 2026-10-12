@@ -32,6 +32,7 @@ export interface ListUnitsQuery {
   readonly status?: UnitStatusDto | undefined;
   readonly sourceReceiptId?: string | undefined;
   readonly packageReference?: string | undefined;
+  readonly attention?: 'REPAIR' | undefined;
 }
 
 export interface ListUnitsResponse {
@@ -403,9 +404,17 @@ export async function receiveReturnedUnit(
 
 export async function setVariantTrackingMode(
   input: SetTrackingModeInput,
-): Promise<{ readonly variantId: string; readonly trackingMode: VariantTrackingModeDto; readonly version: number }> {
+): Promise<{
+  readonly variantId: string;
+  readonly trackingMode: VariantTrackingModeDto;
+  readonly version: number;
+}> {
   const response = await inventoryRequest<{
-    readonly data: { readonly variantId: string; readonly trackingMode: VariantTrackingModeDto; readonly version: number };
+    readonly data: {
+      readonly variantId: string;
+      readonly trackingMode: VariantTrackingModeDto;
+      readonly version: number;
+    };
   }>('/admin/inventory/units/tracking-mode', {
     method: 'POST',
     headers: commandHeaders(),
@@ -414,9 +423,7 @@ export async function setVariantTrackingMode(
   return response.data;
 }
 
-export async function convertStockToSerialized(
-  input: ConvertStockInput,
-): Promise<{
+export async function convertStockToSerialized(input: ConvertStockInput): Promise<{
   readonly variantId: string;
   readonly registeredUnitsCount: number;
   readonly units: readonly InventoryUnitDto[];

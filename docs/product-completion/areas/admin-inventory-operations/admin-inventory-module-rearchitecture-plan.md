@@ -158,7 +158,7 @@ Verification for this slice:
 - Focused Admin TypeScript and lint checks passed for the rebuilt Locations list.
 - One focused Inventory integration test passed for Location commitment projection, capability-removal protection, and update replay safety.
 
-Remaining in Stage 5:
+Remaining in Batch 4:
 
 - Finish decomposing the legacy Location detail component onto shared Admin primitives.
 - Continue decomposing create/edit presentation into smaller shared field sections where doing so materially improves the workflow.
@@ -177,7 +177,7 @@ Verification for this slice:
 - Database/API/Admin focused TypeScript and lint checks passed for the detail lifecycle changes.
 - One focused Inventory integration test passed for retry-safe Transfer cancellation and stale-transition rejection.
 
-Remaining in Stage 6:
+Remaining in Batch 5:
 
 - Rework create/edit and the receive/discrepancy sheets into one coherent lifecycle experience.
 - Audit transfer validation, permissions, retry semantics, and discrepancy recovery across aggregate and serialized stock.
@@ -195,10 +195,31 @@ Verification for this slice:
 - Focused Database/API/Admin TypeScript and lint checks passed.
 - One focused Inventory integration test passed for idempotent stocktake posting after the command-boundary changes.
 
-Remaining in Stage 7:
+Remaining in Batch 6:
 
 - Rework the count detail, line entry, review, cancellation, and posting experience around snapshot truth, movement-after-snapshot explanations, and explicit variance impact.
 - Continue decomposing the large count detail component and standardize its visual primitives without weakening the now-authoritative transition behavior.
+
+#### Batch 7 — Quality and physical-unit operations — IN PROGRESS
+
+- Joined the Physical Units and Repair Queue screens with one Quality workspace navigation so repair work is discoverable without becoming another primary sidebar destination.
+- Replaced the Repair Queue's two capped browser queries and client-side deduplication with one authoritative server-side `attention=REPAIR` query. The query applies `REPAIR_REQUIRED OR ON_HOLD` before counting and pagination, so totals and later pages no longer omit or duplicate eligible units.
+- Added real pagination, responsive mobile cards, compact desktop rows, explicit recovery, semantic warning treatment, and capability-aware repair, reinspection, movement, and release controls.
+- Applied the operator's Location scope to an unfiltered physical-unit collection at the database query boundary. A scoped operator can no longer omit `locationId` to receive organization-wide unit identities.
+- Closed Location-scope gaps on unit history, inspections, repairs, barcode outputs, inspection, repair request/completion, packaging, release, write-off, return receipt, direct placement, bulk inspection, bulk placement, and Fulfillment allocation. Cross-Location moves now authorize both the current Location and destination; bulk commands authorize every selected identity before the transaction begins.
+- Added a tenant-safe repair-to-current-Location resolver so repair completion can be authorized without exposing repair details from an out-of-scope facility.
+
+Verification for this slice:
+
+- Focused Database and API package builds plus Admin TypeScript check passed.
+- Focused lint passed for the touched Database, API, and Quality Admin files.
+- One focused serialized-unit database test passed for combined repair-attention filtering, Location scoping, and authoritative pagination totals.
+
+Remaining in Batch 7:
+
+- Rework the physical-unit detail into a clearer identity, current state, provenance, event, inspection, and repair workspace with capability-exact actions.
+- Complete the scanner/intake and label workflows, including honest hardware and print-layout verification boundaries.
+- Audit each Quality dialog's conflict recovery, evidence requirements, and touch behavior, then reduce the remaining large unit-list component without duplicating workflow logic.
 
 ---
 

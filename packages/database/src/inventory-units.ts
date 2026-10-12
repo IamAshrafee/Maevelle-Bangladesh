@@ -9,11 +9,7 @@ import {
 import { claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { requireActiveLocationCapability } from './warehouse.js';
 
-export type UnitCondition =
-  | 'GRADE_A'
-  | 'GRADE_B'
-  | 'REPAIR_REQUIRED'
-  | 'DAMAGED_UNSELLABLE';
+export type UnitCondition = 'GRADE_A' | 'GRADE_B' | 'REPAIR_REQUIRED' | 'DAMAGED_UNSELLABLE';
 
 export type UnitStatus =
   | 'AWAITING_QC'
@@ -27,36 +23,18 @@ export type UnitStatus =
   | 'WRITTEN_OFF';
 
 export type UnitSourceType =
-  | 'INBOUND_RECEIPT'
-  | 'STOCK_CONVERSION'
-  | 'RETURN_RECEIPT'
-  | 'MANUAL_INTAKE';
+  'INBOUND_RECEIPT' | 'STOCK_CONVERSION' | 'RETURN_RECEIPT' | 'MANUAL_INTAKE';
 
 export type InspectionStage =
-  | 'INBOUND_INTAKE'
-  | 'REINSPECTION'
-  | 'RETURN_INSPECTION'
-  | 'ROUTINE_AUDIT';
+  'INBOUND_INTAKE' | 'REINSPECTION' | 'RETURN_INSPECTION' | 'ROUTINE_AUDIT';
 
 export type InspectionOutcome =
-  | 'PASSED'
-  | 'PASSED_WITH_DEFECT'
-  | 'HOLD_FOR_REPAIR'
-  | 'QUARANTINE_DAMAGED';
+  'PASSED' | 'PASSED_WITH_DEFECT' | 'HOLD_FOR_REPAIR' | 'QUARANTINE_DAMAGED';
 
 export type InspectionDisposition =
-  | 'RELEASE_SELLABLE'
-  | 'RESTRICTED_SALE'
-  | 'MOVE_TO_REPAIR'
-  | 'WRITE_OFF'
-  | 'HOLD';
+  'RELEASE_SELLABLE' | 'RESTRICTED_SALE' | 'MOVE_TO_REPAIR' | 'WRITE_OFF' | 'HOLD';
 
-export type RepairStatus =
-  | 'REQUESTED'
-  | 'IN_PROGRESS'
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'CANCELLED';
+export type RepairStatus = 'REQUESTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export type UnitEventType =
   | 'REGISTERED'
@@ -179,10 +157,7 @@ export async function executeIdempotentUnitCommand<T>(
  * Generates an atomic sequential Unit Code with the format MVU-000101
  * using platform.number_sequences with a NEVER reset policy.
  */
-export async function nextUnitCode(
-  db: DatabaseExecutor,
-  organizationId: string,
-): Promise<string> {
+export async function nextUnitCode(db: DatabaseExecutor, organizationId: string): Promise<string> {
   await sql`
     insert into platform.number_sequences (
       organization_id, sequence_type, prefix, counter_value, reset_policy, sequence_year, padding
@@ -208,10 +183,7 @@ export async function nextUnitCode(
   return `${row.prefix}${row.counter_value.padStart(row.padding, '0')}`;
 }
 
-async function nextInspectionNumber(
-  db: DatabaseExecutor,
-  organizationId: string,
-): Promise<string> {
+async function nextInspectionNumber(db: DatabaseExecutor, organizationId: string): Promise<string> {
   const year = new Date().getUTCFullYear();
   const prefix = `INSP-${year}-`;
   await sql`
@@ -239,10 +211,7 @@ async function nextInspectionNumber(
   return `${row.prefix}${row.counter_value.padStart(row.padding, '0')}`;
 }
 
-async function nextRepairNumber(
-  db: DatabaseExecutor,
-  organizationId: string,
-): Promise<string> {
+async function nextRepairNumber(db: DatabaseExecutor, organizationId: string): Promise<string> {
   const year = new Date().getUTCFullYear();
   const prefix = `REP-${year}-`;
   await sql`
@@ -698,7 +667,8 @@ export async function registerInventoryUnits(
       const availableCapacity = capacity.rows[0];
       if (
         !availableCapacity ||
-        Number(availableCapacity.registered_quantity) + input.quantity > Number(availableCapacity.quantity)
+        Number(availableCapacity.registered_quantity) + input.quantity >
+          Number(availableCapacity.quantity)
       ) {
         throw new UnitTraceabilityDomainError(
           'CONFLICT',
@@ -718,9 +688,13 @@ export async function registerInventoryUnits(
 
     const createdUnits: InventoryUnitView[] = [];
     const condition = input.initialCondition ?? 'GRADE_A';
-    const status = input.initialStatus ?? (
-      inventoryCondition === 'SELLABLE' ? 'AVAILABLE' : inventoryCondition === 'INSPECTION' ? 'AWAITING_QC' : 'ON_HOLD'
-    );
+    const status =
+      input.initialStatus ??
+      (inventoryCondition === 'SELLABLE'
+        ? 'AVAILABLE'
+        : inventoryCondition === 'INSPECTION'
+          ? 'AWAITING_QC'
+          : 'ON_HOLD');
 
     for (let i = 0; i < input.quantity; i++) {
       const unitCode = await nextUnitCode(trx, input.organizationId);
@@ -812,7 +786,8 @@ export async function setVariantTrackingMode(
     `.execute(trx);
 
     let itemId = item.rows[0]?.id;
-    if (item.rows[0]) requireCurrentVersion(item.rows[0].version, input.expectedVersion, 'Inventory item');
+    if (item.rows[0])
+      requireCurrentVersion(item.rows[0].version, input.expectedVersion, 'Inventory item');
     else if (input.expectedVersion !== 0)
       throw new UnitTraceabilityDomainError(
         'STALE_VERSION',
@@ -974,7 +949,12 @@ export async function convertStockToSerialized(
         set tracking_mode = 'SERIAL', updated_at = now(), version = version + 1
         where id = ${item.id} and organization_id = ${input.organizationId}
       `.execute(trx);
-      return { variantId: input.variantId, locationId: input.locationId, unitsCreated: 0, units: [] };
+      return {
+        variantId: input.variantId,
+        locationId: input.locationId,
+        unitsCreated: 0,
+        units: [],
+      };
     }
 
     const units: InventoryUnitView[] = [];
@@ -1002,7 +982,9 @@ export async function convertStockToSerialized(
               : 'ON_HOLD',
         packageReference: input.packageReference,
         storageNotes: input.storageNotes,
-        notes: input.notes ?? `Adopted ${entry.quantity} ${entry.condition.toLowerCase()} units from aggregate stock`,
+        notes:
+          input.notes ??
+          `Adopted ${entry.quantity} ${entry.condition.toLowerCase()} units from aggregate stock`,
       });
       units.push(...created);
     }
@@ -1116,6 +1098,8 @@ export async function listInventoryUnits(
     status?: UnitStatus;
     sourceReceiptId?: string;
     packageReference?: string;
+    attention?: 'REPAIR';
+    allowedLocationIds?: readonly string[];
   } = {},
 ): Promise<{
   items: readonly InventoryUnitView[];
@@ -1137,6 +1121,13 @@ export async function listInventoryUnits(
   const status = filters.status ?? null;
   const sourceReceiptId = filters.sourceReceiptId ?? null;
   const packageRef = filters.packageReference?.trim() || null;
+  const attention = filters.attention ?? null;
+  const scopeFilter =
+    filters.allowedLocationIds === undefined
+      ? sql`true`
+      : filters.allowedLocationIds.length
+        ? sql`unit.location_id in (${sql.join(filters.allowedLocationIds.map((id) => sql`${id}::uuid`))})`
+        : sql`false`;
 
   const [itemsResult, countResult] = await Promise.all([
     sql<InventoryUnitRow>`
@@ -1160,6 +1151,8 @@ export async function listInventoryUnits(
       left join fulfillment.fulfillments fulfillment on fulfillment.id = unit.current_fulfillment_id and fulfillment.organization_id = unit.organization_id
       left join orders.orders orders on orders.id = unit.current_order_id and orders.organization_id = unit.organization_id
       where unit.organization_id = ${organizationId}
+        and ${scopeFilter}
+        and (${attention}::text is null or (${attention} = 'REPAIR' and (unit.current_condition = 'REPAIR_REQUIRED' or unit.status = 'ON_HOLD')))
         and (${variantId}::uuid is null or unit.variant_id = ${variantId})
         and (${locationId}::uuid is null or unit.location_id = ${locationId})
         and (${condition}::text is null or unit.current_condition = ${condition})
@@ -1185,6 +1178,8 @@ export async function listInventoryUnits(
       join catalog.product_variants variant on variant.id = unit.variant_id and variant.organization_id = unit.organization_id
       join catalog.products product on product.id = variant.product_id and product.organization_id = unit.organization_id
       where unit.organization_id = ${organizationId}
+        and ${scopeFilter}
+        and (${attention}::text is null or (${attention} = 'REPAIR' and (unit.current_condition = 'REPAIR_REQUIRED' or unit.status = 'ON_HOLD')))
         and (${variantId}::uuid is null or unit.variant_id = ${variantId})
         and (${locationId}::uuid is null or unit.location_id = ${locationId})
         and (${condition}::text is null or unit.current_condition = ${condition})
@@ -1426,11 +1421,17 @@ export async function bulkInspectUnits(
   },
 ): Promise<{ count: number; units: readonly InventoryUnitView[] }> {
   if (!input.units.length) {
-    throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'At least one unit must be specified.');
+    throw new UnitTraceabilityDomainError(
+      'VALIDATION_FAILED',
+      'At least one unit must be specified.',
+    );
   }
 
   if (new Set(input.units.map((unit) => unit.unitId)).size !== input.units.length)
-    throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'Each unit can be inspected only once.');
+    throw new UnitTraceabilityDomainError(
+      'VALIDATION_FAILED',
+      'Each unit can be inspected only once.',
+    );
   return withUnitTransaction(db, async (trx) => {
     const results: InventoryUnitView[] = [];
     for (const unit of input.units) {
@@ -1817,12 +1818,18 @@ export async function bulkMoveUnitsLocation(
   },
 ): Promise<{ count: number; units: readonly InventoryUnitView[] }> {
   if (!input.units.length) {
-    throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'At least one unit must be specified.');
+    throw new UnitTraceabilityDomainError(
+      'VALIDATION_FAILED',
+      'At least one unit must be specified.',
+    );
   }
 
   return withUnitTransaction(db, async (trx) => {
     if (new Set(input.units.map((unit) => unit.unitId)).size !== input.units.length)
-      throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'Each unit can be moved only once.');
+      throw new UnitTraceabilityDomainError(
+        'VALIDATION_FAILED',
+        'Each unit can be moved only once.',
+      );
     const results: InventoryUnitView[] = [];
     for (const unit of input.units) {
       const updated = await moveUnitLocation(trx, {
@@ -1997,10 +2004,7 @@ export async function writeOffUnit(
   },
 ): Promise<InventoryUnitView> {
   if (!input.reason.trim()) {
-    throw new UnitTraceabilityDomainError(
-      'VALIDATION_FAILED',
-      'A write-off reason is required.',
-    );
+    throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'A write-off reason is required.');
   }
 
   return withUnitTransaction(db, async (trx) => {
@@ -2518,10 +2522,7 @@ export async function reconcileSerializedInventory(
 
   const item = itemQuery.rows[0];
   if (!item) {
-    throw new UnitTraceabilityDomainError(
-      'NOT_FOUND',
-      'Inventory item or variant was not found.',
-    );
+    throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory item or variant was not found.');
   }
 
   // Count units by status
@@ -2544,7 +2545,10 @@ export async function reconcileSerializedInventory(
   }
 
   const availableUnits = statusMap.get('AVAILABLE') ?? 0;
-  const onHoldUnits = (statusMap.get('ON_HOLD') ?? 0) + (statusMap.get('AWAITING_QC') ?? 0) + (statusMap.get('RETURNED') ?? 0);
+  const onHoldUnits =
+    (statusMap.get('ON_HOLD') ?? 0) +
+    (statusMap.get('AWAITING_QC') ?? 0) +
+    (statusMap.get('RETURNED') ?? 0);
   const reservedUnits = statusMap.get('RESERVED') ?? 0;
   const inFulfillmentUnits = statusMap.get('IN_FULFILLMENT') ?? 0;
   const onHandUnits = availableUnits + onHoldUnits + reservedUnits + inFulfillmentUnits;
@@ -2636,7 +2640,12 @@ export async function reconcileSerializedInventory(
  */
 export async function listUnitEvents(
   db: DatabaseExecutor,
-  input: { organizationId: string; unitId: string; limit?: number | undefined; offset?: number | undefined },
+  input: {
+    organizationId: string;
+    unitId: string;
+    limit?: number | undefined;
+    offset?: number | undefined;
+  },
 ): Promise<readonly UnitEventView[]> {
   const limit = Math.min(100, Math.max(1, input.limit ?? 50));
   const offset = Math.max(0, input.offset ?? 0);
@@ -2810,6 +2819,25 @@ export async function listUnitRepairs(
   }));
 }
 
+/** Resolve the current location owning a repair without exposing repair data across scopes. */
+export async function findUnitRepairLocation(
+  db: DatabaseExecutor,
+  input: { organizationId: string; repairId: string },
+): Promise<string | undefined> {
+  const result = await sql<{ location_id: string }>`
+    select unit.location_id
+    from inventory.unit_repairs rep
+    join inventory.inventory_units unit
+      on unit.id = rep.unit_id
+      and unit.organization_id = rep.organization_id
+    where rep.organization_id = ${input.organizationId}
+      and rep.id = ${input.repairId}
+    limit 1
+  `.execute(db);
+
+  return result.rows[0]?.location_id;
+}
+
 /**
  * Pure TypeScript Code 128 (Subset B) barcode SVG generator.
  * Encodes alphanumeric strings like "MVU-000101" into standard Code 128 bars.
@@ -2818,17 +2846,113 @@ export function renderCode128Svg(text: string, height = 50, barWidth = 2): strin
   // Code 128 patterns: each pattern is an 11-module sequence of bars and spaces (represented as module widths)
   // 107 patterns (index 0-106)
   const code128Patterns: readonly string[] = [
-    '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213', // 0-9
-    '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132', // 10-19
-    '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211', // 20-29
-    '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313', // 30-39
-    '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331', // 40-49
-    '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111', // 50-59
-    '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214', // 60-69
-    '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111', // 70-79
-    '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141', // 80-89
-    '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141', // 90-99
-    '114131', '311141', '411131', '211412', '211214', '211232', '2331112', // 100-106 (106 is STOP pattern)
+    '212222',
+    '222122',
+    '222221',
+    '121223',
+    '121322',
+    '131222',
+    '122213',
+    '122312',
+    '132212',
+    '221213', // 0-9
+    '221312',
+    '231212',
+    '112232',
+    '122132',
+    '122231',
+    '113222',
+    '123122',
+    '123221',
+    '223211',
+    '221132', // 10-19
+    '221231',
+    '213212',
+    '223112',
+    '312131',
+    '311222',
+    '321122',
+    '321221',
+    '312212',
+    '322112',
+    '322211', // 20-29
+    '212123',
+    '212321',
+    '232121',
+    '111323',
+    '131123',
+    '131321',
+    '112313',
+    '132113',
+    '132311',
+    '211313', // 30-39
+    '231113',
+    '231311',
+    '112133',
+    '112331',
+    '132131',
+    '113123',
+    '113321',
+    '133121',
+    '313121',
+    '211331', // 40-49
+    '231131',
+    '213113',
+    '213311',
+    '213131',
+    '311123',
+    '311321',
+    '331121',
+    '312113',
+    '312311',
+    '332111', // 50-59
+    '314111',
+    '221411',
+    '431111',
+    '111224',
+    '111422',
+    '121124',
+    '121421',
+    '141122',
+    '141221',
+    '112214', // 60-69
+    '112412',
+    '122114',
+    '122411',
+    '142112',
+    '142211',
+    '241211',
+    '221114',
+    '413111',
+    '241112',
+    '134111', // 70-79
+    '111242',
+    '121142',
+    '121241',
+    '114212',
+    '124112',
+    '124211',
+    '411212',
+    '421112',
+    '421211',
+    '212141', // 80-89
+    '214121',
+    '412121',
+    '111143',
+    '111341',
+    '131141',
+    '114113',
+    '114311',
+    '411113',
+    '411311',
+    '113141', // 90-99
+    '114131',
+    '311141',
+    '411131',
+    '211412',
+    '211214',
+    '211232',
+    '2331112', // 100-106 (106 is STOP pattern)
   ];
 
   const START_B = 104;
@@ -2863,7 +2987,9 @@ export function renderCode128Svg(text: string, height = 50, barWidth = 2): strin
   for (let i = 0; i < patternString.length; i++) {
     const width = Number.parseInt(patternString[i]!, 10) * barWidth;
     if (isBar) {
-      rects.push(`<rect x="${currentX}" y="5" width="${width}" height="${height}" fill="currentColor" />`);
+      rects.push(
+        `<rect x="${currentX}" y="5" width="${width}" height="${height}" fill="currentColor" />`,
+      );
     }
     currentX += width;
     isBar = !isBar;
