@@ -11,6 +11,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       inventory_item_id uuid not null,
       variant_id uuid not null,
       location_id uuid not null,
+      inventory_condition_code text not null check (inventory_condition_code in ('SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION')),
       current_condition text not null default 'GRADE_A' check (current_condition in ('GRADE_A', 'GRADE_B', 'REPAIR_REQUIRED', 'DAMAGED_UNSELLABLE')),
       status text not null default 'AWAITING_QC' check (status in ('AWAITING_QC', 'AVAILABLE', 'RESERVED', 'IN_FULFILLMENT', 'DISPATCHED', 'ON_HOLD', 'RETURNED', 'WRITTEN_OFF')),
       source_type text not null default 'INBOUND_RECEIPT' check (source_type in ('INBOUND_RECEIPT', 'STOCK_CONVERSION', 'RETURN_RECEIPT', 'MANUAL_INTAKE')),
@@ -32,13 +33,21 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       unique (organization_id, unit_code),
       foreign key (organization_id, inventory_item_id) references inventory.inventory_items(organization_id, id),
       foreign key (organization_id, variant_id) references catalog.product_variants(organization_id, id),
-      foreign key (organization_id, location_id) references warehouse.locations(organization_id, id)
+      foreign key (organization_id, location_id) references warehouse.locations(organization_id, id),
+      foreign key (organization_id, source_receipt_id) references receiving.inbound_receipts(organization_id, id),
+      foreign key (organization_id, source_receipt_line_id) references receiving.inbound_receipt_lines(organization_id, id),
+      foreign key (organization_id, source_return_receipt_id) references returns.return_receipts(organization_id, id),
+      check (
+        (source_type = 'INBOUND_RECEIPT' and source_receipt_id is not null and source_receipt_line_id is not null)
+        or (source_type = 'RETURN_RECEIPT' and source_return_receipt_id is not null)
+        or (source_type in ('STOCK_CONVERSION', 'MANUAL_INTAKE') and source_receipt_id is null and source_receipt_line_id is null and source_return_receipt_id is null)
+      )
     );
 
     create index if not exists inventory_units_org_unit_code
       on inventory.inventory_units (organization_id, unit_code);
     create index if not exists inventory_units_org_variant_status
-      on inventory.inventory_units (organization_id, variant_id, status, current_condition);
+      on inventory.inventory_units (organization_id, variant_id, location_id, inventory_condition_code, status);
     create index if not exists inventory_units_org_location
       on inventory.inventory_units (organization_id, location_id, status);
     create index if not exists inventory_units_org_fulfillment
@@ -47,6 +56,12 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index if not exists inventory_units_org_source_receipt
       on inventory.inventory_units (organization_id, source_receipt_id)
       where source_receipt_id is not null;
+    create index if not exists inventory_units_org_source_receipt_line
+      on inventory.inventory_units (organization_id, source_receipt_line_id)
+      where source_receipt_line_id is not null;
+    create index if not exists inventory_units_org_source_return_receipt
+      on inventory.inventory_units (organization_id, source_return_receipt_id)
+      where source_return_receipt_id is not null;
 
     create table if not exists inventory.unit_inspections (
       id uuid primary key default uuidv7(),

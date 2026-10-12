@@ -10,10 +10,8 @@ import {
   convertStockToSerialized,
   findInventoryUnitByCode,
   getInventoryUnit,
-  listInventoryUnits,
   listUnitEvents,
   listUnitInspections,
-  listUnitRepairs,
   moveUnitLocation,
   performUnitInspection,
   receiveReturnedUnit,
@@ -30,7 +28,6 @@ import {
 } from './inventory-units.js';
 import {
   createFulfillment,
-  dispatchFulfillmentInTransaction,
   cancelFulfillment,
 } from './fulfillment.js';
 
@@ -118,15 +115,48 @@ async function fixture() {
   };
 }
 
+async function registerLedgerBackedUnits(
+  f: Awaited<ReturnType<typeof fixture>>,
+  input: {
+    quantity: number;
+    inventoryCondition?: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+    initialCondition?: 'GRADE_A' | 'GRADE_B' | 'REPAIR_REQUIRED' | 'DAMAGED_UNSELLABLE';
+    initialStatus?: 'AWAITING_QC' | 'AVAILABLE' | 'ON_HOLD';
+    packageReference?: string;
+    storageNotes?: string;
+  },
+) {
+  const inventoryCondition = input.inventoryCondition ?? 'INSPECTION';
+  await adjustInventory(database.db, {
+    organizationId: f.organizationId,
+    actorId: f.actorId,
+    locationId: f.mainLocation.id,
+    variantId: f.variantId,
+    condition: inventoryCondition,
+    quantityDelta: String(input.quantity),
+    reasonCode: 'OPENING_BALANCE',
+    idempotencyKey: `unit-fixture-${crypto.randomUUID()}`,
+  });
+  return registerInventoryUnits(database.db, {
+    organizationId: f.organizationId,
+    actorId: f.actorId,
+    variantId: f.variantId,
+    locationId: f.mainLocation.id,
+    quantity: input.quantity,
+    sourceType: 'MANUAL_INTAKE',
+    inventoryCondition,
+    initialCondition: input.initialCondition,
+    initialStatus: input.initialStatus,
+    packageReference: input.packageReference,
+    storageNotes: input.storageNotes,
+  });
+}
+
 describe('Individual Unit Traceability & Quality Control', () => {
   it('registers multiple units sharing one variant SKU with permanent, sequential Unit Codes', async () => {
     const f = await fixture();
 
-    const units = await registerInventoryUnits(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
+    const units = await registerLedgerBackedUnits(f, {
       quantity: 3,
       initialCondition: 'GRADE_A',
       packageReference: 'BOX-001',
@@ -148,6 +178,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       expect(u.productTitle).toBe('Silk Summer Dress');
       expect(u.locationId).toBe(f.mainLocation.id);
       expect(u.status).toBe('AWAITING_QC');
+      expect(u.inventoryCondition).toBe('INSPECTION');
       expect(u.currentCondition).toBe('GRADE_A');
       expect(u.packageReference).toBe('BOX-001');
     }
@@ -159,6 +190,18 @@ describe('Individual Unit Traceability & Quality Control', () => {
     });
     expect(events).toHaveLength(1);
     expect(events[0]!.eventType).toBe('REGISTERED');
+
+    await expect(
+      registerInventoryUnits(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        variantId: f.variantId,
+        locationId: f.mainLocation.id,
+        quantity: 1,
+        sourceType: 'MANUAL_INTAKE',
+        inventoryCondition: 'INSPECTION',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
   it('preserves quantity tracking mode and supports safe stock conversion to serialized units', async () => {
@@ -214,6 +257,14 @@ describe('Individual Unit Traceability & Quality Control', () => {
     expect(reconciliation.ledgerSellableQuantity).toBe('5.000000');
     expect(reconciliation.isConsistent).toBe(true);
     expect(reconciliation.discrepancies).toHaveLength(0);
+
+    const replay = await convertStockToSerialized(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.mainLocation.id,
+    });
+    expect(replay.unitsCreated).toBe(0);
   });
 
   it('rejects conversion to serialized when active inventory reservations conflict', async () => {
@@ -256,11 +307,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
   it('supports barcode lookup by Unit Code (case-insensitive) and generates Code 128 payload', async () => {
     const f = await fixture();
 
-    const [unit] = await registerInventoryUnits(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
+    const [unit] = await registerLedgerBackedUnits(f, {
       quantity: 1,
     });
 
@@ -283,11 +330,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
   it('executes Quality Control inspection workflow: Grade A passes to AVAILABLE', async () => {
     const f = await fixture();
 
-    const [unit] = await registerInventoryUnits(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
+    const [unit] = await registerLedgerBackedUnits(f, {
       quantity: 1,
       initialStatus: 'AWAITING_QC',
     });
@@ -307,6 +350,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
     expect(inspection.conditionResult).toBe('GRADE_A');
     expect(inspection.inspectionOutcome).toBe('PASSED');
     expect(inspectedUnit.status).toBe('AVAILABLE');
+    expect(inspectedUnit.inventoryCondition).toBe('SELLABLE');
     expect(inspectedUnit.currentCondition).toBe('GRADE_A');
 
     // History preserves inspection event
@@ -317,14 +361,50 @@ describe('Individual Unit Traceability & Quality Control', () => {
     expect(events.some((e) => e.eventType === 'INSPECTED' && e.toStatus === 'AVAILABLE')).toBe(true);
   });
 
+  it('rolls back a unit inspection when its authoritative ledger bucket cannot move', async () => {
+    const f = await fixture();
+    const [unit] = await registerLedgerBackedUnits(f, {
+      quantity: 1,
+      inventoryCondition: 'INSPECTION',
+      initialStatus: 'AWAITING_QC',
+    });
+    await adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.mainLocation.id,
+      variantId: f.variantId,
+      condition: 'INSPECTION',
+      quantityDelta: '-1',
+      reasonCode: 'TEST_LEDGER_DIVERGENCE',
+      idempotencyKey: `divergence-${crypto.randomUUID()}`,
+    });
+
+    await expect(
+      performUnitInspection(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        inspectionStage: 'INBOUND_INTAKE',
+        conditionResult: 'GRADE_A',
+        outcome: 'PASSED',
+      }),
+    ).rejects.toThrow();
+
+    const unchanged = await getInventoryUnit(database.db, {
+      organizationId: f.organizationId,
+      unitId: unit!.id,
+    });
+    expect(unchanged.status).toBe('AWAITING_QC');
+    expect(await listUnitInspections(database.db, {
+      organizationId: f.organizationId,
+      unitId: unit!.id,
+    })).toHaveLength(0);
+  });
+
   it('manages cleaning and repair workflow with mandatory reinspection before release', async () => {
     const f = await fixture();
 
-    const [unit] = await registerInventoryUnits(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
+    const [unit] = await registerLedgerBackedUnits(f, {
       quantity: 1,
       initialStatus: 'AWAITING_QC',
     });
@@ -392,34 +472,35 @@ describe('Individual Unit Traceability & Quality Control', () => {
     });
 
     expect(reinspection.unit.status).toBe('AVAILABLE');
+    expect(reinspection.unit.inventoryCondition).toBe('SELLABLE');
     expect(reinspection.unit.currentCondition).toBe('GRADE_A');
   });
 
-  it('tracks location movement and packaging identity changes', async () => {
+  it('blocks direct cross-location movement and preserves packaging identity changes', async () => {
     const f = await fixture();
 
-    const [unit] = await registerInventoryUnits(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
+    const [unit] = await registerLedgerBackedUnits(f, {
       quantity: 1,
       packageReference: 'BOX-ALPHA',
       storageNotes: 'Shelf 1',
     });
 
-    // Move to showroom location
-    const moved = await moveUnitLocation(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      unitId: unit!.id,
-      newLocationId: f.secondaryLocation.id,
-      newStorageNotes: 'Showroom Display Rack 3',
-      reason: 'Showroom merchandising transfer',
-    });
+    await expect(
+      moveUnitLocation(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        newLocationId: f.secondaryLocation.id,
+        newStorageNotes: 'Showroom Display Rack 3',
+        reason: 'Showroom merchandising transfer',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
 
-    expect(moved.locationId).toBe(f.secondaryLocation.id);
-    expect(moved.storageNotes).toBe('Showroom Display Rack 3');
+    const unchanged = await getInventoryUnit(database.db, {
+      organizationId: f.organizationId,
+      unitId: unit!.id,
+    });
+    expect(unchanged.locationId).toBe(f.mainLocation.id);
 
     // Repackage unit
     const repackaged = await updateUnitPackaging(database.db, {
@@ -436,19 +517,16 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       unitId: unit!.id,
     });
-    expect(events.some((e) => e.eventType === 'LOCATION_MOVED')).toBe(true);
+    expect(events.some((e) => e.eventType === 'LOCATION_MOVED')).toBe(false);
     expect(events.some((e) => e.eventType === 'REPACKAGED')).toBe(true);
   });
 
   it('supports authorized release and permanent write-off', async () => {
     const f = await fixture();
 
-    const [unit] = await registerInventoryUnits(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
+    const [unit] = await registerLedgerBackedUnits(f, {
       quantity: 1,
+      inventoryCondition: 'QUARANTINE',
       initialStatus: 'ON_HOLD',
       initialCondition: 'GRADE_B',
     });
@@ -461,6 +539,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       reason: 'Approved for sale under minor-imperfection discount arrangement',
     });
     expect(released.status).toBe('AVAILABLE');
+    expect(released.inventoryCondition).toBe('SELLABLE');
 
     // Write-off unit
     const writtenOff = await writeOffUnit(database.db, {
@@ -471,6 +550,14 @@ describe('Individual Unit Traceability & Quality Control', () => {
     });
     expect(writtenOff.status).toBe('WRITTEN_OFF');
     expect(writtenOff.currentCondition).toBe('DAMAGED_UNSELLABLE');
+
+    const reconciliation = await reconcileSerializedInventory(database.db, {
+      organizationId: f.organizationId,
+      variantId: f.variantId,
+      locationId: f.mainLocation.id,
+    });
+    expect(reconciliation.ledgerSellableQuantity).toBe('0.000000');
+    expect(reconciliation.isConsistent).toBe(true);
 
     // Cannot write off again or inspect
     await expect(
@@ -487,28 +574,14 @@ describe('Individual Unit Traceability & Quality Control', () => {
     const f = await fixture();
 
     // 1. Register unit in AVAILABLE status
-    const [unit] = await registerInventoryUnits(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
+    const [unit] = await registerLedgerBackedUnits(f, {
       quantity: 1,
+      inventoryCondition: 'SELLABLE',
       initialStatus: 'AVAILABLE',
       initialCondition: 'GRADE_A',
     });
 
-    // 2. Add inventory & create reservation for order
-    await adjustInventory(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      locationId: f.mainLocation.id,
-      variantId: f.variantId,
-      condition: 'SELLABLE',
-      quantityDelta: '1',
-      reasonCode: 'OPENING_BALANCE',
-      idempotencyKey: `adj-${crypto.randomUUID()}`,
-    });
-
+    // 2. Reserve the ledger-backed unit for an order.
     const reservation = await createInventoryReservation(database.db, {
       organizationId: f.organizationId,
       actorId: f.actorId,
@@ -606,47 +679,44 @@ describe('Individual Unit Traceability & Quality Control', () => {
     expect(unitReleased.currentFulfillmentId).toBeNull();
   });
 
-  it('receives returned unit into return quarantine and preserves outbound provenance', async () => {
+  it('requires posted return-receipt evidence before reconnecting a dispatched unit', async () => {
     const f = await fixture();
 
-    const [unit] = await registerInventoryUnits(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
+    const [unit] = await registerLedgerBackedUnits(f, {
       quantity: 1,
-      initialStatus: 'DISPATCHED',
+      inventoryCondition: 'SELLABLE',
+      initialStatus: 'AVAILABLE',
     });
-
-    // Customer returns the dress
-    const returned = await receiveReturnedUnit(database.db, {
+    await adjustInventory(database.db, {
       organizationId: f.organizationId,
       actorId: f.actorId,
-      unitId: unit!.id,
-      receivingLocationId: f.secondaryLocation.id,
-      notes: 'Customer returned via Pathao courier, bag intact.',
+      locationId: f.mainLocation.id,
+      variantId: f.variantId,
+      condition: 'SELLABLE',
+      quantityDelta: '-1',
+      reasonCode: 'TEST_DISPATCH',
+      idempotencyKey: `dispatch-${crypto.randomUUID()}`,
     });
+    await sql`
+      update inventory.inventory_units set status = 'DISPATCHED'
+      where id = ${unit!.id} and organization_id = ${f.organizationId}
+    `.execute(database.db);
 
-    expect(returned.status).toBe('RETURNED');
-    expect(returned.locationId).toBe(f.secondaryLocation.id);
+    await expect(
+      receiveReturnedUnit(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        receivingLocationId: f.secondaryLocation.id,
+        notes: 'Customer returned via Pathao courier, bag intact.',
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
 
-    const events = await listUnitEvents(database.db, {
+    const unchanged = await getInventoryUnit(database.db, {
       organizationId: f.organizationId,
       unitId: unit!.id,
     });
-    expect(events.some((e) => e.eventType === 'RETURNED')).toBe(true);
-
-    // Unit can now be QC inspected after return
-    const returnInspection = await performUnitInspection(database.db, {
-      organizationId: f.organizationId,
-      actorId: f.actorId,
-      unitId: unit!.id,
-      inspectionStage: 'RETURN_INSPECTION',
-      conditionResult: 'GRADE_A',
-      outcome: 'PASSED',
-      notes: 'Dress tried on once, tags intact, flawless. Restocked.',
-    });
-
-    expect(returnInspection.unit.status).toBe('AVAILABLE');
+    expect(unchanged.status).toBe('DISPATCHED');
+    expect(unchanged.locationId).toBe(f.mainLocation.id);
   });
 });

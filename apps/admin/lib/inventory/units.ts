@@ -9,9 +9,9 @@ import type {
   UnitStatusDto,
   UnitSourceTypeDto,
   InspectionStageDto,
-  InspectionOutcomeDto,
   InspectionDispositionDto,
   VariantTrackingModeDto,
+  InventoryConditionDto,
   PaginationDto,
 } from '@maevelle/contracts';
 
@@ -42,6 +42,7 @@ export interface RegisterUnitsInput {
   readonly sourceType?: UnitSourceTypeDto | undefined;
   readonly sourceReceiptId?: string | undefined;
   readonly sourceReceiptLineId?: string | undefined;
+  readonly inventoryCondition?: InventoryConditionDto | undefined;
   readonly packageReference?: string | undefined;
   readonly storageNotes?: string | undefined;
 }
@@ -199,11 +200,12 @@ export function getUnitBarcodeSvgUrl(unitId: string): string {
 export async function registerInventoryUnits(
   input: RegisterUnitsInput,
 ): Promise<readonly InventoryUnitDto[]> {
+  const { count, ...registration } = input;
   const response = await inventoryRequest<{ readonly data: readonly InventoryUnitDto[] }>(
     '/admin/inventory/units/register',
     {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...registration, quantity: count }),
     },
   );
   return response.data;
@@ -215,9 +217,22 @@ export async function performUnitInspection(
 ): Promise<{ readonly unit: InventoryUnitDto; readonly inspection: UnitInspectionDto }> {
   const response = await inventoryRequest<{
     readonly data: { readonly unit: InventoryUnitDto; readonly inspection: UnitInspectionDto };
-  }>(`/admin/inventory/units/${encodeURIComponent(unitId)}/inspect`, {
+  }>(`/admin/inventory/units/${encodeURIComponent(unitId)}/inspections`, {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      inspectionStage: input.inspectionStage ?? 'INBOUND_INTAKE',
+      outcome:
+        input.disposition === 'RELEASE_SELLABLE'
+          ? 'PASSED'
+          : input.disposition === 'RESTRICTED_SALE'
+            ? 'PASSED_WITH_DEFECT'
+            : input.disposition === 'MOVE_TO_REPAIR'
+              ? 'HOLD_FOR_REPAIR'
+              : 'QUARANTINE_DAMAGED',
+      mediaAssetIds: input.photoAssetIds,
+      photoAssetIds: undefined,
+    }),
   });
   return response.data;
 }
@@ -226,21 +241,32 @@ export async function bulkInspectUnits(
   input: BulkInspectInput,
 ): Promise<{ readonly inspectedCount: number; readonly units: readonly InventoryUnitDto[] }> {
   const response = await inventoryRequest<{
-    readonly data: { readonly inspectedCount: number; readonly units: readonly InventoryUnitDto[] };
+    readonly data: { readonly count: number; readonly units: readonly InventoryUnitDto[] };
   }>('/admin/inventory/units/bulk-inspect', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      inspectionStage: 'INBOUND_INTAKE',
+      outcome:
+        input.disposition === 'RELEASE_SELLABLE'
+          ? 'PASSED'
+          : input.disposition === 'RESTRICTED_SALE'
+            ? 'PASSED_WITH_DEFECT'
+            : input.disposition === 'MOVE_TO_REPAIR'
+              ? 'HOLD_FOR_REPAIR'
+              : 'QUARANTINE_DAMAGED',
+    }),
   });
-  return response.data;
+  return { inspectedCount: response.data.count, units: response.data.units };
 }
 
 export async function requestUnitRepair(
   unitId: string,
   input: RequestRepairInput,
-): Promise<{ readonly unit: InventoryUnitDto; readonly repair: UnitRepairDto }> {
+): Promise<UnitRepairDto> {
   const response = await inventoryRequest<{
-    readonly data: { readonly unit: InventoryUnitDto; readonly repair: UnitRepairDto };
-  }>(`/admin/inventory/units/${encodeURIComponent(unitId)}/repair-requests`, {
+    readonly data: UnitRepairDto;
+  }>(`/admin/inventory/units/${encodeURIComponent(unitId)}/repairs`, {
     method: 'POST',
     body: JSON.stringify(input),
   });
@@ -250,12 +276,16 @@ export async function requestUnitRepair(
 export async function completeUnitRepair(
   repairId: string,
   input: CompleteRepairInput,
-): Promise<{ readonly unit: InventoryUnitDto; readonly repair: UnitRepairDto }> {
+): Promise<UnitRepairDto> {
   const response = await inventoryRequest<{
-    readonly data: { readonly unit: InventoryUnitDto; readonly repair: UnitRepairDto };
+    readonly data: UnitRepairDto;
   }>(`/admin/inventory/units/repairs/${encodeURIComponent(repairId)}/complete`, {
-    method: 'POST',
-    body: JSON.stringify(input),
+    method: 'PATCH',
+    body: JSON.stringify({
+      ...input,
+      mediaAssetIds: input.photoAssetIds,
+      photoAssetIds: undefined,
+    }),
   });
   return response.data;
 }
@@ -265,9 +295,9 @@ export async function moveUnitLocation(
   input: MoveLocationInput,
 ): Promise<InventoryUnitDto> {
   const response = await inventoryRequest<{ readonly data: InventoryUnitDto }>(
-    `/admin/inventory/units/${encodeURIComponent(unitId)}/move-location`,
+    `/admin/inventory/units/${encodeURIComponent(unitId)}/location`,
     {
-      method: 'POST',
+      method: 'PATCH',
       body: JSON.stringify(input),
     },
   );
@@ -278,12 +308,12 @@ export async function bulkMoveUnitsLocation(
   input: BulkMoveLocationInput,
 ): Promise<{ readonly movedCount: number; readonly units: readonly InventoryUnitDto[] }> {
   const response = await inventoryRequest<{
-    readonly data: { readonly movedCount: number; readonly units: readonly InventoryUnitDto[] };
-  }>('/admin/inventory/units/bulk-move', {
+    readonly data: { readonly count: number; readonly units: readonly InventoryUnitDto[] };
+  }>('/admin/inventory/units/bulk-location', {
     method: 'POST',
     body: JSON.stringify(input),
   });
-  return response.data;
+  return { movedCount: response.data.count, units: response.data.units };
 }
 
 export async function updateUnitPackaging(
@@ -293,7 +323,7 @@ export async function updateUnitPackaging(
   const response = await inventoryRequest<{ readonly data: InventoryUnitDto }>(
     `/admin/inventory/units/${encodeURIComponent(unitId)}/packaging`,
     {
-      method: 'POST',
+      method: 'PATCH',
       body: JSON.stringify(input),
     },
   );
@@ -332,11 +362,16 @@ export async function receiveReturnedUnit(
   unitId: string,
   input: ReceiveReturnInput,
 ): Promise<InventoryUnitDto> {
+  const { returnReceiptId, condition, ...returnIntake } = input;
   const response = await inventoryRequest<{ readonly data: InventoryUnitDto }>(
     `/admin/inventory/units/${encodeURIComponent(unitId)}/receive-return`,
     {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        ...returnIntake,
+        sourceReturnReceiptId: returnReceiptId,
+        conditionResult: condition,
+      }),
     },
   );
   return response.data;
@@ -347,7 +382,7 @@ export async function setVariantTrackingMode(
 ): Promise<{ readonly variantId: string; readonly trackingMode: VariantTrackingModeDto }> {
   const response = await inventoryRequest<{
     readonly data: { readonly variantId: string; readonly trackingMode: VariantTrackingModeDto };
-  }>('/admin/inventory/variants/tracking-mode', {
+  }>('/admin/inventory/units/tracking-mode', {
     method: 'POST',
     body: JSON.stringify(input),
   });
@@ -364,23 +399,30 @@ export async function convertStockToSerialized(
   const response = await inventoryRequest<{
     readonly data: {
       readonly variantId: string;
-      readonly registeredUnitsCount: number;
+      readonly unitsCreated: number;
       readonly units: readonly InventoryUnitDto[];
     };
-  }>('/admin/inventory/variants/convert-to-serialized', {
+  }>('/admin/inventory/units/convert-stock', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      variantId: input.variantId,
+      locationId: input.locationId,
+      storageNotes: input.storageNotes,
+    }),
   });
-  return response.data;
+  return {
+    variantId: response.data.variantId,
+    registeredUnitsCount: response.data.unitsCreated,
+    units: response.data.units,
+  };
 }
 
 export async function reconcileSerializedInventory(
   variantId: string,
   locationId: string,
 ): Promise<SerializedStockReconciliationDto> {
-  const params = new URLSearchParams({ locationId });
   const response = await inventoryRequest<{ readonly data: SerializedStockReconciliationDto }>(
-    `/admin/inventory/variants/${encodeURIComponent(variantId)}/reconciliation?${params.toString()}`,
+    `/admin/inventory/units/reconcile?${new URLSearchParams({ variantId, locationId }).toString()}`,
   );
   return response.data;
 }

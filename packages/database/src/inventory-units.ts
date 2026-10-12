@@ -3,6 +3,7 @@ import { sql, type Kysely, type Transaction } from 'kysely';
 import type { DatabaseSchema } from './index.js';
 import {
   moveInventoryConditionInTransaction,
+  writeOffInventoryInTransaction,
   type InventoryCondition,
 } from './inventory.js';
 import { requireActiveLocationCapability } from './warehouse.js';
@@ -250,6 +251,7 @@ export interface InventoryUnitRow {
   readonly inventory_item_id: string;
   readonly variant_id: string;
   readonly location_id: string;
+  readonly inventory_condition_code: InventoryCondition;
   readonly current_condition: UnitCondition;
   readonly status: UnitStatus;
   readonly source_type: UnitSourceType;
@@ -290,6 +292,7 @@ export interface InventoryUnitView {
   readonly locationId: string;
   readonly locationName: string;
   readonly locationCode: string;
+  readonly inventoryCondition: InventoryCondition;
   readonly currentCondition: UnitCondition;
   readonly status: UnitStatus;
   readonly sourceType: UnitSourceType;
@@ -382,6 +385,7 @@ function mapUnitRow(row: InventoryUnitRow): InventoryUnitView {
     locationId: row.location_id,
     locationName: row.location_name ?? '',
     locationCode: row.location_code ?? '',
+    inventoryCondition: row.inventory_condition_code,
     currentCondition: row.current_condition,
     status: row.status,
     sourceType: row.source_type,
@@ -420,6 +424,7 @@ export async function registerInventoryUnits(
     sourceReceiptId?: string | null | undefined;
     sourceReceiptLineId?: string | null | undefined;
     sourceReturnReceiptId?: string | null | undefined;
+    inventoryCondition?: InventoryCondition | undefined;
     initialCondition?: UnitCondition | undefined;
     initialStatus?: UnitStatus | undefined;
     packageReference?: string | null | undefined;
@@ -511,6 +516,131 @@ export async function registerInventoryUnits(
       );
     }
 
+    const sourceType = input.sourceType ?? 'MANUAL_INTAKE';
+    let inventoryCondition = input.inventoryCondition ?? 'INSPECTION';
+
+    if (sourceType === 'INBOUND_RECEIPT') {
+      if (!input.sourceReceiptId || !input.sourceReceiptLineId) {
+        throw new UnitTraceabilityDomainError(
+          'VALIDATION_FAILED',
+          'Inbound unit registration requires both the receipt and receipt line.',
+        );
+      }
+      const receiptLine = await sql<{
+        condition_code: InventoryCondition;
+        quantity: string;
+        registered_quantity: string;
+      }>`
+        select line.condition_code, line.quantity::text,
+          (select count(*)::text from inventory.inventory_units registered
+            where registered.organization_id = line.organization_id
+              and registered.source_receipt_line_id = line.id) as registered_quantity
+        from receiving.inbound_receipt_lines line
+        join receiving.inbound_receipts receipt
+          on receipt.id = line.inbound_receipt_id
+          and receipt.organization_id = line.organization_id
+        where line.id = ${input.sourceReceiptLineId}
+          and line.inbound_receipt_id = ${input.sourceReceiptId}
+          and line.organization_id = ${input.organizationId}
+          and line.variant_id = ${input.variantId}
+          and receipt.receiving_location_id = ${input.locationId}
+          and receipt.status = 'POSTED'
+        for update of line
+      `.execute(trx);
+      const source = receiptLine.rows[0];
+      if (!source) {
+        throw new UnitTraceabilityDomainError(
+          'VALIDATION_FAILED',
+          'The posted inbound receipt line does not match this variant and location.',
+        );
+      }
+      if (Number(source.registered_quantity) + input.quantity > Number(source.quantity)) {
+        throw new UnitTraceabilityDomainError(
+          'CONFLICT',
+          'Unit registration would exceed the quantity on the inbound receipt line.',
+        );
+      }
+      inventoryCondition = source.condition_code;
+    } else if (sourceType === 'RETURN_RECEIPT') {
+      if (!input.sourceReturnReceiptId) {
+        throw new UnitTraceabilityDomainError(
+          'VALIDATION_FAILED',
+          'Returned unit registration requires a posted return receipt.',
+        );
+      }
+      const returnSource = await sql<{ quantity: string; registered_quantity: string }>`
+        select (
+            select sum(source_line.quantity)::text
+            from returns.return_receipt_lines source_line
+            where source_line.organization_id = receipt.organization_id
+              and source_line.return_receipt_id = receipt.id
+              and source_line.inventory_item_id = ${variantInfo.inventory_item_id}
+          ) as quantity,
+          (select count(*)::text from inventory.inventory_units registered
+            where registered.organization_id = receipt.organization_id
+              and registered.source_return_receipt_id = receipt.id
+              and registered.inventory_item_id = ${variantInfo.inventory_item_id}) as registered_quantity
+        from returns.return_receipts receipt
+        where receipt.id = ${input.sourceReturnReceiptId}
+          and receipt.organization_id = ${input.organizationId}
+          and receipt.receiving_location_id = ${input.locationId}
+          and receipt.status = 'POSTED'
+          and exists (
+            select 1 from returns.return_receipt_lines line
+            where line.organization_id = receipt.organization_id
+              and line.return_receipt_id = receipt.id
+              and line.inventory_item_id = ${variantInfo.inventory_item_id}
+          )
+        for update of receipt
+      `.execute(trx);
+      const source = returnSource.rows[0];
+      if (!source) {
+        throw new UnitTraceabilityDomainError(
+          'VALIDATION_FAILED',
+          'The posted return receipt does not match this variant and location.',
+        );
+      }
+      if (Number(source.registered_quantity) + input.quantity > Number(source.quantity)) {
+        throw new UnitTraceabilityDomainError(
+          'CONFLICT',
+          'Unit registration would exceed the received return quantity.',
+        );
+      }
+      inventoryCondition = 'INSPECTION';
+    } else {
+      if (input.sourceReceiptId || input.sourceReceiptLineId || input.sourceReturnReceiptId) {
+        throw new UnitTraceabilityDomainError(
+          'VALIDATION_FAILED',
+          'Receipt references are only valid for receipt-backed registration.',
+        );
+      }
+      const capacity = await sql<{ quantity: string; registered_quantity: string }>`
+        select condition.quantity::text,
+          (select count(*)::text from inventory.inventory_units registered
+            where registered.organization_id = condition.organization_id
+              and registered.inventory_item_id = condition.inventory_item_id
+              and registered.location_id = condition.location_id
+              and registered.inventory_condition_code = condition.condition_code
+              and registered.status not in ('DISPATCHED', 'WRITTEN_OFF')) as registered_quantity
+        from inventory.inventory_level_conditions condition
+        where condition.organization_id = ${input.organizationId}
+          and condition.inventory_item_id = ${variantInfo.inventory_item_id}
+          and condition.location_id = ${input.locationId}
+          and condition.condition_code = ${inventoryCondition}
+        for update of condition
+      `.execute(trx);
+      const availableCapacity = capacity.rows[0];
+      if (
+        !availableCapacity ||
+        Number(availableCapacity.registered_quantity) + input.quantity > Number(availableCapacity.quantity)
+      ) {
+        throw new UnitTraceabilityDomainError(
+          'CONFLICT',
+          'Serialized units cannot exceed the authoritative ledger quantity for this condition and location.',
+        );
+      }
+    }
+
     // Automatically set tracking_mode to SERIAL if not already
     if (variantInfo.tracking_mode !== 'SERIAL') {
       await sql`
@@ -522,20 +652,21 @@ export async function registerInventoryUnits(
 
     const createdUnits: InventoryUnitView[] = [];
     const condition = input.initialCondition ?? 'GRADE_A';
-    const status = input.initialStatus ?? 'AWAITING_QC';
-    const sourceType = input.sourceType ?? 'INBOUND_RECEIPT';
+    const status = input.initialStatus ?? (
+      inventoryCondition === 'SELLABLE' ? 'AVAILABLE' : inventoryCondition === 'INSPECTION' ? 'AWAITING_QC' : 'ON_HOLD'
+    );
 
     for (let i = 0; i < input.quantity; i++) {
       const unitCode = await nextUnitCode(trx, input.organizationId);
       const inserted = await sql<InventoryUnitRow>`
         insert into inventory.inventory_units (
           organization_id, unit_code, inventory_item_id, variant_id, location_id,
-          current_condition, status, source_type, source_receipt_id, source_receipt_line_id,
+          inventory_condition_code, current_condition, status, source_type, source_receipt_id, source_receipt_line_id,
           source_return_receipt_id, package_reference, storage_notes, barcode_payload,
           registered_by_actor_id
         ) values (
           ${input.organizationId}, ${unitCode}, ${variantInfo.inventory_item_id},
-          ${input.variantId}, ${input.locationId}, ${condition}, ${status},
+          ${input.variantId}, ${input.locationId}, ${inventoryCondition}, ${condition}, ${status},
           ${sourceType}, ${input.sourceReceiptId ?? null},
           ${input.sourceReceiptLineId ?? null},
           ${input.sourceReturnReceiptId ?? null},
@@ -568,6 +699,7 @@ export async function registerInventoryUnits(
           unitCode,
           sku: variantInfo.sku,
           sourceType,
+          inventoryCondition,
           packageReference: input.packageReference ?? null,
         },
       });
@@ -612,6 +744,21 @@ export async function setVariantTrackingMode(
     `.execute(trx);
 
     let itemId = item.rows[0]?.id;
+    if (itemId && input.trackingMode === 'STANDARD') {
+      const liveUnits = await sql<{ count: string }>`
+        select count(*)::text as count
+        from inventory.inventory_units
+        where organization_id = ${input.organizationId}
+          and inventory_item_id = ${itemId}
+          and status not in ('DISPATCHED', 'WRITTEN_OFF')
+      `.execute(trx);
+      if (Number(liveUnits.rows[0]?.count ?? 0) > 0) {
+        throw new UnitTraceabilityDomainError(
+          'CONFLICT',
+          'Serialized tracking cannot be disabled while live unit identities remain on hand.',
+        );
+      }
+    }
     if (!itemId) {
       const inserted = await sql<{ id: string }>`
         insert into inventory.inventory_items (organization_id, variant_id, tracking_mode)
@@ -693,22 +840,47 @@ export async function convertStockToSerialized(
       );
     }
 
-    // Get current on-hand levels
-    const levels = await sql<{
-      sellable_quantity: string;
-      unavailable_quantity: string;
+    // Adopt only the identity records that are still missing for each ledger bucket.
+    // This makes conversion safely replayable and preserves exact condition truth.
+    const conditions = await sql<{
+      condition_code: InventoryCondition;
+      quantity: string;
+      registered_quantity: string;
     }>`
-      select sellable_quantity::text, unavailable_quantity::text
-      from inventory.inventory_levels
-      where organization_id = ${input.organizationId}
-        and inventory_item_id = ${item.id}
-        and location_id = ${input.locationId}
+      select condition.condition_code, condition.quantity::text,
+        (select count(*)::text from inventory.inventory_units unit
+          where unit.organization_id = condition.organization_id
+            and unit.inventory_item_id = condition.inventory_item_id
+            and unit.location_id = condition.location_id
+            and unit.inventory_condition_code = condition.condition_code
+            and unit.status not in ('DISPATCHED', 'WRITTEN_OFF')) as registered_quantity
+      from inventory.inventory_level_conditions condition
+      where condition.organization_id = ${input.organizationId}
+        and condition.inventory_item_id = ${item.id}
+        and condition.location_id = ${input.locationId}
+      order by condition.condition_code
+      for update of condition
     `.execute(trx);
 
-    const level = levels.rows[0];
-    const sellable = Math.trunc(Number(level?.sellable_quantity ?? 0));
-    const unavailable = Math.trunc(Number(level?.unavailable_quantity ?? 0));
-    const totalCount = sellable + unavailable;
+    for (const condition of conditions.rows) {
+      if (!Number.isInteger(Number(condition.quantity))) {
+        throw new UnitTraceabilityDomainError(
+          'VALIDATION_FAILED',
+          'Fractional inventory cannot be converted to individual serialized units.',
+        );
+      }
+    }
+    const missingByCondition = conditions.rows.map((condition) => ({
+      condition: condition.condition_code,
+      quantity: Number(condition.quantity) - Number(condition.registered_quantity),
+    }));
+    if (missingByCondition.some((entry) => entry.quantity < 0)) {
+      throw new UnitTraceabilityDomainError(
+        'CONFLICT',
+        'Existing serialized identities exceed the authoritative ledger quantity.',
+      );
+    }
+    const totalCount = missingByCondition.reduce((sum, entry) => sum + entry.quantity, 0);
 
     if (totalCount === 0) {
       // Just update tracking mode
@@ -720,41 +892,34 @@ export async function convertStockToSerialized(
       return { variantId: input.variantId, locationId: input.locationId, unitsCreated: 0, units: [] };
     }
 
-    // Create units for sellable stock
     const units: InventoryUnitView[] = [];
-    if (sellable > 0) {
-      const sellableUnits = await registerInventoryUnits(trx, {
+    for (const entry of missingByCondition) {
+      if (entry.quantity === 0) continue;
+      const created = await registerInventoryUnits(trx, {
         organizationId: input.organizationId,
         actorId: input.actorId,
         variantId: input.variantId,
         locationId: input.locationId,
-        quantity: sellable,
+        quantity: entry.quantity,
         sourceType: 'STOCK_CONVERSION',
-        initialCondition: input.initialCondition ?? 'GRADE_A',
-        initialStatus: 'AVAILABLE',
+        inventoryCondition: entry.condition,
+        initialCondition:
+          entry.condition === 'SELLABLE'
+            ? (input.initialCondition ?? 'GRADE_A')
+            : entry.condition === 'DAMAGED'
+              ? 'DAMAGED_UNSELLABLE'
+              : 'REPAIR_REQUIRED',
+        initialStatus:
+          entry.condition === 'SELLABLE'
+            ? 'AVAILABLE'
+            : entry.condition === 'INSPECTION'
+              ? 'AWAITING_QC'
+              : 'ON_HOLD',
         packageReference: input.packageReference,
         storageNotes: input.storageNotes,
-        notes: input.notes ?? `Adopted from quantity stock (${sellable} sellable units)`,
+        notes: input.notes ?? `Adopted ${entry.quantity} ${entry.condition.toLowerCase()} units from aggregate stock`,
       });
-      units.push(...sellableUnits);
-    }
-
-    // Create units for unavailable stock
-    if (unavailable > 0) {
-      const unavailableUnits = await registerInventoryUnits(trx, {
-        organizationId: input.organizationId,
-        actorId: input.actorId,
-        variantId: input.variantId,
-        locationId: input.locationId,
-        quantity: unavailable,
-        sourceType: 'STOCK_CONVERSION',
-        initialCondition: 'REPAIR_REQUIRED',
-        initialStatus: 'ON_HOLD',
-        packageReference: input.packageReference,
-        storageNotes: input.storageNotes,
-        notes: input.notes ?? `Adopted from quantity stock (${unavailable} unavailable units)`,
-      });
-      units.push(...unavailableUnits);
+      units.push(...created);
     }
 
     await sql`
@@ -1067,29 +1232,37 @@ export async function performUnitInspection(
 
     if (input.disposition === 'WRITE_OFF') {
       nextStatus = 'WRITTEN_OFF';
+      targetInventoryCondition = null;
     }
 
-    // Coordinate with inventory ledger if unit was in AWAITING_QC or RETURNED (under INSPECTION)
-    if (
-      (unit.status === 'AWAITING_QC' || unit.status === 'RETURNED') &&
-      targetInventoryCondition !== null
+    if (nextStatus === 'WRITTEN_OFF') {
+      await writeOffInventoryInTransaction(trx, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        inventoryItemId: unit.inventory_item_id,
+        locationId: unit.location_id,
+        condition: unit.inventory_condition_code,
+        quantity: '1',
+        reason: `QC Inspection ${inspectionNumber}: ${input.outcome}`,
+        referenceType: 'inventory.unit_inspection',
+        referenceId: insRow.id,
+      });
+    } else if (
+      targetInventoryCondition !== null &&
+      targetInventoryCondition !== unit.inventory_condition_code
     ) {
-      try {
-        await moveInventoryConditionInTransaction(trx, {
-          organizationId: input.organizationId,
-          actorId: input.actorId,
-          inventoryItemId: unit.inventory_item_id,
-          locationId: unit.location_id,
-          fromCondition: 'INSPECTION',
-          toCondition: targetInventoryCondition,
-          quantity: '1',
-          reason: `QC Inspection ${inspectionNumber}: ${input.outcome}`,
-          referenceType: 'inventory.unit_inspection',
-          referenceId: insRow.id,
-        });
-      } catch (err) {
-        // If the item wasn't tracked in INSPECTION bucket, allow inspection to proceed
-      }
+      await moveInventoryConditionInTransaction(trx, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        inventoryItemId: unit.inventory_item_id,
+        locationId: unit.location_id,
+        fromCondition: unit.inventory_condition_code,
+        toCondition: targetInventoryCondition,
+        quantity: '1',
+        reason: `QC Inspection ${inspectionNumber}: ${input.outcome}`,
+        referenceType: 'inventory.unit_inspection',
+        referenceId: insRow.id,
+      });
     }
 
     // Update unit
@@ -1097,6 +1270,7 @@ export async function performUnitInspection(
       update inventory.inventory_units
       set current_condition = ${input.conditionResult},
         status = ${nextStatus},
+        inventory_condition_code = coalesce(${targetInventoryCondition}, inventory_condition_code),
         updated_at = now(),
         version = version + 1
       where id = ${input.unitId} and organization_id = ${input.organizationId}
@@ -1255,10 +1429,26 @@ export async function requestUnitRepair(
 
     const repairRow = inserted.rows[0]!;
 
-    // Set unit status to ON_HOLD and condition to REPAIR_REQUIRED
+    if (unit.inventory_condition_code !== 'QUARANTINE') {
+      await moveInventoryConditionInTransaction(trx, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        inventoryItemId: unit.inventory_item_id,
+        locationId: unit.location_id,
+        fromCondition: unit.inventory_condition_code,
+        toCondition: 'QUARANTINE',
+        quantity: '1',
+        reason: `Repair requested: ${input.defectDescription.trim()}`,
+        referenceType: 'inventory.unit_repair',
+        referenceId: repairRow.id,
+      });
+    }
+
+    // Repair custody is always represented by the aggregate QUARANTINE bucket.
     await sql`
       update inventory.inventory_units
       set current_condition = 'REPAIR_REQUIRED',
+        inventory_condition_code = 'QUARANTINE',
         status = 'ON_HOLD',
         updated_at = now(),
         version = version + 1
@@ -1475,11 +1665,16 @@ export async function moveUnitLocation(
     }
 
     const fromLoc = unit.location_id;
+    if (fromLoc !== input.newLocationId) {
+      throw new UnitTraceabilityDomainError(
+        'INVALID_TRANSITION',
+        'Cross-location movement must use a warehouse transfer so unit identity, quantity, and cost move together.',
+      );
+    }
 
     await sql`
       update inventory.inventory_units
-      set location_id = ${input.newLocationId},
-        storage_notes = coalesce(${input.newStorageNotes?.trim() || null}, storage_notes),
+      set storage_notes = coalesce(${input.newStorageNotes?.trim() || null}, storage_notes),
         package_reference = coalesce(${input.newPackageReference?.trim() || null}, package_reference),
         updated_at = now(),
         version = version + 1
@@ -1489,11 +1684,11 @@ export async function moveUnitLocation(
     await appendUnitEventInTransaction(trx, {
       organizationId: input.organizationId,
       unitId: input.unitId,
-      eventType: 'LOCATION_MOVED',
+      eventType: 'REPACKAGED',
       actorId: input.actorId,
       fromLocationId: fromLoc,
       toLocationId: input.newLocationId,
-      reason: input.reason ?? 'Relocated physical unit',
+      reason: input.reason ?? 'Updated storage placement within the current location',
       metadata: {
         storageNotes: input.newStorageNotes ?? unit.storage_notes,
         packageReference: input.newPackageReference ?? unit.package_reference,
@@ -1511,7 +1706,7 @@ export async function moveUnitLocation(
  * Bulk move locations for multiple units.
  */
 export async function bulkMoveUnitsLocation(
-  db: Kysely<DatabaseSchema>,
+  db: DatabaseExecutor,
   input: {
     organizationId: string;
     actorId: string;
@@ -1526,20 +1721,22 @@ export async function bulkMoveUnitsLocation(
     throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'At least one unit must be specified.');
   }
 
-  const results: InventoryUnitView[] = [];
-  for (const unitId of input.unitIds) {
-    const updated = await moveUnitLocation(db, {
-      organizationId: input.organizationId,
-      actorId: input.actorId,
-      unitId,
-      newLocationId: input.newLocationId,
-      newStorageNotes: input.newStorageNotes,
-      newPackageReference: input.newPackageReference,
-      reason: input.reason,
-    });
-    results.push(updated);
-  }
-  return { count: results.length, units: results };
+  return withUnitTransaction(db, async (trx) => {
+    const results: InventoryUnitView[] = [];
+    for (const unitId of input.unitIds) {
+      const updated = await moveUnitLocation(trx, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        unitId,
+        newLocationId: input.newLocationId,
+        newStorageNotes: input.newStorageNotes,
+        newPackageReference: input.newPackageReference,
+        reason: input.reason,
+      });
+      results.push(updated);
+    }
+    return { count: results.length, units: results };
+  });
 }
 
 /**
@@ -1638,9 +1835,25 @@ export async function releaseUnitForSale(
       );
     }
 
+    if (unit.inventory_condition_code !== 'SELLABLE') {
+      await moveInventoryConditionInTransaction(trx, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        inventoryItemId: unit.inventory_item_id,
+        locationId: unit.location_id,
+        fromCondition: unit.inventory_condition_code,
+        toCondition: 'SELLABLE',
+        quantity: '1',
+        reason: input.reason.trim(),
+        referenceType: 'inventory.unit',
+        referenceId: unit.id,
+      });
+    }
+
     await sql`
       update inventory.inventory_units
       set status = 'AVAILABLE',
+        inventory_condition_code = 'SELLABLE',
         updated_at = now(),
         version = version + 1
       where id = ${input.unitId} and organization_id = ${input.organizationId}
@@ -1703,6 +1916,18 @@ export async function writeOffUnit(
         'Cannot write off a dispatched unit without a return/loss case.',
       );
     }
+
+    await writeOffInventoryInTransaction(trx, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      inventoryItemId: unit.inventory_item_id,
+      locationId: unit.location_id,
+      condition: unit.inventory_condition_code,
+      quantity: '1',
+      reason: input.reason.trim(),
+      referenceType: 'inventory.unit',
+      referenceId: unit.id,
+    });
 
     await sql`
       update inventory.inventory_units
@@ -2030,6 +2255,37 @@ export async function receiveReturnedUnit(
     if (!unit) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
+    if (unit.status !== 'DISPATCHED') {
+      throw new UnitTraceabilityDomainError(
+        'INVALID_TRANSITION',
+        'Only a dispatched unit can be received through the return workflow.',
+      );
+    }
+    if (!input.sourceReturnReceiptId) {
+      throw new UnitTraceabilityDomainError(
+        'VALIDATION_FAILED',
+        'A posted return receipt is required before reconnecting a returned unit.',
+      );
+    }
+    const receipt = await sql<{ id: string }>`
+      select receipt.id
+      from returns.return_receipts receipt
+      join returns.return_receipt_lines line
+        on line.return_receipt_id = receipt.id
+        and line.organization_id = receipt.organization_id
+      where receipt.id = ${input.sourceReturnReceiptId}
+        and receipt.organization_id = ${input.organizationId}
+        and receipt.receiving_location_id = ${input.receivingLocationId}
+        and receipt.status = 'POSTED'
+        and line.inventory_item_id = ${unit.inventory_item_id}
+      for update of receipt
+    `.execute(trx);
+    if (!receipt.rows[0]) {
+      throw new UnitTraceabilityDomainError(
+        'VALIDATION_FAILED',
+        'The posted return receipt does not match this unit and receiving location.',
+      );
+    }
 
     const previousStatus = unit.status;
 
@@ -2038,6 +2294,7 @@ export async function receiveReturnedUnit(
       set location_id = ${input.receivingLocationId},
         source_return_receipt_id = coalesce(${input.sourceReturnReceiptId ?? null}, source_return_receipt_id),
         status = 'RETURNED',
+        inventory_condition_code = 'INSPECTION',
         current_condition = coalesce(${input.conditionResult ?? null}, current_condition),
         updated_at = now(),
         version = version + 1
@@ -2139,6 +2396,19 @@ export async function reconcileSerializedInventory(
   const inFulfillmentUnits = statusMap.get('IN_FULFILLMENT') ?? 0;
   const onHandUnits = availableUnits + onHoldUnits + reservedUnits + inFulfillmentUnits;
 
+  const unitConditions = await sql<{ condition_code: InventoryCondition; count: string }>`
+    select inventory_condition_code as condition_code, count(*)::text as count
+    from inventory.inventory_units
+    where organization_id = ${input.organizationId}
+      and variant_id = ${input.variantId}
+      and location_id = ${input.locationId}
+      and status not in ('DISPATCHED', 'WRITTEN_OFF')
+    group by inventory_condition_code
+  `.execute(db);
+  const unitConditionMap = new Map<InventoryCondition, number>(
+    unitConditions.rows.map((row) => [row.condition_code, Number(row.count)]),
+  );
+
   // Ledger levels
   const levelRes = await sql<{
     sellable_quantity: string;
@@ -2159,24 +2429,31 @@ export async function reconcileSerializedInventory(
   };
 
   const discrepancies: string[] = [];
-  const ledgerSellable = Number(level.sellable_quantity);
-  const ledgerUnavailable = Number(level.unavailable_quantity);
   const ledgerReserved = Number(level.reserved_quantity);
 
   if (item.tracking_mode === 'SERIAL') {
-    if (availableUnits !== ledgerSellable) {
-      discrepancies.push(
-        `Available units count (${availableUnits}) does not match ledger sellable quantity (${ledgerSellable}).`,
-      );
+    const ledgerConditions = await sql<{ condition_code: InventoryCondition; quantity: string }>`
+      select condition_code, quantity::text
+      from inventory.inventory_level_conditions
+      where organization_id = ${input.organizationId}
+        and inventory_item_id = ${item.item_id}
+        and location_id = ${input.locationId}
+    `.execute(db);
+    const ledgerConditionMap = new Map<InventoryCondition, number>(
+      ledgerConditions.rows.map((row) => [row.condition_code, Number(row.quantity)]),
+    );
+    for (const condition of ['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION'] as const) {
+      const identities = unitConditionMap.get(condition) ?? 0;
+      const ledgerQuantity = ledgerConditionMap.get(condition) ?? 0;
+      if (identities !== ledgerQuantity) {
+        discrepancies.push(
+          `${condition} unit identities (${identities}) do not match the ledger condition quantity (${ledgerQuantity}).`,
+        );
+      }
     }
-    if (onHoldUnits !== ledgerUnavailable) {
+    if (reservedUnits + inFulfillmentUnits > ledgerReserved) {
       discrepancies.push(
-        `On-hold / awaiting QC units count (${onHoldUnits}) does not match ledger unavailable quantity (${ledgerUnavailable}).`,
-      );
-    }
-    if (inFulfillmentUnits > 0 && inFulfillmentUnits > ledgerReserved) {
-      discrepancies.push(
-        `In-fulfillment units count (${inFulfillmentUnits}) exceeds ledger reserved quantity (${ledgerReserved}).`,
+        `Selected reserved/in-fulfillment units (${reservedUnits + inFulfillmentUnits}) exceed ledger reserved quantity (${ledgerReserved}).`,
       );
     }
   }
@@ -2290,7 +2567,7 @@ export async function listUnitInspections(
     created_at: Date;
   }>`
     select insp.id, insp.unit_id, unit.unit_code, insp.inspection_number,
-      insp.inspector_actor_id, user_row.display_name as inspector_name,
+      insp.inspector_actor_id, user_row.name as inspector_name,
       insp.inspection_stage, insp.condition_result, insp.defect_description,
       insp.notes, insp.media_asset_ids, insp.inspection_outcome, insp.disposition,
       insp.created_at

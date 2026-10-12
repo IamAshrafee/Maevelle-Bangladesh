@@ -3,6 +3,7 @@ import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
 import { findActiveAdminContext } from '@maevelle/database/platform';
+import type { InventoryCondition } from '@maevelle/database/inventory';
 import {
   allocateUnitsToFulfillment,
   bulkInspectUnits,
@@ -40,7 +41,6 @@ import type { createAuth } from '../auth/auth.js';
 import {
   canAccessLocation,
   locationScopeError,
-  locationScopeIds,
 } from '../authorization/location-scope.js';
 
 type Auth = ReturnType<typeof createAuth>;
@@ -116,6 +116,13 @@ const sourceTypeSchema = Type.Union([
   Type.Literal('STOCK_CONVERSION'),
   Type.Literal('RETURN_RECEIPT'),
   Type.Literal('MANUAL_INTAKE'),
+]);
+
+const inventoryConditionSchema = Type.Union([
+  Type.Literal('SELLABLE'),
+  Type.Literal('DAMAGED'),
+  Type.Literal('QUARANTINE'),
+  Type.Literal('INSPECTION'),
 ]);
 
 const inspectionStageSchema = Type.Union([
@@ -390,6 +397,7 @@ export function registerInventoryUnitRoutes(
           sourceReceiptId: Type.Optional(Type.String()),
           sourceReceiptLineId: Type.Optional(Type.String()),
           sourceReturnReceiptId: Type.Optional(Type.String()),
+          inventoryCondition: Type.Optional(inventoryConditionSchema),
           initialCondition: Type.Optional(conditionSchema),
           packageReference: Type.Optional(Type.String()),
           storageNotes: Type.Optional(Type.String()),
@@ -409,6 +417,7 @@ export function registerInventoryUnitRoutes(
         sourceReceiptId?: string;
         sourceReceiptLineId?: string;
         sourceReturnReceiptId?: string;
+        inventoryCondition?: InventoryCondition;
         initialCondition?: UnitCondition;
         packageReference?: string;
         storageNotes?: string;

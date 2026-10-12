@@ -869,6 +869,62 @@ export async function moveInventoryConditionInTransaction(
   return transactionId;
 }
 
+/**
+ * Canonical in-transaction inventory loss used by identity-aware unit write-offs.
+ * The quantity projection, immutable movement evidence, and FIFO cost position
+ * consumption are committed together or not at all.
+ */
+export async function writeOffInventoryInTransaction(
+  transaction: Transaction<DatabaseSchema>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    inventoryItemId: string;
+    locationId: string;
+    condition: InventoryCondition;
+    quantity: string;
+    reason: string;
+    referenceType: string;
+    referenceId: string;
+    idempotencyRecordId?: string;
+  },
+): Promise<string> {
+  assertQuantity(input.quantity);
+  await requireActiveLocationCapability(
+    transaction,
+    input.organizationId,
+    input.locationId,
+    'STOCK_HOLDING',
+  );
+  const transactionId = await postTransaction(transaction, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    transactionType: 'ADJUSTMENT',
+    reasonCode: 'UNIT_WRITE_OFF',
+    reasonText: input.reason,
+    referenceType: input.referenceType,
+    referenceId: input.referenceId,
+    idempotencyRecordId: input.idempotencyRecordId,
+    lines: [
+      {
+        inventoryItemId: input.inventoryItemId,
+        locationId: input.locationId,
+        condition: input.condition,
+        quantityDelta: `-${input.quantity}`,
+      },
+    ],
+  });
+  await consumeCostPositionsForInventoryLossInTransaction(transaction, {
+    organizationId: input.organizationId,
+    inventoryItemId: input.inventoryItemId,
+    locationId: input.locationId,
+    condition: input.condition,
+    quantity: input.quantity,
+    inventoryTransactionId: transactionId,
+  });
+  return transactionId;
+}
+
 export async function createInventoryReservation(
   db: Kysely<DatabaseSchema>,
   input: ReservationInput,
@@ -2418,13 +2474,24 @@ export async function dispatchWarehouseTransfer(
       id: string;
       inventory_item_id: string;
       quantity: string;
-    }>`select id, inventory_item_id, (requested_quantity - cancelled_quantity - dispatched_quantity)::text as quantity from warehouse.transfer_lines where transfer_id = ${header.id} and organization_id = ${input.organizationId} order by inventory_item_id for update`.execute(
+      tracking_mode: string;
+    }>`select line.id, line.inventory_item_id, (line.requested_quantity - line.cancelled_quantity - line.dispatched_quantity)::text as quantity, item.tracking_mode
+      from warehouse.transfer_lines line
+      join inventory.inventory_items item
+        on item.id = line.inventory_item_id and item.organization_id = line.organization_id
+      where line.transfer_id = ${header.id} and line.organization_id = ${input.organizationId}
+      order by line.inventory_item_id for update of line`.execute(
       transaction,
     );
     if (lines.rows.some((line) => line.quantity === '0'))
       throw new InventoryDomainError(
         'CONFLICT',
         'Transfer has no remaining dispatchable quantity.',
+      );
+    if (lines.rows.some((line) => line.tracking_mode === 'SERIAL'))
+      throw new InventoryDomainError(
+        'VALIDATION_FAILED',
+        'Serialized inventory requires exact unit selection before a warehouse transfer can be dispatched.',
       );
     const inventoryTransactionId = await postTransaction(transaction, {
       organizationId: input.organizationId,
@@ -2755,6 +2822,23 @@ export async function startStocktake(
       input.locationId,
       'STOCK_HOLDING',
     );
+    const serializedStock = await sql<{ exists: boolean }>`
+      select exists (
+        select 1
+        from inventory.inventory_levels level
+        join inventory.inventory_items item
+          on item.id = level.inventory_item_id and item.organization_id = level.organization_id
+        where level.organization_id = ${input.organizationId}
+          and level.location_id = ${input.locationId}
+          and item.tracking_mode = 'SERIAL'
+          and level.sellable_quantity + level.unavailable_quantity > 0
+      ) as exists
+    `.execute(transaction);
+    if (serializedStock.rows[0]?.exists)
+      throw new InventoryDomainError(
+        'VALIDATION_FAILED',
+        'This location contains serialized inventory. Start an identity-aware unit count instead.',
+      );
     const created = await sql<{
       id: string;
     }>`insert into inventory.stocktake_sessions (organization_id, stocktake_number, location_id, status, created_by_actor_id) values (${input.organizationId}, concat('ST-', replace(uuidv7()::text, '-', '')), ${input.locationId}, 'COUNTING', ${input.actorId}) returning id`.execute(

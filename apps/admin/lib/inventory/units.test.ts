@@ -2,20 +2,10 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   listInventoryUnits,
   lookupUnitByCode,
-  getInventoryUnit,
-  registerInventoryUnits,
   performUnitInspection,
   bulkInspectUnits,
-  requestUnitRepair,
   completeUnitRepair,
-  moveUnitLocation,
-  bulkMoveUnitsLocation,
-  releaseUnitForSale,
-  writeOffUnit,
-  receiveReturnedUnit,
-  setVariantTrackingMode,
   convertStockToSerialized,
-  reconcileSerializedInventory,
   allocateUnitsToFulfillment,
   getUnitBarcodeSvgUrl,
 } from './units';
@@ -111,7 +101,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
       ok: true,
       json: async () => ({
         data: {
-          inspectedCount: 7,
+          count: 7,
           units: Array.from({ length: 7 }, (_, i) => ({
             id: `unit-${i + 1}`,
             unitCode: `MVU-00010${i + 1}`,
@@ -173,11 +163,12 @@ describe('Individual Unit Traceability Frontend API Client', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('/api/admin/inventory/units/unit-8/inspect');
+    expect(url).toContain('/api/admin/inventory/units/unit-8/inspections');
     const body = JSON.parse(init?.body as string);
     expect(body.conditionResult).toBe('GRADE_B');
     expect(body.defectDescription).toBe('Minor seam fraying on inner hem');
-    expect(body.photoAssetIds).toEqual(['asset-photo-1']);
+    expect(body.mediaAssetIds).toEqual(['asset-photo-1']);
+    expect(body.outcome).toBe('PASSED_WITH_DEFECT');
     expect(res.unit.currentCondition).toBe('GRADE_B');
   });
 
@@ -186,7 +177,6 @@ describe('Individual Unit Traceability Frontend API Client', () => {
       ok: true,
       json: async () => ({
         data: {
-          repair: {
             id: 'rep-1',
             unitId: 'unit-9',
             repairStatus: 'COMPLETED',
@@ -194,13 +184,6 @@ describe('Individual Unit Traceability Frontend API Client', () => {
             technicianName: 'Rafiq',
             costAmount: '120.00',
             costCurrency: 'BDT',
-          },
-          unit: {
-            id: 'unit-9',
-            unitCode: 'MVU-000109',
-            status: 'AWAITING_QC',
-            currentCondition: 'GRADE_A',
-          },
         },
       }),
     });
@@ -219,7 +202,8 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     const body = JSON.parse(init?.body as string);
     expect(body.actionPerformed).toBe('Re-stitched seam zipper');
     expect(body.costAmount).toBe('120.00');
-    expect(res.unit.status).toBe('AWAITING_QC');
+    expect(init?.method).toBe('PATCH');
+    expect(res.repairStatus).toBe('COMPLETED');
   });
 
   it('handles stock conversion to serialized inventory', async () => {
@@ -228,7 +212,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
       json: async () => ({
         data: {
           variantId: 'var-1',
-          registeredUnitsCount: 11,
+          unitsCreated: 11,
           units: Array.from({ length: 11 }, (_, i) => ({
             id: `unit-${i + 1}`,
             unitCode: `MVU-0001${String(i + 1).padStart(2, '0')}`,
@@ -247,9 +231,9 @@ describe('Individual Unit Traceability Frontend API Client', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('/api/admin/inventory/variants/convert-to-serialized');
+    expect(url).toContain('/api/admin/inventory/units/convert-stock');
     const body = JSON.parse(init?.body as string);
-    expect(body.count).toBe(11);
+    expect(body.count).toBeUndefined();
     expect(res.registeredUnitsCount).toBe(11);
   });
 

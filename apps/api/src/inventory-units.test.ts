@@ -6,6 +6,7 @@ import {
   createOrganization,
   createOwnerMembership,
 } from '@maevelle/database/platform';
+import { adjustInventory } from '@maevelle/database/inventory';
 
 import { buildApi } from './app.js';
 import { createAuth } from './auth/auth.js';
@@ -192,7 +193,18 @@ describe('Inventory Units & Traceability API Routes', () => {
     expect(modeRes.statusCode).toBe(200);
     expect(modeRes.json().data.trackingMode).toBe('SERIAL');
 
-    // 2. Register units via POST /admin/inventory/units/register
+    // 2. Adopt identities only after aggregate inventory truth exists.
+    await adjustInventory(database.db, {
+      organizationId: ctx.orgId,
+      actorId: ctx.userId,
+      locationId: ctx.locationId,
+      variantId: ctx.variantId,
+      condition: 'INSPECTION',
+      quantityDelta: '3',
+      reasonCode: 'OPENING_BALANCE',
+      idempotencyKey: `api-unit-fixture-${crypto.randomUUID()}`,
+    });
+
     const regRes = await app.inject({
       method: 'POST',
       url: '/admin/inventory/units/register',
@@ -201,6 +213,8 @@ describe('Inventory Units & Traceability API Routes', () => {
         variantId: ctx.variantId,
         locationId: ctx.locationId,
         quantity: 3,
+        sourceType: 'MANUAL_INTAKE',
+        inventoryCondition: 'INSPECTION',
         packageReference: 'BOX-EXP-01',
         storageNotes: 'Shelf A-3',
         notes: 'Inbound shipment from Guangzhou',
@@ -335,7 +349,7 @@ describe('Inventory Units & Traceability API Routes', () => {
     expect(packRes.statusCode).toBe(200);
     expect(packRes.json().data.packageReference).toBe('BOX-PREMIUM-LUX-05');
 
-    // 11. Move location
+    // 11. Direct cross-location moves are rejected; Transfers own that boundary.
     const moveRes = await app.inject({
       method: 'PATCH',
       url: `/admin/inventory/units/${unit1.id}/location`,
@@ -346,8 +360,8 @@ describe('Inventory Units & Traceability API Routes', () => {
         reason: 'Temporary relocation for staging',
       },
     });
-    expect(moveRes.statusCode).toBe(200);
-    expect(moveRes.json().data.locationId).toBe(ctx.repairLocationId);
+    expect(moveRes.statusCode).toBe(422);
+    expect(moveRes.json().error.code).toBe('INVALID_TRANSITION');
 
     // 12. Check event history timeline via GET /admin/inventory/units/:unitId/history
     const historyRes = await app.inject({
@@ -357,14 +371,14 @@ describe('Inventory Units & Traceability API Routes', () => {
     });
     expect(historyRes.statusCode).toBe(200);
     const events = historyRes.json().data;
-    expect(events.length).toBeGreaterThanOrEqual(4);
+    expect(events.length).toBeGreaterThanOrEqual(3);
     const eventTypes = events.map((e: { eventType: string }) => e.eventType);
     expect(eventTypes).toContain('REGISTERED');
     expect(eventTypes).toContain('INSPECTED');
     expect(eventTypes).toContain('REPACKAGED');
-    expect(eventTypes).toContain('LOCATION_MOVED');
+    expect(eventTypes).not.toContain('LOCATION_MOVED');
 
-    // 13. Receive returned unit into quarantine
+    // 13. Return intake requires dispatched state and posted receipt evidence.
     const returnRes = await app.inject({
       method: 'POST',
       url: `/admin/inventory/units/${unit1.id}/receive-return`,
@@ -375,8 +389,8 @@ describe('Inventory Units & Traceability API Routes', () => {
         notes: 'Customer returned dress with minor fabric fold crease',
       },
     });
-    expect(returnRes.statusCode).toBe(200);
-    expect(returnRes.json().data.status).toBe('RETURNED');
+    expect(returnRes.statusCode).toBe(422);
+    expect(returnRes.json().error.code).toBe('INVALID_TRANSITION');
 
     // 14. Write-off unit 3
     const unit3 = units[2]!;

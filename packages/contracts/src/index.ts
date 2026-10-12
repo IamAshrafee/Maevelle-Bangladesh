@@ -5634,6 +5634,9 @@ export type UnitConditionDto =
   | 'REPAIR_REQUIRED'
   | 'DAMAGED_UNSELLABLE';
 
+/** Aggregate inventory-ledger condition occupied by a serialized unit. */
+export type InventoryConditionDto = 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+
 export type UnitStatusDto =
   | 'AWAITING_QC'
   | 'AVAILABLE'
@@ -5712,6 +5715,8 @@ export interface InventoryUnitDto {
   readonly locationId: string;
   readonly locationName: string;
   readonly locationCode: string;
+  /** Authoritative aggregate-ledger bucket occupied by this physical unit. */
+  readonly inventoryCondition: InventoryConditionDto;
   readonly currentCondition: UnitConditionDto;
   readonly status: UnitStatusDto;
   readonly sourceType: UnitSourceTypeDto;
