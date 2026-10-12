@@ -82,6 +82,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('warehouse.manage', 'warehouse', 'Create and manage locations and transfers.', 'HIGH'),
       ('inventory.view', 'inventory', 'View inventory balances and history.', 'INTERNAL'),
       ('inventory.adjust', 'inventory', 'Post controlled inventory adjustments and condition moves.', 'HIGH'),
+      ('inventory.replenishment.manage', 'inventory', 'Manage inventory replenishment policies and sourcing preferences.', 'HIGH'),
       ('inventory.reserve', 'inventory', 'Create and release inventory reservations.', 'HIGH'),
       ('inventory.transfer', 'inventory', 'Dispatch and receive warehouse transfers.', 'HIGH'),
       ('inventory.stocktake', 'inventory', 'Create and post stocktakes.', 'HIGH')
@@ -89,7 +90,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     update iam.capability_definitions
     set supported_scope_types = array['LOCATION']::text[]
     where capability_code in (
-      'warehouse.view', 'warehouse.manage', 'inventory.view', 'inventory.adjust',
+      'warehouse.view', 'warehouse.manage', 'inventory.view', 'inventory.adjust', 'inventory.replenishment.manage',
       'inventory.reserve', 'inventory.transfer', 'inventory.stocktake'
     );
 
@@ -97,7 +98,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     select membership.id, capability.capability_code
     from iam.organization_memberships membership
     cross join (values
-      ('warehouse.view'), ('warehouse.manage'), ('inventory.view'), ('inventory.adjust'),
+      ('warehouse.view'), ('warehouse.manage'), ('inventory.view'), ('inventory.adjust'), ('inventory.replenishment.manage'),
       ('inventory.reserve'), ('inventory.transfer'), ('inventory.stocktake')
     ) as capability(capability_code)
     where membership.membership_type = 'OWNER' and membership.status = 'ACTIVE'

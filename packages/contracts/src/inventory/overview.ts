@@ -13,7 +13,11 @@ export interface InventoryOverviewAttentionDto {
   readonly locationName: string;
   readonly availableToSell: string;
   readonly replenishmentThreshold: number;
-  readonly replenishmentThresholdSource: 'VARIANT' | 'ORGANIZATION_DEFAULT';
+  readonly replenishmentThresholdSource:
+    | 'LOCATION_POLICY'
+    | 'ITEM_POLICY'
+    | 'VARIANT'
+    | 'ORGANIZATION_DEFAULT';
   readonly explanation: string;
   readonly owner: 'INVENTORY';
   readonly nextActionHref: string;

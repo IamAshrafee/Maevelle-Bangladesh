@@ -235,6 +235,41 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index if not exists fulfillment_unit_allocations_lookup
       on fulfillment.fulfillment_unit_allocations (organization_id, fulfillment_id);
 
+    create table if not exists inventory.replenishment_policies (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      inventory_item_id uuid not null,
+      location_id uuid,
+      reorder_point numeric(20,6) not null check (reorder_point >= 0),
+      safety_stock numeric(20,6) not null default 0 check (safety_stock >= 0),
+      target_stock numeric(20,6) not null check (target_stock >= 0),
+      lead_time_days integer check (lead_time_days is null or lead_time_days >= 0),
+      preferred_source_location_id uuid,
+      preferred_supplier_id uuid,
+      created_by_actor_id uuid references iam.users(id),
+      updated_by_actor_id uuid references iam.users(id),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      version bigint not null default 1,
+      unique (organization_id, id),
+      unique nulls not distinct (organization_id, inventory_item_id, location_id),
+      foreign key (organization_id, inventory_item_id) references inventory.inventory_items(organization_id, id),
+      foreign key (organization_id, location_id) references warehouse.locations(organization_id, id),
+      foreign key (organization_id, preferred_source_location_id) references warehouse.locations(organization_id, id),
+      foreign key (organization_id, preferred_supplier_id) references procurement.suppliers(organization_id, id),
+      check (target_stock >= reorder_point),
+      check (target_stock >= safety_stock),
+      check (location_id is null or preferred_source_location_id is null or location_id <> preferred_source_location_id)
+    );
+    create index if not exists replenishment_policies_item
+      on inventory.replenishment_policies (organization_id, inventory_item_id, location_id);
+    create index if not exists replenishment_policies_source_location
+      on inventory.replenishment_policies (organization_id, preferred_source_location_id)
+      where preferred_source_location_id is not null;
+    create index if not exists replenishment_policies_supplier
+      on inventory.replenishment_policies (organization_id, preferred_supplier_id)
+      where preferred_supplier_id is not null;
+
     insert into iam.capability_definitions (capability_code, domain, description, sensitivity)
     values
       ('inventory.units.view', 'inventory', 'View individual inventory units and traceability history.', 'INTERNAL'),

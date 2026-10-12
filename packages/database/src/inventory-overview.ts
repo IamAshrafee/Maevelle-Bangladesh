@@ -29,7 +29,11 @@ export interface InventoryOverviewReadModel {
       readonly locationName: string;
       readonly availableToSell: string;
       readonly replenishmentThreshold: number;
-      readonly replenishmentThresholdSource: 'VARIANT' | 'ORGANIZATION_DEFAULT';
+      readonly replenishmentThresholdSource:
+        | 'LOCATION_POLICY'
+        | 'ITEM_POLICY'
+        | 'VARIANT'
+        | 'ORGANIZATION_DEFAULT';
       readonly explanation: string;
       readonly owner: 'INVENTORY';
       readonly nextActionHref: string;
@@ -152,15 +156,21 @@ export async function getInventoryOverview(
       location_name: string;
       available: string;
       threshold: string;
-      threshold_source: 'VARIANT' | 'ORGANIZATION_DEFAULT';
+      threshold_source:
+        | 'LOCATION_POLICY'
+        | 'ITEM_POLICY'
+        | 'VARIANT'
+        | 'ORGANIZATION_DEFAULT';
       last_movement_at: string | null;
       total_count: string;
     }>`
       select item.id as inventory_item_id,variant.id as variant_id,variant.sku,
         product.title as product_title,location.id as location_id,location.name as location_name,
         (level.sellable_quantity-level.reserved_quantity)::text as available,
-        coalesce(variant.reorder_point,${lowStockThreshold})::text as threshold,
-        case when variant.reorder_point is null then 'ORGANIZATION_DEFAULT' else 'VARIANT' end as threshold_source,
+        coalesce(location_policy.reorder_point,item_policy.reorder_point,variant.reorder_point,${lowStockThreshold})::text as threshold,
+        case when location_policy.id is not null then 'LOCATION_POLICY'
+          when item_policy.id is not null then 'ITEM_POLICY'
+          when variant.reorder_point is not null then 'VARIANT' else 'ORGANIZATION_DEFAULT' end as threshold_source,
         last_movement.occurred_at::text as last_movement_at,count(*) over()::text as total_count
       from inventory.inventory_levels level
       join inventory.inventory_items item
@@ -171,6 +181,12 @@ export async function getInventoryOverview(
         on product.organization_id=variant.organization_id and product.id=variant.product_id
       join warehouse.locations location
         on location.organization_id=level.organization_id and location.id=level.location_id
+      left join inventory.replenishment_policies location_policy
+        on location_policy.organization_id=level.organization_id
+        and location_policy.inventory_item_id=level.inventory_item_id and location_policy.location_id=level.location_id
+      left join inventory.replenishment_policies item_policy
+        on item_policy.organization_id=level.organization_id
+        and item_policy.inventory_item_id=level.inventory_item_id and item_policy.location_id is null
       left join lateral (
         select max(tx.occurred_at) as occurred_at
         from inventory.inventory_movement_lines movement
@@ -181,7 +197,8 @@ export async function getInventoryOverview(
           and movement.location_id=level.location_id
       ) last_movement on true
       where level.organization_id=${organizationId} and ${levelScope}
-        and level.sellable_quantity-level.reserved_quantity <= coalesce(variant.reorder_point,${lowStockThreshold})
+        and level.sellable_quantity-level.reserved_quantity
+          <= coalesce(location_policy.reorder_point,item_policy.reorder_point,variant.reorder_point,${lowStockThreshold})
       order by (level.sellable_quantity-level.reserved_quantity <= 0) desc,
         level.sellable_quantity-level.reserved_quantity,product.title,variant.sku
       limit ${attentionLimit}
@@ -282,7 +299,7 @@ export async function getInventoryOverview(
         coalesce(sum(level.sellable_quantity-level.reserved_quantity),0)::text as available,
         coalesce(sum(level.unavailable_quantity),0)::text as unavailable,
         count(*) filter (where level.sellable_quantity-level.reserved_quantity
-          <= coalesce(variant.reorder_point,${lowStockThreshold}))::text as attention_count
+          <= coalesce(location_policy.reorder_point,item_policy.reorder_point,variant.reorder_point,${lowStockThreshold}))::text as attention_count
       from warehouse.locations location
       join warehouse.location_capabilities capability
         on capability.organization_id=location.organization_id and capability.location_id=location.id
@@ -293,6 +310,12 @@ export async function getInventoryOverview(
         on item.organization_id=level.organization_id and item.id=level.inventory_item_id
       left join catalog.product_variants variant
         on variant.organization_id=item.organization_id and variant.id=item.variant_id
+      left join inventory.replenishment_policies location_policy
+        on location_policy.organization_id=level.organization_id
+        and location_policy.inventory_item_id=level.inventory_item_id and location_policy.location_id=level.location_id
+      left join inventory.replenishment_policies item_policy
+        on item_policy.organization_id=level.organization_id
+        and item_policy.inventory_item_id=level.inventory_item_id and item_policy.location_id is null
       where location.organization_id=${organizationId} and location.status='ACTIVE'
         and ${locationIds === undefined ? sql`true` : locationIds.length ? sql`location.id=any(${locationIds}::uuid[])` : sql`false`}
       group by location.id order by attention_count desc,location.name
@@ -332,7 +355,7 @@ export async function getInventoryOverview(
           replenishmentThresholdSource: row.threshold_source,
           explanation: out
             ? 'No unallocated sellable quantity remains at this location.'
-            : `Available quantity is at or below the ${row.threshold_source === 'VARIANT' ? 'SKU' : 'organization'} threshold of ${row.threshold}.`,
+            : `Available quantity is at or below the ${row.threshold_source.toLowerCase().replaceAll('_', ' ')} threshold of ${row.threshold}.`,
           owner: 'INVENTORY',
           nextActionHref: `/inventory/stock/${row.inventory_item_id}?locationId=${row.location_id}`,
           lastMovementAt: row.last_movement_at,

@@ -98,6 +98,11 @@ Implemented in the first Stage 2 slice:
 - Exposed each position's resolved replenishment threshold and source so the Admin UI can explain why a SKU is considered low stock.
 - Removed the dashboard's false “5 units” copy and show the resolved threshold on attention rows.
 - Repaired clean-database Settings audit/outbox writes discovered by the new policy tests: audit targets now use real UUID entity IDs, and Settings outbox records include the required event and aggregate envelope.
+- Added versioned `inventory.replenishment_policies` with one item-wide policy or a Location-specific override, non-negative reorder/safety/target invariants, active stock-holding source validation, and organization-safe optional Supplier sourcing.
+- Added the separate `inventory.replenishment.manage` capability with Location scope support. Location-scoped operators can manage only destination policies in their scope and cannot create or reset an organization-wide override.
+- Added focused shared contracts plus paginated policy and recommendation services and APIs. Policy create/update/reset commands require idempotency keys, reject stale versions, write audit evidence, and emit transactional outbox events.
+- Established the authoritative threshold order: Location policy, item-wide policy, Catalog variant reorder point, then the organization Inventory default. Overview attention, Stock positions, legacy balance filtering, and Inventory statistics now use that same order.
+- Added explainable replenishment projections from available-to-sell, inbound purchase shipments, inbound transfers, and approved outbound transfers. Recommendations suggest a Transfer only when the configured source has enough surplus above its own resolved threshold; otherwise they hand off to a preferred Supplier Purchase or policy review without creating Procurement or Finance obligations inside Inventory.
 
 Verification for this slice:
 
@@ -105,11 +110,15 @@ Verification for this slice:
 - Focused Inventory and Settings database suites: 31 tests passed.
 - Inventory API lifecycle suite, including the new Overview endpoint: 2 tests passed.
 - Focused lint for all touched contracts, database, API, and Admin files: passed.
+- Fresh disposable Compose rebuild after adding replenishment policy persistence: migration plus API, Worker, Admin, and Storefront production builds passed.
+- Focused Inventory suite after policy lifecycle and recommendation integration: 19 tests passed, including idempotent replay, changed-payload rejection, stale-write protection, reset replay, hierarchy resolution, and genuine-surplus transfer selection.
+- Database and API package builds plus focused replenishment lint: passed.
+- Root TypeScript project build and the combined Inventory/serialized-unit database suites: passed; 33 tests passed across 2 files.
 
 Remaining in Stage 2:
 
-- Add Location/item replenishment policy persistence and recommendation resolution above the Catalog/default fallback.
 - Continue splitting route/service responsibilities and normalize remaining Inventory envelopes and error semantics.
+- Build the responsive Admin replenishment queue and shared policy editor on the new contracts, then connect the prefilled Transfer and Purchase handoffs to their owning forms.
 - Expand Overview attention beyond the now-authoritative stock, queue, movement, and Location snapshot where owning-domain SLA/configuration evidence is still required.
 
 ---

@@ -90,7 +90,11 @@ export interface InventoryPosition {
   readonly costCurrency: string | null;
   readonly costState: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
   readonly replenishmentThreshold: number;
-  readonly replenishmentThresholdSource: 'VARIANT' | 'ORGANIZATION_DEFAULT';
+  readonly replenishmentThresholdSource:
+    | 'LOCATION_POLICY'
+    | 'ITEM_POLICY'
+    | 'VARIANT'
+    | 'ORGANIZATION_DEFAULT';
 }
 
 function fingerprint(input: unknown): string {
@@ -1397,7 +1401,7 @@ export async function listInventoryPositions(
     input.availability === 'IN_STOCK'
       ? sql`level.sellable_quantity - level.reserved_quantity > 0`
       : input.availability === 'LOW_STOCK'
-        ? sql`level.sellable_quantity - level.reserved_quantity between 1 and coalesce(variant.reorder_point, ${lowStockThreshold})`
+        ? sql`level.sellable_quantity - level.reserved_quantity between 1 and coalesce(location_policy.reorder_point, item_policy.reorder_point, variant.reorder_point, ${lowStockThreshold})`
         : input.availability === 'OUT_OF_STOCK'
           ? sql`level.sellable_quantity - level.reserved_quantity <= 0`
           : sql`true`;
@@ -1446,6 +1450,12 @@ export async function listInventoryPositions(
     join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
     join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
     join warehouse.locations location on location.id = level.location_id and location.organization_id = level.organization_id
+    left join inventory.replenishment_policies location_policy
+      on location_policy.organization_id=level.organization_id
+      and location_policy.inventory_item_id=level.inventory_item_id and location_policy.location_id=level.location_id
+    left join inventory.replenishment_policies item_policy
+      on item_policy.organization_id=level.organization_id
+      and item_policy.inventory_item_id=level.inventory_item_id and item_policy.location_id is null
     left join lateral (
       select
         coalesce(sum(condition.quantity) filter (where condition.condition_code = 'SELLABLE'), 0) as sellable,
@@ -1600,7 +1610,11 @@ export async function listInventoryPositions(
     cost_currency: string | null;
     cost_state: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
     replenishment_threshold: string;
-    replenishment_threshold_source: 'VARIANT' | 'ORGANIZATION_DEFAULT';
+    replenishment_threshold_source:
+      | 'LOCATION_POLICY'
+      | 'ITEM_POLICY'
+      | 'VARIANT'
+      | 'ORGANIZATION_DEFAULT';
   }>`
     select level.inventory_item_id, item.variant_id, variant.product_id, variant.sku,
       product.title as product_title, coalesce(nullif(variant.title, ''), (
@@ -1614,8 +1628,10 @@ export async function listInventoryPositions(
       primary_media.visibility_class as image_visibility, primary_media.alt_text as image_alt_text,
       current_cost.unit_cost::text as unit_acquisition_cost,
       current_cost.currency_code as cost_currency, current_cost.cost_state,
-      coalesce(variant.reorder_point, ${lowStockThreshold})::text as replenishment_threshold,
-      case when variant.reorder_point is not null then 'VARIANT' else 'ORGANIZATION_DEFAULT' end as replenishment_threshold_source,
+      coalesce(location_policy.reorder_point,item_policy.reorder_point,variant.reorder_point,${lowStockThreshold})::text as replenishment_threshold,
+      case when location_policy.id is not null then 'LOCATION_POLICY'
+        when item_policy.id is not null then 'ITEM_POLICY'
+        when variant.reorder_point is not null then 'VARIANT' else 'ORGANIZATION_DEFAULT' end as replenishment_threshold_source,
       level.location_id, location.code as location_code,
       location.name as location_name, (level.sellable_quantity + level.unavailable_quantity)::text as on_hand,
       level.sellable_quantity::text as sellable, level.reserved_quantity::text as reserved,
@@ -1815,7 +1831,7 @@ export async function listInventoryBalances(
     input.availability === 'IN_STOCK'
       ? sql`level.sellable_quantity - level.reserved_quantity > 0`
       : input.availability === 'LOW_STOCK'
-        ? sql`level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= coalesce(variant.reorder_point, ${lowStockThreshold})`
+        ? sql`level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= coalesce(location_policy.reorder_point, item_policy.reorder_point, variant.reorder_point, ${lowStockThreshold})`
         : input.availability === 'OUT_OF_STOCK'
           ? sql`level.sellable_quantity - level.reserved_quantity <= 0`
           : sql`1=1`;
@@ -1827,6 +1843,12 @@ export async function listInventoryBalances(
     join inventory.inventory_items item on item.id = condition.inventory_item_id and item.organization_id = condition.organization_id
     join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
     join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
+    left join inventory.replenishment_policies location_policy
+      on location_policy.organization_id=level.organization_id
+      and location_policy.inventory_item_id=level.inventory_item_id and location_policy.location_id=level.location_id
+    left join inventory.replenishment_policies item_policy
+      on item_policy.organization_id=level.organization_id
+      and item_policy.inventory_item_id=level.inventory_item_id and item_policy.location_id is null
     where condition.organization_id = ${organizationId}
       and ${locationFilter}
       and ${conditionFilter}
@@ -1853,6 +1875,12 @@ export async function listInventoryBalances(
     join catalog.product_variants variant on variant.id = item.variant_id and variant.organization_id = item.organization_id
     join catalog.products product on product.id = variant.product_id and product.organization_id = variant.organization_id
     join warehouse.locations location on location.id = condition.location_id and location.organization_id = condition.organization_id
+    left join inventory.replenishment_policies location_policy
+      on location_policy.organization_id=level.organization_id
+      and location_policy.inventory_item_id=level.inventory_item_id and location_policy.location_id=level.location_id
+    left join inventory.replenishment_policies item_policy
+      on item_policy.organization_id=level.organization_id
+      and item_policy.inventory_item_id=level.inventory_item_id and item_policy.location_id is null
     where condition.organization_id = ${organizationId}
       and ${locationFilter}
       and ${conditionFilter}
@@ -3904,11 +3932,17 @@ export async function getInventoryStats(
       coalesce(sum(level.reserved_quantity), 0)::text as total_reserved,
       coalesce(sum(level.unavailable_quantity), 0)::text as total_unavailable,
       coalesce((select sum(quantity) from inventory.inventory_level_conditions where organization_id = ${organizationId} and condition_code = 'DAMAGED'), 0)::text as total_damaged,
-      count(case when level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= coalesce(variant.reorder_point, ${lowStockThreshold}) then 1 end)::text as low_stock_count,
+      count(case when level.sellable_quantity - level.reserved_quantity > 0 and level.sellable_quantity - level.reserved_quantity <= coalesce(location_policy.reorder_point,item_policy.reorder_point,variant.reorder_point,${lowStockThreshold}) then 1 end)::text as low_stock_count,
       count(case when level.sellable_quantity - level.reserved_quantity <= 0 then 1 end)::text as out_of_stock_count
     from inventory.inventory_levels level
     join inventory.inventory_items item on item.organization_id=level.organization_id and item.id=level.inventory_item_id
     join catalog.product_variants variant on variant.organization_id=item.organization_id and variant.id=item.variant_id
+    left join inventory.replenishment_policies location_policy
+      on location_policy.organization_id=level.organization_id
+      and location_policy.inventory_item_id=level.inventory_item_id and location_policy.location_id=level.location_id
+    left join inventory.replenishment_policies item_policy
+      on item_policy.organization_id=level.organization_id
+      and item_policy.inventory_item_id=level.inventory_item_id and item_policy.location_id is null
     where level.organization_id = ${organizationId}
   `.execute(db);
   const row = result.rows[0];

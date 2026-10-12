@@ -397,7 +397,8 @@ describe('Individual Unit Traceability & Quality Control', () => {
       variantId: f.variantId,
       condition: 'INSPECTION',
       quantityDelta: '-1',
-      reasonCode: 'TEST_LEDGER_DIVERGENCE',
+      reasonCode: 'OTHER',
+      note: 'Create a deliberate ledger divergence for rollback verification.',
       idempotencyKey: `divergence-${crypto.randomUUID()}`,
     });
 
@@ -929,7 +930,8 @@ describe('Individual Unit Traceability & Quality Control', () => {
       variantId: f.variantId,
       condition: 'SELLABLE',
       quantityDelta: '-1',
-      reasonCode: 'TEST_DISPATCH',
+      reasonCode: 'OTHER',
+      note: 'Simulate the fulfillment dispatch that precedes a customer return.',
       idempotencyKey: `dispatch-${crypto.randomUUID()}`,
     });
     await sql`

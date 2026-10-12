@@ -39,6 +39,12 @@ import {
 } from './warehouse.js';
 import { invalidateSettingsCache, updateSingleSetting } from './settings.js';
 import { getInventoryOverview } from './inventory-overview.js';
+import {
+  deleteReplenishmentPolicy,
+  listReplenishmentPolicies,
+  listReplenishmentRecommendations,
+  putReplenishmentPolicy,
+} from './inventory-replenishment.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -128,6 +134,135 @@ async function opening(f: Awaited<ReturnType<typeof fixture>>, quantity: string)
 }
 
 describe('ledger-backed inventory', () => {
+  it('resolves location policies and recommends a transfer only from genuine surplus', async () => {
+    const f = await fixture();
+    const mainStock = await opening(f, '2');
+    await adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.secondary.id,
+      condition: 'SELLABLE',
+      quantityDelta: '20',
+      reasonCode: 'OPENING_BALANCE',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const supplier = await sql<{ id: string }>`insert into procurement.suppliers (
+      organization_id,code,name
+    ) values (${f.organizationId},${`SUP-${crypto.randomUUID().slice(0, 8)}`},'Backup Supplier') returning id`.execute(
+      database.db,
+    );
+    const idempotencyKey = crypto.randomUUID();
+    const input = {
+      inventoryItemId: mainStock.inventoryItemId,
+      locationId: f.main.id,
+      reorderPoint: '5',
+      safetyStock: '2',
+      targetStock: '10',
+      leadTimeDays: 7,
+      preferredSourceLocationId: f.secondary.id,
+      preferredSupplierId: supplier.rows[0]!.id,
+      expectedVersion: 0,
+    } as const;
+    const policy = await putReplenishmentPolicy(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      idempotencyKey,
+      input,
+    });
+    expect(policy).toMatchObject({
+      inventoryItemId: mainStock.inventoryItemId,
+      locationId: f.main.id,
+      preferredSourceLocationId: f.secondary.id,
+      version: 1,
+    });
+    await expect(
+      putReplenishmentPolicy(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        idempotencyKey,
+        input,
+      }),
+    ).resolves.toEqual(policy);
+    await expect(
+      putReplenishmentPolicy(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        idempotencyKey,
+        input: { ...input, targetStock: '11' },
+      }),
+    ).rejects.toMatchObject({
+      code: 'IDEMPOTENCY_KEY_REUSED',
+    });
+
+    await expect(
+      listReplenishmentPolicies(database.db, f.organizationId, {
+        inventoryItemId: mainStock.inventoryItemId,
+      }),
+    ).resolves.toMatchObject({ total: 1, items: [{ id: policy.id, version: 1 }] });
+    const recommendations = await listReplenishmentRecommendations(database.db, f.organizationId);
+    expect(recommendations).toMatchObject({
+      total: 1,
+      items: [
+        {
+          inventoryItemId: mainStock.inventoryItemId,
+          locationId: f.main.id,
+          projectedAvailable: '2.000000',
+          reorderPoint: '5.000000',
+          targetStock: '10.000000',
+          policySource: 'LOCATION_POLICY',
+          suggestedQuantity: '8',
+          status: 'REPLENISH',
+          suggestedAction: {
+            type: 'TRANSFER',
+            sourceLocationId: f.secondary.id,
+            availableSurplus: '15.000000',
+          },
+        },
+      ],
+    });
+    await expect(
+      listInventoryPositions(database.db, f.organizationId, {
+        locationId: f.main.id,
+        availability: 'LOW_STOCK',
+      }),
+    ).resolves.toMatchObject({
+      items: [
+        {
+          replenishmentThreshold: 5,
+          replenishmentThresholdSource: 'LOCATION_POLICY',
+        },
+      ],
+    });
+    await expect(
+      putReplenishmentPolicy(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        idempotencyKey: crypto.randomUUID(),
+        input,
+      }),
+    ).rejects.toMatchObject({ code: 'STALE_VERSION' });
+    const deleteKey = crypto.randomUUID();
+    await expect(
+      deleteReplenishmentPolicy(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        policyId: policy.id,
+        expectedVersion: 1,
+        idempotencyKey: deleteKey,
+      }),
+    ).resolves.toEqual({ id: policy.id, deleted: true });
+    await expect(
+      deleteReplenishmentPolicy(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        policyId: policy.id,
+        expectedVersion: 1,
+        idempotencyKey: deleteKey,
+      }),
+    ).resolves.toEqual({ id: policy.id, deleted: true });
+  });
+
   it('resolves low-stock status from variant policy before the Inventory organization default', async () => {
     const f = await fixture();
     await opening(f, '7');

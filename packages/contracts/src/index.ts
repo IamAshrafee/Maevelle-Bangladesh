@@ -5854,3 +5854,12 @@ export type {
   InventoryOverviewAttentionDto,
   InventoryOverviewDto,
 } from './inventory/overview.js';
+export type {
+  ReplenishmentPolicyDto,
+  ReplenishmentPolicyInput,
+  ReplenishmentPolicyListDto,
+  ReplenishmentPolicySource,
+  ReplenishmentRecommendationAction,
+  ReplenishmentRecommendationDto,
+  ReplenishmentRecommendationListDto,
+} from './inventory/replenishment.js';

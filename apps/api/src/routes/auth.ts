@@ -38,6 +38,7 @@ import { registerCourierWebhookRoutes } from './courier-webhooks.js';
 import { registerTeamAccessRoutes } from './team-access.js';
 import { registerAssetRoutes } from './assets.js';
 import { registerSettingsRoutes } from './settings.js';
+import { registerInventoryReplenishmentRoutes } from './inventory-replenishment.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -189,6 +190,7 @@ export function registerAuthRoutes(
   });
   registerSizingRoutes(app, database, auth);
   registerInventoryRoutes(app, database, auth);
+  registerInventoryReplenishmentRoutes(app, database, auth);
   registerInventoryUnitRoutes(app, database, auth);
   registerWarehouseRoutes(app, database, auth);
   registerCustomerRoutes(app, database, auth);
