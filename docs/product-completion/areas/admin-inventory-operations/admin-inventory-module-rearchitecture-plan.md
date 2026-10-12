@@ -103,6 +103,10 @@ Implemented in the first Stage 2 slice:
 - Added focused shared contracts plus paginated policy and recommendation services and APIs. Policy create/update/reset commands require idempotency keys, reject stale versions, write audit evidence, and emit transactional outbox events.
 - Established the authoritative threshold order: Location policy, item-wide policy, Catalog variant reorder point, then the organization Inventory default. Overview attention, Stock positions, legacy balance filtering, and Inventory statistics now use that same order.
 - Added explainable replenishment projections from available-to-sell, inbound purchase shipments, inbound transfers, and approved outbound transfers. Recommendations suggest a Transfer only when the configured source has enough surplus above its own resolved threshold; otherwise they hand off to a preferred Supplier Purchase or policy review without creating Procurement or Finance obligations inside Inventory.
+- Added the responsive Admin Replenishment workspace with action-only/all-position views, Location and text filters, compact desktop tables, touch-friendly mobile cards, source explanations, policy hierarchy labels, pagination, empty/error/loading states, and capability-gated management.
+- Added one shared create/edit policy form with client and server validation, optimistic versions, mobile full-screen behavior, item-wide and Location-specific scopes, safety/target/lead-time inputs, preferred transfer source, and fallback Supplier.
+- Connected recommendation actions to prefilled canonical Transfer and Purchase workflows. The owning forms now accept the suggested SKU, quantity, destination, source, and Supplier context while leaving the operator in control of the resulting business command.
+- Reduced the Inventory sidebar to the six approved operator destinations: Overview, Stock, Locations, Transfers, Counts, and Quality. Replenishment is linked contextually from Overview; adjustments, movement history, repair, and other secondary workflows remain reachable inside their owning workspaces rather than competing as primary navigation.
 
 Verification for this slice:
 
@@ -114,6 +118,7 @@ Verification for this slice:
 - Focused Inventory suite after policy lifecycle and recommendation integration: 19 tests passed, including idempotent replay, changed-payload rejection, stale-write protection, reset replay, hierarchy resolution, and genuine-surplus transfer selection.
 - Database and API package builds plus focused replenishment lint: passed.
 - Root TypeScript project build and the combined Inventory/serialized-unit database suites: passed; 33 tests passed across 2 files.
+- Replenishment Admin slice: Admin TypeScript check, database package build, and focused lint passed; the single authoritative policy/recommendation workflow test passed.
 
 Remaining in Stage 2:
 

@@ -211,7 +211,7 @@ describe('ledger-backed inventory', () => {
           reorderPoint: '5.000000',
           targetStock: '10.000000',
           policySource: 'LOCATION_POLICY',
-          suggestedQuantity: '8',
+          suggestedQuantity: '8.000000',
           status: 'REPLENISH',
           suggestedAction: {
             type: 'TRANSFER',

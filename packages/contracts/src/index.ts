@@ -1601,7 +1601,11 @@ export interface InventoryPositionDto {
   readonly costCurrency: string | null;
   readonly costState: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
   readonly replenishmentThreshold: number;
-  readonly replenishmentThresholdSource: 'VARIANT' | 'ORGANIZATION_DEFAULT';
+  readonly replenishmentThresholdSource:
+    | 'LOCATION_POLICY'
+    | 'ITEM_POLICY'
+    | 'VARIANT'
+    | 'ORGANIZATION_DEFAULT';
 }
 
 /** Catalog-backed inventory identity used by stock operations before a SKU has any movement. */

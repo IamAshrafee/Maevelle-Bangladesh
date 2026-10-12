@@ -141,6 +141,14 @@ export function InventoryDashboard() {
 
         {/* Fast Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            render={<Link href="/inventory/replenishment" />}
+          >
+            <TrendingDown className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Replenishment
+          </Button>
           {canAdjust ? (
             <Button
               variant="outline"
@@ -258,10 +266,10 @@ export function InventoryDashboard() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  render={<Link href="/inventory/stock?availability=LOW_STOCK" />}
+                  render={<Link href="/inventory/replenishment" />}
                   className="text-xs"
                 >
-                  View full stock table{' '}
+                  Plan replenishment{' '}
                   <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
                 </Button>
               </div>

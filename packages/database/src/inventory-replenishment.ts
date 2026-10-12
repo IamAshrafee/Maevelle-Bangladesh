@@ -511,6 +511,7 @@ interface RecommendationRow {
   reorder_point: string;
   safety_stock: string;
   target_stock: string;
+  suggested_quantity: string;
   policy_source: 'LOCATION_POLICY' | 'ITEM_POLICY' | 'VARIANT' | 'ORGANIZATION_DEFAULT';
   preferred_source_location_id: string | null;
   preferred_source_location_name: string | null;
@@ -612,6 +613,7 @@ export async function listReplenishmentRecommendations(
       projected.available::text,projected.incoming_supply::text,projected.incoming_transfer::text,
       projected.outgoing_transfer::text,projected.projected::text,projected.reorder_point::text,
       projected.safety_stock::text,projected.target_stock::text
+      ,greatest(projected.target_stock-projected.projected,0)::text as suggested_quantity
     from projected
     left join warehouse.locations source
       on source.organization_id=${organizationId} and source.id=projected.preferred_source_location_id and source.status='ACTIVE'
@@ -641,7 +643,7 @@ export async function listReplenishmentRecommendations(
       const projected = Number(row.projected);
       const reorder = Number(row.reorder_point);
       const target = Number(row.target_stock);
-      const suggested = Math.max(0, target - projected);
+      const suggested = Number(row.suggested_quantity);
       const sourceSurplus = Number(row.source_surplus);
       const canTransfer =
         Boolean(row.preferred_source_location_id && row.preferred_source_location_name) &&
@@ -649,6 +651,7 @@ export async function listReplenishmentRecommendations(
       const query = new URLSearchParams({
         inventoryItemId: row.inventory_item_id,
         variantId: row.variant_id,
+        sku: row.sku,
         quantity: String(suggested),
         destinationLocationId: row.location_id,
       });
@@ -668,7 +671,7 @@ export async function listReplenishmentRecommendations(
         safetyStock: row.safety_stock,
         targetStock: row.target_stock,
         policySource: row.policy_source,
-        suggestedQuantity: String(suggested),
+        suggestedQuantity: row.suggested_quantity,
         status: projected < reorder ? 'REPLENISH' : projected < target ? 'BELOW_THRESHOLD' : 'HEALTHY',
         explanation:
           projected < reorder

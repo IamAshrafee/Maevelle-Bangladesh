@@ -13,7 +13,6 @@ import {
   Package,
   AlertTriangle,
   Building2,
-  Info,
 } from 'lucide-react';
 import { z } from 'zod';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -79,10 +78,14 @@ export function TransferForm({
   transferId,
   initialVariantId,
   initialSourceLocationId,
+  initialDestinationLocationId,
+  initialQuantity,
 }: {
   transferId?: string | undefined;
   initialVariantId?: string | undefined;
   initialSourceLocationId?: string | undefined;
+  initialDestinationLocationId?: string | undefined;
+  initialQuantity?: string | undefined;
 }) {
   const router = useRouter();
   const isEditing = Boolean(transferId);
@@ -100,9 +103,9 @@ export function TransferForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       sourceLocationId: '',
-      destinationLocationId: '',
+      destinationLocationId: initialDestinationLocationId ?? '',
       notes: '',
-      lines: [{ variantId: '', quantity: '1' }],
+      lines: [{ variantId: '', quantity: initialQuantity && Number(initialQuantity) > 0 ? initialQuantity : '1' }],
     },
   });
 
@@ -247,6 +250,8 @@ export function TransferForm({
             !form.getValues('lines.0.variantId')
           ) {
             form.setValue('lines.0.variantId', initialVariantId, { shouldValidate: true });
+            if (initialQuantity && Number(initialQuantity) > 0)
+              form.setValue('lines.0.quantity', initialQuantity, { shouldValidate: true });
           }
           setIsLoadingStock(false);
         }
@@ -261,7 +266,7 @@ export function TransferForm({
     return () => {
       mounted = false;
     };
-  }, [form, initialVariantId, sourceLocationId, transferId]);
+  }, [form, initialQuantity, initialVariantId, sourceLocationId, transferId]);
 
   // Handle source location change with safety check
   const handleSourceLocationChange = (newSourceId: string | null) => {
