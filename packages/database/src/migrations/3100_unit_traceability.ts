@@ -63,6 +63,29 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       on inventory.inventory_units (organization_id, source_return_receipt_id)
       where source_return_receipt_id is not null;
 
+    create table if not exists inventory.unit_return_receipt_allocations (
+      id uuid primary key default uuidv7(),
+      organization_id uuid not null references platform.organizations(id),
+      unit_id uuid not null references inventory.inventory_units(id),
+      return_receipt_id uuid not null references returns.return_receipts(id),
+      return_receipt_line_id uuid not null references returns.return_receipt_lines(id),
+      received_by_actor_id uuid references iam.users(id),
+      created_at timestamptz not null default now(),
+      unique (organization_id, id),
+      unique (organization_id, unit_id, return_receipt_id),
+      foreign key (organization_id, unit_id)
+        references inventory.inventory_units(organization_id, id),
+      foreign key (organization_id, return_receipt_id)
+        references returns.return_receipts(organization_id, id),
+      foreign key (organization_id, return_receipt_line_id)
+        references returns.return_receipt_lines(organization_id, id)
+    );
+
+    create index if not exists unit_return_receipt_allocations_receipt
+      on inventory.unit_return_receipt_allocations (
+        organization_id, return_receipt_id, return_receipt_line_id
+      );
+
     create table if not exists inventory.unit_inspections (
       id uuid primary key default uuidv7(),
       organization_id uuid not null references platform.organizations(id),

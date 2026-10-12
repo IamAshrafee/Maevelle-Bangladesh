@@ -2380,14 +2380,10 @@ export async function receiveReturnedUnit(
     const receipt = await sql<{ id: string }>`
       select receipt.id
       from returns.return_receipts receipt
-      join returns.return_receipt_lines line
-        on line.return_receipt_id = receipt.id
-        and line.organization_id = receipt.organization_id
       where receipt.id = ${input.sourceReturnReceiptId}
         and receipt.organization_id = ${input.organizationId}
         and receipt.receiving_location_id = ${input.receivingLocationId}
         and receipt.status = 'POSTED'
-        and line.inventory_item_id = ${unit.inventory_item_id}
       for update of receipt
     `.execute(trx);
     if (!receipt.rows[0]) {
@@ -2396,16 +2392,63 @@ export async function receiveReturnedUnit(
         'The posted return receipt does not match this unit and receiving location.',
       );
     }
+    const receiptLines = await sql<{ id: string; quantity: string }>`
+      select line.id, line.quantity::text
+      from returns.return_receipt_lines line
+      where line.organization_id = ${input.organizationId}
+        and line.return_receipt_id = ${input.sourceReturnReceiptId}
+        and line.inventory_item_id = ${unit.inventory_item_id}
+      for update
+    `.execute(trx);
+    const receiptQuantity = receiptLines.rows.reduce(
+      (total, line) => total + Number(line.quantity),
+      0,
+    );
+    const linkedUnits = await sql<{ count: string }>`
+      select (
+        select count(*)
+        from inventory.inventory_units linked
+        where linked.organization_id = ${input.organizationId}
+          and linked.source_return_receipt_id = ${input.sourceReturnReceiptId}
+          and linked.inventory_item_id = ${unit.inventory_item_id}
+      ) + (
+        select count(*)
+        from inventory.unit_return_receipt_allocations allocation
+        join returns.return_receipt_lines linked_line
+          on linked_line.organization_id = allocation.organization_id
+          and linked_line.id = allocation.return_receipt_line_id
+        where allocation.organization_id = ${input.organizationId}
+          and allocation.return_receipt_id = ${input.sourceReturnReceiptId}
+          and linked_line.inventory_item_id = ${unit.inventory_item_id}
+      ) as count
+    `.execute(trx);
+    if (Number(linkedUnits.rows[0]?.count ?? 0) + 1 > receiptQuantity) {
+      throw new UnitTraceabilityDomainError(
+        'CONFLICT',
+        'The posted return receipt has no remaining quantity for this physical unit.',
+      );
+    }
+    await sql`
+      insert into inventory.unit_return_receipt_allocations (
+        organization_id, unit_id, return_receipt_id, return_receipt_line_id, received_by_actor_id
+      ) values (
+        ${input.organizationId}, ${input.unitId}, ${input.sourceReturnReceiptId},
+        ${receiptLines.rows[0]!.id}, ${input.actorId}
+      )
+    `.execute(trx);
 
     const previousStatus = unit.status;
 
     await sql`
       update inventory.inventory_units
       set location_id = ${input.receivingLocationId},
-        source_return_receipt_id = coalesce(${input.sourceReturnReceiptId ?? null}, source_return_receipt_id),
         status = 'RETURNED',
         inventory_condition_code = 'INSPECTION',
         current_condition = coalesce(${input.conditionResult ?? null}, current_condition),
+        current_fulfillment_id = null,
+        current_fulfillment_line_id = null,
+        current_order_id = null,
+        current_order_line_id = null,
         updated_at = now(),
         version = version + 1
       where id = ${input.unitId} and organization_id = ${input.organizationId}

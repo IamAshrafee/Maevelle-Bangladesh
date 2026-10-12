@@ -37,7 +37,7 @@ The owner approved the full target architecture and staged implementation in thi
 
 ### Implementation progress
 
-#### Batch 1 — Serialized-unit authority and contract convergence — IN PROGRESS
+#### Batch 1 — Serialized-unit authority and contract convergence — COMPLETE
 
 Implemented in the first integrity slice:
 
@@ -67,6 +67,9 @@ Implemented in the first integrity slice:
 - Added optimistic version requirements to mutable unit and repair commands, including batch inspection and placement operations. Batch commands now execute atomically and reject stale or duplicate Unit IDs rather than partially applying.
 - Extended optimistic concurrency to tracking-mode changes and stock conversion. The Admin item workspace now carries the item version through the command boundary and shows refresh-and-retry conflicts instead of silently overwriting concurrent work.
 - Removed the misleading editable conversion quantity from the Admin dialog. Conversion now truthfully adopts every missing whole-unit identity represented by the selected location's authoritative condition ledger and preserves existing identities.
+- Completed a real serialized customer-return workflow through Order, Fulfillment, Delivery, Returns authorization, immutable receipt posting, and Unit ID intake. The returned identity is reconnected only after the matching receipt has restored aggregate `INSPECTION` quantity and cost provenance.
+- Preserved immutable unit acquisition provenance during later returns. Existing Unit IDs now receive a durable return-receipt allocation record instead of overwriting their inbound/stock-conversion source, and receipt capacity is locked and bounded across both newly registered and reconnected identities.
+- Cleared active Order and Fulfillment pointers when a dispatched identity is physically returned; the immutable unit event timeline and receipt allocation retain the historical connection.
 
 Verification completed for this slice:
 
@@ -76,10 +79,13 @@ Verification completed for this slice:
 - Docker production builds for API, Worker, Admin, and Storefront during the disposable baseline rebuild: passed.
 - Focused Inventory, serialized-unit, API, and Admin unit-client suites: 41 tests passed across 4 files.
 - Focused command-safety verification after the idempotency/version changes: 24 tests passed across the serialized-unit database, API, and Admin client suites; exact replay, changed-payload rejection, and stale-write rejection are covered.
+- Final Stage 1 focused verification: 47 tests passed across Inventory, serialized units, Returns, unit API, and Admin unit-client suites.
+- Fresh disposable Compose rebuild after the return-provenance baseline change: migration plus API, Worker, Admin, and Storefront production builds passed.
 
-Remaining before Stage 1 can be marked complete:
+Stage 1 completion decision:
 
-- Complete successful posted-return-receipt intake coverage with real return fixtures, not only rejection/rollback evidence.
+- **COMPLETE.** Every currently supported serialized-unit mutation is ledger-bound, retry-safe at the API command boundary, optimistic-version protected where it edits existing state, and covered by focused cross-domain workflow evidence.
+- The next implementation batch is Stage 2: contract normalization, backend responsibility splits, overview/attention read models, replenishment policy resolution, and capability/location-scope alignment.
 
 ---
 

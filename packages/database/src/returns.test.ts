@@ -18,6 +18,14 @@ import {
 } from './delivery.js';
 import { createFulfillment, dispatchFulfillment, transitionFulfillment } from './fulfillment.js';
 import {
+  allocateUnitsToFulfillment,
+  convertStockToSerialized,
+  getInventoryUnit,
+  listUnitEvents,
+  receiveReturnedUnit,
+  reconcileSerializedInventory,
+} from './inventory-units.js';
+import {
   createCheckout,
   placeOrder,
   updateCheckoutAddress,
@@ -59,6 +67,16 @@ async function returnFixture(quantity = '10') {
     defaultCurrency: 'CNY',
   });
   const actorId = crypto.randomUUID();
+  const actorEmail = `returns-${actorId}@example.test`;
+  await sql`
+    insert into iam.users (id, name, email, email_normalized)
+    values (${actorId}, 'Returns Operator', ${actorEmail}, ${actorEmail})
+  `.execute(database.db);
+  await sql`
+    insert into iam.organization_memberships (
+      organization_id, user_id, membership_type, status, display_name
+    ) values (${organization.id}, ${actorId}, 'OWNER', 'ACTIVE', 'Returns Operator')
+  `.execute(database.db);
   const type = await sql<{
     id: string;
   }>`insert into catalog.product_types (organization_id, code, name) values (${organization.id}, ${`return-${crypto.randomUUID().slice(0, 8)}`}, 'Return product') returning id`.execute(
@@ -169,6 +187,7 @@ async function returnFixture(quantity = '10') {
 async function deliveredOrder(
   input: Awaited<ReturnType<typeof returnFixture>>,
   outcome: 'DELIVERED' | 'FAILED' = 'DELIVERED',
+  unitId?: string,
 ) {
   const cart = await createGuestCart(database.db, {
     organizationId: input.organizationId,
@@ -218,6 +237,14 @@ async function deliveredOrder(
     lines: [{ orderLineId: orderLine.rows[0]!.id, quantity: '1' }],
     idempotencyKey: crypto.randomUUID(),
   });
+  if (unitId) {
+    await allocateUnitsToFulfillment(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      fulfillmentId: fulfillment.id,
+      allocations: [{ fulfillmentLineId: fulfillment.lines[0]!.id, unitId }],
+    });
+  }
   const ready = await transitionFulfillment(database.db, {
     organizationId: input.organizationId,
     actorId: input.actorId,
@@ -364,6 +391,111 @@ describe('reverse logistics', () => {
       recoveries: '1',
       status: 'OPEN',
     });
+    expect(await verifyReturnIntegrity(database.db, input.organizationId)).toEqual([]);
+    expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
+  });
+
+  it('reconnects the exact dispatched Unit ID through a posted customer-return receipt', async () => {
+    const input = await returnFixture('1');
+    const item = await sql<{ version: string }>`
+      select version::text from inventory.inventory_items
+      where organization_id=${input.organizationId} and variant_id=${input.variantId}
+    `.execute(database.db);
+    const conversion = await convertStockToSerialized(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      variantId: input.variantId,
+      locationId: input.locationId,
+      expectedVersion: Number(item.rows[0]!.version),
+    });
+    const unit = conversion.units[0]!;
+    const order = await deliveredOrder(input, 'DELIVERED', unit.id);
+    const dispatched = await getInventoryUnit(database.db, {
+      organizationId: input.organizationId,
+      unitId: unit.id,
+    });
+    expect(dispatched).toMatchObject({
+      status: 'DISPATCHED',
+      currentOrderId: order.orderId,
+    });
+
+    const returnCase = await createReturnCase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      orderId: order.orderId,
+      reasonCode: 'WRONG_SIZE',
+      lines: [{
+        orderLineId: order.orderLineId,
+        deliveryLineId: order.deliveryLineId,
+        quantity: '1',
+      }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await authorizeReturnCase(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      returnCaseId: returnCase.id,
+      expectedVersion: 1,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const returnLine = await sql<{ id: string }>`
+      select id from returns.return_lines
+      where organization_id=${input.organizationId} and return_case_id=${returnCase.id}
+    `.execute(database.db);
+    const receipt = await postReturnReceipt(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      returnCaseId: returnCase.id,
+      locationId: input.locationId,
+      lines: [{ returnLineId: returnLine.rows[0]!.id, quantity: '1' }],
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const returned = await receiveReturnedUnit(database.db, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      unitId: unit.id,
+      expectedVersion: dispatched.version,
+      receivingLocationId: input.locationId,
+      sourceReturnReceiptId: receipt.id,
+      conditionResult: 'GRADE_B',
+      notes: 'Exact returned garment scanned at the returns desk.',
+    });
+
+    expect(returned).toMatchObject({
+      status: 'RETURNED',
+      inventoryCondition: 'INSPECTION',
+      currentCondition: 'GRADE_B',
+      locationId: input.locationId,
+      sourceReturnReceiptId: null,
+      currentFulfillmentId: null,
+      currentOrderId: null,
+    });
+    const receiptAllocation = await sql<{
+      return_receipt_id: string;
+      unit_id: string;
+    }>`
+      select return_receipt_id, unit_id
+      from inventory.unit_return_receipt_allocations
+      where organization_id=${input.organizationId} and unit_id=${unit.id}
+    `.execute(database.db);
+    expect(receiptAllocation.rows[0]).toEqual({
+      return_receipt_id: receipt.id,
+      unit_id: unit.id,
+    });
+    const events = await listUnitEvents(database.db, {
+      organizationId: input.organizationId,
+      unitId: unit.id,
+    });
+    expect(events[0]).toMatchObject({
+      eventType: 'RETURNED',
+      referenceType: 'returns.return_receipt',
+      referenceId: receipt.id,
+    });
+    expect((await reconcileSerializedInventory(database.db, {
+      organizationId: input.organizationId,
+      variantId: input.variantId,
+      locationId: input.locationId,
+    })).isConsistent).toBe(true);
     expect(await verifyReturnIntegrity(database.db, input.organizationId)).toEqual([]);
     expect(await verifyCostingIntegrity(database.db, input.organizationId)).toEqual([]);
   });
