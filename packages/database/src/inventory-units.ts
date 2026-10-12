@@ -6,6 +6,7 @@ import {
   writeOffInventoryInTransaction,
   type InventoryCondition,
 } from './inventory.js';
+import { claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import { requireActiveLocationCapability } from './warehouse.js';
 
 export type UnitCondition =
@@ -91,6 +92,7 @@ export class UnitTraceabilityDomainError extends Error {
       | 'VALIDATION_FAILED'
       | 'INVALID_TRANSITION'
       | 'STALE_VERSION'
+      | 'IDEMPOTENCY_KEY_REUSED'
       | 'RESERVATION_CONFLICT'
       | 'UNAUTHORIZED_ACCESS',
     message: string,
@@ -102,6 +104,14 @@ export class UnitTraceabilityDomainError extends Error {
 
 export type DatabaseExecutor = Kysely<DatabaseSchema> | Transaction<DatabaseSchema>;
 
+function requireCurrentVersion(actual: string | number, expected: number, resource: string): void {
+  if (Number(actual) !== expected)
+    throw new UnitTraceabilityDomainError(
+      'STALE_VERSION',
+      `${resource} changed after it was loaded. Refresh and try again.`,
+    );
+}
+
 export function withUnitTransaction<T>(
   db: DatabaseExecutor,
   callback: (trx: Transaction<DatabaseSchema>) => Promise<T>,
@@ -110,6 +120,59 @@ export function withUnitTransaction<T>(
     return callback(db as unknown as Transaction<DatabaseSchema>);
   }
   return (db as Kysely<DatabaseSchema>).transaction().execute(callback);
+}
+
+export async function executeIdempotentUnitCommand<T>(
+  db: DatabaseExecutor,
+  input: {
+    organizationId: string;
+    actorId: string;
+    operation: string;
+    idempotencyKey: string;
+    request: unknown;
+    resultEntityType: string;
+    resultEntityId: string;
+  },
+  command: (trx: Transaction<DatabaseSchema>) => Promise<T>,
+): Promise<T> {
+  return withUnitTransaction(db, async (trx) => {
+    let record;
+    try {
+      record = await claimIdempotencyRecord(trx, {
+        organizationId: input.organizationId,
+        principalType: 'USER',
+        principalId: input.actorId,
+        operationType: input.operation,
+        idempotencyKey: input.idempotencyKey,
+        requestFingerprint: JSON.stringify(input.request),
+      });
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError)
+        throw new UnitTraceabilityDomainError('IDEMPOTENCY_KEY_REUSED', error.message);
+      throw error;
+    }
+    if (!record.created) {
+      const existing = await sql<{ safe_response: T | null; status: string }>`
+        select safe_response, status from platform.idempotency_records where id = ${record.id}
+      `.execute(trx);
+      if (existing.rows[0]?.status === 'SUCCEEDED' && existing.rows[0].safe_response !== null)
+        return existing.rows[0].safe_response;
+      throw new UnitTraceabilityDomainError(
+        'CONFLICT',
+        'The same serialized inventory command is already in progress.',
+      );
+    }
+    const response = await command(trx);
+    await sql`
+      update platform.idempotency_records
+      set status = 'SUCCEEDED', result_entity_type = ${input.resultEntityType},
+        result_entity_id = ${input.resultEntityId}::uuid,
+        safe_response = ${JSON.stringify(response)}::jsonb,
+        completed_at = now()
+      where id = ${record.id}
+    `.execute(trx);
+    return response;
+  });
 }
 
 /**
@@ -733,20 +796,28 @@ export async function setVariantTrackingMode(
     actorId: string;
     variantId: string;
     trackingMode: VariantTrackingMode;
+    expectedVersion: number;
   },
-): Promise<{ variantId: string; trackingMode: VariantTrackingMode }> {
+): Promise<{ variantId: string; trackingMode: VariantTrackingMode; version: number }> {
   return withUnitTransaction(db, async (trx) => {
     const item = await sql<{
       id: string;
       tracking_mode: string;
+      version: string;
     }>`
-      select item.id, item.tracking_mode
+      select item.id, item.tracking_mode, item.version::text
       from inventory.inventory_items item
       where item.variant_id = ${input.variantId} and item.organization_id = ${input.organizationId}
       for update
     `.execute(trx);
 
     let itemId = item.rows[0]?.id;
+    if (item.rows[0]) requireCurrentVersion(item.rows[0].version, input.expectedVersion, 'Inventory item');
+    else if (input.expectedVersion !== 0)
+      throw new UnitTraceabilityDomainError(
+        'STALE_VERSION',
+        'Inventory item changed after it was loaded. Refresh and try again.',
+      );
     if (itemId && input.trackingMode === 'STANDARD') {
       const liveUnits = await sql<{ count: string }>`
         select count(*)::text as count
@@ -778,7 +849,15 @@ export async function setVariantTrackingMode(
       `.execute(trx);
     }
 
-    return { variantId: input.variantId, trackingMode: input.trackingMode };
+    const version = await sql<{ version: string }>`
+      select version::text from inventory.inventory_items
+      where id = ${itemId} and organization_id = ${input.organizationId}
+    `.execute(trx);
+    return {
+      variantId: input.variantId,
+      trackingMode: input.trackingMode,
+      version: Number(version.rows[0]?.version ?? input.expectedVersion),
+    };
   });
 }
 
@@ -793,6 +872,7 @@ export async function convertStockToSerialized(
     actorId: string;
     variantId: string;
     locationId: string;
+    expectedVersion: number;
     initialCondition?: UnitCondition;
     packageReference?: string;
     storageNotes?: string;
@@ -810,8 +890,9 @@ export async function convertStockToSerialized(
       id: string;
       tracking_mode: string;
       sku: string;
+      version: string;
     }>`
-      select item.id, item.tracking_mode, variant.sku
+      select item.id, item.tracking_mode, variant.sku, item.version::text
       from inventory.inventory_items item
       join catalog.product_variants variant on variant.id = item.variant_id
       where item.variant_id = ${input.variantId} and item.organization_id = ${input.organizationId}
@@ -825,6 +906,7 @@ export async function convertStockToSerialized(
         'Inventory item was not found for this variant.',
       );
     }
+    requireCurrentVersion(item.version, input.expectedVersion, 'Inventory item');
 
     // Check for active reservations
     const reservations = await sql<{ count: string }>`
@@ -1145,6 +1227,7 @@ export async function performUnitInspection(
     organizationId: string;
     actorId: string;
     unitId: string;
+    expectedVersion: number;
     inspectionStage: InspectionStage;
     conditionResult: UnitCondition;
     defectDescription?: string | null | undefined;
@@ -1165,6 +1248,7 @@ export async function performUnitInspection(
     if (!unit) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
+    requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
 
     if (unit.status === 'DISPATCHED' && input.inspectionStage !== 'RETURN_INSPECTION') {
       throw new UnitTraceabilityDomainError(
@@ -1328,11 +1412,11 @@ export async function performUnitInspection(
  * Bulk initial inspection or batch QC for multiple units.
  */
 export async function bulkInspectUnits(
-  db: Kysely<DatabaseSchema>,
+  db: DatabaseExecutor,
   input: {
     organizationId: string;
     actorId: string;
-    unitIds: readonly string[];
+    units: readonly { unitId: string; expectedVersion: number }[];
     inspectionStage: InspectionStage;
     conditionResult: UnitCondition;
     defectDescription?: string;
@@ -1341,26 +1425,31 @@ export async function bulkInspectUnits(
     disposition?: InspectionDisposition;
   },
 ): Promise<{ count: number; units: readonly InventoryUnitView[] }> {
-  if (!input.unitIds.length) {
+  if (!input.units.length) {
     throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'At least one unit must be specified.');
   }
 
-  const results: InventoryUnitView[] = [];
-  for (const unitId of input.unitIds) {
-    const res = await performUnitInspection(db, {
-      organizationId: input.organizationId,
-      actorId: input.actorId,
-      unitId,
-      inspectionStage: input.inspectionStage,
-      conditionResult: input.conditionResult,
-      defectDescription: input.defectDescription,
-      notes: input.notes,
-      outcome: input.outcome,
-      disposition: input.disposition,
-    });
-    results.push(res.unit);
-  }
-  return { count: results.length, units: results };
+  if (new Set(input.units.map((unit) => unit.unitId)).size !== input.units.length)
+    throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'Each unit can be inspected only once.');
+  return withUnitTransaction(db, async (trx) => {
+    const results: InventoryUnitView[] = [];
+    for (const unit of input.units) {
+      const res = await performUnitInspection(trx, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        unitId: unit.unitId,
+        expectedVersion: unit.expectedVersion,
+        inspectionStage: input.inspectionStage,
+        conditionResult: input.conditionResult,
+        defectDescription: input.defectDescription,
+        notes: input.notes,
+        outcome: input.outcome,
+        disposition: input.disposition,
+      });
+      results.push(res.unit);
+    }
+    return { count: results.length, units: results };
+  });
 }
 
 /**
@@ -1372,6 +1461,7 @@ export async function requestUnitRepair(
     organizationId: string;
     actorId: string;
     unitId: string;
+    expectedVersion: number;
     defectDescription: string;
     actionRequired?: string;
     technicianName?: string;
@@ -1389,6 +1479,7 @@ export async function requestUnitRepair(
     if (!unit) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
+    requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
     if (unit.status === 'DISPATCHED' || unit.status === 'WRITTEN_OFF') {
       throw new UnitTraceabilityDomainError(
         'INVALID_TRANSITION',
@@ -1505,6 +1596,7 @@ export async function completeUnitRepair(
     organizationId: string;
     actorId: string;
     repairId: string;
+    expectedVersion: number;
     actionPerformed: string;
     technicianName?: string;
     costAmount?: string;
@@ -1519,8 +1611,9 @@ export async function completeUnitRepair(
       unit_id: string;
       repair_number: string;
       repair_status: RepairStatus;
+      version: string;
     }>`
-      select id, unit_id, repair_number, repair_status
+      select id, unit_id, repair_number, repair_status, version::text
       from inventory.unit_repairs
       where id = ${input.repairId} and organization_id = ${input.organizationId}
       for update
@@ -1530,6 +1623,7 @@ export async function completeUnitRepair(
     if (!repair) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Unit repair record was not found.');
     }
+    requireCurrentVersion(repair.version, input.expectedVersion, 'Unit repair');
     if (repair.repair_status === 'COMPLETED') {
       throw new UnitTraceabilityDomainError(
         'CONFLICT',
@@ -1636,6 +1730,7 @@ export async function moveUnitLocation(
     organizationId: string;
     actorId: string;
     unitId: string;
+    expectedVersion: number;
     newLocationId: string;
     newStorageNotes?: string | null | undefined;
     newPackageReference?: string | null | undefined;
@@ -1660,6 +1755,7 @@ export async function moveUnitLocation(
     if (!unit) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
+    requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
     if (unit.status === 'DISPATCHED' || unit.status === 'WRITTEN_OFF') {
       throw new UnitTraceabilityDomainError(
         'INVALID_TRANSITION',
@@ -1713,24 +1809,27 @@ export async function bulkMoveUnitsLocation(
   input: {
     organizationId: string;
     actorId: string;
-    unitIds: readonly string[];
+    units: readonly { unitId: string; expectedVersion: number }[];
     newLocationId: string;
     newStorageNotes?: string;
     newPackageReference?: string;
     reason?: string;
   },
 ): Promise<{ count: number; units: readonly InventoryUnitView[] }> {
-  if (!input.unitIds.length) {
+  if (!input.units.length) {
     throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'At least one unit must be specified.');
   }
 
   return withUnitTransaction(db, async (trx) => {
+    if (new Set(input.units.map((unit) => unit.unitId)).size !== input.units.length)
+      throw new UnitTraceabilityDomainError('VALIDATION_FAILED', 'Each unit can be moved only once.');
     const results: InventoryUnitView[] = [];
-    for (const unitId of input.unitIds) {
+    for (const unit of input.units) {
       const updated = await moveUnitLocation(trx, {
         organizationId: input.organizationId,
         actorId: input.actorId,
-        unitId,
+        unitId: unit.unitId,
+        expectedVersion: unit.expectedVersion,
         newLocationId: input.newLocationId,
         newStorageNotes: input.newStorageNotes,
         newPackageReference: input.newPackageReference,
@@ -1751,6 +1850,7 @@ export async function updateUnitPackaging(
     organizationId: string;
     actorId: string;
     unitId: string;
+    expectedVersion: number;
     packageReference: string;
     storageNotes?: string;
   },
@@ -1766,6 +1866,7 @@ export async function updateUnitPackaging(
     if (!unit) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
+    requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
 
     await sql`
       update inventory.inventory_units
@@ -1804,6 +1905,7 @@ export async function releaseUnitForSale(
     organizationId: string;
     actorId: string;
     unitId: string;
+    expectedVersion: number;
     reason: string;
   },
 ): Promise<InventoryUnitView> {
@@ -1825,6 +1927,7 @@ export async function releaseUnitForSale(
     if (!unit) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
+    requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
     if (unit.status !== 'ON_HOLD' && unit.status !== 'AWAITING_QC') {
       throw new UnitTraceabilityDomainError(
         'INVALID_TRANSITION',
@@ -1889,6 +1992,7 @@ export async function writeOffUnit(
     organizationId: string;
     actorId: string;
     unitId: string;
+    expectedVersion: number;
     reason: string;
   },
 ): Promise<InventoryUnitView> {
@@ -1910,6 +2014,7 @@ export async function writeOffUnit(
     if (!unit) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
+    requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
     if (unit.status === 'WRITTEN_OFF') {
       throw new UnitTraceabilityDomainError('CONFLICT', 'Unit is already written off.');
     }
@@ -2234,6 +2339,7 @@ export async function receiveReturnedUnit(
     organizationId: string;
     actorId: string;
     unitId: string;
+    expectedVersion: number;
     receivingLocationId: string;
     sourceReturnReceiptId?: string;
     conditionResult?: UnitCondition;
@@ -2258,6 +2364,7 @@ export async function receiveReturnedUnit(
     if (!unit) {
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
+    requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
     if (unit.status !== 'DISPATCHED') {
       throw new UnitTraceabilityDomainError(
         'INVALID_TRANSITION',

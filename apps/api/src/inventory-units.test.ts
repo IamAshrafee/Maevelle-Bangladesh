@@ -178,6 +178,9 @@ describe('Inventory Units & Traceability API Routes', () => {
     const headers = {
       cookie: sessionCookie,
       'x-organization-id': ctx.orgId,
+      get 'idempotency-key'() {
+        return crypto.randomUUID();
+      },
     };
 
     // 1. Configure tracking mode to SERIAL
@@ -188,6 +191,7 @@ describe('Inventory Units & Traceability API Routes', () => {
       payload: {
         variantId: ctx.variantId,
         trackingMode: 'SERIAL',
+        expectedVersion: 0,
       },
     });
     expect(modeRes.statusCode).toBe(200);
@@ -263,6 +267,7 @@ describe('Inventory Units & Traceability API Routes', () => {
         notes: 'Seams and fabric in flawless condition',
         outcome: 'PASSED',
         disposition: 'RELEASE_SELLABLE',
+        expectedVersion: unit1.version,
       },
     });
     expect(inspectRes.statusCode).toBe(201);
@@ -282,6 +287,7 @@ describe('Inventory Units & Traceability API Routes', () => {
         defectDescription: 'Loose button on left sleeve cuff',
         outcome: 'HOLD_FOR_REPAIR',
         disposition: 'MOVE_TO_REPAIR',
+        expectedVersion: unit2.version,
       },
     });
     expect(inspectRes2.statusCode).toBe(201);
@@ -296,6 +302,7 @@ describe('Inventory Units & Traceability API Routes', () => {
         defectDescription: 'Loose button on left sleeve cuff',
         actionRequired: 'Re-stitch button securely with matching silk thread',
         technicianName: 'Rafiq Master Tailor',
+        expectedVersion: inspectRes2.json().data.unit.version,
       },
     });
     expect(repairReq.statusCode).toBe(201);
@@ -314,6 +321,7 @@ describe('Inventory Units & Traceability API Routes', () => {
         costAmount: '120.00',
         costCurrency: 'BDT',
         notes: 'Repair complete, awaiting reinspection',
+        expectedVersion: repairRecord.version,
       },
     });
     expect(completeRepairRes.statusCode).toBe(200);
@@ -331,23 +339,65 @@ describe('Inventory Units & Traceability API Routes', () => {
         notes: 'Button securely reattached, verified retail quality',
         outcome: 'PASSED',
         disposition: 'RELEASE_SELLABLE',
+        expectedVersion: inspectRes2.json().data.unit.version + 2,
       },
     });
     expect(reinspectRes.statusCode).toBe(201);
     expect(reinspectRes.json().data.unit.status).toBe('AVAILABLE');
 
     // 10. Update packaging box reference
+    const packagingHeaders = {
+      ...headers,
+      'idempotency-key': `packaging-${crypto.randomUUID()}`,
+    };
     const packRes = await app.inject({
       method: 'PATCH',
       url: `/admin/inventory/units/${unit1.id}/packaging`,
-      headers,
+      headers: packagingHeaders,
       payload: {
         packageReference: 'BOX-PREMIUM-LUX-05',
         storageNotes: 'Packed in dust bag with branded hanger',
+        expectedVersion: inspectData.unit.version,
       },
     });
     expect(packRes.statusCode).toBe(200);
     expect(packRes.json().data.packageReference).toBe('BOX-PREMIUM-LUX-05');
+    const packReplay = await app.inject({
+      method: 'PATCH',
+      url: `/admin/inventory/units/${unit1.id}/packaging`,
+      headers: packagingHeaders,
+      payload: {
+        packageReference: 'BOX-PREMIUM-LUX-05',
+        storageNotes: 'Packed in dust bag with branded hanger',
+        expectedVersion: inspectData.unit.version,
+      },
+    });
+    expect(packReplay.statusCode).toBe(200);
+    expect(packReplay.json().data.version).toBe(packRes.json().data.version);
+
+    const reusedKey = await app.inject({
+      method: 'PATCH',
+      url: `/admin/inventory/units/${unit1.id}/packaging`,
+      headers: packagingHeaders,
+      payload: {
+        packageReference: 'BOX-DIFFERENT-COMMAND',
+        expectedVersion: inspectData.unit.version,
+      },
+    });
+    expect(reusedKey.statusCode).toBe(409);
+    expect(reusedKey.json().error.code).toBe('IDEMPOTENCY_KEY_REUSED');
+
+    const stalePack = await app.inject({
+      method: 'PATCH',
+      url: `/admin/inventory/units/${unit1.id}/packaging`,
+      headers,
+      payload: {
+        packageReference: 'BOX-STALE-ATTEMPT',
+        expectedVersion: inspectData.unit.version,
+      },
+    });
+    expect(stalePack.statusCode).toBe(409);
+    expect(stalePack.json().error.code).toBe('STALE_VERSION');
 
     // 11. Direct cross-location moves are rejected; Transfers own that boundary.
     const moveRes = await app.inject({
@@ -358,6 +408,7 @@ describe('Inventory Units & Traceability API Routes', () => {
         newLocationId: ctx.repairLocationId,
         newStorageNotes: 'Transfer Bay Shelf 1',
         reason: 'Temporary relocation for staging',
+        expectedVersion: packRes.json().data.version,
       },
     });
     expect(moveRes.statusCode).toBe(422);
@@ -387,6 +438,7 @@ describe('Inventory Units & Traceability API Routes', () => {
         receivingLocationId: ctx.locationId,
         conditionResult: 'GRADE_B',
         notes: 'Customer returned dress with minor fabric fold crease',
+        expectedVersion: packRes.json().data.version,
       },
     });
     expect(returnRes.statusCode).toBe(422);
@@ -400,6 +452,7 @@ describe('Inventory Units & Traceability API Routes', () => {
       headers,
       payload: {
         reason: 'Accidental chemical spill during handling - totally unsellable',
+        expectedVersion: unit3.version,
       },
     });
     expect(writeOffRes.statusCode).toBe(200);

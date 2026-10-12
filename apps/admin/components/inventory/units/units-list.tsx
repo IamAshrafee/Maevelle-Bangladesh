@@ -6,22 +6,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Boxes,
   Search,
-  Filter,
-  Plus,
   Printer,
   ShieldCheck,
   Wrench,
-  CheckCircle,
   Copy,
   Check,
-  ExternalLink,
   ChevronRight,
   RefreshCw,
   Loader2,
   X,
   ScanBarcode,
-  ArrowUpDown,
-  Tag,
 } from 'lucide-react';
 import type {
   InventoryUnitDto,
@@ -59,7 +53,6 @@ import { UnitBarcodeModal } from './unit-barcode-modal';
 import { UnitMoveDialog } from './unit-move-dialog';
 import { UnitInspectDialog } from './unit-inspect-dialog';
 import { UnitScanLookupDialog } from './unit-scan-lookup-dialog';
-import { UnitScannerInput } from './unit-scanner-input';
 import { cn } from '@/lib/utils';
 
 export function UnitsList() {
@@ -77,7 +70,7 @@ export function UnitsList() {
   );
   const [locationId, setLocationId] = useState(searchParams.get('locationId') || '');
   const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize] = useState(25);
 
   // Data state
   const [units, setUnits] = useState<readonly InventoryUnitDto[]>([]);
@@ -187,7 +180,10 @@ export function UnitsList() {
     setBusy(true);
     try {
       await bulkInspectUnits({
-        unitIds: Array.from(selectedIds),
+        units: selectedUnits.map((unit) => ({
+          unitId: unit.id,
+          expectedVersion: unit.version,
+        })),
         conditionResult: 'GRADE_A',
         disposition: 'RELEASE_SELLABLE',
         notes: 'Bulk approved during inventory review.',

@@ -418,6 +418,7 @@ export function InventoryItemDetail({ inventoryItemId }: { inventoryItemId: stri
         sku={item.sku}
         productTitle={item.productTitle}
         currentTrackingMode={item.trackingMode === 'SERIAL' ? 'SERIAL' : 'STANDARD'}
+        currentItemVersion={item.version}
         currentOnHand={Number(item.summary.onHand) || 0}
         onSuccess={() => setReloadKey((k) => k + 1)}
       />

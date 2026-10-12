@@ -110,6 +110,7 @@ export function UnitInspectDialog({
 
     try {
       await performUnitInspection(unit.id, {
+        expectedVersion: unit.version,
         inspectionStage: stage,
         conditionResult: condition,
         defectDescription: defectDescription.trim() || undefined,

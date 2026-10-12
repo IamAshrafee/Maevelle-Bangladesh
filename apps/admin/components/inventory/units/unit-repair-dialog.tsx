@@ -90,6 +90,7 @@ export function UnitRepairDialog({
     try {
       if (mode === 'request') {
         await requestUnitRepair(unit.id, {
+          expectedVersion: unit.version,
           defectDescription: defectDescription.trim(),
           actionRequired: actionRequired.trim() || undefined,
           notes: requestNotes.trim() || undefined,
@@ -101,6 +102,7 @@ export function UnitRepairDialog({
         }
 
         await completeUnitRepair(repairId, {
+          expectedVersion: (existingRepair ?? unit.activeRepair)!.version,
           actionPerformed: actionPerformed.trim(),
           technicianName: technicianName.trim() || undefined,
           costAmount: costAmount.trim() || undefined,

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings2, Boxes, ArrowRight, Loader2, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Settings2, ArrowRight, Loader2, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { VariantTrackingModeDto, WarehouseLocationDto } from '@maevelle/contracts';
 import {
   Dialog,
@@ -13,7 +13,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { fetchApiData } from '@/lib/api';
 import { setVariantTrackingMode, convertStockToSerialized } from '@/lib/inventory/units';
 
@@ -24,6 +23,7 @@ export interface TrackingModeDialogProps {
   readonly sku: string;
   readonly productTitle: string;
   readonly currentTrackingMode: VariantTrackingModeDto;
+  readonly currentItemVersion: number;
   readonly currentOnHand?: number;
   readonly onSuccess?: () => void;
 }
@@ -35,11 +35,11 @@ export function TrackingModeDialog({
   sku,
   productTitle,
   currentTrackingMode,
+  currentItemVersion,
   currentOnHand = 0,
   onSuccess,
 }: TrackingModeDialogProps) {
   const [selectedMode, setSelectedMode] = useState<VariantTrackingModeDto>(currentTrackingMode);
-  const [convertCount, setConvertCount] = useState<number>(currentOnHand);
   const [locationId, setLocationId] = useState<string>('');
   const [storageNotes, setStorageNotes] = useState<string>('');
   const [locations, setLocations] = useState<readonly WarehouseLocationDto[]>([]);
@@ -48,7 +48,6 @@ export function TrackingModeDialog({
 
   useEffect(() => {
     setSelectedMode(currentTrackingMode);
-    setConvertCount(currentOnHand);
   }, [currentTrackingMode, currentOnHand]);
 
   useEffect(() => {
@@ -78,26 +77,19 @@ export function TrackingModeDialog({
     try {
       if (isConvertingExistingStock) {
         if (!locationId) throw new Error('Warehouse location is required to register existing stock.');
-        if (convertCount <= 0) throw new Error('Conversion quantity must be at least 1.');
 
-        // 1. Convert stock to serialized
         await convertStockToSerialized({
           variantId,
           locationId,
-          count: convertCount,
+          expectedVersion: currentItemVersion,
           storageNotes: storageNotes.trim() || undefined,
-        });
-
-        // 2. Set mode to SERIAL
-        await setVariantTrackingMode({
-          variantId,
-          trackingMode: 'SERIAL',
         });
       } else {
         // Direct mode toggle
         await setVariantTrackingMode({
           variantId,
           trackingMode: selectedMode,
+          expectedVersion: currentItemVersion,
         });
       }
 
@@ -192,24 +184,7 @@ export function TrackingModeDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-amber-500/20">
-                <div className="space-y-1">
-                  <label htmlFor="convert-count" className="text-[11px] font-medium text-foreground">
-                    Units to Register *
-                  </label>
-                  <Input
-                    id="convert-count"
-                    type="number"
-                    min="1"
-                    max={currentOnHand}
-                    value={convertCount}
-                    onChange={(e) => setConvertCount(Number(e.target.value))}
-                    disabled={submitting}
-                    required
-                    className="text-xs font-mono"
-                  />
-                </div>
-
+              <div className="grid grid-cols-1 gap-3 pt-1 border-t border-amber-500/20">
                 <div className="space-y-1">
                   <label htmlFor="convert-location" className="text-[11px] font-medium text-foreground">
                     Storage Warehouse *
@@ -229,6 +204,9 @@ export function TrackingModeDialog({
                     ))}
                   </NativeSelect>
                 </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Every unrepresented whole unit in the selected warehouse ledger will receive an identity. Existing identities are preserved, and the command stops if the ledger contains fractional stock.
+                </p>
               </div>
 
               <div className="space-y-1">

@@ -10,6 +10,7 @@ import {
   bulkMoveUnitsLocation,
   completeUnitRepair,
   convertStockToSerialized,
+  executeIdempotentUnitCommand,
   findInventoryUnitByCode,
   getInventoryUnit,
   listInventoryUnits,
@@ -80,7 +81,7 @@ function sendError(
         ? 404
         : error.code === 'UNAUTHORIZED_ACCESS'
           ? 403
-          : ['CONFLICT', 'RESERVATION_CONFLICT', 'STALE_VERSION'].includes(error.code)
+          : ['CONFLICT', 'RESERVATION_CONFLICT', 'STALE_VERSION', 'IDEMPOTENCY_KEY_REUSED'].includes(error.code)
             ? 409
             : 422;
     return reply.code(status).send({ error: { code: error.code, message: error.message } });
@@ -91,6 +92,23 @@ function sendError(
       .send({ error: { code: 'CONFLICT', message: 'A record with that unique key already exists.' } });
   }
   throw error;
+}
+
+function idempotencyKey(value: string | string[] | undefined): string | undefined {
+  const key = Array.isArray(value) ? value[0] : value;
+  return key && /^[\x21-\x7e]{1,128}$/.test(key) ? key : undefined;
+}
+
+function requireIdempotencyKey(
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  value: string | string[] | undefined,
+): string | undefined {
+  const key = idempotencyKey(value);
+  if (!key)
+    reply.code(400).send({
+      error: { code: 'IDEMPOTENCY_KEY_REQUIRED', message: 'A valid idempotency-key header is required.' },
+    });
+  return key;
 }
 
 const conditionSchema = Type.Union([
@@ -413,6 +431,7 @@ export function registerInventoryUnitRoutes(
       const body = request.body as {
         variantId: string;
         locationId: string;
+        expectedVersion: number;
         quantity: number;
         sourceType?: UnitSourceType;
         sourceReceiptId?: string;
@@ -428,13 +447,21 @@ export function registerInventoryUnitRoutes(
       if (!canAccessLocation(active, 'inventory.units.manage', body.locationId)) {
         return reply.code(403).send(locationScopeError());
       }
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const units = await registerInventoryUnits(database.db, {
+        const units = await executeIdempotentUnitCommand(database.db, {
           organizationId: active.organizationId,
           actorId: active.actorId,
-          ...body,
-        });
+          operation: 'inventory.units.register',
+          idempotencyKey: key,
+          request: body,
+          resultEntityType: 'catalog.variant',
+          resultEntityId: body.variantId,
+        }, (trx) => registerInventoryUnits(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, ...body,
+        }));
         return reply.code(201).send({ data: units });
       } catch (error) {
         return sendError(reply, error);
@@ -455,6 +482,7 @@ export function registerInventoryUnitRoutes(
           mediaAssetIds: Type.Optional(Type.Array(Type.String())),
           outcome: inspectionOutcomeSchema,
           disposition: Type.Optional(dispositionSchema),
+          expectedVersion: Type.Integer({ minimum: 1 }),
         }),
       },
     },
@@ -471,15 +499,19 @@ export function registerInventoryUnitRoutes(
         mediaAssetIds?: readonly string[];
         outcome: InspectionOutcome;
         disposition?: InspectionDisposition;
+        expectedVersion: number;
       };
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const result = await performUnitInspection(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          unitId,
-          ...body,
-        });
+        const result = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.unit.inspect', idempotencyKey: key,
+          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
+        }, (trx) => performUnitInspection(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
+        }));
         return reply.code(201).send({ data: result });
       } catch (error) {
         return sendError(reply, error);
@@ -493,7 +525,13 @@ export function registerInventoryUnitRoutes(
     {
       schema: {
         body: Type.Object({
-          unitIds: Type.Array(Type.String(), { minItems: 1, maxItems: 100 }),
+          units: Type.Array(
+            Type.Object({
+              unitId: Type.String(),
+              expectedVersion: Type.Integer({ minimum: 1 }),
+            }),
+            { minItems: 1, maxItems: 100 },
+          ),
           inspectionStage: inspectionStageSchema,
           conditionResult: conditionSchema,
           defectDescription: Type.Optional(Type.String()),
@@ -508,7 +546,7 @@ export function registerInventoryUnitRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
 
       const body = request.body as {
-        unitIds: readonly string[];
+        units: readonly { unitId: string; expectedVersion: number }[];
         inspectionStage: InspectionStage;
         conditionResult: UnitCondition;
         defectDescription?: string;
@@ -516,13 +554,17 @@ export function registerInventoryUnitRoutes(
         outcome: InspectionOutcome;
         disposition?: InspectionDisposition;
       };
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const result = await bulkInspectUnits(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          ...body,
-        });
+        const result = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.units.bulk_inspect', idempotencyKey: key,
+          request: body, resultEntityType: 'inventory.unit', resultEntityId: body.units[0]!.unitId,
+        }, (trx) => bulkInspectUnits(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, ...body,
+        }));
         return { data: result };
       } catch (error) {
         return sendError(reply, error);
@@ -540,6 +582,7 @@ export function registerInventoryUnitRoutes(
           actionRequired: Type.Optional(Type.String()),
           technicianName: Type.Optional(Type.String()),
           notes: Type.Optional(Type.String()),
+          expectedVersion: Type.Integer({ minimum: 1 }),
         }),
       },
     },
@@ -553,15 +596,19 @@ export function registerInventoryUnitRoutes(
         actionRequired?: string;
         technicianName?: string;
         notes?: string;
+        expectedVersion: number;
       };
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const repair = await requestUnitRepair(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          unitId,
-          ...body,
-        });
+        const repair = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.unit.repair.request', idempotencyKey: key,
+          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
+        }, (trx) => requestUnitRepair(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
+        }));
         return reply.code(201).send({ data: repair });
       } catch (error) {
         return sendError(reply, error);
@@ -581,6 +628,7 @@ export function registerInventoryUnitRoutes(
           costCurrency: Type.Optional(Type.String()),
           mediaAssetIds: Type.Optional(Type.Array(Type.String())),
           notes: Type.Optional(Type.String()),
+          expectedVersion: Type.Integer({ minimum: 1 }),
         }),
       },
     },
@@ -596,15 +644,19 @@ export function registerInventoryUnitRoutes(
         costCurrency?: string;
         mediaAssetIds?: readonly string[];
         notes?: string;
+        expectedVersion: number;
       };
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const repair = await completeUnitRepair(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          repairId,
-          ...body,
-        });
+        const repair = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.unit.repair.complete', idempotencyKey: key,
+          request: { repairId, ...body }, resultEntityType: 'inventory.unit_repair', resultEntityId: repairId,
+        }, (trx) => completeUnitRepair(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, repairId, ...body,
+        }));
         return { data: repair };
       } catch (error) {
         return sendError(reply, error);
@@ -622,6 +674,7 @@ export function registerInventoryUnitRoutes(
           newStorageNotes: Type.Optional(Type.String()),
           newPackageReference: Type.Optional(Type.String()),
           reason: Type.Optional(Type.String()),
+          expectedVersion: Type.Integer({ minimum: 1 }),
         }),
       },
     },
@@ -635,19 +688,23 @@ export function registerInventoryUnitRoutes(
         newStorageNotes?: string;
         newPackageReference?: string;
         reason?: string;
+        expectedVersion: number;
       };
 
       if (!canAccessLocation(active, 'inventory.units.manage', body.newLocationId)) {
         return reply.code(403).send(locationScopeError());
       }
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const unit = await moveUnitLocation(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          unitId,
-          ...body,
-        });
+        const unit = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.unit.placement.update', idempotencyKey: key,
+          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
+        }, (trx) => moveUnitLocation(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
+        }));
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -661,7 +718,13 @@ export function registerInventoryUnitRoutes(
     {
       schema: {
         body: Type.Object({
-          unitIds: Type.Array(Type.String(), { minItems: 1, maxItems: 100 }),
+          units: Type.Array(
+            Type.Object({
+              unitId: Type.String(),
+              expectedVersion: Type.Integer({ minimum: 1 }),
+            }),
+            { minItems: 1, maxItems: 100 },
+          ),
           newLocationId: Type.String(),
           newStorageNotes: Type.Optional(Type.String()),
           newPackageReference: Type.Optional(Type.String()),
@@ -674,7 +737,7 @@ export function registerInventoryUnitRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
 
       const body = request.body as {
-        unitIds: readonly string[];
+        units: readonly { unitId: string; expectedVersion: number }[];
         newLocationId: string;
         newStorageNotes?: string;
         newPackageReference?: string;
@@ -684,13 +747,17 @@ export function registerInventoryUnitRoutes(
       if (!canAccessLocation(active, 'inventory.units.manage', body.newLocationId)) {
         return reply.code(403).send(locationScopeError());
       }
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const result = await bulkMoveUnitsLocation(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          ...body,
-        });
+        const result = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.units.bulk_placement_update', idempotencyKey: key,
+          request: body, resultEntityType: 'inventory.unit', resultEntityId: body.units[0]!.unitId,
+        }, (trx) => bulkMoveUnitsLocation(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, ...body,
+        }));
         return { data: result };
       } catch (error) {
         return sendError(reply, error);
@@ -706,6 +773,7 @@ export function registerInventoryUnitRoutes(
         body: Type.Object({
           packageReference: Type.String({ minLength: 1 }),
           storageNotes: Type.Optional(Type.String()),
+          expectedVersion: Type.Integer({ minimum: 1 }),
         }),
       },
     },
@@ -717,15 +785,19 @@ export function registerInventoryUnitRoutes(
       const body = request.body as {
         packageReference: string;
         storageNotes?: string;
+        expectedVersion: number;
       };
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const unit = await updateUnitPackaging(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          unitId,
-          ...body,
-        });
+        const unit = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.unit.packaging.update', idempotencyKey: key,
+          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
+        }, (trx) => updateUnitPackaging(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
+        }));
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -740,6 +812,7 @@ export function registerInventoryUnitRoutes(
       schema: {
         body: Type.Object({
           reason: Type.String({ minLength: 1 }),
+          expectedVersion: Type.Integer({ minimum: 1 }),
         }),
       },
     },
@@ -748,15 +821,19 @@ export function registerInventoryUnitRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
 
       const { unitId } = request.params as { unitId: string };
-      const { reason } = request.body as { reason: string };
+      const { reason, expectedVersion } = request.body as { reason: string; expectedVersion: number };
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const unit = await releaseUnitForSale(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          unitId,
-          reason,
-        });
+        const body = { reason, expectedVersion };
+        const unit = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.unit.release', idempotencyKey: key,
+          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
+        }, (trx) => releaseUnitForSale(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
+        }));
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -771,6 +848,7 @@ export function registerInventoryUnitRoutes(
       schema: {
         body: Type.Object({
           reason: Type.String({ minLength: 1 }),
+          expectedVersion: Type.Integer({ minimum: 1 }),
         }),
       },
     },
@@ -779,15 +857,19 @@ export function registerInventoryUnitRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
 
       const { unitId } = request.params as { unitId: string };
-      const { reason } = request.body as { reason: string };
+      const { reason, expectedVersion } = request.body as { reason: string; expectedVersion: number };
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const unit = await writeOffUnit(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          unitId,
-          reason,
-        });
+        const body = { reason, expectedVersion };
+        const unit = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.unit.write_off', idempotencyKey: key,
+          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
+        }, (trx) => writeOffUnit(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
+        }));
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -805,6 +887,7 @@ export function registerInventoryUnitRoutes(
           sourceReturnReceiptId: Type.Optional(Type.String()),
           conditionResult: Type.Optional(conditionSchema),
           notes: Type.Optional(Type.String()),
+          expectedVersion: Type.Integer({ minimum: 1 }),
         }),
       },
     },
@@ -818,19 +901,23 @@ export function registerInventoryUnitRoutes(
         sourceReturnReceiptId?: string;
         conditionResult?: UnitCondition;
         notes?: string;
+        expectedVersion: number;
       };
 
       if (!canAccessLocation(active, 'inventory.units.manage', body.receivingLocationId)) {
         return reply.code(403).send(locationScopeError());
       }
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const unit = await receiveReturnedUnit(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          unitId,
-          ...body,
-        });
+        const unit = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.unit.return.receive', idempotencyKey: key,
+          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
+        }, (trx) => receiveReturnedUnit(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
+        }));
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -846,6 +933,7 @@ export function registerInventoryUnitRoutes(
         body: Type.Object({
           variantId: Type.String(),
           trackingMode: Type.Union([Type.Literal('STANDARD'), Type.Literal('SERIAL')]),
+          expectedVersion: Type.Integer({ minimum: 0 }),
         }),
       },
     },
@@ -856,14 +944,19 @@ export function registerInventoryUnitRoutes(
       const body = request.body as {
         variantId: string;
         trackingMode: VariantTrackingMode;
+        expectedVersion: number;
       };
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const result = await setVariantTrackingMode(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          ...body,
-        });
+        const result = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.variant.tracking_mode.set', idempotencyKey: key,
+          request: body, resultEntityType: 'catalog.variant', resultEntityId: body.variantId,
+        }, (trx) => setVariantTrackingMode(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, ...body,
+        }));
         return { data: result };
       } catch (error) {
         return sendError(reply, error);
@@ -879,6 +972,7 @@ export function registerInventoryUnitRoutes(
         body: Type.Object({
           variantId: Type.String(),
           locationId: Type.String(),
+          expectedVersion: Type.Integer({ minimum: 1 }),
           initialCondition: Type.Optional(conditionSchema),
           packageReference: Type.Optional(Type.String()),
           storageNotes: Type.Optional(Type.String()),
@@ -893,6 +987,7 @@ export function registerInventoryUnitRoutes(
       const body = request.body as {
         variantId: string;
         locationId: string;
+        expectedVersion: number;
         initialCondition?: UnitCondition;
         packageReference?: string;
         storageNotes?: string;
@@ -902,13 +997,17 @@ export function registerInventoryUnitRoutes(
       if (!canAccessLocation(active, 'inventory.units.manage', body.locationId)) {
         return reply.code(403).send(locationScopeError());
       }
+      const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
+      if (!key) return;
 
       try {
-        const result = await convertStockToSerialized(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          ...body,
-        });
+        const result = await executeIdempotentUnitCommand(database.db, {
+          organizationId: active.organizationId, actorId: active.actorId,
+          operation: 'inventory.units.convert_stock', idempotencyKey: key,
+          request: body, resultEntityType: 'catalog.variant', resultEntityId: body.variantId,
+        }, (trx) => convertStockToSerialized(trx, {
+          organizationId: active.organizationId, actorId: active.actorId, ...body,
+        }));
         return { data: result };
       } catch (error) {
         return sendError(reply, error);

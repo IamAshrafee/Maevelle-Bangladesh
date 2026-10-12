@@ -42,6 +42,7 @@ export function UnitReleaseDialog({
 
     try {
       await releaseUnitForSale(unit.id, {
+        expectedVersion: unit.version,
         reason: reason.trim() || undefined,
         targetCondition,
       });

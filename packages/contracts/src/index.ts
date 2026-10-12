@@ -1703,6 +1703,7 @@ export interface InventoryStatsDto {
 
 export interface InventoryItemDetailDto {
   readonly id: string;
+  readonly version: number;
   readonly variantId: string;
   readonly productId: string;
   readonly sku: string;

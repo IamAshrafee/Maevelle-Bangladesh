@@ -17,6 +17,10 @@ import type {
 
 import { inventoryRequest } from './api';
 
+function commandHeaders(): HeadersInit {
+  return { 'idempotency-key': crypto.randomUUID() };
+}
+
 export interface ListUnitsQuery {
   readonly page?: number | undefined;
   readonly pageSize?: number | undefined;
@@ -48,6 +52,7 @@ export interface RegisterUnitsInput {
 }
 
 export interface PerformInspectionInput {
+  readonly expectedVersion: number;
   readonly inspectionStage: InspectionStageDto;
   readonly conditionResult: UnitConditionDto;
   readonly defectDescription?: string | undefined;
@@ -57,7 +62,7 @@ export interface PerformInspectionInput {
 }
 
 export interface BulkInspectInput {
-  readonly unitIds: readonly string[];
+  readonly units: readonly { readonly unitId: string; readonly expectedVersion: number }[];
   readonly conditionResult: UnitConditionDto;
   readonly defectDescription?: string | undefined;
   readonly notes?: string | undefined;
@@ -65,12 +70,14 @@ export interface BulkInspectInput {
 }
 
 export interface RequestRepairInput {
+  readonly expectedVersion: number;
   readonly defectDescription: string;
   readonly actionRequired?: string | undefined;
   readonly notes?: string | undefined;
 }
 
 export interface CompleteRepairInput {
+  readonly expectedVersion: number;
   readonly actionPerformed: string;
   readonly technicianName?: string | undefined;
   readonly costAmount?: string | undefined;
@@ -80,31 +87,36 @@ export interface CompleteRepairInput {
 }
 
 export interface MoveLocationInput {
+  readonly expectedVersion: number;
   readonly newLocationId: string;
   readonly reason?: string | undefined;
 }
 
 export interface BulkMoveLocationInput {
-  readonly unitIds: readonly string[];
+  readonly units: readonly { readonly unitId: string; readonly expectedVersion: number }[];
   readonly newLocationId: string;
   readonly reason?: string | undefined;
 }
 
 export interface UpdatePackagingInput {
+  readonly expectedVersion: number;
   readonly packageReference?: string | undefined;
   readonly storageNotes?: string | undefined;
 }
 
 export interface ReleaseUnitInput {
+  readonly expectedVersion: number;
   readonly reason?: string | undefined;
   readonly targetCondition?: UnitConditionDto | undefined;
 }
 
 export interface WriteOffUnitInput {
+  readonly expectedVersion: number;
   readonly reason: string;
 }
 
 export interface ReceiveReturnInput {
+  readonly expectedVersion: number;
   readonly receivingLocationId: string;
   readonly returnReceiptId?: string | undefined;
   readonly condition?: UnitConditionDto | undefined;
@@ -114,12 +126,13 @@ export interface ReceiveReturnInput {
 export interface SetTrackingModeInput {
   readonly variantId: string;
   readonly trackingMode: VariantTrackingModeDto;
+  readonly expectedVersion: number;
 }
 
 export interface ConvertStockInput {
   readonly variantId: string;
   readonly locationId: string;
-  readonly count: number;
+  readonly expectedVersion: number;
   readonly storageNotes?: string | undefined;
 }
 
@@ -205,6 +218,7 @@ export async function registerInventoryUnits(
     '/admin/inventory/units/register',
     {
       method: 'POST',
+      headers: commandHeaders(),
       body: JSON.stringify({ ...registration, quantity: count }),
     },
   );
@@ -219,6 +233,7 @@ export async function performUnitInspection(
     readonly data: { readonly unit: InventoryUnitDto; readonly inspection: UnitInspectionDto };
   }>(`/admin/inventory/units/${encodeURIComponent(unitId)}/inspections`, {
     method: 'POST',
+    headers: commandHeaders(),
     body: JSON.stringify({
       ...input,
       inspectionStage: input.inspectionStage ?? 'INBOUND_INTAKE',
@@ -244,6 +259,7 @@ export async function bulkInspectUnits(
     readonly data: { readonly count: number; readonly units: readonly InventoryUnitDto[] };
   }>('/admin/inventory/units/bulk-inspect', {
     method: 'POST',
+    headers: commandHeaders(),
     body: JSON.stringify({
       ...input,
       inspectionStage: 'INBOUND_INTAKE',
@@ -268,6 +284,7 @@ export async function requestUnitRepair(
     readonly data: UnitRepairDto;
   }>(`/admin/inventory/units/${encodeURIComponent(unitId)}/repairs`, {
     method: 'POST',
+    headers: commandHeaders(),
     body: JSON.stringify(input),
   });
   return response.data;
@@ -281,6 +298,7 @@ export async function completeUnitRepair(
     readonly data: UnitRepairDto;
   }>(`/admin/inventory/units/repairs/${encodeURIComponent(repairId)}/complete`, {
     method: 'PATCH',
+    headers: commandHeaders(),
     body: JSON.stringify({
       ...input,
       mediaAssetIds: input.photoAssetIds,
@@ -298,6 +316,7 @@ export async function moveUnitLocation(
     `/admin/inventory/units/${encodeURIComponent(unitId)}/location`,
     {
       method: 'PATCH',
+      headers: commandHeaders(),
       body: JSON.stringify(input),
     },
   );
@@ -311,6 +330,7 @@ export async function bulkMoveUnitsLocation(
     readonly data: { readonly count: number; readonly units: readonly InventoryUnitDto[] };
   }>('/admin/inventory/units/bulk-location', {
     method: 'POST',
+    headers: commandHeaders(),
     body: JSON.stringify(input),
   });
   return { movedCount: response.data.count, units: response.data.units };
@@ -324,6 +344,7 @@ export async function updateUnitPackaging(
     `/admin/inventory/units/${encodeURIComponent(unitId)}/packaging`,
     {
       method: 'PATCH',
+      headers: commandHeaders(),
       body: JSON.stringify(input),
     },
   );
@@ -332,12 +353,13 @@ export async function updateUnitPackaging(
 
 export async function releaseUnitForSale(
   unitId: string,
-  input: ReleaseUnitInput = {},
+  input: ReleaseUnitInput,
 ): Promise<InventoryUnitDto> {
   const response = await inventoryRequest<{ readonly data: InventoryUnitDto }>(
     `/admin/inventory/units/${encodeURIComponent(unitId)}/release`,
     {
       method: 'POST',
+      headers: commandHeaders(),
       body: JSON.stringify(input),
     },
   );
@@ -352,6 +374,7 @@ export async function writeOffUnit(
     `/admin/inventory/units/${encodeURIComponent(unitId)}/write-off`,
     {
       method: 'POST',
+      headers: commandHeaders(),
       body: JSON.stringify(input),
     },
   );
@@ -367,6 +390,7 @@ export async function receiveReturnedUnit(
     `/admin/inventory/units/${encodeURIComponent(unitId)}/receive-return`,
     {
       method: 'POST',
+      headers: commandHeaders(),
       body: JSON.stringify({
         ...returnIntake,
         sourceReturnReceiptId: returnReceiptId,
@@ -379,11 +403,12 @@ export async function receiveReturnedUnit(
 
 export async function setVariantTrackingMode(
   input: SetTrackingModeInput,
-): Promise<{ readonly variantId: string; readonly trackingMode: VariantTrackingModeDto }> {
+): Promise<{ readonly variantId: string; readonly trackingMode: VariantTrackingModeDto; readonly version: number }> {
   const response = await inventoryRequest<{
-    readonly data: { readonly variantId: string; readonly trackingMode: VariantTrackingModeDto };
+    readonly data: { readonly variantId: string; readonly trackingMode: VariantTrackingModeDto; readonly version: number };
   }>('/admin/inventory/units/tracking-mode', {
     method: 'POST',
+    headers: commandHeaders(),
     body: JSON.stringify(input),
   });
   return response.data;
@@ -404,9 +429,11 @@ export async function convertStockToSerialized(
     };
   }>('/admin/inventory/units/convert-stock', {
     method: 'POST',
+    headers: commandHeaders(),
     body: JSON.stringify({
       variantId: input.variantId,
       locationId: input.locationId,
+      expectedVersion: input.expectedVersion,
       storageNotes: input.storageNotes,
     }),
   });

@@ -4228,6 +4228,7 @@ export async function getInventoryItemDetail(
 ): Promise<
   | {
       id: string;
+      version: number;
       variantId: string;
       productId: string;
       sku: string;
@@ -4275,8 +4276,9 @@ export async function getInventoryItemDetail(
     variant_status: 'ACTIVE' | 'ARCHIVED';
     tracking_mode: 'STANDARD' | 'LOT' | 'SERIAL';
     unit_code: string;
+    version: string;
   }>`
-    select item.id, item.variant_id, variant.product_id, item.tracking_mode, item.unit_code,
+    select item.id, item.variant_id, variant.product_id, item.tracking_mode, item.unit_code, item.version::text,
       item.status as inventory_status, variant.status as variant_status, variant.sku,
       coalesce(nullif(variant.title, ''), (
         select string_agg(axis.name || ': ' || value.display_value, ', ' order by axis.position, value.position)
@@ -4341,6 +4343,7 @@ export async function getInventoryItemDetail(
 
   return {
     id: item.id,
+    version: Number(item.version),
     variantId: item.variant_id,
     productId: item.product_id,
     sku: item.sku,

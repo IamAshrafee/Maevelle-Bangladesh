@@ -3,12 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   RotateCcw,
-  ScanBarcode,
-  CheckCircle2,
   AlertCircle,
   Loader2,
-  Boxes,
-  ShieldCheck,
 } from 'lucide-react';
 import type { WarehouseLocationDto, UnitConditionDto, InventoryUnitDto } from '@maevelle/contracts';
 import {
@@ -80,6 +76,7 @@ export function ReturnUnitIntakeDialog({
 
     try {
       await receiveReturnedUnit(scannedUnit.id, {
+        expectedVersion: scannedUnit.version,
         receivingLocationId,
         returnReceiptId: returnId,
         condition,

@@ -40,6 +40,7 @@ export function UnitWriteOffDialog({
 
     try {
       await writeOffUnit(unit.id, {
+        expectedVersion: unit.version,
         reason: reason.trim(),
       });
 

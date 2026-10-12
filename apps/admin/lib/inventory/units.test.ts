@@ -113,7 +113,10 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     });
 
     const res = await bulkInspectUnits({
-      unitIds: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7'],
+      units: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7'].map((unitId) => ({
+        unitId,
+        expectedVersion: 1,
+      })),
       conditionResult: 'GRADE_A',
       disposition: 'RELEASE_SELLABLE',
       notes: 'Passed 7 flawless dresses in bulk',
@@ -124,7 +127,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     expect(url).toContain('/api/admin/inventory/units/bulk-inspect');
     expect(init?.method).toBe('POST');
     const body = JSON.parse(init?.body as string);
-    expect(body.unitIds).toHaveLength(7);
+    expect(body.units).toHaveLength(7);
     expect(body.conditionResult).toBe('GRADE_A');
     expect(body.disposition).toBe('RELEASE_SELLABLE');
     expect(res.inspectedCount).toBe(7);
@@ -154,6 +157,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     });
 
     const res = await performUnitInspection('unit-8', {
+      expectedVersion: 3,
       inspectionStage: 'INBOUND_INTAKE',
       conditionResult: 'GRADE_B',
       defectDescription: 'Minor seam fraying on inner hem',
@@ -189,6 +193,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     });
 
     const res = await completeUnitRepair('rep-1', {
+      expectedVersion: 2,
       actionPerformed: 'Re-stitched seam zipper',
       technicianName: 'Rafiq',
       costAmount: '120.00',
@@ -225,7 +230,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     const res = await convertStockToSerialized({
       variantId: 'var-1',
       locationId: 'loc-main',
-      count: 11,
+      expectedVersion: 4,
       storageNotes: 'Converted 11 dresses from warehouse floor',
     });
 
@@ -234,6 +239,8 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     expect(url).toContain('/api/admin/inventory/units/convert-stock');
     const body = JSON.parse(init?.body as string);
     expect(body.count).toBeUndefined();
+    expect(body.expectedVersion).toBe(4);
+    expect(init?.headers).toMatchObject({ 'idempotency-key': expect.any(String) });
     expect(res.registeredUnitsCount).toBe(11);
   });
 

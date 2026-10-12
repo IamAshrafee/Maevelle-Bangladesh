@@ -238,6 +238,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       actorId: f.actorId,
       variantId: f.variantId,
       trackingMode: 'STANDARD',
+      expectedVersion: 1,
     });
     expect(trackingMode.trackingMode).toBe('STANDARD');
 
@@ -247,6 +248,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       actorId: f.actorId,
       variantId: f.variantId,
       locationId: f.mainLocation.id,
+      expectedVersion: trackingMode.version,
       packageReference: 'LOT-BATCH-1',
     });
 
@@ -271,11 +273,16 @@ describe('Individual Unit Traceability & Quality Control', () => {
     expect(reconciliation.isConsistent).toBe(true);
     expect(reconciliation.discrepancies).toHaveLength(0);
 
+    const versionAfterConversion = await sql<{ version: string }>`
+      select version::text from inventory.inventory_items
+      where organization_id = ${f.organizationId} and variant_id = ${f.variantId}
+    `.execute(database.db);
     const replay = await convertStockToSerialized(database.db, {
       organizationId: f.organizationId,
       actorId: f.actorId,
       variantId: f.variantId,
       locationId: f.mainLocation.id,
+      expectedVersion: Number(versionAfterConversion.rows[0]!.version),
     });
     expect(replay.unitsCreated).toBe(0);
   });
@@ -313,6 +320,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
         actorId: f.actorId,
         variantId: f.variantId,
         locationId: f.mainLocation.id,
+        expectedVersion: 1,
       }),
     ).rejects.toThrowError(UnitTraceabilityDomainError);
   });
@@ -353,6 +361,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       actorId: f.actorId,
       unitId: unit!.id,
+      expectedVersion: unit!.version,
       inspectionStage: 'INBOUND_INTAKE',
       conditionResult: 'GRADE_A',
       outcome: 'PASSED',
@@ -397,6 +406,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
         organizationId: f.organizationId,
         actorId: f.actorId,
         unitId: unit!.id,
+        expectedVersion: unit!.version,
         inspectionStage: 'INBOUND_INTAKE',
         conditionResult: 'GRADE_A',
         outcome: 'PASSED',
@@ -427,6 +437,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       actorId: f.actorId,
       unitId: unit!.id,
+      expectedVersion: unit!.version,
       inspectionStage: 'INBOUND_INTAKE',
       conditionResult: 'REPAIR_REQUIRED',
       defectDescription: 'Minor seam unraveling near inner hem',
@@ -438,6 +449,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       actorId: f.actorId,
       unitId: unit!.id,
+      expectedVersion: unit!.version + 1,
       defectDescription: 'Inner hem seam unraveling',
       actionRequired: 'Hand stitching repair',
       technicianName: 'Rafiq Master',
@@ -458,6 +470,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       actorId: f.actorId,
       repairId: repair.id,
+      expectedVersion: repair.version,
       actionPerformed: 'Reinforced inner hem with double stitching',
       costAmount: '150.0000',
       costCurrency: 'BDT',
@@ -478,6 +491,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       actorId: f.actorId,
       unitId: unit!.id,
+      expectedVersion: unitAfterRepair.version,
       inspectionStage: 'REINSPECTION',
       conditionResult: 'GRADE_A',
       outcome: 'PASSED',
@@ -503,6 +517,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
         organizationId: f.organizationId,
         actorId: f.actorId,
         unitId: unit!.id,
+        expectedVersion: unit!.version,
         newLocationId: f.secondaryLocation.id,
         newStorageNotes: 'Showroom Display Rack 3',
         reason: 'Showroom merchandising transfer',
@@ -520,6 +535,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       actorId: f.actorId,
       unitId: unit!.id,
+      expectedVersion: unchanged.version,
       packageReference: 'BOX-BETA-GIFT',
     });
 
@@ -752,6 +768,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       actorId: f.actorId,
       unitId: unit!.id,
+      expectedVersion: unit!.version,
       reason: 'Approved for sale under minor-imperfection discount arrangement',
     });
     expect(released.status).toBe('AVAILABLE');
@@ -762,6 +779,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       actorId: f.actorId,
       unitId: unit!.id,
+      expectedVersion: released.version,
       reason: 'Accidental chemical spill during handling - totally unsellable',
     });
     expect(writtenOff.status).toBe('WRITTEN_OFF');
@@ -781,6 +799,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
         organizationId: f.organizationId,
         actorId: f.actorId,
         unitId: unit!.id,
+        expectedVersion: writtenOff.version,
         reason: 'Duplicate attempt',
       }),
     ).rejects.toThrowError(UnitTraceabilityDomainError);
@@ -923,6 +942,7 @@ describe('Individual Unit Traceability & Quality Control', () => {
         organizationId: f.organizationId,
         actorId: f.actorId,
         unitId: unit!.id,
+        expectedVersion: unit!.version,
         receivingLocationId: f.secondaryLocation.id,
         notes: 'Customer returned via Pathao courier, bag intact.',
       }),

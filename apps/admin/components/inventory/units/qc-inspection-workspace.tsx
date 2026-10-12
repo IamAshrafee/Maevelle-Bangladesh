@@ -4,20 +4,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ShieldCheck,
   CheckCircle,
-  AlertTriangle,
-  Wrench,
-  Ban,
   ArrowRight,
   Printer,
-  Boxes,
   Loader2,
   RefreshCw,
-  ScanBarcode,
-  Search,
   UploadCloud,
   FileImage,
   X,
-  ChevronRight,
   Sparkles,
 } from 'lucide-react';
 import type {
@@ -187,7 +180,9 @@ export function QCInspectionWorkspace({
 
     try {
       const result = await bulkInspectUnits({
-        unitIds: Array.from(selectedIds),
+        units: units
+          .filter((unit) => selectedIds.has(unit.id))
+          .map((unit) => ({ unitId: unit.id, expectedVersion: unit.version })),
         conditionResult: 'GRADE_A',
         disposition: 'RELEASE_SELLABLE',
         notes: 'Bulk passed during physical QC intake.',
@@ -224,6 +219,7 @@ export function QCInspectionWorkspace({
 
     try {
       await performUnitInspection(activeUnit.id, {
+        expectedVersion: activeUnit.version,
         inspectionStage: stage,
         conditionResult: exceptionCondition,
         defectDescription: exceptionDefect.trim() || undefined,

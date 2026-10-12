@@ -63,6 +63,10 @@ Implemented in the first integrity slice:
 - Replaced the serialized-stocktake restriction with an identity-aware count. A stocktake now snapshots exact Unit IDs and conditions, the Admin count sheet records which Unit Codes are physically present plus their observed conditions, and posting atomically corrects unit state, aggregate condition balances, and cost evidence. Missing committed units fail closed until their reservation or fulfillment is resolved.
 - Included live serialized identities discovered after the snapshot as explicit found candidates instead of allowing anonymous quantity additions. Serialized gains therefore require a registered physical identity before they can enter a posted count.
 - Fixed the inspection-history query to use the actual IAM user-name column.
+- Added command-level idempotency to every mutable serialized-unit API operation. Exact request replays return the recorded result, while reuse of a key for a changed payload is a `409` conflict.
+- Added optimistic version requirements to mutable unit and repair commands, including batch inspection and placement operations. Batch commands now execute atomically and reject stale or duplicate Unit IDs rather than partially applying.
+- Extended optimistic concurrency to tracking-mode changes and stock conversion. The Admin item workspace now carries the item version through the command boundary and shows refresh-and-retry conflicts instead of silently overwriting concurrent work.
+- Removed the misleading editable conversion quantity from the Admin dialog. Conversion now truthfully adopts every missing whole-unit identity represented by the selected location's authoritative condition ledger and preserves existing identities.
 
 Verification completed for this slice:
 
@@ -71,10 +75,10 @@ Verification completed for this slice:
 - Admin TypeScript check after client-contract repair: passed.
 - Docker production builds for API, Worker, Admin, and Storefront during the disposable baseline rebuild: passed.
 - Focused Inventory, serialized-unit, API, and Admin unit-client suites: 41 tests passed across 4 files.
+- Focused command-safety verification after the idempotency/version changes: 24 tests passed across the serialized-unit database, API, and Admin client suites; exact replay, changed-payload rejection, and stale-write rejection are covered.
 
 Remaining before Stage 1 can be marked complete:
 
-- Complete command-level idempotency and optimistic-version coverage for every mutable unit endpoint.
 - Complete successful posted-return-receipt intake coverage with real return fixtures, not only rejection/rollback evidence.
 
 ---
