@@ -167,14 +167,18 @@ Remaining in Stage 5:
 
 - Rebuilt the Transfer queue with shared page/table/state primitives, capability-aware creation, responsive mobile cards, compact desktop rows, semantic statuses, route context, and requested/dispatched/received progress.
 - Added source and destination Location filters alongside status and transfer-number search. Pagination now uses the authoritative server `totalCount` instead of guessing that another page exists whenever the current page happens to contain 25 rows.
+- Transfer detail now uses the shared Admin page, loading/error, status, and compact table primitives. Draft management actions and physical transfer actions render from their distinct capabilities, and success/error treatment uses semantic theme tokens.
+- Draft approval and cancellation now require API idempotency keys and replay equivalent completed commands safely while preserving their optimistic version checks. The UI supplies a stable command key for each transfer version.
 
 Verification for this slice:
 
 - Focused Admin TypeScript and lint checks passed for the Transfer queue.
+- Database/API/Admin focused TypeScript and lint checks passed for the detail lifecycle changes.
+- One focused Inventory integration test passed for retry-safe Transfer cancellation and stale-transition rejection.
 
 Remaining in Stage 6:
 
-- Rework create/detail/approval/dispatch/receipt/discrepancy surfaces into one coherent lifecycle experience.
+- Rework create/edit and the receive/discrepancy sheets into one coherent lifecycle experience.
 - Audit transfer validation, permissions, retry semantics, and discrepancy recovery across aggregate and serialized stock.
 
 ---

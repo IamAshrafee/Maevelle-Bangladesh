@@ -6,13 +6,15 @@ import { ArrowLeft, ArrowRight, CheckCircle2, FileText, MapPin, Pencil } from 'l
 import Link from 'next/link';
 import type { WarehouseTransferDetailDto, WarehouseTransferLineDto } from '@maevelle/contracts';
 
+import { useAdminCapability } from '@/components/admin-capabilities';
+import { StatusBadge } from '@/components/status-badge';
 import { inventoryRequest, formatInventoryDate, formatInventoryNumber } from '@/lib/inventory/api';
-import { InventoryEmptyState } from './inventory-page-ui';
 import { ReceiveTransferSheet } from './receive-transfer-sheet';
 import { CloseTransferDiscrepancySheet } from './close-transfer-discrepancy-sheet';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { AdminPage, EmptyState, ErrorState, LoadingState } from '@/components/ui/page-shell';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,24 +27,12 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === 'RECEIVED'
-      ? ('default' as const)
-      : status === 'IN_TRANSIT' || status === 'PARTIALLY_RECEIVED'
-        ? ('secondary' as const)
-        : status === 'CANCELLED'
-          ? ('destructive' as const)
-          : ('outline' as const);
-  return <Badge variant={variant}>{status.replaceAll('_', ' ')}</Badge>;
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function TransferDetail({ transferId }: { transferId: string }) {
   const router = useRouter();
+  const canManage = useAdminCapability('warehouse.manage');
+  const canTransfer = useAdminCapability('inventory.transfer');
   const [transfer, setTransfer] = useState<WarehouseTransferDetailDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -86,6 +76,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
     try {
       await inventoryRequest(`/warehouse/transfers/${transferId}/approve`, {
         method: 'POST',
+        headers: { 'idempotency-key': `approve-${transferId}-${transfer.version}` },
         body: JSON.stringify({ version: transfer.version }),
       });
       setSuccessMessage('Transfer approved. It is now ready to dispatch.');
@@ -104,6 +95,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
     try {
       await inventoryRequest(`/warehouse/transfers/${transferId}/cancel`, {
         method: 'POST',
+        headers: { 'idempotency-key': `cancel-${transferId}-${transfer.version}` },
         body: JSON.stringify({ version: transfer.version }),
       });
       setSuccessMessage('Transfer cancelled.');
@@ -137,33 +129,22 @@ export function TransferDetail({ transferId }: { transferId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="h-10 w-72 animate-pulse rounded-md bg-muted" />
-        <div className="grid gap-4 md:grid-cols-2">
-          {[1, 2].map((i) => (
-            <div key={i} className="h-32 animate-pulse rounded-xl bg-muted" />
-          ))}
-        </div>
-        <div className="h-64 animate-pulse rounded-xl bg-muted" />
-      </div>
+      <AdminPage><LoadingState message="Loading transfer…" /></AdminPage>
     );
   }
 
   if (!transfer) {
     return (
-      <InventoryEmptyState
-        title="Transfer not found"
-        description="This transfer could not be found or you don't have permission to view it."
-      />
+      <AdminPage><EmptyState title="Transfer not found" description="This transfer could not be found or you don't have permission to view it." /></AdminPage>
     );
   }
 
   const lines = transfer.lines;
 
   return (
-    <div className="space-y-6">
+    <AdminPage>
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 border-b border-border/70 pb-5 sm:flex-row sm:items-center">
         <Button variant="outline" size="icon" onClick={() => router.push('/inventory/transfers')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -181,7 +162,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
 
         {/* Action buttons — only shown for actionable states */}
         <div className="flex gap-2 shrink-0">
-          {transfer.status === 'DRAFT' && (
+          {canManage && transfer.status === 'DRAFT' && (
             <>
               <Button
                 variant="outline"
@@ -219,7 +200,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
             </>
           )}
 
-          {transfer.status === 'READY' && (
+          {canTransfer && transfer.status === 'READY' && (
             <AlertDialog>
               <AlertDialogTrigger render={<Button disabled={busy} />}>
                 Dispatch Transfer
@@ -240,7 +221,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
             </AlertDialog>
           )}
 
-          {(transfer.status === 'IN_TRANSIT' || transfer.status === 'PARTIALLY_RECEIVED') && (
+          {canTransfer && (transfer.status === 'IN_TRANSIT' || transfer.status === 'PARTIALLY_RECEIVED') && (
             <>
               <Button variant="outline" onClick={() => setDiscrepancyOpen(true)} disabled={busy}>
                 Resolve missing stock
@@ -253,14 +234,10 @@ export function TransferDetail({ transferId }: { transferId: string }) {
         </div>
       </div>
 
-      {error && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
 
       {successMessage && (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm text-foreground">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           {successMessage}
         </div>
@@ -318,7 +295,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
                 <p className="text-xs text-muted-foreground">Dispatched</p>
               </div>
               <div>
-                <p className="text-2xl font-bold text-emerald-600">
+                <p className="font-mono text-2xl font-bold tabular-nums text-success">
                   {formatInventoryNumber(transfer.totalReceived)}
                 </p>
                 <p className="text-xs text-muted-foreground">Received</p>
@@ -351,70 +328,56 @@ export function TransferDetail({ transferId }: { transferId: string }) {
               No items in this transfer.
             </div>
           ) : (
-            <div className="relative w-full overflow-auto">
-              <table className="w-full caption-bottom text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40">
-                    <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">
-                      Product
-                    </th>
-                    <th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground">
-                      SKU
-                    </th>
-                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
-                      Requested
-                    </th>
-                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
-                      Dispatched
-                    </th>
-                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
-                      Received
-                    </th>
-                    <th className="h-10 px-4 text-right align-middle font-medium text-muted-foreground">
-                      Discrepancy
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="[&_tr:last-child]:border-0">
+            <Table density="compact">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead className="text-right">Requested</TableHead>
+                    <TableHead className="text-right">Dispatched</TableHead>
+                    <TableHead className="text-right">Received</TableHead>
+                    <TableHead className="text-right">Discrepancy</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {lines.map((line: WarehouseTransferLineDto) => (
-                    <tr key={line.id} className="border-b transition-colors hover:bg-muted/30">
-                      <td className="px-4 py-3 align-middle">
+                    <TableRow key={line.id}>
+                      <TableCell>
                         <Link
                           href={`/inventory/stock/${line.inventoryItemId}`}
                           className="font-medium hover:underline"
                         >
                           {line.productTitle}
                         </Link>
-                      </td>
-                      <td className="px-4 py-3 align-middle">
+                      </TableCell>
+                      <TableCell>
                         <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
                           {line.sku}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-right align-middle tabular-nums">
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">
                         {formatInventoryNumber(line.requestedQuantity)}
-                      </td>
-                      <td className="px-4 py-3 text-right align-middle tabular-nums">
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">
                         {formatInventoryNumber(line.dispatchedQuantity)}
-                      </td>
-                      <td className="px-4 py-3 text-right align-middle tabular-nums font-medium text-emerald-600">
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums font-medium text-success">
                         {formatInventoryNumber(line.receivedQuantity)}
-                      </td>
-                      <td className="px-4 py-3 text-right align-middle tabular-nums">
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">
                         {line.discrepancy ? (
-                          <span className="text-amber-700" title={line.discrepancy.reasonCode}>
+                          <span className="text-warning" title={line.discrepancy.reasonCode}>
                             {formatInventoryNumber(line.discrepancy.quantity)}{' '}
                             {line.discrepancy.dispositionCode.toLowerCase()}
                           </span>
                         ) : (
                           '—'
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
           )}
         </CardContent>
       </Card>
@@ -440,6 +403,6 @@ export function TransferDetail({ transferId }: { transferId: string }) {
           void load();
         }}
       />
-    </div>
+    </AdminPage>
   );
 }

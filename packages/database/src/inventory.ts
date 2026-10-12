@@ -2424,9 +2424,17 @@ export async function updateWarehouseTransferDraft(
 
 export async function approveWarehouseTransfer(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; transferId: string; expectedVersion: number },
+  input: { organizationId: string; actorId: string; transferId: string; expectedVersion: number; idempotencyKey?: string },
 ): Promise<{ transferId: string; version: number }> {
   return db.transaction().execute(async (transaction) => {
+    const started = input.idempotencyKey ? await beginIdempotent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      operation: 'warehouse.transfer.approve',
+      idempotencyKey: input.idempotencyKey,
+      request: input,
+    }) : {};
+    if (started.replay) return started.replay as { transferId: string; version: number };
     const updated = await sql<{
       id: string;
       version: string;
@@ -2436,6 +2444,8 @@ export async function approveWarehouseTransfer(
     const row = updated.rows[0];
     if (!row)
       throw new InventoryDomainError('STALE_VERSION', 'Transfer is no longer a current Draft.');
+    const response = { transferId: row.id, version: Number(row.version) };
+    if (started.recordId) await completeIdempotency(transaction, started.recordId, 'warehouse.transfer', row.id, response);
     await emit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -2444,16 +2454,24 @@ export async function approveWarehouseTransfer(
       targetType: 'warehouse.transfer',
       targetId: row.id,
     });
-    return { transferId: row.id, version: Number(row.version) };
+    return response;
   });
 }
 
 /** Draft cancellation is deliberately the only reversible transfer state: dispatched stock never teleports back. */
 export async function cancelWarehouseTransfer(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; actorId: string; transferId: string; expectedVersion: number },
+  input: { organizationId: string; actorId: string; transferId: string; expectedVersion: number; idempotencyKey?: string },
 ): Promise<{ transferId: string; version: number }> {
   return db.transaction().execute(async (transaction) => {
+    const started = input.idempotencyKey ? await beginIdempotent(transaction, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      operation: 'warehouse.transfer.cancel',
+      idempotencyKey: input.idempotencyKey,
+      request: input,
+    }) : {};
+    if (started.replay) return started.replay as { transferId: string; version: number };
     const updated = await sql<{
       id: string;
       version: string;
@@ -2466,6 +2484,8 @@ export async function cancelWarehouseTransfer(
         'STALE_VERSION',
         'Only a current Draft Transfer can be cancelled.',
       );
+    const response = { transferId: row.id, version: Number(row.version) };
+    if (started.recordId) await completeIdempotency(transaction, started.recordId, 'warehouse.transfer', row.id, response);
     await emit(transaction, {
       organizationId: input.organizationId,
       actorId: input.actorId,
@@ -2474,7 +2494,7 @@ export async function cancelWarehouseTransfer(
       targetType: 'warehouse.transfer',
       targetId: row.id,
     });
-    return { transferId: row.id, version: Number(row.version) };
+    return response;
   });
 }
 

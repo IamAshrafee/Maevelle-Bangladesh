@@ -932,20 +932,23 @@ describe('ledger-backed inventory', () => {
       lines: [{ variantId: f.variantId, quantity: '1' }],
       idempotencyKey: crypto.randomUUID(),
     });
-    await expect(
-      cancelWarehouseTransfer(database.db, {
+    const cancelKey = crypto.randomUUID();
+    const cancelInput = {
         organizationId: f.organizationId,
         actorId: f.actorId,
         transferId: transfer.transferId,
         expectedVersion: transfer.version,
-      }),
-    ).resolves.toMatchObject({ transferId: transfer.transferId, version: 2 });
+        idempotencyKey: cancelKey,
+      };
+    await expect(cancelWarehouseTransfer(database.db, cancelInput)).resolves.toMatchObject({ transferId: transfer.transferId, version: 2 });
+    await expect(cancelWarehouseTransfer(database.db, cancelInput)).resolves.toMatchObject({ transferId: transfer.transferId, version: 2 });
     await expect(
       cancelWarehouseTransfer(database.db, {
         organizationId: f.organizationId,
         actorId: f.actorId,
         transferId: transfer.transferId,
         expectedVersion: 2,
+        idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toMatchObject({ code: 'STALE_VERSION' });
   });
