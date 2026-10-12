@@ -34,6 +34,11 @@ export interface LocationSummary {
   readonly version: number;
 }
 
+export interface LocationListItem extends LocationSummary {
+  readonly stockOnHand: string;
+  readonly activeWorkCount: number;
+}
+
 export interface LocationOperationalCommitment {
   readonly code:
     | 'STOCK_ON_HAND'
@@ -226,7 +231,7 @@ export async function listLocations(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   allowedLocationIds?: readonly string[],
-): Promise<readonly LocationSummary[]> {
+): Promise<readonly LocationListItem[]> {
   const result = await sql<{
     id: string;
     code: string;
@@ -235,9 +240,23 @@ export async function listLocations(
     status: LocationSummary['status'];
     version: string;
     capabilities: string[] | null;
+    stock_on_hand: string;
+    active_work_count: string;
   }>`
     select location.id, location.code, location.name, location.location_type, location.status, location.version::text,
-      array_remove(array_agg(capability.capability_code order by capability.capability_code), null) as capabilities
+      array_remove(array_agg(capability.capability_code order by capability.capability_code), null) as capabilities,
+      coalesce((select sum(level.sellable_quantity+level.unavailable_quantity)
+        from inventory.inventory_levels level
+        where level.organization_id=location.organization_id and level.location_id=location.id),0)::text as stock_on_hand,
+      ((select count(*) from warehouse.transfers transfer where transfer.organization_id=location.organization_id
+          and (transfer.source_location_id=location.id or transfer.destination_location_id=location.id)
+          and transfer.status in ('DRAFT','READY','IN_TRANSIT','PARTIALLY_RECEIVED'))
+       + (select count(*) from inventory.stocktake_sessions stocktake where stocktake.organization_id=location.organization_id
+          and stocktake.location_id=location.id and stocktake.status in ('DRAFT','COUNTING','REVIEW'))
+       + (select count(*) from inbound_shipment.shipments shipment where shipment.organization_id=location.organization_id
+          and shipment.receiving_location_id=location.id and shipment.status <> 'CANCELLED' and shipment.receiving_status <> 'RECEIVED')
+       + (select count(*) from fulfillment.fulfillments fulfillment where fulfillment.organization_id=location.organization_id
+          and fulfillment.location_id=location.id and fulfillment.status in ('DRAFT','READY','PICKING','PACKED')))::text as active_work_count
     from warehouse.locations location
     left join warehouse.location_capabilities capability on capability.location_id = location.id and capability.organization_id = location.organization_id
     where location.organization_id = ${organizationId}
@@ -246,7 +265,11 @@ export async function listLocations(
       ))
     group by location.id order by location.name, location.id
   `.execute(db);
-  return result.rows.map(mapLocation);
+  return result.rows.map((row) => ({
+    ...mapLocation(row),
+    stockOnHand: row.stock_on_hand,
+    activeWorkCount: Number(row.active_work_count),
+  }));
 }
 
 export async function updateLocation(

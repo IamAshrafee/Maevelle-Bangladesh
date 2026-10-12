@@ -1691,6 +1691,11 @@ export interface WarehouseLocationDto {
   readonly version: number;
 }
 
+export interface WarehouseLocationListItemDto extends WarehouseLocationDto {
+  readonly stockOnHand: string;
+  readonly activeWorkCount: number;
+}
+
 export interface PaginatedDto<T> {
   readonly items: readonly T[];
   readonly nextCursor?: string | null;

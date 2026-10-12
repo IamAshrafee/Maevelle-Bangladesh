@@ -11,7 +11,7 @@ import {
 import { createFinancialAccount } from './finance.js';
 import { configurePaymentMethod } from './payments.js';
 import { createPriceDefinition } from './pricing.js';
-import { createLocation, listLocations } from './warehouse.js';
+import { createLocation, listLocations, type LocationSummary } from './warehouse.js';
 import {
   createSizingDomain,
   createSizeSystem,
@@ -62,7 +62,7 @@ async function main() {
       code: 'staging-sample',
       name: 'Staging Sample',
     });
-    let location = (await listLocations(database.db, active.organization_id)).find(
+    let location: LocationSummary | undefined = (await listLocations(database.db, active.organization_id)).find(
       (item) => item.code === 'STAGING',
     );
     location ??= await createLocation(database.db, {
