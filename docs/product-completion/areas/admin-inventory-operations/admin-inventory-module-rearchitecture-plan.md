@@ -182,6 +182,21 @@ Remaining in Stage 6:
 - Rework create/edit and the receive/discrepancy sheets into one coherent lifecycle experience.
 - Audit transfer validation, permissions, retry semantics, and discrepancy recovery across aggregate and serialized stock.
 
+#### Batch 6 — Count operations — IN PROGRESS
+
+- Rebuilt the Counts queue with shared Admin page, filter, state, status, table, and responsive card primitives. Creation is capability-aware, progress is explicit, and pagination is driven by authoritative server totals.
+- Moved session/location/code search into the database query instead of filtering only the current browser page. Location, status, and search filters now operate across the complete authorized count history.
+- Extended the shared status vocabulary for Counting, Review, and Posted states so count lifecycle indicators use the same semantic system as the other operational workspaces.
+
+Verification for this slice:
+
+- Focused Database/API/Admin TypeScript and lint checks passed.
+
+Remaining in Stage 7:
+
+- Rework the count detail, line entry, review, cancellation, and posting experience around snapshot truth, movement-after-snapshot explanations, and explicit variance impact.
+- Audit retry and optimistic-concurrency behavior for every count transition and line mutation.
+
 ---
 
 ## 2. What was reviewed

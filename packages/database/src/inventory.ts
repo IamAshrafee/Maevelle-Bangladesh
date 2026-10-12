@@ -4218,7 +4218,7 @@ export async function listInventoryReservations(
 export async function listStocktakeSessions(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
-  input: { locationId?: string; status?: string; page?: number; limit?: number } = {},
+  input: { locationId?: string; status?: string; search?: string; page?: number; limit?: number } = {},
 ): Promise<{
   items: readonly {
     id: string;
@@ -4239,13 +4239,18 @@ export async function listStocktakeSessions(
     ? sql`session.location_id = ${input.locationId}::uuid`
     : sql`1=1`;
   const statusFilter = input.status ? sql`session.status = ${input.status}` : sql`1=1`;
+  const searchFilter = input.search?.trim()
+    ? sql`(session.stocktake_number ilike '%' || ${input.search.trim()} || '%' or location.name ilike '%' || ${input.search.trim()} || '%' or location.code ilike '%' || ${input.search.trim()} || '%')`
+    : sql`1=1`;
 
   const countResult = await sql<{ count: string }>`
     select count(*)::text as count
     from inventory.stocktake_sessions session
+    join warehouse.locations location on location.id = session.location_id and location.organization_id = session.organization_id
     where session.organization_id = ${organizationId}
       and ${locationFilter}
       and ${statusFilter}
+      and ${searchFilter}
   `.execute(db);
 
   const result = await sql<{
@@ -4268,6 +4273,7 @@ export async function listStocktakeSessions(
     where session.organization_id = ${organizationId}
       and ${locationFilter}
       and ${statusFilter}
+      and ${searchFilter}
     order by session.created_at desc
     limit ${input.limit || 25} offset ${offset}
   `.execute(db);

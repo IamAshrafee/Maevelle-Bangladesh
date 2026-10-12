@@ -810,6 +810,7 @@ export function registerInventoryRoutes(
         querystring: Type.Object({
           locationId: Type.Optional(Type.String()),
           status: Type.Optional(Type.String()),
+          search: Type.Optional(Type.String()),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
@@ -824,7 +825,7 @@ export function registerInventoryRoutes(
         data: await listStocktakeSessions(
           database.db,
           active.organizationId,
-          request.query as { locationId?: string; status?: string; page?: number; limit?: number },
+          request.query as { locationId?: string; status?: string; search?: string; page?: number; limit?: number },
         ),
       };
     },
