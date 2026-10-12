@@ -127,6 +127,20 @@ Remaining in Stage 2:
 - Build the responsive Admin replenishment queue and shared policy editor on the new contracts, then connect the prefilled Transfer and Purchase handoffs to their owning forms.
 - Expand Overview attention beyond the now-authoritative stock, queue, movement, and Location snapshot where owning-domain SLA/configuration evidence is still required.
 
+#### Batch 3 — Inventory shell and navigation — IN PROGRESS
+
+- Added the six-destination Inventory workspace navigation to every Inventory route with responsive horizontal overflow, capability-aware rendering, active-route treatment, and semantic links.
+- Mapped secondary Stock routes—Replenishment, Adjustments, Reservations, Movement History, and Settings—back to the Stock destination so operators keep their workspace context without restoring sidebar clutter.
+- Kept barcode scanning as a global command and Repair as a visible Quality action. Added Replenishment, Reservations, Movements, and Adjust Stock as contextual Stock actions.
+- Removed the broken Loss destination from both primary navigation layers; loss handling remains an explicit Transfer discrepancy or authoritative write-off action rather than a dead standalone page.
+
+Focused verification: Admin TypeScript and lint for the workspace navigation and Stock integration passed.
+
+Remaining in Stage 3:
+
+- Consolidate the secondary Stock and Quality routes into tabs/actions, then add compatibility redirects only after their destination behavior is present.
+- Standardize the remaining Locations, Transfers, Counts, and Quality page shells and permission rendering.
+
 ---
 
 ## 2. What was reviewed
