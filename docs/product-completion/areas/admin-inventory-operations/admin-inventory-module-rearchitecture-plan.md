@@ -163,6 +163,20 @@ Remaining in Stage 5:
 - Finish decomposing the legacy Location detail component onto shared Admin primitives.
 - Continue decomposing create/edit presentation into smaller shared field sections where doing so materially improves the workflow.
 
+#### Batch 5 — Transfer operations — IN PROGRESS
+
+- Rebuilt the Transfer queue with shared page/table/state primitives, capability-aware creation, responsive mobile cards, compact desktop rows, semantic statuses, route context, and requested/dispatched/received progress.
+- Added source and destination Location filters alongside status and transfer-number search. Pagination now uses the authoritative server `totalCount` instead of guessing that another page exists whenever the current page happens to contain 25 rows.
+
+Verification for this slice:
+
+- Focused Admin TypeScript and lint checks passed for the Transfer queue.
+
+Remaining in Stage 6:
+
+- Rework create/detail/approval/dispatch/receipt/discrepancy surfaces into one coherent lifecycle experience.
+- Audit transfer validation, permissions, retry semantics, and discrepancy recovery across aggregate and serialized stock.
+
 ---
 
 ## 2. What was reviewed
