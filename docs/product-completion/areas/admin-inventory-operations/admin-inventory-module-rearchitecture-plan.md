@@ -225,6 +225,8 @@ Remaining in Batch 6:
 - Replaced the event timeline's unsafe status/condition casts and raw JSON metadata block with guarded badges and labeled operational evidence. Unknown historical values remain visible as text, while current known values use the shared status primitives. The release dialog now also keeps Cancel available before a reason is entered and prevents empty submissions.
 - Added a typed Inventory request error carrying HTTP status, domain error code, and request ID, plus one shared Quality command-error treatment. Inspection, repair, release, and write-off dialogs now recognize stale-version and other conflict responses, explain that current state has changed, and offer an explicit close-and-reload recovery instead of leaving operators to retry stale data. In-flight commands cannot be dismissed accidentally.
 - Finished the touched Quality form audit: photo-removal controls have accessible names, repair completion fields stack on mobile, warning styling uses semantic tokens, and repair cost is explicitly labeled operational evidence that neither posts a Finance expense nor changes inventory acquisition cost.
+- Reduced the physical-unit list orchestration component from roughly 850 lines to roughly 316 by extracting the filter surface, responsive collection, and bulk-action toolbar. The presentation components reuse the shared action policy and UI primitives while the parent retains query, selection, and dialog orchestration.
+- Made Quality list state intentional: filters and pages now remain shareable in the URL; a contextual SKU filter is visible and removable; `IN_TRANSFER` is no longer absent from the status filter; selection clears across filter/page changes; and closing a single-unit action clears its target so a later bulk label or Transfer action cannot silently operate on the previous identity.
 
 Verification for this slice:
 
@@ -237,11 +239,11 @@ Verification for this slice:
 - Focused Admin TypeScript and lint checks passed for Receiving/Quality capability separation and paginated QC. One focused Admin client test passed for preserving a non-default inspection stage in the bulk command payload.
 - One focused Admin client test passed for repair-attention query serialization. Focused Admin TypeScript and lint checks passed for the rebuilt detail, overview, quality history, event timeline, and release dialog.
 - One focused Admin client test passed for typed stale-version conflict preservation. Focused Admin TypeScript and lint checks passed for the shared recovery treatment and the inspection, repair, release, and write-off dialogs.
+- Focused Admin TypeScript and lint checks passed for the decomposed physical-unit list, filters, bulk toolbar, and responsive desktop/mobile collection.
 
 Remaining in Batch 7:
 
-- Complete the scanner/intake and label workflows, including honest hardware and print-layout verification boundaries.
-- Reduce the remaining large unit-list component without duplicating workflow logic.
+- Code implementation is complete for the planned Quality slice. Real handheld scanner, device camera, and physical label-printer calibration remain explicit hardware/owner verification gates rather than code-completion claims.
 
 ---
 
