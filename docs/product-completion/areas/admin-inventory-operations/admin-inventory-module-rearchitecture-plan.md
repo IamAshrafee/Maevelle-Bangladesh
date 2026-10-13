@@ -219,6 +219,10 @@ Remaining in Batch 6:
 - Repaired the Supply Receiving → Quality boundary. Receipt truth now loads independently of optional serialized-unit visibility, so Supply-only operators are not locked out by a unit permission they do not have. Unit registration and Receiving QC render only with `inventory.units.manage`; labels and physical identities require `inventory.units.view`; and the embedded QC dialog is touch-friendly on mobile.
 - Reworked the embedded Receiving QC collection onto 50-unit server pages with authoritative overall and awaiting-QC totals. Page selection is explicit, label printing is truthfully scoped to the current/loaded page, and large receipts no longer disappear after an implicit 100-unit browser cap.
 - Fixed the single-unit quick-pass race that could submit the previous React selection. Bulk and individual session actions now construct their exact Unit ID/version payload directly, reject identities that no longer match the session stage, clear stale selections between pages, and preserve inbound, return, reinspection, or routine inspection stage through the Admin client contract.
+- Fixed the Admin client boundary so `attention=REPAIR` is actually serialized into the physical-unit request. The repair queue now reaches the authoritative combined repair/hold query implemented by the API instead of silently falling back to an ordinary unit listing.
+- Rebuilt physical-unit detail as an operator workspace around current control state, exact identity, authoritative ledger bucket, Location, provenance/custody, inspection evidence, repair evidence, and lifecycle evidence. Capability/state-exact actions remain driven by the shared policy, current Location and upstream receipt/order/Fulfillment records are directly reachable, and the view names the next operational step without inventing a second lifecycle.
+- Split overview and quality-history presentation out of the orchestration component. Inspection, repair, and event reads now fail independently after the authoritative Unit ID loads, so one unavailable evidence feed no longer hides the unit or blocks safe actions; each failed section explains its recovery path.
+- Replaced the event timeline's unsafe status/condition casts and raw JSON metadata block with guarded badges and labeled operational evidence. Unknown historical values remain visible as text, while current known values use the shared status primitives. The release dialog now also keeps Cancel available before a reason is entered and prevents empty submissions.
 
 Verification for this slice:
 
@@ -229,10 +233,10 @@ Verification for this slice:
 - Focused Admin TypeScript and lint checks passed for the shared scanner result, full-page scanner, quick dialog, and camera input. Real handheld-scanner, device-camera, and printed-label verification remains a hardware/owner gate.
 - Focused Admin TypeScript and lint checks passed for isolated exact-size barcode label preparation. Physical printer calibration, media margins, contrast, and scanner-read verification remain a hardware/owner gate.
 - Focused Admin TypeScript and lint checks passed for Receiving/Quality capability separation and paginated QC. One focused Admin client test passed for preserving a non-default inspection stage in the bulk command payload.
+- One focused Admin client test passed for repair-attention query serialization. Focused Admin TypeScript and lint checks passed for the rebuilt detail, overview, quality history, event timeline, and release dialog.
 
 Remaining in Batch 7:
 
-- Rework the physical-unit detail into a clearer identity, current state, provenance, event, inspection, and repair workspace with capability-exact actions.
 - Complete the scanner/intake and label workflows, including honest hardware and print-layout verification boundaries.
 - Audit each Quality dialog's conflict recovery, evidence requirements, and touch behavior, then reduce the remaining large unit-list component without duplicating workflow logic.
 

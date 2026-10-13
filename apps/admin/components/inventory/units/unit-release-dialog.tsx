@@ -21,12 +21,7 @@ export interface UnitReleaseDialogProps {
   readonly onSuccess?: () => void;
 }
 
-export function UnitReleaseDialog({
-  open,
-  onOpenChange,
-  unit,
-  onSuccess,
-}: UnitReleaseDialogProps) {
+export function UnitReleaseDialog({ open, onOpenChange, unit, onSuccess }: UnitReleaseDialogProps) {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +60,7 @@ export function UnitReleaseDialog({
       <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-            <CheckCircle2 className="size-4 text-emerald-600" />
+            <CheckCircle2 className="size-4 text-success" />
             <span>Authorize Release for Sale — {unit.unitCode}</span>
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
@@ -103,7 +98,7 @@ export function UnitReleaseDialog({
               variant="outline"
               size="sm"
               onClick={() => onOpenChange(false)}
-              disabled={submitting || !reason.trim()}
+              disabled={submitting}
             >
               Cancel
             </Button>
@@ -111,7 +106,7 @@ export function UnitReleaseDialog({
               type="submit"
               variant="default"
               size="sm"
-              disabled={submitting}
+              disabled={submitting || !reason.trim()}
               className="gap-1.5"
             >
               {submitting ? (

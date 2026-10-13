@@ -1,59 +1,47 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  Boxes,
+  AlertCircle,
   ArrowLeft,
+  Ban,
+  Boxes,
+  Check,
+  CheckCircle,
+  Clock,
+  Copy,
   Printer,
+  RefreshCw,
   ShieldCheck,
   Wrench,
-  CheckCircle,
-  Ban,
-  Copy,
-  Check,
-  ExternalLink,
-  Clock,
-  RefreshCw,
-  ShoppingBag,
-  PackageCheck,
-  Truck,
 } from 'lucide-react';
 import type {
   InventoryUnitDto,
+  UnitEventDto,
   UnitInspectionDto,
   UnitRepairDto,
-  UnitEventDto,
 } from '@maevelle/contracts';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+
+import { useAdminCapability } from '@/components/admin-capabilities';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
+import { Button } from '@/components/ui/button';
 import {
   AdminPage,
-  PageHeader,
-  PageActions,
-  PageSection,
   ErrorState,
   LoadingState,
+  PageActions,
+  PageDescription,
+  PageHeader,
+  PageSection,
+  PageTitle,
 } from '@/components/ui/page-shell';
-import { StatusBadge } from '@/components/status-badge';
-import { useAdminCapability } from '@/components/admin-capabilities';
 import {
   getInventoryUnit,
+  getUnitEvents,
   getUnitInspections,
   getUnitRepairs,
-  getUnitEvents,
-  getUnitBarcodeSvgUrl,
 } from '@/lib/inventory/units';
-import { UnitStatusBadge } from './unit-status-badge';
-import { UnitConditionBadge } from './unit-condition-badge';
-import { UnitBarcodeModal } from './unit-barcode-modal';
-import { UnitMoveDialog } from './unit-move-dialog';
-import { UnitInspectDialog } from './unit-inspect-dialog';
-import { UnitRepairDialog } from './unit-repair-dialog';
-import { UnitReleaseDialog } from './unit-release-dialog';
-import { UnitWriteOffDialog } from './unit-write-off-dialog';
-import { UnitEventTimeline } from './unit-event-timeline';
 import { QualityWorkspaceTabs } from './quality-workspace-tabs';
 import {
   recommendedInspectionStage,
@@ -64,6 +52,34 @@ import {
   unitCanEnterRepair,
   unitCanEnterTransfer,
 } from './unit-action-policy';
+import { UnitBarcodeModal } from './unit-barcode-modal';
+import { UnitConditionBadge } from './unit-condition-badge';
+import { UnitEventTimeline } from './unit-event-timeline';
+import { UnitInspectDialog } from './unit-inspect-dialog';
+import { UnitMoveDialog } from './unit-move-dialog';
+import { UnitOverviewPanels } from './unit-overview-panels';
+import { UnitQualityHistory } from './unit-quality-history';
+import { UnitReleaseDialog } from './unit-release-dialog';
+import { UnitRepairDialog } from './unit-repair-dialog';
+import { UnitStatusBadge } from './unit-status-badge';
+import { UnitWriteOffDialog } from './unit-write-off-dialog';
+
+interface SectionErrors {
+  readonly inspections: string | undefined;
+  readonly repairs: string | undefined;
+  readonly events: string | undefined;
+}
+
+const EMPTY_SECTION_ERRORS: SectionErrors = {
+  inspections: undefined,
+  repairs: undefined,
+  events: undefined,
+};
+
+function rejectionMessage(result: PromiseSettledResult<unknown>, fallback: string) {
+  if (result.status !== 'rejected') return undefined;
+  return result.reason instanceof Error ? result.reason.message : fallback;
+}
 
 export function UnitDetailView({ unitId }: { readonly unitId: string }) {
   const canManage = useAdminCapability('inventory.units.manage');
@@ -75,12 +91,12 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
   const [inspections, setInspections] = useState<readonly UnitInspectionDto[]>([]);
   const [repairs, setRepairs] = useState<readonly UnitRepairDto[]>([]);
   const [events, setEvents] = useState<readonly UnitEventDto[]>([]);
+  const [sectionErrors, setSectionErrors] = useState<SectionErrors>(EMPTY_SECTION_ERRORS);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Modals state
   const [printOpen, setPrintOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [inspectOpen, setInspectOpen] = useState(false);
@@ -89,36 +105,59 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [writeOffOpen, setWriteOffOpen] = useState(false);
 
-  const loadUnitData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [u, insp, rep, ev] = await Promise.all([
-        getInventoryUnit(unitId),
-        getUnitInspections(unitId),
-        getUnitRepairs(unitId),
-        getUnitEvents(unitId),
-      ]);
-      setUnit(u);
-      setInspections(insp);
-      setRepairs(rep);
-      setEvents(ev);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load physical unit details.');
-    } finally {
-      setLoading(false);
-    }
-  }, [unitId]);
+  const loadUnitData = useCallback(
+    async (initial = false) => {
+      if (initial) setLoading(true);
+      else setRefreshing(true);
+      setError(null);
+
+      try {
+        const currentUnit = await getInventoryUnit(unitId);
+        setUnit(currentUnit);
+
+        const [inspectionResult, repairResult, eventResult] = await Promise.allSettled([
+          getUnitInspections(unitId),
+          getUnitRepairs(unitId),
+          getUnitEvents(unitId),
+        ]);
+
+        setInspections(inspectionResult.status === 'fulfilled' ? inspectionResult.value : []);
+        setRepairs(repairResult.status === 'fulfilled' ? repairResult.value : []);
+        setEvents(eventResult.status === 'fulfilled' ? eventResult.value : []);
+        setSectionErrors({
+          inspections: rejectionMessage(
+            inspectionResult,
+            'Inspection history could not be loaded.',
+          ),
+          repairs: rejectionMessage(repairResult, 'Repair history could not be loaded.'),
+          events: rejectionMessage(eventResult, 'Lifecycle history could not be loaded.'),
+        });
+      } catch (loadError) {
+        setError(
+          loadError instanceof Error ? loadError.message : 'Failed to load physical unit details.',
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [unitId],
+  );
 
   useEffect(() => {
-    void loadUnitData();
+    setUnit(null);
+    setInspections([]);
+    setRepairs([]);
+    setEvents([]);
+    setSectionErrors(EMPTY_SECTION_ERRORS);
+    void loadUnitData(true);
   }, [loadUnitData]);
 
-  const handleCopyCode = () => {
+  const handleCopyCode = async () => {
     if (!unit) return;
-    void navigator.clipboard.writeText(unit.unitCode);
+    await navigator.clipboard.writeText(unit.unitCode);
     setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
+    window.setTimeout(() => setCopiedCode(false), 2000);
   };
 
   if (loading) {
@@ -134,23 +173,20 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
       <AdminPage>
         <ErrorState
           title="Physical unit unavailable"
-          message={error || 'The physical unit was not found or is outside your authorized locations.'}
-          onRetry={() => void loadUnitData()}
+          message={
+            error || 'The physical unit was not found or is outside your authorized locations.'
+          }
+          onRetry={() => void loadUnitData(true)}
         />
         <div>
-          <Button
-            variant="outline"
-            size="sm"
-            render={<Link href="/inventory/units" />}
-          >
-            <ArrowLeft className="size-3.5 mr-1.5" /> Back to Units
+          <Button variant="outline" size="sm" render={<Link href="/inventory/units" />}>
+            <ArrowLeft className="mr-1.5 size-3.5" aria-hidden="true" /> Back to units
           </Button>
         </div>
       </AdminPage>
     );
   }
 
-  // Permitted actions based on operational status
   const canInspect = canManage && unitCanBeInspected(unit);
   const canMove = canTransfer && unitCanEnterTransfer(unit);
   const canRequestRepair = canManage && unitCanEnterRepair(unit);
@@ -158,42 +194,43 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
   const canRelease = canReleaseUnits && unitCanBeReleased(unit);
   const canWriteOff = canWriteOffUnits && unitCanBeWrittenOff(unit);
 
+  const openRepair = (mode: 'request' | 'complete') => {
+    setRepairMode(mode);
+    setRepairOpen(true);
+  };
+
   return (
     <AdminPage>
-      {/* Breadcrumb Navigation */}
       <Breadcrumb
         items={[
           { label: 'Inventory', href: '/inventory' },
-          { label: 'Physical Units', href: '/inventory/units' },
+          { label: 'Quality', href: '/inventory/units' },
           { label: unit.unitCode, current: true },
         ]}
       />
       <QualityWorkspaceTabs />
 
-      {/* Header */}
       <PageHeader>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold font-mono tracking-tight text-foreground">
-              {unit.unitCode}
-            </h1>
-            <button
+            <PageTitle className="font-mono">{unit.unitCode}</PageTitle>
+            <Button
               type="button"
-              onClick={handleCopyCode}
-              className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
-              title="Copy Unit Code"
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => void handleCopyCode()}
+              aria-label="Copy Unit ID"
             >
               {copiedCode ? (
-                <Check className="size-3.5 text-success" />
+                <Check className="size-3.5 text-success" aria-hidden="true" />
               ) : (
-                <Copy className="size-3.5" />
+                <Copy className="size-3.5" aria-hidden="true" />
               )}
-            </button>
+            </Button>
             <UnitConditionBadge condition={unit.currentCondition} />
             <UnitStatusBadge status={unit.status} />
           </div>
-
-          <p className="text-sm text-muted-foreground">
+          <PageDescription>
             <Link
               href={`/products/${unit.productId}`}
               className="font-semibold text-foreground hover:underline"
@@ -203,408 +240,114 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
             {' · '}
             <span className="font-mono">{unit.sku}</span>
             {unit.optionSummary ? ` · ${unit.optionSummary}` : ''}
-          </p>
+          </PageDescription>
         </div>
 
-        {/* Action Controls */}
         <PageActions className="flex-wrap gap-2">
           {canInspect ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setInspectOpen(true)}
-              className="gap-1.5"
-            >
-              <ShieldCheck className="size-3.5 text-info" />
-              <span>Inspect</span>
+            <Button variant="outline" size="sm" onClick={() => setInspectOpen(true)}>
+              <ShieldCheck className="text-info" aria-hidden="true" /> Inspect
             </Button>
           ) : null}
-
           {canMove ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setMoveOpen(true)}
-              className="gap-1.5"
-            >
-              <Boxes className="size-3.5" />
-              <span>Move Location</span>
+            <Button variant="outline" size="sm" onClick={() => setMoveOpen(true)}>
+              <Boxes aria-hidden="true" /> Transfer
             </Button>
           ) : null}
-
           {canRequestRepair ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setRepairMode('request');
-                setRepairOpen(true);
-              }}
-              className="gap-1.5"
-            >
-              <Wrench className="size-3.5" />
-              <span>Send for Repair</span>
+            <Button variant="outline" size="sm" onClick={() => openRepair('request')}>
+              <Wrench aria-hidden="true" /> Send for repair
             </Button>
           ) : null}
-
           {canCompleteRepair ? (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => {
-                setRepairMode('complete');
-                setRepairOpen(true);
-              }}
-              className="gap-1.5"
-            >
-              <Wrench className="size-3.5" />
-              <span>Complete Repair</span>
+            <Button size="sm" onClick={() => openRepair('complete')}>
+              <Wrench aria-hidden="true" /> Complete repair
             </Button>
           ) : null}
-
           {canRelease ? (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => setReleaseOpen(true)}
-              className="gap-1.5"
-            >
-              <CheckCircle className="size-3.5" />
-              <span>Release for Sale</span>
+            <Button size="sm" onClick={() => setReleaseOpen(true)}>
+              <CheckCircle aria-hidden="true" /> Release for sale
             </Button>
           ) : null}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPrintOpen(true)}
-            className="gap-1.5"
-          >
-            <Printer className="size-3.5" />
-            <span>Print Label</span>
+          <Button variant="outline" size="sm" onClick={() => setPrintOpen(true)}>
+            <Printer aria-hidden="true" /> Print label
           </Button>
-
           {canWriteOff ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setWriteOffOpen(true)}
-              className="gap-1.5 text-destructive hover:bg-destructive/10 border-destructive/30"
-            >
-              <Ban className="size-3.5" />
-              <span>Write Off</span>
+            <Button variant="destructive" size="sm" onClick={() => setWriteOffOpen(true)}>
+              <Ban aria-hidden="true" /> Write off
             </Button>
           ) : null}
         </PageActions>
       </PageHeader>
 
-      {/* Overview Cards Grid */}
-      <PageSection>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Card 1: Physical Identity & Barcode */}
-          <Card className="rounded-xl shadow-2xs">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                <span>Physical Barcode</span>
-                <span className="font-mono text-[10px] text-muted-foreground">Code 128</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="bg-white p-3 rounded-lg border flex flex-col items-center justify-center">
-                <img
-                  src={getUnitBarcodeSvgUrl(unit.id)}
-                  alt={`Barcode for ${unit.unitCode}`}
-                  className="max-h-12 w-auto object-contain filter contrast-200"
-                />
-                <span className="font-mono text-xs font-bold text-black mt-1">
-                  {unit.unitCode}
-                </span>
-              </div>
-              <div className="text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Barcode Payload:</span>
-                  <span className="font-mono font-medium">{unit.barcodePayload}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Registered:</span>
-                  <span className="font-mono">
-                    {new Intl.DateTimeFormat('en-BD', { dateStyle: 'medium' }).format(
-                      new Date(unit.createdAt),
-                    )}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Card 2: Warehouse Location & Storage */}
-          <Card className="rounded-xl shadow-2xs">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Current Storage Location
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="p-3 bg-muted/40 rounded-lg border space-y-1">
-                <span className="text-xs text-muted-foreground">Warehouse:</span>
-                <p className="text-base font-semibold text-foreground">
-                  {unit.locationName || unit.locationCode || 'Unassigned'}
-                </p>
-                <span className="text-xs font-mono text-muted-foreground block">
-                  Code: {unit.locationCode || '—'}
-                </span>
-              </div>
-              <div className="text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Packaging Ref:</span>
-                  <span className="font-mono font-medium">
-                    {unit.packageReference || 'None recorded'}
-                  </span>
-                </div>
-                {unit.storageNotes ? (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Storage Notes:</span>
-                    <span className="truncate max-w-[150px]">{unit.storageNotes}</span>
-                  </div>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Card 3: Inbound Source & Commercial Linkage */}
-          <Card className="rounded-xl shadow-2xs">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Traceability References
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between p-2 rounded bg-muted/30 border">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <PackageCheck className="size-3.5" /> Source Receipt:
-                  </span>
-                  {unit.sourceReceiptId ? (
-                    <Link
-                      href={`/receiving/${unit.sourceReceiptId}`}
-                      className="font-mono font-medium text-primary hover:underline flex items-center gap-1"
-                    >
-                      {unit.sourceReceiptNumber || 'View Receipt'}
-                      <ExternalLink className="size-2.5" />
-                    </Link>
-                  ) : (
-                    <span className="capitalize">{unit.sourceType.toLowerCase()}</span>
-                  )}
-                </div>
-
-                {unit.currentFulfillmentId ? (
-                  <div className="flex items-center justify-between p-2 rounded bg-muted/30 border">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <Truck className="size-3.5" /> Fulfillment:
-                    </span>
-                    <Link
-                      href={`/fulfillments?selected=${unit.currentFulfillmentId}`}
-                      className="font-mono font-medium text-primary hover:underline flex items-center gap-1"
-                    >
-                      {unit.currentFulfillmentNumber || 'View Fulfillment'}
-                      <ExternalLink className="size-2.5" />
-                    </Link>
-                  </div>
-                ) : null}
-
-                {unit.currentOrderId ? (
-                  <div className="flex items-center justify-between p-2 rounded bg-muted/30 border">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <ShoppingBag className="size-3.5" /> Order:
-                    </span>
-                    <Link
-                      href={`/orders/${unit.currentOrderId}`}
-                      className="font-mono font-medium text-primary hover:underline flex items-center gap-1"
-                    >
-                      {unit.currentOrderNumber || 'View Order'}
-                      <ExternalLink className="size-2.5" />
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
+      {error ? (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-warning/25 bg-warning/10 p-3 text-sm">
+          <p className="flex items-start gap-2 text-foreground">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+            {error} The last loaded state is still shown.
+          </p>
+          <Button variant="outline" size="xs" onClick={() => void loadUnitData()}>
+            Retry
+          </Button>
         </div>
+      ) : null}
+
+      <PageSection>
+        <UnitOverviewPanels unit={unit} />
       </PageSection>
 
-      {/* QC & Repair History Section */}
       <PageSection>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Quality Control Inspections */}
-          <div className="rounded-xl border bg-card p-4 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between border-b pb-2.5">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <ShieldCheck className="size-4 text-primary" />
-                <span>Quality Control Inspections ({inspections.length})</span>
-              </h3>
-              {canInspect ? (
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() => setInspectOpen(true)}
-                  className="gap-1"
-                >
-                  <ShieldCheck className="size-3" /> New Inspection
-                </Button>
-              ) : null}
-            </div>
-
-            {inspections.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">
-                No inspection records logged yet. Item is currently {unit.status.replaceAll('_', ' ')}.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {inspections.map((insp) => (
-                  <div key={insp.id} className="p-3 rounded-lg border bg-muted/20 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <UnitConditionBadge condition={insp.conditionResult} short />
-                        <span className="font-mono text-[11px] text-muted-foreground">
-                          {insp.inspectionNumber}
-                        </span>
-                      </div>
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        {new Intl.DateTimeFormat('en-BD', {
-                          dateStyle: 'short',
-                          timeStyle: 'short',
-                        }).format(new Date(insp.createdAt))}
-                      </span>
-                    </div>
-
-                    {insp.defectDescription ? (
-                      <p className="rounded border border-warning/30 bg-warning/10 p-2 text-xs text-foreground">
-                        <strong>Defect:</strong> {insp.defectDescription}
-                      </p>
-                    ) : null}
-
-                    {insp.notes ? (
-                      <p className="text-[11px] text-muted-foreground italic">
-                        Notes: {insp.notes}
-                      </p>
-                    ) : null}
-
-                    <div className="flex items-center justify-between pt-1 border-t text-[11px] text-muted-foreground">
-                      <span>Stage: {insp.inspectionStage.replaceAll('_', ' ')}</span>
-                      <span>Outcome: {insp.inspectionOutcome.replaceAll('_', ' ')}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Repair & Cleaning Records */}
-          <div className="rounded-xl border bg-card p-4 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between border-b pb-2.5">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Wrench className="size-4 text-warning" />
-                <span>Repair & Tailoring Records ({repairs.length})</span>
-              </h3>
-              {canRequestRepair ? (
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() => {
-                    setRepairMode('request');
-                    setRepairOpen(true);
-                  }}
-                  className="gap-1"
-                >
-                  <Wrench className="size-3" /> Log Repair
-                </Button>
-              ) : null}
-            </div>
-
-            {repairs.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-4 text-center">
-                No repairs recorded for this unit.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {repairs.map((rep) => (
-                  <div key={rep.id} className="p-3 rounded-lg border bg-muted/20 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono font-semibold text-foreground">
-                        {rep.repairNumber}
-                      </span>
-                      <StatusBadge status={rep.repairStatus} />
-                    </div>
-
-                    <p className="text-xs text-foreground">
-                      <strong>Defect:</strong> {rep.defectDescription}
-                    </p>
-
-                    {rep.actionPerformed ? (
-                      <p className="text-xs text-foreground">
-                        <strong>Work Done:</strong> {rep.actionPerformed}
-                      </p>
-                    ) : null}
-
-                    <div className="flex items-center justify-between pt-1 border-t text-[11px] text-muted-foreground">
-                      <span>Technician: {rep.technicianName || 'In-house tailoring'}</span>
-                      {rep.costAmount ? (
-                        <span className="font-mono font-semibold text-foreground">
-                          Cost: ৳{rep.costAmount}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <UnitQualityHistory
+          inspections={inspections}
+          repairs={repairs}
+          inspectionError={sectionErrors.inspections}
+          repairError={sectionErrors.repairs}
+          canInspect={canInspect}
+          canRequestRepair={canRequestRepair}
+          currentStatus={unit.status}
+          onInspect={() => setInspectOpen(true)}
+          onRequestRepair={() => openRepair('request')}
+        />
       </PageSection>
 
-      {/* Lifecycle Timeline Section */}
       <PageSection>
-        <div className="rounded-xl border bg-card p-6 shadow-2xs space-y-4">
-          <div className="border-b pb-3 flex items-center justify-between">
+        <section className="space-y-4 rounded-xl border bg-card p-4 shadow-2xs sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-3">
             <div>
-              <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Clock className="size-4 text-primary" />
-                <span>Chronological Traceability History</span>
-              </h3>
+              <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <Clock className="size-4 text-primary" aria-hidden="true" /> Lifecycle evidence
+              </h2>
               <p className="text-xs text-muted-foreground">
-                Audited timeline of physical receptions, QC grades, movements, repairs, and allocations.
+                Audited reception, inspection, movement, repair, allocation, and custody events.
               </p>
             </div>
             <Button
               variant="outline"
               size="xs"
               onClick={() => void loadUnitData()}
-              className="gap-1"
+              disabled={refreshing}
             >
-              <RefreshCw className="size-3" /> Refresh
+              <RefreshCw className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
+              {refreshing ? 'Refreshing…' : 'Refresh'}
             </Button>
           </div>
 
-          <UnitEventTimeline events={events} />
-        </div>
+          {sectionErrors.events ? (
+            <div className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning/10 p-3 text-xs text-foreground">
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
+              <p>{sectionErrors.events} Use Refresh to retry this evidence feed.</p>
+            </div>
+          ) : (
+            <UnitEventTimeline events={events} />
+          )}
+        </section>
       </PageSection>
 
-      {/* Modals & Dialogs */}
-      <UnitBarcodeModal
-        open={printOpen}
-        onOpenChange={setPrintOpen}
-        units={[unit]}
-      />
+      <UnitBarcodeModal open={printOpen} onOpenChange={setPrintOpen} units={[unit]} />
 
       {canTransfer ? (
-        <UnitMoveDialog
-          open={moveOpen}
-          onOpenChange={setMoveOpen}
-          units={[unit]}
-          onSuccess={() => void loadUnitData()}
-        />
+        <UnitMoveDialog open={moveOpen} onOpenChange={setMoveOpen} units={[unit]} />
       ) : null}
-
       {canManage ? (
         <UnitInspectDialog
           open={inspectOpen}
@@ -614,7 +357,6 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
           onSuccess={() => void loadUnitData()}
         />
       ) : null}
-
       {canManage ? (
         <UnitRepairDialog
           open={repairOpen}
@@ -625,7 +367,6 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
           onSuccess={() => void loadUnitData()}
         />
       ) : null}
-
       {canReleaseUnits ? (
         <UnitReleaseDialog
           open={releaseOpen}
@@ -634,7 +375,6 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
           onSuccess={() => void loadUnitData()}
         />
       ) : null}
-
       {canWriteOffUnits ? (
         <UnitWriteOffDialog
           open={writeOffOpen}
