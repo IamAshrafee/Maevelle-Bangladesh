@@ -16,6 +16,7 @@ import {
   expireInventoryReservations,
   getInventoryStats,
   getInventoryItemDetail,
+  getStocktakeWorkspace,
   listInventoryItemChoices,
   listInventoryBalances,
   listInventoryHistory,
@@ -1090,6 +1091,52 @@ describe('ledger-backed inventory', () => {
         idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('previews post-snapshot movement and current variance before posting', async () => {
+    const f = await fixture();
+    const opened = await opening(f, '5');
+    const stocktake = await startStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+    });
+    await recordStocktakeCount(database.db, {
+      organizationId: f.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: opened.inventoryItemId,
+      countedQuantity: '5',
+      expectedVersion: stocktake.version,
+    });
+    await submitStocktakeForReview(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
+    });
+    await adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.main.id,
+      condition: 'SELLABLE',
+      quantityDelta: '2',
+      reasonCode: 'FOUND_STOCK',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const workspace = await getStocktakeWorkspace(
+      database.db,
+      f.organizationId,
+      stocktake.stocktakeId,
+    );
+
+    expect(workspace?.lines[0]).toMatchObject({
+      expectedQuantityAtSnapshot: '5',
+      movementsAfterSnapshot: '2',
+      finalExpectedQuantity: '7',
+      varianceQuantity: '-2',
+    });
   });
 
   it('reconciles a stocktake by physical condition rather than forcing variance into sellable stock', async () => {

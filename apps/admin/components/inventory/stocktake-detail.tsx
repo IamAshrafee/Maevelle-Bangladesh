@@ -13,14 +13,18 @@ import {
   Package,
   Plus,
   RefreshCw,
-  RotateCcw,
   Search,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
 import type { CatalogVariantChoiceDto, StocktakeDetailDto } from '@maevelle/contracts';
 
-import { inventoryRequest, formatInventoryNumber, formatInventoryDate } from '@/lib/inventory/api';
+import {
+  InventoryRequestError,
+  inventoryRequest,
+  formatInventoryNumber,
+  formatInventoryDate,
+} from '@/lib/inventory/api';
 import {
   InventoryStatCards,
   InventoryEmptyState,
@@ -55,6 +59,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { StatusBadge } from '@/components/status-badge';
 
 // ─── Types & Constants ────────────────────────────────────────────────────────
 
@@ -67,36 +72,7 @@ type FilterTab = 'all' | 'discrepancies' | 'uncounted' | 'matched';
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
 function StocktakeStatusBadge({ status }: { status: string }) {
-  if (status === 'POSTED') {
-    return (
-      <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1">
-        <Check className="size-3" />
-        Reconciled
-      </Badge>
-    );
-  }
-  if (status === 'REVIEW') {
-    return (
-      <Badge variant="outline" className="border-amber-500 text-amber-600 bg-amber-50/50 gap-1">
-        <Clock className="size-3" />
-        Pending Review
-      </Badge>
-    );
-  }
-  if (status === 'CANCELLED') {
-    return (
-      <Badge variant="secondary" className="text-muted-foreground gap-1">
-        <X className="size-3" />
-        Cancelled
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="secondary" className="bg-primary/10 text-primary gap-1">
-      <RotateCcw className="size-3" />
-      In Progress
-    </Badge>
-  );
+  return <StatusBadge status={status} />;
 }
 
 // ─── Condition Breakdown Dialog ───────────────────────────────────────────────
@@ -215,8 +191,7 @@ function ConditionBreakdownModal({
 
           <div className="space-y-3 divide-y divide-border/50">
             {conditions.map((condition) => {
-              const expectedConditionQty =
-                line.expectedQuantitiesByCondition?.[condition] ?? '0';
+              const expectedConditionQty = line.expectedQuantitiesByCondition?.[condition] ?? '0';
               const val = localValues[condition] ?? '';
 
               return (
@@ -256,21 +231,26 @@ function ConditionBreakdownModal({
           <div
             className={`flex items-center justify-between rounded-md p-2.5 text-xs ${
               isBalanced
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : 'bg-amber-50 text-amber-800 border border-amber-200'
+                ? 'border border-success/20 bg-success/10 text-foreground'
+                : 'border border-warning/20 bg-warning/10 text-foreground'
             }`}
           >
             <div className="flex items-center gap-1.5 font-medium">
               {isBalanced ? (
                 <>
-                  <CheckCircle2 className="size-4 text-emerald-600" />
-                  Allocated: {formatInventoryNumber(currentSum)} / {formatInventoryNumber(targetNumber)} (Balanced)
+                  <CheckCircle2 className="size-4 text-success" />
+                  Allocated: {formatInventoryNumber(currentSum)} /{' '}
+                  {formatInventoryNumber(targetNumber)} (Balanced)
                 </>
               ) : (
                 <>
-                  <AlertCircle className="size-4 text-amber-600" />
-                  Allocated: {formatInventoryNumber(currentSum)} / {formatInventoryNumber(targetNumber)}{' '}
-                  ({remaining > 0 ? `${formatInventoryNumber(remaining)} unassigned` : `${formatInventoryNumber(Math.abs(remaining))} over-allocated`})
+                  <AlertCircle className="size-4 text-warning" />
+                  Allocated: {formatInventoryNumber(currentSum)} /{' '}
+                  {formatInventoryNumber(targetNumber)} (
+                  {remaining > 0
+                    ? `${formatInventoryNumber(remaining)} unassigned`
+                    : `${formatInventoryNumber(Math.abs(remaining))} over-allocated`}
+                  )
                 </>
               )}
             </div>
@@ -280,7 +260,7 @@ function ConditionBreakdownModal({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 text-xs text-amber-900 hover:text-amber-950 px-2"
+                className="h-6 px-2 text-xs text-warning hover:text-warning"
                 onClick={handleAssignRemainingToSellable}
               >
                 Assign to Sellable
@@ -328,6 +308,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
   const [successMessage, setSuccessMessage] = useState('');
   const [isPosting, setIsPosting] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [postConfirmOpen, setPostConfirmOpen] = useState(false);
 
   // Version concurrency ref to prevent stale version race conditions
   const currentVersionRef = useRef<number>(1);
@@ -341,8 +322,12 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
   const [isAddingFound, setIsAddingFound] = useState(false);
 
   // Condition breakdown modal
-  const [conditionModalLine, setConditionModalLine] = useState<EnrichedStocktake['lines'][number] | null>(null);
-  const [serializedCountLine, setSerializedCountLine] = useState<EnrichedStocktake['lines'][number] | null>(null);
+  const [conditionModalLine, setConditionModalLine] = useState<
+    EnrichedStocktake['lines'][number] | null
+  >(null);
+  const [serializedCountLine, setSerializedCountLine] = useState<
+    EnrichedStocktake['lines'][number] | null
+  >(null);
 
   // Count states
   const [counts, setCounts] = useState<Record<string, string>>({});
@@ -359,8 +344,9 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
   const [copied, setCopied] = useState(false);
 
   // Load stocktake data
-  const reload = async () => {
+  const reload = async (): Promise<boolean> => {
     try {
+      setError(null);
       const res = await inventoryRequest<{ data: EnrichedStocktake }>(
         `/inventory/stocktakes/${stocktakeId}`,
       );
@@ -380,8 +366,10 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
       }
       setCounts(persisted);
       setConditionCounts(condPersisted);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reload stocktake data.');
+      return false;
     }
   };
 
@@ -463,12 +451,16 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
       const errorMsg = err instanceof Error ? err.message : 'Could not save count.';
 
       // Reload concurrent work for review; never overwrite it automatically.
-      if (errorMsg.includes('STALE_VERSION') || errorMsg.includes('no longer current')) {
+      if (
+        (err instanceof InventoryRequestError && err.code === 'STALE_VERSION') ||
+        errorMsg.includes('no longer current')
+      ) {
         try {
           await reload();
           setSaveErrors((previous) => ({
             ...previous,
-            [inventoryItemId]: 'Another operator changed this count. The latest values are loaded; review them before saving again.',
+            [inventoryItemId]:
+              'Another operator changed this count. The latest values are loaded; review them before saving again.',
           }));
         } catch (retryErr) {
           setSaveErrors((p) => ({
@@ -502,13 +494,27 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
         method: 'POST',
         headers: { 'idempotency-key': `post-${stocktakeId}-${currentVersionRef.current}` },
       });
-      setSuccessMessage('Stocktake posted successfully. Inventory balances have been reconciled in the ledger.');
+      setSuccessMessage(
+        'Stocktake posted successfully. Inventory balances have been reconciled in the ledger.',
+      );
+      setPostConfirmOpen(false);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Stocktake could not be posted.');
+      if (err instanceof InventoryRequestError && err.status === 409) {
+        setPostConfirmOpen(false);
+        await reload();
+      }
     } finally {
       setIsPosting(false);
     }
+  };
+
+  const preparePostReview = async () => {
+    setIsTransitioning(true);
+    const refreshed = await reload();
+    setIsTransitioning(false);
+    if (refreshed) setPostConfirmOpen(true);
   };
 
   // Submit for review or cancel
@@ -549,7 +555,9 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
         );
         setVariants(response.data);
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'Catalog variants could not be loaded.');
+        setError(
+          caught instanceof Error ? caught.message : 'Catalog variants could not be loaded.',
+        );
       } finally {
         setIsLoadingVariants(false);
       }
@@ -564,12 +572,16 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     try {
       await inventoryRequest(`/inventory/stocktakes/${stocktakeId}/found-lines`, {
         method: 'POST',
-        headers: { 'idempotency-key': `found-${stocktakeId}-${currentVersionRef.current}-${foundVariantId}` },
+        headers: {
+          'idempotency-key': `found-${stocktakeId}-${currentVersionRef.current}-${foundVariantId}`,
+        },
         body: JSON.stringify({ variantId: foundVariantId, version: currentVersionRef.current }),
       });
       setFoundOpen(false);
       setFoundVariantId('');
-      setSuccessMessage('Found SKU added with expected snapshot quantity of 0. Enter its physical count below.');
+      setSuccessMessage(
+        'Found SKU added with expected snapshot quantity of 0. Enter its physical count below.',
+      );
       await reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Found SKU could not be added.');
@@ -635,9 +647,10 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
     const countedNumber = hasCount ? Number(rawCounted) : null;
     const movements = Number(line.movementsAfterSnapshot || '0');
     const snapshotExpected = Number(line.expectedQuantityAtSnapshot);
-    const finalExpected = line.finalExpectedQuantity !== null
-      ? Number(line.finalExpectedQuantity)
-      : snapshotExpected + movements;
+    const finalExpected =
+      line.finalExpectedQuantity !== null
+        ? Number(line.finalExpectedQuantity)
+        : snapshotExpected + movements;
 
     let variance: number | null = null;
     if (line.varianceQuantity !== null) {
@@ -665,6 +678,11 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
 
   const discrepantCount = discrepantLines.length;
   const matchedCount = matchedLines.length;
+  const movementAffectedCount = linesWithCalculatedVariance.filter(
+    (line) => Math.abs(line.movements) > 0.000001,
+  ).length;
+  const gainCount = discrepantLines.filter((line) => (line.variance ?? 0) > 0).length;
+  const lossCount = discrepantLines.filter((line) => (line.variance ?? 0) < 0).length;
 
   // Filter lines by search and active tab
   const filteredLines = linesWithCalculatedVariance.filter((l) => {
@@ -786,12 +804,12 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
               title="Copy session number"
             >
               <span>{stocktake.stocktakeNumber}</span>
-              {copied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+              {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
             </button>
 
             {stocktake.status === 'POSTED' && stocktake.postedInventoryTransactionId && (
               <Link
-                href={`/admin/inventory/adjustments`}
+                href="/inventory/adjustments"
                 className="inline-flex items-center gap-1 text-primary hover:underline"
               >
                 <span>View Ledger Adjustment</span>
@@ -817,14 +835,17 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
               </Button>
 
               <AlertDialog>
-                <AlertDialogTrigger render={<Button variant="outline" size="sm" disabled={isTransitioning} />}>
+                <AlertDialogTrigger
+                  render={<Button variant="outline" size="sm" disabled={isTransitioning} />}
+                >
                   Cancel Stocktake
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Cancel this stocktake?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Recorded counts remain as historical audit notes, but no inventory balances will be changed.
+                      Recorded counts remain as historical audit notes, but no inventory balances
+                      will be changed.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -864,14 +885,19 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
             <>
               {/* Backend supports cancellation in REVIEW state */}
               <AlertDialog>
-                <AlertDialogTrigger render={<Button variant="outline" size="sm" disabled={isTransitioning || isPosting} />}>
+                <AlertDialogTrigger
+                  render={
+                    <Button variant="outline" size="sm" disabled={isTransitioning || isPosting} />
+                  }
+                >
                   Cancel Stocktake
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Cancel this stocktake?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will abort the stocktake without applying any adjustments. Recorded counts will be preserved as audit records.
+                      This will abort the stocktake without applying any adjustments. Recorded
+                      counts will be preserved as audit records.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -886,26 +912,30 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                 </AlertDialogContent>
               </AlertDialog>
 
-              <AlertDialog>
-                <AlertDialogTrigger render={<Button size="sm" disabled={isPosting || isTransitioning} className="gap-1.5" />}>
-                  {isPosting ? (
-                    <>
-                      <RefreshCw className="size-3.5 animate-spin" />
-                      Posting…
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="size-3.5" />
-                      Post Stocktake
-                    </>
-                  )}
-                </AlertDialogTrigger>
+              <Button
+                size="sm"
+                disabled={isPosting || isTransitioning}
+                onClick={() => void preparePostReview()}
+                className="gap-1.5"
+              >
+                {isTransitioning ? (
+                  <RefreshCw className="size-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="size-3.5" />
+                )}
+                Review and post
+              </Button>
+              <AlertDialog open={postConfirmOpen} onOpenChange={setPostConfirmOpen}>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Post this stocktake to ledger?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Posting will finalize all counted quantities and write authoritative inventory adjustments
-                      to the ledger for all {discrepantCount} variance line{discrepantCount === 1 ? '' : 's'}. This cannot be undone.
+                      This refreshed preview contains {discrepantCount} variance line
+                      {discrepantCount === 1 ? '' : 's'} ({gainCount} gain, {lossCount} loss) and{' '}
+                      {movementAffectedCount} line{movementAffectedCount === 1 ? '' : 's'} affected
+                      by net movement after the snapshot. Posting re-locks current balances and
+                      recomputes every variance before writing the authoritative ledger adjustment.
+                      It cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -920,7 +950,10 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           )}
 
           {stocktake.status === 'POSTED' && (
-            <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 py-1.5 px-3">
+            <Badge
+              variant="outline"
+              className="border-success/20 bg-success/10 px-3 py-1.5 text-success"
+            >
               Reconciliation Completed on {formatInventoryDate(stocktake.postedAt?.toString())}
             </Badge>
           )}
@@ -930,6 +963,27 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
       {/* Operational Feedback */}
       {error && <InventoryFeedback message={error} isError />}
       {successMessage && <InventoryFeedback message={successMessage} />}
+
+      {stocktake.status === 'REVIEW' ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-info/25 bg-info/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-foreground">Live review preview</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Net movement and variance compare the frozen snapshot and saved physical count with
+              the latest Location balance. Posting still locks and recomputes these values, so use
+              Review and post to refresh once more before confirmation.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void reload()}
+            disabled={isTransitioning || isPosting}
+          >
+            <RefreshCw aria-hidden="true" /> Refresh preview
+          </Button>
+        </div>
+      ) : null}
 
       {/* Reusable Metric Stat Cards */}
       <InventoryStatCards stats={statsData} />
@@ -1056,7 +1110,11 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                       const rawCounted = counts[line.inventoryItemId] ?? '';
                       const lineConditions = conditionCounts[line.inventoryItemId] ?? {};
                       const hasSplit = Object.values(lineConditions).some(
-                        (v) => v !== undefined && v !== '' && Number(v) > 0 && Number(v) !== Number(rawCounted),
+                        (v) =>
+                          v !== undefined &&
+                          v !== '' &&
+                          Number(v) > 0 &&
+                          Number(v) !== Number(rawCounted),
                       );
 
                       return (
@@ -1092,9 +1150,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                             <td className="py-3 px-3 text-right tabular-nums text-xs whitespace-nowrap">
                               {line.movements !== 0 ? (
                                 <span
-                                  className={
-                                    line.movements > 0 ? 'text-emerald-600' : 'text-amber-600'
-                                  }
+                                  className={line.movements > 0 ? 'text-success' : 'text-warning'}
                                 >
                                   {line.movements > 0 ? '+' : ''}
                                   {formatInventoryNumber(line.movements)}
@@ -1130,10 +1186,12 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                                     placeholder="0"
                                     disabled={stocktake.status !== 'COUNTING' || isSaving}
                                     value={rawCounted}
-                                    onChange={(e) => setCounts((prev) => ({
-                                      ...prev,
-                                      [line.inventoryItemId]: e.target.value,
-                                    }))}
+                                    onChange={(e) =>
+                                      setCounts((prev) => ({
+                                        ...prev,
+                                        [line.inventoryItemId]: e.target.value,
+                                      }))
+                                    }
                                     onBlur={() => {
                                       const v = counts[line.inventoryItemId];
                                       if (v !== undefined) void saveCount(line.inventoryItemId, v);
@@ -1142,7 +1200,8 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                                       if (e.key === 'Enter') {
                                         e.preventDefault();
                                         const v = counts[line.inventoryItemId];
-                                        if (v !== undefined) void saveCount(line.inventoryItemId, v);
+                                        if (v !== undefined)
+                                          void saveCount(line.inventoryItemId, v);
                                       }
                                     }}
                                     className="h-8 w-24 text-right font-mono text-sm tabular-nums"
@@ -1153,7 +1212,9 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                                     size="sm"
                                     onClick={() => setConditionModalLine(line)}
                                     className={`h-8 gap-1 px-2 text-xs ${
-                                      hasSplit ? 'border border-primary/20 text-primary' : 'text-muted-foreground'
+                                      hasSplit
+                                        ? 'border border-primary/20 text-primary'
+                                        : 'text-muted-foreground'
                                     }`}
                                     title="Split into Damaged, Quarantine, or Inspection"
                                   >
@@ -1175,7 +1236,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                               <span
                                 className={
                                   line.variance > 0
-                                    ? 'text-emerald-600 font-semibold'
+                                    ? 'text-success font-semibold'
                                     : 'text-destructive font-semibold'
                                 }
                               >
@@ -1193,15 +1254,19 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                                 Saving…
                               </span>
                             ) : isSaved ? (
-                              <span className="text-xs text-emerald-600 flex items-center justify-center gap-1 font-medium">
+                              <span className="flex items-center justify-center gap-1 text-xs font-medium text-success">
                                 <Check className="size-3.5" />
                                 Saved
                               </span>
                             ) : line.hasCount ? (
-                              <Badge variant="outline" className="text-xs py-0 h-5 text-emerald-700 bg-emerald-50/60 border-emerald-200">
+                              <Badge
+                                variant="outline"
+                                className="h-5 border-success/20 bg-success/10 py-0 text-xs text-success"
+                              >
                                 Counted
                               </Badge>
-                            ) : stocktake.status === 'COUNTING' && line.trackingMode !== 'SERIAL' ? (
+                            ) : stocktake.status === 'COUNTING' &&
+                              line.trackingMode !== 'SERIAL' ? (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1231,7 +1296,11 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                   const rawCounted = counts[line.inventoryItemId] ?? '';
                   const lineConditions = conditionCounts[line.inventoryItemId] ?? {};
                   const hasSplit = Object.values(lineConditions).some(
-                    (v) => v !== undefined && v !== '' && Number(v) > 0 && Number(v) !== Number(rawCounted),
+                    (v) =>
+                      v !== undefined &&
+                      v !== '' &&
+                      Number(v) > 0 &&
+                      Number(v) !== Number(rawCounted),
                   );
 
                   return (
@@ -1253,7 +1322,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                             variant={line.variance === 0 ? 'outline' : 'secondary'}
                             className={`tabular-nums ${
                               line.variance > 0
-                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                ? 'border-success/20 bg-success/10 text-success'
                                 : line.variance < 0
                                   ? 'text-destructive bg-destructive/10'
                                   : 'text-muted-foreground'
@@ -1269,13 +1338,22 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                       <div className="grid grid-cols-2 gap-2 text-xs bg-muted/40 p-2 rounded-lg">
                         <div>
                           <span className="text-muted-foreground">Expected: </span>
-                          <span className="font-medium">{formatInventoryNumber(line.expectedQuantityAtSnapshot)}</span>
+                          <span className="font-medium">
+                            {formatInventoryNumber(line.expectedQuantityAtSnapshot)}
+                          </span>
                         </div>
                         {line.movements !== 0 && (
                           <div>
                             <span className="text-muted-foreground">Net Moved: </span>
-                            <span className={line.movements > 0 ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
-                              {line.movements > 0 ? '+' : ''}{formatInventoryNumber(line.movements)}
+                            <span
+                              className={
+                                line.movements > 0
+                                  ? 'font-medium text-success'
+                                  : 'font-medium text-warning'
+                              }
+                            >
+                              {line.movements > 0 ? '+' : ''}
+                              {formatInventoryNumber(line.movements)}
                             </span>
                           </div>
                         )}
@@ -1334,9 +1412,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
                         </div>
                       </div>
 
-                      {saveError && (
-                        <p className="text-xs text-destructive">{saveError}</p>
-                      )}
+                      {saveError && <p className="text-xs text-destructive">{saveError}</p>}
                     </div>
                   );
                 })}
@@ -1348,7 +1424,8 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           {stocktake.status === 'COUNTING' && totalCount > 0 && !allCounted && (
             <div className="px-4 py-3 text-xs text-muted-foreground border-t bg-muted/20 flex items-center justify-between">
               <span>
-                {uncountedCount} item{uncountedCount === 1 ? '' : 's'} remaining to count before submitting for review.
+                {uncountedCount} item{uncountedCount === 1 ? '' : 's'} remaining to count before
+                submitting for review.
               </span>
               <span className="font-medium text-foreground">{progressPct}% complete</span>
             </div>
@@ -1365,8 +1442,8 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
               Add Found SKU
             </DialogTitle>
             <DialogDescription>
-              Add inventory physically present at this location but missing from the initial snapshot.
-              It starts with an expected count of 0.
+              Add inventory physically present at this location but missing from the initial
+              snapshot. It starts with an expected count of 0.
             </DialogDescription>
           </DialogHeader>
 
@@ -1459,8 +1536,12 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
           if (!open) setConditionModalLine(null);
         }}
         line={conditionModalLine}
-        currentCounted={conditionModalLine ? counts[conditionModalLine.inventoryItemId] ?? '0' : '0'}
-        conditionValues={conditionModalLine ? conditionCounts[conditionModalLine.inventoryItemId] ?? {} : {}}
+        currentCounted={
+          conditionModalLine ? (counts[conditionModalLine.inventoryItemId] ?? '0') : '0'
+        }
+        conditionValues={
+          conditionModalLine ? (conditionCounts[conditionModalLine.inventoryItemId] ?? {}) : {}
+        }
         onSave={async (itemId, total, conds) => {
           setCounts((prev) => ({ ...prev, [itemId]: total }));
           setConditionCounts((prev) => ({ ...prev, [itemId]: conds }));
@@ -1477,10 +1558,13 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
         disabled={stocktake.status !== 'COUNTING'}
         onSave={async (units) => {
           if (!serializedCountLine) return;
-          const conditionTotals = units.reduce<Partial<Record<Condition, string>>>((totals, unit) => {
-            totals[unit.condition] = String(Number(totals[unit.condition] ?? '0') + 1);
-            return totals;
-          }, {});
+          const conditionTotals = units.reduce<Partial<Record<Condition, string>>>(
+            (totals, unit) => {
+              totals[unit.condition] = String(Number(totals[unit.condition] ?? '0') + 1);
+              return totals;
+            },
+            {},
+          );
           const total = String(units.length);
           setCounts((current) => ({
             ...current,
@@ -1490,12 +1574,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
             ...current,
             [serializedCountLine.inventoryItemId]: conditionTotals,
           }));
-          await saveCount(
-            serializedCountLine.inventoryItemId,
-            total,
-            conditionTotals,
-            units,
-          );
+          await saveCount(serializedCountLine.inventoryItemId, total, conditionTotals, units);
           await reload();
         }}
       />
