@@ -45,6 +45,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
       status: 'AVAILABLE',
       condition: 'GRADE_A',
       locationId: 'loc-1',
+      attention: 'REPAIR',
     });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -57,6 +58,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     expect(url).toContain('status=AVAILABLE');
     expect(url).toContain('condition=GRADE_A');
     expect(url).toContain('locationId=loc-1');
+    expect(url).toContain('attention=REPAIR');
 
     expect(result.data).toHaveLength(1);
     expect(result.data[0]?.unitCode).toBe('MVU-000101');

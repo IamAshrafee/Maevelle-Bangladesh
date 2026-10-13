@@ -161,6 +161,7 @@ export async function listInventoryUnits(query: ListUnitsQuery = {}): Promise<Li
   if (query.status) params.set('status', query.status);
   if (query.sourceReceiptId) params.set('sourceReceiptId', query.sourceReceiptId);
   if (query.packageReference?.trim()) params.set('packageReference', query.packageReference.trim());
+  if (query.attention) params.set('attention', query.attention);
 
   const queryString = params.toString();
   const endpoint = `/admin/inventory/units${queryString ? `?${queryString}` : ''}`;
