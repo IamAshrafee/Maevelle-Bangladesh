@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Printer, X, Check, Copy } from 'lucide-react';
+import React, { useState } from 'react';
+import { Printer, Check, Copy, Loader2, AlertCircle } from 'lucide-react';
 import type { InventoryUnitDto } from '@maevelle/contracts';
 import {
   Dialog,
@@ -46,12 +46,80 @@ const LABEL_SIZES: Record<
   },
 };
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModalProps) {
   const [sizePreset, setSizePreset] = useState<LabelSizePreset>('standard');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    if (!units.length || printing) return;
+    setPrinting(true);
+    setPrintError(null);
+    let frame: HTMLIFrameElement | null = null;
+    try {
+      const labels = await Promise.all(
+        units.map(async (unit) => {
+          const response = await fetch(getUnitBarcodeSvgUrl(unit.id), { credentials: 'include' });
+          if (!response.ok) throw new Error(`Could not load the barcode for ${unit.unitCode}.`);
+          const svg = await response.text();
+          return `<section class="label">
+            <header><strong>MAEVELLE</strong><span>${escapeHtml(unit.sku)}</span></header>
+            <div class="product"><strong>${escapeHtml(unit.productTitle)}</strong>${unit.optionSummary ? `<small>${escapeHtml(unit.optionSummary)}</small>` : ''}</div>
+            <div class="barcode">${svg}</div>
+            <footer>${escapeHtml(unit.unitCode)}</footer>
+          </section>`;
+        }),
+      );
+
+      frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.position = 'fixed';
+      frame.style.width = '0';
+      frame.style.height = '0';
+      frame.style.border = '0';
+      document.body.append(frame);
+      const printDocument = frame.contentDocument;
+      if (!printDocument) throw new Error('The browser could not prepare the label document.');
+      printDocument.open();
+      printDocument.write(`<!doctype html><html><head><meta charset="utf-8"><title>Maevelle unit labels</title><style>
+        @page { size: ${activePreset.widthMm}mm ${activePreset.heightMm}mm; margin: 0; }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; font-family: Arial, sans-serif; color: #000; background: #fff; }
+        .label { width: ${activePreset.widthMm}mm; height: ${activePreset.heightMm}mm; padding: 2mm; display: flex; flex-direction: column; align-items: center; justify-content: space-between; overflow: hidden; break-after: page; page-break-after: always; }
+        .label:last-child { break-after: auto; page-break-after: auto; }
+        header { width: 100%; display: flex; justify-content: space-between; gap: 2mm; border-bottom: 0.2mm solid #ddd; padding-bottom: 0.5mm; font-size: 7pt; }
+        header strong { letter-spacing: 0.08em; }
+        header span { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
+        .product { width: 100%; text-align: center; overflow: hidden; font-size: 7.5pt; line-height: 1.1; }
+        .product strong, .product small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .product small { margin-top: 0.3mm; color: #444; font-size: 6.5pt; }
+        .barcode { width: 100%; min-height: 9mm; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .barcode svg { width: 100%; height: 9mm; }
+        footer { width: 100%; border-top: 0.2mm solid #ddd; padding-top: 0.5mm; text-align: center; font: bold 8pt monospace; letter-spacing: 0.08em; }
+      </style></head><body>${labels.join('')}</body></html>`);
+      printDocument.close();
+      const printWindow = frame.contentWindow;
+      if (!printWindow) throw new Error('The browser could not open the label print document.');
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
+      printWindow.focus();
+      printWindow.print();
+      window.setTimeout(() => frame?.remove(), 60_000);
+    } catch (error) {
+      frame?.remove();
+      setPrintError(error instanceof Error ? error.message : 'Could not prepare barcode labels.');
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const handleCopy = (code: string) => {
@@ -64,7 +132,7 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-w-2xl sm:max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="p-4 sm:p-6 border-b pb-4">
           <div className="flex items-center justify-between">
             <div>
@@ -95,6 +163,12 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
 
         {/* Printable & Preview Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/20">
+          {printError ? (
+            <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <span>{printError}</span>
+            </div>
+          ) : null}
           <div
             id="barcode-print-container"
             className="grid grid-cols-1 sm:grid-cols-2 gap-4 justify-items-center"
@@ -132,7 +206,6 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
 
                   {/* Barcode SVG */}
                   <div className="w-full h-11 flex items-center justify-center my-0.5 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={svgUrl}
                       alt={`Barcode for ${unit.unitCode}`}
@@ -147,7 +220,7 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
                       type="button"
                       onClick={() => handleCopy(unit.unitCode)}
                       className="print:hidden text-[9px] text-slate-500 hover:text-black inline-flex items-center gap-0.5"
-                      title="Copy code"
+                      aria-label={`Copy unit code ${unit.unitCode}`}
                     >
                       {copiedId === unit.unitCode ? (
                         <Check className="size-2.5 text-emerald-600" />
@@ -174,52 +247,17 @@ export function UnitBarcodeModal({ open, onOpenChange, units }: UnitBarcodeModal
             <Button
               variant="default"
               size="sm"
-              onClick={handlePrint}
+              onClick={() => void handlePrint()}
+              disabled={printing || units.length === 0}
               className="gap-1.5 shadow-2xs"
             >
-              <Printer className="size-3.5" />
-              <span>Print {units.length} {units.length === 1 ? 'Label' : 'Labels'}</span>
+              {printing ? <Loader2 className="size-3.5 animate-spin" /> : <Printer className="size-3.5" />}
+              <span>{printing ? 'Preparing…' : `Print ${units.length} ${units.length === 1 ? 'Label' : 'Labels'}`}</span>
             </Button>
           </div>
         </DialogFooter>
       </DialogContent>
 
-      {/* Scoped Print Styles */}
-      <style jsx global>{`
-        @media print {
-          @page {
-            margin: 0;
-            size: auto;
-          }
-          body {
-            background: white !important;
-          }
-          body * {
-            visibility: hidden;
-          }
-          #barcode-print-container,
-          #barcode-print-container * {
-            visibility: visible;
-          }
-          #barcode-print-container {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100vw !important;
-            height: auto !important;
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: wrap !important;
-            align-content: flex-start !important;
-            justify-content: flex-start !important;
-            gap: 4mm !important;
-            background: white !important;
-            padding: 4mm !important;
-            margin: 0 !important;
-            z-index: 99999 !important;
-          }
-        }
-      `}</style>
     </Dialog>
   );
 }
