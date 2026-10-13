@@ -312,6 +312,7 @@ export function registerInventoryRoutes(
       schema: {
         querystring: Type.Object({
           locationId: Type.Optional(Type.String()),
+          variantId: Type.Optional(Type.String({ format: 'uuid' })),
           search: Type.Optional(Type.String()),
           condition: Type.Optional(condition),
           availability: Type.Optional(
@@ -337,6 +338,7 @@ export function registerInventoryRoutes(
           active.organizationId,
           request.query as {
             locationId?: string;
+            variantId?: string;
             search?: string;
             condition?: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
             availability?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';

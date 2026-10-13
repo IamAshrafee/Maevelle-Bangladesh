@@ -163,7 +163,7 @@ Remaining in Batch 4:
 - Finish decomposing the legacy Location detail component onto shared Admin primitives.
 - Continue decomposing create/edit presentation into smaller shared field sections where doing so materially improves the workflow.
 
-#### Batch 5 — Transfer operations — IN PROGRESS
+#### Batch 5 — Transfer operations — IMPLEMENTATION COMPLETE
 
 - Rebuilt the Transfer queue with shared page/table/state primitives, capability-aware creation, responsive mobile cards, compact desktop rows, semantic statuses, route context, and requested/dispatched/received progress.
 - Added source and destination Location filters alongside status and transfer-number search. Pagination now uses the authoritative server `totalCount` instead of guessing that another page exists whenever the current page happens to contain 25 rows.
@@ -174,6 +174,9 @@ Remaining in Batch 4:
 - Bound Transfer draft, receipt, and discrepancy idempotency keys to the exact submitted payload. An unchanged retry reuses its key, while editing quantities, Unit IDs, conditions, reasons, or routing after a failed attempt creates a new command identity instead of triggering changed-payload key reuse.
 - Added explicit stale/conflict recovery to receipt, discrepancy, and draft editing. In-flight sheets cannot be dismissed accidentally; a conflict offers close-and-reload against current Transfer truth; draft edits can reload the latest version; and source-stock loading failures are no longer silently presented as “no stock.”
 - Aligned draft quantities with the platform's whole-unit Inventory contract and moved touched capability warnings to semantic tokens.
+- Replaced the capped 100-row draft preload with a debounced server-searched stock picker. The Inventory balance read model now supports an exact `variantId` lookup so edit and deep-link selections are revalidated against the chosen source without downloading the full stock catalogue.
+- Kept current availability visible at the decision point, disabled variants already used on another line, blocked submission until every restored selection is verified, and retained the server as the final stock authority.
+- Decomposed the create/edit surface into reusable routing, responsive line-row, and asynchronous stock-picker components. Desktop and mobile now share one line workflow instead of maintaining duplicated selectors and quantity controls.
 
 Verification for this slice:
 
@@ -181,10 +184,11 @@ Verification for this slice:
 - Database/API/Admin focused TypeScript and lint checks passed for the detail lifecycle changes.
 - One focused Inventory integration test passed for retry-safe Transfer cancellation and stale-transition rejection.
 - Focused Admin TypeScript and lint checks passed for draft save, partial serialized receipt, discrepancy closure, and Transfer detail integration.
+- Focused database, API, and Admin TypeScript checks plus focused lint passed for exact stock lookup and the searched transfer picker. No broad build or full suite was run for this UI-focused slice.
 
 Remaining in Batch 5:
 
-- Replace the draft item's capped 100-row source-stock preload with a server-searched/paginated picker, then finish decomposing the large create/edit form without losing the shared workflow.
+- Authenticated browser and owner operational review with representative large stock catalogues remains part of the module-wide closure gate.
 
 #### Batch 6 — Count operations — IN PROGRESS
 

@@ -7,12 +7,9 @@ import {
   Save,
   ArrowLeft,
   Plus,
-  Trash2,
   Loader2,
-  ArrowRight,
   Package,
   AlertTriangle,
-  Building2,
 } from 'lucide-react';
 import { z } from 'zod';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -22,24 +19,15 @@ import { InventoryRequestError, inventoryRequest } from '@/lib/inventory/api';
 import type {
   WarehouseLocationDto,
   InventoryBalanceDto,
-  PaginatedDto,
   WarehouseTransferDetailDto,
 } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { OperationalFeedback } from '@/components/operational-worklist';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { TransferLineRow } from '@/components/inventory/transfer-line-row';
+import { TransferRoutingCard } from '@/components/inventory/transfer-routing-card';
 
 const lineSchema = z.object({
   variantId: z.string().min(1, 'Item selection is required'),
@@ -97,9 +85,9 @@ export function TransferForm({
   // Data fetching state
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
-  const [isLoadingStock, setIsLoadingStock] = useState(false);
-  const [availableStock, setAvailableStock] = useState<InventoryBalanceDto[]>([]);
-  const [stockLoadError, setStockLoadError] = useState<string | null>(null);
+  const [selectedStockByVariant, setSelectedStockByVariant] = useState<
+    Record<string, InventoryBalanceDto>
+  >({});
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -144,16 +132,6 @@ export function TransferForm({
           location.id !== sourceLocationId,
       ),
     [locations, sourceLocationId],
-  );
-
-  const selectedSource = useMemo(
-    () => locations.find((l) => l.id === sourceLocationId),
-    [locations, sourceLocationId],
-  );
-
-  const selectedDestination = useMemo(
-    () => locations.find((l) => l.id === destinationLocationId),
-    [locations, destinationLocationId],
   );
 
   // Calculate totals
@@ -213,6 +191,9 @@ export function TransferForm({
             response.data.some((location) => location.id === initialSourceLocationId)
           ) {
             form.setValue('sourceLocationId', initialSourceLocationId);
+            if (initialVariantId) {
+              form.setValue('lines.0.variantId', initialVariantId, { shouldValidate: true });
+            }
           }
           setIsLoadingLocations(false);
         }
@@ -227,57 +208,7 @@ export function TransferForm({
     return () => {
       mounted = false;
     };
-  }, [form, initialSourceLocationId, transferId]);
-
-  // Fetch available transferable stock when source location changes
-  useEffect(() => {
-    let mounted = true;
-    if (!sourceLocationId) {
-      setAvailableStock([]);
-      return;
-    }
-
-    const fetchStock = async () => {
-      setIsLoadingStock(true);
-      setStockLoadError(null);
-      try {
-        const response = await inventoryRequest<{ data: PaginatedDto<InventoryBalanceDto> }>(
-          `/inventory/stock?locationId=${sourceLocationId}&availability=IN_STOCK&limit=100`,
-        );
-        if (mounted) {
-          // Filter to items with strictly positive available-to-sell stock
-          const transferableStock = (response.data?.items || []).filter(
-            (item) => Number(item.availableToSell) > 0,
-          );
-          setAvailableStock(transferableStock);
-
-          if (
-            !transferId &&
-            initialVariantId &&
-            transferableStock.some((item) => item.variantId === initialVariantId) &&
-            !form.getValues('lines.0.variantId')
-          ) {
-            form.setValue('lines.0.variantId', initialVariantId, { shouldValidate: true });
-            if (initialQuantity && Number(initialQuantity) > 0)
-              form.setValue('lines.0.quantity', initialQuantity, { shouldValidate: true });
-          }
-          setIsLoadingStock(false);
-        }
-      } catch (err) {
-        if (mounted) {
-          setAvailableStock([]);
-          setStockLoadError(
-            err instanceof Error ? err.message : 'Transferable stock could not be loaded.',
-          );
-          setIsLoadingStock(false);
-        }
-      }
-    };
-    fetchStock();
-    return () => {
-      mounted = false;
-    };
-  }, [form, initialQuantity, initialVariantId, sourceLocationId, transferId]);
+  }, [form, initialSourceLocationId, initialVariantId, transferId]);
 
   // Handle source location change with safety check
   const handleSourceLocationChange = (newSourceId: string | null) => {
@@ -299,6 +230,7 @@ export function TransferForm({
     }
     // Reset lines to blank single row
     form.setValue('lines', [{ variantId: '', quantity: '1' }]);
+    setSelectedStockByVariant({});
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -308,7 +240,14 @@ export function TransferForm({
     // Dynamic stock ceiling check
     for (const [i, line] of values.lines.entries()) {
       if (!line) continue;
-      const stockItem = availableStock.find((s) => s.variantId === line.variantId);
+      const stockItem = selectedStockByVariant[line.variantId];
+      if (!stockItem) {
+        form.setError(`lines.${i}.variantId`, {
+          type: 'manual',
+          message: 'Wait for this item to be verified against current source stock.',
+        });
+        return;
+      }
       if (stockItem && Number(line.quantity) > Number(stockItem.availableToSell)) {
         form.setError(`lines.${i}.quantity`, {
           type: 'manual',
@@ -471,145 +410,21 @@ export function TransferForm({
         className="space-y-5"
         noValidate
       >
-        {/* Transfer Details Card */}
-        <Card className="shadow-xs">
-          <CardHeader className="p-4 sm:p-5 pb-3 sm:pb-3">
-            <CardTitle className="text-base font-semibold">Transfer Routing</CardTitle>
-            <CardDescription className="text-xs">
-              Select origin and destination depots. Dispatches must originate from a stock-holding
-              source.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-5 pt-0 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {/* Source Facility */}
-              <div className="space-y-1.5">
-                <Label htmlFor="source-location" className="text-xs font-medium">
-                  Source Location (Origin) <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={sourceLocationId}
-                  onValueChange={handleSourceLocationChange}
-                  disabled={isLoadingLocations}
-                >
-                  <SelectTrigger id="source-location" className="h-9 text-sm">
-                    <SelectValue
-                      placeholder={
-                        isLoadingLocations ? 'Loading locations…' : 'Select origin depot'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sourceLocations.map((loc) => (
-                      <SelectItem
-                        key={loc.id}
-                        value={loc.id}
-                        label={`${loc.name} (${loc.code})`}
-                        description={`${loc.locationType.replace('_', ' ')} · ${loc.status}`}
-                      >
-                        {loc.name}{' '}
-                        <span className="text-muted-foreground ml-1 font-mono text-xs">
-                          ({loc.code})
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.sourceLocationId ? (
-                  <p className="text-[11px] font-medium text-destructive">
-                    {form.formState.errors.sourceLocationId.message}
-                  </p>
-                ) : null}
-              </div>
-
-              {/* Destination Facility */}
-              <div className="space-y-1.5">
-                <Label htmlFor="destination-location" className="text-xs font-medium">
-                  Destination Location <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={destinationLocationId}
-                  onValueChange={(val) =>
-                    form.setValue('destinationLocationId', val || '', { shouldValidate: true })
-                  }
-                  disabled={isLoadingLocations || !sourceLocationId}
-                >
-                  <SelectTrigger id="destination-location" className="h-9 text-sm">
-                    <SelectValue
-                      placeholder={
-                        !sourceLocationId
-                          ? 'Select source location first'
-                          : isLoadingLocations
-                            ? 'Loading locations…'
-                            : 'Select receiving facility'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {destinationLocations.map((loc) => (
-                      <SelectItem
-                        key={loc.id}
-                        value={loc.id}
-                        label={`${loc.name} (${loc.code})`}
-                        description={`${loc.locationType.replace('_', ' ')} · ${loc.status}`}
-                      >
-                        {loc.name}{' '}
-                        <span className="text-muted-foreground ml-1 font-mono text-xs">
-                          ({loc.code})
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.destinationLocationId ? (
-                  <p className="text-[11px] font-medium text-destructive">
-                    {form.formState.errors.destinationLocationId.message}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            {/* Route Summary Pill */}
-            {selectedSource && selectedDestination ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-2.5 text-xs">
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Building2 className="size-3.5 text-muted-foreground" />
-                  <span>{selectedSource.name}</span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    ({selectedSource.code})
-                  </span>
-                </div>
-                <ArrowRight className="size-3.5 text-muted-foreground mx-1 shrink-0" />
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Building2 className="size-3.5 text-muted-foreground" />
-                  <span>{selectedDestination.name}</span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    ({selectedDestination.code})
-                  </span>
-                </div>
-              </div>
-            ) : null}
-
-            {/* Notes */}
-            <div className="space-y-1.5">
-              <Label htmlFor="transfer-notes" className="text-xs font-medium">
-                Dispatch Notes & Instructions
-              </Label>
-              <Textarea
-                id="transfer-notes"
-                placeholder="Optional carrier instructions, reason for transfer, or consignment reference"
-                rows={2}
-                className="text-sm"
-                {...form.register('notes')}
-              />
-              {form.formState.errors.notes ? (
-                <p className="text-[11px] font-medium text-destructive">
-                  {form.formState.errors.notes.message}
-                </p>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+        <TransferRoutingCard
+          sourceLocationId={sourceLocationId}
+          destinationLocationId={destinationLocationId}
+          sourceLocations={sourceLocations}
+          destinationLocations={destinationLocations}
+          loading={isLoadingLocations}
+          sourceError={form.formState.errors.sourceLocationId?.message}
+          destinationError={form.formState.errors.destinationLocationId?.message}
+          notesError={form.formState.errors.notes?.message}
+          notesInputProps={form.register('notes')}
+          onSourceChange={handleSourceLocationChange}
+          onDestinationChange={(value) =>
+            form.setValue('destinationLocationId', value ?? '', { shouldValidate: true })
+          }
+        />
 
         {/* Line Items Card */}
         <Card className="shadow-xs">
@@ -630,7 +445,7 @@ export function TransferForm({
               variant="outline"
               size="sm"
               onClick={() => append({ variantId: '', quantity: '1' })}
-              disabled={!sourceLocationId || isLoadingStock || availableStock.length === 0}
+              disabled={!sourceLocationId}
               className="h-8 text-xs shrink-0 self-start sm:self-auto"
             >
               <Plus className="mr-1.5 size-3.5" /> Add Line
@@ -654,273 +469,60 @@ export function TransferForm({
                   dispatch.
                 </p>
               </div>
-            ) : isLoadingStock ? (
-              <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-xs text-muted-foreground">
-                <Loader2 className="mr-2 size-4 animate-spin text-primary" /> Loading transferable
-                stock…
-              </div>
-            ) : stockLoadError ? (
-              <div
-                role="alert"
-                className="flex flex-col items-center justify-center rounded-lg border border-destructive/20 bg-destructive/5 p-8 text-center text-xs text-destructive"
-              >
-                <AlertTriangle className="mb-2 size-7" aria-hidden="true" />
-                <p className="font-medium">Transferable stock could not be loaded</p>
-                <p className="mt-1 max-w-sm">{stockLoadError}</p>
-              </div>
-            ) : availableStock.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center text-xs text-muted-foreground">
-                <Package className="size-8 stroke-1 text-muted-foreground/60 mb-2" />
-                <p className="font-medium text-foreground">No Stock Available for Transfer</p>
-                <p className="mt-1 max-w-sm">
-                  {selectedSource?.name} currently has zero items with positive available-to-sell
-                  balance.
-                </p>
-              </div>
             ) : (
               <div className="space-y-3">
                 {fields.map((field, index) => {
                   const lineVariantId = form.watch(`lines.${index}.variantId`);
-                  const selectedStockItem = availableStock.find(
-                    (s) => s.variantId === lineVariantId,
-                  );
+                  const selectedStockItem = selectedStockByVariant[lineVariantId];
                   const isDuplicate =
                     Boolean(lineVariantId) &&
                     watchLines.filter((l) => l?.variantId === lineVariantId).length > 1;
 
                   return (
-                    <div
+                    <TransferLineRow
                       key={field.id}
-                      className={`rounded-lg border p-3 transition-colors ${
-                        isDuplicate ? 'border-destructive/40 bg-destructive/[0.02]' : 'bg-card'
-                      }`}
-                    >
-                      {/* Desktop Layout */}
-                      <div className="hidden sm:grid sm:grid-cols-12 sm:items-start sm:gap-3">
-                        {/* Item Select (col-span-7) */}
-                        <div className="sm:col-span-7 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs font-medium">
-                              Item #{index + 1} <span className="text-destructive">*</span>
-                            </Label>
-                            {selectedStockItem ? (
-                              <span className="text-[11px] text-muted-foreground">
-                                Stock: {selectedStockItem.availableToSell} avail.
-                              </span>
-                            ) : null}
-                          </div>
-                          <Select
-                            value={lineVariantId}
-                            onValueChange={(val) =>
-                              form.setValue(`lines.${index}.variantId`, val || '', {
-                                shouldValidate: true,
-                              })
-                            }
-                            disabled={isLoadingStock}
-                          >
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue placeholder="Select product variant to transfer" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableStock.map((stock) => {
-                                const isAlreadyUsed =
-                                  selectedVariantIds.has(stock.variantId) &&
-                                  stock.variantId !== lineVariantId;
-                                return (
-                                  <SelectItem
-                                    key={stock.variantId}
-                                    value={stock.variantId}
-                                    label={`${stock.productTitle} — ${stock.sku}`}
-                                    description={`${stock.availableToSell} available at origin depot${
-                                      isAlreadyUsed ? ' · (Already in transfer)' : ''
-                                    }`}
-                                    disabled={isAlreadyUsed}
-                                  >
-                                    {stock.productTitle}
-                                    <span className="text-muted-foreground ml-2 font-mono text-xs">
-                                      {stock.sku}
-                                    </span>
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                          {form.formState.errors.lines?.[index]?.variantId ? (
-                            <p className="text-[11px] font-medium text-destructive">
-                              {form.formState.errors.lines[index]?.variantId?.message}
-                            </p>
-                          ) : null}
-                        </div>
-
-                        {/* Quantity (col-span-4) */}
-                        <div className="sm:col-span-4 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <Label className="text-xs font-medium">
-                              Qty <span className="text-destructive">*</span>
-                            </Label>
-                            {selectedStockItem ? (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  form.setValue(
-                                    `lines.${index}.quantity`,
-                                    String(selectedStockItem.availableToSell),
-                                    { shouldValidate: true },
-                                  )
-                                }
-                                className="text-[11px] text-primary hover:underline font-medium"
-                                title="Set quantity to maximum available units"
-                              >
-                                Max ({selectedStockItem.availableToSell})
-                              </button>
-                            ) : null}
-                          </div>
-                          <Input
-                            type="number"
-                            min="1"
-                            step="any"
-                            placeholder="1"
-                            disabled={!lineVariantId}
-                            className="h-9 text-xs font-mono"
-                            {...form.register(`lines.${index}.quantity`)}
-                          />
-                          {form.formState.errors.lines?.[index]?.quantity ? (
-                            <p className="text-[11px] font-medium text-destructive">
-                              {form.formState.errors.lines[index]?.quantity?.message}
-                            </p>
-                          ) : null}
-                        </div>
-
-                        {/* Remove Action (col-span-1) */}
-                        <div className="sm:col-span-1 pt-6 flex justify-end">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => remove(index)}
-                            disabled={fields.length === 1}
-                            className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            title={
-                              fields.length === 1
-                                ? 'A transfer requires at least one line'
-                                : 'Remove line item'
-                            }
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Mobile Layout */}
-                      <div className="sm:hidden space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Badge variant="outline" className="text-[11px] font-normal">
-                            Line #{index + 1}
-                          </Badge>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => remove(index)}
-                            disabled={fields.length === 1}
-                            className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            title="Remove line item"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium">
-                            Product Variant <span className="text-destructive">*</span>
-                          </Label>
-                          <Select
-                            value={lineVariantId}
-                            onValueChange={(val) =>
-                              form.setValue(`lines.${index}.variantId`, val || '', {
-                                shouldValidate: true,
-                              })
-                            }
-                            disabled={isLoadingStock}
-                          >
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue placeholder="Select product variant" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableStock.map((stock) => {
-                                const isAlreadyUsed =
-                                  selectedVariantIds.has(stock.variantId) &&
-                                  stock.variantId !== lineVariantId;
-                                return (
-                                  <SelectItem
-                                    key={stock.variantId}
-                                    value={stock.variantId}
-                                    label={`${stock.productTitle} — ${stock.sku}`}
-                                    description={`${stock.availableToSell} available`}
-                                    disabled={isAlreadyUsed}
-                                  >
-                                    {stock.productTitle}
-                                    <span className="text-muted-foreground ml-1 font-mono text-[11px]">
-                                      {stock.sku}
-                                    </span>
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                          {form.formState.errors.lines?.[index]?.variantId ? (
-                            <p className="text-[11px] font-medium text-destructive">
-                              {form.formState.errors.lines[index]?.variantId?.message}
-                            </p>
-                          ) : null}
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1 space-y-1">
-                            <Label className="text-xs font-medium">Quantity</Label>
-                            <Input
-                              type="number"
-                              min="1"
-                              step="any"
-                              placeholder="1"
-                              disabled={!lineVariantId}
-                              className="h-9 text-xs font-mono"
-                              {...form.register(`lines.${index}.quantity`)}
-                            />
-                          </div>
-                          {selectedStockItem ? (
-                            <div className="flex flex-col items-end justify-center pt-5">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  form.setValue(
-                                    `lines.${index}.quantity`,
-                                    String(selectedStockItem.availableToSell),
-                                    { shouldValidate: true },
-                                  )
-                                }
-                                className="text-xs text-primary font-medium hover:underline"
-                              >
-                                Max ({selectedStockItem.availableToSell})
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
-                        {form.formState.errors.lines?.[index]?.quantity ? (
-                          <p className="text-[11px] font-medium text-destructive">
-                            {form.formState.errors.lines[index]?.quantity?.message}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      {/* Duplicate error feedback */}
-                      {isDuplicate ? (
-                        <p className="mt-2 text-[11px] font-medium text-destructive">
-                          Duplicate SKU: This item is already added in another line. Each variant
-                          may only appear once in a transfer draft.
-                        </p>
-                      ) : null}
-                    </div>
+                      index={index}
+                      sourceLocationId={sourceLocationId}
+                      variantId={lineVariantId}
+                      selectedStockItem={selectedStockItem}
+                      selectedVariantIds={selectedVariantIds}
+                      quantityInputProps={form.register(`lines.${index}.quantity`)}
+                      variantError={form.formState.errors.lines?.[index]?.variantId?.message}
+                      quantityError={form.formState.errors.lines?.[index]?.quantity?.message}
+                      duplicate={isDuplicate}
+                      removable={fields.length > 1}
+                      onVariantChange={(item) => {
+                        form.setValue(`lines.${index}.variantId`, item?.variantId ?? '', {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        });
+                        if (item) {
+                          setSelectedStockByVariant((current) => ({
+                            ...current,
+                            [item.variantId]: item,
+                          }));
+                        }
+                      }}
+                      onItemResolved={(item) => {
+                        setSelectedStockByVariant((current) => ({
+                          ...current,
+                          [item.variantId]: item,
+                        }));
+                        form.clearErrors(`lines.${index}.variantId`);
+                      }}
+                      onResolutionError={(message) =>
+                        form.setError(`lines.${index}.variantId`, { type: 'manual', message })
+                      }
+                      onSetMaximum={() => {
+                        if (!selectedStockItem) return;
+                        form.setValue(
+                          `lines.${index}.quantity`,
+                          selectedStockItem.availableToSell,
+                          { shouldValidate: true, shouldDirty: true },
+                        );
+                      }}
+                      onRemove={() => remove(index)}
+                    />
                   );
                 })}
               </div>

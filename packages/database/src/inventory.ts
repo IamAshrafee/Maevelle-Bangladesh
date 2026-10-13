@@ -1793,6 +1793,7 @@ export async function listInventoryBalances(
   organizationId: string,
   input: {
     locationId?: string;
+    variantId?: string;
     search?: string;
     condition?: InventoryCondition;
     availability?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
@@ -1816,6 +1817,9 @@ export async function listInventoryBalances(
     : sql`1=1`;
   const conditionFilter = input.condition
     ? sql`condition.condition_code = ${input.condition}`
+    : sql`1=1`;
+  const variantFilter = input.variantId
+    ? sql`item.variant_id = ${input.variantId}::uuid`
     : sql`1=1`;
   const searchFilter = input.search
     ? sql`(variant.sku ilike '%' || ${input.search} || '%' or product.title ilike '%' || ${input.search} || '%')`
@@ -1846,6 +1850,7 @@ export async function listInventoryBalances(
     where condition.organization_id = ${organizationId}
       and ${locationFilter}
       and ${conditionFilter}
+      and ${variantFilter}
       and ${searchFilter}
       and ${availabilityFilter}
   `.execute(db);
@@ -1878,6 +1883,7 @@ export async function listInventoryBalances(
     where condition.organization_id = ${organizationId}
       and ${locationFilter}
       and ${conditionFilter}
+      and ${variantFilter}
       and ${searchFilter}
       and ${availabilityFilter}
     order by product.title, variant.sku, location.name, condition.condition_code
