@@ -195,16 +195,28 @@ export function OrganizationSidebar({
           {/* Size Guide */}
           {sizeSystemId && (
             <div className="space-y-1.5">
-              <Label htmlFor="size-guide-select" className="text-xs font-medium">
-                Storefront Size Guide
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="size-guide-select" className="text-xs font-medium">
+                  Storefront Size Guide
+                </Label>
+                <Link
+                  href="/sizing/guides"
+                  target="_blank"
+                  className="text-[11px] font-medium text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  Manage Guides <ExternalLink className="size-2.5" />
+                </Link>
+              </div>
               <NativeSelect
                 id="size-guide-select"
                 value={sizeGuideId}
                 onChange={(e) => onSizeGuideChange(e.target.value)}
                 className="text-xs"
               >
-                <NativeSelectOption value="">Select a guide chart…</NativeSelectOption>
+                <NativeSelectOption value="">
+                  None (Use Category Default if available)
+                </NativeSelectOption>
+                {/* System-bound guides */}
                 {sizeGuides
                   .filter((g) => g.sizeSystemId === sizeSystemId && g.status === 'ACTIVE')
                   .map((g) => (
@@ -212,15 +224,42 @@ export function OrganizationSidebar({
                       {g.name} (v{g.version})
                     </NativeSelectOption>
                   ))}
+                {/* Unbound guides belonging to the active domain */}
+                {(() => {
+                  const currentSys = sizingData.systems.find((s) => s.id === sizeSystemId);
+                  if (!currentSys) return null;
+                  return sizeGuides
+                    .filter(
+                      (g) =>
+                        !g.sizeSystemId &&
+                        g.sizingDomainId === currentSys.sizingDomainId &&
+                        g.status === 'ACTIVE',
+                    )
+                    .map((g) => (
+                      <NativeSelectOption key={g.id} value={g.id}>
+                        {g.name} (v{g.version}) [Domain Unbound]
+                      </NativeSelectOption>
+                    ));
+                })()}
               </NativeSelect>
-              {sizeGuides.filter(
-                (guide) => guide.sizeSystemId === sizeSystemId && guide.status === 'ACTIVE',
-              ).length === 0 ? (
-                <p className="rounded-md border border-warning/30 bg-warning/5 p-2 text-[11px] text-warning">
-                  No active guide matches this size system. Create or activate one before publishing
-                  a size chart.
-                </p>
-              ) : null}
+              {(() => {
+                const currentSys = sizingData.systems.find((s) => s.id === sizeSystemId);
+                const matchingCount = sizeGuides.filter(
+                  (g) =>
+                    g.status === 'ACTIVE' &&
+                    (g.sizeSystemId === sizeSystemId ||
+                      (!g.sizeSystemId && currentSys && g.sizingDomainId === currentSys.sizingDomainId)),
+                ).length;
+                if (matchingCount === 0) {
+                  return (
+                    <p className="rounded-md border border-warning/30 bg-warning/5 p-2 text-[11px] text-warning">
+                      No active guide matches this size system or domain. Create or activate one before
+                      publishing a size chart.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
 

@@ -1299,6 +1299,47 @@ export interface ProductSizingDto {
   readonly sizeGuideSystemId: string | null;
   readonly hasPublishedGuide: boolean;
   readonly configStatus: SizingLifecycleStatusDto | null;
+  readonly categoryDefaultGuideId?: string | null;
+  readonly categoryDefaultGuideName?: string | null;
+  readonly categoryDefaultGuideStatus?: SizingLifecycleStatusDto | null;
+  readonly categoryName?: string | null;
+  readonly effectiveGuideId?: string | null;
+  readonly effectiveGuideName?: string | null;
+  readonly effectiveSource?: 'PRODUCT' | 'CATEGORY' | 'NONE';
+}
+
+export interface SizingTemplatePresetDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly category: string;
+  readonly domainCode: string;
+  readonly domainName: string;
+  readonly subjectType: SizingSubjectTypeDto;
+  readonly sizeSystemCode?: string;
+  readonly sizeSystemName?: string;
+  readonly defaultUnit: SizingMeasurementUnitDto;
+  readonly standardSizes: readonly {
+    readonly code: string;
+    readonly label: string;
+    readonly sortOrder: number;
+  }[];
+  readonly standardMeasurements: readonly {
+    readonly code: string;
+    readonly name: string;
+    readonly defaultUnit: SizingMeasurementUnitDto;
+    readonly sortOrder: number;
+  }[];
+  readonly sampleRows?: readonly {
+    readonly sizeLabel: string;
+    readonly measurements: readonly {
+      readonly measurementCode: string;
+      readonly exact?: string;
+      readonly min?: string;
+      readonly max?: string;
+      readonly unit: SizingMeasurementUnitDto;
+    }[];
+  }[];
 }
 
 export interface AdminSizingGuideDto {

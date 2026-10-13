@@ -42,14 +42,7 @@ import {
   StocktakeConditionDialog,
   type StocktakeCondition,
 } from './stocktake-condition-dialog';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { StocktakeFoundItemDialog } from './stocktake-found-item-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1205,101 +1198,18 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
         </CardContent>
       </Card>
 
-      {/* Enhanced Add Found SKU Modal */}
-      <Dialog open={foundOpen} onOpenChange={setFoundOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="size-5 text-primary" />
-              Add Found SKU
-            </DialogTitle>
-            <DialogDescription>
-              Add inventory physically present at this location but missing from the initial
-              snapshot. It starts with an expected count of 0.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-2 flex-1 min-w-0 overflow-hidden flex flex-col">
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Search catalog by title, SKU, or barcode…"
-                className="pl-9 text-sm h-9"
-                value={variantSearch}
-                onChange={(e) => setVariantSearch(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-
-            <div className="flex-1 overflow-y-auto border rounded-lg divide-y divide-border/60 max-h-60">
-              {isLoadingVariants ? (
-                <div className="p-6 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-                  <RefreshCw className="size-4 animate-spin" />
-                  Loading catalog variants…
-                </div>
-              ) : availableVariants.length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground">
-                  All active catalog variants are already included in this stocktake session.
-                </div>
-              ) : filteredVariants.length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground">
-                  No catalog variants match &ldquo;{variantSearch}&rdquo;.
-                </div>
-              ) : (
-                filteredVariants.map((variant) => {
-                  const isSelected = foundVariantId === variant.id;
-
-                  return (
-                    <button
-                      key={variant.id}
-                      type="button"
-                      onClick={() => setFoundVariantId(variant.id)}
-                      className={`w-full text-left p-3 text-sm flex items-start gap-3 transition-colors ${
-                        isSelected ? 'bg-primary/10 border-l-4 border-primary' : 'hover:bg-muted/50'
-                      }`}
-                    >
-                      <Package className="size-4 text-muted-foreground mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground">{variant.productTitle}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                          <span className="bg-muted px-1.5 py-0.5 rounded text-foreground">
-                            {variant.sku}
-                          </span>
-                          {variant.optionSummary && <span>{variant.optionSummary}</span>}
-                        </div>
-                      </div>
-                      {isSelected && <Check className="size-4 text-primary shrink-0 mt-1" />}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setFoundOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => void addFoundSku()}
-              disabled={!foundVariantId || isAddingFound}
-              className="gap-1.5"
-            >
-              {isAddingFound ? (
-                <>
-                  <RefreshCw className="size-3.5 animate-spin" />
-                  Adding…
-                </>
-              ) : (
-                <>
-                  <Plus className="size-3.5" />
-                  Add to Count Sheet
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <StocktakeFoundItemDialog
+        open={foundOpen}
+        variants={filteredVariants}
+        query={variantSearch}
+        selectedVariantId={foundVariantId}
+        loading={isLoadingVariants}
+        submitting={isAddingFound}
+        onOpenChange={setFoundOpen}
+        onQueryChange={setVariantSearch}
+        onSelect={setFoundVariantId}
+        onSubmit={() => void addFoundSku()}
+      />
 
       {/* Split Condition Breakdown Modal */}
       <StocktakeConditionDialog

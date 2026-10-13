@@ -3059,6 +3059,13 @@ export async function getProductSizingConfiguration(
   sizeGuideSystemId: string | null;
   hasPublishedGuide: boolean;
   configStatus: LifecycleStatus | null;
+  categoryDefaultGuideId: string | null;
+  categoryDefaultGuideName: string | null;
+  categoryDefaultGuideStatus: LifecycleStatus | null;
+  categoryName: string | null;
+  effectiveGuideId: string | null;
+  effectiveGuideName: string | null;
+  effectiveSource: 'PRODUCT' | 'CATEGORY' | 'NONE';
 }> {
   const product = await sql<{ version: string | number }>`
     select version
@@ -3102,8 +3109,65 @@ export async function getProductSizingConfiguration(
       and config.status = 'ACTIVE'
   `.execute(db);
 
+  const categoryResult = await sql<{
+    category_id: string;
+    category_name: string;
+    default_size_guide_id: string | null;
+    guide_name: string | null;
+    guide_status: LifecycleStatus | null;
+    has_published_guide: boolean;
+  }>`
+    select
+      cat.id::text as category_id,
+      cat.name as category_name,
+      cat.default_size_guide_id::text,
+      g.name as guide_name,
+      g.status as guide_status,
+      (g.current_published_revision_id is not null) as has_published_guide
+    from catalog.products prod
+    left join catalog.categories cat
+      on cat.id = coalesce(
+        prod.primary_category_id,
+        (
+          select pc.category_id
+          from catalog.product_categories pc
+          where pc.product_id = prod.id
+            and pc.organization_id = prod.organization_id
+          order by pc.category_id
+          limit 1
+        )
+      )
+     and cat.organization_id = prod.organization_id
+    left join sizing.size_guides g
+      on g.id = cat.default_size_guide_id
+     and g.organization_id = cat.organization_id
+    where prod.id = ${productId}
+      and prod.organization_id = ${organizationId}
+  `.execute(db);
+
   const productVersion = numberFromDatabase(product.rows[0].version);
   const row = result.rows[0];
+  const catRow = categoryResult.rows[0];
+
+  const categoryDefaultGuideId = catRow?.default_size_guide_id ?? null;
+  const categoryDefaultGuideName = catRow?.guide_name ?? null;
+  const categoryDefaultGuideStatus = catRow?.guide_status ?? null;
+  const categoryName = catRow?.category_name ?? null;
+
+  const hasDirectGuide = Boolean(row?.size_guide_id && row?.has_published_guide);
+  const hasCategoryGuide = Boolean(categoryDefaultGuideId && catRow?.has_published_guide);
+
+  const effectiveGuideId = hasDirectGuide
+    ? row!.size_guide_id
+    : hasCategoryGuide
+      ? categoryDefaultGuideId
+      : null;
+  const effectiveGuideName = hasDirectGuide
+    ? row!.guide_name
+    : hasCategoryGuide
+      ? categoryDefaultGuideName
+      : null;
+  const effectiveSource = hasDirectGuide ? 'PRODUCT' : hasCategoryGuide ? 'CATEGORY' : 'NONE';
 
   if (!row) {
     return {
@@ -3118,6 +3182,13 @@ export async function getProductSizingConfiguration(
       sizeGuideSystemId: null,
       hasPublishedGuide: false,
       configStatus: null,
+      categoryDefaultGuideId,
+      categoryDefaultGuideName,
+      categoryDefaultGuideStatus,
+      categoryName,
+      effectiveGuideId,
+      effectiveGuideName,
+      effectiveSource,
     };
   }
 
@@ -3133,6 +3204,13 @@ export async function getProductSizingConfiguration(
     sizeGuideSystemId: row.guide_size_system_id,
     hasPublishedGuide: row.has_published_guide,
     configStatus: row.config_status,
+    categoryDefaultGuideId,
+    categoryDefaultGuideName,
+    categoryDefaultGuideStatus,
+    categoryName,
+    effectiveGuideId,
+    effectiveGuideName,
+    effectiveSource,
   };
 }
 
