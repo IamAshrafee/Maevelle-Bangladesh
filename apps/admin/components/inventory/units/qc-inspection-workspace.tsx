@@ -18,6 +18,7 @@ import type {
   UnitConditionDto,
   InspectionDispositionDto,
   InspectionStageDto,
+  PaginationDto,
 } from '@maevelle/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,20 +33,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  bulkInspectUnits,
-  performUnitInspection,
-  listInventoryUnits,
-} from '@/lib/inventory/units';
+import { bulkInspectUnits, performUnitInspection, listInventoryUnits } from '@/lib/inventory/units';
 import { uploadMediaFile } from '@/lib/media/api';
 import { UnitStatusBadge } from './unit-status-badge';
 import { UnitConditionBadge } from './unit-condition-badge';
 import { UnitBarcodeModal } from './unit-barcode-modal';
 import { UnitScannerInput } from './unit-scanner-input';
 import { cn } from '@/lib/utils';
+import { recommendedInspectionStage, unitCanBeInspected } from './unit-action-policy';
 
 export interface QCInspectionWorkspaceProps {
-  readonly initialUnits?: readonly InventoryUnitDto[];
   readonly sourceReceiptId?: string;
   readonly variantId?: string;
   readonly stage?: InspectionStageDto;
@@ -53,14 +50,22 @@ export interface QCInspectionWorkspaceProps {
 }
 
 export function QCInspectionWorkspace({
-  initialUnits,
   sourceReceiptId,
   variantId,
   stage = 'INBOUND_INTAKE',
   onCompleted,
 }: QCInspectionWorkspaceProps) {
-  const [units, setUnits] = useState<readonly InventoryUnitDto[]>(initialUnits || []);
-  const [loading, setLoading] = useState(!initialUnits);
+  const [units, setUnits] = useState<readonly InventoryUnitDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+  const [pagination, setPagination] = useState<PaginationDto>({
+    page: 1,
+    pageSize,
+    totalItems: 0,
+    totalPages: 1,
+  });
+  const [overallAwaitingQc, setOverallAwaitingQc] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
 
@@ -85,15 +90,31 @@ export function QCInspectionWorkspace({
 
   // Refresh units from backend
   const loadUnits = useCallback(async () => {
-    if (!sourceReceiptId && !variantId && initialUnits) return;
+    if (!sourceReceiptId && !variantId) {
+      setUnits([]);
+      setPagination((current) => ({ ...current, page: 1, totalItems: 0, totalPages: 1 }));
+      setOverallAwaitingQc(0);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await listInventoryUnits({
+      const query = {
         sourceReceiptId: sourceReceiptId || undefined,
         variantId: variantId || undefined,
-        pageSize: 100,
-      });
-      setUnits(res.data);
+      };
+      const [result, awaiting] = await Promise.all([
+        listInventoryUnits({ ...query, page, pageSize }),
+        listInventoryUnits({ ...query, status: 'AWAITING_QC', pageSize: 1 }),
+      ]);
+      if (page > result.pagination.totalPages) {
+        setPage(result.pagination.totalPages);
+        return;
+      }
+      setUnits(result.data);
+      setPagination(result.pagination);
+      setOverallAwaitingQc(awaiting.pagination.totalItems);
     } catch (err) {
       setFeedback({
         message: err instanceof Error ? err.message : 'Failed to load inspection units.',
@@ -102,20 +123,17 @@ export function QCInspectionWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [initialUnits, sourceReceiptId, variantId]);
+  }, [page, sourceReceiptId, variantId]);
 
   useEffect(() => {
-    if (!initialUnits && (sourceReceiptId || variantId)) {
-      void loadUnits();
-    }
-  }, [initialUnits, sourceReceiptId, variantId, loadUnits]);
+    void loadUnits();
+  }, [loadUnits]);
 
   // Derived progress statistics
   const stats = useMemo(() => {
-    const total = units.length;
-    const awaitingQC = units.filter((u) => u.status === 'AWAITING_QC').length;
-    const inspected = total - awaitingQC;
-    const gradeA = units.filter((u) => u.currentCondition === 'GRADE_A' && u.status !== 'AWAITING_QC').length;
+    const gradeA = units.filter(
+      (u) => u.currentCondition === 'GRADE_A' && u.status !== 'AWAITING_QC',
+    ).length;
     const gradeB = units.filter((u) => u.currentCondition === 'GRADE_B').length;
     const repairRequired = units.filter(
       (u) => u.currentCondition === 'REPAIR_REQUIRED' || u.status === 'ON_HOLD',
@@ -123,25 +141,32 @@ export function QCInspectionWorkspace({
     const damaged = units.filter((u) => u.currentCondition === 'DAMAGED_UNSELLABLE').length;
 
     return {
-      total,
-      awaitingQC,
-      inspected,
       gradeA,
       gradeB,
       repairRequired,
       damaged,
-      isFinished: total > 0 && awaitingQC === 0,
+      isFinished: pagination.totalItems > 0 && overallAwaitingQc === 0,
     };
-  }, [units]);
+  }, [overallAwaitingQc, pagination.totalItems, units]);
 
-  // Set default active unit when units load
+  const canInspectInSession = useCallback(
+    (unit: InventoryUnitDto) =>
+      unitCanBeInspected(unit) && recommendedInspectionStage(unit) === stage,
+    [stage],
+  );
+  const inspectableUnits = useMemo(
+    () => units.filter(canInspectInSession),
+    [canInspectInSession, units],
+  );
+
+  // Keep the active row useful: prefer work this session can actually complete.
   useEffect(() => {
     if (!activeUnitId && units.length > 0) {
-      const firstAwaiting = units.find((u) => u.status === 'AWAITING_QC');
+      const firstInspectable = units.find(canInspectInSession);
       const firstUnit = units[0];
-      setActiveUnitId(firstAwaiting ? firstAwaiting.id : (firstUnit ? firstUnit.id : null));
+      setActiveUnitId(firstInspectable?.id ?? firstUnit?.id ?? null);
     }
-  }, [units, activeUnitId]);
+  }, [activeUnitId, canInspectInSession, units]);
 
   const activeUnit = useMemo(() => {
     return units.find((u) => u.id === activeUnitId) || null;
@@ -150,9 +175,7 @@ export function QCInspectionWorkspace({
   // Select all uninspected units
   const handleSelectAllUninspected = (checked: boolean) => {
     if (checked) {
-      const uninspected = units
-        .filter((u) => u.status === 'AWAITING_QC')
-        .map((u) => u.id);
+      const uninspected = inspectableUnits.map((u) => u.id);
       setSelectedIds(new Set(uninspected));
     } else {
       setSelectedIds(new Set());
@@ -160,6 +183,8 @@ export function QCInspectionWorkspace({
   };
 
   const toggleSelectOne = (id: string) => {
+    const unit = units.find((candidate) => candidate.id === id);
+    if (!unit || !canInspectInSession(unit)) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -172,17 +197,25 @@ export function QCInspectionWorkspace({
   };
 
   // 1. QUICK-PASS BATCH WORKFLOW: Pass all selected units as Grade A Flawless
-  const handleQuickPassSelected = async () => {
-    if (selectedIds.size === 0) return;
+  const quickPassUnits = async (unitIds: ReadonlySet<string>) => {
+    if (unitIds.size === 0) return;
+    const targets = units.filter((unit) => unitIds.has(unit.id) && canInspectInSession(unit));
+    if (targets.length === 0) {
+      setSelectedIds(new Set());
+      setFeedback({
+        message: 'The selected units are no longer eligible for this inspection session.',
+        tone: 'info',
+      });
+      return;
+    }
 
     setSubmitting(true);
     setFeedback(null);
 
     try {
       const result = await bulkInspectUnits({
-        units: units
-          .filter((unit) => selectedIds.has(unit.id))
-          .map((unit) => ({ unitId: unit.id, expectedVersion: unit.version })),
+        units: targets.map((unit) => ({ unitId: unit.id, expectedVersion: unit.version })),
+        inspectionStage: stage,
         conditionResult: 'GRADE_A',
         disposition: 'RELEASE_SELLABLE',
         notes: 'Bulk passed during physical QC intake.',
@@ -196,7 +229,7 @@ export function QCInspectionWorkspace({
       setSelectedIds(new Set());
       await loadUnits();
 
-      if (onCompleted && stats.awaitingQC - result.inspectedCount === 0) {
+      if (onCompleted && overallAwaitingQc - result.inspectedCount === 0) {
         onCompleted();
       }
     } catch (err) {
@@ -209,10 +242,12 @@ export function QCInspectionWorkspace({
     }
   };
 
+  const handleQuickPassSelected = () => quickPassUnits(selectedIds);
+
   // 2. EXCEPTION INSPECTION: Submit specific defect for active unit
   const handleSaveActiveException = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeUnit) return;
+    if (!activeUnit || !canInspectInSession(activeUnit)) return;
 
     setSubmitting(true);
     setFeedback(null);
@@ -309,7 +344,8 @@ export function QCInspectionWorkspace({
               <span>Quality Control Inspection Workspace</span>
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Inspect physical pieces, grade condition, record defects with photos, and print Code 128 labels.
+              Inspect physical pieces, grade condition, record defects with photos, and print Code
+              128 labels.
             </p>
           </div>
 
@@ -332,61 +368,57 @@ export function QCInspectionWorkspace({
               className="gap-1.5"
             >
               <Printer className="size-3.5" />
-              <span>Print All Labels</span>
+              <span>Print Page Labels</span>
             </Button>
           </div>
         </div>
 
         {/* Inspection Progress Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-3.5 text-center">
+        <p className="pt-3.5 text-xs text-muted-foreground">
+          Overall totals are shown for registered and awaiting units; grade counts describe this
+          page.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-2 text-center">
           <div className="rounded-lg bg-muted/40 p-2 border">
             <span className="text-[11px] text-muted-foreground block font-medium">Total Units</span>
             <span className="text-lg font-bold font-mono tabular-nums text-foreground">
-              {stats.total}
+              {pagination.totalItems}
             </span>
           </div>
 
-          <div className="rounded-lg bg-amber-500/10 p-2 border border-amber-500/20">
-            <span className="text-[11px] text-amber-700 dark:text-amber-400 block font-medium">
-              Awaiting QC
-            </span>
-            <span className="text-lg font-bold font-mono tabular-nums text-amber-700 dark:text-amber-400">
-              {stats.awaitingQC}
+          <div className="rounded-lg bg-warning/10 p-2 border border-warning/20">
+            <span className="text-[11px] text-warning block font-medium">Awaiting QC</span>
+            <span className="text-lg font-bold font-mono tabular-nums text-warning">
+              {overallAwaitingQc}
             </span>
           </div>
 
-          <div className="rounded-lg bg-emerald-500/10 p-2 border border-emerald-500/20">
-            <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block font-medium">
-              Grade A (Passed)
-            </span>
-            <span className="text-lg font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+          <div className="rounded-lg bg-success/10 p-2 border border-success/20">
+            <span className="text-[11px] text-success block font-medium">Grade A (Passed)</span>
+            <span className="text-lg font-bold font-mono tabular-nums text-success">
               {stats.gradeA}
             </span>
           </div>
 
-          <div className="rounded-lg bg-sky-500/10 p-2 border border-sky-500/20">
-            <span className="text-[11px] text-sky-700 dark:text-sky-400 block font-medium">
-              Grade B (Minor)
-            </span>
-            <span className="text-lg font-bold font-mono tabular-nums text-sky-700 dark:text-sky-400">
+          <div className="rounded-lg bg-info/10 p-2 border border-info/20">
+            <span className="text-[11px] text-info block font-medium">Grade B (Minor)</span>
+            <span className="text-lg font-bold font-mono tabular-nums text-info">
               {stats.gradeB}
             </span>
           </div>
 
-          <div className="rounded-lg bg-amber-500/10 p-2 border border-amber-500/20">
-            <span className="text-[11px] text-amber-700 dark:text-amber-400 block font-medium">
-              Repair Hold
-            </span>
-            <span className="text-lg font-bold font-mono tabular-nums text-amber-700 dark:text-amber-400">
+          <div className="rounded-lg bg-warning/10 p-2 border border-warning/20">
+            <span className="text-[11px] text-warning block font-medium">Repair Hold</span>
+            <span className="text-lg font-bold font-mono tabular-nums text-warning">
               {stats.repairRequired}
             </span>
           </div>
 
-          <div className="rounded-lg bg-rose-500/10 p-2 border border-rose-500/20">
-            <span className="text-[11px] text-rose-700 dark:text-rose-400 block font-medium">
+          <div className="rounded-lg bg-destructive/10 p-2 border border-destructive/20">
+            <span className="text-[11px] text-destructive block font-medium">
               Damaged / Quarantined
             </span>
-            <span className="text-lg font-bold font-mono tabular-nums text-rose-700 dark:text-rose-400">
+            <span className="text-lg font-bold font-mono tabular-nums text-destructive">
               {stats.damaged}
             </span>
           </div>
@@ -394,10 +426,11 @@ export function QCInspectionWorkspace({
 
         {/* Completion status alert */}
         {stats.isFinished ? (
-          <div className="mt-3 p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+          <div className="mt-3 p-2.5 bg-success/10 border border-success/20 rounded-lg text-xs text-foreground flex items-center justify-between">
             <span className="flex items-center gap-1.5 font-medium">
-              <CheckCircle className="size-4 text-emerald-600" />
-              All units in this receiving batch have been inspected! Ready for labeling and storage allocation.
+              <CheckCircle className="size-4 text-success" />
+              All units in this receiving batch have been inspected! Ready for labeling and storage
+              allocation.
             </span>
             <Button
               size="xs"
@@ -405,7 +438,7 @@ export function QCInspectionWorkspace({
               onClick={() => setPrintModalOpen(true)}
               className="gap-1"
             >
-              <Printer className="size-3" /> Print Labels
+              <Printer className="size-3" /> Print This Page
             </Button>
           </div>
         ) : null}
@@ -416,8 +449,9 @@ export function QCInspectionWorkspace({
         <div
           className={cn(
             'p-3 rounded-lg text-xs border flex items-center justify-between',
-            feedback.tone === 'success' && 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300',
-            feedback.tone === 'danger' && 'bg-destructive/10 border-destructive/20 text-destructive',
+            feedback.tone === 'success' && 'bg-success/10 border-success/20 text-foreground',
+            feedback.tone === 'danger' &&
+              'bg-destructive/10 border-destructive/20 text-destructive',
             feedback.tone === 'info' && 'bg-primary/10 border-primary/20 text-primary',
           )}
         >
@@ -455,19 +489,17 @@ export function QCInspectionWorkspace({
                 <Checkbox
                   id="select-all-uninspected"
                   checked={
-                    stats.awaitingQC > 0 &&
-                    units
-                      .filter((u) => u.status === 'AWAITING_QC')
-                      .every((u) => selectedIds.has(u.id))
+                    inspectableUnits.length > 0 &&
+                    inspectableUnits.every((u) => selectedIds.has(u.id))
                   }
                   onCheckedChange={handleSelectAllUninspected}
-                  disabled={submitting || stats.awaitingQC === 0}
+                  disabled={submitting || inspectableUnits.length === 0}
                 />
                 <label
                   htmlFor="select-all-uninspected"
                   className="text-xs font-medium text-foreground cursor-pointer"
                 >
-                  Select Uninspected ({selectedIds.size} selected)
+                  Select eligible on this page ({selectedIds.size} selected)
                 </label>
               </div>
 
@@ -475,9 +507,9 @@ export function QCInspectionWorkspace({
                 <Button
                   size="xs"
                   variant="default"
-                  onClick={handleQuickPassSelected}
+                  onClick={() => void handleQuickPassSelected()}
                   disabled={submitting}
-                  className="gap-1.5 shadow-2xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="gap-1.5 shadow-2xs"
                 >
                   <Sparkles className="size-3" />
                   <span>Pass {selectedIds.size} as Grade A (Flawless)</span>
@@ -526,7 +558,7 @@ export function QCInspectionWorkspace({
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={() => toggleSelectOne(unit.id)}
-                              disabled={submitting}
+                              disabled={submitting || !canInspectInSession(unit)}
                             />
                           </TableCell>
                           <TableCell className="font-mono text-xs font-semibold">
@@ -550,6 +582,7 @@ export function QCInspectionWorkspace({
                                 e.stopPropagation();
                                 setActiveUnitId(unit.id);
                               }}
+                              disabled={!canInspectInSession(unit)}
                             >
                               Inspect
                             </Button>
@@ -584,12 +617,12 @@ export function QCInspectionWorkspace({
               </div>
 
               {/* Quick pass single action button */}
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-between">
+              <div className="p-3 bg-success/10 border border-success/20 rounded-lg flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 block">
+                  <span className="text-xs font-semibold text-foreground block">
                     Flawless / Perfect Piece?
                   </span>
-                  <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                  <span className="text-[11px] text-muted-foreground">
                     No tears, stains, or sewing defects.
                   </span>
                 </div>
@@ -597,11 +630,10 @@ export function QCInspectionWorkspace({
                   size="sm"
                   variant="default"
                   onClick={() => {
-                    setSelectedIds(new Set([activeUnit.id]));
-                    void handleQuickPassSelected();
+                    void quickPassUnits(new Set([activeUnit.id]));
                   }}
-                  disabled={submitting}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                  disabled={submitting || !canInspectInSession(activeUnit)}
+                  className="shadow-2xs"
                 >
                   <CheckCircle className="size-3.5 mr-1" /> Pass Flawless
                 </Button>
@@ -614,7 +646,10 @@ export function QCInspectionWorkspace({
                 </span>
 
                 <div className="space-y-1">
-                  <label htmlFor="active-qc-cond" className="text-[11px] font-medium text-foreground">
+                  <label
+                    htmlFor="active-qc-cond"
+                    className="text-[11px] font-medium text-foreground"
+                  >
                     Condition Assessment *
                   </label>
                   <NativeSelect
@@ -632,13 +667,20 @@ export function QCInspectionWorkspace({
                     required
                   >
                     <option value="GRADE_B">Grade B — Minor Imperfection / Restricted Sale</option>
-                    <option value="REPAIR_REQUIRED">Repair Required — Send to Sewing / Cleaning</option>
-                    <option value="DAMAGED_UNSELLABLE">Damaged / Unsellable — Quarantine Hold</option>
+                    <option value="REPAIR_REQUIRED">
+                      Repair Required — Send to Sewing / Cleaning
+                    </option>
+                    <option value="DAMAGED_UNSELLABLE">
+                      Damaged / Unsellable — Quarantine Hold
+                    </option>
                   </NativeSelect>
                 </div>
 
                 <div className="space-y-1">
-                  <label htmlFor="active-qc-disp" className="text-[11px] font-medium text-foreground">
+                  <label
+                    htmlFor="active-qc-disp"
+                    className="text-[11px] font-medium text-foreground"
+                  >
                     Action / Disposition *
                   </label>
                   <NativeSelect
@@ -658,7 +700,10 @@ export function QCInspectionWorkspace({
                 </div>
 
                 <div className="space-y-1">
-                  <label htmlFor="active-qc-defect" className="text-[11px] font-medium text-foreground">
+                  <label
+                    htmlFor="active-qc-defect"
+                    className="text-[11px] font-medium text-foreground"
+                  >
                     Defect Description *
                   </label>
                   <Input
@@ -674,7 +719,10 @@ export function QCInspectionWorkspace({
                 </div>
 
                 <div className="space-y-1">
-                  <label htmlFor="active-qc-notes" className="text-[11px] font-medium text-foreground">
+                  <label
+                    htmlFor="active-qc-notes"
+                    className="text-[11px] font-medium text-foreground"
+                  >
                     Inspector Notes
                   </label>
                   <Textarea
@@ -743,7 +791,9 @@ export function QCInspectionWorkspace({
                     type="submit"
                     variant="default"
                     size="sm"
-                    disabled={submitting || !exceptionDefect.trim()}
+                    disabled={
+                      submitting || !exceptionDefect.trim() || !canInspectInSession(activeUnit)
+                    }
                     className="w-full gap-1.5"
                   >
                     {submitting ? (
@@ -764,12 +814,43 @@ export function QCInspectionWorkspace({
         </div>
       </div>
 
+      {!loading && pagination.totalPages > 1 ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Page <span className="font-mono tabular-nums">{pagination.page}</span> of{' '}
+            <span className="font-mono tabular-nums">{pagination.totalPages}</span>
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || submitting}
+              onClick={() => {
+                setSelectedIds(new Set());
+                setActiveUnitId(null);
+                setPage((value) => value - 1);
+              }}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= pagination.totalPages || submitting}
+              onClick={() => {
+                setSelectedIds(new Set());
+                setActiveUnitId(null);
+                setPage((value) => value + 1);
+              }}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Barcode Label Printing Modal */}
-      <UnitBarcodeModal
-        open={printModalOpen}
-        onOpenChange={setPrintModalOpen}
-        units={units}
-      />
+      <UnitBarcodeModal open={printModalOpen} onOpenChange={setPrintModalOpen} units={units} />
     </div>
   );
 }

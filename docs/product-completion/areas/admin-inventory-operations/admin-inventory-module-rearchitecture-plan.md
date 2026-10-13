@@ -216,6 +216,9 @@ Remaining in Batch 6:
 - Consolidated the full scanner page and quick-scan dialog onto one scanned-unit result component. Both entry points now use the same capability/state-aware inspection and Transfer actions, current state display, label action, detail link, and post-inspection refresh instead of maintaining two drifting workflows.
 - Improved camera fallback and accessibility: unsupported camera/barcode detection produces an actionable handheld/manual-entry path before requesting permission, rear-camera preference is non-blocking, the overlay has dialog semantics, and icon controls have accessible names. The quick scanner uses a touch-friendly full-screen mobile dialog and clears stale results on each new session.
 - Replaced whole-Admin-page label printing and global visibility/`!important` overrides with an isolated print document. The selected compact, standard, or large preset now controls the physical `mm` page and label dimensions; authorized barcode SVGs are loaded before printing; each Unit ID prints on its own label page; failures are recoverable; and the preview remains inside a full-screen mobile-capable dialog.
+- Repaired the Supply Receiving → Quality boundary. Receipt truth now loads independently of optional serialized-unit visibility, so Supply-only operators are not locked out by a unit permission they do not have. Unit registration and Receiving QC render only with `inventory.units.manage`; labels and physical identities require `inventory.units.view`; and the embedded QC dialog is touch-friendly on mobile.
+- Reworked the embedded Receiving QC collection onto 50-unit server pages with authoritative overall and awaiting-QC totals. Page selection is explicit, label printing is truthfully scoped to the current/loaded page, and large receipts no longer disappear after an implicit 100-unit browser cap.
+- Fixed the single-unit quick-pass race that could submit the previous React selection. Bulk and individual session actions now construct their exact Unit ID/version payload directly, reject identities that no longer match the session stage, clear stale selections between pages, and preserve inbound, return, reinspection, or routine inspection stage through the Admin client contract.
 
 Verification for this slice:
 
@@ -225,6 +228,7 @@ Verification for this slice:
 - Two focused serialized-unit lifecycle tests passed for active/completed repair release protection and committed Fulfillment identity protection.
 - Focused Admin TypeScript and lint checks passed for the shared scanner result, full-page scanner, quick dialog, and camera input. Real handheld-scanner, device-camera, and printed-label verification remains a hardware/owner gate.
 - Focused Admin TypeScript and lint checks passed for isolated exact-size barcode label preparation. Physical printer calibration, media margins, contrast, and scanner-read verification remain a hardware/owner gate.
+- Focused Admin TypeScript and lint checks passed for Receiving/Quality capability separation and paginated QC. One focused Admin client test passed for preserving a non-default inspection stage in the bulk command payload.
 
 Remaining in Batch 7:
 

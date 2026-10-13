@@ -117,6 +117,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
         unitId,
         expectedVersion: 1,
       })),
+      inspectionStage: 'REINSPECTION',
       conditionResult: 'GRADE_A',
       disposition: 'RELEASE_SELLABLE',
       notes: 'Passed 7 flawless dresses in bulk',
@@ -129,6 +130,7 @@ describe('Individual Unit Traceability Frontend API Client', () => {
     const body = JSON.parse(init?.body as string);
     expect(body.units).toHaveLength(7);
     expect(body.conditionResult).toBe('GRADE_A');
+    expect(body.inspectionStage).toBe('REINSPECTION');
     expect(body.disposition).toBe('RELEASE_SELLABLE');
     expect(res.inspectedCount).toBe(7);
   });
@@ -181,13 +183,13 @@ describe('Individual Unit Traceability Frontend API Client', () => {
       ok: true,
       json: async () => ({
         data: {
-            id: 'rep-1',
-            unitId: 'unit-9',
-            repairStatus: 'COMPLETED',
-            actionPerformed: 'Re-stitched seam zipper',
-            technicianName: 'Rafiq',
-            costAmount: '120.00',
-            costCurrency: 'BDT',
+          id: 'rep-1',
+          unitId: 'unit-9',
+          repairStatus: 'COMPLETED',
+          actionPerformed: 'Re-stitched seam zipper',
+          technicianName: 'Rafiq',
+          costAmount: '120.00',
+          costCurrency: 'BDT',
         },
       }),
     });

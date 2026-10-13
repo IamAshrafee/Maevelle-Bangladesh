@@ -64,6 +64,7 @@ export interface PerformInspectionInput {
 
 export interface BulkInspectInput {
   readonly units: readonly { readonly unitId: string; readonly expectedVersion: number }[];
+  readonly inspectionStage?: InspectionStageDto | undefined;
   readonly conditionResult: UnitConditionDto;
   readonly defectDescription?: string | undefined;
   readonly notes?: string | undefined;
@@ -262,7 +263,7 @@ export async function bulkInspectUnits(
     headers: commandHeaders(),
     body: JSON.stringify({
       ...input,
-      inspectionStage: 'INBOUND_INTAKE',
+      inspectionStage: input.inspectionStage ?? 'INBOUND_INTAKE',
       outcome:
         input.disposition === 'RELEASE_SELLABLE'
           ? 'PASSED'
@@ -401,9 +402,7 @@ export async function receiveReturnedUnit(
   return response.data;
 }
 
-export async function setVariantTrackingMode(
-  input: SetTrackingModeInput,
-): Promise<{
+export async function setVariantTrackingMode(input: SetTrackingModeInput): Promise<{
   readonly variantId: string;
   readonly trackingMode: VariantTrackingModeDto;
   readonly version: number;
