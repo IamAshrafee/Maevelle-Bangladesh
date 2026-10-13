@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { inventoryRequest } from '@/lib/inventory/api';
+import { InventoryRequestError, inventoryRequest } from '@/lib/inventory/api';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -89,6 +89,7 @@ export function CloseTransferDiscrepancySheet({
   open,
   onClose,
   onSuccess,
+  onReload,
 }: {
   transferId: string;
   transferVersion: number;
@@ -96,15 +97,20 @@ export function CloseTransferDiscrepancySheet({
   open: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
+  onReload: () => void;
 }) {
   const [entries, setEntries] = useState<DiscrepancyLine[]>(() => toFormLines(lines));
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const commandAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
 
   useEffect(() => {
     if (open) {
       setEntries(toFormLines(lines));
       setError('');
+      setConflict(false);
+      commandAttempt.current = null;
     }
   }, [lines, open]);
 
@@ -127,23 +133,32 @@ export function CloseTransferDiscrepancySheet({
     setError('');
     setIsSubmitting(true);
     try {
+      const payload = {
+        lines: selected.map((entry) => ({
+          transferLineId: entry.transferLineId,
+          dispositionCode: entry.dispositionCode,
+          quantity: entry.remaining,
+          reasonCode: entry.reasonCode.trim(),
+          ...(entry.notes.trim() ? { notes: entry.notes.trim() } : {}),
+          ...(entry.unitIds.length ? { unitIds: entry.unitIds } : {}),
+        })),
+      };
+      const fingerprint = JSON.stringify(payload);
+      if (commandAttempt.current?.fingerprint !== fingerprint) {
+        commandAttempt.current = {
+          fingerprint,
+          key: `transfer-discrepancy-${transferId}-${transferVersion}-${crypto.randomUUID()}`,
+        };
+      }
       const response = await inventoryRequest<{ data: { status: string } }>(
         `/warehouse/transfers/${transferId}/close-discrepancy`,
         {
           method: 'POST',
-          headers: { 'idempotency-key': `transfer-discrepancy-${transferId}-${transferVersion}` },
-          body: JSON.stringify({
-            lines: selected.map((entry) => ({
-              transferLineId: entry.transferLineId,
-              dispositionCode: entry.dispositionCode,
-              quantity: entry.remaining,
-              reasonCode: entry.reasonCode.trim(),
-              ...(entry.notes.trim() ? { notes: entry.notes.trim() } : {}),
-              ...(entry.unitIds.length ? { unitIds: entry.unitIds } : {}),
-            })),
-          }),
+          headers: { 'idempotency-key': commandAttempt.current.key },
+          body: fingerprint,
         },
       );
+      commandAttempt.current = null;
       onSuccess(
         response.data.status === 'CLOSED_WITH_DISCREPANCY'
           ? 'Transfer closed with the documented discrepancy.'
@@ -152,13 +167,14 @@ export function CloseTransferDiscrepancySheet({
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The discrepancy could not be recorded.');
+      setConflict(caught instanceof InventoryRequestError && caught.status === 409);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
+    <Sheet open={open} onOpenChange={(value) => !value && !isSubmitting && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Resolve missing stock</SheetTitle>
@@ -171,9 +187,25 @@ export function CloseTransferDiscrepancySheet({
 
         <div className="mt-6 space-y-4">
           {error && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
+            <div
+              role="alert"
+              className="space-y-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              <p>{error}</p>
+              {conflict ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => {
+                    onClose();
+                    onReload();
+                  }}
+                >
+                  Close and reload transfer
+                </Button>
+              ) : null}
+            </div>
           )}
           {entries.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -216,10 +248,16 @@ export function CloseTransferDiscrepancySheet({
                           <SelectValue placeholder="Select disposition" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="MISSING" description="Item unaccounted for during intake">
+                          <SelectItem
+                            value="MISSING"
+                            description="Item unaccounted for during intake"
+                          >
                             Missing
                           </SelectItem>
-                          <SelectItem value="LOST" description="Transit loss or courier discrepancy">
+                          <SelectItem
+                            value="LOST"
+                            description="Transit loss or courier discrepancy"
+                          >
                             Lost in transfer
                           </SelectItem>
                         </SelectContent>

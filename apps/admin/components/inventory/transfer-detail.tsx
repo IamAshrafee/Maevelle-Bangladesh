@@ -14,7 +14,14 @@ import { CloseTransferDiscrepancySheet } from './close-transfer-discrepancy-shee
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AdminPage, EmptyState, ErrorState, LoadingState } from '@/components/ui/page-shell';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -129,13 +136,20 @@ export function TransferDetail({ transferId }: { transferId: string }) {
 
   if (isLoading) {
     return (
-      <AdminPage><LoadingState message="Loading transfer…" /></AdminPage>
+      <AdminPage>
+        <LoadingState message="Loading transfer…" />
+      </AdminPage>
     );
   }
 
   if (!transfer) {
     return (
-      <AdminPage><EmptyState title="Transfer not found" description="This transfer could not be found or you don't have permission to view it." /></AdminPage>
+      <AdminPage>
+        <EmptyState
+          title="Transfer not found"
+          description="This transfer could not be found or you don't have permission to view it."
+        />
+      </AdminPage>
     );
   }
 
@@ -221,16 +235,17 @@ export function TransferDetail({ transferId }: { transferId: string }) {
             </AlertDialog>
           )}
 
-          {canTransfer && (transfer.status === 'IN_TRANSIT' || transfer.status === 'PARTIALLY_RECEIVED') && (
-            <>
-              <Button variant="outline" onClick={() => setDiscrepancyOpen(true)} disabled={busy}>
-                Resolve missing stock
-              </Button>
-              <Button onClick={() => setReceiveOpen(true)} disabled={busy}>
-                Receive Transfer
-              </Button>
-            </>
-          )}
+          {canTransfer &&
+            (transfer.status === 'IN_TRANSIT' || transfer.status === 'PARTIALLY_RECEIVED') && (
+              <>
+                <Button variant="outline" onClick={() => setDiscrepancyOpen(true)} disabled={busy}>
+                  Resolve missing stock
+                </Button>
+                <Button onClick={() => setReceiveOpen(true)} disabled={busy}>
+                  Receive Transfer
+                </Button>
+              </>
+            )}
         </div>
       </div>
 
@@ -329,55 +344,55 @@ export function TransferDetail({ transferId }: { transferId: string }) {
             </div>
           ) : (
             <Table density="compact">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead className="text-right">Requested</TableHead>
-                    <TableHead className="text-right">Dispatched</TableHead>
-                    <TableHead className="text-right">Received</TableHead>
-                    <TableHead className="text-right">Discrepancy</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lines.map((line: WarehouseTransferLineDto) => (
-                    <TableRow key={line.id}>
-                      <TableCell>
-                        <Link
-                          href={`/inventory/stock/${line.inventoryItemId}`}
-                          className="font-medium hover:underline"
-                        >
-                          {line.productTitle}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
-                          {line.sku}
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead className="text-right">Requested</TableHead>
+                  <TableHead className="text-right">Dispatched</TableHead>
+                  <TableHead className="text-right">Received</TableHead>
+                  <TableHead className="text-right">Discrepancy</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((line: WarehouseTransferLineDto) => (
+                  <TableRow key={line.id}>
+                    <TableCell>
+                      <Link
+                        href={`/inventory/stock/${line.inventoryItemId}`}
+                        className="font-medium hover:underline"
+                      >
+                        {line.productTitle}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
+                        {line.sku}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {formatInventoryNumber(line.requestedQuantity)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {formatInventoryNumber(line.dispatchedQuantity)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums font-medium text-success">
+                      {formatInventoryNumber(line.receivedQuantity)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {line.discrepancy ? (
+                        <span className="text-warning" title={line.discrepancy.reasonCode}>
+                          {formatInventoryNumber(line.discrepancy.quantity)}{' '}
+                          {line.discrepancy.dispositionCode.toLowerCase()}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatInventoryNumber(line.requestedQuantity)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatInventoryNumber(line.dispatchedQuantity)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums font-medium text-success">
-                        {formatInventoryNumber(line.receivedQuantity)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {line.discrepancy ? (
-                          <span className="text-warning" title={line.discrepancy.reasonCode}>
-                            {formatInventoryNumber(line.discrepancy.quantity)}{' '}
-                            {line.discrepancy.dispositionCode.toLowerCase()}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -393,6 +408,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
           setSuccessMessage(msg);
           void load();
         }}
+        onReload={() => void load()}
       />
       <CloseTransferDiscrepancySheet
         transferId={transferId}
@@ -404,6 +420,7 @@ export function TransferDetail({ transferId }: { transferId: string }) {
           setSuccessMessage(message);
           void load();
         }}
+        onReload={() => void load()}
       />
     </AdminPage>
   );

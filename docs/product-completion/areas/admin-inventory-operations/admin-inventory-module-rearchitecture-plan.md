@@ -170,17 +170,21 @@ Remaining in Batch 4:
 - Transfer detail now uses the shared Admin page, loading/error, status, and compact table primitives. Draft management actions and physical transfer actions render from their distinct capabilities, and success/error treatment uses semantic theme tokens.
 - Draft approval and cancellation now require API idempotency keys and replay equivalent completed commands safely while preserving their optimistic version checks. The UI supplies a stable command key for each transfer version.
 - Fixed partial-receipt recovery: reopening the Receive sheet now rehydrates from the latest server lines instead of retaining its first-render quantities. Receive and discrepancy commands use a stable key for the current Transfer version, and both sheets now use full-width mobile layouts with touch-safe serialized-unit controls.
+- Completed partial serialized receipt entry. Each in-transit Unit ID can now be included or left for a later arrival and receives its own arrival condition; selected standard or serialized lines must contain at least one unit and cannot exceed the authoritative remaining in-transit quantity.
+- Bound Transfer draft, receipt, and discrepancy idempotency keys to the exact submitted payload. An unchanged retry reuses its key, while editing quantities, Unit IDs, conditions, reasons, or routing after a failed attempt creates a new command identity instead of triggering changed-payload key reuse.
+- Added explicit stale/conflict recovery to receipt, discrepancy, and draft editing. In-flight sheets cannot be dismissed accidentally; a conflict offers close-and-reload against current Transfer truth; draft edits can reload the latest version; and source-stock loading failures are no longer silently presented as “no stock.”
+- Aligned draft quantities with the platform's whole-unit Inventory contract and moved touched capability warnings to semantic tokens.
 
 Verification for this slice:
 
 - Focused Admin TypeScript and lint checks passed for the Transfer queue.
 - Database/API/Admin focused TypeScript and lint checks passed for the detail lifecycle changes.
 - One focused Inventory integration test passed for retry-safe Transfer cancellation and stale-transition rejection.
+- Focused Admin TypeScript and lint checks passed for draft save, partial serialized receipt, discrepancy closure, and Transfer detail integration.
 
 Remaining in Batch 5:
 
-- Rework create/edit and the receive/discrepancy sheets into one coherent lifecycle experience.
-- Audit transfer validation, permissions, retry semantics, and discrepancy recovery across aggregate and serialized stock.
+- Replace the draft item's capped 100-row source-stock preload with a server-searched/paginated picker, then finish decomposing the large create/edit form without losing the shared workflow.
 
 #### Batch 6 — Count operations — IN PROGRESS
 

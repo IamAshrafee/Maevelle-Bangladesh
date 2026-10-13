@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
-import { inventoryRequest } from '@/lib/inventory/api';
+import { InventoryRequestError, inventoryRequest } from '@/lib/inventory/api';
 import type {
   WarehouseLocationDto,
   InventoryBalanceDto,
@@ -46,7 +46,7 @@ const lineSchema = z.object({
   quantity: z
     .string()
     .trim()
-    .regex(/^\d+(?:\.\d{1,6})?$/, 'Enter a valid positive number')
+    .regex(/^\d+$/, 'Enter a positive whole-unit quantity')
     .refine((val) => Number(val) > 0, 'Quantity must be greater than 0'),
 });
 
@@ -89,8 +89,9 @@ export function TransferForm({
 }) {
   const router = useRouter();
   const isEditing = Boolean(transferId);
-  const commandKey = useRef(crypto.randomUUID());
+  const commandAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isConflict, setIsConflict] = useState(false);
   const [draftVersion, setDraftVersion] = useState<number | null>(null);
 
   // Data fetching state
@@ -98,6 +99,7 @@ export function TransferForm({
   const [locations, setLocations] = useState<WarehouseLocationDto[]>([]);
   const [isLoadingStock, setIsLoadingStock] = useState(false);
   const [availableStock, setAvailableStock] = useState<InventoryBalanceDto[]>([]);
+  const [stockLoadError, setStockLoadError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -105,7 +107,12 @@ export function TransferForm({
       sourceLocationId: '',
       destinationLocationId: initialDestinationLocationId ?? '',
       notes: '',
-      lines: [{ variantId: '', quantity: initialQuantity && Number(initialQuantity) > 0 ? initialQuantity : '1' }],
+      lines: [
+        {
+          variantId: '',
+          quantity: initialQuantity && Number(initialQuantity) > 0 ? initialQuantity : '1',
+        },
+      ],
     },
   });
 
@@ -232,6 +239,7 @@ export function TransferForm({
 
     const fetchStock = async () => {
       setIsLoadingStock(true);
+      setStockLoadError(null);
       try {
         const response = await inventoryRequest<{ data: PaginatedDto<InventoryBalanceDto> }>(
           `/inventory/stock?locationId=${sourceLocationId}&availability=IN_STOCK&limit=100`,
@@ -257,7 +265,10 @@ export function TransferForm({
         }
       } catch (err) {
         if (mounted) {
-          console.error('Failed to fetch source stock:', err);
+          setAvailableStock([]);
+          setStockLoadError(
+            err instanceof Error ? err.message : 'Transferable stock could not be loaded.',
+          );
           setIsLoadingStock(false);
         }
       }
@@ -292,6 +303,7 @@ export function TransferForm({
 
   const onSubmit = async (values: FormValues) => {
     setErrorMessage(null);
+    setIsConflict(false);
 
     // Dynamic stock ceiling check
     for (const [i, line] of values.lines.entries()) {
@@ -307,24 +319,36 @@ export function TransferForm({
     }
 
     try {
+      const payload = {
+        ...(isEditing ? { version: draftVersion } : {}),
+        sourceLocationId: values.sourceLocationId,
+        destinationLocationId: values.destinationLocationId,
+        notes: values.notes?.trim() || null,
+        lines: values.lines.map((line) => ({
+          variantId: line.variantId,
+          quantity: line.quantity,
+        })),
+      };
+      const fingerprint = JSON.stringify(payload);
+      if (commandAttempt.current?.fingerprint !== fingerprint) {
+        commandAttempt.current = {
+          fingerprint,
+          key: `transfer-draft-${transferId ?? 'new'}-${draftVersion ?? 0}-${crypto.randomUUID()}`,
+        };
+      }
       const result = await inventoryRequest<{ data: { transferId: string; version: number } }>(
         isEditing ? `/warehouse/transfers/${transferId}` : '/warehouse/transfers',
         {
           method: isEditing ? 'PUT' : 'POST',
-          headers: { 'idempotency-key': commandKey.current },
-          body: JSON.stringify({
-            ...(isEditing ? { version: draftVersion } : {}),
-            sourceLocationId: values.sourceLocationId,
-            destinationLocationId: values.destinationLocationId,
-            notes: values.notes?.trim() || null,
-            lines: values.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
-          }),
+          headers: { 'idempotency-key': commandAttempt.current.key },
+          body: fingerprint,
         },
       );
 
       router.push(`/inventory/transfers/${result.data.transferId}`);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
+      setIsConflict(err instanceof InventoryRequestError && err.status === 409);
     }
   };
 
@@ -405,13 +429,26 @@ export function TransferForm({
 
       {/* Error banner */}
       {errorMessage ? (
-        <OperationalFeedback tone="danger">{errorMessage}</OperationalFeedback>
+        <div className="space-y-2">
+          <OperationalFeedback tone="danger">{errorMessage}</OperationalFeedback>
+          {isConflict && isEditing ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.reload()}
+            >
+              Reload current draft
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Capability Warning if no facilities configured */}
-      {!isLoadingLocations && (sourceLocations.length === 0 || destinationLocations.length === 0) ? (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3.5 text-xs text-amber-900 dark:text-amber-200">
-          <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+      {!isLoadingLocations &&
+      (sourceLocations.length === 0 || destinationLocations.length === 0) ? (
+        <div className="flex items-start gap-3 rounded-lg border border-warning/20 bg-warning/10 p-3.5 text-xs text-foreground">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
           <div>
             <p className="font-semibold leading-none">Operational Capability Notice</p>
             <p className="mt-1 text-muted-foreground leading-relaxed">
@@ -457,7 +494,9 @@ export function TransferForm({
                 >
                   <SelectTrigger id="source-location" className="h-9 text-sm">
                     <SelectValue
-                      placeholder={isLoadingLocations ? 'Loading locations…' : 'Select origin depot'}
+                      placeholder={
+                        isLoadingLocations ? 'Loading locations…' : 'Select origin depot'
+                      }
                     />
                   </SelectTrigger>
                   <SelectContent>
@@ -600,11 +639,9 @@ export function TransferForm({
 
           <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
             {/* Global line items validation error */}
-            {form.formState.errors.lines?.root?.message ||
-            form.formState.errors.lines?.message ? (
+            {form.formState.errors.lines?.root?.message || form.formState.errors.lines?.message ? (
               <p className="rounded-md border border-destructive/20 bg-destructive/5 p-2 text-xs font-medium text-destructive">
-                {form.formState.errors.lines?.root?.message ||
-                  form.formState.errors.lines?.message}
+                {form.formState.errors.lines?.root?.message || form.formState.errors.lines?.message}
               </p>
             ) : null}
 
@@ -621,6 +658,15 @@ export function TransferForm({
               <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-xs text-muted-foreground">
                 <Loader2 className="mr-2 size-4 animate-spin text-primary" /> Loading transferable
                 stock…
+              </div>
+            ) : stockLoadError ? (
+              <div
+                role="alert"
+                className="flex flex-col items-center justify-center rounded-lg border border-destructive/20 bg-destructive/5 p-8 text-center text-xs text-destructive"
+              >
+                <AlertTriangle className="mb-2 size-7" aria-hidden="true" />
+                <p className="font-medium">Transferable stock could not be loaded</p>
+                <p className="mt-1 max-w-sm">{stockLoadError}</p>
               </div>
             ) : availableStock.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center text-xs text-muted-foreground">
@@ -870,8 +916,8 @@ export function TransferForm({
                       {/* Duplicate error feedback */}
                       {isDuplicate ? (
                         <p className="mt-2 text-[11px] font-medium text-destructive">
-                          Duplicate SKU: This item is already added in another line. Each variant may
-                          only appear once in a transfer draft.
+                          Duplicate SKU: This item is already added in another line. Each variant
+                          may only appear once in a transfer draft.
                         </p>
                       ) : null}
                     </div>
