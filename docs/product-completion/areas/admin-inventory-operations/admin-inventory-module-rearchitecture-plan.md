@@ -213,6 +213,8 @@ Remaining in Batch 6:
 - Closed a capability bypass where an inspection disposition could write off inventory with only `inventory.units.manage`. Single and bulk inspection now require the distinct `inventory.units.write_off` capability for that disposition, and routine inspection forms direct operators to the dedicated write-off workflow.
 - Made Quality dialogs recoverable between units and attempts: inspection, repair, release, and write-off state resets from the latest unit/version each time they open, stale values no longer leak between identities, inspection stage defaults follow inbound/return/reinspection/routine context, and the forms use full-screen mobile layouts.
 - Removed the release form's non-authoritative “target grade” selector. Release now records the mandatory authorization reason while inspection remains the sole owner of the physical quality grade.
+- Consolidated the full scanner page and quick-scan dialog onto one scanned-unit result component. Both entry points now use the same capability/state-aware inspection and Transfer actions, current state display, label action, detail link, and post-inspection refresh instead of maintaining two drifting workflows.
+- Improved camera fallback and accessibility: unsupported camera/barcode detection produces an actionable handheld/manual-entry path before requesting permission, rear-camera preference is non-blocking, the overlay has dialog semantics, and icon controls have accessible names. The quick scanner uses a touch-friendly full-screen mobile dialog and clears stale results on each new session.
 
 Verification for this slice:
 
@@ -220,6 +222,7 @@ Verification for this slice:
 - Focused lint passed for the touched Database, API, and Quality Admin files.
 - One focused serialized-unit database test passed for combined repair-attention filtering, Location scoping, and authoritative pagination totals.
 - Two focused serialized-unit lifecycle tests passed for active/completed repair release protection and committed Fulfillment identity protection.
+- Focused Admin TypeScript and lint checks passed for the shared scanner result, full-page scanner, quick dialog, and camera input. Real handheld-scanner, device-camera, and printed-label verification remains a hardware/owner gate.
 
 Remaining in Batch 7:
 
