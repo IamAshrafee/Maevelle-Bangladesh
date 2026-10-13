@@ -603,6 +603,17 @@ export function registerInventoryUnitRoutes(
         disposition?: InspectionDisposition;
         expectedVersion: number;
       };
+      if (
+        body.disposition === 'WRITE_OFF' &&
+        !active.capabilities.includes('inventory.units.write_off')
+      ) {
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Writing off a physical unit requires the inventory.units.write_off capability.',
+          },
+        });
+      }
       const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
       if (!key) return;
 
@@ -670,6 +681,17 @@ export function registerInventoryUnitRoutes(
         outcome: InspectionOutcome;
         disposition?: InspectionDisposition;
       };
+      if (
+        body.disposition === 'WRITE_OFF' &&
+        !active.capabilities.includes('inventory.units.write_off')
+      ) {
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Writing off physical units requires the inventory.units.write_off capability.',
+          },
+        });
+      }
       const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
       if (!key) return;
 

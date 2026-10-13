@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
-import type { InventoryUnitDto, UnitConditionDto } from '@maevelle/contracts';
+import type { InventoryUnitDto } from '@maevelle/contracts';
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { NativeSelect } from '@/components/ui/native-select';
 import { releaseUnitForSale } from '@/lib/inventory/units';
 
 export interface UnitReleaseDialogProps {
@@ -29,11 +28,14 @@ export function UnitReleaseDialog({
   onSuccess,
 }: UnitReleaseDialogProps) {
   const [reason, setReason] = useState('');
-  const [targetCondition, setTargetCondition] = useState<UnitConditionDto>(
-    unit.currentCondition === 'GRADE_B' ? 'GRADE_B' : 'GRADE_A',
-  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setReason('');
+    setError(null);
+  }, [open, unit.id, unit.version]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,8 +45,7 @@ export function UnitReleaseDialog({
     try {
       await releaseUnitForSale(unit.id, {
         expectedVersion: unit.version,
-        reason: reason.trim() || undefined,
-        targetCondition,
+        reason: reason.trim(),
       });
 
       onOpenChange(false);
@@ -61,7 +62,7 @@ export function UnitReleaseDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
             <CheckCircle2 className="size-4 text-emerald-600" />
@@ -81,25 +82,8 @@ export function UnitReleaseDialog({
           ) : null}
 
           <div className="space-y-1.5">
-            <label htmlFor="release-condition" className="text-xs font-medium text-foreground">
-              Target Release Grade *
-            </label>
-            <NativeSelect
-              id="release-condition"
-              value={targetCondition}
-              onChange={(e) => setTargetCondition(e.target.value as UnitConditionDto)}
-              disabled={submitting}
-              className="w-full text-xs"
-              required
-            >
-              <option value="GRADE_A">Grade A — Prime Flawless Inventory</option>
-              <option value="GRADE_B">Grade B — Approved Minor Imperfection / Restricted</option>
-            </NativeSelect>
-          </div>
-
-          <div className="space-y-1.5">
             <label htmlFor="release-reason" className="text-xs font-medium text-foreground">
-              Authorization Note / Reason
+              Authorization Note / Reason *
             </label>
             <Input
               id="release-reason"
@@ -108,6 +92,7 @@ export function UnitReleaseDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               disabled={submitting}
+              required
               className="text-xs font-sans"
             />
           </div>
@@ -118,7 +103,7 @@ export function UnitReleaseDialog({
               variant="outline"
               size="sm"
               onClick={() => onOpenChange(false)}
-              disabled={submitting}
+              disabled={submitting || !reason.trim()}
             >
               Cancel
             </Button>

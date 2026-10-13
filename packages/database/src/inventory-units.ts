@@ -1245,16 +1245,37 @@ export async function performUnitInspection(
     }
     requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
 
-    if (unit.status === 'DISPATCHED' && input.inspectionStage !== 'RETURN_INSPECTION') {
+    if (!['AWAITING_QC', 'AVAILABLE', 'ON_HOLD', 'RETURNED'].includes(unit.status)) {
       throw new UnitTraceabilityDomainError(
         'INVALID_TRANSITION',
-        'Cannot inspect a unit that has already been dispatched without a return workflow.',
+        `Unit status ${unit.status} cannot enter a quality inspection. Resolve its reservation, transfer, or fulfillment commitment first.`,
       );
     }
-    if (unit.status === 'WRITTEN_OFF') {
+    if (unit.status === 'RETURNED' && input.inspectionStage !== 'RETURN_INSPECTION') {
       throw new UnitTraceabilityDomainError(
         'INVALID_TRANSITION',
-        'Cannot inspect a written-off unit.',
+        'A returned unit must use the return inspection stage.',
+      );
+    }
+    if (input.inspectionStage === 'RETURN_INSPECTION' && unit.status !== 'RETURNED') {
+      throw new UnitTraceabilityDomainError(
+        'INVALID_TRANSITION',
+        'Return inspection is available only after the unit has been received through the return workflow.',
+      );
+    }
+
+    const activeRepair = await sql<{ id: string }>`
+      select id
+      from inventory.unit_repairs
+      where organization_id = ${input.organizationId}
+        and unit_id = ${input.unitId}
+        and repair_status in ('REQUESTED', 'IN_PROGRESS')
+      limit 1
+    `.execute(trx);
+    if (activeRepair.rows[0]) {
+      throw new UnitTraceabilityDomainError(
+        'INVALID_TRANSITION',
+        'Complete the active repair before recording a reinspection.',
       );
     }
 
@@ -1481,10 +1502,25 @@ export async function requestUnitRepair(
       throw new UnitTraceabilityDomainError('NOT_FOUND', 'Inventory unit was not found.');
     }
     requireCurrentVersion(unit.version, input.expectedVersion, 'Inventory unit');
-    if (unit.status === 'DISPATCHED' || unit.status === 'WRITTEN_OFF') {
+    if (!['AWAITING_QC', 'AVAILABLE', 'ON_HOLD'].includes(unit.status)) {
       throw new UnitTraceabilityDomainError(
         'INVALID_TRANSITION',
-        'Cannot request repair on a dispatched or written-off unit.',
+        `Unit status ${unit.status} cannot enter repair. Resolve its reservation, transfer, or fulfillment commitment first.`,
+      );
+    }
+
+    const existingRepair = await sql<{ id: string }>`
+      select id
+      from inventory.unit_repairs
+      where organization_id = ${input.organizationId}
+        and unit_id = ${input.unitId}
+        and repair_status in ('REQUESTED', 'IN_PROGRESS')
+      limit 1
+    `.execute(trx);
+    if (existingRepair.rows[0]) {
+      throw new UnitTraceabilityDomainError(
+        'CONFLICT',
+        'Complete the active repair before opening another repair record.',
       );
     }
 
@@ -1947,6 +1983,57 @@ export async function releaseUnitForSale(
         'Severely damaged unsellable items cannot be directly released for sale.',
       );
     }
+    if (unit.current_condition === 'REPAIR_REQUIRED') {
+      throw new UnitTraceabilityDomainError(
+        'INVALID_TRANSITION',
+        'A repair-required unit must complete repair and reinspection before release.',
+      );
+    }
+
+    const repairEvidence = await sql<{
+      active_repair_id: string | null;
+      latest_completed_at: Date | null;
+      latest_inspected_at: Date | null;
+    }>`
+      select
+        (
+          select rep.id
+          from inventory.unit_repairs rep
+          where rep.organization_id = ${input.organizationId}
+            and rep.unit_id = ${input.unitId}
+            and rep.repair_status in ('REQUESTED', 'IN_PROGRESS')
+          limit 1
+        ) as active_repair_id,
+        (
+          select max(rep.completed_at)
+          from inventory.unit_repairs rep
+          where rep.organization_id = ${input.organizationId}
+            and rep.unit_id = ${input.unitId}
+            and rep.repair_status = 'COMPLETED'
+        ) as latest_completed_at,
+        (
+          select max(insp.created_at)
+          from inventory.unit_inspections insp
+          where insp.organization_id = ${input.organizationId}
+            and insp.unit_id = ${input.unitId}
+        ) as latest_inspected_at
+    `.execute(trx);
+    const evidence = repairEvidence.rows[0]!;
+    if (evidence.active_repair_id) {
+      throw new UnitTraceabilityDomainError(
+        'INVALID_TRANSITION',
+        'Complete the active repair before releasing this unit.',
+      );
+    }
+    if (
+      evidence.latest_completed_at &&
+      (!evidence.latest_inspected_at || evidence.latest_inspected_at <= evidence.latest_completed_at)
+    ) {
+      throw new UnitTraceabilityDomainError(
+        'INVALID_TRANSITION',
+        'A completed repair must be followed by a successful reinspection before release.',
+      );
+    }
 
     if (unit.inventory_condition_code !== 'SELLABLE') {
       await moveInventoryConditionInTransaction(trx, {
@@ -2022,10 +2109,10 @@ export async function writeOffUnit(
     if (unit.status === 'WRITTEN_OFF') {
       throw new UnitTraceabilityDomainError('CONFLICT', 'Unit is already written off.');
     }
-    if (unit.status === 'DISPATCHED') {
+    if (['RESERVED', 'IN_FULFILLMENT', 'IN_TRANSFER', 'DISPATCHED'].includes(unit.status)) {
       throw new UnitTraceabilityDomainError(
         'INVALID_TRANSITION',
-        'Cannot write off a dispatched unit without a return/loss case.',
+        `Cannot write off a unit with status ${unit.status}. Resolve its reservation, transfer, fulfillment, or loss workflow first.`,
       );
     }
 

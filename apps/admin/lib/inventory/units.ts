@@ -107,8 +107,7 @@ export interface UpdatePackagingInput {
 
 export interface ReleaseUnitInput {
   readonly expectedVersion: number;
-  readonly reason?: string | undefined;
-  readonly targetCondition?: UnitConditionDto | undefined;
+  readonly reason: string;
 }
 
 export interface WriteOffUnitInput {

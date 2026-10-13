@@ -20,7 +20,6 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { UnitEventDto, UnitEventTypeDto } from '@maevelle/contracts';
-import { cn } from '@/lib/utils';
 import { UnitStatusBadge } from './unit-status-badge';
 import { UnitConditionBadge } from './unit-condition-badge';
 

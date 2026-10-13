@@ -208,12 +208,18 @@ Remaining in Batch 6:
 - Applied the operator's Location scope to an unfiltered physical-unit collection at the database query boundary. A scoped operator can no longer omit `locationId` to receive organization-wide unit identities.
 - Closed Location-scope gaps on unit history, inspections, repairs, barcode outputs, inspection, repair request/completion, packaging, release, write-off, return receipt, direct placement, bulk inspection, bulk placement, and Fulfillment allocation. Cross-Location moves now authorize both the current Location and destination; bulk commands authorize every selected identity before the transaction begins.
 - Added a tenant-safe repair-to-current-Location resolver so repair completion can be authorized without exposing repair details from an out-of-scope facility.
+- Added one shared Admin action policy for inspection, repair, release, Transfer handoff, bulk QC, and write-off availability. Unit list, detail, mobile cards, and Repair Queue now hide actions that the current identity state or operator capability cannot complete.
+- Hardened Quality lifecycle invariants in the domain: reserved, in-Fulfillment, in-Transfer, dispatched, and written-off units cannot be silently regraded, repaired, or written off around their owning workflow; active repairs block inspection and release; a completed repair requires later reinspection before release; and return inspections require a real returned unit.
+- Closed a capability bypass where an inspection disposition could write off inventory with only `inventory.units.manage`. Single and bulk inspection now require the distinct `inventory.units.write_off` capability for that disposition, and routine inspection forms direct operators to the dedicated write-off workflow.
+- Made Quality dialogs recoverable between units and attempts: inspection, repair, release, and write-off state resets from the latest unit/version each time they open, stale values no longer leak between identities, inspection stage defaults follow inbound/return/reinspection/routine context, and the forms use full-screen mobile layouts.
+- Removed the release form's non-authoritative “target grade” selector. Release now records the mandatory authorization reason while inspection remains the sole owner of the physical quality grade.
 
 Verification for this slice:
 
 - Focused Database and API package builds plus Admin TypeScript check passed.
 - Focused lint passed for the touched Database, API, and Quality Admin files.
 - One focused serialized-unit database test passed for combined repair-attention filtering, Location scoping, and authoritative pagination totals.
+- Two focused serialized-unit lifecycle tests passed for active/completed repair release protection and committed Fulfillment identity protection.
 
 Remaining in Batch 7:
 

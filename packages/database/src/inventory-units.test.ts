@@ -514,6 +514,28 @@ describe('Individual Unit Traceability & Quality Control', () => {
     expect(unitOnHold.status).toBe('ON_HOLD');
     expect(unitOnHold.currentCondition).toBe('REPAIR_REQUIRED');
 
+    await expect(
+      performUnitInspection(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitOnHold.version,
+        inspectionStage: 'REINSPECTION',
+        conditionResult: 'GRADE_A',
+        outcome: 'PASSED',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+
+    await expect(
+      releaseUnitForSale(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitOnHold.version,
+        reason: 'Unsafe release while repair is active',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+
     // 2. Complete repair
     const completedRepair = await completeUnitRepair(database.db, {
       organizationId: f.organizationId,
@@ -534,6 +556,16 @@ describe('Individual Unit Traceability & Quality Control', () => {
       unitId: unit!.id,
     });
     expect(unitAfterRepair.status).toBe('AWAITING_QC');
+
+    await expect(
+      releaseUnitForSale(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitAfterRepair.version,
+        reason: 'Unsafe release before post-repair inspection',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
 
     // 3. Reinspection passes
     const reinspection = await performUnitInspection(database.db, {
@@ -977,6 +1009,27 @@ describe('Individual Unit Traceability & Quality Control', () => {
     });
     expect(unitAllocated.status).toBe('IN_FULFILLMENT');
     expect(unitAllocated.currentFulfillmentId).toBe(fulfillment.id);
+
+    await expect(
+      performUnitInspection(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitAllocated.version,
+        inspectionStage: 'ROUTINE_AUDIT',
+        conditionResult: 'GRADE_A',
+        outcome: 'PASSED',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+    await expect(
+      writeOffUnit(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitAllocated.version,
+        reason: 'Unsafe write-off while committed to fulfillment',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
 
     // 6. Test cancellation releases units
     const cancelled = await cancelFulfillment(database.db, {

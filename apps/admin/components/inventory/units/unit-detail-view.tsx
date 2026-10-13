@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   Boxes,
   ArrowLeft,
@@ -11,16 +10,10 @@ import {
   Wrench,
   CheckCircle,
   Ban,
-  RotateCcw,
   Copy,
   Check,
   ExternalLink,
-  Calendar,
-  User,
-  Tag,
   Clock,
-  Loader2,
-  AlertTriangle,
   RefreshCw,
   ShoppingBag,
   PackageCheck,
@@ -38,11 +31,13 @@ import { Breadcrumb } from '@/components/ui/breadcrumb';
 import {
   AdminPage,
   PageHeader,
-  PageTitle,
-  PageDescription,
   PageActions,
   PageSection,
+  ErrorState,
+  LoadingState,
 } from '@/components/ui/page-shell';
+import { StatusBadge } from '@/components/status-badge';
+import { useAdminCapability } from '@/components/admin-capabilities';
 import {
   getInventoryUnit,
   getUnitInspections,
@@ -59,10 +54,22 @@ import { UnitRepairDialog } from './unit-repair-dialog';
 import { UnitReleaseDialog } from './unit-release-dialog';
 import { UnitWriteOffDialog } from './unit-write-off-dialog';
 import { UnitEventTimeline } from './unit-event-timeline';
-import { cn } from '@/lib/utils';
+import { QualityWorkspaceTabs } from './quality-workspace-tabs';
+import {
+  recommendedInspectionStage,
+  unitCanBeInspected,
+  unitCanBeReleased,
+  unitCanBeWrittenOff,
+  unitCanCompleteRepair,
+  unitCanEnterRepair,
+  unitCanEnterTransfer,
+} from './unit-action-policy';
 
 export function UnitDetailView({ unitId }: { readonly unitId: string }) {
-  const router = useRouter();
+  const canManage = useAdminCapability('inventory.units.manage');
+  const canTransfer = useAdminCapability('inventory.transfer');
+  const canReleaseUnits = useAdminCapability('inventory.units.release');
+  const canWriteOffUnits = useAdminCapability('inventory.units.write_off');
 
   const [unit, setUnit] = useState<InventoryUnitDto | null>(null);
   const [inspections, setInspections] = useState<readonly UnitInspectionDto[]>([]);
@@ -117,10 +124,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
   if (loading) {
     return (
       <AdminPage>
-        <div className="p-12 text-center text-sm text-muted-foreground">
-          <Loader2 className="size-6 animate-spin mx-auto mb-2 text-primary" />
-          Loading unit data…
-        </div>
+        <LoadingState message="Loading physical unit details…" />
       </AdminPage>
     );
   }
@@ -128,12 +132,15 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
   if (!unit) {
     return (
       <AdminPage>
-        <div className="p-8 text-center text-sm text-destructive border rounded-xl bg-card">
-          <p className="font-semibold">{error || 'Physical unit was not found.'}</p>
+        <ErrorState
+          title="Physical unit unavailable"
+          message={error || 'The physical unit was not found or is outside your authorized locations.'}
+          onRetry={() => void loadUnitData()}
+        />
+        <div>
           <Button
             variant="outline"
             size="sm"
-            className="mt-4"
             render={<Link href="/inventory/units" />}
           >
             <ArrowLeft className="size-3.5 mr-1.5" /> Back to Units
@@ -144,13 +151,12 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
   }
 
   // Permitted actions based on operational status
-  const canInspect = ['AWAITING_QC', 'AVAILABLE', 'ON_HOLD', 'RETURNED'].includes(unit.status);
-  const canMove = unit.status !== 'WRITTEN_OFF';
-  const canRequestRepair =
-    ['AWAITING_QC', 'AVAILABLE', 'ON_HOLD'].includes(unit.status) && !unit.activeRepair;
-  const canCompleteRepair = Boolean(unit.activeRepair);
-  const canRelease = ['ON_HOLD', 'AWAITING_QC'].includes(unit.status);
-  const canWriteOff = !['DISPATCHED', 'WRITTEN_OFF'].includes(unit.status);
+  const canInspect = canManage && unitCanBeInspected(unit);
+  const canMove = canTransfer && unitCanEnterTransfer(unit);
+  const canRequestRepair = canManage && unitCanEnterRepair(unit);
+  const canCompleteRepair = canManage && unitCanCompleteRepair(unit);
+  const canRelease = canReleaseUnits && unitCanBeReleased(unit);
+  const canWriteOff = canWriteOffUnits && unitCanBeWrittenOff(unit);
 
   return (
     <AdminPage>
@@ -162,6 +168,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
           { label: unit.unitCode, current: true },
         ]}
       />
+      <QualityWorkspaceTabs />
 
       {/* Header */}
       <PageHeader>
@@ -177,7 +184,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
               title="Copy Unit Code"
             >
               {copiedCode ? (
-                <Check className="size-3.5 text-emerald-600" />
+                <Check className="size-3.5 text-success" />
               ) : (
                 <Copy className="size-3.5" />
               )}
@@ -208,7 +215,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
               onClick={() => setInspectOpen(true)}
               className="gap-1.5"
             >
-              <ShieldCheck className="size-3.5 text-blue-600" />
+              <ShieldCheck className="size-3.5 text-info" />
               <span>Inspect</span>
             </Button>
           ) : null}
@@ -233,7 +240,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
                 setRepairMode('request');
                 setRepairOpen(true);
               }}
-              className="gap-1.5 text-amber-700 dark:text-amber-400"
+              className="gap-1.5"
             >
               <Wrench className="size-3.5" />
               <span>Send for Repair</span>
@@ -248,7 +255,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
                 setRepairMode('complete');
                 setRepairOpen(true);
               }}
-              className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+              className="gap-1.5"
             >
               <Wrench className="size-3.5" />
               <span>Complete Repair</span>
@@ -260,7 +267,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
               variant="default"
               size="sm"
               onClick={() => setReleaseOpen(true)}
-              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="gap-1.5"
             >
               <CheckCircle className="size-3.5" />
               <span>Release for Sale</span>
@@ -304,7 +311,6 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="bg-white p-3 rounded-lg border flex flex-col items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={getUnitBarcodeSvgUrl(unit.id)}
                   alt={`Barcode for ${unit.unitCode}`}
@@ -472,7 +478,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
                     </div>
 
                     {insp.defectDescription ? (
-                      <p className="text-xs text-foreground bg-amber-500/10 border border-amber-500/20 p-2 rounded">
+                      <p className="rounded border border-warning/30 bg-warning/10 p-2 text-xs text-foreground">
                         <strong>Defect:</strong> {insp.defectDescription}
                       </p>
                     ) : null}
@@ -497,7 +503,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
           <div className="rounded-xl border bg-card p-4 shadow-2xs space-y-3">
             <div className="flex items-center justify-between border-b pb-2.5">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Wrench className="size-4 text-amber-500" />
+                <Wrench className="size-4 text-warning" />
                 <span>Repair & Tailoring Records ({repairs.length})</span>
               </h3>
               {canRequestRepair ? (
@@ -527,16 +533,7 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
                       <span className="font-mono font-semibold text-foreground">
                         {rep.repairNumber}
                       </span>
-                      <span
-                        className={cn(
-                          'px-2 py-0.5 rounded-full text-[10px] font-medium border',
-                          rep.repairStatus === 'COMPLETED'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200',
-                        )}
-                      >
-                        {rep.repairStatus.replaceAll('_', ' ')}
-                      </span>
+                      <StatusBadge status={rep.repairStatus} />
                     </div>
 
                     <p className="text-xs text-foreground">
@@ -599,42 +596,53 @@ export function UnitDetailView({ unitId }: { readonly unitId: string }) {
         units={[unit]}
       />
 
-      <UnitMoveDialog
-        open={moveOpen}
-        onOpenChange={setMoveOpen}
-        units={[unit]}
-        onSuccess={() => void loadUnitData()}
-      />
+      {canTransfer ? (
+        <UnitMoveDialog
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
+          units={[unit]}
+          onSuccess={() => void loadUnitData()}
+        />
+      ) : null}
 
-      <UnitInspectDialog
-        open={inspectOpen}
-        onOpenChange={setInspectOpen}
-        unit={unit}
-        onSuccess={() => void loadUnitData()}
-      />
+      {canManage ? (
+        <UnitInspectDialog
+          open={inspectOpen}
+          onOpenChange={setInspectOpen}
+          unit={unit}
+          defaultStage={recommendedInspectionStage(unit)}
+          onSuccess={() => void loadUnitData()}
+        />
+      ) : null}
 
-      <UnitRepairDialog
-        open={repairOpen}
-        onOpenChange={setRepairOpen}
-        unit={unit}
-        existingRepair={unit.activeRepair}
-        mode={repairMode}
-        onSuccess={() => void loadUnitData()}
-      />
+      {canManage ? (
+        <UnitRepairDialog
+          open={repairOpen}
+          onOpenChange={setRepairOpen}
+          unit={unit}
+          existingRepair={unit.activeRepair}
+          mode={repairMode}
+          onSuccess={() => void loadUnitData()}
+        />
+      ) : null}
 
-      <UnitReleaseDialog
-        open={releaseOpen}
-        onOpenChange={setReleaseOpen}
-        unit={unit}
-        onSuccess={() => void loadUnitData()}
-      />
+      {canReleaseUnits ? (
+        <UnitReleaseDialog
+          open={releaseOpen}
+          onOpenChange={setReleaseOpen}
+          unit={unit}
+          onSuccess={() => void loadUnitData()}
+        />
+      ) : null}
 
-      <UnitWriteOffDialog
-        open={writeOffOpen}
-        onOpenChange={setWriteOffOpen}
-        unit={unit}
-        onSuccess={() => void loadUnitData()}
-      />
+      {canWriteOffUnits ? (
+        <UnitWriteOffDialog
+          open={writeOffOpen}
+          onOpenChange={setWriteOffOpen}
+          unit={unit}
+          onSuccess={() => void loadUnitData()}
+        />
+      ) : null}
     </AdminPage>
   );
 }

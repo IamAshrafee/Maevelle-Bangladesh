@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Ban, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
 import type { InventoryUnitDto } from '@maevelle/contracts';
 import {
@@ -31,6 +31,12 @@ export function UnitWriteOffDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    setReason('');
+    setError(null);
+  }, [open, unit.id, unit.version]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) return;
@@ -58,7 +64,7 @@ export function UnitWriteOffDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md border-destructive/20">
+      <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-w-md border-destructive/20">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold text-destructive">
             <Ban className="size-4" />
@@ -83,7 +89,7 @@ export function UnitWriteOffDialog({
               <span>Permanent Operational Adjustment</span>
             </div>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-              Writing off unit <strong className="font-mono text-foreground">{unit.unitCode}</strong> marks it as permanently destroyed or lost, and automatically posts an inventory loss decrement to the financial and stock ledgers.
+              Writing off unit <strong className="font-mono text-foreground">{unit.unitCode}</strong> permanently removes its physical identity from usable stock and records the quantity and inventory-cost evidence.
             </p>
           </div>
 

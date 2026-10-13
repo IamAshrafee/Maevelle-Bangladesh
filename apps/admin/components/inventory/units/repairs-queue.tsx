@@ -35,6 +35,12 @@ import { UnitReleaseDialog } from './unit-release-dialog';
 import { cn } from '@/lib/utils';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { QualityWorkspaceTabs } from './quality-workspace-tabs';
+import {
+  unitCanBeInspected,
+  unitCanBeReleased,
+  unitCanCompleteRepair,
+  unitCanEnterRepair,
+} from './unit-action-policy';
 
 export function RepairsQueue() {
   const canManage = useAdminCapability('inventory.units.manage');
@@ -225,7 +231,8 @@ export function RepairsQueue() {
                       </p>
                       {canManage || canRelease ? (
                         <div className="mt-4 grid grid-cols-2 gap-2">
-                          {canManage ? (
+                          {canManage &&
+                          (unitCanCompleteRepair(unit) || unitCanEnterRepair(unit)) ? (
                             <Button
                               size="sm"
                               onClick={() => {
@@ -238,7 +245,7 @@ export function RepairsQueue() {
                               {unit.activeRepair ? 'Complete repair' : 'Log work'}
                             </Button>
                           ) : null}
-                          {canManage ? (
+                          {canManage && unitCanBeInspected(unit) ? (
                             <Button
                               variant="outline"
                               size="sm"
@@ -250,7 +257,7 @@ export function RepairsQueue() {
                               <ShieldCheck className="size-4" /> Reinspect
                             </Button>
                           ) : null}
-                          {canRelease ? (
+                          {canRelease && unitCanBeReleased(unit) ? (
                             <Button
                               variant="outline"
                               size="sm"
@@ -323,7 +330,8 @@ export function RepairsQueue() {
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {/* Log / Complete Repair button */}
-                              {canManage ? (
+                          {canManage &&
+                          (unitCanCompleteRepair(unit) || unitCanEnterRepair(unit)) ? (
                                 <Button
                                   variant="default"
                                   size="xs"
@@ -340,7 +348,7 @@ export function RepairsQueue() {
                               ) : null}
 
                               {/* Reinspect button */}
-                              {canManage ? (
+                          {canManage && unitCanBeInspected(unit) ? (
                                 <Button
                                   variant="outline"
                                   size="xs"
@@ -357,7 +365,7 @@ export function RepairsQueue() {
                               ) : null}
 
                               {/* Authorize Release button */}
-                              {canRelease ? (
+                          {canRelease && unitCanBeReleased(unit) ? (
                                 <Button
                                   variant="outline"
                                   size="xs"

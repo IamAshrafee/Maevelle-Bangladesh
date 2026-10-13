@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Wrench, CheckCircle, Loader2, AlertCircle, UploadCloud, X, FileImage } from 'lucide-react';
 import type { InventoryUnitDto, UnitRepairDto } from '@maevelle/contracts';
 import {
@@ -53,6 +53,20 @@ export function UnitRepairDialog({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setDefectDescription(unit.latestInspection?.defectDescription || '');
+    setActionRequired('');
+    setRequestNotes('');
+    setActionPerformed('');
+    setTechnicianName(existingRepair?.technicianName || unit.activeRepair?.technicianName || '');
+    setCostAmount('');
+    setCompleteNotes('');
+    setPhotoAssetIds([]);
+    setPhotoPreviews([]);
+    setError(null);
+  }, [existingRepair, mode, open, unit]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -125,10 +139,10 @@ export function UnitRepairDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-h-[90vh] sm:max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-            <Wrench className="size-4 text-amber-500" />
+            <Wrench className="size-4 text-warning" />
             <span>
               {mode === 'request'
                 ? `Route Unit ${unit.unitCode} for Repair`

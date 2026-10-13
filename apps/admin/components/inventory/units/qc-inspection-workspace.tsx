@@ -654,7 +654,6 @@ export function QCInspectionWorkspace({
                     <option value="RESTRICTED_SALE">Restricted / Minor Defect Sale</option>
                     <option value="MOVE_TO_REPAIR">Route to Repair Queue</option>
                     <option value="HOLD">Hold in Quality Quarantine</option>
-                    <option value="WRITE_OFF">Authorize Write-Off</option>
                   </NativeSelect>
                 </div>
 

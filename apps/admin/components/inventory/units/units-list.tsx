@@ -56,11 +56,18 @@ import { UnitScanLookupDialog } from './unit-scan-lookup-dialog';
 import { cn } from '@/lib/utils';
 import { useAdminCapability } from '@/components/admin-capabilities';
 import { QualityWorkspaceTabs } from './quality-workspace-tabs';
+import {
+  recommendedInspectionStage,
+  unitCanBeBulkPassed,
+  unitCanBeInspected,
+  unitCanEnterTransfer,
+} from './unit-action-policy';
 
 export function UnitsList() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const canManage = useAdminCapability('inventory.units.manage');
+  const canTransfer = useAdminCapability('inventory.transfer');
 
   // Query filters from URL or defaults
   const [search, setSearch] = useState(searchParams.get('search') || searchParams.get('q') || '');
@@ -412,29 +419,30 @@ export function UnitsList() {
               <span>Print Labels</span>
             </Button>
 
-            {canManage ? (
-              <>
+            {canTransfer ? (
                 <Button
                   size="xs"
                   variant="secondary"
                   onClick={() => setMoveModalOpen(true)}
+                  disabled={selectedUnits.some((unit) => !unitCanEnterTransfer(unit))}
                   className="gap-1.5"
                 >
                   <Boxes className="size-3" />
                   <span>Move Location</span>
                 </Button>
+            ) : null}
 
+            {canManage ? (
                 <Button
                   size="xs"
                   variant="secondary"
                   onClick={handleBulkPass}
-                  disabled={busy}
+                  disabled={busy || selectedUnits.some((unit) => !unitCanBeBulkPassed(unit))}
                   className="gap-1.5"
                 >
                   <ShieldCheck className="size-3" />
                   <span>Mark QC Passed</span>
                 </Button>
-              </>
             ) : null}
 
             <Button
@@ -592,7 +600,7 @@ export function UnitsList() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
-                              {canManage ? (
+                              {canManage && unitCanBeInspected(unit) ? (
                                 <Button
                                   variant="ghost"
                                   size="xs"
@@ -607,7 +615,7 @@ export function UnitsList() {
                                 </Button>
                               ) : null}
 
-                              {canManage ? (
+                              {canTransfer && unitCanEnterTransfer(unit) ? (
                                 <Button
                                   variant="ghost"
                                   size="xs"
@@ -721,7 +729,7 @@ export function UnitsList() {
 
                       <div className="flex items-center justify-between pt-1">
                         <div className="flex items-center gap-1">
-                          {canManage ? (
+                          {canManage && unitCanBeInspected(unit) ? (
                             <Button
                               variant="outline"
                               size="xs"
@@ -733,7 +741,7 @@ export function UnitsList() {
                               Inspect
                             </Button>
                           ) : null}
-                          {canManage ? (
+                          {canTransfer && unitCanEnterTransfer(unit) ? (
                             <Button
                               variant="outline"
                               size="xs"
@@ -811,7 +819,7 @@ export function UnitsList() {
         units={singleTargetUnit ? [singleTargetUnit] : selectedUnits}
       />
 
-      {canManage ? (
+      {canTransfer ? (
         <UnitMoveDialog
           open={moveModalOpen}
           onOpenChange={setMoveModalOpen}
@@ -829,6 +837,7 @@ export function UnitsList() {
           open={inspectModalOpen}
           onOpenChange={setInspectModalOpen}
           unit={singleTargetUnit}
+          defaultStage={recommendedInspectionStage(singleTargetUnit)}
           onSuccess={() => {
             setSingleTargetUnit(null);
             void fetchUnits();
