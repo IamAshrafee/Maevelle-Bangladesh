@@ -200,12 +200,14 @@ Remaining in Batch 5:
 - Repaired Review truth for post-snapshot movement. Before posting, the Stocktake detail read model now compares each frozen snapshot line with the latest aggregate Location balance and returns live net movement, current expected quantity, and current variance; posted sessions continue to show their immutable stored result.
 - Added an explicit live-preview explanation and refresh-before-confirm flow. “Review and post” reloads the current preview before opening confirmation, summarizes gain/loss and movement-affected lines, and explains that posting will lock and recompute again transactionally. Conflict responses close the stale confirmation and reload current truth.
 - Replaced fragile stale-count message parsing with the typed Inventory `STALE_VERSION` error code, corrected the broken ledger-adjustment link, and moved touched count status/variance styling onto shared semantic tokens.
+- Began the count-detail decomposition by extracting condition allocation into a focused shared dialog. The dialog now has an explicit Cancel path, prevents dismissal during save, uses whole-unit numeric input, keeps snapshot-versus-physical context visible, and adapts to a full-screen touch workflow on mobile without changing the authoritative count command.
 
 Verification for this slice:
 
 - Focused Database/API/Admin TypeScript and lint checks passed.
 - One focused Inventory integration test passed for idempotent stocktake posting after the command-boundary changes.
 - Database package build, Admin TypeScript, and focused lint passed for the live Review preview. One focused Inventory integration test passed for a post-snapshot +2 movement producing current expected 7 and preview variance -2 before posting.
+- Focused Admin TypeScript and lint passed for the extracted condition-allocation workflow.
 
 Remaining in Batch 6:
 

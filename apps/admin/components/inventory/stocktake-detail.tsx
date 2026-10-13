@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  AlertCircle,
   Check,
   CheckCircle2,
   Clock,
@@ -28,7 +27,6 @@ import {
 import {
   InventoryStatCards,
   InventoryEmptyState,
-  InventoryConditionBadge,
   InventoryFeedback,
 } from './inventory-page-ui';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
@@ -40,6 +38,10 @@ import {
   SerializedStocktakeCountDialog,
   type SerializedCountEntry,
 } from './serialized-stocktake-count-dialog';
+import {
+  StocktakeConditionDialog,
+  type StocktakeCondition,
+} from './stocktake-condition-dialog';
 import {
   Dialog,
   DialogContent,
@@ -61,242 +63,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { StatusBadge } from '@/components/status-badge';
 
-// ─── Types & Constants ────────────────────────────────────────────────────────
-
 type EnrichedStocktake = StocktakeDetailDto;
-type Condition = 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
-const conditions: readonly Condition[] = ['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION'];
-
+type Condition = StocktakeCondition;
 type FilterTab = 'all' | 'discrepancies' | 'uncounted' | 'matched';
-
-// ─── Status Badge ─────────────────────────────────────────────────────────────
 
 function StocktakeStatusBadge({ status }: { status: string }) {
   return <StatusBadge status={status} />;
-}
-
-// ─── Condition Breakdown Dialog ───────────────────────────────────────────────
-
-interface ConditionBreakdownModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  line: EnrichedStocktake['lines'][number] | null;
-  currentCounted: string;
-  conditionValues: Partial<Record<Condition, string>>;
-  onSave: (
-    inventoryItemId: string,
-    countedTotal: string,
-    conditions: Partial<Record<Condition, string>>,
-  ) => Promise<void>;
-  disabled?: boolean;
-}
-
-function ConditionBreakdownModal({
-  open,
-  onOpenChange,
-  line,
-  currentCounted,
-  conditionValues,
-  onSave,
-  disabled,
-}: ConditionBreakdownModalProps) {
-  const [localValues, setLocalValues] = useState<Partial<Record<Condition, string>>>({});
-  const [targetCounted, setTargetCounted] = useState('0');
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (line && open) {
-      setTargetCounted(currentCounted || '0');
-      const initial = { ...conditionValues };
-      // If no condition splits exist, default everything to SELLABLE
-      if (!initial.SELLABLE && !initial.DAMAGED && !initial.QUARANTINE && !initial.INSPECTION) {
-        initial.SELLABLE = currentCounted || '0';
-      }
-      setLocalValues(initial);
-      setError(null);
-    }
-  }, [line, open, currentCounted, conditionValues]);
-
-  if (!line) return null;
-
-  const currentSum = conditions.reduce((acc, c) => acc + (Number(localValues[c]) || 0), 0);
-  const targetNumber = Number(targetCounted) || 0;
-  const isBalanced = Math.abs(currentSum - targetNumber) < 0.000001;
-  const remaining = targetNumber - currentSum;
-
-  const handleAssignRemainingToSellable = () => {
-    const newSellable = Math.max(0, (Number(localValues.SELLABLE) || 0) + remaining);
-    setLocalValues((prev) => ({
-      ...prev,
-      SELLABLE: newSellable.toString(),
-    }));
-  };
-
-  const handleSetAllSellable = () => {
-    setLocalValues({
-      SELLABLE: targetCounted,
-      DAMAGED: '0',
-      QUARANTINE: '0',
-      INSPECTION: '0',
-    });
-  };
-
-  const handleConfirm = async () => {
-    if (!isBalanced) {
-      setError(
-        `Condition breakdown sum (${formatInventoryNumber(currentSum)}) must match the total counted quantity (${formatInventoryNumber(targetNumber)}).`,
-      );
-      return;
-    }
-    setIsSaving(true);
-    setError(null);
-    try {
-      await onSave(line.inventoryItemId, targetCounted, localValues);
-      onOpenChange(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save condition breakdown.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <SlidersHorizontal className="size-5 text-primary" />
-            Split Condition Quantities
-          </DialogTitle>
-          <DialogDescription>
-            Specify physical condition breakdown for{' '}
-            <strong className="text-foreground">{line.productTitle}</strong> ({line.sku}).
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-2">
-          <div className="flex items-center justify-between rounded-lg bg-muted/60 p-3 text-sm">
-            <div>
-              <p className="text-xs text-muted-foreground">Total Physical Count</p>
-              <p className="text-lg font-semibold">{formatInventoryNumber(targetCounted)} units</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">Snapshot Expected</p>
-              <p className="text-sm font-medium text-muted-foreground">
-                {formatInventoryNumber(line.expectedQuantityAtSnapshot)} units
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3 divide-y divide-border/50">
-            {conditions.map((condition) => {
-              const expectedConditionQty = line.expectedQuantitiesByCondition?.[condition] ?? '0';
-              const val = localValues[condition] ?? '';
-
-              return (
-                <div key={condition} className="flex items-center justify-between pt-3 first:pt-0">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <InventoryConditionBadge condition={condition} />
-                      <span className="text-xs text-muted-foreground">
-                        Exp: {formatInventoryNumber(expectedConditionQty)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="w-32">
-                    <Input
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      step="1"
-                      placeholder="0"
-                      disabled={disabled || isSaving}
-                      value={val}
-                      onChange={(e) =>
-                        setLocalValues((prev) => ({
-                          ...prev,
-                          [condition]: e.target.value,
-                        }))
-                      }
-                      className="text-right tabular-nums h-8"
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Balance Tracker */}
-          <div
-            className={`flex items-center justify-between rounded-md p-2.5 text-xs ${
-              isBalanced
-                ? 'border border-success/20 bg-success/10 text-foreground'
-                : 'border border-warning/20 bg-warning/10 text-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 font-medium">
-              {isBalanced ? (
-                <>
-                  <CheckCircle2 className="size-4 text-success" />
-                  Allocated: {formatInventoryNumber(currentSum)} /{' '}
-                  {formatInventoryNumber(targetNumber)} (Balanced)
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="size-4 text-warning" />
-                  Allocated: {formatInventoryNumber(currentSum)} /{' '}
-                  {formatInventoryNumber(targetNumber)} (
-                  {remaining > 0
-                    ? `${formatInventoryNumber(remaining)} unassigned`
-                    : `${formatInventoryNumber(Math.abs(remaining))} over-allocated`}
-                  )
-                </>
-              )}
-            </div>
-
-            {!isBalanced && remaining > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs text-warning hover:text-warning"
-                onClick={handleAssignRemainingToSellable}
-              >
-                Assign to Sellable
-              </Button>
-            )}
-          </div>
-
-          {error && (
-            <p className="rounded-md bg-destructive/10 p-2 text-xs font-medium text-destructive">
-              {error}
-            </p>
-          )}
-        </div>
-
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleSetAllSellable}
-            disabled={disabled || isSaving}
-          >
-            Reset All to Sellable
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void handleConfirm()}
-            disabled={disabled || isSaving || !isBalanced}
-          >
-            {isSaving ? 'Saving…' : 'Apply Conditions'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 // ─── Main Stocktake Detail Component ──────────────────────────────────────────
@@ -1530,7 +1302,7 @@ export function StocktakeDetail({ stocktakeId }: { stocktakeId: string }) {
       </Dialog>
 
       {/* Split Condition Breakdown Modal */}
-      <ConditionBreakdownModal
+      <StocktakeConditionDialog
         open={Boolean(conditionModalLine)}
         onOpenChange={(open) => {
           if (!open) setConditionModalLine(null);
