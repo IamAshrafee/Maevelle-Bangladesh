@@ -223,6 +223,8 @@ Remaining in Batch 6:
 - Rebuilt physical-unit detail as an operator workspace around current control state, exact identity, authoritative ledger bucket, Location, provenance/custody, inspection evidence, repair evidence, and lifecycle evidence. Capability/state-exact actions remain driven by the shared policy, current Location and upstream receipt/order/Fulfillment records are directly reachable, and the view names the next operational step without inventing a second lifecycle.
 - Split overview and quality-history presentation out of the orchestration component. Inspection, repair, and event reads now fail independently after the authoritative Unit ID loads, so one unavailable evidence feed no longer hides the unit or blocks safe actions; each failed section explains its recovery path.
 - Replaced the event timeline's unsafe status/condition casts and raw JSON metadata block with guarded badges and labeled operational evidence. Unknown historical values remain visible as text, while current known values use the shared status primitives. The release dialog now also keeps Cancel available before a reason is entered and prevents empty submissions.
+- Added a typed Inventory request error carrying HTTP status, domain error code, and request ID, plus one shared Quality command-error treatment. Inspection, repair, release, and write-off dialogs now recognize stale-version and other conflict responses, explain that current state has changed, and offer an explicit close-and-reload recovery instead of leaving operators to retry stale data. In-flight commands cannot be dismissed accidentally.
+- Finished the touched Quality form audit: photo-removal controls have accessible names, repair completion fields stack on mobile, warning styling uses semantic tokens, and repair cost is explicitly labeled operational evidence that neither posts a Finance expense nor changes inventory acquisition cost.
 
 Verification for this slice:
 
@@ -234,11 +236,12 @@ Verification for this slice:
 - Focused Admin TypeScript and lint checks passed for isolated exact-size barcode label preparation. Physical printer calibration, media margins, contrast, and scanner-read verification remain a hardware/owner gate.
 - Focused Admin TypeScript and lint checks passed for Receiving/Quality capability separation and paginated QC. One focused Admin client test passed for preserving a non-default inspection stage in the bulk command payload.
 - One focused Admin client test passed for repair-attention query serialization. Focused Admin TypeScript and lint checks passed for the rebuilt detail, overview, quality history, event timeline, and release dialog.
+- One focused Admin client test passed for typed stale-version conflict preservation. Focused Admin TypeScript and lint checks passed for the shared recovery treatment and the inspection, repair, release, and write-off dialogs.
 
 Remaining in Batch 7:
 
 - Complete the scanner/intake and label workflows, including honest hardware and print-layout verification boundaries.
-- Audit each Quality dialog's conflict recovery, evidence requirements, and touch behavior, then reduce the remaining large unit-list component without duplicating workflow logic.
+- Reduce the remaining large unit-list component without duplicating workflow logic.
 
 ---
 

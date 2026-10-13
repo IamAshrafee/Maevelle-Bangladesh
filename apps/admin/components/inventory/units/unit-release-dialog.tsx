@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import type { InventoryUnitDto } from '@maevelle/contracts';
 import {
   Dialog,
@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { releaseUnitForSale } from '@/lib/inventory/units';
+import { UnitCommandError } from './unit-command-error';
 
 export interface UnitReleaseDialogProps {
   readonly open: boolean;
@@ -24,7 +25,7 @@ export interface UnitReleaseDialogProps {
 export function UnitReleaseDialog({ open, onOpenChange, unit, onSuccess }: UnitReleaseDialogProps) {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -49,14 +50,14 @@ export function UnitReleaseDialog({ open, onOpenChange, unit, onSuccess }: UnitR
         onSuccess();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Release authorization failed.');
+      setError(err instanceof Error ? err : new Error('Release authorization failed.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
       <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
@@ -70,10 +71,13 @@ export function UnitReleaseDialog({ open, onOpenChange, unit, onSuccess }: UnitR
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error ? (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
-              <AlertCircle className="size-4 shrink-0" />
-              <span>{error}</span>
-            </div>
+            <UnitCommandError
+              error={error}
+              onReload={() => {
+                onOpenChange(false);
+                onSuccess?.();
+              }}
+            />
           ) : null}
 
           <div className="space-y-1.5">

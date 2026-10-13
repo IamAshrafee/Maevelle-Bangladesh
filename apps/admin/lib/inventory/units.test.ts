@@ -9,6 +9,7 @@ import {
   allocateUnitsToFulfillment,
   getUnitBarcodeSvgUrl,
 } from './units';
+import { InventoryRequestError, isInventoryConflictError } from './api';
 
 // Mock global fetch for API client tests
 const mockFetch = vi.fn();
@@ -62,6 +63,30 @@ describe('Individual Unit Traceability Frontend API Client', () => {
 
     expect(result.data).toHaveLength(1);
     expect(result.data[0]?.unitCode).toBe('MVU-000101');
+  });
+
+  it('preserves inventory conflict details for recoverable command errors', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        error: {
+          code: 'STALE_VERSION',
+          message: 'The physical unit changed after this form opened.',
+          requestId: 'request-123',
+        },
+      }),
+    });
+
+    const error = await listInventoryUnits().catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(InventoryRequestError);
+    expect(isInventoryConflictError(error)).toBe(true);
+    expect(error).toMatchObject({
+      status: 409,
+      code: 'STALE_VERSION',
+      requestId: 'request-123',
+    });
   });
 
   it('correctly handles fast scannable barcode lookup', async () => {

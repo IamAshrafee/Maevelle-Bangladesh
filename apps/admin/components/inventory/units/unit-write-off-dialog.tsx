@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Ban, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Ban, Loader2, AlertTriangle } from 'lucide-react';
 import type { InventoryUnitDto } from '@maevelle/contracts';
 import {
   Dialog,
@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { writeOffUnit } from '@/lib/inventory/units';
+import { UnitCommandError } from './unit-command-error';
 
 export interface UnitWriteOffDialogProps {
   readonly open: boolean;
@@ -29,7 +30,7 @@ export function UnitWriteOffDialog({
 }: UnitWriteOffDialogProps) {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -56,14 +57,14 @@ export function UnitWriteOffDialog({
         onSuccess();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Write-off authorization failed.');
+      setError(err instanceof Error ? err : new Error('Write-off authorization failed.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
       <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-w-md border-destructive/20">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold text-destructive">
@@ -77,10 +78,13 @@ export function UnitWriteOffDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error ? (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
-              <AlertCircle className="size-4 shrink-0" />
-              <span>{error}</span>
-            </div>
+            <UnitCommandError
+              error={error}
+              onReload={() => {
+                onOpenChange(false);
+                onSuccess?.();
+              }}
+            />
           ) : null}
 
           <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 text-xs text-destructive space-y-1.5">
@@ -89,7 +93,10 @@ export function UnitWriteOffDialog({
               <span>Permanent Operational Adjustment</span>
             </div>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-              Writing off unit <strong className="font-mono text-foreground">{unit.unitCode}</strong> permanently removes its physical identity from usable stock and records the quantity and inventory-cost evidence.
+              Writing off unit{' '}
+              <strong className="font-mono text-foreground">{unit.unitCode}</strong> permanently
+              removes its physical identity from usable stock and records the quantity and
+              inventory-cost evidence.
             </p>
           </div>
 
