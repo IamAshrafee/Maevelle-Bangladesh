@@ -1,7 +1,7 @@
 # Omnichannel Messaging Architecture
 
-**Status:** Phase 02 Storefront backend complete — Phase 03 implementation reference
-**Date:** 2026-10-21
+**Status:** Phase 03 Storefront live chat frontend complete
+**Date:** 2026-10-22
 **Scope:** Storefront live chat, unified Admin inbox, Facebook Messenger, and Instagram Direct
 **Authority:** Current source and migrations outrank historical design documents. This design does not authorize a production migration or provider connection.
 
@@ -26,6 +26,7 @@ The design deliberately does **not** introduce Redis, a broker, a messaging micr
 11. [Phase 00 architecture review](10-architecture-review.md)
 12. [Phase 01 implementation record and Phase 02 handoff](11-phase-01-completion.md)
 13. [Phase 02 Storefront backend completion and operations](12-phase-02-completion.md)
+14. [Phase 03 Storefront live chat frontend completion](13-phase-03-completion.md)
 
 ## Architecture at a glance
 
@@ -57,14 +58,17 @@ flowchart LR
 - `conversation.sequence` defines canonical message order. Provider timestamps are evidence, not ordering authority.
 - Provider capabilities and reply eligibility are evaluated before accepting an outbound operation.
 - Message bodies and private attachment URLs are not written to ordinary logs, notifications, or analytics payloads.
-- Phase 03's staff surface is the first composition of permanent inbox components, not throwaway UI.
+- Storefront and Admin messaging UIs remain separate compositions over the same canonical contracts.
 
-## Phase 03 readiness
+## Phase 04 and Phase 05 readiness
 
-Phases 01 and 02 are implemented. The shared core now has a complete website
-channel: opaque guest sessions, one active conversation per website identity,
-public Storefront commands and replayable SSE, private image attachments,
-authenticated customer linking, and a worker-owned website delivery adapter.
-Phase 03 can build the Storefront widget and permanent Admin workspace directly
-against these contracts. See the [Phase 02 implementation and operations
-record](12-phase-02-completion.md).
+Phases 01–03 are implemented. The shared core has a complete website channel,
+and the Storefront now has the lazy, responsive customer chat interface over
+its public commands, private media, and replayable SSE. See the
+[Phase 02 backend operations record](12-phase-02-completion.md) and
+[Phase 03 frontend completion record](13-phase-03-completion.md).
+
+Phase 03 deliberately contains no Admin messaging UI. Phase 04 owns the
+advanced administrative backend; Phase 05 will build the complete
+mobile/tablet-first Admin Messaging Workspace against the existing Admin APIs
+and shared canonical contracts.

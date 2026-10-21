@@ -12,6 +12,7 @@ export type TextareaProps = ComponentPropsWithRef<'textarea'> & {
   hasError?: boolean | undefined;
   maxCharacters?: number | undefined;
   showCharacterCount?: boolean | undefined;
+  sizeVariant?: 'default' | 'compact' | undefined;
 };
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
@@ -22,6 +23,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     maxCharacters,
     maxLength,
     showCharacterCount = false,
+    sizeVariant = 'default',
     value,
     ...props
   },
@@ -36,7 +38,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         aria-invalid={hasError ? true : props['aria-invalid']}
         className={cx(
           formControlClassName,
-          'min-h-24 sm:min-h-28 resize-y py-3 px-3.5 leading-relaxed',
+          sizeVariant === 'compact'
+            ? 'min-h-12 resize-none px-3.5 py-3 leading-normal'
+            : 'min-h-24 resize-y px-3.5 py-3 leading-relaxed sm:min-h-28',
           hasError && 'border-error focus:border-error focus:ring-error/15',
           className,
         )}

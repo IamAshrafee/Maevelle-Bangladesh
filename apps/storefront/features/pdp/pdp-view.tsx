@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/icons';
 import { Breadcrumb, type BreadcrumbItemDef } from '@/components/ui/breadcrumb';
 import { cx } from '@/components/ui/classnames';
+import { ChatProductContext } from '@/features/chat/page-context';
 import { PdpGallery } from './pdp-gallery';
 import { PdpCommercialHeader } from './pdp-commercial-header';
 import { PdpVariantSelector } from './pdp-variant-selector';
@@ -312,6 +313,11 @@ export function PdpView({
 
   return (
     <>
+      <ChatProductContext
+        productId={product.id}
+        productTitle={product.title}
+        variantId={selectedVariant?.id ?? null}
+      />
       {/* ═══════════════ MOBILE LAYOUT (< lg) ═══════════════ */}
       <div className="lg:hidden flex flex-col w-full pb-32 bg-[#fff8f5] min-h-screen">
         {/* Mobile breadcrumb */}
