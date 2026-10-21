@@ -71,6 +71,16 @@ const payloadId = (payload: Record<string, unknown>, key: string, fallback: stri
  * presentation policy for facts that have already committed to the outbox.
  */
 export const notificationEventCatalog: readonly NotificationEventDefinition[] = [
+  staff(
+    'messaging.inbound_message.created.v1',
+    'MESSAGING_INBOUND_ATTENTION',
+    'messaging.inbox.view_assigned',
+    'New customer message',
+    'A customer conversation needs attention.',
+    (id, payload) => `/messaging/conversations/${payloadId(payload, 'conversationId', id)}`,
+    'HIGH',
+    'OPERATIONAL',
+  ),
   customer('orders.order.placed', 'ORDER_PLACED', true),
   customer('orders.order.confirmed', 'ORDER_CONFIRMED', true),
   // Order completion is derived from delivery completion. Customer delivery

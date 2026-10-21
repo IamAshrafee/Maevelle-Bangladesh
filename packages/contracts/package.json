@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/src/index.js"
+    },
+    "./messaging": {
+      "types": "./src/messaging/index.ts",
+      "default": "./dist/src/messaging/index.js"
     }
   }
 }

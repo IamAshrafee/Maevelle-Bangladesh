@@ -26,6 +26,12 @@ import { dispatchPostDeliveryReviewInvitations } from '@maevelle/database/review
 import { processCourierBookings, type CourierProviderResolver } from './courier-bookings.js';
 import type { ObjectStoragePort } from '@maevelle/media';
 import { cleanupExpiredMediaUploads, processMediaBatch, purgeOneMediaAsset } from './media-jobs.js';
+import {
+  ChannelAdapterRegistry,
+  processMessagingDeliveries,
+  purgeExpiredRealtimeEvents,
+  reclaimExpiredMessagingDeliveries,
+} from '@maevelle/database/messaging';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -49,6 +55,7 @@ export interface WorkerOptions {
   readonly smsProvider?: SmsProvider;
   readonly smsRuntime?: SmsRuntimeOptions;
   readonly smsMaxPerTick?: number;
+  readonly messagingAdapters?: ChannelAdapterRegistry;
 }
 
 export interface WorkerRuntime {
@@ -69,6 +76,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
   const emailAdapter = options.emailAdapter ?? createLocalEmailAdapter();
   const smsProvider = options.smsProvider;
   const smsRuntime = options.smsRuntime;
+  const messagingAdapters = options.messagingAdapters ?? new ChannelAdapterRegistry();
   const invitationEmailAdapter = {
     name: emailAdapter.name,
     send: async (request: {
@@ -130,6 +138,9 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         purgedNotificationHistory,
         integrityScheduled,
         integrityRuns,
+        messagingDeliveries,
+        messagingReclaimed,
+        messagingEventsPurged,
       ] = await Promise.all([
         runJob(() => reclaimExpiredJobs(options.database.db)),
         runJob(() =>
@@ -210,6 +221,16 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         runJob(() => purgeExpiredNotificationHistory(options.database.db)),
         runJob(() => scheduleDueIntegrityRuns(options.database.db)),
         runJob(() => processIntegrityRuns(options.database.db, `worker:${process.pid}`, 1)),
+        runJob(() =>
+          processMessagingDeliveries(
+            options.database.db,
+            messagingAdapters,
+            `worker:${process.pid}`,
+            20,
+          ),
+        ),
+        runJob(() => reclaimExpiredMessagingDeliveries(options.database.db)),
+        runJob(() => purgeExpiredRealtimeEvents(options.database.db)),
       ]);
       logger?.debug(
         {
@@ -237,6 +258,9 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           purgedNotificationHistory,
           integrityScheduled,
           integrityRuns,
+          messagingDeliveries,
+          messagingReclaimed,
+          messagingEventsPurged,
         },
         'Worker recovery tick.',
       );

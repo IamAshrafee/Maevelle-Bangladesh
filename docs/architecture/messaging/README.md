@@ -1,6 +1,6 @@
 # Omnichannel Messaging Architecture
 
-**Status:** Phase 00 complete — implementation reference
+**Status:** Phase 01 backend complete — Phase 02 implementation reference
 **Date:** 2026-10-21
 **Scope:** Storefront live chat, unified Admin inbox, Facebook Messenger, and Instagram Direct
 **Authority:** Current source and migrations outrank historical design documents. This design does not authorize a production migration or provider connection.
@@ -24,6 +24,7 @@ The design deliberately does **not** introduce Redis, a broker, a messaging micr
 9. [Architecture decisions](08-adrs.md)
 10. [Phase roadmap and Phase 01 handoff](09-roadmap-and-phase-01-handoff.md)
 11. [Phase 00 architecture review](10-architecture-review.md)
+12. [Phase 01 implementation record and Phase 02 handoff](11-phase-01-completion.md)
 
 ## Architecture at a glance
 
@@ -57,6 +58,6 @@ flowchart LR
 - Message bodies and private attachment URLs are not written to ordinary logs, notifications, or analytics payloads.
 - Phase 03's staff surface is the first composition of permanent inbox components, not throwaway UI.
 
-## Phase 01 readiness
+## Phase 02 readiness
 
-Phase 01 can begin. It should implement the schema and service contracts in [the handoff](09-roadmap-and-phase-01-handoff.md#phase-01-implementation-handoff), beginning with core tables, transactional message acceptance, outbox events, authorization capabilities, cursor queries, and the SSE replay endpoint. Website visitor credentials, widget routes, and storefront-specific behavior remain Phase 02.
+Phase 01 is implemented. The core schema, service contracts, transactional acceptance, delivery state machine, capability-protected Admin APIs, and authenticated replayable SSE endpoint are available. Phase 02 can add website visitor credentials, public chat routes, the website adapter, and private attachment authorization without replacing the shared messaging core. See the [implementation record](11-phase-01-completion.md).

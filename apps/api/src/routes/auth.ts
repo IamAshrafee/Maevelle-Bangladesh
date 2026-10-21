@@ -39,6 +39,7 @@ import { registerTeamAccessRoutes } from './team-access.js';
 import { registerAssetRoutes } from './assets.js';
 import { registerSettingsRoutes } from './settings.js';
 import { registerInventoryReplenishmentRoutes } from './inventory-replenishment.js';
+import { registerMessagingRoutes } from './messaging.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -215,4 +216,5 @@ export function registerAuthRoutes(
   registerTeamAccessRoutes(app, database, auth, config);
   registerAssetRoutes(app, database, auth);
   registerSettingsRoutes(app, database, auth, config);
+  registerMessagingRoutes(app, database, auth);
 }

@@ -172,6 +172,10 @@
       "types": "./src/storefront.ts",
       "default": "./dist/src/storefront.js"
     },
+    "./messaging": {
+      "types": "./src/messaging/index.ts",
+      "default": "./dist/src/messaging/index.js"
+    },
     "./seed": {
       "types": "./src/seed/index.ts",
       "default": "./dist/src/seed/index.js"
@@ -191,6 +195,7 @@
     "import:skybuy:apply": "pnpm run build && node --env-file=../../.env dist/src/imports/skybuy/apply-cli.js"
   },
   "dependencies": {
+    "@maevelle/contracts": "workspace:*",
     "@maevelle/core": "workspace:*",
     "@maevelle/security": "workspace:*",
     "exceljs": "4.4.0",

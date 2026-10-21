@@ -509,10 +509,13 @@ async function createStaffInAppNotifications(
   const recipients = await sql<{ id: string }>`select membership.id
     from iam.organization_memberships membership
     where membership.organization_id=${event.organization_id} and membership.status='ACTIVE'
-      and exists(
-        select 1 from iam.membership_capability_grants grant_record
-        where grant_record.membership_id=membership.id
-          and grant_record.capability_code=${definition.requiredCapability}
+      and (
+        membership.membership_type='OWNER'
+        or exists(
+          select 1 from iam.membership_capability_grants grant_record
+          where grant_record.membership_id=membership.id
+            and grant_record.capability_code=${definition.requiredCapability}
+        )
       )`.execute(db);
   let created = 0;
   for (const recipient of recipients.rows) {

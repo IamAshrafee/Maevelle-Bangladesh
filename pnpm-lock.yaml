@@ -226,6 +226,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@maevelle/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@maevelle/core':
         specifier: workspace:*
         version: link:../core

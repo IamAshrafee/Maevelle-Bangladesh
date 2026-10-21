@@ -141,9 +141,9 @@ Checks require content or attachment expectation, valid sender columns, and mono
 
 ### `messaging.realtime_events`
 
-`id bigint generated always as identity PK` is the global replay cursor; `event_id uuid unique`, `organization_id`, `audience_type` (`CONVERSATION`, `MEMBERSHIP`, `ORGANIZATION`, `VISITOR`), `audience_id`, `conversation_id` nullable, `event_type`, `event_version`, `aggregate_id`, `aggregate_version`, `payload` jsonb object (identifiers and changed fields only), `created_at`, `expires_at`.
+`id bigint generated always as identity PK` is internal row identity, not the replay cursor. `stream_sequence bigint` is allocated under the organization row in `messaging.realtime_streams` and is the replay cursor; this prevents a later-committing transaction from being skipped merely because it obtained an identity value first. Events also contain `event_id uuid unique`, `organization_id`, `audience_type` (`CONVERSATION`, `MEMBERSHIP`, `ORGANIZATION`, `VISITOR`), `audience_id`, `conversation_id` nullable, `event_type`, `event_version`, `aggregate_id`, `aggregate_version`, `payload` jsonb object (identifiers and changed fields only), `created_at`, `expires_at`. `realtime_streams.retained_from_sequence` records the current replay-window floor.
 
-Indexes `(organization_id,id)`, `(organization_id,audience_type,audience_id,id)`, `(expires_at)`. Retain at least seven days; clients beyond retention receive `410 EVENT_CURSOR_EXPIRED` and refetch current state.
+Indexes `(organization_id,stream_sequence)`, `(organization_id,audience_type,audience_id,stream_sequence)`, `(expires_at)`. Retain at least seven days; clients beyond retention receive `410 EVENT_CURSOR_EXPIRED` and refetch current state.
 
 ### `messaging.delivery_intents` and `messaging.delivery_attempts`
 
@@ -163,7 +163,7 @@ Optional bounded history of customer-provided page/product context: identity/tim
 
 ## Phase 04 operational tables
 
-- `conversation_read_cursors`: composite PK `(organization_id,conversation_id,reader_type,reader_id)`; `reader_type` check `MEMBERSHIP|CONTACT_IDENTITY`, `last_read_sequence bigint not null default 0 check >= 0`, `updated_at`. Conversation FK; indexes reader/time and conversation/sequence. Upsert may only increase the cursor.
+- `conversation_read_cursors` was pulled into Phase 01 because the required Admin read endpoint and unread projection cannot be durable without it. Phase 04 extends the workflows around it; it does not replace the table. The table uses composite PK `(organization_id,conversation_id,reader_type,reader_id)`; `reader_type` check `MEMBERSHIP|CONTACT_IDENTITY`, `last_read_sequence bigint not null default 0 check >= 0`, `updated_at`. Upsert may only increase the cursor.
 - `conversation_assignment_events`: bigint identity PK; organization/conversation FKs; nullable old/new IAM membership IDs; required actor membership, `reason text`, `conversation_version bigint`, `created_at`. Index conversation/time and new-assignee/time. Immutable.
 - `conversation_events`: bigint identity PK; organization/conversation FKs; `event_type text`, nullable actor membership, `from_value/to_value jsonb`, `reason`, `created_at`; index conversation/time and organization/type/time. Values are bounded by application schemas.
 - `internal_notes`: UUID PK; organization/conversation FK; `author_membership_id uuid not null`, `body text not null` with trimmed length 1–10,000, `revision integer default 1`, nullable `superseded_by_note_id`, `deleted_at/deleted_by/reason`, timestamps. Index conversation/time; edits append or supersede rather than erase evidence.
@@ -219,9 +219,9 @@ The transaction then inserts message, external reference/idempotency evidence, u
 
 | Phase | Baseline responsibility |
 |---|---|
-| 01 | schema, connections, contacts/identities/link events, conversations, messages/references, realtime events, delivery intents/attempts, core capabilities |
+| 01 | schema, connections, contacts/identities/link events, conversations, messages/references, realtime streams/events, delivery intents/attempts, minimal read cursors, core capabilities |
 | 02 | visitor sessions, website configuration/context, website connection seed |
-| 04 | read cursors, assignment/events, notes, tags, saved replies, business hours, availability/rules/reporting |
+| 04 | advanced read/assignment workflows and events, notes, tags, saved replies, business hours, availability/rules/reporting |
 | 06 | provider inbox and Facebook-specific connection metadata/indexes |
 | 08 | Instagram-specific connection metadata/indexes; reuse provider inbox |
 

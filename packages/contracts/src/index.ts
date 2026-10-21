@@ -1,4 +1,5 @@
 /** Explicit transport DTOs shared by API clients; domain entities stay private to their owners. */
+export * from './messaging/index.js';
 export interface ApiEnvelope<T> {
   readonly data: T;
 }
