@@ -27,6 +27,8 @@ export type MessagingErrorCode =
   | 'STALE_VERSION'
   | 'ASSIGNMENT_CONFLICT'
   | 'EVENT_CURSOR_EXPIRED'
+  | 'UNAUTHENTICATED'
+  | 'SESSION_EXPIRED'
   | 'VALIDATION_FAILED';
 
 export class MessagingDomainError extends Error {
@@ -232,8 +234,10 @@ export async function createConversation(
     const created = await sql<{
       id: string;
       version: string;
-    }>`insert into messaging.conversations(organization_id,channel_connection_id,contact_id,contact_identity_id,subject)
-      values(${input.organizationId},${input.channelConnectionId},${input.contactId},${input.contactIdentityId},${input.subject ?? null}) returning id,version::text`.execute(
+    }>`insert into messaging.conversations(organization_id,channel_connection_id,channel_kind,contact_id,contact_identity_id,subject)
+      select ${input.organizationId},cc.id,cc.channel_kind,${input.contactId},${input.contactIdentityId},${input.subject ?? null}
+      from messaging.channel_connections cc where cc.organization_id=${input.organizationId} and cc.id=${input.channelConnectionId}
+      returning id,version::text`.execute(
       tx,
     );
     const row = created.rows[0]!;
@@ -355,6 +359,7 @@ interface MessageRow {
   sender_id: string | null;
   sender_name: string | null;
   message_type: MessageView['type'];
+  client_message_id: string | null;
   text_body: string | null;
   delivery_state: MessageView['delivery']['state'];
   failure_code: string | null;
@@ -363,7 +368,7 @@ interface MessageRow {
   retracted_at: Date | null;
 }
 
-function mapMessage(row: MessageRow): MessageView {
+function mapMessage(row: MessageRow, attachments: MessageView['attachments'] = []): MessageView {
   return {
     id: row.id,
     conversationId: row.conversation_id,
@@ -371,8 +376,9 @@ function mapMessage(row: MessageRow): MessageView {
     direction: row.direction,
     sender: { type: row.sender_type, id: row.sender_id, name: row.sender_name },
     type: row.message_type,
+    clientMessageId: row.client_message_id,
     text: row.text_body,
-    attachments: [],
+    attachments,
     delivery: {
       state: row.delivery_state,
       ...(row.failure_code ? { failureCode: row.failure_code } : {}),
@@ -384,6 +390,49 @@ function mapMessage(row: MessageRow): MessageView {
   };
 }
 
+async function loadAttachments(
+  db: Db,
+  organizationId: string,
+  messageIds: readonly string[],
+): Promise<Map<string, MessageView['attachments']>> {
+  if (!messageIds.length) return new Map();
+  const result = await sql<{
+    message_id: string;
+    id: string;
+    kind: MessageView['attachments'][number]['kind'];
+    filename: string | null;
+    mime_type: string | null;
+    byte_size: string | null;
+    width_px: number | null;
+    height_px: number | null;
+    security_status: MessageView['attachments'][number]['securityStatus'];
+  }>`select id,message_id,kind,filename,mime_type,byte_size::text,width_px,height_px,security_status
+      from messaging.message_attachments where organization_id=${organizationId}
+        and message_id in (${sql.join(messageIds.map((id) => sql`${id}::uuid`))}) order by message_id,position`.execute(db);
+  const grouped = new Map<string, MessageView['attachments']>();
+  for (const row of result.rows) {
+    const items = grouped.get(row.message_id) ?? [];
+    grouped.set(row.message_id, [
+      ...items,
+      {
+        id: row.id,
+        kind: row.kind,
+        fileName: row.filename,
+        mimeType: row.mime_type,
+        byteSize: row.byte_size,
+        width: row.width_px,
+        height: row.height_px,
+        securityStatus: row.security_status,
+        downloadPath:
+          row.security_status === 'AVAILABLE'
+            ? `/api/admin/messaging/attachments/${row.id}`
+            : null,
+      },
+    ]);
+  }
+  return grouped;
+}
+
 async function loadMessage(
   db: Db,
   organizationId: string,
@@ -392,13 +441,14 @@ async function loadMessage(
   const result =
     await sql<MessageRow>`select m.id,m.conversation_id,m.sequence::text,m.direction,m.sender_type,
     coalesce(m.sender_membership_id,m.sender_contact_identity_id)::text sender_id,coalesce(mem.display_name,ci.display_name) sender_name,
-    m.message_type,m.text_body,m.delivery_state,m.failure_code,m.created_at,m.edited_at,m.retracted_at
+    m.message_type,m.client_message_id,m.text_body,m.delivery_state,m.failure_code,m.created_at,m.edited_at,m.retracted_at
     from messaging.messages m left join iam.organization_memberships mem on mem.id=m.sender_membership_id
     left join messaging.contact_identities ci on ci.id=m.sender_contact_identity_id
     where m.organization_id=${organizationId}::uuid and m.id=${messageId}::uuid`.execute(db);
   if (!result.rows[0])
     throw new MessagingDomainError('CONVERSATION_NOT_FOUND', 'Message was not found.');
-  return mapMessage(result.rows[0]);
+  const attachments = await loadAttachments(db, organizationId, [result.rows[0].id]);
+  return mapMessage(result.rows[0], attachments.get(result.rows[0].id));
 }
 
 export async function listMessages(
@@ -417,15 +467,16 @@ export async function listMessages(
   const before = decodeCursor<{ sequence: string }>(input.before);
   const result =
     await sql<MessageRow>`select m.id,m.conversation_id,m.sequence::text,m.direction,m.sender_type,coalesce(m.sender_membership_id,m.sender_contact_identity_id)::text sender_id,
-    coalesce(mem.display_name,ci.display_name) sender_name,m.message_type,m.text_body,m.delivery_state,m.failure_code,m.created_at,m.edited_at,m.retracted_at
+    coalesce(mem.display_name,ci.display_name) sender_name,m.message_type,m.client_message_id,m.text_body,m.delivery_state,m.failure_code,m.created_at,m.edited_at,m.retracted_at
     from messaging.messages m left join iam.organization_memberships mem on mem.id=m.sender_membership_id left join messaging.contact_identities ci on ci.id=m.sender_contact_identity_id
     where m.organization_id=${input.organizationId}::uuid and m.conversation_id=${input.conversationId}::uuid and (${before?.sequence ?? null}::bigint is null or m.sequence<${before?.sequence ?? null}::bigint)
     order by m.sequence desc limit ${limit + 1}`.execute(db);
   const hasMore = result.rows.length > limit;
   const rows = result.rows.slice(0, limit);
   const oldest = rows.at(-1);
+  const attachments = await loadAttachments(db, input.organizationId, rows.map((row) => row.id));
   return {
-    data: rows.reverse().map(mapMessage),
+    data: rows.reverse().map((row) => mapMessage(row, attachments.get(row.id))),
     pagination: {
       hasMore,
       nextCursor: hasMore && oldest ? encodeCursor({ sequence: oldest.sequence }) : null,
@@ -479,16 +530,18 @@ export async function prepareOutboundMessage(
     conversationId: string;
     idempotencyKey: string;
     clientMessageId: string;
-    text: string;
+    text?: string;
+    attachmentIds?: readonly string[];
     replyToMessageId?: string;
     requestId?: string;
   },
 ): Promise<{ message: MessageView; replayed: boolean }> {
-  const text = input.text.trim();
-  if (!text || text.length > 10_000)
+  const text = input.text?.trim() ?? '';
+  const attachmentIds = [...new Set(input.attachmentIds ?? [])];
+  if ((!text && !attachmentIds.length) || text.length > 10_000 || attachmentIds.length > 5)
     throw new MessagingDomainError(
       'VALIDATION_FAILED',
-      'Message text must contain 1 to 10,000 characters.',
+      'A message requires text or up to five attachments; text cannot exceed 10,000 characters.',
     );
   try {
     return await db.transaction().execute(async (tx) => {
@@ -503,7 +556,11 @@ export async function prepareOutboundMessage(
           'CONVERSATION_CLOSED',
           'Closed conversations cannot receive replies.',
         );
-      if (!conversation.capabilities.replies || !conversation.capabilities.text)
+      if (
+        !conversation.capabilities.replies ||
+        (text && !conversation.capabilities.text) ||
+        (attachmentIds.length && !conversation.capabilities.attachments)
+      )
         throw new MessagingDomainError(
           'CHANNEL_CAPABILITY_UNSUPPORTED',
           'This channel does not support text replies.',
@@ -518,6 +575,7 @@ export async function prepareOutboundMessage(
           conversationId: input.conversationId,
           clientMessageId: input.clientMessageId,
           text,
+          attachmentIds,
           replyToMessageId: input.replyToMessageId ?? null,
         }),
       });
@@ -541,6 +599,38 @@ export async function prepareOutboundMessage(
           replayed: true,
         };
       }
+      const priorClient = await sql<{
+        id: string;
+        text_body: string | null;
+        reply_to_message_id: string | null;
+        attachment_ids: string[];
+      }>`select m.id,m.text_body,m.reply_to_message_id,
+          coalesce(array_agg(a.media_asset_id::text order by a.position) filter(where a.id is not null),'{}') attachment_ids
+        from messaging.messages m left join messaging.message_attachments a
+          on a.organization_id=m.organization_id and a.message_id=m.id
+        where m.organization_id=${input.actor.organizationId} and m.conversation_id=${input.conversationId}
+          and m.client_message_id=${input.clientMessageId} and m.direction='OUTBOUND'
+        group by m.id`.execute(tx);
+      if (priorClient.rows[0]) {
+        const prior = priorClient.rows[0];
+        if (
+          (prior.text_body ?? '') !== text ||
+          (prior.reply_to_message_id ?? null) !== (input.replyToMessageId ?? null) ||
+          prior.attachment_ids.length !== attachmentIds.length ||
+          prior.attachment_ids.some((id, index) => id !== attachmentIds[index])
+        )
+          throw new MessagingDomainError(
+            'IDEMPOTENCY_KEY_REUSED',
+            'The client message identifier was already used for different input.',
+          );
+        await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_id=${prior.id},
+          safe_response=${JSON.stringify({ messageId: prior.id })}::jsonb,completed_at=now()
+          where id=${record.id}::uuid`.execute(tx);
+        return {
+          message: await loadMessage(tx as Db, input.actor.organizationId, prior.id),
+          replayed: true,
+        };
+      }
       if (input.replyToMessageId) {
         const reply =
           await sql`select 1 from messaging.messages where organization_id=${input.actor.organizationId} and conversation_id=${input.conversationId} and id=${input.replyToMessageId}`.execute(
@@ -552,6 +642,21 @@ export async function prepareOutboundMessage(
             'Reply target does not belong to this conversation.',
           );
       }
+      const attachmentAssets = attachmentIds.length
+        ? await sql<{
+            id: string;
+            original_filename: string;
+            mime_type: string;
+            byte_size: string;
+            width_px: number | null;
+            height_px: number | null;
+          }>`select a.id,a.original_filename,o.mime_type,o.byte_size::text,o.width_px,o.height_px
+              from media.media_assets a join media.media_objects o on o.organization_id=a.organization_id and o.id=a.current_object_id
+              where a.organization_id=${input.actor.organizationId} and a.id in (${sql.join(attachmentIds.map((id) => sql`${id}::uuid`))})
+                and a.visibility_class='PRIVATE' and a.status='READY' and a.asset_type='IMAGE'`.execute(tx)
+        : { rows: [] };
+      if (attachmentAssets.rows.length !== attachmentIds.length)
+        throw new MessagingDomainError('VALIDATION_FAILED', 'One or more attachments are unavailable.');
       const allocated = await sql<{
         sequence: string;
         version: string;
@@ -581,10 +686,15 @@ export async function prepareOutboundMessage(
       const inserted = await sql<{
         id: string;
       }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,sender_membership_id,message_type,text_body,client_message_id,reply_to_message_id,delivery_state)
-        values(${input.actor.organizationId},${input.conversationId},${allocation.sequence}::bigint,'OUTBOUND','STAFF',${input.actor.membershipId},'TEXT',${text},${input.clientMessageId},${input.replyToMessageId ?? null},'QUEUED') returning id`.execute(
+        values(${input.actor.organizationId},${input.conversationId},${allocation.sequence}::bigint,'OUTBOUND','STAFF',${input.actor.membershipId},${attachmentIds.length ? (text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${text || null},${input.clientMessageId},${input.replyToMessageId ?? null},'QUEUED') returning id`.execute(
         tx,
       );
       const messageId = inserted.rows[0]!.id;
+      for (const [position, assetId] of attachmentIds.entries()) {
+        const asset = attachmentAssets.rows.find((candidate) => candidate.id === assetId)!;
+        await sql`insert into messaging.message_attachments(organization_id,message_id,media_asset_id,position,kind,filename,mime_type,byte_size,width_px,height_px,security_status)
+          values(${input.actor.organizationId},${messageId},${assetId},${position},'IMAGE',${asset.original_filename},${asset.mime_type},${asset.byte_size}::bigint,${asset.width_px},${asset.height_px},'AVAILABLE')`.execute(tx);
+      }
       await sql`update messaging.conversations set last_message_id=${messageId},last_message_at=now(),last_outbound_at=now() where organization_id=${input.actor.organizationId} and id=${input.conversationId}`.execute(
         tx,
       );
@@ -649,27 +759,33 @@ export async function acceptInboundMessage(
     contactIdentityId: string;
     idempotencyKey: string;
     externalMessageId: string;
-    text: string;
+    text?: string;
+    attachmentIds?: readonly string[];
     providerCreatedAt?: Date;
   },
 ): Promise<{ message: MessageView; replayed: boolean }> {
-  const text = input.text.trim();
-  if (!text || text.length > 10_000)
+  const text = input.text?.trim() ?? '';
+  const attachmentIds = [...new Set(input.attachmentIds ?? [])];
+  if ((!text && !attachmentIds.length) || text.length > 10_000 || attachmentIds.length > 5)
     throw new MessagingDomainError(
       'VALIDATION_FAILED',
-      'Message text must contain 1 to 10,000 characters.',
+      'A message requires text or up to five attachments; text cannot exceed 10,000 characters.',
     );
   try {
     return await db.transaction().execute(async (tx) => {
       const conversation = await sql<{
         channel_connection_id: string;
+        channel_kind: ChannelKind;
         contact_identity_id: string;
-      }>`select channel_connection_id,contact_identity_id from messaging.conversations where organization_id=${input.organizationId} and id=${input.conversationId} for update`.execute(
+        status: ConversationStatus;
+      }>`select channel_connection_id,channel_kind,contact_identity_id,status from messaging.conversations where organization_id=${input.organizationId} and id=${input.conversationId} for update`.execute(
         tx,
       );
       const row = conversation.rows[0];
       if (!row || row.contact_identity_id !== input.contactIdentityId)
         throw new MessagingDomainError('CONVERSATION_NOT_FOUND', 'Conversation was not found.');
+      if (row.status === 'CLOSED')
+        throw new MessagingDomainError('CONVERSATION_CLOSED', 'Closed conversations cannot receive messages.');
       const record = await claimIdempotencyRecord(tx, {
         organizationId: input.organizationId,
         principalType: 'CONTACT_IDENTITY',
@@ -680,6 +796,7 @@ export async function acceptInboundMessage(
           conversationId: input.conversationId,
           externalMessageId: input.externalMessageId,
           text,
+          attachmentIds,
           providerCreatedAt: input.providerCreatedAt?.toISOString() ?? null,
         }),
       });
@@ -703,19 +820,81 @@ export async function acceptInboundMessage(
           replayed: true,
         };
       }
+      const priorExternal = await sql<{
+        message_id: string;
+        conversation_id: string;
+        text_body: string | null;
+        attachment_ids: string[];
+      }>`select r.message_id,m.conversation_id,m.text_body,
+          coalesce(array_agg(u.id::text order by a.position) filter(where u.id is not null),'{}') attachment_ids
+        from messaging.message_external_references r
+        join messaging.messages m on m.organization_id=r.organization_id and m.id=r.message_id
+        left join messaging.message_attachments a on a.organization_id=m.organization_id and a.message_id=m.id
+        left join messaging.website_attachment_uploads u on u.organization_id=a.organization_id
+          and u.media_asset_id=a.media_asset_id and u.attached_message_id=m.id
+        where r.organization_id=${input.organizationId} and r.channel_connection_id=${row.channel_connection_id}
+          and r.reference_type='PROVIDER_MESSAGE' and r.external_id=${input.externalMessageId}
+        group by r.message_id,m.conversation_id,m.text_body`.execute(tx);
+      if (priorExternal.rows[0]) {
+        const prior = priorExternal.rows[0];
+        if (
+          prior.conversation_id !== input.conversationId ||
+          (row.channel_kind === 'WEBSITE' &&
+            ((prior.text_body ?? '') !== text ||
+              prior.attachment_ids.length !== attachmentIds.length ||
+              prior.attachment_ids.some((id, index) => id !== attachmentIds[index])))
+        )
+          throw new MessagingDomainError(
+            'IDEMPOTENCY_KEY_REUSED',
+            'The client message identifier was already used for different input.',
+          );
+        await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='messaging.message',
+          result_entity_id=${prior.message_id},safe_response=${JSON.stringify({ messageId: prior.message_id })}::jsonb,
+          completed_at=now() where id=${record.id}`.execute(tx);
+        return {
+          message: await loadMessage(tx as Db, input.organizationId, prior.message_id),
+          replayed: true,
+        };
+      }
+      const attachmentUploads = attachmentIds.length
+        ? await sql<{
+            id: string;
+            media_asset_id: string;
+            file_name: string;
+            mime_type: string;
+            byte_size: string;
+            width_px: number | null;
+            height_px: number | null;
+          }>`select u.id,u.media_asset_id,u.file_name,u.mime_type,u.byte_size::text,o.width_px,o.height_px
+              from messaging.website_attachment_uploads u
+              join media.media_assets a on a.organization_id=u.organization_id and a.id=u.media_asset_id
+              join media.media_objects o on o.organization_id=a.organization_id and o.id=a.current_object_id
+              where u.organization_id=${input.organizationId} and u.conversation_id=${input.conversationId}
+                and u.contact_identity_id=${input.contactIdentityId} and u.id in (${sql.join(attachmentIds.map((id) => sql`${id}::uuid`))})
+                and u.status='AVAILABLE' and u.expires_at>now() and a.status='READY'`.execute(tx)
+        : { rows: [] };
+      if (attachmentUploads.rows.length !== attachmentIds.length)
+        throw new MessagingDomainError('VALIDATION_FAILED', 'One or more attachments are unavailable.');
       const allocated = await sql<{
         sequence: string;
         version: string;
-      }>`update messaging.conversations set next_message_sequence=next_message_sequence+1,last_message_sequence=next_message_sequence,status=case when status in('RESOLVED','CLOSED') then 'OPEN' else status end,resolved_at=null,closed_at=null,last_inbound_at=coalesce(${input.providerCreatedAt ?? new Date()},now()),updated_at=now(),version=version+1 where organization_id=${input.organizationId} and id=${input.conversationId} returning (next_message_sequence-1)::text sequence,version::text`.execute(
+      }>`update messaging.conversations set next_message_sequence=next_message_sequence+1,last_message_sequence=next_message_sequence,status=case when status='RESOLVED' then 'OPEN' else status end,resolved_at=null,last_inbound_at=coalesce(${input.providerCreatedAt ?? new Date()},now()),updated_at=now(),version=version+1 where organization_id=${input.organizationId} and id=${input.conversationId} and status<>'CLOSED' returning (next_message_sequence-1)::text sequence,version::text`.execute(
         tx,
       );
       const allocation = allocated.rows[0]!;
       const inserted = await sql<{
         id: string;
-      }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,sender_contact_identity_id,message_type,text_body,provider_message_id,delivery_state,provider_created_at) values(${input.organizationId},${input.conversationId},${allocation.sequence}::bigint,'INBOUND','CONTACT',${input.contactIdentityId},'TEXT',${text},${input.externalMessageId},'RECEIVED',${input.providerCreatedAt ?? null}) returning id`.execute(
+      }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,sender_contact_identity_id,message_type,text_body,provider_message_id,client_message_id,delivery_state,provider_created_at) values(${input.organizationId},${input.conversationId},${allocation.sequence}::bigint,'INBOUND','CONTACT',${input.contactIdentityId},${attachmentIds.length ? (text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${text || null},${input.externalMessageId},${input.externalMessageId},'RECEIVED',${input.providerCreatedAt ?? null}) returning id`.execute(
         tx,
       );
       const messageId = inserted.rows[0]!.id;
+      for (const [position, uploadId] of attachmentIds.entries()) {
+        const upload = attachmentUploads.rows.find((candidate) => candidate.id === uploadId)!;
+        await sql`insert into messaging.message_attachments(organization_id,message_id,media_asset_id,position,kind,filename,mime_type,byte_size,width_px,height_px,security_status)
+          values(${input.organizationId},${messageId},${upload.media_asset_id},${position},'IMAGE',${upload.file_name},${upload.mime_type},${upload.byte_size}::bigint,${upload.width_px},${upload.height_px},'AVAILABLE')`.execute(tx);
+        await sql`update messaging.website_attachment_uploads set status='ATTACHED',attached_message_id=${messageId},updated_at=now()
+          where organization_id=${input.organizationId} and id=${uploadId} and status='AVAILABLE'`.execute(tx);
+      }
       await sql`update messaging.conversations set last_message_id=${messageId},last_message_at=now() where organization_id=${input.organizationId} and id=${input.conversationId}`.execute(
         tx,
       );
@@ -1038,6 +1217,9 @@ export class ChannelAdapterRegistry {
   get(kind: ChannelKind) {
     return this.adapters.get(kind);
   }
+  has(kind: ChannelKind) {
+    return this.adapters.has(kind);
+  }
   kinds() {
     return [...this.adapters.keys()];
   }
@@ -1175,3 +1357,5 @@ export async function reclaimExpiredMessagingDeliveries(db: Db): Promise<number>
   );
   return result.rows.length;
 }
+
+export * from './storefront.js';

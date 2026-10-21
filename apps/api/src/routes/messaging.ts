@@ -4,6 +4,7 @@ import { Type } from 'typebox';
 import type { DatabaseClient } from '@maevelle/database';
 import * as messaging from '@maevelle/database/messaging';
 import { findActiveAdminContext, type AdminContextRecord } from '@maevelle/database/platform';
+import type { ObjectStoragePort } from '@maevelle/media';
 
 import type { createAuth } from '../auth/auth.js';
 
@@ -59,6 +60,7 @@ function fail(reply: FastifyReply, error: unknown, requestId: string) {
                 'ASSIGNMENT_CONFLICT',
                 'CONVERSATION_CLOSED',
                 'IDEMPOTENCY_IN_PROGRESS',
+                'IDEMPOTENCY_KEY_REUSED',
               ].includes(error.code)
             ? 409
             : error.code === 'CONNECTION_UNAVAILABLE'
@@ -99,6 +101,7 @@ export function registerMessagingRoutes(
   app: FastifyInstance,
   database: DatabaseClient,
   auth: Auth,
+  storage?: ObjectStoragePort,
 ): void {
   const activeByMembership = new Map<string, number>();
   const controllers = new Set<AbortController>();
@@ -255,7 +258,7 @@ export function registerMessagingRoutes(
         params: Type.Object({ conversationId: Type.String({ format: 'uuid' }) }),
         body: Type.Object({
           clientMessageId: Type.String({ minLength: 1, maxLength: 160 }),
-          text: Type.String({ minLength: 1, maxLength: 10_000 }),
+          text: Type.Optional(Type.String({ minLength: 1, maxLength: 10_000 })),
           attachmentIds: Type.Optional(
             Type.Array(Type.String({ format: 'uuid' }), { maxItems: 10 }),
           ),
@@ -285,18 +288,10 @@ export function registerMessagingRoutes(
       const params = request.params as { conversationId: string };
       const body = request.body as {
         clientMessageId: string;
-        text: string;
+        text?: string;
         attachmentIds?: string[];
         replyToMessageId?: string;
       };
-      if (body.attachmentIds?.length)
-        return reply.code(422).send({
-          error: {
-            code: 'ATTACHMENT_REJECTED',
-            message: 'Website attachment processing is introduced in Phase 02.',
-            requestId: request.id,
-          },
-        });
       try {
         const result = await messaging.prepareOutboundMessage(database.db, {
           actor: actor(context),
@@ -304,7 +299,8 @@ export function registerMessagingRoutes(
           conversationId: params.conversationId,
           idempotencyKey: key,
           clientMessageId: body.clientMessageId,
-          text: body.text,
+          ...(body.text !== undefined ? { text: body.text } : {}),
+          ...(body.attachmentIds ? { attachmentIds: body.attachmentIds } : {}),
           ...(body.replyToMessageId ? { replyToMessageId: body.replyToMessageId } : {}),
           requestId: request.id,
         });
@@ -314,6 +310,39 @@ export function registerMessagingRoutes(
       }
     },
   );
+
+  if (storage)
+    app.get(
+      '/admin/messaging/attachments/:attachmentId',
+      { schema: { params: Type.Object({ attachmentId: Type.String({ format: 'uuid' }) }) } },
+      async (request, reply) => {
+        const context = await authenticate(database, auth, request.headers);
+        if (!context || !hasInboxAccess(context))
+          return reply.code(403).send({
+            error: { code: 'FORBIDDEN', message: 'Messaging inbox access is required.', requestId: request.id },
+          });
+        try {
+          const attachment = await messaging.authorizeStaffMessagingAttachment(database.db, {
+            organizationId: context.organizationId,
+            membershipId: context.membershipId,
+            access: access(context),
+            attachmentId: (request.params as { attachmentId: string }).attachmentId,
+          });
+          const locator = { provider: attachment.provider, bucket: attachment.bucket, key: attachment.objectKey };
+          if (storage.provider !== 'local') {
+            const url = await storage.createSignedRead(locator, { expiresInSeconds: 300 });
+            if (url) return reply.redirect(url, 302);
+          }
+          const content = await storage.get(locator);
+          if (!content)
+            return reply.code(404).send({ error: { code: 'CONVERSATION_NOT_FOUND', message: 'Attachment was not found.', requestId: request.id } });
+          return reply.header('content-type', attachment.mimeType).header('content-length', String(content.length))
+            .header('cache-control', 'private, no-store').header('content-disposition', 'inline').send(content);
+        } catch (error) {
+          return fail(reply, error, request.id);
+        }
+      },
+    );
 
   app.post(
     '/admin/messaging/conversations/:conversationId/read',

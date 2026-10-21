@@ -39,7 +39,12 @@ export async function createMediaUploadSession(
   input: {
     organizationId: string;
     actorId?: string;
-    uploadSource?: 'ADMIN_UPLOAD' | 'CUSTOMER_REVIEW' | 'SUPPLIER_IMPORT' | 'API';
+    uploadSource?:
+      | 'ADMIN_UPLOAD'
+      | 'CUSTOMER_REVIEW'
+      | 'MESSAGING_ATTACHMENT'
+      | 'SUPPLIER_IMPORT'
+      | 'API';
     guestOwnerHash?: string;
     originalFilename: string;
     declaredMimeType: string;
@@ -67,8 +72,11 @@ export async function createMediaUploadSession(
   const originalFilename = safeFilename(input.originalFilename);
   if (input.guestOwnerHash && !/^[0-9a-f]{64}$/.test(input.guestOwnerHash))
     throw new MediaDomainError('VALIDATION_FAILED', 'Guest upload ownership is invalid.');
-  if (input.uploadSource === 'CUSTOMER_REVIEW' && !input.guestOwnerHash)
-    throw new MediaDomainError('VALIDATION_FAILED', 'Customer Review uploads require ownership.');
+  if (
+    (input.uploadSource === 'CUSTOMER_REVIEW' || input.uploadSource === 'MESSAGING_ATTACHMENT') &&
+    !input.guestOwnerHash
+  )
+    throw new MediaDomainError('VALIDATION_FAILED', 'Guest uploads require ownership.');
   return withMediaTransaction(db, async (transaction) => {
     const asset = await sql<{ id: string }>`
       insert into media.media_assets(

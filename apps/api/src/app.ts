@@ -15,6 +15,15 @@ export interface BuildApiOptions {
   readonly logger?: FastifyBaseLogger | false;
 }
 
+function matchesExpectedOrigin(origin: string, expectedOrigin: string, requestHost?: string): boolean {
+  if (origin === expectedOrigin) return true;
+  try {
+    return new URL(origin).host === requestHost;
+  } catch {
+    return false;
+  }
+}
+
 export function buildApi(options: BuildApiOptions) {
   const rateAttempts = new Map<string, { count: number; resetAt: number }>();
   const loggerOptions =
@@ -64,8 +73,19 @@ export function buildApi(options: BuildApiOptions) {
       (request.url.startsWith('/admin/') || request.url.startsWith('/invitations/'))
     ) {
       const trustedOrigin = new URL(options.config.authBaseUrl).origin;
-      const sameHost = new URL(origin).host === request.headers.host;
-      if (origin !== trustedOrigin && !sameHost)
+      if (!matchesExpectedOrigin(origin, trustedOrigin, request.headers.host))
+        return reply.code(403).send({
+          error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
+        });
+    }
+    if (
+      options.config &&
+      origin &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
+      request.url.startsWith('/storefront/v1/chat/')
+    ) {
+      const storefrontOrigin = new URL(options.config.storefrontBaseUrl).origin;
+      if (!matchesExpectedOrigin(origin, storefrontOrigin, request.headers.host))
         return reply.code(403).send({
           error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
         });
@@ -82,6 +102,7 @@ export function buildApi(options: BuildApiOptions) {
       { prefix: '/admin/sms/', maximum: 60 },
       { prefix: '/admin/integrity/', maximum: 30 },
       { prefix: '/admin/messaging/', maximum: 180 },
+      { prefix: '/storefront/v1/chat/', maximum: 120 },
       { prefix: '/webhooks/sms/', maximum: 240 },
     ];
     const policy = limits.find((candidate) => request.url.startsWith(candidate.prefix));

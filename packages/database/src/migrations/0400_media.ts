@@ -42,7 +42,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       caption text check (caption is null or length(caption) <= 1000),
       internal_description text check (internal_description is null or length(internal_description) <= 4000),
       upload_source text not null default 'ADMIN_UPLOAD'
-        check (upload_source in ('ADMIN_UPLOAD', 'CUSTOMER_REVIEW', 'SUPPLIER_IMPORT', 'API', 'MIGRATION', 'SYSTEM_GENERATED')),
+        check (upload_source in ('ADMIN_UPLOAD', 'CUSTOMER_REVIEW', 'MESSAGING_ATTACHMENT', 'SUPPLIER_IMPORT', 'API', 'MIGRATION', 'SYSTEM_GENERATED')),
       uploaded_by uuid references iam.users(id),
       guest_owner_hash text check (guest_owner_hash is null or guest_owner_hash ~ '^[0-9a-f]{64}$'),
       processing_error_code text,

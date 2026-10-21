@@ -33,7 +33,11 @@ export interface ObjectStoragePort {
   readonly publicBucket: string;
   createSignedUpload(
     locator: StoredObjectLocator,
-    input: { readonly contentType: string; readonly expiresInSeconds: number },
+    input: {
+      readonly contentType: string;
+      readonly expiresInSeconds: number;
+      readonly checksumSha256?: string;
+    },
   ): Promise<UploadAuthorization>;
   createSignedRead(
     locator: StoredObjectLocator,

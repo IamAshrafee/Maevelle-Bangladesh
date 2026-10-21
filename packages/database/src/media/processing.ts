@@ -204,6 +204,7 @@ export async function claimDueMediaPurge(db: Kysely<DatabaseSchema>) {
       where asset.status='TRASHED' and asset.purge_after<=now()
         and not exists(select 1 from catalog.product_media usage where usage.organization_id=asset.organization_id and usage.asset_id=asset.id)
         and not exists(select 1 from reviews.review_media usage where usage.organization_id=asset.organization_id and usage.media_asset_id=asset.id)
+        and not exists(select 1 from messaging.message_attachments usage where usage.organization_id=asset.organization_id and usage.media_asset_id=asset.id)
       order by asset.purge_after,asset.id for update of asset skip locked limit 1`.execute(
       transaction,
     );

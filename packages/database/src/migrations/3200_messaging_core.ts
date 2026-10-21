@@ -17,8 +17,10 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       configuration jsonb not null default '{}'::jsonb check(jsonb_typeof(configuration)='object'),
       last_healthy_at timestamptz, last_error_at timestamptz, last_error_code text,
       created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1 check(version>0),
-      unique(organization_id,id), foreign key(organization_id,integration_account_id) references integrations.integration_accounts(organization_id,id)
+      unique(organization_id,id), unique(organization_id,id,channel_kind),
+      foreign key(organization_id,integration_account_id) references integrations.integration_accounts(organization_id,id)
     );
+    create unique index channel_connections_website on messaging.channel_connections(organization_id,channel_kind) where channel_kind='WEBSITE';
     create unique index channel_connections_provider on messaging.channel_connections(organization_id,channel_kind,provider_account_id) where provider_account_id is not null;
     create index channel_connections_status on messaging.channel_connections(organization_id,status,channel_kind);
 
@@ -47,6 +49,28 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create index contact_identities_contact on messaging.contact_identities(organization_id,contact_id,last_seen_at desc);
 
+    create table messaging.visitor_sessions (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      channel_connection_id uuid not null, contact_identity_id uuid not null,
+      credential_digest bytea not null check(octet_length(credential_digest)=32),
+      status text not null default 'ACTIVE' check(status in ('ACTIVE','ROTATED','REVOKED','EXPIRED')),
+      issued_at timestamptz not null default now(), last_seen_at timestamptz not null default now(),
+      expires_at timestamptz not null, absolute_expires_at timestamptz not null,
+      rotated_to_session_id uuid, revoked_at timestamptz, revocation_reason text,
+      created_at timestamptz not null default now(),
+      unique(organization_id,id),
+      foreign key(organization_id,channel_connection_id) references messaging.channel_connections(organization_id,id),
+      foreign key(organization_id,contact_identity_id) references messaging.contact_identities(organization_id,id),
+      check(expires_at>issued_at and absolute_expires_at>=expires_at),
+      check((status in ('ROTATED','REVOKED'))=(revoked_at is not null)),
+      check(status<>'ROTATED' or rotated_to_session_id is not null)
+    );
+    alter table messaging.visitor_sessions add constraint visitor_sessions_rotation_fk
+      foreign key(organization_id,rotated_to_session_id) references messaging.visitor_sessions(organization_id,id);
+    create index visitor_sessions_identity on messaging.visitor_sessions(organization_id,contact_identity_id,last_seen_at desc);
+    create index visitor_sessions_expiry on messaging.visitor_sessions(expires_at,id) where status='ACTIVE';
+    create index visitor_sessions_rotated_to on messaging.visitor_sessions(organization_id,rotated_to_session_id) where rotated_to_session_id is not null;
+
     create table messaging.contact_customer_link_events (
       id bigint generated always as identity primary key, organization_id uuid not null references platform.organizations(id), contact_id uuid not null, customer_id uuid,
       action text not null check(action in ('LINKED','UNLINKED','REJECTED')), method text not null check(method in ('AUTHENTICATED_ACCOUNT','VERIFIED_EMAIL','VERIFIED_PHONE','STAFF_REVIEW','CUSTOMER_MERGE','PRIVACY_ACTION')),
@@ -58,7 +82,9 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index contact_link_events_customer on messaging.contact_customer_link_events(organization_id,customer_id,created_at desc);
 
     create table messaging.conversations (
-      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), channel_connection_id uuid not null, contact_id uuid not null, contact_identity_id uuid not null,
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), channel_connection_id uuid not null,
+      channel_kind text not null check(channel_kind in ('WEBSITE','FACEBOOK','INSTAGRAM')),
+      contact_id uuid not null, contact_identity_id uuid not null,
       provider_conversation_id text, status text not null default 'NEW' check(status in ('NEW','OPEN','PENDING','RESOLVED','CLOSED')),
       priority text not null default 'NORMAL' check(priority in ('LOW','NORMAL','HIGH','URGENT')),
       assignee_membership_id uuid, assigned_at timestamptz, assigned_by_membership_id uuid, is_starred boolean not null default false,
@@ -66,7 +92,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       last_message_at timestamptz, last_inbound_at timestamptz, last_outbound_at timestamptz, resolved_at timestamptz, closed_at timestamptz, reply_eligible_until timestamptz,
       subject text check(subject is null or length(trim(subject)) between 1 and 240), context jsonb not null default '{}'::jsonb check(jsonb_typeof(context)='object'),
       created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1 check(version>0),
-      unique(organization_id,id), foreign key(organization_id,channel_connection_id) references messaging.channel_connections(organization_id,id),
+      unique(organization_id,id), foreign key(organization_id,channel_connection_id,channel_kind) references messaging.channel_connections(organization_id,id,channel_kind),
       foreign key(organization_id,contact_id) references messaging.contacts(organization_id,id), foreign key(organization_id,contact_identity_id) references messaging.contact_identities(organization_id,id),
       foreign key(organization_id,contact_identity_id,contact_id,channel_connection_id) references messaging.contact_identities(organization_id,id,contact_id,channel_connection_id),
       foreign key(organization_id,assignee_membership_id) references iam.organization_memberships(organization_id,id),
@@ -81,6 +107,25 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index conversations_contact on messaging.conversations(organization_id,contact_id,last_message_at desc nulls last);
     create index conversations_identity on messaging.conversations(organization_id,contact_identity_id);
     create index conversations_assigned_by on messaging.conversations(organization_id,assigned_by_membership_id) where assigned_by_membership_id is not null;
+    create unique index conversations_website_active on messaging.conversations(organization_id,channel_connection_id,contact_identity_id)
+      where channel_kind='WEBSITE' and status in ('NEW','OPEN','PENDING','RESOLVED');
+
+    create table messaging.conversation_context_events (
+      id bigint generated always as identity primary key,
+      organization_id uuid not null references platform.organizations(id), conversation_id uuid not null,
+      contact_identity_id uuid not null,
+      context_type text not null check(context_type in ('HOME','PRODUCT','CATEGORY','CART','CHECKOUT','OTHER')),
+      url_path text not null check(length(url_path) between 1 and 500 and left(url_path,1)='/'),
+      product_id uuid, variant_id uuid, product_title text check(product_title is null or length(product_title)<=240),
+      metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(metadata)='object'),
+      created_at timestamptz not null default now(),
+      foreign key(organization_id,conversation_id) references messaging.conversations(organization_id,id),
+      foreign key(organization_id,contact_identity_id) references messaging.contact_identities(organization_id,id),
+      foreign key(organization_id,product_id) references catalog.products(organization_id,id),
+      foreign key(organization_id,product_id,variant_id) references catalog.product_variants(organization_id,product_id,id),
+      check(variant_id is null or product_id is not null)
+    );
+    create index conversation_context_history on messaging.conversation_context_events(organization_id,conversation_id,created_at desc,id desc);
 
     create table messaging.messages (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), conversation_id uuid not null, sequence bigint not null check(sequence>0),
@@ -124,6 +169,25 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create index message_attachments_media on messaging.message_attachments(organization_id,media_asset_id) where media_asset_id is not null;
     create index message_attachments_purge on messaging.message_attachments(security_status,expires_at) where expires_at is not null;
+
+    create table messaging.website_attachment_uploads (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      conversation_id uuid not null, contact_identity_id uuid not null, media_asset_id uuid not null,
+      media_upload_session_id uuid not null, file_name text not null check(length(file_name) between 1 and 255),
+      mime_type text not null check(mime_type in ('image/jpeg','image/png','image/webp')),
+      byte_size bigint not null check(byte_size between 1 and 5242880), sha256 text not null check(sha256 ~ '^[0-9a-f]{64}$'),
+      status text not null default 'PENDING' check(status in ('PENDING','PROCESSING','AVAILABLE','REJECTED','EXPIRED','ATTACHED')),
+      expires_at timestamptz not null, attached_message_id uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      unique(organization_id,id), unique(organization_id,media_asset_id), unique(organization_id,media_upload_session_id),
+      foreign key(organization_id,conversation_id) references messaging.conversations(organization_id,id),
+      foreign key(organization_id,contact_identity_id) references messaging.contact_identities(organization_id,id),
+      foreign key(organization_id,media_asset_id) references media.media_assets(organization_id,id),
+      foreign key(organization_id,media_upload_session_id) references media.media_upload_sessions(organization_id,id),
+      foreign key(organization_id,attached_message_id) references messaging.messages(organization_id,id),
+      check((status='ATTACHED')=(attached_message_id is not null))
+    );
+    create index website_attachment_uploads_owner on messaging.website_attachment_uploads(organization_id,contact_identity_id,created_at desc);
+    create index website_attachment_uploads_cleanup on messaging.website_attachment_uploads(status,expires_at) where status in ('PENDING','PROCESSING','AVAILABLE');
 
     create table messaging.realtime_streams (
       organization_id uuid primary key references platform.organizations(id), next_sequence bigint not null default 1 check(next_sequence>0), retained_from_sequence bigint not null default 1 check(retained_from_sequence>0), updated_at timestamptz not null default now()

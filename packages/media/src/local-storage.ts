@@ -25,7 +25,11 @@ export class LocalObjectStorage implements ObjectStoragePort {
 
   public async createSignedUpload(
     _locator: StoredObjectLocator,
-    input: { readonly contentType: string; readonly expiresInSeconds: number },
+    input: {
+      readonly contentType: string;
+      readonly expiresInSeconds: number;
+      readonly checksumSha256?: string;
+    },
   ): Promise<UploadAuthorization> {
     return {
       strategy: 'API_PROXY',
@@ -42,7 +46,6 @@ export class LocalObjectStorage implements ObjectStoragePort {
   public async put(
     locator: StoredObjectLocator,
     content: Buffer,
-    _input: { readonly contentType: string; readonly checksumSha256?: string },
   ): Promise<void> {
     const destination = this.resolveLocator(locator);
     await mkdir(dirname(destination), { recursive: true });

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'kysely';
 
 import { createDatabase } from './index.js';
@@ -55,6 +55,9 @@ beforeAll(async () => {
     displayName: 'Test Website',
     status: 'ACTIVE',
   });
+});
+
+beforeEach(async () => {
   ({ identityId, contactId } = await messaging.createContactIdentity(database.db, {
     organizationId,
     channelConnectionId: connectionId,
@@ -126,6 +129,25 @@ describe('messaging transactional core', () => {
       text: 'Canonical',
     });
     expect(repeated).toEqual({ ...canonical, replayed: true });
+    const clientReplay = await messaging.prepareOutboundMessage(database.db, {
+      actor: actor(),
+      access: 'ALL',
+      conversationId,
+      idempotencyKey: `same-client-${crypto.randomUUID()}`,
+      clientMessageId: sameClient,
+      text: 'Canonical',
+    });
+    expect(clientReplay).toEqual({ ...canonical, replayed: true });
+    await expect(
+      messaging.prepareOutboundMessage(database.db, {
+        actor: actor(),
+        access: 'ALL',
+        conversationId,
+        idempotencyKey: `changed-client-${crypto.randomUUID()}`,
+        clientMessageId: sameClient,
+        text: 'Changed body',
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
     const evidence = await sql<{
       messages: string;
       intents: string;

@@ -1,6 +1,6 @@
 # Omnichannel Messaging Architecture
 
-**Status:** Phase 01 backend complete — Phase 02 implementation reference
+**Status:** Phase 02 Storefront backend complete — Phase 03 implementation reference
 **Date:** 2026-10-21
 **Scope:** Storefront live chat, unified Admin inbox, Facebook Messenger, and Instagram Direct
 **Authority:** Current source and migrations outrank historical design documents. This design does not authorize a production migration or provider connection.
@@ -25,6 +25,7 @@ The design deliberately does **not** introduce Redis, a broker, a messaging micr
 10. [Phase roadmap and Phase 01 handoff](09-roadmap-and-phase-01-handoff.md)
 11. [Phase 00 architecture review](10-architecture-review.md)
 12. [Phase 01 implementation record and Phase 02 handoff](11-phase-01-completion.md)
+13. [Phase 02 Storefront backend completion and operations](12-phase-02-completion.md)
 
 ## Architecture at a glance
 
@@ -58,6 +59,12 @@ flowchart LR
 - Message bodies and private attachment URLs are not written to ordinary logs, notifications, or analytics payloads.
 - Phase 03's staff surface is the first composition of permanent inbox components, not throwaway UI.
 
-## Phase 02 readiness
+## Phase 03 readiness
 
-Phase 01 is implemented. The core schema, service contracts, transactional acceptance, delivery state machine, capability-protected Admin APIs, and authenticated replayable SSE endpoint are available. Phase 02 can add website visitor credentials, public chat routes, the website adapter, and private attachment authorization without replacing the shared messaging core. See the [implementation record](11-phase-01-completion.md).
+Phases 01 and 02 are implemented. The shared core now has a complete website
+channel: opaque guest sessions, one active conversation per website identity,
+public Storefront commands and replayable SSE, private image attachments,
+authenticated customer linking, and a worker-owned website delivery adapter.
+Phase 03 can build the Storefront widget and permanent Admin workspace directly
+against these contracts. See the [Phase 02 implementation and operations
+record](12-phase-02-completion.md).

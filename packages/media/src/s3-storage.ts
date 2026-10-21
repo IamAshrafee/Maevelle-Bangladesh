@@ -61,7 +61,11 @@ export class S3ObjectStorage implements ObjectStoragePort {
 
   public async createSignedUpload(
     locator: StoredObjectLocator,
-    input: { readonly contentType: string; readonly expiresInSeconds: number },
+    input: {
+      readonly contentType: string;
+      readonly expiresInSeconds: number;
+      readonly checksumSha256?: string;
+    },
   ): Promise<UploadAuthorization> {
     this.assertLocator(locator);
     const url = await getSignedUrl(
@@ -70,6 +74,7 @@ export class S3ObjectStorage implements ObjectStoragePort {
         Bucket: locator.bucket,
         Key: locator.key,
         ContentType: input.contentType,
+        ...(input.checksumSha256 ? { Metadata: { sha256: input.checksumSha256 } } : {}),
       }),
       { expiresIn: input.expiresInSeconds },
     );
@@ -77,7 +82,12 @@ export class S3ObjectStorage implements ObjectStoragePort {
       strategy: 'SIGNED_PUT',
       url,
       method: 'PUT',
-      headers: { 'content-type': input.contentType },
+      headers: {
+        'content-type': input.contentType,
+        ...(input.checksumSha256
+          ? { 'x-amz-meta-sha256': input.checksumSha256 }
+          : {}),
+      },
       expiresAt: new Date(Date.now() + input.expiresInSeconds * 1_000).toISOString(),
     };
   }

@@ -30,8 +30,10 @@ import {
   ChannelAdapterRegistry,
   processMessagingDeliveries,
   purgeExpiredRealtimeEvents,
+  purgeExpiredWebsiteVisitorResources,
   reclaimExpiredMessagingDeliveries,
 } from '@maevelle/database/messaging';
+import { websiteMessagingAdapter } from './website-messaging-adapter.js';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -77,6 +79,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
   const smsProvider = options.smsProvider;
   const smsRuntime = options.smsRuntime;
   const messagingAdapters = options.messagingAdapters ?? new ChannelAdapterRegistry();
+  if (!messagingAdapters.has('WEBSITE')) messagingAdapters.register(websiteMessagingAdapter);
   const invitationEmailAdapter = {
     name: emailAdapter.name,
     send: async (request: {
@@ -141,6 +144,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         messagingDeliveries,
         messagingReclaimed,
         messagingEventsPurged,
+        messagingVisitorResourcesPurged,
       ] = await Promise.all([
         runJob(() => reclaimExpiredJobs(options.database.db)),
         runJob(() =>
@@ -231,6 +235,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         ),
         runJob(() => reclaimExpiredMessagingDeliveries(options.database.db)),
         runJob(() => purgeExpiredRealtimeEvents(options.database.db)),
+        runJob(() => purgeExpiredWebsiteVisitorResources(options.database.db)),
       ]);
       logger?.debug(
         {
@@ -261,6 +266,7 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           messagingDeliveries,
           messagingReclaimed,
           messagingEventsPurged,
+          messagingVisitorResourcesPurged,
         },
         'Worker recovery tick.',
       );
