@@ -103,9 +103,17 @@ export function UnitScannerInput({
   const startCamera = async () => {
     try {
       setError(null);
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('Camera access is not available in this browser. Use a handheld scanner or enter the Unit Code.');
+        return;
+      }
+      if (!('BarcodeDetector' in window)) {
+        setError('Camera barcode detection is not supported in this browser. Use a handheld scanner or enter the Unit Code.');
+        return;
+      }
       setCameraActive(true);
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode: { ideal: 'environment' } },
       });
       streamRef.current = stream;
       if (videoRef.current) {
@@ -113,30 +121,25 @@ export function UnitScannerInput({
         await videoRef.current.play();
       }
 
-      // If standard BarcodeDetector is available
-      if ('BarcodeDetector' in window) {
-        // @ts-expect-error Standard browser BarcodeDetector API
-        const detector = new window.BarcodeDetector({ formats: ['code_128', 'qr_code'] });
-        const scanFrame = async () => {
-          if (!videoRef.current || !streamRef.current) return;
-          try {
-            const barcodes = await detector.detect(videoRef.current);
-            if (barcodes.length > 0 && barcodes[0].rawValue) {
-              const scanned = barcodes[0].rawValue;
-              stopCamera();
-              setValue(scanned);
-              void processCode(scanned);
-              return;
-            }
-          } catch {
-            // Frame detection skipped
+      // @ts-expect-error BarcodeDetector is a progressive browser API without a stable DOM type.
+      const detector = new window.BarcodeDetector({ formats: ['code_128', 'qr_code'] });
+      const scanFrame = async () => {
+        if (!videoRef.current || !streamRef.current) return;
+        try {
+          const barcodes = await detector.detect(videoRef.current);
+          if (barcodes.length > 0 && barcodes[0].rawValue) {
+            const scanned = barcodes[0].rawValue;
+            stopCamera();
+            setValue(scanned);
+            void processCode(scanned);
+            return;
           }
-          if (streamRef.current) {
-            requestAnimationFrame(scanFrame);
-          }
-        };
-        requestAnimationFrame(scanFrame);
-      }
+        } catch {
+          // A frame can be unreadable while the operator aligns the label.
+        }
+        if (streamRef.current) requestAnimationFrame(scanFrame);
+      };
+      requestAnimationFrame(scanFrame);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not access device camera.');
       stopCamera();
@@ -167,7 +170,7 @@ export function UnitScannerInput({
             'absolute left-3 size-4 text-muted-foreground pointer-events-none transition-colors',
             loading && 'text-primary animate-pulse',
             error && 'text-destructive',
-            successCode && 'text-emerald-600',
+            successCode && 'text-success',
           )}
         />
         <Input
@@ -186,7 +189,7 @@ export function UnitScannerInput({
             size === 'sm' && 'h-8 text-xs',
             size === 'lg' && 'h-11 text-base',
             error && 'border-destructive focus-visible:ring-destructive',
-            successCode && 'border-emerald-500 focus-visible:ring-emerald-500',
+            successCode && 'border-success focus-visible:ring-success',
             inputClassName,
           )}
         />
@@ -208,7 +211,7 @@ export function UnitScannerInput({
             size="icon"
             onClick={startCamera}
             className="size-7 text-muted-foreground hover:text-foreground"
-            title="Scan with Camera"
+            aria-label="Scan with device camera"
           >
             <Camera className="size-3.5" />
           </Button>
@@ -239,7 +242,7 @@ export function UnitScannerInput({
       ) : null}
 
       {successCode ? (
-        <p className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 mt-1.5 font-medium animate-in fade-in duration-150">
+        <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-success animate-in fade-in duration-150">
           <CheckCircle2 className="size-3 shrink-0" />
           <span>Scanned & verified: <strong className="font-mono">{successCode}</strong></span>
         </p>
@@ -247,7 +250,7 @@ export function UnitScannerInput({
 
       {/* Camera Preview Modal Overlay */}
       {cameraActive ? (
-        <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Camera barcode scanner">
           <div className="bg-card w-full max-w-md rounded-xl overflow-hidden border shadow-lg flex flex-col">
             <div className="p-3 border-b flex justify-between items-center bg-muted/40">
               <span className="text-xs font-semibold flex items-center gap-1.5">
@@ -257,6 +260,7 @@ export function UnitScannerInput({
                 type="button"
                 onClick={stopCamera}
                 className="p-1 text-muted-foreground hover:text-foreground rounded"
+                aria-label="Close camera scanner"
               >
                 <X className="size-4" />
               </button>

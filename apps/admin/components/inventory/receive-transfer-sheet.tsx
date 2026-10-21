@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
-import { inventoryRequest } from '@/lib/inventory/api';
+import { InventoryRequestError, inventoryRequest } from '@/lib/inventory/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -42,10 +42,12 @@ export interface ReceivableTransferLine {
 
 interface Props {
   transferId: string;
+  transferVersion: number;
   lines: readonly ReceivableTransferLine[];
   open: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
+  onReload: () => void;
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
@@ -63,17 +65,48 @@ const lineSchema = z.object({
   quarantineQuantity: z.string().regex(/^(\d+)?$/, 'Enter a whole number of units'),
   inspectionQuantity: z.string().regex(/^(\d+)?$/, 'Enter a whole number of units'),
   trackingMode: z.enum(['STANDARD', 'SERIAL']),
-  unitReceipts: z.array(z.object({
-    unitId: z.string(),
-    unitCode: z.string(),
-    condition: z.enum(['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION']),
-  })),
+  unitReceipts: z.array(
+    z.object({
+      unitId: z.string(),
+      unitCode: z.string(),
+      selected: z.boolean(),
+      condition: z.enum(['SELLABLE', 'DAMAGED', 'QUARANTINE', 'INSPECTION']),
+    }),
+  ),
 });
 
-const formSchema = z.object({
-  lines: z.array(lineSchema).refine((lines) => lines.some((line) => line.selected), {
-    message: 'Select at least one line to receive.',
-  }),
+const formSchema = z.object({ lines: z.array(lineSchema) }).superRefine(({ lines }, context) => {
+  if (!lines.some((line) => line.selected)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['lines'],
+      message: 'Select at least one line to receive.',
+    });
+  }
+  lines.forEach((line, index) => {
+    if (!line.selected) return;
+    const total =
+      line.trackingMode === 'SERIAL'
+        ? line.unitReceipts.filter((unit) => unit.selected).length
+        : Number(line.sellableQuantity || 0) +
+          Number(line.damagedQuantity || 0) +
+          Number(line.quarantineQuantity || 0) +
+          Number(line.inspectionQuantity || 0);
+    if (total <= 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['lines', index],
+        message: 'Enter or select at least one received unit.',
+      });
+    }
+    if (total > line.remainingQty) {
+      context.addIssue({
+        code: 'custom',
+        path: ['lines', index],
+        message: 'Received quantity cannot exceed the remaining in-transit quantity.',
+      });
+    }
+  });
 });
 type FormValues = z.infer<typeof formSchema>;
 
@@ -100,6 +133,7 @@ function defaultLine(l: ReceivableTransferLine): FormValues['lines'][number] {
       .map((unit) => ({
         unitId: unit.unitId,
         unitCode: unit.unitCode,
+        selected: true,
         condition: 'SELLABLE' as const,
       })),
   };
@@ -107,7 +141,15 @@ function defaultLine(l: ReceivableTransferLine): FormValues['lines'][number] {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSuccess }: Props) {
+export function ReceiveTransferSheet({
+  transferId,
+  transferVersion,
+  lines,
+  open,
+  onClose,
+  onSuccess,
+  onReload,
+}: Props) {
   const receivableLines = lines.filter(
     (l) =>
       Number(l.dispatchedQuantity) >
@@ -115,6 +157,8 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
   );
 
   const [submitError, setSubmitError] = useState('');
+  const [conflict, setConflict] = useState(false);
+  const commandAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -125,51 +169,75 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
 
   const { fields } = useFieldArray({ control: form.control, name: 'lines' });
 
+  useEffect(() => {
+    if (!open) return;
+    form.reset({
+      lines: lines
+        .filter(
+          (line) =>
+            Number(line.dispatchedQuantity) >
+            Number(line.receivedQuantity) + Number(line.discrepancy?.quantity ?? 0),
+        )
+        .map(defaultLine),
+    });
+    setSubmitError('');
+    setConflict(false);
+    commandAttempt.current = null;
+  }, [form, lines, open]);
+
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError('');
     try {
+      const payload = {
+        lines: values.lines
+          .filter((line) => line.selected)
+          .map((l) => {
+            const unitReceipts =
+              l.trackingMode === 'SERIAL'
+                ? l.unitReceipts
+                    .filter((unit) => unit.selected)
+                    .map((unit) => ({
+                      unitId: unit.unitId,
+                      unitCode: unit.unitCode,
+                      condition: unit.condition,
+                    }))
+                : [];
+            const conditionCount = (
+              condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION',
+            ) => String(unitReceipts.filter((unit) => unit.condition === condition).length);
+            const entry: Record<string, unknown> = {
+              transferLineId: l.transferLineId,
+              sellableQuantity:
+                l.trackingMode === 'SERIAL' ? conditionCount('SELLABLE') : l.sellableQuantity,
+            };
+            const damagedQuantity =
+              l.trackingMode === 'SERIAL' ? conditionCount('DAMAGED') : l.damagedQuantity;
+            const quarantineQuantity =
+              l.trackingMode === 'SERIAL' ? conditionCount('QUARANTINE') : l.quarantineQuantity;
+            const inspectionQuantity =
+              l.trackingMode === 'SERIAL' ? conditionCount('INSPECTION') : l.inspectionQuantity;
+            if (damagedQuantity && damagedQuantity !== '0') entry.damagedQuantity = damagedQuantity;
+            if (quarantineQuantity && quarantineQuantity !== '0')
+              entry.quarantineQuantity = quarantineQuantity;
+            if (inspectionQuantity && inspectionQuantity !== '0')
+              entry.inspectionQuantity = inspectionQuantity;
+            if (unitReceipts.length) entry.unitReceipts = unitReceipts;
+            return entry;
+          }),
+      };
+      const fingerprint = JSON.stringify(payload);
+      if (commandAttempt.current?.fingerprint !== fingerprint) {
+        commandAttempt.current = {
+          fingerprint,
+          key: `receive-${transferId}-${transferVersion}-${crypto.randomUUID()}`,
+        };
+      }
       const res = await inventoryRequest<{ data: { status: string } }>(
         `/warehouse/transfers/${transferId}/receive`,
         {
           method: 'POST',
-          headers: {
-            'idempotency-key': `recv-${transferId}-${Date.now()}`,
-          },
-          body: JSON.stringify({
-            lines: values.lines
-              .filter((line) => line.selected)
-              .map((l) => {
-                const unitReceipts = l.trackingMode === 'SERIAL' ? l.unitReceipts : [];
-                const conditionCount = (condition: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION') =>
-                  String(unitReceipts.filter((unit) => unit.condition === condition).length);
-                const entry: Record<string, unknown> = {
-                  transferLineId: l.transferLineId,
-                  sellableQuantity: l.trackingMode === 'SERIAL'
-                    ? conditionCount('SELLABLE')
-                    : l.sellableQuantity,
-                };
-                const damagedQuantity = l.trackingMode === 'SERIAL'
-                  ? conditionCount('DAMAGED')
-                  : l.damagedQuantity;
-                const quarantineQuantity = l.trackingMode === 'SERIAL'
-                  ? conditionCount('QUARANTINE')
-                  : l.quarantineQuantity;
-                const inspectionQuantity = l.trackingMode === 'SERIAL'
-                  ? conditionCount('INSPECTION')
-                  : l.inspectionQuantity;
-                if (damagedQuantity && damagedQuantity !== '0') {
-                  entry.damagedQuantity = damagedQuantity;
-                }
-                if (quarantineQuantity && quarantineQuantity !== '0') {
-                  entry.quarantineQuantity = quarantineQuantity;
-                }
-                if (inspectionQuantity && inspectionQuantity !== '0') {
-                  entry.inspectionQuantity = inspectionQuantity;
-                }
-                if (unitReceipts.length) entry.unitReceipts = unitReceipts;
-                return entry;
-              }),
-          }),
+          headers: { 'idempotency-key': commandAttempt.current.key },
+          body: fingerprint,
         },
       );
       const status = res.data?.status ?? '';
@@ -178,16 +246,18 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
           ? 'Transfer fully received. Inventory updated at destination.'
           : 'Partial receipt recorded.';
       onSuccess(msg);
+      commandAttempt.current = null;
       onClose();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Receipt could not be posted.');
+      setConflict(err instanceof InventoryRequestError && err.status === 409);
     }
   });
 
   if (receivableLines.length === 0) {
     return (
       <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-        <SheetContent className="sm:max-w-lg">
+        <SheetContent className="w-full sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>Receive Transfer</SheetTitle>
             <SheetDescription>There are no lines remaining to receive.</SheetDescription>
@@ -203,8 +273,8 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
   }
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="sm:max-w-2xl overflow-y-auto">
+    <Sheet open={open} onOpenChange={(o) => !o && !form.formState.isSubmitting && onClose()}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Receive Transfer</SheetTitle>
           <SheetDescription>
@@ -215,19 +285,36 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
 
         <form onSubmit={onSubmit} className="mt-6 space-y-6">
           {submitError && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {submitError}
-            </p>
+            <div
+              role="alert"
+              className="space-y-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              <p>{submitError}</p>
+              {conflict ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => {
+                    onClose();
+                    onReload();
+                  }}
+                >
+                  Close and reload transfer
+                </Button>
+              ) : null}
+            </div>
           )}
 
           {fields.map((field, index) => {
             const lineWatch = form.watch(`lines.${index}`);
-            const totalEntered = lineWatch.trackingMode === 'SERIAL'
-              ? lineWatch.unitReceipts.length
-              : Number(lineWatch.sellableQuantity || 0) +
-                Number(lineWatch.damagedQuantity || 0) +
-                Number(lineWatch.quarantineQuantity || 0) +
-                Number(lineWatch.inspectionQuantity || 0);
+            const totalEntered =
+              lineWatch.trackingMode === 'SERIAL'
+                ? lineWatch.unitReceipts.filter((unit) => unit.selected).length
+                : Number(lineWatch.sellableQuantity || 0) +
+                  Number(lineWatch.damagedQuantity || 0) +
+                  Number(lineWatch.quarantineQuantity || 0) +
+                  Number(lineWatch.inspectionQuantity || 0);
             const overReceived = totalEntered > lineWatch.remainingQty;
 
             return (
@@ -263,7 +350,57 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                       Confirm each received Unit ID and its arrival condition
                     </p>
                     {lineWatch.unitReceipts.map((unit, unitIndex) => (
-                      <div key={unit.unitId} className="grid grid-cols-[1fr_10rem] items-center gap-3">
+                      <div
+                        key={unit.unitId}
+                        className="grid grid-cols-[auto_1fr] items-center gap-2 sm:grid-cols-[auto_1fr_10rem] sm:gap-3"
+                      >
+                        <Checkbox
+                          checked={unit.selected}
+                          onCheckedChange={(checked) => {
+                            const nextUnits = lineWatch.unitReceipts.map((entry, entryIndex) =>
+                              entryIndex === unitIndex
+                                ? { ...entry, selected: checked === true }
+                                : entry,
+                            );
+                            form.setValue(`lines.${index}.unitReceipts`, nextUnits, {
+                              shouldValidate: true,
+                            });
+                            form.setValue(
+                              `lines.${index}.sellableQuantity`,
+                              String(
+                                nextUnits.filter(
+                                  (entry) => entry.selected && entry.condition === 'SELLABLE',
+                                ).length,
+                              ),
+                            );
+                            form.setValue(
+                              `lines.${index}.damagedQuantity`,
+                              String(
+                                nextUnits.filter(
+                                  (entry) => entry.selected && entry.condition === 'DAMAGED',
+                                ).length,
+                              ),
+                            );
+                            form.setValue(
+                              `lines.${index}.quarantineQuantity`,
+                              String(
+                                nextUnits.filter(
+                                  (entry) => entry.selected && entry.condition === 'QUARANTINE',
+                                ).length,
+                              ),
+                            );
+                            form.setValue(
+                              `lines.${index}.inspectionQuantity`,
+                              String(
+                                nextUnits.filter(
+                                  (entry) => entry.selected && entry.condition === 'INSPECTION',
+                                ).length,
+                              ),
+                            );
+                          }}
+                          disabled={!lineWatch.selected || form.formState.isSubmitting}
+                          aria-label={`Receive Unit ID ${unit.unitCode}`}
+                        />
                         <span className="font-mono text-xs tabular-nums text-foreground">
                           {unit.unitCode}
                         </span>
@@ -271,18 +408,51 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                           aria-label={`Arrival condition for ${unit.unitCode}`}
                           value={unit.condition}
                           onChange={(event) => {
-                            const condition = event.target.value as 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
+                            const condition = event.target.value as
+                              'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
                             const nextUnits = lineWatch.unitReceipts.map((entry, entryIndex) =>
                               entryIndex === unitIndex ? { ...entry, condition } : entry,
                             );
-                            form.setValue(`lines.${index}.unitReceipts`, nextUnits, { shouldValidate: true });
-                            form.setValue(`lines.${index}.sellableQuantity`, String(nextUnits.filter((entry) => entry.condition === 'SELLABLE').length));
-                            form.setValue(`lines.${index}.damagedQuantity`, String(nextUnits.filter((entry) => entry.condition === 'DAMAGED').length));
-                            form.setValue(`lines.${index}.quarantineQuantity`, String(nextUnits.filter((entry) => entry.condition === 'QUARANTINE').length));
-                            form.setValue(`lines.${index}.inspectionQuantity`, String(nextUnits.filter((entry) => entry.condition === 'INSPECTION').length));
+                            form.setValue(`lines.${index}.unitReceipts`, nextUnits, {
+                              shouldValidate: true,
+                            });
+                            form.setValue(
+                              `lines.${index}.sellableQuantity`,
+                              String(
+                                nextUnits.filter(
+                                  (entry) => entry.selected && entry.condition === 'SELLABLE',
+                                ).length,
+                              ),
+                            );
+                            form.setValue(
+                              `lines.${index}.damagedQuantity`,
+                              String(
+                                nextUnits.filter(
+                                  (entry) => entry.selected && entry.condition === 'DAMAGED',
+                                ).length,
+                              ),
+                            );
+                            form.setValue(
+                              `lines.${index}.quarantineQuantity`,
+                              String(
+                                nextUnits.filter(
+                                  (entry) => entry.selected && entry.condition === 'QUARANTINE',
+                                ).length,
+                              ),
+                            );
+                            form.setValue(
+                              `lines.${index}.inspectionQuantity`,
+                              String(
+                                nextUnits.filter(
+                                  (entry) => entry.selected && entry.condition === 'INSPECTION',
+                                ).length,
+                              ),
+                            );
                           }}
-                          disabled={!lineWatch.selected || form.formState.isSubmitting}
-                          className="h-8 text-xs"
+                          disabled={
+                            !lineWatch.selected || !unit.selected || form.formState.isSubmitting
+                          }
+                          className="col-span-2 h-8 text-xs sm:col-span-1"
                         >
                           <option value="SELLABLE">Sellable</option>
                           <option value="DAMAGED">Damaged</option>
@@ -294,9 +464,15 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                   </div>
                 ) : null}
 
+                {form.formState.errors.lines?.[index]?.message ? (
+                  <p className="text-xs text-destructive">
+                    {form.formState.errors.lines[index]?.message}
+                  </p>
+                ) : null}
+
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="space-y-1">
-                    <Label className="text-xs text-emerald-700 font-medium">Sellable</Label>
+                    <Label className="text-xs text-success font-medium">Sellable</Label>
                     <Input
                       type="number"
                       min="0"
@@ -320,7 +496,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-amber-600 font-medium">Quarantine</Label>
+                    <Label className="text-xs text-warning font-medium">Quarantine</Label>
                     <Input
                       type="number"
                       min="0"
@@ -332,7 +508,7 @@ export function ReceiveTransferSheet({ transferId, lines, open, onClose, onSucce
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-blue-600 font-medium">Inspection</Label>
+                    <Label className="text-xs text-info font-medium">Inspection</Label>
                     <Input
                       type="number"
                       min="0"

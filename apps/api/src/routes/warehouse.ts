@@ -208,6 +208,8 @@ export function registerWarehouseRoutes(
             message: 'Creating a location requires organization-wide warehouse access.',
           },
         });
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         const body = request.body as {
           code: string;
@@ -227,6 +229,7 @@ export function registerWarehouseRoutes(
             capabilities: body.capabilities,
             ...(body.status ? { status: body.status } : {}),
             ...(body.address ? { address: body.address } : {}),
+            idempotencyKey: key,
           }),
         });
       } catch (error) {
@@ -244,6 +247,7 @@ export function registerWarehouseRoutes(
           name: Type.Optional(Type.String({ minLength: 1 })),
           status: Type.Optional(
             Type.Union([
+              Type.Literal('DRAFT'),
               Type.Literal('ACTIVE'),
               Type.Literal('INACTIVE'),
               Type.Literal('ARCHIVED'),
@@ -261,11 +265,13 @@ export function registerWarehouseRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const locationId = (request.params as { locationId: string }).locationId;
       if (!requireLocation(reply, active, 'warehouse.manage', locationId)) return;
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         const body = request.body as {
           version: number;
           name?: string;
-          status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+          status?: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
           capabilities?: Parameters<typeof updateLocation>[1]['capabilities'];
           address?: Record<string, unknown> | null;
         };
@@ -279,6 +285,7 @@ export function registerWarehouseRoutes(
             ...(body.status === undefined ? {} : { status: body.status }),
             ...(body.capabilities === undefined ? {} : { capabilities: body.capabilities }),
             ...(body.address === undefined ? {} : { address: body.address }),
+            idempotencyKey: key,
           }),
         };
       } catch (error) {
@@ -451,6 +458,8 @@ export function registerWarehouseRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const transferId = (request.params as { transferId: string }).transferId;
       if (!(await requireTransferLocations(database, reply, active, 'warehouse.manage', transferId))) return;
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         return {
           data: await approveWarehouseTransfer(database.db, {
@@ -458,6 +467,7 @@ export function registerWarehouseRoutes(
             actorId: active.actorId,
             transferId,
             expectedVersion: (request.body as { version: number }).version,
+            idempotencyKey: key,
           }),
         };
       } catch (error) {
@@ -474,6 +484,8 @@ export function registerWarehouseRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const transferId = (request.params as { transferId: string }).transferId;
       if (!(await requireTransferLocations(database, reply, active, 'warehouse.manage', transferId))) return;
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         return {
           data: await cancelWarehouseTransfer(database.db, {
@@ -481,6 +493,7 @@ export function registerWarehouseRoutes(
             actorId: active.actorId,
             transferId,
             expectedVersion: (request.body as { version: number }).version,
+            idempotencyKey: key,
           }),
         };
       } catch (error) {

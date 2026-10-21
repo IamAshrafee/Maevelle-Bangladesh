@@ -312,6 +312,7 @@ export function registerInventoryRoutes(
       schema: {
         querystring: Type.Object({
           locationId: Type.Optional(Type.String()),
+          variantId: Type.Optional(Type.String({ format: 'uuid' })),
           search: Type.Optional(Type.String()),
           condition: Type.Optional(condition),
           availability: Type.Optional(
@@ -337,6 +338,7 @@ export function registerInventoryRoutes(
           active.organizationId,
           request.query as {
             locationId?: string;
+            variantId?: string;
             search?: string;
             condition?: 'SELLABLE' | 'DAMAGED' | 'QUARANTINE' | 'INSPECTION';
             availability?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
@@ -555,12 +557,15 @@ export function registerInventoryRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const locationId = (request.body as { locationId: string }).locationId;
       if (!requireLocation(reply, active, 'inventory.stocktake', locationId)) return;
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         return reply.code(201).send({
           data: await startStocktake(database.db, {
             organizationId: active.organizationId,
             actorId: active.actorId,
             ...(request.body as { locationId: string }),
+            idempotencyKey: key,
           }),
         });
       } catch (error) {
@@ -611,6 +616,8 @@ export function registerInventoryRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
       if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         const body = request.body as {
           countedQuantity: string;
@@ -629,6 +636,8 @@ export function registerInventoryRoutes(
           inventoryItemId: (request.params as { inventoryItemId: string }).inventoryItemId,
           ...body,
           expectedVersion: body.version,
+          actorId: active.actorId,
+          idempotencyKey: key,
         });
         return reply.code(204).send();
       } catch (error) {
@@ -648,6 +657,8 @@ export function registerInventoryRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
       if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         const body = request.body as { variantId: string; version: number };
         return reply.code(201).send({
@@ -656,6 +667,8 @@ export function registerInventoryRoutes(
             stocktakeId,
             variantId: body.variantId,
             expectedVersion: body.version,
+            actorId: active.actorId,
+            idempotencyKey: key,
           }),
         });
       } catch (error) {
@@ -671,6 +684,8 @@ export function registerInventoryRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
       if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         const body = request.body as { version: number };
         return {
@@ -679,6 +694,7 @@ export function registerInventoryRoutes(
             actorId: active.actorId,
             stocktakeId,
             expectedVersion: body.version,
+            idempotencyKey: key,
           }),
         };
       } catch (error) {
@@ -694,6 +710,8 @@ export function registerInventoryRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
       const stocktakeId = (request.params as { stocktakeId: string }).stocktakeId;
       if (!(await requireStocktakeLocation(database, reply, active, stocktakeId))) return;
+      const key = requireKey(reply, idempotencyKey(request.headers['idempotency-key']));
+      if (!key || typeof key !== 'string') return key;
       try {
         const body = request.body as { version: number };
         return {
@@ -702,6 +720,7 @@ export function registerInventoryRoutes(
             actorId: active.actorId,
             stocktakeId,
             expectedVersion: body.version,
+            idempotencyKey: key,
           }),
         };
       } catch (error) {
@@ -810,6 +829,7 @@ export function registerInventoryRoutes(
         querystring: Type.Object({
           locationId: Type.Optional(Type.String()),
           status: Type.Optional(Type.String()),
+          search: Type.Optional(Type.String()),
           page: Type.Optional(Type.Integer({ minimum: 1 })),
           limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
@@ -824,7 +844,7 @@ export function registerInventoryRoutes(
         data: await listStocktakeSessions(
           database.db,
           active.organizationId,
-          request.query as { locationId?: string; status?: string; page?: number; limit?: number },
+          request.query as { locationId?: string; status?: string; search?: string; page?: number; limit?: number },
         ),
       };
     },

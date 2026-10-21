@@ -313,26 +313,59 @@ export function useCreatorVariantsMatrix({
 
     if (sizeDefs.length === 0) return;
 
-    setOptionAxes((prev) =>
-      prev.map((axis) => {
+    setOptionAxes((prev) => {
+      const hasSizeAxis = prev.some((axis) => axis.name.toLowerCase() === 'size');
+
+      if (!hasSizeAxis) {
+        return [
+          ...prev,
+          {
+            id: `opt-size-${Date.now()}`,
+            name: 'Size',
+            isVisual: false,
+            values: sizeDefs.map((sd) => ({
+              id: `optval-size-${sd.id}`,
+              label: sd.label || sd.code,
+              isPrimary: false,
+              sizeDefinitionId: sd.id,
+            })),
+          },
+        ];
+      }
+
+      return prev.map((axis) => {
         if (axis.name.toLowerCase() === 'size') {
-          const existingLabels = new Set(axis.values.map((v) => v.label.toLowerCase()));
-          const newValues: OptionValueState[] = [
-            ...axis.values,
-            ...sizeDefs
-              .filter((sd) => !existingLabels.has(sd.code.toLowerCase()))
-              .map((sd) => ({
-                id: `optval-size-${sd.id}`,
-                label: sd.code,
-                isPrimary: false,
-                sizeDefinitionId: sd.id,
-              })),
-          ];
-          return { ...axis, values: newValues };
+          const existingLabels = new Set(
+            axis.values.flatMap((v) => [v.label.toLowerCase(), (v.sizeDefinitionId ?? '').toLowerCase()]),
+          );
+          const newEntries: OptionValueState[] = sizeDefs
+            .filter(
+              (sd) =>
+                !existingLabels.has((sd.label || '').toLowerCase()) &&
+                !existingLabels.has(sd.code.toLowerCase()) &&
+                !existingLabels.has(sd.id.toLowerCase()),
+            )
+            .map((sd) => ({
+              id: `optval-size-${sd.id}`,
+              label: sd.label || sd.code,
+              isPrimary: false,
+              sizeDefinitionId: sd.id,
+            }));
+
+          // Merge and sort combined values using size definition sort orders
+          const combined = [...axis.values, ...newEntries];
+          const sortOrderMap = new Map(sizeDefs.map((sd) => [sd.id, sd.sortOrder]));
+          combined.sort((a, b) => {
+            const orderA = a.sizeDefinitionId ? (sortOrderMap.get(a.sizeDefinitionId) ?? 9999) : 9999;
+            const orderB = b.sizeDefinitionId ? (sortOrderMap.get(b.sizeDefinitionId) ?? 9999) : 9999;
+            return orderA - orderB;
+          });
+
+          return { ...axis, values: combined };
         }
         return axis;
-      }),
-    );
+      });
+    });
     markDirty();
   };
 

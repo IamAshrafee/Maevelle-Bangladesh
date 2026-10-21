@@ -16,20 +16,21 @@ import {
   RotateCcw,
   Lock,
   AlertTriangle,
-  Boxes,
   ArrowDownLeft,
   Building2,
   RefreshCw,
 } from 'lucide-react';
-import Link from 'next/link';
-
 import type {
   WarehouseLocationDetailDto,
   InventoryBalanceDto,
+  LocationCapability,
   PaginatedDto,
 } from '@maevelle/contracts';
 
 import { inventoryRequest, formatInventoryNumber } from '@/lib/inventory/api';
+import { LOCATION_CAPABILITY_GROUPS } from '@/lib/inventory/location-config';
+import { useAdminCapability } from '@/components/admin-capabilities';
+import { StatusBadge } from '@/components/status-badge';
 import { InventoryEmptyState, InventoryFeedback, InventoryPager } from './inventory-page-ui';
 import { StockTable } from './stock-table';
 import { Button } from '@/components/ui/button';
@@ -55,77 +56,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-const CAPABILITY_GROUPS = [
-  {
-    group: 'Inventory & Storage',
-    description: 'Physical storage and staging areas',
-    icon: Boxes,
-    items: [
-      { code: 'STOCK_HOLDING', label: 'Stock Holding', desc: 'Can store physical inventory units' },
-      {
-        code: 'INTERNAL_STORAGE',
-        label: 'Internal Storage',
-        desc: 'Dedicated reserve / staging warehouse',
-      },
-    ],
-  },
-  {
-    group: 'Inbound & Receiving',
-    description: 'Inbound intake from vendors and returns',
-    icon: ArrowDownLeft,
-    items: [
-      {
-        code: 'PURCHASE_RECEIVING',
-        label: 'Purchase Receiving',
-        desc: 'Can receive purchase orders from suppliers',
-      },
-      {
-        code: 'RETURN_RECEIVING',
-        label: 'Return Receiving',
-        desc: 'Can accept customer order returns',
-      },
-    ],
-  },
-  {
-    group: 'Fulfillment & Outbound',
-    description: 'Customer order picking, packing, and collection',
-    icon: Building2,
-    items: [
-      {
-        code: 'ORDER_FULFILLMENT',
-        label: 'Order Fulfillment',
-        desc: 'Can pick, pack and ship customer orders',
-      },
-      {
-        code: 'CUSTOMER_PICKUP',
-        label: 'Customer Pickup',
-        desc: 'Supports in-store customer collection',
-      },
-    ],
-  },
-  {
-    group: 'Inter-Warehouse Transfers',
-    description: 'Movement between company facilities',
-    icon: Truck,
-    items: [
-      {
-        code: 'TRANSFER_SEND',
-        label: 'Transfer Send',
-        desc: 'Can dispatch inter-warehouse transfers',
-      },
-      {
-        code: 'TRANSFER_RECEIVE',
-        label: 'Transfer Receive',
-        desc: 'Can receive transfers from other locations',
-      },
-    ],
-  },
-];
+const ALL_CAPABILITIES = LOCATION_CAPABILITY_GROUPS.flatMap((group) => group.items);
 
-const ALL_CAPABILITIES = CAPABILITY_GROUPS.flatMap((g) => g.items);
+function addressValue(address: Record<string, unknown> | undefined, key: string): string {
+  const value = address?.[key];
+  return typeof value === 'string' ? value : '';
+}
 
 export function LocationDetail({ locationId }: { locationId: string }) {
   const router = useRouter();
+  const canManage = useAdminCapability('warehouse.manage');
+  const canTransfer = useAdminCapability('inventory.transfer');
   const [location, setLocation] = useState<WarehouseLocationDetailDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -149,8 +90,8 @@ export function LocationDetail({ locationId }: { locationId: string }) {
   // Edit Settings Dialog popup state
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editStatus, setEditStatus] = useState<'ACTIVE' | 'INACTIVE' | 'ARCHIVED'>('ACTIVE');
-  const [editCapabilities, setEditCapabilities] = useState<string[]>([]);
+  const [editStatus, setEditStatus] = useState<WarehouseLocationDetailDto['status']>('ACTIVE');
+  const [editCapabilities, setEditCapabilities] = useState<LocationCapability[]>([]);
   const [editFullAddress, setEditFullAddress] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editPostalCode, setEditPostalCode] = useState('');
@@ -159,12 +100,12 @@ export function LocationDetail({ locationId }: { locationId: string }) {
 
   const resetEditForm = (loc: WarehouseLocationDetailDto) => {
     setEditName(loc.name);
-    setEditStatus(loc.status as any);
-    setEditCapabilities([...loc.capabilities]);
-    const addr = (loc.address as any) || {};
-    setEditFullAddress(addr.fullAddress || '');
-    setEditCity(addr.city || '');
-    setEditPostalCode(addr.postalCode || '');
+    setEditStatus(loc.status);
+    setEditCapabilities([...loc.capabilities] as LocationCapability[]);
+    const addr = loc.address ?? {};
+    setEditFullAddress(addressValue(addr, 'fullAddress'));
+    setEditCity(addressValue(addr, 'city'));
+    setEditPostalCode(addressValue(addr, 'postalCode'));
     setEditError('');
   };
 
@@ -208,7 +149,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
           }
         >;
       }>(`/inventory/stock?${params.toString()}`);
-      setStock(res.data.items as any);
+      setStock([...res.data.items]);
       setStockHasNext(res.data.items.length === 25);
     } catch (err) {
       console.error(err);
@@ -231,26 +172,33 @@ export function LocationDetail({ locationId }: { locationId: string }) {
     fetchStock();
   };
 
-  const currentAddressObj = (location?.address as any) || {};
+  const currentAddressObj = location?.address ?? {};
   const isDirty =
     Boolean(location) &&
     (editName.trim() !== location!.name ||
       editStatus !== location!.status ||
-      editFullAddress.trim() !== (currentAddressObj.fullAddress || '') ||
-      editCity.trim() !== (currentAddressObj.city || '') ||
-      editPostalCode.trim() !== (currentAddressObj.postalCode || '') ||
+      editFullAddress.trim() !== addressValue(currentAddressObj, 'fullAddress') ||
+      editCity.trim() !== addressValue(currentAddressObj, 'city') ||
+      editPostalCode.trim() !== addressValue(currentAddressObj, 'postalCode') ||
       editCapabilities.length !== location!.capabilities.length ||
       !editCapabilities.every((c) => location!.capabilities.includes(c)));
 
-  const totalOnHandUnits = Number(location?.inventorySummary?.totalOnHand ?? '0');
-  const totalReservedUnits = Number(location?.inventorySummary?.totalReserved ?? '0');
-  const totalDamagedUnits = Number(location?.inventorySummary?.totalDamaged ?? '0');
-  const hasActiveStockOrHolds =
-    totalOnHandUnits > 0 || totalReservedUnits > 0 || totalDamagedUnits > 0;
+  const lifecycleBlockers = location?.operationalCommitments.filter((item) => item.blocksStatusChange) ?? [];
+  const blockedCapabilities = new Map(
+    (location?.operationalCommitments ?? [])
+      .filter((item) => item.requiredCapability)
+      .map((item) => [item.requiredCapability!, item]),
+  );
+  const hasLifecycleBlockers = lifecycleBlockers.length > 0;
 
-  const handleToggleCapability = (capCode: string) => {
+  const handleToggleCapability = (capCode: LocationCapability) => {
     setEditError('');
     if (editCapabilities.includes(capCode)) {
+      const blocker = blockedCapabilities.get(capCode);
+      if (blocker) {
+        setEditError(`Cannot remove this capability while the location has ${blocker.count} ${blocker.label}.`);
+        return;
+      }
       if (editCapabilities.length === 1) {
         setEditError('A location must maintain at least one operational capability.');
         return;
@@ -262,18 +210,19 @@ export function LocationDetail({ locationId }: { locationId: string }) {
   };
 
   const handleSelectStandardCapabilities = () => {
-    setEditCapabilities([
+    const standard: LocationCapability[] = [
       'STOCK_HOLDING',
       'PURCHASE_RECEIVING',
       'ORDER_FULFILLMENT',
       'TRANSFER_SEND',
       'TRANSFER_RECEIVE',
-    ]);
+    ];
+    setEditCapabilities(standard);
     setEditError('');
   };
 
   const handleSelectAllCapabilities = () => {
-    const allCodes = CAPABILITY_GROUPS.flatMap((g) => g.items.map((i) => i.code));
+    const allCodes = LOCATION_CAPABILITY_GROUPS.flatMap((group) => group.items.map((item) => item.code));
     setEditCapabilities(allCodes);
     setEditError('');
   };
@@ -290,9 +239,9 @@ export function LocationDetail({ locationId }: { locationId: string }) {
       setEditError('A location must maintain at least one operational capability.');
       return;
     }
-    if (editStatus !== 'ACTIVE' && hasActiveStockOrHolds) {
+    if (editStatus !== 'ACTIVE' && editStatus !== 'DRAFT' && hasLifecycleBlockers) {
       setEditError(
-        'Cannot deactivate or archive a location while it holds physical inventory or reserved stock.',
+        `Complete or reassign the remaining operational work first: ${lifecycleBlockers.map((item) => `${item.count} ${item.label}`).join(', ')}.`,
       );
       return;
     }
@@ -300,13 +249,13 @@ export function LocationDetail({ locationId }: { locationId: string }) {
     setIsSaving(true);
     setEditError('');
 
-    const currentAddr = (location.address as any) || {};
+    const currentAddr = location.address ?? {};
     const addressPayload = {
       ...currentAddr,
       fullAddress: editFullAddress.trim() || undefined,
       city: editCity.trim() || undefined,
       postalCode: editPostalCode.trim() || undefined,
-      countryCode: currentAddr.countryCode || 'BD',
+      countryCode: addressValue(currentAddr, 'countryCode') || 'BD',
     };
 
     try {
@@ -314,6 +263,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
         `/warehouse/locations/${locationId}`,
         {
           method: 'PATCH',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
           body: JSON.stringify({
             version: location.version,
             name: trimmedName,
@@ -372,9 +322,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-muted-foreground" />
               <h1 className="text-2xl font-bold tracking-tight">{location.name}</h1>
-              <Badge variant={location.status === 'ACTIVE' ? 'default' : 'secondary'}>
-                {location.status}
-              </Badge>
+              <StatusBadge status={location.status} />
               <Badge variant="outline" className="font-mono text-xs">
                 {location.code}
               </Badge>
@@ -386,24 +334,19 @@ export function LocationDetail({ locationId }: { locationId: string }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleOpenEdit}>
-            <Settings className="mr-1.5 h-4 w-4" />
-            Edit Location
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => router.push(`/inventory/transfers/new?sourceLocationId=${locationId}`)}
-          >
-            <Truck className="mr-1.5 h-4 w-4" />
-            Transfer Stock
-          </Button>
+          {canManage ? <Button variant="outline" size="sm" onClick={handleOpenEdit}>
+            <Settings className="mr-1.5 h-4 w-4" />Edit Location
+          </Button> : null}
+          {canTransfer && location.status === 'ACTIVE' && location.capabilities.includes('TRANSFER_SEND') ? <Button size="sm" onClick={() => router.push(`/inventory/transfers/new?sourceLocationId=${locationId}`)}>
+            <Truck className="mr-1.5 h-4 w-4" />Transfer Stock
+          </Button> : null}
         </div>
       </div>
 
       {feedback && <InventoryFeedback message={feedback} />}
 
       {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -426,10 +369,10 @@ export function LocationDetail({ locationId }: { locationId: string }) {
             <CardTitle className="text-xs font-medium text-muted-foreground">
               Available to Sell
             </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <CheckCircle2 className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">
+            <div className="font-mono text-2xl font-bold tabular-nums text-success">
               {formatInventoryNumber(location.inventorySummary?.totalAvailable ?? '0')}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">Ready for allocation</p>
@@ -439,10 +382,10 @@ export function LocationDetail({ locationId }: { locationId: string }) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">Reserved</CardTitle>
-            <Clock className="h-4 w-4 text-amber-500" />
+            <Clock className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">
+            <div className="font-mono text-2xl font-bold tabular-nums text-warning">
               {formatInventoryNumber(location.inventorySummary?.totalReserved ?? '0')}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">Held for orders & transfers</p>
@@ -454,13 +397,25 @@ export function LocationDetail({ locationId }: { locationId: string }) {
             <CardTitle className="text-xs font-medium text-muted-foreground">
               Damaged / Hold
             </CardTitle>
-            <ShieldAlert className="h-4 w-4 text-rose-500" />
+            <ShieldAlert className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-rose-600">
+            <div className="font-mono text-2xl font-bold tabular-nums text-destructive">
               {formatInventoryNumber(location.inventorySummary?.totalDamaged ?? '0')}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">Non-sellable condition</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Incoming</CardTitle>
+            <ArrowDownLeft className="h-4 w-4 text-info" />
+          </CardHeader>
+          <CardContent>
+            <div className="font-mono text-2xl font-bold tabular-nums text-info">
+              {formatInventoryNumber(location.inventorySummary.totalIncoming)}
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">Transfers and inbound supply</p>
           </CardContent>
         </Card>
       </div>
@@ -542,6 +497,24 @@ export function LocationDetail({ locationId }: { locationId: string }) {
 
         {/* Capabilities & Info Tab */}
         <TabsContent value="capabilities" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold">Active operational commitments</CardTitle>
+              <CardDescription>These records must be completed or reassigned before related capabilities or the location can be retired.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {location.operationalCommitments.length ? (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {location.operationalCommitments.map((item) => (
+                    <div key={item.code} className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                      <p className="font-mono text-lg font-semibold tabular-nums">{item.count}</p>
+                      <p className="text-xs capitalize text-muted-foreground">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-muted-foreground">No active operational work currently blocks lifecycle or capability changes.</p>}
+            </CardContent>
+          </Card>
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
@@ -611,19 +584,19 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                 <div className="grid grid-cols-2 gap-2 border-b pb-3">
                   <span className="text-muted-foreground text-xs">City / District</span>
                   <span className="font-medium text-xs text-right">
-                    {(location.address as any)?.city || '—'}
+                    {addressValue(location.address, 'city') || '—'}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 border-b pb-3">
                   <span className="text-muted-foreground text-xs">Postal Code</span>
                   <span className="font-mono text-xs text-right">
-                    {(location.address as any)?.postalCode || '—'}
+                    {addressValue(location.address, 'postalCode') || '—'}
                   </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground text-xs block mb-1">Physical Address</span>
                   <p className="text-xs bg-muted/40 p-2.5 rounded-md border font-mono">
-                    {(location.address as any)?.fullAddress || 'No physical address recorded.'}
+                    {addressValue(location.address, 'fullAddress') || 'No physical address recorded.'}
                   </p>
                 </div>
               </CardContent>
@@ -690,22 +663,13 @@ export function LocationDetail({ locationId }: { locationId: string }) {
               </div>
             )}
 
-            {hasActiveStockOrHolds && (
+            {hasLifecycleBlockers && (
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 rounded-lg text-xs flex items-start gap-2.5">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                 <div className="space-y-0.5">
-                  <span className="font-semibold">Stock Invariant Guard:</span>
+                  <span className="font-semibold">Operational change guard</span>
                   <p className="text-[11px] text-muted-foreground">
-                    This location currently holds{' '}
-                    <span className="font-medium text-foreground">
-                      {formatInventoryNumber(location.inventorySummary?.totalOnHand ?? '0')}
-                    </span>{' '}
-                    physical units on hand and{' '}
-                    <span className="font-medium text-foreground">
-                      {formatInventoryNumber(location.inventorySummary?.totalReserved ?? '0')}
-                    </span>{' '}
-                    reserved units. It cannot be set to INACTIVE or ARCHIVED until all inventory
-                    balances are transferred or cleared.
+                    Inactive and archived states are unavailable until this work is completed or reassigned: {lifecycleBlockers.map((item) => `${item.count} ${item.label}`).join(', ')}.
                   </p>
                 </div>
               </div>
@@ -743,7 +707,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                     <Label htmlFor="loc-status" className="text-xs font-medium">
                       Operating Status
                     </Label>
-                    {hasActiveStockOrHolds && (
+                    {hasLifecycleBlockers && (
                       <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
                         <Lock className="h-3 w-3" /> Locked to ACTIVE
                       </span>
@@ -752,7 +716,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                   <Select
                     value={editStatus}
                     onValueChange={(v) => {
-                      setEditStatus((v || 'ACTIVE') as any);
+                      setEditStatus((v || 'ACTIVE') as WarehouseLocationDetailDto['status']);
                       if (editError) setEditError('');
                     }}
                   >
@@ -760,22 +724,23 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="DRAFT" label="Draft (Setup Mode)">Draft (Setup Mode)</SelectItem>
                       <SelectItem value="ACTIVE" label="Active (Operational)">
                         Active (Operational)
                       </SelectItem>
                       <SelectItem
                         value="INACTIVE"
-                        disabled={hasActiveStockOrHolds}
+                        disabled={hasLifecycleBlockers}
                         label="Inactive (Temporarily Closed)"
-                        description={hasActiveStockOrHolds ? 'Blocked: Holds stock' : undefined}
+                        description={hasLifecycleBlockers ? 'Blocked by active operational work' : undefined}
                       >
                         Inactive (Temporarily Closed)
                       </SelectItem>
                       <SelectItem
                         value="ARCHIVED"
-                        disabled={hasActiveStockOrHolds}
+                        disabled={hasLifecycleBlockers}
                         label="Archived (Decommissioned)"
-                        description={hasActiveStockOrHolds ? 'Blocked: Holds stock' : undefined}
+                        description={hasLifecycleBlockers ? 'Blocked by active operational work' : undefined}
                       >
                         Archived (Decommissioned)
                       </SelectItem>
@@ -872,7 +837,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
               </div>
 
               <div className="space-y-3">
-                {CAPABILITY_GROUPS.map((group) => {
+                {LOCATION_CAPABILITY_GROUPS.map((group) => {
                   const GroupIcon = group.icon;
                   return (
                     <div key={group.group} className="rounded-lg border bg-card p-3 space-y-2">
@@ -885,13 +850,14 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {group.items.map((cap) => {
-                          const isChecked = editCapabilities.includes(cap.code);
+                          const capabilityCode = cap.code as LocationCapability;
+                          const isChecked = editCapabilities.includes(capabilityCode);
                           const isOnlySelected = isChecked && editCapabilities.length === 1;
                           return (
                             <button
                               type="button"
                               key={cap.code}
-                              onClick={() => handleToggleCapability(cap.code)}
+                              onClick={() => handleToggleCapability(capabilityCode)}
                               disabled={isOnlySelected}
                               className={`w-full text-left p-2.5 rounded-md border text-xs flex items-start justify-between gap-2 transition-colors ${
                                 isChecked
@@ -977,7 +943,7 @@ export function LocationDetail({ locationId }: { locationId: string }) {
                   editName.trim().length < 2 ||
                   editCapabilities.length === 0 ||
                   !isDirty ||
-                  (editStatus !== 'ACTIVE' && hasActiveStockOrHolds)
+                  ((editStatus === 'INACTIVE' || editStatus === 'ARCHIVED') && hasLifecycleBlockers)
                 }
                 className="text-xs h-8"
               >

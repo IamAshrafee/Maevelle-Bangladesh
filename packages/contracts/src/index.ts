@@ -1299,6 +1299,47 @@ export interface ProductSizingDto {
   readonly sizeGuideSystemId: string | null;
   readonly hasPublishedGuide: boolean;
   readonly configStatus: SizingLifecycleStatusDto | null;
+  readonly categoryDefaultGuideId?: string | null;
+  readonly categoryDefaultGuideName?: string | null;
+  readonly categoryDefaultGuideStatus?: SizingLifecycleStatusDto | null;
+  readonly categoryName?: string | null;
+  readonly effectiveGuideId?: string | null;
+  readonly effectiveGuideName?: string | null;
+  readonly effectiveSource?: 'PRODUCT' | 'CATEGORY' | 'NONE';
+}
+
+export interface SizingTemplatePresetDto {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly category: string;
+  readonly domainCode: string;
+  readonly domainName: string;
+  readonly subjectType: SizingSubjectTypeDto;
+  readonly sizeSystemCode?: string;
+  readonly sizeSystemName?: string;
+  readonly defaultUnit: SizingMeasurementUnitDto;
+  readonly standardSizes: readonly {
+    readonly code: string;
+    readonly label: string;
+    readonly sortOrder: number;
+  }[];
+  readonly standardMeasurements: readonly {
+    readonly code: string;
+    readonly name: string;
+    readonly defaultUnit: SizingMeasurementUnitDto;
+    readonly sortOrder: number;
+  }[];
+  readonly sampleRows?: readonly {
+    readonly sizeLabel: string;
+    readonly measurements: readonly {
+      readonly measurementCode: string;
+      readonly exact?: string;
+      readonly min?: string;
+      readonly max?: string;
+      readonly unit: SizingMeasurementUnitDto;
+    }[];
+  }[];
 }
 
 export interface AdminSizingGuideDto {
@@ -1601,7 +1642,11 @@ export interface InventoryPositionDto {
   readonly costCurrency: string | null;
   readonly costState: 'PROVISIONAL' | 'FINALIZED' | 'ADJUSTED' | null;
   readonly replenishmentThreshold: number;
-  readonly replenishmentThresholdSource: 'VARIANT' | 'ORGANIZATION_DEFAULT';
+  readonly replenishmentThresholdSource:
+    | 'LOCATION_POLICY'
+    | 'ITEM_POLICY'
+    | 'VARIANT'
+    | 'ORGANIZATION_DEFAULT';
 }
 
 /** Catalog-backed inventory identity used by stock operations before a SKU has any movement. */
@@ -1687,6 +1732,11 @@ export interface WarehouseLocationDto {
   readonly version: number;
 }
 
+export interface WarehouseLocationListItemDto extends WarehouseLocationDto {
+  readonly stockOnHand: string;
+  readonly activeWorkCount: number;
+}
+
 export interface PaginatedDto<T> {
   readonly items: readonly T[];
   readonly nextCursor?: string | null;
@@ -1743,6 +1793,24 @@ export interface WarehouseLocationDetailDto extends WarehouseLocationDto {
     readonly totalIncoming: string;
     readonly lowStockSkus: number;
   };
+  readonly operationalCommitments: readonly WarehouseLocationCommitmentDto[];
+}
+
+export interface WarehouseLocationCommitmentDto {
+  readonly code:
+    | 'STOCK_ON_HAND'
+    | 'ACTIVE_RESERVATIONS'
+    | 'OUTGOING_TRANSFERS'
+    | 'INCOMING_TRANSFERS'
+    | 'OPEN_STOCKTAKES'
+    | 'INBOUND_SHIPMENTS'
+    | 'OPEN_FULFILLMENTS'
+    | 'REPLENISHMENT_DESTINATION_POLICIES'
+    | 'REPLENISHMENT_SOURCE_POLICIES';
+  readonly label: string;
+  readonly count: number;
+  readonly blocksStatusChange: boolean;
+  readonly requiredCapability?: LocationCapability;
 }
 
 export interface WarehouseTransferDto {

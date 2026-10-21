@@ -23,6 +23,7 @@ import {
   convertStockToSerialized,
   findInventoryUnitByCode,
   getInventoryUnit,
+  listInventoryUnits,
   listUnitEvents,
   listUnitInspections,
   moveUnitLocation,
@@ -39,10 +40,7 @@ import {
   UnitTraceabilityDomainError,
   renderCode128Svg,
 } from './inventory-units.js';
-import {
-  createFulfillment,
-  cancelFulfillment,
-} from './fulfillment.js';
+import { createFulfillment, cancelFulfillment } from './fulfillment.js';
 
 const database = createDatabase({
   connectionString: process.env.TEST_DATABASE_URL!,
@@ -105,7 +103,13 @@ async function fixture() {
     code: `WH-${crypto.randomUUID().slice(0, 5)}`,
     name: 'Central Warehouse Dhaka',
     locationType: 'WAREHOUSE',
-    capabilities: ['STOCK_HOLDING', 'PURCHASE_RECEIVING', 'ORDER_FULFILLMENT', 'TRANSFER_SEND', 'TRANSFER_RECEIVE'],
+    capabilities: [
+      'STOCK_HOLDING',
+      'PURCHASE_RECEIVING',
+      'ORDER_FULFILLMENT',
+      'TRANSFER_SEND',
+      'TRANSFER_RECEIVE',
+    ],
   });
 
   const secondaryLocation = await createLocation(database.db, {
@@ -166,6 +170,46 @@ async function registerLedgerBackedUnits(
 }
 
 describe('Individual Unit Traceability & Quality Control', () => {
+  it('keeps unit collection queries inside the caller supplied location scope', async () => {
+    const f = await fixture();
+    const mainUnits = await registerLedgerBackedUnits(f, {
+      quantity: 1,
+      initialCondition: 'REPAIR_REQUIRED',
+      initialStatus: 'ON_HOLD',
+    });
+
+    await adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.secondaryLocation.id,
+      variantId: f.variantId,
+      condition: 'INSPECTION',
+      quantityDelta: '1',
+      reasonCode: 'OPENING_BALANCE',
+      idempotencyKey: `unit-scope-${crypto.randomUUID()}`,
+    });
+    const secondaryUnits = await registerInventoryUnits(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.secondaryLocation.id,
+      quantity: 1,
+      sourceType: 'MANUAL_INTAKE',
+      inventoryCondition: 'INSPECTION',
+      initialCondition: 'REPAIR_REQUIRED',
+      initialStatus: 'ON_HOLD',
+    });
+
+    const result = await listInventoryUnits(database.db, f.organizationId, {
+      attention: 'REPAIR',
+      allowedLocationIds: [f.mainLocation.id],
+    });
+
+    expect(result.items.map((unit) => unit.id)).toEqual([mainUnits[0]!.id]);
+    expect(result.items.some((unit) => unit.id === secondaryUnits[0]!.id)).toBe(false);
+    expect(result.pagination.totalItems).toBe(1);
+  });
+
   it('registers multiple units sharing one variant SKU with permanent, sequential Unit Codes', async () => {
     const f = await fixture();
 
@@ -380,7 +424,9 @@ describe('Individual Unit Traceability & Quality Control', () => {
       organizationId: f.organizationId,
       unitId: unit!.id,
     });
-    expect(events.some((e) => e.eventType === 'INSPECTED' && e.toStatus === 'AVAILABLE')).toBe(true);
+    expect(events.some((e) => e.eventType === 'INSPECTED' && e.toStatus === 'AVAILABLE')).toBe(
+      true,
+    );
   });
 
   it('rolls back a unit inspection when its authoritative ledger bucket cannot move', async () => {
@@ -419,10 +465,12 @@ describe('Individual Unit Traceability & Quality Control', () => {
       unitId: unit!.id,
     });
     expect(unchanged.status).toBe('AWAITING_QC');
-    expect(await listUnitInspections(database.db, {
-      organizationId: f.organizationId,
-      unitId: unit!.id,
-    })).toHaveLength(0);
+    expect(
+      await listUnitInspections(database.db, {
+        organizationId: f.organizationId,
+        unitId: unit!.id,
+      }),
+    ).toHaveLength(0);
   });
 
   it('manages cleaning and repair workflow with mandatory reinspection before release', async () => {
@@ -466,6 +514,28 @@ describe('Individual Unit Traceability & Quality Control', () => {
     expect(unitOnHold.status).toBe('ON_HOLD');
     expect(unitOnHold.currentCondition).toBe('REPAIR_REQUIRED');
 
+    await expect(
+      performUnitInspection(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitOnHold.version,
+        inspectionStage: 'REINSPECTION',
+        conditionResult: 'GRADE_A',
+        outcome: 'PASSED',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+
+    await expect(
+      releaseUnitForSale(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitOnHold.version,
+        reason: 'Unsafe release while repair is active',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+
     // 2. Complete repair
     const completedRepair = await completeUnitRepair(database.db, {
       organizationId: f.organizationId,
@@ -486,6 +556,16 @@ describe('Individual Unit Traceability & Quality Control', () => {
       unitId: unit!.id,
     });
     expect(unitAfterRepair.status).toBe('AWAITING_QC');
+
+    await expect(
+      releaseUnitForSale(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitAfterRepair.version,
+        reason: 'Unsafe release before post-repair inspection',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
 
     // 3. Reinspection passes
     const reinspection = await performUnitInspection(database.db, {
@@ -579,17 +659,25 @@ describe('Individual Unit Traceability & Quality Control', () => {
       idempotencyKey: crypto.randomUUID(),
     });
 
-    const inTransit = await Promise.all(units.map((unit) => getInventoryUnit(database.db, {
-      organizationId: f.organizationId,
-      unitId: unit.id,
-    })));
+    const inTransit = await Promise.all(
+      units.map((unit) =>
+        getInventoryUnit(database.db, {
+          organizationId: f.organizationId,
+          unitId: unit.id,
+        }),
+      ),
+    );
     expect(inTransit.map((unit) => unit.status)).toEqual(['IN_TRANSFER', 'IN_TRANSFER']);
     expect(inTransit.every((unit) => unit.locationId === f.mainLocation.id)).toBe(true);
-    expect((await reconcileSerializedInventory(database.db, {
-      organizationId: f.organizationId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
-    })).isConsistent).toBe(true);
+    expect(
+      (
+        await reconcileSerializedInventory(database.db, {
+          organizationId: f.organizationId,
+          variantId: f.variantId,
+          locationId: f.mainLocation.id,
+        })
+      ).isConsistent,
+    ).toBe(true);
 
     const line = await sql<{ id: string }>`
       select id from warehouse.transfer_lines
@@ -600,21 +688,27 @@ describe('Individual Unit Traceability & Quality Control', () => {
       actorId: f.actorId,
       transferId: created.transferId,
       idempotencyKey: crypto.randomUUID(),
-      lines: [{
-        transferLineId: line.rows[0]!.id,
-        sellableQuantity: '1',
-        damagedQuantity: '1',
-        unitReceipts: [
-          { unitId: units[0]!.id, condition: 'SELLABLE' },
-          { unitId: units[1]!.id, condition: 'DAMAGED' },
-        ],
-      }],
+      lines: [
+        {
+          transferLineId: line.rows[0]!.id,
+          sellableQuantity: '1',
+          damagedQuantity: '1',
+          unitReceipts: [
+            { unitId: units[0]!.id, condition: 'SELLABLE' },
+            { unitId: units[1]!.id, condition: 'DAMAGED' },
+          ],
+        },
+      ],
     });
 
-    const received = await Promise.all(units.map((unit) => getInventoryUnit(database.db, {
-      organizationId: f.organizationId,
-      unitId: unit.id,
-    })));
+    const received = await Promise.all(
+      units.map((unit) =>
+        getInventoryUnit(database.db, {
+          organizationId: f.organizationId,
+          unitId: unit.id,
+        }),
+      ),
+    );
     expect(received[0]).toMatchObject({
       locationId: f.secondaryLocation.id,
       inventoryCondition: 'SELLABLE',
@@ -625,16 +719,24 @@ describe('Individual Unit Traceability & Quality Control', () => {
       inventoryCondition: 'DAMAGED',
       status: 'ON_HOLD',
     });
-    expect((await reconcileSerializedInventory(database.db, {
-      organizationId: f.organizationId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
-    })).isConsistent).toBe(true);
-    expect((await reconcileSerializedInventory(database.db, {
-      organizationId: f.organizationId,
-      variantId: f.variantId,
-      locationId: f.secondaryLocation.id,
-    })).isConsistent).toBe(true);
+    expect(
+      (
+        await reconcileSerializedInventory(database.db, {
+          organizationId: f.organizationId,
+          variantId: f.variantId,
+          locationId: f.mainLocation.id,
+        })
+      ).isConsistent,
+    ).toBe(true);
+    expect(
+      (
+        await reconcileSerializedInventory(database.db, {
+          organizationId: f.organizationId,
+          variantId: f.variantId,
+          locationId: f.secondaryLocation.id,
+        })
+      ).isConsistent,
+    ).toBe(true);
   });
 
   it('closes serialized in-transit loss against exact Unit IDs', async () => {
@@ -673,19 +775,23 @@ describe('Individual Unit Traceability & Quality Control', () => {
       actorId: f.actorId,
       transferId: created.transferId,
       idempotencyKey: crypto.randomUUID(),
-      lines: [{
-        transferLineId: line.rows[0]!.id,
-        dispositionCode: 'LOST',
-        quantity: '1',
-        reasonCode: 'CARRIER_LOSS_CONFIRMED',
-        unitIds: [unit!.id],
-      }],
+      lines: [
+        {
+          transferLineId: line.rows[0]!.id,
+          dispositionCode: 'LOST',
+          quantity: '1',
+          reasonCode: 'CARRIER_LOSS_CONFIRMED',
+          unitIds: [unit!.id],
+        },
+      ],
     });
     expect(closed.status).toBe('CLOSED_WITH_DISCREPANCY');
-    expect(await getInventoryUnit(database.db, {
-      organizationId: f.organizationId,
-      unitId: unit!.id,
-    })).toMatchObject({ status: 'WRITTEN_OFF', currentCondition: 'DAMAGED_UNSELLABLE' });
+    expect(
+      await getInventoryUnit(database.db, {
+        organizationId: f.organizationId,
+        unitId: unit!.id,
+      }),
+    ).toMatchObject({ status: 'WRITTEN_OFF', currentCondition: 'DAMAGED_UNSELLABLE' });
     const allocation = await sql<{ status: string }>`
       select status from inventory.unit_transfer_allocations
       where organization_id = ${f.organizationId} and unit_id = ${unit!.id}
@@ -739,19 +845,27 @@ describe('Individual Unit Traceability & Quality Control', () => {
       idempotencyKey: crypto.randomUUID(),
     });
     expect(reviewed.version).toBe(stocktake.version + 2);
-    expect(await getInventoryUnit(database.db, {
-      organizationId: f.organizationId,
-      unitId: units[0]!.id,
-    })).toMatchObject({ status: 'ON_HOLD', inventoryCondition: 'DAMAGED' });
-    expect(await getInventoryUnit(database.db, {
-      organizationId: f.organizationId,
-      unitId: units[1]!.id,
-    })).toMatchObject({ status: 'WRITTEN_OFF' });
-    expect((await reconcileSerializedInventory(database.db, {
-      organizationId: f.organizationId,
-      variantId: f.variantId,
-      locationId: f.mainLocation.id,
-    })).isConsistent).toBe(true);
+    expect(
+      await getInventoryUnit(database.db, {
+        organizationId: f.organizationId,
+        unitId: units[0]!.id,
+      }),
+    ).toMatchObject({ status: 'ON_HOLD', inventoryCondition: 'DAMAGED' });
+    expect(
+      await getInventoryUnit(database.db, {
+        organizationId: f.organizationId,
+        unitId: units[1]!.id,
+      }),
+    ).toMatchObject({ status: 'WRITTEN_OFF' });
+    expect(
+      (
+        await reconcileSerializedInventory(database.db, {
+          organizationId: f.organizationId,
+          variantId: f.variantId,
+          locationId: f.mainLocation.id,
+        })
+      ).isConsistent,
+    ).toBe(true);
   });
 
   it('supports authorized release and permanent write-off', async () => {
@@ -895,6 +1009,27 @@ describe('Individual Unit Traceability & Quality Control', () => {
     });
     expect(unitAllocated.status).toBe('IN_FULFILLMENT');
     expect(unitAllocated.currentFulfillmentId).toBe(fulfillment.id);
+
+    await expect(
+      performUnitInspection(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitAllocated.version,
+        inspectionStage: 'ROUTINE_AUDIT',
+        conditionResult: 'GRADE_A',
+        outcome: 'PASSED',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
+    await expect(
+      writeOffUnit(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        unitId: unit!.id,
+        expectedVersion: unitAllocated.version,
+        reason: 'Unsafe write-off while committed to fulfillment',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_TRANSITION' });
 
     // 6. Test cancellation releases units
     const cancelled = await cancelFulfillment(database.db, {

@@ -12,6 +12,7 @@ import {
   convertStockToSerialized,
   executeIdempotentUnitCommand,
   findInventoryUnitByCode,
+  findUnitRepairLocation,
   getInventoryUnit,
   listInventoryUnits,
   listUnitEvents,
@@ -41,6 +42,7 @@ import {
 import type { createAuth } from '../auth/auth.js';
 import {
   canAccessLocation,
+  locationScopeIds,
   locationScopeError,
 } from '../authorization/location-scope.js';
 
@@ -81,7 +83,12 @@ function sendError(
         ? 404
         : error.code === 'UNAUTHORIZED_ACCESS'
           ? 403
-          : ['CONFLICT', 'RESERVATION_CONFLICT', 'STALE_VERSION', 'IDEMPOTENCY_KEY_REUSED'].includes(error.code)
+          : [
+                'CONFLICT',
+                'RESERVATION_CONFLICT',
+                'STALE_VERSION',
+                'IDEMPOTENCY_KEY_REUSED',
+              ].includes(error.code)
             ? 409
             : 422;
     return reply.code(status).send({ error: { code: error.code, message: error.message } });
@@ -89,7 +96,9 @@ function sendError(
   if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
     return reply
       .code(409)
-      .send({ error: { code: 'CONFLICT', message: 'A record with that unique key already exists.' } });
+      .send({
+        error: { code: 'CONFLICT', message: 'A record with that unique key already exists.' },
+      });
   }
   throw error;
 }
@@ -106,9 +115,69 @@ function requireIdempotencyKey(
   const key = idempotencyKey(value);
   if (!key)
     reply.code(400).send({
-      error: { code: 'IDEMPOTENCY_KEY_REQUIRED', message: 'A valid idempotency-key header is required.' },
+      error: {
+        code: 'IDEMPOTENCY_KEY_REQUIRED',
+        message: 'A valid idempotency-key header is required.',
+      },
     });
   return key;
+}
+
+type ActiveAdminContext = NonNullable<Awaited<ReturnType<typeof requireAdmin>>>;
+
+async function requireUnitLocation(
+  database: DatabaseClient,
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  active: ActiveAdminContext,
+  capability: string,
+  unitId: string,
+): Promise<boolean> {
+  const unit = await getInventoryUnit(database.db, {
+    organizationId: active.organizationId,
+    unitId,
+  });
+  if (canAccessLocation(active, capability, unit.locationId)) return true;
+  reply.code(403).send(locationScopeError());
+  return false;
+}
+
+async function requireUnitLocations(
+  database: DatabaseClient,
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  active: ActiveAdminContext,
+  capability: string,
+  unitIds: readonly string[],
+): Promise<boolean> {
+  const units = await Promise.all(
+    [...new Set(unitIds)].map((unitId) =>
+      getInventoryUnit(database.db, { organizationId: active.organizationId, unitId }),
+    ),
+  );
+  if (units.every((unit) => canAccessLocation(active, capability, unit.locationId))) return true;
+  reply.code(403).send(locationScopeError());
+  return false;
+}
+
+async function requireRepairLocation(
+  database: DatabaseClient,
+  reply: { code(status: number): { send(value: unknown): unknown } },
+  active: ActiveAdminContext,
+  capability: string,
+  repairId: string,
+): Promise<boolean> {
+  const locationId = await findUnitRepairLocation(database.db, {
+    organizationId: active.organizationId,
+    repairId,
+  });
+  if (!locationId) {
+    reply
+      .code(404)
+      .send({ error: { code: 'NOT_FOUND', message: 'The unit repair was not found.' } });
+    return false;
+  }
+  if (canAccessLocation(active, capability, locationId)) return true;
+  reply.code(403).send(locationScopeError());
+  return false;
 }
 
 const conditionSchema = Type.Union([
@@ -187,6 +256,7 @@ export function registerInventoryUnitRoutes(
           status: Type.Optional(statusSchema),
           sourceReceiptId: Type.Optional(Type.String()),
           packageReference: Type.Optional(Type.String()),
+          attention: Type.Optional(Type.Literal('REPAIR')),
         }),
       },
     },
@@ -205,14 +275,23 @@ export function registerInventoryUnitRoutes(
         status?: UnitStatus;
         sourceReceiptId?: string;
         packageReference?: string;
+        attention?: 'REPAIR';
       };
 
-      if (query.locationId && !canAccessLocation(active, 'inventory.units.view', query.locationId)) {
+      if (
+        query.locationId &&
+        !canAccessLocation(active, 'inventory.units.view', query.locationId)
+      ) {
         return reply.code(403).send(locationScopeError());
       }
 
       try {
-        const result = await listInventoryUnits(database.db, active.organizationId, query);
+        const result = await listInventoryUnits(database.db, active.organizationId, {
+          ...query,
+          ...(locationScopeIds(active, 'inventory.units.view')
+            ? { allowedLocationIds: locationScopeIds(active, 'inventory.units.view')! }
+            : {}),
+        });
         return { data: result.items, pagination: result.pagination };
       } catch (error) {
         return sendError(reply, error);
@@ -253,10 +332,14 @@ export function registerInventoryUnitRoutes(
 
         // Permitted transitions based on current status
         const permittedTransitions: UnitStatus[] = [];
-        if (unit.status === 'AWAITING_QC') permittedTransitions.push('AVAILABLE', 'ON_HOLD', 'WRITTEN_OFF');
-        if (unit.status === 'AVAILABLE') permittedTransitions.push('RESERVED', 'IN_FULFILLMENT', 'ON_HOLD', 'WRITTEN_OFF');
-        if (unit.status === 'ON_HOLD') permittedTransitions.push('AVAILABLE', 'AWAITING_QC', 'WRITTEN_OFF');
-        if (unit.status === 'RETURNED') permittedTransitions.push('AWAITING_QC', 'ON_HOLD', 'WRITTEN_OFF');
+        if (unit.status === 'AWAITING_QC')
+          permittedTransitions.push('AVAILABLE', 'ON_HOLD', 'WRITTEN_OFF');
+        if (unit.status === 'AVAILABLE')
+          permittedTransitions.push('RESERVED', 'IN_FULFILLMENT', 'ON_HOLD', 'WRITTEN_OFF');
+        if (unit.status === 'ON_HOLD')
+          permittedTransitions.push('AVAILABLE', 'AWAITING_QC', 'WRITTEN_OFF');
+        if (unit.status === 'RETURNED')
+          permittedTransitions.push('AWAITING_QC', 'ON_HOLD', 'WRITTEN_OFF');
 
         return {
           data: {
@@ -312,6 +395,8 @@ export function registerInventoryUnitRoutes(
 
       try {
         const { unitId } = request.params as { unitId: string };
+        if (!(await requireUnitLocation(database, reply, active, 'inventory.units.view', unitId)))
+          return;
         const query = request.query as { limit?: number; offset?: number };
         const events = await listUnitEvents(database.db, {
           organizationId: active.organizationId,
@@ -333,6 +418,8 @@ export function registerInventoryUnitRoutes(
 
     try {
       const { unitId } = request.params as { unitId: string };
+      if (!(await requireUnitLocation(database, reply, active, 'inventory.units.view', unitId)))
+        return;
       const inspections = await listUnitInspections(database.db, {
         organizationId: active.organizationId,
         unitId,
@@ -350,6 +437,8 @@ export function registerInventoryUnitRoutes(
 
     try {
       const { unitId } = request.params as { unitId: string };
+      if (!(await requireUnitLocation(database, reply, active, 'inventory.units.view', unitId)))
+        return;
       const repairs = await listUnitRepairs(database.db, {
         organizationId: active.organizationId,
         unitId,
@@ -371,6 +460,9 @@ export function registerInventoryUnitRoutes(
         organizationId: active.organizationId,
         unitId,
       });
+      if (!canAccessLocation(active, 'inventory.units.view', unit.locationId)) {
+        return reply.code(403).send(locationScopeError());
+      }
 
       return {
         data: {
@@ -396,6 +488,9 @@ export function registerInventoryUnitRoutes(
         organizationId: active.organizationId,
         unitId,
       });
+      if (!canAccessLocation(active, 'inventory.units.view', unit.locationId)) {
+        return reply.code(403).send(locationScopeError());
+      }
 
       return reply.type('image/svg+xml').send(renderCode128Svg(unit.barcodePayload));
     } catch (error) {
@@ -451,17 +546,24 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const units = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId,
-          actorId: active.actorId,
-          operation: 'inventory.units.register',
-          idempotencyKey: key,
-          request: body,
-          resultEntityType: 'catalog.variant',
-          resultEntityId: body.variantId,
-        }, (trx) => registerInventoryUnits(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, ...body,
-        }));
+        const units = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.units.register',
+            idempotencyKey: key,
+            request: body,
+            resultEntityType: 'catalog.variant',
+            resultEntityId: body.variantId,
+          },
+          (trx) =>
+            registerInventoryUnits(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              ...body,
+            }),
+        );
         return reply.code(201).send({ data: units });
       } catch (error) {
         return sendError(reply, error);
@@ -501,17 +603,42 @@ export function registerInventoryUnitRoutes(
         disposition?: InspectionDisposition;
         expectedVersion: number;
       };
+      if (
+        body.disposition === 'WRITE_OFF' &&
+        !active.capabilities.includes('inventory.units.write_off')
+      ) {
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Writing off a physical unit requires the inventory.units.write_off capability.',
+          },
+        });
+      }
       const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
       if (!key) return;
 
       try {
-        const result = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.unit.inspect', idempotencyKey: key,
-          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
-        }, (trx) => performUnitInspection(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
-        }));
+        if (!(await requireUnitLocation(database, reply, active, 'inventory.units.manage', unitId)))
+          return;
+        const result = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.unit.inspect',
+            idempotencyKey: key,
+            request: { unitId, ...body },
+            resultEntityType: 'inventory.unit',
+            resultEntityId: unitId,
+          },
+          (trx) =>
+            performUnitInspection(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              unitId,
+              ...body,
+            }),
+        );
         return reply.code(201).send({ data: result });
       } catch (error) {
         return sendError(reply, error);
@@ -554,17 +681,49 @@ export function registerInventoryUnitRoutes(
         outcome: InspectionOutcome;
         disposition?: InspectionDisposition;
       };
+      if (
+        body.disposition === 'WRITE_OFF' &&
+        !active.capabilities.includes('inventory.units.write_off')
+      ) {
+        return reply.code(403).send({
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Writing off physical units requires the inventory.units.write_off capability.',
+          },
+        });
+      }
       const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
       if (!key) return;
 
       try {
-        const result = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.units.bulk_inspect', idempotencyKey: key,
-          request: body, resultEntityType: 'inventory.unit', resultEntityId: body.units[0]!.unitId,
-        }, (trx) => bulkInspectUnits(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, ...body,
-        }));
+        if (
+          !(await requireUnitLocations(
+            database,
+            reply,
+            active,
+            'inventory.units.manage',
+            body.units.map((unit) => unit.unitId),
+          ))
+        )
+          return;
+        const result = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.units.bulk_inspect',
+            idempotencyKey: key,
+            request: body,
+            resultEntityType: 'inventory.unit',
+            resultEntityId: body.units[0]!.unitId,
+          },
+          (trx) =>
+            bulkInspectUnits(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              ...body,
+            }),
+        );
         return { data: result };
       } catch (error) {
         return sendError(reply, error);
@@ -602,13 +761,27 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const repair = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.unit.repair.request', idempotencyKey: key,
-          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
-        }, (trx) => requestUnitRepair(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
-        }));
+        if (!(await requireUnitLocation(database, reply, active, 'inventory.units.manage', unitId)))
+          return;
+        const repair = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.unit.repair.request',
+            idempotencyKey: key,
+            request: { unitId, ...body },
+            resultEntityType: 'inventory.unit',
+            resultEntityId: unitId,
+          },
+          (trx) =>
+            requestUnitRepair(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              unitId,
+              ...body,
+            }),
+        );
         return reply.code(201).send({ data: repair });
       } catch (error) {
         return sendError(reply, error);
@@ -650,13 +823,35 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const repair = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.unit.repair.complete', idempotencyKey: key,
-          request: { repairId, ...body }, resultEntityType: 'inventory.unit_repair', resultEntityId: repairId,
-        }, (trx) => completeUnitRepair(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, repairId, ...body,
-        }));
+        if (
+          !(await requireRepairLocation(
+            database,
+            reply,
+            active,
+            'inventory.units.manage',
+            repairId,
+          ))
+        )
+          return;
+        const repair = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.unit.repair.complete',
+            idempotencyKey: key,
+            request: { repairId, ...body },
+            resultEntityType: 'inventory.unit_repair',
+            resultEntityId: repairId,
+          },
+          (trx) =>
+            completeUnitRepair(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              repairId,
+              ...body,
+            }),
+        );
         return { data: repair };
       } catch (error) {
         return sendError(reply, error);
@@ -698,13 +893,27 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const unit = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.unit.placement.update', idempotencyKey: key,
-          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
-        }, (trx) => moveUnitLocation(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
-        }));
+        if (!(await requireUnitLocation(database, reply, active, 'inventory.units.manage', unitId)))
+          return;
+        const unit = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.unit.placement.update',
+            idempotencyKey: key,
+            request: { unitId, ...body },
+            resultEntityType: 'inventory.unit',
+            resultEntityId: unitId,
+          },
+          (trx) =>
+            moveUnitLocation(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              unitId,
+              ...body,
+            }),
+        );
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -751,13 +960,34 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const result = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.units.bulk_placement_update', idempotencyKey: key,
-          request: body, resultEntityType: 'inventory.unit', resultEntityId: body.units[0]!.unitId,
-        }, (trx) => bulkMoveUnitsLocation(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, ...body,
-        }));
+        if (
+          !(await requireUnitLocations(
+            database,
+            reply,
+            active,
+            'inventory.units.manage',
+            body.units.map((unit) => unit.unitId),
+          ))
+        )
+          return;
+        const result = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.units.bulk_placement_update',
+            idempotencyKey: key,
+            request: body,
+            resultEntityType: 'inventory.unit',
+            resultEntityId: body.units[0]!.unitId,
+          },
+          (trx) =>
+            bulkMoveUnitsLocation(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              ...body,
+            }),
+        );
         return { data: result };
       } catch (error) {
         return sendError(reply, error);
@@ -791,13 +1021,27 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const unit = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.unit.packaging.update', idempotencyKey: key,
-          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
-        }, (trx) => updateUnitPackaging(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
-        }));
+        if (!(await requireUnitLocation(database, reply, active, 'inventory.units.manage', unitId)))
+          return;
+        const unit = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.unit.packaging.update',
+            idempotencyKey: key,
+            request: { unitId, ...body },
+            resultEntityType: 'inventory.unit',
+            resultEntityId: unitId,
+          },
+          (trx) =>
+            updateUnitPackaging(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              unitId,
+              ...body,
+            }),
+        );
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -821,19 +1065,38 @@ export function registerInventoryUnitRoutes(
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
 
       const { unitId } = request.params as { unitId: string };
-      const { reason, expectedVersion } = request.body as { reason: string; expectedVersion: number };
+      const { reason, expectedVersion } = request.body as {
+        reason: string;
+        expectedVersion: number;
+      };
       const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
       if (!key) return;
 
       try {
+        if (
+          !(await requireUnitLocation(database, reply, active, 'inventory.units.release', unitId))
+        )
+          return;
         const body = { reason, expectedVersion };
-        const unit = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.unit.release', idempotencyKey: key,
-          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
-        }, (trx) => releaseUnitForSale(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
-        }));
+        const unit = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.unit.release',
+            idempotencyKey: key,
+            request: { unitId, ...body },
+            resultEntityType: 'inventory.unit',
+            resultEntityId: unitId,
+          },
+          (trx) =>
+            releaseUnitForSale(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              unitId,
+              ...body,
+            }),
+        );
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -853,23 +1116,47 @@ export function registerInventoryUnitRoutes(
       },
     },
     async (request, reply) => {
-      const active = await requireAdmin(database, auth, request.headers, 'inventory.units.write_off');
+      const active = await requireAdmin(
+        database,
+        auth,
+        request.headers,
+        'inventory.units.write_off',
+      );
       if (!active) return reply.code(403).send({ error: 'FORBIDDEN' });
 
       const { unitId } = request.params as { unitId: string };
-      const { reason, expectedVersion } = request.body as { reason: string; expectedVersion: number };
+      const { reason, expectedVersion } = request.body as {
+        reason: string;
+        expectedVersion: number;
+      };
       const key = requireIdempotencyKey(reply, request.headers['idempotency-key']);
       if (!key) return;
 
       try {
+        if (
+          !(await requireUnitLocation(database, reply, active, 'inventory.units.write_off', unitId))
+        )
+          return;
         const body = { reason, expectedVersion };
-        const unit = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.unit.write_off', idempotencyKey: key,
-          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
-        }, (trx) => writeOffUnit(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
-        }));
+        const unit = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.unit.write_off',
+            idempotencyKey: key,
+            request: { unitId, ...body },
+            resultEntityType: 'inventory.unit',
+            resultEntityId: unitId,
+          },
+          (trx) =>
+            writeOffUnit(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              unitId,
+              ...body,
+            }),
+        );
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -911,13 +1198,27 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const unit = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.unit.return.receive', idempotencyKey: key,
-          request: { unitId, ...body }, resultEntityType: 'inventory.unit', resultEntityId: unitId,
-        }, (trx) => receiveReturnedUnit(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, unitId, ...body,
-        }));
+        if (!(await requireUnitLocation(database, reply, active, 'inventory.units.manage', unitId)))
+          return;
+        const unit = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.unit.return.receive',
+            idempotencyKey: key,
+            request: { unitId, ...body },
+            resultEntityType: 'inventory.unit',
+            resultEntityId: unitId,
+          },
+          (trx) =>
+            receiveReturnedUnit(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              unitId,
+              ...body,
+            }),
+        );
         return { data: unit };
       } catch (error) {
         return sendError(reply, error);
@@ -950,13 +1251,24 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const result = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.variant.tracking_mode.set', idempotencyKey: key,
-          request: body, resultEntityType: 'catalog.variant', resultEntityId: body.variantId,
-        }, (trx) => setVariantTrackingMode(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, ...body,
-        }));
+        const result = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.variant.tracking_mode.set',
+            idempotencyKey: key,
+            request: body,
+            resultEntityType: 'catalog.variant',
+            resultEntityId: body.variantId,
+          },
+          (trx) =>
+            setVariantTrackingMode(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              ...body,
+            }),
+        );
         return { data: result };
       } catch (error) {
         return sendError(reply, error);
@@ -1001,13 +1313,24 @@ export function registerInventoryUnitRoutes(
       if (!key) return;
 
       try {
-        const result = await executeIdempotentUnitCommand(database.db, {
-          organizationId: active.organizationId, actorId: active.actorId,
-          operation: 'inventory.units.convert_stock', idempotencyKey: key,
-          request: body, resultEntityType: 'catalog.variant', resultEntityId: body.variantId,
-        }, (trx) => convertStockToSerialized(trx, {
-          organizationId: active.organizationId, actorId: active.actorId, ...body,
-        }));
+        const result = await executeIdempotentUnitCommand(
+          database.db,
+          {
+            organizationId: active.organizationId,
+            actorId: active.actorId,
+            operation: 'inventory.units.convert_stock',
+            idempotencyKey: key,
+            request: body,
+            resultEntityType: 'catalog.variant',
+            resultEntityId: body.variantId,
+          },
+          (trx) =>
+            convertStockToSerialized(trx, {
+              organizationId: active.organizationId,
+              actorId: active.actorId,
+              ...body,
+            }),
+        );
         return { data: result };
       } catch (error) {
         return sendError(reply, error);
@@ -1078,6 +1401,16 @@ export function registerInventoryUnitRoutes(
       };
 
       try {
+        if (
+          !(await requireUnitLocations(
+            database,
+            reply,
+            active,
+            'fulfillment.manage',
+            body.allocations.map((allocation) => allocation.unitId),
+          ))
+        )
+          return;
         const result = await allocateUnitsToFulfillment(database.db, {
           organizationId: active.organizationId,
           actorId: active.actorId,

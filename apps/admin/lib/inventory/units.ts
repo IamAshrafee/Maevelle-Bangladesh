@@ -32,6 +32,7 @@ export interface ListUnitsQuery {
   readonly status?: UnitStatusDto | undefined;
   readonly sourceReceiptId?: string | undefined;
   readonly packageReference?: string | undefined;
+  readonly attention?: 'REPAIR' | undefined;
 }
 
 export interface ListUnitsResponse {
@@ -63,6 +64,7 @@ export interface PerformInspectionInput {
 
 export interface BulkInspectInput {
   readonly units: readonly { readonly unitId: string; readonly expectedVersion: number }[];
+  readonly inspectionStage?: InspectionStageDto | undefined;
   readonly conditionResult: UnitConditionDto;
   readonly defectDescription?: string | undefined;
   readonly notes?: string | undefined;
@@ -106,8 +108,7 @@ export interface UpdatePackagingInput {
 
 export interface ReleaseUnitInput {
   readonly expectedVersion: number;
-  readonly reason?: string | undefined;
-  readonly targetCondition?: UnitConditionDto | undefined;
+  readonly reason: string;
 }
 
 export interface WriteOffUnitInput {
@@ -160,6 +161,7 @@ export async function listInventoryUnits(query: ListUnitsQuery = {}): Promise<Li
   if (query.status) params.set('status', query.status);
   if (query.sourceReceiptId) params.set('sourceReceiptId', query.sourceReceiptId);
   if (query.packageReference?.trim()) params.set('packageReference', query.packageReference.trim());
+  if (query.attention) params.set('attention', query.attention);
 
   const queryString = params.toString();
   const endpoint = `/admin/inventory/units${queryString ? `?${queryString}` : ''}`;
@@ -262,7 +264,7 @@ export async function bulkInspectUnits(
     headers: commandHeaders(),
     body: JSON.stringify({
       ...input,
-      inspectionStage: 'INBOUND_INTAKE',
+      inspectionStage: input.inspectionStage ?? 'INBOUND_INTAKE',
       outcome:
         input.disposition === 'RELEASE_SELLABLE'
           ? 'PASSED'
@@ -401,11 +403,17 @@ export async function receiveReturnedUnit(
   return response.data;
 }
 
-export async function setVariantTrackingMode(
-  input: SetTrackingModeInput,
-): Promise<{ readonly variantId: string; readonly trackingMode: VariantTrackingModeDto; readonly version: number }> {
+export async function setVariantTrackingMode(input: SetTrackingModeInput): Promise<{
+  readonly variantId: string;
+  readonly trackingMode: VariantTrackingModeDto;
+  readonly version: number;
+}> {
   const response = await inventoryRequest<{
-    readonly data: { readonly variantId: string; readonly trackingMode: VariantTrackingModeDto; readonly version: number };
+    readonly data: {
+      readonly variantId: string;
+      readonly trackingMode: VariantTrackingModeDto;
+      readonly version: number;
+    };
   }>('/admin/inventory/units/tracking-mode', {
     method: 'POST',
     headers: commandHeaders(),
@@ -414,9 +422,7 @@ export async function setVariantTrackingMode(
   return response.data;
 }
 
-export async function convertStockToSerialized(
-  input: ConvertStockInput,
-): Promise<{
+export async function convertStockToSerialized(input: ConvertStockInput): Promise<{
   readonly variantId: string;
   readonly registeredUnitsCount: number;
   readonly units: readonly InventoryUnitDto[];

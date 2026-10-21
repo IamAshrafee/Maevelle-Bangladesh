@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
-import type { InventoryUnitDto, UnitConditionDto } from '@maevelle/contracts';
+import React, { useEffect, useState } from 'react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
+import type { InventoryUnitDto } from '@maevelle/contracts';
 import {
   Dialog,
   DialogContent,
@@ -12,8 +12,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { NativeSelect } from '@/components/ui/native-select';
 import { releaseUnitForSale } from '@/lib/inventory/units';
+import { UnitCommandError } from './unit-command-error';
 
 export interface UnitReleaseDialogProps {
   readonly open: boolean;
@@ -22,18 +22,16 @@ export interface UnitReleaseDialogProps {
   readonly onSuccess?: () => void;
 }
 
-export function UnitReleaseDialog({
-  open,
-  onOpenChange,
-  unit,
-  onSuccess,
-}: UnitReleaseDialogProps) {
+export function UnitReleaseDialog({ open, onOpenChange, unit, onSuccess }: UnitReleaseDialogProps) {
   const [reason, setReason] = useState('');
-  const [targetCondition, setTargetCondition] = useState<UnitConditionDto>(
-    unit.currentCondition === 'GRADE_B' ? 'GRADE_B' : 'GRADE_A',
-  );
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setReason('');
+    setError(null);
+  }, [open, unit.id, unit.version]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,8 +41,7 @@ export function UnitReleaseDialog({
     try {
       await releaseUnitForSale(unit.id, {
         expectedVersion: unit.version,
-        reason: reason.trim() || undefined,
-        targetCondition,
+        reason: reason.trim(),
       });
 
       onOpenChange(false);
@@ -53,18 +50,18 @@ export function UnitReleaseDialog({
         onSuccess();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Release authorization failed.');
+      setError(err instanceof Error ? err : new Error('Release authorization failed.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
+      <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-            <CheckCircle2 className="size-4 text-emerald-600" />
+            <CheckCircle2 className="size-4 text-success" />
             <span>Authorize Release for Sale — {unit.unitCode}</span>
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
@@ -74,32 +71,18 @@ export function UnitReleaseDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error ? (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
-              <AlertCircle className="size-4 shrink-0" />
-              <span>{error}</span>
-            </div>
+            <UnitCommandError
+              error={error}
+              onReload={() => {
+                onOpenChange(false);
+                onSuccess?.();
+              }}
+            />
           ) : null}
 
           <div className="space-y-1.5">
-            <label htmlFor="release-condition" className="text-xs font-medium text-foreground">
-              Target Release Grade *
-            </label>
-            <NativeSelect
-              id="release-condition"
-              value={targetCondition}
-              onChange={(e) => setTargetCondition(e.target.value as UnitConditionDto)}
-              disabled={submitting}
-              className="w-full text-xs"
-              required
-            >
-              <option value="GRADE_A">Grade A — Prime Flawless Inventory</option>
-              <option value="GRADE_B">Grade B — Approved Minor Imperfection / Restricted</option>
-            </NativeSelect>
-          </div>
-
-          <div className="space-y-1.5">
             <label htmlFor="release-reason" className="text-xs font-medium text-foreground">
-              Authorization Note / Reason
+              Authorization Note / Reason *
             </label>
             <Input
               id="release-reason"
@@ -108,6 +91,7 @@ export function UnitReleaseDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               disabled={submitting}
+              required
               className="text-xs font-sans"
             />
           </div>
@@ -126,7 +110,7 @@ export function UnitReleaseDialog({
               type="submit"
               variant="default"
               size="sm"
-              disabled={submitting}
+              disabled={submitting || !reason.trim()}
               className="gap-1.5"
             >
               {submitting ? (

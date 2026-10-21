@@ -103,6 +103,11 @@ Implemented in the first Stage 2 slice:
 - Added focused shared contracts plus paginated policy and recommendation services and APIs. Policy create/update/reset commands require idempotency keys, reject stale versions, write audit evidence, and emit transactional outbox events.
 - Established the authoritative threshold order: Location policy, item-wide policy, Catalog variant reorder point, then the organization Inventory default. Overview attention, Stock positions, legacy balance filtering, and Inventory statistics now use that same order.
 - Added explainable replenishment projections from available-to-sell, inbound purchase shipments, inbound transfers, and approved outbound transfers. Recommendations suggest a Transfer only when the configured source has enough surplus above its own resolved threshold; otherwise they hand off to a preferred Supplier Purchase or policy review without creating Procurement or Finance obligations inside Inventory.
+- Added the responsive Admin Replenishment workspace with action-only/all-position views, Location and text filters, compact desktop tables, touch-friendly mobile cards, source explanations, policy hierarchy labels, pagination, empty/error/loading states, and capability-gated management.
+- Added one shared create/edit policy form with client and server validation, optimistic versions, mobile full-screen behavior, item-wide and Location-specific scopes, safety/target/lead-time inputs, preferred transfer source, and fallback Supplier.
+- Connected recommendation actions to prefilled canonical Transfer and Purchase workflows. The owning forms now accept the suggested SKU, quantity, destination, source, and Supplier context while leaving the operator in control of the resulting business command.
+- Reduced the Inventory sidebar to the six approved operator destinations: Overview, Stock, Locations, Transfers, Counts, and Quality. Replenishment is linked contextually from Overview; adjustments, movement history, repair, and other secondary workflows remain reachable inside their owning workspaces rather than competing as primary navigation.
+- Replaced the legacy Overview's six independent browser requests and partial-failure aggregation with the single scope-aware Inventory Overview snapshot. The page now uses the shared Admin page system for authoritative KPIs, threshold-aware attention, owned work queues, recent ledger movements, Location health, recovery states, and responsive action placement.
 
 Verification for this slice:
 
@@ -114,12 +119,147 @@ Verification for this slice:
 - Focused Inventory suite after policy lifecycle and recommendation integration: 19 tests passed, including idempotent replay, changed-payload rejection, stale-write protection, reset replay, hierarchy resolution, and genuine-surplus transfer selection.
 - Database and API package builds plus focused replenishment lint: passed.
 - Root TypeScript project build and the combined Inventory/serialized-unit database suites: passed; 33 tests passed across 2 files.
+- Replenishment Admin slice: Admin TypeScript check, database package build, and focused lint passed; the single authoritative policy/recommendation workflow test passed.
 
 Remaining in Stage 2:
 
 - Continue splitting route/service responsibilities and normalize remaining Inventory envelopes and error semantics.
 - Build the responsive Admin replenishment queue and shared policy editor on the new contracts, then connect the prefilled Transfer and Purchase handoffs to their owning forms.
 - Expand Overview attention beyond the now-authoritative stock, queue, movement, and Location snapshot where owning-domain SLA/configuration evidence is still required.
+
+#### Batch 3 — Inventory shell and navigation — IN PROGRESS
+
+- Added the six-destination Inventory workspace navigation to every Inventory route with responsive horizontal overflow, capability-aware rendering, active-route treatment, and semantic links.
+- Mapped secondary Stock routes—Replenishment, Adjustments, Reservations, Movement History, and Settings—back to the Stock destination so operators keep their workspace context without restoring sidebar clutter.
+- Kept barcode scanning as a global command and Repair as a visible Quality action. Added Replenishment, Reservations, Movements, and Adjust Stock as contextual Stock actions.
+- Removed the broken Loss destination from both primary navigation layers; loss handling remains an explicit Transfer discrepancy or authoritative write-off action rather than a dead standalone page.
+
+Focused verification: Admin TypeScript and lint for the workspace navigation and Stock integration passed.
+
+Remaining in Stage 3:
+
+- Consolidate the secondary Stock and Quality routes into tabs/actions, then add compatibility redirects only after their destination behavior is present.
+- Standardize the remaining Locations, Transfers, Counts, and Quality page shells and permission rendering.
+
+#### Batch 4 — Location lifecycle authority — IN PROGRESS
+
+- Added an authoritative Location operational-commitment projection covering stocked SKUs, active reservations, incoming/outgoing Transfers, open Counts, inbound Shipments, open Fulfillments, and replenishment destination/source policies.
+- Location deactivation and archive now reject changes that would strand any active operational work. Capability removal is validated against the exact work that requires that capability, with actionable blocker counts in the domain error.
+- Location detail now returns those commitment explanations, uses the replenishment-policy hierarchy for low-stock counts, and reports real incoming Transfer plus inbound-supply quantity instead of the former hard-coded zero.
+- Location updates now publish a transactional outbox event in addition to their audit evidence.
+- Rebuilt the Locations list as a responsive operations surface with shared page/table/state primitives, status and capability filters, permission-aware creation, mobile cards, compact desktop rows, and visible on-hand/open-work context. The list projection now returns those operational totals without per-row browser requests.
+- Connected Location detail/edit to the blocker model: active commitments are visible, lifecycle and capability choices are disabled with exact reasons, Draft locations remain editable, incoming stock is real, and Edit/Transfer actions respect operator permissions plus facility capabilities.
+- Location create/update API commands now require idempotency keys; the domain replays completed equivalent requests safely, rejects key reuse with a changed payload, and retains optimistic version protection.
+- Extracted the shared Location type catalog, capability groups, type defaults, labels, and code derivation used by create and edit. The two workflows no longer maintain conflicting facility definitions.
+
+Verification for this slice:
+
+- Database package TypeScript build passed.
+- Focused Admin TypeScript and lint checks passed for the rebuilt Locations list.
+- One focused Inventory integration test passed for Location commitment projection, capability-removal protection, and update replay safety.
+
+Remaining in Batch 4:
+
+- Finish decomposing the legacy Location detail component onto shared Admin primitives.
+- Continue decomposing create/edit presentation into smaller shared field sections where doing so materially improves the workflow.
+
+#### Batch 5 — Transfer operations — IMPLEMENTATION COMPLETE
+
+- Rebuilt the Transfer queue with shared page/table/state primitives, capability-aware creation, responsive mobile cards, compact desktop rows, semantic statuses, route context, and requested/dispatched/received progress.
+- Added source and destination Location filters alongside status and transfer-number search. Pagination now uses the authoritative server `totalCount` instead of guessing that another page exists whenever the current page happens to contain 25 rows.
+- Transfer detail now uses the shared Admin page, loading/error, status, and compact table primitives. Draft management actions and physical transfer actions render from their distinct capabilities, and success/error treatment uses semantic theme tokens.
+- Draft approval and cancellation now require API idempotency keys and replay equivalent completed commands safely while preserving their optimistic version checks. The UI supplies a stable command key for each transfer version.
+- Fixed partial-receipt recovery: reopening the Receive sheet now rehydrates from the latest server lines instead of retaining its first-render quantities. Receive and discrepancy commands use a stable key for the current Transfer version, and both sheets now use full-width mobile layouts with touch-safe serialized-unit controls.
+- Completed partial serialized receipt entry. Each in-transit Unit ID can now be included or left for a later arrival and receives its own arrival condition; selected standard or serialized lines must contain at least one unit and cannot exceed the authoritative remaining in-transit quantity.
+- Bound Transfer draft, receipt, and discrepancy idempotency keys to the exact submitted payload. An unchanged retry reuses its key, while editing quantities, Unit IDs, conditions, reasons, or routing after a failed attempt creates a new command identity instead of triggering changed-payload key reuse.
+- Added explicit stale/conflict recovery to receipt, discrepancy, and draft editing. In-flight sheets cannot be dismissed accidentally; a conflict offers close-and-reload against current Transfer truth; draft edits can reload the latest version; and source-stock loading failures are no longer silently presented as “no stock.”
+- Aligned draft quantities with the platform's whole-unit Inventory contract and moved touched capability warnings to semantic tokens.
+- Replaced the capped 100-row draft preload with a debounced server-searched stock picker. The Inventory balance read model now supports an exact `variantId` lookup so edit and deep-link selections are revalidated against the chosen source without downloading the full stock catalogue.
+- Kept current availability visible at the decision point, disabled variants already used on another line, blocked submission until every restored selection is verified, and retained the server as the final stock authority.
+- Decomposed the create/edit surface into reusable routing, responsive line-row, and asynchronous stock-picker components. Desktop and mobile now share one line workflow instead of maintaining duplicated selectors and quantity controls.
+
+Verification for this slice:
+
+- Focused Admin TypeScript and lint checks passed for the Transfer queue.
+- Database/API/Admin focused TypeScript and lint checks passed for the detail lifecycle changes.
+- One focused Inventory integration test passed for retry-safe Transfer cancellation and stale-transition rejection.
+- Focused Admin TypeScript and lint checks passed for draft save, partial serialized receipt, discrepancy closure, and Transfer detail integration.
+- Focused database, API, and Admin TypeScript checks plus focused lint passed for exact stock lookup and the searched transfer picker. No broad build or full suite was run for this UI-focused slice.
+
+Remaining in Batch 5:
+
+- Authenticated browser and owner operational review with representative large stock catalogues remains part of the module-wide closure gate.
+
+#### Batch 6 — Count operations — IN PROGRESS
+
+- Rebuilt the Counts queue with shared Admin page, filter, state, status, table, and responsive card primitives. Creation is capability-aware, progress is explicit, and pagination is driven by authoritative server totals.
+- Moved session/location/code search into the database query instead of filtering only the current browser page. Location, status, and search filters now operate across the complete authorized count history.
+- Extended the shared status vocabulary for Counting, Review, and Posted states so count lifecycle indicators use the same semantic system as the other operational workspaces.
+- Closed the count concurrency overwrite path: a stale line save now reloads the latest server evidence and asks the operator to review it instead of silently retrying over another operator's count.
+- Start, line count, found-SKU, submit-for-review, cancel, and post commands now require API idempotency keys and use domain-backed replay where applicable. UI command keys remain stable for the exact count version/payload being submitted.
+- Repaired Review truth for post-snapshot movement. Before posting, the Stocktake detail read model now compares each frozen snapshot line with the latest aggregate Location balance and returns live net movement, current expected quantity, and current variance; posted sessions continue to show their immutable stored result.
+- Added an explicit live-preview explanation and refresh-before-confirm flow. “Review and post” reloads the current preview before opening confirmation, summarizes gain/loss and movement-affected lines, and explains that posting will lock and recompute again transactionally. Conflict responses close the stale confirmation and reload current truth.
+- Replaced fragile stale-count message parsing with the typed Inventory `STALE_VERSION` error code, corrected the broken ledger-adjustment link, and moved touched count status/variance styling onto shared semantic tokens.
+- Began the count-detail decomposition by extracting condition allocation into a focused shared dialog. The dialog now has an explicit Cancel path, prevents dismissal during save, uses whole-unit numeric input, keeps snapshot-versus-physical context visible, and adapts to a full-screen touch workflow on mobile without changing the authoritative count command.
+- Extracted found-stock discovery from the count orchestrator into a focused responsive dialog. It preserves exclusion of variants already in the session, makes selection state accessible, blocks accidental dismissal during submission, and uses a full-screen mobile search/selection flow while retaining the existing found-line command.
+
+Verification for this slice:
+
+- Focused Database/API/Admin TypeScript and lint checks passed.
+- One focused Inventory integration test passed for idempotent stocktake posting after the command-boundary changes.
+- Database package build, Admin TypeScript, and focused lint passed for the live Review preview. One focused Inventory integration test passed for a post-snapshot +2 movement producing current expected 7 and preview variance -2 before posting.
+- Focused Admin TypeScript and lint passed for the extracted condition-allocation workflow.
+- Focused Admin TypeScript and lint passed for the extracted found-stock workflow and its count-detail integration.
+
+Remaining in Batch 6:
+
+- Rework the count detail, line entry, review, cancellation, and posting experience around snapshot truth, movement-after-snapshot explanations, and explicit variance impact.
+- Continue decomposing the large count detail component and standardize its visual primitives without weakening the now-authoritative transition behavior.
+
+#### Batch 7 — Quality and physical-unit operations — IN PROGRESS
+
+- Joined the Physical Units and Repair Queue screens with one Quality workspace navigation so repair work is discoverable without becoming another primary sidebar destination.
+- Replaced the Repair Queue's two capped browser queries and client-side deduplication with one authoritative server-side `attention=REPAIR` query. The query applies `REPAIR_REQUIRED OR ON_HOLD` before counting and pagination, so totals and later pages no longer omit or duplicate eligible units.
+- Added real pagination, responsive mobile cards, compact desktop rows, explicit recovery, semantic warning treatment, and capability-aware repair, reinspection, movement, and release controls.
+- Applied the operator's Location scope to an unfiltered physical-unit collection at the database query boundary. A scoped operator can no longer omit `locationId` to receive organization-wide unit identities.
+- Closed Location-scope gaps on unit history, inspections, repairs, barcode outputs, inspection, repair request/completion, packaging, release, write-off, return receipt, direct placement, bulk inspection, bulk placement, and Fulfillment allocation. Cross-Location moves now authorize both the current Location and destination; bulk commands authorize every selected identity before the transaction begins.
+- Added a tenant-safe repair-to-current-Location resolver so repair completion can be authorized without exposing repair details from an out-of-scope facility.
+- Added one shared Admin action policy for inspection, repair, release, Transfer handoff, bulk QC, and write-off availability. Unit list, detail, mobile cards, and Repair Queue now hide actions that the current identity state or operator capability cannot complete.
+- Hardened Quality lifecycle invariants in the domain: reserved, in-Fulfillment, in-Transfer, dispatched, and written-off units cannot be silently regraded, repaired, or written off around their owning workflow; active repairs block inspection and release; a completed repair requires later reinspection before release; and return inspections require a real returned unit.
+- Closed a capability bypass where an inspection disposition could write off inventory with only `inventory.units.manage`. Single and bulk inspection now require the distinct `inventory.units.write_off` capability for that disposition, and routine inspection forms direct operators to the dedicated write-off workflow.
+- Made Quality dialogs recoverable between units and attempts: inspection, repair, release, and write-off state resets from the latest unit/version each time they open, stale values no longer leak between identities, inspection stage defaults follow inbound/return/reinspection/routine context, and the forms use full-screen mobile layouts.
+- Removed the release form's non-authoritative “target grade” selector. Release now records the mandatory authorization reason while inspection remains the sole owner of the physical quality grade.
+- Consolidated the full scanner page and quick-scan dialog onto one scanned-unit result component. Both entry points now use the same capability/state-aware inspection and Transfer actions, current state display, label action, detail link, and post-inspection refresh instead of maintaining two drifting workflows.
+- Improved camera fallback and accessibility: unsupported camera/barcode detection produces an actionable handheld/manual-entry path before requesting permission, rear-camera preference is non-blocking, the overlay has dialog semantics, and icon controls have accessible names. The quick scanner uses a touch-friendly full-screen mobile dialog and clears stale results on each new session.
+- Replaced whole-Admin-page label printing and global visibility/`!important` overrides with an isolated print document. The selected compact, standard, or large preset now controls the physical `mm` page and label dimensions; authorized barcode SVGs are loaded before printing; each Unit ID prints on its own label page; failures are recoverable; and the preview remains inside a full-screen mobile-capable dialog.
+- Repaired the Supply Receiving → Quality boundary. Receipt truth now loads independently of optional serialized-unit visibility, so Supply-only operators are not locked out by a unit permission they do not have. Unit registration and Receiving QC render only with `inventory.units.manage`; labels and physical identities require `inventory.units.view`; and the embedded QC dialog is touch-friendly on mobile.
+- Reworked the embedded Receiving QC collection onto 50-unit server pages with authoritative overall and awaiting-QC totals. Page selection is explicit, label printing is truthfully scoped to the current/loaded page, and large receipts no longer disappear after an implicit 100-unit browser cap.
+- Fixed the single-unit quick-pass race that could submit the previous React selection. Bulk and individual session actions now construct their exact Unit ID/version payload directly, reject identities that no longer match the session stage, clear stale selections between pages, and preserve inbound, return, reinspection, or routine inspection stage through the Admin client contract.
+- Fixed the Admin client boundary so `attention=REPAIR` is actually serialized into the physical-unit request. The repair queue now reaches the authoritative combined repair/hold query implemented by the API instead of silently falling back to an ordinary unit listing.
+- Rebuilt physical-unit detail as an operator workspace around current control state, exact identity, authoritative ledger bucket, Location, provenance/custody, inspection evidence, repair evidence, and lifecycle evidence. Capability/state-exact actions remain driven by the shared policy, current Location and upstream receipt/order/Fulfillment records are directly reachable, and the view names the next operational step without inventing a second lifecycle.
+- Split overview and quality-history presentation out of the orchestration component. Inspection, repair, and event reads now fail independently after the authoritative Unit ID loads, so one unavailable evidence feed no longer hides the unit or blocks safe actions; each failed section explains its recovery path.
+- Replaced the event timeline's unsafe status/condition casts and raw JSON metadata block with guarded badges and labeled operational evidence. Unknown historical values remain visible as text, while current known values use the shared status primitives. The release dialog now also keeps Cancel available before a reason is entered and prevents empty submissions.
+- Added a typed Inventory request error carrying HTTP status, domain error code, and request ID, plus one shared Quality command-error treatment. Inspection, repair, release, and write-off dialogs now recognize stale-version and other conflict responses, explain that current state has changed, and offer an explicit close-and-reload recovery instead of leaving operators to retry stale data. In-flight commands cannot be dismissed accidentally.
+- Finished the touched Quality form audit: photo-removal controls have accessible names, repair completion fields stack on mobile, warning styling uses semantic tokens, and repair cost is explicitly labeled operational evidence that neither posts a Finance expense nor changes inventory acquisition cost.
+- Reduced the physical-unit list orchestration component from roughly 850 lines to roughly 316 by extracting the filter surface, responsive collection, and bulk-action toolbar. The presentation components reuse the shared action policy and UI primitives while the parent retains query, selection, and dialog orchestration.
+- Made Quality list state intentional: filters and pages now remain shareable in the URL; a contextual SKU filter is visible and removable; `IN_TRANSFER` is no longer absent from the status filter; selection clears across filter/page changes; and closing a single-unit action clears its target so a later bulk label or Transfer action cannot silently operate on the previous identity.
+
+Verification for this slice:
+
+- Focused Database and API package builds plus Admin TypeScript check passed.
+- Focused lint passed for the touched Database, API, and Quality Admin files.
+- One focused serialized-unit database test passed for combined repair-attention filtering, Location scoping, and authoritative pagination totals.
+- Two focused serialized-unit lifecycle tests passed for active/completed repair release protection and committed Fulfillment identity protection.
+- Focused Admin TypeScript and lint checks passed for the shared scanner result, full-page scanner, quick dialog, and camera input. Real handheld-scanner, device-camera, and printed-label verification remains a hardware/owner gate.
+- Focused Admin TypeScript and lint checks passed for isolated exact-size barcode label preparation. Physical printer calibration, media margins, contrast, and scanner-read verification remain a hardware/owner gate.
+- Focused Admin TypeScript and lint checks passed for Receiving/Quality capability separation and paginated QC. One focused Admin client test passed for preserving a non-default inspection stage in the bulk command payload.
+- One focused Admin client test passed for repair-attention query serialization. Focused Admin TypeScript and lint checks passed for the rebuilt detail, overview, quality history, event timeline, and release dialog.
+- One focused Admin client test passed for typed stale-version conflict preservation. Focused Admin TypeScript and lint checks passed for the shared recovery treatment and the inspection, repair, release, and write-off dialogs.
+- Focused Admin TypeScript and lint checks passed for the decomposed physical-unit list, filters, bulk toolbar, and responsive desktop/mobile collection.
+
+Remaining in Batch 7:
+
+- Code implementation is complete for the planned Quality slice. Real handheld scanner, device camera, and physical label-printer calibration remain explicit hardware/owner verification gates rather than code-completion claims.
 
 ---
 

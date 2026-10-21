@@ -19,8 +19,13 @@ import {
   Tag,
   ShieldCheck,
 } from 'lucide-react';
-import type { UnitEventDto, UnitEventTypeDto } from '@maevelle/contracts';
-import { cn } from '@/lib/utils';
+import type {
+  UnitConditionDto,
+  UnitEventDto,
+  UnitEventTypeDto,
+  UnitStatusDto,
+} from '@maevelle/contracts';
+import { Button } from '@/components/ui/button';
 import { UnitStatusBadge } from './unit-status-badge';
 import { UnitConditionBadge } from './unit-condition-badge';
 
@@ -46,33 +51,90 @@ function getEventIcon(type: UnitEventTypeDto) {
       return <PackageCheck className="size-3.5 text-primary" />;
     case 'INSPECTED':
     case 'RETURN_INSPECTED':
-      return <ShieldCheck className="size-3.5 text-blue-500" />;
+      return <ShieldCheck className="size-3.5 text-info" />;
     case 'LOCATION_MOVED':
-      return <Boxes className="size-3.5 text-slate-500" />;
+      return <Boxes className="size-3.5 text-muted-foreground" />;
     case 'REPACKAGED':
-      return <Tag className="size-3.5 text-slate-500" />;
+      return <Tag className="size-3.5 text-muted-foreground" />;
     case 'REPAIR_REQUESTED':
     case 'REPAIR_STARTED':
     case 'REPAIR_COMPLETED':
-      return <Wrench className="size-3.5 text-amber-500" />;
+      return <Wrench className="size-3.5 text-warning" />;
     case 'RELEASED_FOR_SALE':
-      return <CheckCircle className="size-3.5 text-emerald-500" />;
+      return <CheckCircle className="size-3.5 text-success" />;
     case 'QUARANTINED':
-      return <AlertTriangle className="size-3.5 text-amber-500" />;
+      return <AlertTriangle className="size-3.5 text-warning" />;
     case 'ALLOCATED_TO_FULFILLMENT':
     case 'RELEASED_FROM_FULFILLMENT':
     case 'PICKED':
     case 'PACKED':
-      return <Tag className="size-3.5 text-indigo-500" />;
+      return <Tag className="size-3.5 text-info" />;
     case 'DISPATCHED':
-      return <Truck className="size-3.5 text-emerald-600" />;
+      return <Truck className="size-3.5 text-success" />;
     case 'RETURNED':
-      return <RotateCcw className="size-3.5 text-rose-500" />;
+      return <RotateCcw className="size-3.5 text-warning" />;
     case 'WRITTEN_OFF':
-      return <Ban className="size-3.5 text-rose-600" />;
+      return <Ban className="size-3.5 text-destructive" />;
     default:
       return <Clock className="size-3.5 text-muted-foreground" />;
   }
+}
+
+const UNIT_STATUSES = new Set<UnitStatusDto>([
+  'AWAITING_QC',
+  'AVAILABLE',
+  'RESERVED',
+  'IN_FULFILLMENT',
+  'IN_TRANSFER',
+  'DISPATCHED',
+  'ON_HOLD',
+  'RETURNED',
+  'WRITTEN_OFF',
+]);
+
+const UNIT_CONDITIONS = new Set<UnitConditionDto>([
+  'GRADE_A',
+  'GRADE_B',
+  'REPAIR_REQUIRED',
+  'DAMAGED_UNSELLABLE',
+]);
+
+function isUnitStatus(value: string): value is UnitStatusDto {
+  return UNIT_STATUSES.has(value as UnitStatusDto);
+}
+
+function isUnitCondition(value: string): value is UnitConditionDto {
+  return UNIT_CONDITIONS.has(value as UnitConditionDto);
+}
+
+function formatMetadataLabel(key: string) {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replaceAll('_', ' ')
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
+function formatMetadataValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'Not recorded';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  return JSON.stringify(value);
+}
+
+function StatusValue({ value }: { readonly value: string }) {
+  return isUnitStatus(value) ? (
+    <UnitStatusBadge status={value} />
+  ) : (
+    <span className="font-mono text-[11px] text-foreground">{value.replaceAll('_', ' ')}</span>
+  );
+}
+
+function ConditionValue({ value }: { readonly value: string }) {
+  return isUnitCondition(value) ? (
+    <UnitConditionBadge condition={value} short />
+  ) : (
+    <span className="font-mono text-[11px] text-foreground">{value.replaceAll('_', ' ')}</span>
+  );
 }
 
 function getEventTitle(event: UnitEventDto): string {
@@ -187,10 +249,11 @@ export function UnitEventTimeline({ events, loading = false }: UnitEventTimeline
                 </div>
 
                 {hasMetadata ? (
-                  <button
-                    type="button"
+                  <Button
                     onClick={() => toggleExpand(event.id)}
-                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded bg-muted/30 hover:bg-muted/60 transition-colors"
+                    variant="ghost"
+                    size="xs"
+                    aria-expanded={isExpanded}
                   >
                     <span>{isExpanded ? 'Hide Details' : 'Details'}</span>
                     {isExpanded ? (
@@ -198,32 +261,32 @@ export function UnitEventTimeline({ events, loading = false }: UnitEventTimeline
                     ) : (
                       <ChevronDown className="size-3" />
                     )}
-                  </button>
+                  </Button>
                 ) : null}
               </div>
 
               {/* Status / Condition transitions */}
-              {(event.fromStatus || event.toStatus || event.fromCondition || event.toCondition) ? (
+              {event.fromStatus || event.toStatus || event.fromCondition || event.toCondition ? (
                 <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t text-xs">
                   {event.fromStatus || event.toStatus ? (
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <span className="text-[11px]">Status:</span>
-                      {/* @ts-expect-error Safe cast */}
-                      {event.fromStatus ? <UnitStatusBadge status={event.fromStatus} /> : null}
-                      {event.fromStatus && event.toStatus ? <ArrowRight className="size-2.5" /> : null}
-                      {/* @ts-expect-error Safe cast */}
-                      {event.toStatus ? <UnitStatusBadge status={event.toStatus} /> : null}
+                      {event.fromStatus ? <StatusValue value={event.fromStatus} /> : null}
+                      {event.fromStatus && event.toStatus ? (
+                        <ArrowRight className="size-2.5" />
+                      ) : null}
+                      {event.toStatus ? <StatusValue value={event.toStatus} /> : null}
                     </div>
                   ) : null}
 
                   {event.fromCondition || event.toCondition ? (
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <span className="text-[11px]">Condition:</span>
-                      {/* @ts-expect-error Safe cast */}
-                      {event.fromCondition ? <UnitConditionBadge condition={event.fromCondition} short /> : null}
-                      {event.fromCondition && event.toCondition ? <ArrowRight className="size-2.5" /> : null}
-                      {/* @ts-expect-error Safe cast */}
-                      {event.toCondition ? <UnitConditionBadge condition={event.toCondition} short /> : null}
+                      {event.fromCondition ? <ConditionValue value={event.fromCondition} /> : null}
+                      {event.fromCondition && event.toCondition ? (
+                        <ArrowRight className="size-2.5" />
+                      ) : null}
+                      {event.toCondition ? <ConditionValue value={event.toCondition} /> : null}
                     </div>
                   ) : null}
                 </div>
@@ -232,17 +295,27 @@ export function UnitEventTimeline({ events, loading = false }: UnitEventTimeline
               {/* Reason / Notes */}
               {event.reason ? (
                 <p className="mt-2 text-xs text-muted-foreground bg-muted/40 p-2 rounded border border-border/50">
-                  <strong className="text-foreground font-medium">Note / Reason:</strong> {event.reason}
+                  <strong className="text-foreground font-medium">Note / Reason:</strong>{' '}
+                  {event.reason}
                 </p>
               ) : null}
 
               {/* Expanded structured metadata */}
               {isExpanded && event.metadata && Object.keys(event.metadata).length > 0 ? (
                 <div className="mt-3 pt-2 border-t">
-                  <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Event Metadata:</p>
-                  <pre className="text-[11px] font-mono bg-muted/60 p-2.5 rounded-md overflow-x-auto text-foreground/90 whitespace-pre-wrap">
-                    {JSON.stringify(event.metadata, null, 2)}
-                  </pre>
+                  <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+                    Operational evidence
+                  </p>
+                  <dl className="grid gap-x-4 gap-y-1.5 rounded-md bg-muted/60 p-2.5 text-[11px] sm:grid-cols-[minmax(8rem,auto)_1fr]">
+                    {Object.entries(event.metadata).map(([key, value]) => (
+                      <React.Fragment key={key}>
+                        <dt className="text-muted-foreground">{formatMetadataLabel(key)}</dt>
+                        <dd className="break-all font-mono text-foreground/90">
+                          {formatMetadataValue(value)}
+                        </dd>
+                      </React.Fragment>
+                    ))}
+                  </dl>
                 </div>
               ) : null}
             </div>

@@ -6,16 +6,22 @@ import {
   ArrowLeft,
   ArrowUp,
   Check,
+  CheckCircle2,
   Copy,
   Download,
   Edit2,
+  ExternalLink,
+  History,
+  Layers,
   Loader2,
   Pencil,
   Plus,
   RotateCcw,
+  Ruler,
   Save,
   Send,
   ShieldCheck,
+  TableProperties,
   Trash2,
   Upload,
   X,
@@ -52,10 +58,38 @@ import {
   updateSizeGuideRow,
 } from '@/lib/sizing/api';
 
-import { OperationalEmptyState, OperationalFeedback } from '../../../../components/operational-worklist';
-import { StatusBadge } from '../../../../components/status-badge';
+import {
+  AdminPage,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageActions,
+  PageDescription,
+  PageHeader,
+  PagePanel,
+  PageSection,
+} from '@/components/ui/page-shell';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/status-badge';
+import { Input } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/native-select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer';
 
-type Feedback = { message: string; tone: 'success' | 'warning' | 'danger' } | null;
+type Feedback = { message: string; tone: 'success' | 'warning' | 'destructive' } | null;
 
 type CellEditState = {
   rowId: string;
@@ -96,20 +130,20 @@ function parseCsvLine(line: string): string[] {
   let current = '';
   let quoted = false;
 
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index]!;
-    if (character === '"') {
-      if (quoted && line[index + 1] === '"') {
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i]!;
+    if (char === '"') {
+      if (quoted && line[i + 1] === '"') {
         current += '"';
-        index += 1;
+        i += 1;
       } else {
         quoted = !quoted;
       }
-    } else if (character === ',' && !quoted) {
+    } else if (char === ',' && !quoted) {
       values.push(current.trim());
       current = '';
     } else {
-      current += character;
+      current += char;
     }
   }
 
@@ -134,7 +168,7 @@ function parseMeasurementCell(value: string):
   return { min: range[1]!, max: range[2]! };
 }
 
-export default function SizeGuideEditorPage() {
+export default function SizeGuideStudioPage() {
   const router = useRouter();
   const params = useParams();
   const guideId = String(params?.guideId ?? '');
@@ -148,25 +182,34 @@ export default function SizeGuideEditorPage() {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
+  // Cell editing
   const [editingCell, setEditingCell] = useState<CellEditState>(null);
   const [cellSaving, setCellSaving] = useState(false);
   const [cellError, setCellError] = useState('');
 
+  // Row editing
   const [editingRow, setEditingRow] = useState<RowEditState>(null);
   const [rowSaving, setRowSaving] = useState(false);
 
+  // Guide editing
   const [editingGuide, setEditingGuide] = useState<GuideEditState>(null);
   const [guideSaving, setGuideSaving] = useState(false);
 
+  // Duplicate
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateName, setDuplicateName] = useState('');
   const [duplicateBusy, setDuplicateBusy] = useState(false);
 
+  // CSV Import
   const [showImportModal, setShowImportModal] = useState(false);
   const [importCsvText, setImportCsvText] = useState('');
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState('');
 
+  // Linked items drawer
+  const [showLinkedDrawer, setShowLinkedDrawer] = useState(false);
+
+  // Revision guidance meta
   const [metaInstructions, setMetaInstructions] = useState('');
   const [metaFitNotes, setMetaFitNotes] = useState('');
   const [metaDirty, setMetaDirty] = useState(false);
@@ -185,36 +228,34 @@ export default function SizeGuideEditorPage() {
       setGuide(guideData);
       setMeasurements(
         workspace.measurementDefinitions.filter(
-          (measurement) =>
-            measurement.sizingDomainId === guideData.sizingDomainId && measurement.status === 'ACTIVE',
+          (m) => m.sizingDomainId === guideData.sizingDomainId && m.status === 'ACTIVE',
         ),
       );
       setSizeDefinitions(
         workspace.sizeDefinitions.filter(
-          (definition) =>
-            definition.status === 'ACTIVE' &&
-            (!guideData.sizeSystemId || definition.sizeSystemId === guideData.sizeSystemId),
+          (def) =>
+            def.status === 'ACTIVE' &&
+            (!guideData.sizeSystemId || def.sizeSystemId === guideData.sizeSystemId),
         ),
       );
       setSystems(
         workspace.systems.filter(
-          (system) =>
-            system.sizingDomainId === guideData.sizingDomainId && system.status === 'ACTIVE',
+          (s) => s.sizingDomainId === guideData.sizingDomainId && s.status === 'ACTIVE',
         ),
       );
 
       if (guideData.revisions.length > 0) {
-        setActiveRevisionId((previous) => {
-          if (previous && guideData.revisions.some((revision) => revision.id === previous)) return previous;
-          const draft = guideData.revisions.find((revision) => revision.status === 'DRAFT');
+        setActiveRevisionId((prev) => {
+          if (prev && guideData.revisions.some((r) => r.id === prev)) return prev;
+          const draft = guideData.revisions.find((r) => r.status === 'DRAFT');
           return draft?.id ?? guideData.revisions[0]!.id;
         });
       } else {
         setActiveRevisionId(null);
       }
-    } catch (error) {
+    } catch (err) {
       setGuide(null);
-      setFeedback({ message: errorMessage(error, 'Failed to load size guide.'), tone: 'danger' });
+      setFeedback({ message: errorMessage(err, 'Failed to load size guide.'), tone: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -225,12 +266,12 @@ export default function SizeGuideEditorPage() {
   }, [load]);
 
   const activeRevision = useMemo(
-    () => guide?.revisions.find((revision) => revision.id === activeRevisionId) ?? guide?.revisions[0],
+    () => guide?.revisions.find((r) => r.id === activeRevisionId) ?? guide?.revisions[0],
     [activeRevisionId, guide],
   );
 
   const draftRevision = useMemo(
-    () => guide?.revisions.find((revision) => revision.status === 'DRAFT') ?? null,
+    () => guide?.revisions.find((r) => r.status === 'DRAFT') ?? null,
     [guide],
   );
 
@@ -246,15 +287,15 @@ export default function SizeGuideEditorPage() {
     setMetaDirty(false);
   }, [activeRevision?.id, activeRevision?.version]);
 
-  async function mutate(action: () => Promise<void>, success: string) {
+  async function mutate(action: () => Promise<void>, successMessage: string) {
     setBusy(true);
     setFeedback(null);
     try {
       await action();
-      setFeedback({ message: success, tone: 'success' });
+      setFeedback({ message: successMessage, tone: 'success' });
       await load();
-    } catch (error) {
-      setFeedback({ message: errorMessage(error, 'Sizing operation failed.'), tone: 'danger' });
+    } catch (err) {
+      setFeedback({ message: errorMessage(err, 'Operation failed.'), tone: 'destructive' });
       await load();
     } finally {
       setBusy(false);
@@ -263,11 +304,11 @@ export default function SizeGuideEditorPage() {
 
   async function publishRevision() {
     if (!activeRevision || !guide || activeRevision.status !== 'DRAFT') return;
-    if (!window.confirm(`Publish Revision ${activeRevision.revisionNumber}? Published revisions are immutable.`)) return;
+    if (!window.confirm(`Publish Revision ${activeRevision.revisionNumber}? Published revisions become an immutable storefront baseline.`)) return;
 
     await mutate(
       () => publishSizeGuideRevision(guide.id, activeRevision.id, activeRevision.version),
-      `Revision ${activeRevision.revisionNumber} published.`,
+      `Revision ${activeRevision.revisionNumber} published to Storefront successfully.`,
     );
   }
 
@@ -282,8 +323,8 @@ export default function SizeGuideEditorPage() {
     );
   }
 
-  async function saveGuideMetadata(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveGuideMetadata(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     if (!guide || !editingGuide) return;
 
     setGuideSaving(true);
@@ -296,10 +337,10 @@ export default function SizeGuideEditorPage() {
         sizeSystemId: editingGuide.sizeSystemId || null,
       });
       setEditingGuide(null);
-      setFeedback({ message: 'Guide metadata updated.', tone: 'success' });
+      setFeedback({ message: 'Guide information updated.', tone: 'success' });
       await load();
-    } catch (error) {
-      setFeedback({ message: errorMessage(error, 'Failed to update size guide.'), tone: 'danger' });
+    } catch (err) {
+      setFeedback({ message: errorMessage(err, 'Failed to update size guide.'), tone: 'destructive' });
       await load();
     } finally {
       setGuideSaving(false);
@@ -308,12 +349,12 @@ export default function SizeGuideEditorPage() {
 
   async function toggleGuideLifecycle() {
     if (!guide) return;
-    const restoring = guide.status === 'ARCHIVED';
-    if (!restoring && !window.confirm(`Archive “${guide.name}”? Product and category dependencies must be removed first.`)) return;
+    const isRestoring = guide.status === 'ARCHIVED';
+    if (!isRestoring && !window.confirm(`Archive "${guide.name}"? Products will lose direct sizing guidance.`)) return;
 
     await mutate(
-      () => (restoring ? restoreSizeGuide(guide.id) : archiveSizeGuide(guide.id)),
-      `Size guide ${restoring ? 'restored' : 'archived'}.`,
+      () => (isRestoring ? restoreSizeGuide(guide.id) : archiveSizeGuide(guide.id)),
+      `Size guide ${isRestoring ? 'restored' : 'archived'} successfully.`,
     );
   }
 
@@ -329,20 +370,20 @@ export default function SizeGuideEditorPage() {
         fitNotes: metaFitNotes.trim() || null,
       });
       setMetaDirty(false);
-      setFeedback({ message: 'Revision guidance saved.', tone: 'success' });
+      setFeedback({ message: 'Fit notes & measuring guidance saved.', tone: 'success' });
       await load();
-    } catch (error) {
-      setFeedback({ message: errorMessage(error, 'Failed to save revision guidance.'), tone: 'danger' });
+    } catch (err) {
+      setFeedback({ message: errorMessage(err, 'Failed to save guidance.'), tone: 'destructive' });
       await load();
     } finally {
       setMetaSaving(false);
     }
   }
 
-  async function addRow(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function addRow(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     if (!activeRevision || activeRevision.status !== 'DRAFT') return;
-    const formElement = event.currentTarget;
+    const formElement = e.currentTarget;
     const form = new FormData(formElement);
     const displayLabel = String(form.get('displayLabel') ?? '').trim();
     const sizeDefinitionId = String(form.get('sizeDefinitionId') ?? '').trim();
@@ -358,18 +399,18 @@ export default function SizeGuideEditorPage() {
         ...(sizeDefinitionId ? { sizeDefinitionId } : {}),
       });
       formElement.reset();
-      setFeedback({ message: `Size row “${displayLabel}” added.`, tone: 'success' });
+      setFeedback({ message: `Size row "${displayLabel}" added.`, tone: 'success' });
       await load();
-    } catch (error) {
-      setFeedback({ message: errorMessage(error, 'Failed to add size row.'), tone: 'danger' });
+    } catch (err) {
+      setFeedback({ message: errorMessage(err, 'Failed to add size row.'), tone: 'destructive' });
       await load();
     } finally {
       setBusy(false);
     }
   }
 
-  async function saveRowEdit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveRowEdit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     if (!activeRevision || !editingRow || activeRevision.status !== 'DRAFT') return;
 
     setRowSaving(true);
@@ -383,8 +424,8 @@ export default function SizeGuideEditorPage() {
       setEditingRow(null);
       setFeedback({ message: 'Size row updated.', tone: 'success' });
       await load();
-    } catch (error) {
-      setFeedback({ message: errorMessage(error, 'Failed to update size row.'), tone: 'danger' });
+    } catch (err) {
+      setFeedback({ message: errorMessage(err, 'Failed to update size row.'), tone: 'destructive' });
       await load();
     } finally {
       setRowSaving(false);
@@ -393,17 +434,17 @@ export default function SizeGuideEditorPage() {
 
   async function deleteRow(row: SizeGuideRowDto) {
     if (!activeRevision || activeRevision.status !== 'DRAFT') return;
-    if (!window.confirm(`Delete size row “${row.displayLabel}” and all measurements in that row?`)) return;
+    if (!window.confirm(`Delete size row "${row.displayLabel}" and all measurements in this row?`)) return;
 
     await mutate(
       () => deleteSizeGuideRow(activeRevision.id, row.id, activeRevision.version),
-      `Size row “${row.displayLabel}” deleted.`,
+      `Size row "${row.displayLabel}" removed.`,
     );
   }
 
   async function moveRow(rowId: string, direction: -1 | 1) {
     if (!activeRevision || activeRevision.status !== 'DRAFT') return;
-    const currentIndex = sortedRows.findIndex((row) => row.id === rowId);
+    const currentIndex = sortedRows.findIndex((r) => r.id === rowId);
     const targetIndex = currentIndex + direction;
     if (currentIndex < 0 || targetIndex < 0 || targetIndex >= sortedRows.length) return;
 
@@ -417,31 +458,31 @@ export default function SizeGuideEditorPage() {
           expectedVersion: activeRevision.version,
           rows: nextRows.map((candidate, position) => ({ rowId: candidate.id, position })),
         }),
-      'Size row order updated.',
+      'Row sequence updated.',
     );
   }
 
-  function openCellEditor(row: SizeGuideRowDto, measurement: MeasurementDefinitionDto) {
+  function openCellEditor(row: SizeGuideRowDto, m: MeasurementDefinitionDto) {
     if (!activeRevision || activeRevision.status !== 'DRAFT') return;
-    const existing = row.measurements.find((value) => value.measurementDefinitionId === measurement.id);
+    const existing = row.measurements.find((v) => v.measurementDefinitionId === m.id);
 
     setEditingCell({
       rowId: row.id,
       rowLabel: row.displayLabel,
-      measurementId: measurement.id,
-      measurementName: measurement.name,
+      measurementId: m.id,
+      measurementName: m.name,
       exact: existing?.exact ?? '',
       min: existing?.min ?? '',
       max: existing?.max ?? '',
-      unit: existing?.unit ?? measurement.defaultUnit,
+      unit: existing?.unit ?? m.defaultUnit,
       isApproximate: existing?.approximate ?? false,
       hasExistingValue: Boolean(existing),
     });
     setCellError('');
   }
 
-  async function saveCell(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveCell(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     if (!editingCell || !activeRevision || activeRevision.status !== 'DRAFT') return;
 
     const exact = editingCell.exact.trim();
@@ -481,8 +522,8 @@ export default function SizeGuideEditorPage() {
       setEditingCell(null);
       setFeedback({ message: 'Measurement updated.', tone: 'success' });
       await load();
-    } catch (error) {
-      setCellError(errorMessage(error, 'Could not save measurement.'));
+    } catch (err) {
+      setCellError(errorMessage(err, 'Could not save measurement.'));
       await load();
     } finally {
       setCellSaving(false);
@@ -503,24 +544,24 @@ export default function SizeGuideEditorPage() {
       setEditingCell(null);
       setFeedback({ message: 'Measurement cleared.', tone: 'success' });
       await load();
-    } catch (error) {
-      setCellError(errorMessage(error, 'Could not clear measurement.'));
+    } catch (err) {
+      setCellError(errorMessage(err, 'Could not clear measurement.'));
       await load();
     } finally {
       setCellSaving(false);
     }
   }
 
-  async function duplicateGuide(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function duplicateGuide(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     if (!guide || !duplicateName.trim()) return;
     setDuplicateBusy(true);
     try {
       const duplicated = await duplicateSizeGuide(guide.id, duplicateName.trim());
       setShowDuplicateModal(false);
       router.push(`/sizing/guides/${duplicated.id}`);
-    } catch (error) {
-      setFeedback({ message: errorMessage(error, 'Could not duplicate guide.'), tone: 'danger' });
+    } catch (err) {
+      setFeedback({ message: errorMessage(err, 'Could not duplicate guide.'), tone: 'destructive' });
     } finally {
       setDuplicateBusy(false);
     }
@@ -528,61 +569,60 @@ export default function SizeGuideEditorPage() {
 
   function exportCsv() {
     if (!guide || !activeRevision) return;
-    const header = ['Size', ...measurements.map((measurement) => measurement.code)];
+    const header = ['Size', ...measurements.map((m) => m.code)];
     const lines = [header.map(csvEscape).join(',')];
 
     for (const row of sortedRows) {
       const values = [row.displayLabel];
-      for (const measurement of measurements) {
-        const value = row.measurements.find((candidate) => candidate.measurementDefinitionId === measurement.id);
-        values.push(value?.exact ?? (value?.min && value.max ? `${value.min}-${value.max}` : ''));
+      for (const m of measurements) {
+        const val = row.measurements.find((c) => c.measurementDefinitionId === m.id);
+        values.push(val?.exact ?? (val?.min && val.max ? `${val.min}-${val.max}` : ''));
       }
       lines.push(values.map(csvEscape).join(','));
     }
 
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${guide.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}-r${activeRevision.revisionNumber}.csv`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${guide.name.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}-r${activeRevision.revisionNumber}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     URL.revokeObjectURL(url);
   }
 
-  async function importCsv(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function importCsv(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     if (!guide || !activeRevision || activeRevision.status !== 'DRAFT' || !importCsvText.trim()) return;
     setImportBusy(true);
     setImportError('');
 
     try {
-      const lines = importCsvText.split(/\r?\n/).filter((line) => line.trim());
+      const lines = importCsvText.split(/\r?\n/).filter((l) => l.trim());
       if (lines.length < 2) throw new Error('CSV must contain a header and at least one data row.');
 
-      const headers = parseCsvLine(lines[0]!).map((header) => header.toLowerCase());
+      const headers = parseCsvLine(lines[0]!).map((h) => h.toLowerCase());
       if (headers.length < 2) throw new Error('CSV needs a Size column plus at least one measurement column.');
 
       const measurementColumns = new Map<number, MeasurementDefinitionDto>();
-      headers.slice(1).forEach((header, relativeIndex) => {
-        const measurement = measurements.find(
-          (candidate) =>
-            candidate.code.toLowerCase() === header || candidate.name.toLowerCase() === header,
+      headers.slice(1).forEach((header, idx) => {
+        const match = measurements.find(
+          (m) => m.code.toLowerCase() === header || m.name.toLowerCase() === header,
         );
-        if (measurement) measurementColumns.set(relativeIndex + 1, measurement);
+        if (match) measurementColumns.set(idx + 1, match);
       });
       if (measurementColumns.size === 0) {
-        throw new Error(`No CSV headers matched active measurements. Use codes such as: ${measurements.map((measurement) => measurement.code).join(', ')}.`);
+        throw new Error(`No CSV headers matched active measurement columns (${measurements.map((m) => m.code).join(', ')}).`);
       }
 
       let workingVersion = activeRevision.version;
-      const rowMap = new Map(sortedRows.map((row) => [row.displayLabel.toLowerCase(), row.id]));
+      const rowMap = new Map(sortedRows.map((r) => [r.displayLabel.toLowerCase(), r.id]));
       const changes: Array<
         | { operation: 'SET'; rowId: string; measurementDefinitionId: string; unitCode: SizingMeasurementUnitDto; exact: string }
         | { operation: 'SET'; rowId: string; measurementDefinitionId: string; unitCode: SizingMeasurementUnitDto; min: string; max: string }
       > = [];
-      let nextPosition = sortedRows.length;
+      let nextPos = sortedRows.length;
 
       for (const line of lines.slice(1)) {
         const cells = parseCsvLine(line);
@@ -591,33 +631,33 @@ export default function SizeGuideEditorPage() {
 
         let rowId = rowMap.get(label.toLowerCase());
         if (!rowId) {
-          const matchingDefinition = guide.sizeSystemId
+          const matchDef = guide.sizeSystemId
             ? sizeDefinitions.find(
-                (definition) =>
-                  definition.label.toLowerCase() === label.toLowerCase() ||
-                  definition.code.toLowerCase() === label.toLowerCase(),
+                (d) =>
+                  d.label.toLowerCase() === label.toLowerCase() ||
+                  d.code.toLowerCase() === label.toLowerCase(),
               )
             : undefined;
 
           const created = await createSizeGuideRow(activeRevision.id, {
             expectedVersion: workingVersion,
             displayLabel: label,
-            position: nextPosition,
-            ...(matchingDefinition ? { sizeDefinitionId: matchingDefinition.id } : {}),
+            position: nextPos,
+            ...(matchDef ? { sizeDefinitionId: matchDef.id } : {}),
           });
           rowId = created.id;
           rowMap.set(label.toLowerCase(), rowId);
-          nextPosition += 1;
+          nextPos += 1;
           workingVersion += 1;
         }
 
-        for (const [columnIndex, measurement] of measurementColumns.entries()) {
-          const parsed = parseMeasurementCell(cells[columnIndex] ?? '');
+        for (const [colIdx, m] of measurementColumns.entries()) {
+          const parsed = parseMeasurementCell(cells[colIdx] ?? '');
           if (!parsed) continue;
           if ('exact' in parsed) {
-            changes.push({ operation: 'SET', rowId, measurementDefinitionId: measurement.id, unitCode: measurement.defaultUnit, exact: parsed.exact });
+            changes.push({ operation: 'SET', rowId, measurementDefinitionId: m.id, unitCode: m.defaultUnit, exact: parsed.exact });
           } else {
-            changes.push({ operation: 'SET', rowId, measurementDefinitionId: measurement.id, unitCode: measurement.defaultUnit, min: parsed.min, max: parsed.max });
+            changes.push({ operation: 'SET', rowId, measurementDefinitionId: m.id, unitCode: m.defaultUnit, min: parsed.min, max: parsed.max });
           }
         }
       }
@@ -628,10 +668,10 @@ export default function SizeGuideEditorPage() {
 
       setShowImportModal(false);
       setImportCsvText('');
-      setFeedback({ message: `CSV import completed with ${changes.length} measurement update${changes.length === 1 ? '' : 's'}.`, tone: 'success' });
+      setFeedback({ message: `CSV import completed with ${changes.length} measurement updates.`, tone: 'success' });
       await load();
-    } catch (error) {
-      setImportError(errorMessage(error, 'CSV import failed.'));
+    } catch (err) {
+      setImportError(errorMessage(err, 'CSV import failed.'));
       await load();
     } finally {
       setImportBusy(false);
@@ -639,116 +679,918 @@ export default function SizeGuideEditorPage() {
   }
 
   if (loading && !guide) {
-    return <div className="flex h-64 items-center justify-center text-sm text-slate-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading size guide…</div>;
+    return <LoadingState message="Loading size guide studio & measurement matrix…" />;
   }
 
   if (!guide) {
-    return <div className="p-6"><OperationalEmptyState title="Could not load size guide" description={feedback?.message ?? 'The requested guide is unavailable.'} /></div>;
+    return (
+      <AdminPage>
+        <ErrorState
+          title="Could not load size guide"
+          message={feedback?.message ?? 'The requested measurement guide was not found.'}
+          onRetry={() => void load()}
+        />
+      </AdminPage>
+    );
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="border-b border-slate-200 bg-white px-6 py-4">
-        <Link href="/sizing/guides" className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900"><ArrowLeft className="h-3.5 w-3.5" /> Back to size guides</Link>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-bold tracking-tight text-slate-900">{guide.name}</h1><StatusBadge status={guide.status} />{guide.currentPublishedRevisionId ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Published</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Draft only</span>}</div>
-            <p className="mt-1 text-xs text-slate-500">{guide.sizingDomainName} · {guide.sizeSystemName ?? 'No system binding'} · guide v{guide.version} · {guide.products.length} product{guide.products.length === 1 ? '' : 's'} · {guide.categories.length} categor{guide.categories.length === 1 ? 'y' : 'ies'}</p>
-            {guide.description ? <p className="mt-2 max-w-3xl text-xs text-slate-600">{guide.description}</p> : null}
+    <AdminPage>
+      {/* Studio Header */}
+      <div>
+        <Link
+          href="/sizing/guides"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground mb-3 transition-colors"
+        >
+          <ArrowLeft className="size-3.5" />
+          <span>Back to Size Guides</span>
+        </Link>
+
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 border-b border-border pb-5">
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground truncate">{guide.name}</h1>
+              <StatusBadge status={guide.status} />
+              {guide.currentPublishedRevisionId ? (
+                <Badge variant="secondary" className="bg-success-subtle text-success text-xs font-semibold">
+                  Published Baseline Active
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-warning-subtle text-warning text-xs font-semibold">
+                  Draft Only
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline" className="font-normal">
+                {guide.sizingDomainName}
+              </Badge>
+              <span>·</span>
+              <span className="font-mono">
+                {guide.sizeSystemName ?? 'Unbound Custom Chart'}
+              </span>
+              <span>·</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowLinkedDrawer(true)}
+                className="h-6 px-1.5 text-xs text-primary hover:bg-primary/10"
+              >
+                <span>{guide.products.length} products · {guide.categories.length} categories</span>
+                <ExternalLink className="size-3 ml-1" />
+              </Button>
+            </div>
+
+            {guide.description ? (
+              <p className="text-xs text-muted-foreground max-w-3xl pt-1">{guide.description}</p>
+            ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {guide.status === 'ACTIVE' ? <button type="button" onClick={() => setEditingGuide({ name: guide.name, description: guide.description ?? '', sizeSystemId: guide.sizeSystemId ?? '' })} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"><Pencil className="h-3.5 w-3.5" /> Edit guide</button> : null}
-            <button type="button" onClick={() => { setDuplicateName(`${guide.name} (Copy)`); setShowDuplicateModal(true); }} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"><Copy className="h-3.5 w-3.5" /> Duplicate</button>
-            <button type="button" disabled={busy} onClick={() => void toggleGuideLifecycle()} className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium ${guide.status === 'ACTIVE' ? 'border-red-200 text-red-700 hover:bg-red-50' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'}`}>{guide.status === 'ACTIVE' ? <Archive className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}{guide.status === 'ACTIVE' ? 'Archive' : 'Restore'}</button>
+
+          {/* Action Strip */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {activeRevision?.status === 'DRAFT' && guide.status === 'ACTIVE' ? (
+              <Button
+                size="sm"
+                disabled={busy || activeRevision.rows.length === 0}
+                onClick={() => void publishRevision()}
+                className="min-h-10 sm:min-h-9 touch-manipulation bg-success text-success-foreground hover:bg-success/90 font-semibold gap-1.5 shadow-xs"
+              >
+                <Send className="size-4" />
+                <span>Publish Revision {activeRevision.revisionNumber}</span>
+              </Button>
+            ) : activeRevision?.status === 'PUBLISHED' && guide.status === 'ACTIVE' && !draftRevision ? (
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={() => void createDraft()}
+                className="min-h-10 sm:min-h-9 touch-manipulation gap-1.5 shadow-xs"
+              >
+                <Plus className="size-4" />
+                <span>Start New Working Draft</span>
+              </Button>
+            ) : null}
+
+            {guide.status === 'ACTIVE' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setEditingGuide({
+                    name: guide.name,
+                    description: guide.description ?? '',
+                    sizeSystemId: guide.sizeSystemId ?? '',
+                  })
+                }
+                className="min-h-10 sm:min-h-9 touch-manipulation text-xs gap-1"
+              >
+                <Pencil className="size-3.5" />
+                <span>Edit Info</span>
+              </Button>
+            ) : null}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setDuplicateName(`${guide.name} (Copy)`);
+                setShowDuplicateModal(true);
+              }}
+              className="min-h-10 sm:min-h-9 touch-manipulation text-xs gap-1"
+            >
+              <Copy className="size-3.5" />
+              <span>Duplicate</span>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => void toggleGuideLifecycle()}
+              className={`min-h-10 sm:min-h-9 touch-manipulation text-xs gap-1 ${
+                guide.status === 'ACTIVE' ? 'text-destructive hover:bg-destructive/10' : 'text-success hover:bg-success/10'
+              }`}
+            >
+              {guide.status === 'ACTIVE' ? <Archive className="size-3.5" /> : <RotateCcw className="size-3.5" />}
+              <span>{guide.status === 'ACTIVE' ? 'Archive' : 'Restore'}</span>
+            </Button>
           </div>
         </div>
-      </header>
-
-      {feedback ? <div className="px-6 pt-4"><OperationalFeedback tone={feedback.tone}>{feedback.message}</OperationalFeedback></div> : null}
-
-      <div className="flex min-h-0 flex-1">
-        <aside className="w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-4">
-          <div className="mb-3 flex items-center justify-between gap-2"><h2 className="text-xs font-semibold uppercase tracking-wider text-slate-600">Revisions</h2><button type="button" onClick={() => void createDraft()} disabled={busy || guide.status !== 'ACTIVE' || Boolean(draftRevision)} title={draftRevision ? 'A draft already exists' : 'Create a new draft cloned from the published revision'} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-300 disabled:opacity-40"><Plus className="h-3 w-3" /> New draft</button></div>
-          <div className="space-y-2">
-            {guide.revisions.map((revision) => {
-              const selected = activeRevision?.id === revision.id;
-              return <button key={revision.id} type="button" onClick={() => setActiveRevisionId(revision.id)} className={`w-full rounded-lg border p-3 text-left ${selected ? 'border-slate-900 bg-white ring-1 ring-slate-900' : 'border-slate-200 bg-white/70 hover:bg-white'}`}><div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold text-slate-900">Revision {revision.revisionNumber}</span><StatusBadge status={revision.status} /></div><div className="mt-2 flex items-center justify-between text-[11px] text-slate-500"><span>{revision.rows.length} rows · v{revision.version}</span><span>{new Date(revision.createdAt).toLocaleDateString()}</span></div></button>;
-            })}
-          </div>
-        </aside>
-
-        <main className="min-w-0 flex-1 overflow-y-auto bg-white p-6">
-          {activeRevision ? (
-            <div className="mx-auto max-w-7xl space-y-6">
-              <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div><div className="flex items-center gap-2"><h2 className="text-base font-semibold text-slate-900">Revision {activeRevision.revisionNumber}</h2><StatusBadge status={activeRevision.status} /><span className="text-[11px] text-slate-400">version {activeRevision.version}</span></div><p className="mt-1 text-xs text-slate-500">{activeRevision.status === 'DRAFT' ? 'Editable working copy. Changes are isolated until publication.' : activeRevision.status === 'PUBLISHED' ? `Published ${activeRevision.publishedAt ? new Date(activeRevision.publishedAt).toLocaleString() : ''}. This revision is immutable.` : 'Archived historical revision.'}</p></div>
-                {activeRevision.status === 'DRAFT' && guide.status === 'ACTIVE' ? <button type="button" onClick={() => void publishRevision()} disabled={busy || activeRevision.rows.length === 0} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"><Send className="h-4 w-4" /> Publish revision</button> : activeRevision.status === 'PUBLISHED' ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700"><ShieldCheck className="h-4 w-4" /> Locked baseline</span> : null}
-              </section>
-
-              <section className="rounded-xl border border-slate-200 p-5 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-slate-900">Fit notes & instructions</h3><p className="text-xs text-slate-500">Revision-specific customer and measuring guidance.</p></div>{activeRevision.status === 'DRAFT' && metaDirty ? <button type="button" onClick={() => void saveRevisionMeta()} disabled={metaSaving} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">{metaSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save guidance</button> : null}</div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="text-xs font-medium text-slate-700">Fit notes{activeRevision.status === 'DRAFT' ? <textarea rows={3} value={metaFitNotes} onChange={(event) => { setMetaFitNotes(event.target.value); setMetaDirty(true); }} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-xs" placeholder="True to size, relaxed fit…" /> : <p className="mt-1 font-normal italic text-slate-500">{activeRevision.fitNotes || 'No fit notes.'}</p>}</label>
-                  <label className="text-xs font-medium text-slate-700">General instructions{activeRevision.status === 'DRAFT' ? <textarea rows={3} value={metaInstructions} onChange={(event) => { setMetaInstructions(event.target.value); setMetaDirty(true); }} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-xs" placeholder="How to measure or interpret the chart…" /> : <p className="mt-1 font-normal italic text-slate-500">{activeRevision.instructions || 'No instructions.'}</p>}</label>
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div><h3 className="text-sm font-semibold text-slate-900">Measurement matrix</h3><p className="text-xs text-slate-500">Rows are sizes; columns are reusable measurement definitions for {guide.sizingDomainName}.</p></div>
-                  <div className="flex flex-wrap gap-2"><button type="button" onClick={exportCsv} disabled={measurements.length === 0 || sortedRows.length === 0} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-40"><Download className="h-3.5 w-3.5" /> Export CSV</button>{activeRevision.status === 'DRAFT' ? <button type="button" onClick={() => { setImportCsvText(''); setImportError(''); setShowImportModal(true); }} disabled={measurements.length === 0} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-40"><Upload className="h-3.5 w-3.5" /> Import CSV</button> : null}</div>
-                </div>
-
-                {activeRevision.status === 'DRAFT' ? (
-                  <form onSubmit={addRow} className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <label className="text-[11px] font-medium text-slate-600">Display label<input name="displayLabel" required placeholder="S, M, EU 38…" className="mt-1 block w-44 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs" /></label>
-                    {guide.sizeSystemId ? <label className="text-[11px] font-medium text-slate-600">Canonical definition<select name="sizeDefinitionId" defaultValue="" className="mt-1 block w-56 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs"><option value="">Not mapped yet</option>{sizeDefinitions.map((definition) => <option key={definition.id} value={definition.id}>{definition.label} ({definition.code})</option>)}</select></label> : null}
-                    <button type="submit" disabled={busy} className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"><Plus className="h-3.5 w-3.5" /> Add row</button>
-                    {guide.sizeSystemId ? <span className="text-[11px] text-slate-500">System-bound guides must map every row before publishing.</span> : <span className="text-[11px] text-slate-500">This guide is unbound; rows cannot use canonical size definitions until a system is assigned.</span>}
-                  </form>
-                ) : null}
-
-                {measurements.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-6 text-center text-xs text-amber-800">No active measurements exist for this domain. <Link href="/sizing/measurements" className="font-semibold underline">Create measurements</Link> before completing the matrix.</div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
-                      <thead className="bg-slate-50 text-slate-700"><tr><th className="sticky left-0 z-10 min-w-48 border-r border-slate-200 bg-slate-50 px-3 py-3">Size row</th>{measurements.map((measurement) => <th key={measurement.id} className="whitespace-nowrap px-3 py-3"><div>{measurement.name}</div><div className="font-normal text-slate-400">{measurement.defaultUnit} · {measurement.code}</div></th>)}{activeRevision.status === 'DRAFT' ? <th className="px-3 py-3 text-right">Actions</th> : null}</tr></thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {sortedRows.length === 0 ? <tr><td colSpan={measurements.length + 2} className="p-8 text-center text-slate-400">No size rows yet.</td></tr> : sortedRows.map((row, rowIndex) => (
-                          <tr key={row.id} className="group hover:bg-slate-50/50">
-                            <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-3 py-3"><div className="flex items-center justify-between gap-2"><div><strong className="text-slate-900">{row.displayLabel}</strong><div className="mt-0.5 text-[10px] text-slate-400">{row.sizeDefinitionLabel ?? (row.sizeDefinitionId ? 'Mapped definition' : 'Unmapped')}</div></div>{activeRevision.status === 'DRAFT' ? <div className="flex items-center gap-0.5"><button type="button" disabled={rowIndex === 0 || busy} onClick={() => void moveRow(row.id, -1)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-20" title="Move up"><ArrowUp className="h-3 w-3" /></button><button type="button" disabled={rowIndex === sortedRows.length - 1 || busy} onClick={() => void moveRow(row.id, 1)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-20" title="Move down"><ArrowDown className="h-3 w-3" /></button></div> : null}</div></td>
-                            {measurements.map((measurement) => {
-                              const value = row.measurements.find((candidate) => candidate.measurementDefinitionId === measurement.id);
-                              return <td key={measurement.id} onClick={() => activeRevision.status === 'DRAFT' && openCellEditor(row, measurement)} className={`whitespace-nowrap px-3 py-3 ${activeRevision.status === 'DRAFT' ? 'cursor-pointer hover:bg-blue-50' : ''}`}>{value ? <span className="font-medium text-slate-800">{value.approximate ? '~' : ''}{value.exact ?? `${value.min}–${value.max}`} {value.unit}</span> : activeRevision.status === 'DRAFT' ? <span className="rounded border border-dashed border-slate-300 px-2 py-0.5 text-[11px] text-slate-400">+ Set</span> : <span className="text-slate-300">—</span>}</td>;
-                            })}
-                            {activeRevision.status === 'DRAFT' ? <td className="px-3 py-3 text-right"><div className="inline-flex gap-1"><button type="button" onClick={() => setEditingRow({ id: row.id, displayLabel: row.displayLabel, sizeDefinitionId: row.sizeDefinitionId ?? '' })} className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="Edit row"><Edit2 className="h-3.5 w-3.5" /></button><button type="button" onClick={() => void deleteRow(row)} className="rounded p-1.5 text-red-500 hover:bg-red-50" title="Delete row"><Trash2 className="h-3.5 w-3.5" /></button></div></td> : null}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-
-              <section className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 p-4"><h3 className="text-sm font-semibold text-slate-900">Linked products</h3><p className="mt-1 text-xs text-slate-500">Direct product-level guide assignments.</p><div className="mt-3 space-y-2">{guide.products.length === 0 ? <p className="text-xs text-slate-400">No products directly use this guide.</p> : guide.products.map((product) => <Link key={product.id} href={`/products/${product.id}`} className="block rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">{product.title}</Link>)}</div></div>
-                <div className="rounded-xl border border-slate-200 p-4"><h3 className="text-sm font-semibold text-slate-900">Category defaults</h3><p className="mt-1 text-xs text-slate-500">Categories that inherit this guide by default.</p><div className="mt-3 space-y-2">{guide.categories.length === 0 ? <p className="text-xs text-slate-400">No category defaults use this guide.</p> : guide.categories.map((category) => <div key={category.id} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">{category.name}</div>)}</div></div>
-              </section>
-            </div>
-          ) : <div className="flex h-64 items-center justify-center text-sm text-slate-400">Select a revision.</div>}
-        </main>
       </div>
 
-      {editingCell && activeRevision ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"><div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"><div className="flex items-start justify-between border-b border-slate-100 pb-3"><div><h3 className="text-sm font-semibold text-slate-900">{editingCell.measurementName}</h3><p className="text-xs text-slate-500">Size {editingCell.rowLabel} · revision v{activeRevision.version}</p></div><button type="button" onClick={() => setEditingCell(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button></div><form onSubmit={saveCell} className="mt-4 space-y-4 text-xs">{cellError ? <div className="rounded-md bg-red-50 p-2.5 text-red-700">{cellError}</div> : null}<label className="block font-semibold text-slate-700">Exact value<input value={editingCell.exact} onChange={(event) => setEditingCell((current) => current ? { ...current, exact: event.target.value } : null)} placeholder="40 or 40.5" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label><div className="flex items-center gap-2 text-[10px] uppercase text-slate-400"><span className="h-px flex-1 bg-slate-200" />or range<span className="h-px flex-1 bg-slate-200" /></div><div className="grid grid-cols-2 gap-2"><label className="font-semibold text-slate-700">Min<input value={editingCell.min} onChange={(event) => setEditingCell((current) => current ? { ...current, min: event.target.value } : null)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label><label className="font-semibold text-slate-700">Max<input value={editingCell.max} onChange={(event) => setEditingCell((current) => current ? { ...current, max: event.target.value } : null)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label></div><div className="grid grid-cols-2 gap-2"><label className="font-semibold text-slate-700">Unit<select value={editingCell.unit} onChange={(event) => setEditingCell((current) => current ? { ...current, unit: event.target.value as SizingMeasurementUnitDto } : null)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2"><option value="cm">cm</option><option value="inch">inch</option><option value="kg">kg</option></select></label><label className="flex items-end gap-2 pb-2 font-medium text-slate-700"><input type="checkbox" checked={editingCell.isApproximate} onChange={(event) => setEditingCell((current) => current ? { ...current, isApproximate: event.target.checked } : null)} /> Approximate</label></div><div className="flex items-center justify-between border-t border-slate-100 pt-3"><div>{editingCell.hasExistingValue ? <button type="button" disabled={cellSaving} onClick={() => void clearCell()} className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:underline"><Trash2 className="h-3 w-3" /> Clear value</button> : null}</div><div className="flex gap-2"><button type="button" onClick={() => setEditingCell(null)} className="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700">Cancel</button><button type="submit" disabled={cellSaving} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 font-semibold text-white disabled:opacity-40">{cellSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save</button></div></div></form></div></div> : null}
+      {feedback ? (
+        <div
+          role="status"
+          className={`flex items-center gap-2.5 rounded-lg border px-4 py-3 text-sm animate-in fade-in duration-150 ${
+            feedback.tone === 'success'
+              ? 'border-success/30 bg-success-subtle text-success'
+              : 'border-destructive/30 bg-destructive-subtle text-destructive'
+          }`}
+        >
+          <span>{feedback.message}</span>
+        </div>
+      ) : null}
 
-      {editingRow && activeRevision ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"><div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"><div className="flex items-center justify-between border-b border-slate-100 pb-3"><h3 className="text-sm font-semibold text-slate-900">Edit size row</h3><button type="button" onClick={() => setEditingRow(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button></div><form onSubmit={saveRowEdit} className="mt-4 space-y-4 text-xs"><label className="block font-semibold text-slate-700">Display label<input value={editingRow.displayLabel} onChange={(event) => setEditingRow({ ...editingRow, displayLabel: event.target.value })} required className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>{guide.sizeSystemId ? <label className="block font-semibold text-slate-700">Canonical definition<select value={editingRow.sizeDefinitionId} onChange={(event) => setEditingRow({ ...editingRow, sizeDefinitionId: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2"><option value="">Unmapped</option>{sizeDefinitions.map((definition) => <option key={definition.id} value={definition.id}>{definition.label} ({definition.code})</option>)}</select></label> : null}<div className="flex justify-end gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => setEditingRow(null)} className="rounded-md border border-slate-300 px-3 py-1.5">Cancel</button><button type="submit" disabled={rowSaving || !editingRow.displayLabel.trim()} className="rounded-md bg-slate-900 px-3 py-1.5 font-semibold text-white disabled:opacity-40">{rowSaving ? 'Saving…' : 'Save row'}</button></div></form></div></div> : null}
+      {/* Revision Segmented Bar (Replaces Nested Aside) */}
+      <PagePanel className="p-3 border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <History className="size-4 text-primary shrink-0" />
+          <span className="text-xs font-semibold text-foreground">Revisions:</span>
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {guide.revisions.map((rev) => {
+              const selected = activeRevision?.id === rev.id;
+              return (
+                <Button
+                  key={rev.id}
+                  variant={selected ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setActiveRevisionId(rev.id)}
+                  className={`h-8 text-xs font-mono touch-manipulation gap-1.5 ${
+                    selected ? 'shadow-xs font-semibold' : 'text-muted-foreground'
+                  }`}
+                >
+                  <span>Rev {rev.revisionNumber}</span>
+                  <StatusBadge status={rev.status} />
+                </Button>
+              );
+            })}
+          </div>
+        </div>
 
-      {editingGuide ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"><div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"><div className="flex items-center justify-between border-b border-slate-100 pb-3"><div><h3 className="text-sm font-semibold text-slate-900">Edit guide</h3><p className="text-xs text-slate-500">Guide metadata uses optimistic version {guide.version}.</p></div><button type="button" onClick={() => setEditingGuide(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button></div><form onSubmit={saveGuideMetadata} className="mt-4 space-y-4 text-xs"><label className="block font-semibold text-slate-700">Name<input value={editingGuide.name} onChange={(event) => setEditingGuide({ ...editingGuide, name: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" required /></label><label className="block font-semibold text-slate-700">Description<textarea rows={3} value={editingGuide.description} onChange={(event) => setEditingGuide({ ...editingGuide, description: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label><label className="block font-semibold text-slate-700">Canonical size system<select value={editingGuide.sizeSystemId} onChange={(event) => setEditingGuide({ ...editingGuide, sizeSystemId: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2"><option value="">No system binding</option>{systems.map((system) => <option key={system.id} value={system.id}>{system.name}{system.regionCode ? ` · ${system.regionCode}` : ''}</option>)}</select><span className="mt-1 block font-normal text-slate-500">Changing a system is rejected if existing row mappings are incompatible.</span></label><div className="flex justify-end gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => setEditingGuide(null)} className="rounded-md border border-slate-300 px-3 py-1.5">Cancel</button><button type="submit" disabled={guideSaving || !editingGuide.name.trim()} className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-3 py-1.5 font-semibold text-white disabled:opacity-40">{guideSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save guide</button></div></form></div></div> : null}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono tabular-nums">
+          <span>Version: {activeRevision?.version}</span>
+          <span>·</span>
+          <span>{sortedRows.length} size rows</span>
+        </div>
+      </PagePanel>
 
-      {showDuplicateModal ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"><div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"><div className="flex items-center justify-between border-b border-slate-100 pb-3"><h3 className="text-sm font-semibold text-slate-900">Duplicate size guide</h3><button type="button" onClick={() => setShowDuplicateModal(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button></div><form onSubmit={duplicateGuide} className="mt-4 space-y-4 text-xs"><label className="block font-semibold text-slate-700">New guide name<input value={duplicateName} onChange={(event) => setDuplicateName(event.target.value)} required className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label><p className="text-slate-500">The duplicate receives a fresh draft copied from the source guide’s current content.</p><div className="flex justify-end gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => setShowDuplicateModal(false)} className="rounded-md border border-slate-300 px-3 py-1.5">Cancel</button><button type="submit" disabled={duplicateBusy || !duplicateName.trim()} className="rounded-md bg-slate-900 px-3 py-1.5 font-semibold text-white disabled:opacity-40">{duplicateBusy ? 'Duplicating…' : 'Duplicate'}</button></div></form></div></div> : null}
+      {activeRevision ? (
+        <div className="space-y-6">
+          {/* Fit Notes & Customer Guidance Panel */}
+          <PagePanel className="p-4 sm:p-5 border-border space-y-3">
+            <div className="flex items-center justify-between border-b border-border/40 pb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Customer Fit Notes & Measuring Tips</h3>
+                <p className="text-xs text-muted-foreground">
+                  Instructions displayed in the storefront size guide drawer when customers inspect this chart.
+                </p>
+              </div>
+              {activeRevision.status === 'DRAFT' && metaDirty ? (
+                <Button
+                  size="sm"
+                  disabled={metaSaving}
+                  onClick={() => void saveRevisionMeta()}
+                  className="h-8 text-xs gap-1"
+                >
+                  {metaSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+                  <span>Save Guidance</span>
+                </Button>
+              ) : null}
+            </div>
 
-      {showImportModal && activeRevision ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"><div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl"><div className="flex items-start justify-between border-b border-slate-100 pb-3"><div><h3 className="text-sm font-semibold text-slate-900">Import measurement matrix</h3><p className="text-xs text-slate-500">First column is Size. Remaining headers should use measurement codes: {measurements.map((measurement) => measurement.code).join(', ')}.</p></div><button type="button" onClick={() => setShowImportModal(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button></div><form onSubmit={importCsv} className="mt-4 space-y-3 text-xs">{importError ? <div className="rounded-md bg-red-50 p-2.5 text-red-700">{importError}</div> : null}<textarea rows={12} value={importCsvText} onChange={(event) => setImportCsvText(event.target.value)} required placeholder={`Size,${measurements.map((measurement) => measurement.code).join(',')}\nS,84-88,66-70\nM,88-92,70-74`} className="w-full rounded-md border border-slate-300 p-3 font-mono text-xs" /><div className="rounded-md bg-blue-50 p-3 text-[11px] leading-relaxed text-blue-800">Missing size rows are created automatically. For system-bound guides, the importer automatically links rows when the CSV Size matches a canonical definition label or code. Matrix values are committed in one bulk transaction after row creation.</div><div className="flex justify-between border-t border-slate-100 pt-3"><button type="button" onClick={exportCsv} className="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline"><Download className="h-3 w-3" /> Export current template</button><div className="flex gap-2"><button type="button" onClick={() => setShowImportModal(false)} className="rounded-md border border-slate-300 px-3 py-1.5">Cancel</button><button type="submit" disabled={importBusy || !importCsvText.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 font-semibold text-white disabled:opacity-40">{importBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} Import</button></div></div></form></div></div> : null}
-    </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-xs font-medium text-foreground">
+                Fit Notes (e.g. Relaxed Fit, Regular Fit, Slim Fit)
+                {activeRevision.status === 'DRAFT' ? (
+                  <textarea
+                    rows={2}
+                    value={metaFitNotes}
+                    onChange={(e) => {
+                      setMetaFitNotes(e.target.value);
+                      setMetaDirty(true);
+                    }}
+                    placeholder="e.g. True to size. If between sizes, recommend sizing up."
+                    className="mt-1 w-full rounded-md border border-input bg-card p-2 text-xs outline-none focus:border-ring"
+                  />
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground italic bg-muted/20 p-2.5 rounded-md">
+                    {activeRevision.fitNotes || 'No fit notes specified.'}
+                  </p>
+                )}
+              </label>
+
+              <label className="block text-xs font-medium text-foreground">
+                Measuring Instructions
+                {activeRevision.status === 'DRAFT' ? (
+                  <textarea
+                    rows={2}
+                    value={metaInstructions}
+                    onChange={(e) => {
+                      setMetaInstructions(e.target.value);
+                      setMetaDirty(true);
+                    }}
+                    placeholder="e.g. Measure around the fullest part of your chest, keeping tape horizontal."
+                    className="mt-1 w-full rounded-md border border-input bg-card p-2 text-xs outline-none focus:border-ring"
+                  />
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground italic bg-muted/20 p-2.5 rounded-md">
+                    {activeRevision.instructions || 'No measuring instructions specified.'}
+                  </p>
+                )}
+              </label>
+            </div>
+          </PagePanel>
+
+          {/* The Measurement Matrix Section */}
+          <PageSection
+            title="Measurement Matrix"
+            description={`Rows define garment sizes; columns represent reusable measurement dimensions (${measurements.map((m) => m.name).join(', ')}).`}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportCsv}
+                  disabled={measurements.length === 0 || sortedRows.length === 0}
+                  className="h-8 text-xs gap-1"
+                >
+                  <Download className="size-3.5" />
+                  <span>Export CSV</span>
+                </Button>
+                {activeRevision.status === 'DRAFT' ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setImportCsvText('');
+                      setImportError('');
+                      setShowImportModal(true);
+                    }}
+                    disabled={measurements.length === 0}
+                    className="h-8 text-xs gap-1"
+                  >
+                    <Upload className="size-3.5" />
+                    <span>Import CSV</span>
+                  </Button>
+                ) : null}
+              </div>
+            }
+          >
+            {activeRevision.status === 'DRAFT' ? (
+              <form
+                onSubmit={addRow}
+                className="flex flex-col sm:flex-row sm:items-end gap-2.5 rounded-xl border border-border bg-card p-4 shadow-2xs"
+              >
+                <label className="block text-xs font-medium text-foreground flex-1">
+                  Size Display Label
+                  <Input
+                    name="displayLabel"
+                    required
+                    placeholder="e.g. S, M, L, XL, 38, 40, Free Size"
+                    className="mt-1 h-9 text-xs"
+                  />
+                </label>
+
+                {guide.sizeSystemId ? (
+                  <label className="block text-xs font-medium text-foreground flex-1">
+                    Canonical Size Definition
+                    <NativeSelect name="sizeDefinitionId" defaultValue="" className="mt-1 h-9 text-xs bg-card">
+                      <option value="">Unmapped (Custom Label)</option>
+                      {sizeDefinitions.map((def) => (
+                        <option key={def.id} value={def.id}>
+                          {def.label} ({def.code})
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </label>
+                ) : null}
+
+                <Button
+                  type="submit"
+                  disabled={busy}
+                  className="min-h-10 sm:min-h-9 touch-manipulation text-xs gap-1.5 shrink-0"
+                >
+                  <Plus className="size-4" />
+                  <span>Add Size Row</span>
+                </Button>
+              </form>
+            ) : null}
+
+            {measurements.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-warning/40 bg-warning/5 p-6 text-center text-xs text-warning">
+                No active measurement dimensions exist for this domain. Visit{' '}
+                <Link href="/sizing/standards?tab=measurements" className="font-semibold underline">
+                  Standards & Systems
+                </Link>{' '}
+                to create columns like Chest, Waist, or Length.
+              </div>
+            ) : (
+              <>
+                {/* Desktop High-Density Table (sm and up) */}
+                <div className="hidden sm:block">
+                  <PagePanel className="p-0 border-border overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-muted/40 font-semibold text-muted-foreground border-b border-border">
+                          <tr>
+                            <th className="sticky left-0 z-10 bg-muted/90 backdrop-blur-xs px-4 py-3 min-w-44 border-r border-border">
+                              Size Row
+                            </th>
+                            {measurements.map((m) => (
+                              <th key={m.id} className="px-4 py-3 whitespace-nowrap">
+                                <div>{m.name}</div>
+                                <span className="font-normal font-mono text-[10px] text-muted-foreground">
+                                  {m.defaultUnit} · {m.code}
+                                </span>
+                              </th>
+                            ))}
+                            {activeRevision.status === 'DRAFT' ? (
+                              <th className="px-4 py-3 text-right">Row Actions</th>
+                            ) : null}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {sortedRows.length === 0 ? (
+                            <tr>
+                              <td colSpan={measurements.length + 2} className="p-8 text-center text-muted-foreground">
+                                No size rows created yet. Use the form above to add sizes.
+                              </td>
+                            </tr>
+                          ) : (
+                            sortedRows.map((row, rowIdx) => (
+                              <tr key={row.id} className="hover:bg-muted/30 transition-colors">
+                                <td className="sticky left-0 z-10 bg-card border-r border-border px-4 py-3">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div>
+                                      <strong className="font-mono text-sm font-semibold text-foreground">
+                                        {row.displayLabel}
+                                      </strong>
+                                      <div className="text-[10px] text-muted-foreground">
+                                        {row.sizeDefinitionLabel ?? (row.sizeDefinitionId ? 'Mapped' : 'Unmapped')}
+                                      </div>
+                                    </div>
+                                    {activeRevision.status === 'DRAFT' ? (
+                                      <div className="flex items-center gap-0.5">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          disabled={rowIdx === 0 || busy}
+                                          onClick={() => void moveRow(row.id, -1)}
+                                          className="size-6 p-0 text-muted-foreground"
+                                          title="Move up"
+                                        >
+                                          <ArrowUp className="size-3" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          disabled={rowIdx === sortedRows.length - 1 || busy}
+                                          onClick={() => void moveRow(row.id, 1)}
+                                          className="size-6 p-0 text-muted-foreground"
+                                          title="Move down"
+                                        >
+                                          <ArrowDown className="size-3" />
+                                        </Button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </td>
+
+                                {measurements.map((m) => {
+                                  const cell = row.measurements.find((v) => v.measurementDefinitionId === m.id);
+                                  return (
+                                    <td
+                                      key={m.id}
+                                      onClick={() => activeRevision.status === 'DRAFT' && openCellEditor(row, m)}
+                                      className={`px-4 py-3 whitespace-nowrap font-mono tabular-nums ${
+                                        activeRevision.status === 'DRAFT'
+                                          ? 'cursor-pointer hover:bg-primary/5 transition-colors'
+                                          : ''
+                                      }`}
+                                    >
+                                      {cell ? (
+                                        <span className="font-medium text-foreground">
+                                          {cell.approximate ? '~' : ''}
+                                          {cell.exact ?? `${cell.min}–${cell.max}`} {cell.unit}
+                                        </span>
+                                      ) : activeRevision.status === 'DRAFT' ? (
+                                        <span className="rounded border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:border-primary">
+                                          + Set
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground/40">—</span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+
+                                {activeRevision.status === 'DRAFT' ? (
+                                  <td className="px-4 py-3 text-right">
+                                    <div className="inline-flex items-center gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() =>
+                                          setEditingRow({
+                                            id: row.id,
+                                            displayLabel: row.displayLabel,
+                                            sizeDefinitionId: row.sizeDefinitionId ?? '',
+                                          })
+                                        }
+                                        className="size-7 p-0 text-muted-foreground"
+                                        title="Edit label"
+                                      >
+                                        <Edit2 className="size-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => void deleteRow(row)}
+                                        className="size-7 p-0 text-muted-foreground hover:text-destructive"
+                                        title="Delete row"
+                                      >
+                                        <Trash2 className="size-3.5" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                ) : null}
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </PagePanel>
+                </div>
+
+                {/* Mobile Expandable Size Card Stack (< sm) */}
+                <div className="space-y-3 sm:hidden">
+                  {sortedRows.length === 0 ? (
+                    <p className="text-center text-xs text-muted-foreground p-6">No size rows created yet.</p>
+                  ) : (
+                    sortedRows.map((row, rowIdx) => (
+                      <PagePanel key={row.id} className="p-4 border-border flex flex-col gap-3">
+                        <div className="flex items-center justify-between border-b border-border/40 pb-2.5">
+                          <div>
+                            <strong className="font-mono text-base font-bold text-foreground">
+                              {row.displayLabel}
+                            </strong>
+                            <p className="text-[11px] text-muted-foreground">
+                              {row.sizeDefinitionLabel ?? (row.sizeDefinitionId ? 'Mapped Canonical Size' : 'Unmapped')}
+                            </p>
+                          </div>
+
+                          {activeRevision.status === 'DRAFT' ? (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={rowIdx === 0 || busy}
+                                onClick={() => void moveRow(row.id, -1)}
+                                className="size-9 p-0"
+                              >
+                                <ArrowUp className="size-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={rowIdx === sortedRows.length - 1 || busy}
+                                onClick={() => void moveRow(row.id, 1)}
+                                className="size-9 p-0"
+                              >
+                                <ArrowDown className="size-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void deleteRow(row)}
+                                className="size-9 p-0 text-destructive"
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {/* Measurement Grid on Mobile */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {measurements.map((m) => {
+                            const cell = row.measurements.find((v) => v.measurementDefinitionId === m.id);
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                disabled={activeRevision.status !== 'DRAFT'}
+                                onClick={() => openCellEditor(row, m)}
+                                className="flex flex-col items-start p-2.5 rounded-lg border border-border bg-muted/20 text-left hover:border-primary/50 transition-colors"
+                              >
+                                <span className="text-[10px] text-muted-foreground truncate w-full">{m.name}</span>
+                                <span className="mt-0.5 font-mono text-xs font-semibold text-foreground tabular-nums">
+                                  {cell ? (
+                                    `${cell.approximate ? '~' : ''}${cell.exact ?? `${cell.min}–${cell.max}`} ${cell.unit}`
+                                  ) : (
+                                    <span className="text-primary font-normal">+ Set</span>
+                                  )}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </PagePanel>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </PageSection>
+        </div>
+      ) : null}
+
+      {/* MODAL / DRAWER: CELL MEASUREMENT EDITOR */}
+      <Dialog open={Boolean(editingCell)} onOpenChange={(open) => !open && setEditingCell(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{editingCell?.measurementName}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Size &quot;{editingCell?.rowLabel}&quot; · Revision {activeRevision?.revisionNumber}
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingCell ? (
+            <form onSubmit={saveCell} className="space-y-4 pt-2">
+              {cellError ? (
+                <div className="rounded-md bg-destructive/10 p-2.5 text-xs text-destructive">
+                  {cellError}
+                </div>
+              ) : null}
+
+              <label className="block text-xs font-medium text-foreground">
+                Exact Numeric Value
+                <Input
+                  value={editingCell.exact}
+                  onChange={(e) => setEditingCell((cur) => (cur ? { ...cur, exact: e.target.value } : null))}
+                  placeholder="e.g. 40 or 40.5"
+                  className="mt-1 h-9 font-mono text-xs tabular-nums"
+                />
+              </label>
+
+              <div className="flex items-center gap-2 text-[10px] uppercase font-mono text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                <span>or Range (Min–Max)</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block text-xs font-medium text-foreground">
+                  Min Value
+                  <Input
+                    value={editingCell.min}
+                    onChange={(e) => setEditingCell((cur) => (cur ? { ...cur, min: e.target.value } : null))}
+                    placeholder="e.g. 38"
+                    className="mt-1 h-9 font-mono text-xs tabular-nums"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-foreground">
+                  Max Value
+                  <Input
+                    value={editingCell.max}
+                    onChange={(e) => setEditingCell((cur) => (cur ? { ...cur, max: e.target.value } : null))}
+                    placeholder="e.g. 40"
+                    className="mt-1 h-9 font-mono text-xs tabular-nums"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <label className="block text-xs font-medium text-foreground">
+                  Unit
+                  <NativeSelect
+                    value={editingCell.unit}
+                    onChange={(e) =>
+                      setEditingCell((cur) =>
+                        cur ? { ...cur, unit: e.target.value as SizingMeasurementUnitDto } : null,
+                      )
+                    }
+                    className="mt-1 h-9 text-xs bg-card"
+                  >
+                    <option value="inch">inch</option>
+                    <option value="cm">cm</option>
+                    <option value="kg">kg</option>
+                  </NativeSelect>
+                </label>
+
+                <label className="flex items-center gap-2 pt-5 text-xs text-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={editingCell.isApproximate}
+                    onChange={(e) =>
+                      setEditingCell((cur) => (cur ? { ...cur, isApproximate: e.target.checked } : null))
+                    }
+                    className="rounded border-border text-primary focus:ring-primary size-4"
+                  />
+                  <span>Approximate (~)</span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-border pt-3">
+                {editingCell.hasExistingValue ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={cellSaving}
+                    onClick={() => void clearCell()}
+                    className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1 px-2"
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span>Clear</span>
+                  </Button>
+                ) : (
+                  <span />
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setEditingCell(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="sm" disabled={cellSaving}>
+                    {cellSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                    <span>Save Cell</span>
+                  </Button>
+                </div>
+              </div>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: EDIT ROW DISPLAY LABEL & DEFINITION */}
+      <Dialog open={Boolean(editingRow)} onOpenChange={(open) => !open && setEditingRow(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Size Row</DialogTitle>
+          </DialogHeader>
+          {editingRow ? (
+            <form onSubmit={saveRowEdit} className="space-y-4 pt-2">
+              <label className="block text-xs font-medium text-foreground">
+                Display Label
+                <Input
+                  value={editingRow.displayLabel}
+                  onChange={(e) => setEditingRow({ ...editingRow, displayLabel: e.target.value })}
+                  required
+                  className="mt-1 h-9 text-xs"
+                />
+              </label>
+
+              {guide.sizeSystemId ? (
+                <label className="block text-xs font-medium text-foreground">
+                  Canonical Definition Link
+                  <NativeSelect
+                    value={editingRow.sizeDefinitionId}
+                    onChange={(e) => setEditingRow({ ...editingRow, sizeDefinitionId: e.target.value })}
+                    className="mt-1 h-9 text-xs bg-card"
+                  >
+                    <option value="">Unmapped (Custom)</option>
+                    {sizeDefinitions.map((def) => (
+                      <option key={def.id} value={def.id}>
+                        {def.label} ({def.code})
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </label>
+              ) : null}
+
+              <div className="flex justify-end gap-2 border-t border-border pt-3">
+                <Button type="button" variant="outline" size="sm" onClick={() => setEditingRow(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={rowSaving || !editingRow.displayLabel.trim()}>
+                  {rowSaving ? <Loader2 className="size-3.5 animate-spin" /> : <span>Update Row</span>}
+                </Button>
+              </div>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: EDIT GUIDE INFO */}
+      <Dialog open={Boolean(editingGuide)} onOpenChange={(open) => !open && setEditingGuide(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Size Guide</DialogTitle>
+            <DialogDescription className="text-xs">
+              Update metadata and canonical size system binding for this chart.
+            </DialogDescription>
+          </DialogHeader>
+          {editingGuide ? (
+            <form onSubmit={saveGuideMetadata} className="space-y-4 pt-2">
+              <label className="block text-xs font-medium text-foreground">
+                Guide Title
+                <Input
+                  value={editingGuide.name}
+                  onChange={(e) => setEditingGuide({ ...editingGuide, name: e.target.value })}
+                  required
+                  className="mt-1 h-9 text-xs"
+                />
+              </label>
+
+              <label className="block text-xs font-medium text-foreground">
+                Description
+                <textarea
+                  rows={2}
+                  value={editingGuide.description}
+                  onChange={(e) => setEditingGuide({ ...editingGuide, description: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-input bg-card p-2 text-xs outline-none focus:border-ring"
+                />
+              </label>
+
+              <label className="block text-xs font-medium text-foreground">
+                Canonical Size System
+                <NativeSelect
+                  value={editingGuide.sizeSystemId}
+                  onChange={(e) => setEditingGuide({ ...editingGuide, sizeSystemId: e.target.value })}
+                  className="mt-1 h-9 text-xs bg-card"
+                >
+                  <option value="">No system binding (Unbound chart)</option>
+                  {systems.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.regionCode ? `· ${s.regionCode}` : ''}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </label>
+
+              <div className="flex justify-end gap-2 border-t border-border pt-3">
+                <Button type="button" variant="outline" size="sm" onClick={() => setEditingGuide(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={guideSaving || !editingGuide.name.trim()}>
+                  {guideSaving ? <Loader2 className="size-3.5 animate-spin" /> : <span>Save Guide</span>}
+                </Button>
+              </div>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: DUPLICATE GUIDE */}
+      <Dialog open={showDuplicateModal} onOpenChange={setShowDuplicateModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Duplicate Size Guide</DialogTitle>
+            <DialogDescription className="text-xs">
+              Creates a copy with a fresh editable draft revision.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={duplicateGuide} className="space-y-4 pt-2">
+            <label className="block text-xs font-medium text-foreground">
+              New Guide Name
+              <Input
+                value={duplicateName}
+                onChange={(e) => setDuplicateName(e.target.value)}
+                required
+                className="mt-1 h-9 text-xs"
+              />
+            </label>
+            <div className="flex justify-end gap-2 border-t border-border pt-3">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowDuplicateModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={duplicateBusy || !duplicateName.trim()}>
+                {duplicateBusy ? <Loader2 className="size-3.5 animate-spin" /> : <span>Duplicate</span>}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: CSV IMPORT */}
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import Measurement Matrix from CSV</DialogTitle>
+            <DialogDescription className="text-xs">
+              First column must be Size. Remaining column headers must match measurement codes:{' '}
+              <span className="font-mono">{measurements.map((m) => m.code).join(', ')}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={importCsv} className="space-y-4 pt-2">
+            {importError ? (
+              <div className="rounded-md bg-destructive/10 p-2.5 text-xs text-destructive">
+                {importError}
+              </div>
+            ) : null}
+            <textarea
+              rows={10}
+              value={importCsvText}
+              onChange={(e) => setImportCsvText(e.target.value)}
+              required
+              placeholder={`Size,${measurements.map((m) => m.code).join(',')}\nS,38,27\nM,40,28\nL,42,29`}
+              className="w-full rounded-md border border-input bg-card p-3 font-mono text-xs outline-none focus:border-ring"
+            />
+            <div className="flex items-center justify-between border-t border-border pt-3">
+              <Button type="button" variant="ghost" size="sm" onClick={exportCsv} className="text-xs text-primary">
+                <Download className="size-3.5 mr-1" />
+                <span>Export Template</span>
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowImportModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={importBusy || !importCsvText.trim()}>
+                  {importBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+                  <span>Import Data</span>
+                </Button>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* DRAWER: LINKED PRODUCTS & CATEGORIES */}
+      <Drawer open={showLinkedDrawer} onOpenChange={setShowLinkedDrawer}>
+        <DrawerContent className="max-h-[80vh] p-4 sm:p-6">
+          <DrawerHeader className="px-0 pb-3">
+            <DrawerTitle>Catalog Association</DrawerTitle>
+            <DrawerDescription className="text-xs">
+              Products and categories currently utilizing &quot;{guide.name}&quot;.
+            </DrawerDescription>
+          </DrawerHeader>
+
+          <div className="grid sm:grid-cols-2 gap-4 py-3 overflow-y-auto">
+            <div>
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                Direct Products ({guide.products.length})
+              </span>
+              <div className="mt-2 space-y-1.5 max-h-60 overflow-y-auto">
+                {guide.products.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No products directly use this chart.</p>
+                ) : (
+                  guide.products.map((p) => (
+                    <Link
+                      key={p.id}
+                      href={`/products/${p.id}`}
+                      className="block p-2 rounded-md border border-border bg-card text-xs text-foreground hover:text-primary hover:border-primary/50 transition-colors"
+                    >
+                      {p.title}
+                    </Link>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div>
+              <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                Category Defaults ({guide.categories.length})
+              </span>
+              <div className="mt-2 space-y-1.5 max-h-60 overflow-y-auto">
+                {guide.categories.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No categories have this as default.</p>
+                ) : (
+                  guide.categories.map((c) => (
+                    <div
+                      key={c.id}
+                      className="p-2 rounded-md border border-border bg-card text-xs text-foreground"
+                    >
+                      {c.name}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </AdminPage>
   );
 }

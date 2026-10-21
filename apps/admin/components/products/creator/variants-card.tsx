@@ -328,6 +328,18 @@ export function VariantsCard({
                 <Layers className="size-3 text-primary" />
                 <span>Size Only (Shared Photos)</span>
               </Button>
+              {sizeSystemId && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-xs gap-1 border border-primary/20 text-primary hover:bg-primary/10"
+                  onClick={() => onImportSizesFromSystem(sizeSystemId)}
+                >
+                  <Sparkles className="size-3" />
+                  <span>Import System Sizes</span>
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"

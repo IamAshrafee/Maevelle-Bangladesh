@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Wrench, CheckCircle, Loader2, AlertCircle, UploadCloud, X, FileImage } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Wrench, CheckCircle, Loader2, UploadCloud, X, FileImage } from 'lucide-react';
 import type { InventoryUnitDto, UnitRepairDto } from '@maevelle/contracts';
 import {
   Dialog,
@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { requestUnitRepair, completeUnitRepair } from '@/lib/inventory/units';
 import { uploadMediaFile } from '@/lib/media/api';
+import { UnitCommandError } from './unit-command-error';
 
 export interface UnitRepairDialogProps {
   readonly open: boolean;
@@ -52,7 +53,21 @@ export function UnitRepairDialog({
   const [photoPreviews, setPhotoPreviews] = useState<{ id: string; name: string }[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setDefectDescription(unit.latestInspection?.defectDescription || '');
+    setActionRequired('');
+    setRequestNotes('');
+    setActionPerformed('');
+    setTechnicianName(existingRepair?.technicianName || unit.activeRepair?.technicianName || '');
+    setCostAmount('');
+    setCompleteNotes('');
+    setPhotoAssetIds([]);
+    setPhotoPreviews([]);
+    setError(null);
+  }, [existingRepair, mode, open, unit]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -70,7 +85,7 @@ export function UnitRepairDialog({
         setPhotoPreviews((prev) => [...prev, { id: uploaded.assetId, name: file.name }]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Photo upload failed.');
+      setError(err instanceof Error ? err : new Error('Photo upload failed.'));
     } finally {
       setUploadingPhoto(false);
       e.target.value = '';
@@ -117,18 +132,18 @@ export function UnitRepairDialog({
         onSuccess();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Repair operation failed.');
+      setError(err instanceof Error ? err : new Error('Repair operation failed.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
+      <DialogContent className="max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-h-[90vh] sm:max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-            <Wrench className="size-4 text-amber-500" />
+            <Wrench className="size-4 text-warning" />
             <span>
               {mode === 'request'
                 ? `Route Unit ${unit.unitCode} for Repair`
@@ -142,10 +157,13 @@ export function UnitRepairDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {error ? (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive flex items-center gap-2">
-              <AlertCircle className="size-4 shrink-0" />
-              <span>{error}</span>
-            </div>
+            <UnitCommandError
+              error={error}
+              onReload={() => {
+                onOpenChange(false);
+                onSuccess?.();
+              }}
+            />
           ) : null}
 
           {mode === 'request' ? (
@@ -224,7 +242,7 @@ export function UnitRepairDialog({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <label htmlFor="technician-name" className="text-xs font-medium text-foreground">
                     Technician / Tailor
@@ -242,7 +260,7 @@ export function UnitRepairDialog({
 
                 <div className="space-y-1.5">
                   <label htmlFor="repair-cost" className="text-xs font-medium text-foreground">
-                    Repair Cost (BDT)
+                    Operational Cost Evidence (BDT)
                   </label>
                   <Input
                     id="repair-cost"
@@ -312,6 +330,7 @@ export function UnitRepairDialog({
                           type="button"
                           onClick={() => removePhoto(p.id)}
                           className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove ${p.name}`}
                         >
                           <X className="size-3" />
                         </button>
@@ -321,8 +340,11 @@ export function UnitRepairDialog({
                 ) : null}
               </div>
 
-              <p className="text-[11px] text-muted-foreground bg-amber-500/10 border border-amber-500/20 p-2 rounded text-amber-900 dark:text-amber-200">
-                Completing a repair routes the item to <strong>AWAITING_QC</strong> for formal reinspection before it can be released for sale.
+              <p className="rounded border border-warning/20 bg-warning/10 p-2 text-[11px] text-foreground">
+                Completing a repair routes the item to <strong>AWAITING_QC</strong> for formal
+                reinspection before it can be released for sale. Any amount recorded here is
+                operational evidence only; it does not post a Finance expense or change inventory
+                acquisition cost.
               </p>
             </>
           )}

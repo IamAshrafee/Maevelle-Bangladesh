@@ -439,7 +439,8 @@ export function ProductList() {
         className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
         aria-busy={state === 'loading'}
       >
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead className="border-b bg-muted/55 text-xs text-muted-foreground">
               <tr>
@@ -551,6 +552,102 @@ export function ProductList() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card Stack View */}
+        <div className="divide-y divide-border/60 md:hidden">
+          {worklist?.items.map((product) => {
+            const isChecked = selected.has(product.id);
+            return (
+              <div
+                key={product.id}
+                className={cn(
+                  'flex items-start gap-3 p-4 transition-colors',
+                  isChecked && 'bg-primary/5',
+                )}
+              >
+                <div className="pt-1">
+                  <input
+                    aria-label={`Select ${product.title}`}
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggleProduct(product.id)}
+                    className="size-4.5 rounded border-border"
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-start gap-3">
+                    <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted ring-1 ring-foreground/10">
+                      {product.primaryMediaId ? (
+                        <img
+                          alt=""
+                          className="size-full object-cover"
+                          height={48}
+                          loading="lazy"
+                          src={getAdminMediaUrl(product.primaryMediaId, { rendition: 'thumbnail' })}
+                          width={48}
+                        />
+                      ) : (
+                        <ImageIcon className="size-5 text-muted-foreground" aria-hidden="true" />
+                      )}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/products/${product.id}`}
+                        className="block truncate font-semibold text-sm text-foreground hover:text-primary hover:underline"
+                      >
+                        {product.title}
+                      </Link>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {product.productTypeName ?? 'No Product Type'} · /{product.handle}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <StatusBadge status={product.readinessState} />
+                    <StatusBadge status={product.status} />
+                    <StatusBadge status={product.publicationStatus} />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+                    <span className="font-semibold text-foreground tabular-nums">
+                      {productPrice(product)}
+                    </span>
+                    <span className="font-mono tabular-nums text-muted-foreground">
+                      <span className="text-foreground font-medium">
+                        {formatQuantity(product.availableQuantity)}
+                      </span>{' '}
+                      available · {product.variantCount ?? 0} {product.variantCount === 1 ? 'variant' : 'variants'}
+                    </span>
+                  </div>
+
+                  {product.attention ? (
+                    <Link
+                      className="block rounded-md bg-warning/10 p-2 text-xs text-warning hover:underline"
+                      href={productReadinessResolutionHref(product.id, product.attention.code)}
+                    >
+                      <span className="font-semibold">Action needed: </span>
+                      {product.attention.label} — {product.attention.message}
+                    </Link>
+                  ) : null}
+                </div>
+
+                <div className="pt-1">
+                  <Button
+                    aria-label={`Open ${product.title}`}
+                    size="icon-sm"
+                    variant="ghost"
+                    render={<Link href={`/products/${product.id}`} />}
+                  >
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
         </div>
         {state === 'loading' ? (
           <div className="px-4 py-14 text-center text-sm text-muted-foreground" role="status">

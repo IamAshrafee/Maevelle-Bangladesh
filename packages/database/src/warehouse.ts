@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
+
 import { sql, type Kysely } from 'kysely';
 
-import { appendAuditEvent } from './platform.js';
+import { appendAuditEvent, claimIdempotencyRecord, IdempotencyKeyReuseError } from './platform.js';
 import type { DatabaseSchema } from './index.js';
 import { resolveInventorySettings } from './settings.js';
 
@@ -16,12 +18,16 @@ export type LocationCapability =
 
 export class WarehouseDomainError extends Error {
   public constructor(
-    public readonly code: 'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED' | 'STALE_VERSION',
+    public readonly code: 'NOT_FOUND' | 'CONFLICT' | 'VALIDATION_FAILED' | 'STALE_VERSION' | 'IDEMPOTENCY_KEY_REUSED',
     message: string,
   ) {
     super(message);
     this.name = 'WarehouseDomainError';
   }
+}
+
+function fingerprint(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 export interface LocationSummary {
@@ -32,6 +38,91 @@ export interface LocationSummary {
   readonly status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   readonly capabilities: readonly LocationCapability[];
   readonly version: number;
+}
+
+export interface LocationListItem extends LocationSummary {
+  readonly stockOnHand: string;
+  readonly activeWorkCount: number;
+}
+
+export interface LocationOperationalCommitment {
+  readonly code:
+    | 'STOCK_ON_HAND'
+    | 'ACTIVE_RESERVATIONS'
+    | 'OUTGOING_TRANSFERS'
+    | 'INCOMING_TRANSFERS'
+    | 'OPEN_STOCKTAKES'
+    | 'INBOUND_SHIPMENTS'
+    | 'OPEN_FULFILLMENTS'
+    | 'REPLENISHMENT_DESTINATION_POLICIES'
+    | 'REPLENISHMENT_SOURCE_POLICIES';
+  readonly label: string;
+  readonly count: number;
+  readonly blocksStatusChange: boolean;
+  readonly requiredCapability?: LocationCapability;
+}
+
+type LocationCommitmentCounts = {
+  stock_on_hand: string;
+  active_reservations: string;
+  outgoing_transfers: string;
+  incoming_transfers: string;
+  open_stocktakes: string;
+  inbound_shipments: string;
+  open_fulfillments: string;
+  replenishment_destination_policies: string;
+  replenishment_source_policies: string;
+};
+
+async function getLocationOperationalCommitments(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  locationId: string,
+): Promise<readonly LocationOperationalCommitment[]> {
+  const result = await sql<LocationCommitmentCounts>`
+    select
+      (select count(*) from inventory.inventory_levels
+        where organization_id=${organizationId} and location_id=${locationId}
+          and sellable_quantity + unavailable_quantity > 0)::text as stock_on_hand,
+      (select count(*) from inventory.inventory_reservations
+        where organization_id=${organizationId} and location_id=${locationId} and status='ACTIVE')::text as active_reservations,
+      (select count(*) from warehouse.transfers
+        where organization_id=${organizationId} and source_location_id=${locationId}
+          and status in ('DRAFT','READY','IN_TRANSIT','PARTIALLY_RECEIVED'))::text as outgoing_transfers,
+      (select count(*) from warehouse.transfers
+        where organization_id=${organizationId} and destination_location_id=${locationId}
+          and status in ('DRAFT','READY','IN_TRANSIT','PARTIALLY_RECEIVED'))::text as incoming_transfers,
+      (select count(*) from inventory.stocktake_sessions
+        where organization_id=${organizationId} and location_id=${locationId}
+          and status in ('DRAFT','COUNTING','REVIEW'))::text as open_stocktakes,
+      (select count(*) from inbound_shipment.shipments
+        where organization_id=${organizationId} and receiving_location_id=${locationId}
+          and status <> 'CANCELLED' and receiving_status <> 'RECEIVED')::text as inbound_shipments,
+      (select count(*) from fulfillment.fulfillments
+        where organization_id=${organizationId} and location_id=${locationId}
+          and status in ('DRAFT','READY','PICKING','PACKED'))::text as open_fulfillments,
+      (select count(*) from inventory.replenishment_policies
+        where organization_id=${organizationId} and location_id=${locationId})::text as replenishment_destination_policies,
+      (select count(*) from inventory.replenishment_policies
+        where organization_id=${organizationId} and preferred_source_location_id=${locationId})::text as replenishment_source_policies
+  `.execute(db);
+  const row = result.rows[0];
+  if (!row) return [];
+  const definitions: readonly Omit<LocationOperationalCommitment, 'count'>[] = [
+    { code: 'STOCK_ON_HAND', label: 'stocked SKUs', blocksStatusChange: true, requiredCapability: 'STOCK_HOLDING' },
+    { code: 'ACTIVE_RESERVATIONS', label: 'active reservations', blocksStatusChange: true, requiredCapability: 'STOCK_HOLDING' },
+    { code: 'OUTGOING_TRANSFERS', label: 'active outgoing transfers', blocksStatusChange: true, requiredCapability: 'TRANSFER_SEND' },
+    { code: 'INCOMING_TRANSFERS', label: 'active incoming transfers', blocksStatusChange: true, requiredCapability: 'TRANSFER_RECEIVE' },
+    { code: 'OPEN_STOCKTAKES', label: 'open stock counts', blocksStatusChange: true, requiredCapability: 'STOCK_HOLDING' },
+    { code: 'INBOUND_SHIPMENTS', label: 'open inbound shipments', blocksStatusChange: true, requiredCapability: 'PURCHASE_RECEIVING' },
+    { code: 'OPEN_FULFILLMENTS', label: 'open fulfillments', blocksStatusChange: true, requiredCapability: 'ORDER_FULFILLMENT' },
+    { code: 'REPLENISHMENT_DESTINATION_POLICIES', label: 'destination replenishment policies', blocksStatusChange: true, requiredCapability: 'STOCK_HOLDING' },
+    { code: 'REPLENISHMENT_SOURCE_POLICIES', label: 'source replenishment policies', blocksStatusChange: true, requiredCapability: 'TRANSFER_SEND' },
+  ];
+  return definitions.map((definition) => ({
+    ...definition,
+    count: Number(row[definition.code.toLowerCase() as keyof LocationCommitmentCounts]),
+  })).filter((commitment) => commitment.count > 0);
 }
 
 function mapLocation(row: {
@@ -75,6 +166,7 @@ export async function createLocation(
     capabilities: readonly LocationCapability[];
     status?: LocationSummary['status'];
     address?: Record<string, unknown>;
+    idempotencyKey?: string;
   },
 ): Promise<LocationSummary> {
   const code = input.code.trim().toUpperCase();
@@ -96,6 +188,28 @@ export async function createLocation(
       'A Location needs at least one capability.',
     );
   return withWarehouseTransaction(db, async (transaction) => {
+    let idempotencyRecordId: string | undefined;
+    if (input.idempotencyKey) {
+      try {
+        const claim = await claimIdempotencyRecord(transaction, {
+          organizationId: input.organizationId,
+          principalType: 'USER',
+          principalId: input.actorId,
+          operationType: 'warehouse.location.create',
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint: fingerprint({ code, name, locationType: input.locationType, capabilities: [...new Set(input.capabilities)].sort(), status, address: input.address ?? null }),
+        });
+        idempotencyRecordId = claim.id;
+        if (!claim.created) {
+          const replay = await sql<{ status: string; safe_response: LocationSummary | null }>`select status,safe_response from platform.idempotency_records where id=${claim.id}`.execute(transaction);
+          if (replay.rows[0]?.status === 'SUCCEEDED' && replay.rows[0].safe_response) return replay.rows[0].safe_response;
+          throw new WarehouseDomainError('CONFLICT', 'The same location command is already in progress.');
+        }
+      } catch (error) {
+        if (error instanceof IdempotencyKeyReuseError) throw new WarehouseDomainError('IDEMPOTENCY_KEY_REUSED', error.message);
+        throw error;
+      }
+    }
     try {
       const created = await sql<{
         id: string;
@@ -129,10 +243,13 @@ export async function createLocation(
         values (${input.organizationId}, 'warehouse.location.created', 1, 'warehouse.location', ${location.id}, 1, ${JSON.stringify({ locationId: location.id })}::jsonb, now())`.execute(
         transaction,
       );
-      return {
+      const response = {
         ...mapLocation({ ...location, capabilities: [...new Set(input.capabilities)] }),
         version: 1,
       };
+      if (idempotencyRecordId)
+        await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='warehouse.location',result_entity_id=${location.id}::uuid,safe_response=${JSON.stringify(response)}::jsonb,completed_at=now() where id=${idempotencyRecordId}`.execute(transaction);
+      return response;
     } catch (error) {
       if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
         throw new WarehouseDomainError('CONFLICT', `Location with code "${code}" already exists.`);
@@ -146,7 +263,7 @@ export async function listLocations(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   allowedLocationIds?: readonly string[],
-): Promise<readonly LocationSummary[]> {
+): Promise<readonly LocationListItem[]> {
   const result = await sql<{
     id: string;
     code: string;
@@ -155,9 +272,23 @@ export async function listLocations(
     status: LocationSummary['status'];
     version: string;
     capabilities: string[] | null;
+    stock_on_hand: string;
+    active_work_count: string;
   }>`
     select location.id, location.code, location.name, location.location_type, location.status, location.version::text,
-      array_remove(array_agg(capability.capability_code order by capability.capability_code), null) as capabilities
+      array_remove(array_agg(capability.capability_code order by capability.capability_code), null) as capabilities,
+      coalesce((select sum(level.sellable_quantity+level.unavailable_quantity)
+        from inventory.inventory_levels level
+        where level.organization_id=location.organization_id and level.location_id=location.id),0)::text as stock_on_hand,
+      ((select count(*) from warehouse.transfers transfer where transfer.organization_id=location.organization_id
+          and (transfer.source_location_id=location.id or transfer.destination_location_id=location.id)
+          and transfer.status in ('DRAFT','READY','IN_TRANSIT','PARTIALLY_RECEIVED'))
+       + (select count(*) from inventory.stocktake_sessions stocktake where stocktake.organization_id=location.organization_id
+          and stocktake.location_id=location.id and stocktake.status in ('DRAFT','COUNTING','REVIEW'))
+       + (select count(*) from inbound_shipment.shipments shipment where shipment.organization_id=location.organization_id
+          and shipment.receiving_location_id=location.id and shipment.status <> 'CANCELLED' and shipment.receiving_status <> 'RECEIVED')
+       + (select count(*) from fulfillment.fulfillments fulfillment where fulfillment.organization_id=location.organization_id
+          and fulfillment.location_id=location.id and fulfillment.status in ('DRAFT','READY','PICKING','PACKED')))::text as active_work_count
     from warehouse.locations location
     left join warehouse.location_capabilities capability on capability.location_id = location.id and capability.organization_id = location.organization_id
     where location.organization_id = ${organizationId}
@@ -166,7 +297,11 @@ export async function listLocations(
       ))
     group by location.id order by location.name, location.id
   `.execute(db);
-  return result.rows.map(mapLocation);
+  return result.rows.map((row) => ({
+    ...mapLocation(row),
+    stockOnHand: row.stock_on_hand,
+    activeWorkCount: Number(row.active_work_count),
+  }));
 }
 
 export async function updateLocation(
@@ -178,11 +313,34 @@ export async function updateLocation(
     expectedVersion: number;
     name?: string;
     capabilities?: readonly LocationCapability[];
-    status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+    status?: LocationSummary['status'];
     address?: Record<string, unknown> | null;
+    idempotencyKey?: string;
   },
 ): Promise<LocationSummary> {
   return withWarehouseTransaction(db, async (transaction) => {
+    let idempotencyRecordId: string | undefined;
+    if (input.idempotencyKey) {
+      try {
+        const claim = await claimIdempotencyRecord(transaction, {
+          organizationId: input.organizationId,
+          principalType: 'USER',
+          principalId: input.actorId,
+          operationType: 'warehouse.location.update',
+          idempotencyKey: input.idempotencyKey,
+          requestFingerprint: fingerprint({ locationId: input.locationId, expectedVersion: input.expectedVersion, name: input.name, capabilities: input.capabilities ? [...new Set(input.capabilities)].sort() : undefined, status: input.status, address: input.address }),
+        });
+        idempotencyRecordId = claim.id;
+        if (!claim.created) {
+          const replay = await sql<{ status: string; safe_response: LocationSummary | null }>`select status,safe_response from platform.idempotency_records where id=${claim.id}`.execute(transaction);
+          if (replay.rows[0]?.status === 'SUCCEEDED' && replay.rows[0].safe_response) return replay.rows[0].safe_response;
+          throw new WarehouseDomainError('CONFLICT', 'The same location command is already in progress.');
+        }
+      } catch (error) {
+        if (error instanceof IdempotencyKeyReuseError) throw new WarehouseDomainError('IDEMPOTENCY_KEY_REUSED', error.message);
+        throw error;
+      }
+    }
     const existing = await sql<{
       id: string;
       version: string;
@@ -195,16 +353,17 @@ export async function updateLocation(
         'STALE_VERSION',
         'Location has changed; reload before saving.',
       );
+    const commitments = await getLocationOperationalCommitments(
+      transaction,
+      input.organizationId,
+      input.locationId,
+    );
     if (input.status && input.status !== 'ACTIVE') {
-      const stock = await sql<{
-        count: string;
-      }>`select count(*)::text as count from inventory.inventory_levels where organization_id = ${input.organizationId} and location_id = ${input.locationId} and (sellable_quantity > 0 or unavailable_quantity > 0 or reserved_quantity > 0)`.execute(
-        transaction,
-      );
-      if (Number(stock.rows[0]?.count ?? 0) > 0)
+      const blockers = commitments.filter((commitment) => commitment.blocksStatusChange);
+      if (blockers.length > 0)
         throw new WarehouseDomainError(
           'VALIDATION_FAILED',
-          'A Location with stock or reservations cannot be deactivated or archived.',
+          `This location still has operational work: ${blockers.map((blocker) => `${blocker.count} ${blocker.label}`).join(', ')}. Complete or reassign it before changing the location status.`,
         );
     }
     if (input.capabilities && input.capabilities.length === 0)
@@ -212,6 +371,17 @@ export async function updateLocation(
         'VALIDATION_FAILED',
         'A Location needs at least one capability.',
       );
+    if (input.capabilities) {
+      const selected = new Set(input.capabilities);
+      const blockers = commitments.filter(
+        (commitment) => commitment.requiredCapability && !selected.has(commitment.requiredCapability),
+      );
+      if (blockers.length > 0)
+        throw new WarehouseDomainError(
+          'VALIDATION_FAILED',
+          `Capabilities cannot be removed while this location has ${blockers.map((blocker) => `${blocker.count} ${blocker.label}`).join(', ')}.`,
+        );
+    }
     const updated = await sql<{
       id: string;
       code: string;
@@ -257,7 +427,12 @@ export async function updateLocation(
       targetId: input.locationId,
       metadata: { status: input.status, capabilities: input.capabilities },
     });
-    return mapLocation({ ...location, capabilities: [...capabilities] });
+    await sql`insert into platform.outbox_events (organization_id, event_type, event_version, aggregate_type, aggregate_id, aggregate_version, payload, occurred_at)
+      values (${input.organizationId}, 'warehouse.location.updated', 1, 'warehouse.location', ${input.locationId}, ${Number(location.version)}, ${JSON.stringify({ locationId: input.locationId, status: location.status })}::jsonb, now())`.execute(transaction);
+    const response = mapLocation({ ...location, capabilities: [...capabilities] });
+    if (idempotencyRecordId)
+      await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='warehouse.location',result_entity_id=${input.locationId}::uuid,safe_response=${JSON.stringify(response)}::jsonb,completed_at=now() where id=${idempotencyRecordId}`.execute(transaction);
+    return response;
   });
 }
 
@@ -294,6 +469,7 @@ export async function getLocationDetail(
         readonly totalIncoming: string;
         readonly lowStockSkus: number;
       };
+      readonly operationalCommitments: readonly LocationOperationalCommitment[];
     })
   | undefined
 > {
@@ -312,6 +488,7 @@ export async function getLocationDetail(
     total_reserved: string;
     total_damaged: string;
     low_stock_skus: string;
+    total_incoming: string;
   }>`
     select location.id, location.code, location.name, location.location_type, location.status, location.version::text,
       location.address_json,
@@ -328,8 +505,28 @@ export async function getLocationDetail(
           on variant.organization_id=item.organization_id and variant.id=item.variant_id
         where level.organization_id=location.organization_id and level.location_id=location.id
           and level.sellable_quantity-level.reserved_quantity > 0
-          and level.sellable_quantity-level.reserved_quantity <= coalesce(variant.reorder_point, ${lowStockThreshold})
-      )::text as low_stock_skus
+          and level.sellable_quantity-level.reserved_quantity <= coalesce(
+            (select policy.reorder_point from inventory.replenishment_policies policy
+              where policy.organization_id=level.organization_id and policy.inventory_item_id=level.inventory_item_id
+                and (policy.location_id=level.location_id or policy.location_id is null)
+              order by policy.location_id nulls last limit 1),
+            variant.reorder_point, ${lowStockThreshold})
+      )::text as low_stock_skus,
+      (coalesce((select sum(line.dispatched_quantity-line.received_quantity-coalesce(discrepancy.quantity,0))
+        from warehouse.transfers transfer
+        join warehouse.transfer_lines line on line.organization_id=transfer.organization_id and line.transfer_id=transfer.id
+        left join warehouse.transfer_line_discrepancies discrepancy on discrepancy.organization_id=line.organization_id and discrepancy.transfer_line_id=line.id
+        where transfer.organization_id=location.organization_id and transfer.destination_location_id=location.id
+          and transfer.status in ('IN_TRANSIT','PARTIALLY_RECEIVED')),0)
+       + coalesce((select sum(allocation.allocated_quantity-coalesce(received.quantity,0))
+        from inbound_shipment.shipments shipment
+        join inbound_shipment.purchase_line_allocations allocation on allocation.organization_id=shipment.organization_id and allocation.shipment_id=shipment.id
+        left join lateral (select sum(receipt_line.quantity) as quantity
+          from receiving.inbound_receipt_lines receipt_line
+          join receiving.inbound_receipts receipt on receipt.organization_id=receipt_line.organization_id and receipt.id=receipt_line.inbound_receipt_id
+          where receipt_line.organization_id=allocation.organization_id and receipt_line.shipment_allocation_id=allocation.id and receipt.status <> 'REVERSED') received on true
+        where shipment.organization_id=location.organization_id and shipment.receiving_location_id=location.id
+          and shipment.status <> 'CANCELLED' and shipment.receiving_status <> 'RECEIVED'),0))::text as total_incoming
     from warehouse.locations location
     left join warehouse.location_capabilities capability on capability.location_id = location.id and capability.organization_id = location.organization_id
     where location.id = ${locationId} and location.organization_id = ${organizationId}
@@ -338,6 +535,7 @@ export async function getLocationDetail(
 
   const row = result.rows[0];
   if (!row) return undefined;
+  const operationalCommitments = await getLocationOperationalCommitments(db, organizationId, locationId);
 
   return {
     ...mapLocation(row),
@@ -347,9 +545,10 @@ export async function getLocationDetail(
       totalAvailable: String(row.total_available),
       totalReserved: String(row.total_reserved),
       totalDamaged: String(row.total_damaged),
-      totalIncoming: '0', // Future implementation
+      totalIncoming: String(row.total_incoming),
       lowStockSkus: Number(row.low_stock_skus),
     },
+    operationalCommitments,
   };
 }
 

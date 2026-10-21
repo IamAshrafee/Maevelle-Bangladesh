@@ -1,14 +1,17 @@
 'use client';
 
 import {
-  Check,
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   GitCompareArrows,
   Loader2,
-  Search,
+  RefreshCw,
   Save,
-  TriangleAlert,
+  Search,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
@@ -28,15 +31,33 @@ import {
   linkOptionValuesToSizeDefinitionsBulk,
 } from '@/lib/sizing/api';
 
+import { StatusBadge } from '@/components/status-badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
-  OperationalEmptyState,
-  OperationalFeedback,
-  OperationalPageHeader,
-} from '../../../components/operational-worklist';
+  AdminPage,
+  EmptyState,
+  LoadingState,
+  PageActions,
+  PageDescription,
+  PageHeader,
+  PagePanel,
+  PageSection,
+  PageTitle,
+} from '@/components/ui/page-shell';
 
-type Feedback = { message: string; tone: 'success' | 'warning' | 'danger' } | null;
+type Feedback = {
+  message: string;
+  tone: 'success' | 'warning' | 'danger';
+} | null;
 
-const EMPTY_PAGINATION: PaginationDto = { page: 1, pageSize: 50, totalItems: 0, totalPages: 0 };
+const EMPTY_PAGINATION: PaginationDto = {
+  page: 1,
+  pageSize: 50,
+  totalItems: 0,
+  totalPages: 0,
+};
 
 export default function SizeOptionMappingsPage() {
   const [items, setItems] = useState<readonly SizeOptionValueMappingDto[]>([]);
@@ -74,7 +95,10 @@ export default function SizeOptionMappingsPage() {
       setSystems(workspace.systems.filter((system) => system.status === 'ACTIVE'));
       setDraftMappings({});
     } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : 'Failed to load option mappings.', tone: 'danger' });
+      setFeedback({
+        message: error instanceof Error ? error.message : 'Failed to load option mappings.',
+        tone: 'danger',
+      });
     } finally {
       setLoading(false);
     }
@@ -85,10 +109,11 @@ export default function SizeOptionMappingsPage() {
   }, [load]);
 
   const dirtyMappings = useMemo(
-    () => Object.entries(draftMappings).filter(([optionValueId, definitionId]) => {
-      const item = items.find((candidate) => candidate.optionValueId === optionValueId);
-      return item && (item.sizeDefinitionId ?? '') !== definitionId;
-    }),
+    () =>
+      Object.entries(draftMappings).filter(([optionValueId, definitionId]) => {
+        const item = items.find((candidate) => candidate.optionValueId === optionValueId);
+        return item && (item.sizeDefinitionId ?? '') !== definitionId;
+      }),
     [draftMappings, items],
   );
 
@@ -110,10 +135,16 @@ export default function SizeOptionMappingsPage() {
     setFeedback(null);
     try {
       await linkOptionValueToSizeDefinition(item.optionValueId, definitionId || null);
-      setFeedback({ message: `Mapping updated for ${item.productTitle} / ${item.optionValueLabel}.`, tone: 'success' });
+      setFeedback({
+        message: `Mapping updated for ${item.productTitle} (${item.optionValueLabel}).`,
+        tone: 'success',
+      });
       await load();
     } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : 'Failed to update mapping.', tone: 'danger' });
+      setFeedback({
+        message: error instanceof Error ? error.message : 'Failed to update mapping.',
+        tone: 'danger',
+      });
     } finally {
       setBusyId(null);
     }
@@ -130,10 +161,16 @@ export default function SizeOptionMappingsPage() {
           sizeDefinitionId: definitionId || null,
         })),
       );
-      setFeedback({ message: `${dirtyMappings.length} option mapping${dirtyMappings.length === 1 ? '' : 's'} updated.`, tone: 'success' });
+      setFeedback({
+        message: `${dirtyMappings.length} option mapping${dirtyMappings.length === 1 ? '' : 's'} successfully updated.`,
+        tone: 'success',
+      });
       await load();
     } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : 'Bulk mapping update failed.', tone: 'danger' });
+      setFeedback({
+        message: error instanceof Error ? error.message : 'Bulk mapping update failed.',
+        tone: 'danger',
+      });
     } finally {
       setBulkBusy(false);
     }
@@ -147,7 +184,9 @@ export default function SizeOptionMappingsPage() {
       if (item.sizeDefinitionId) continue;
       const normalized = item.optionValueLabel.trim().toLowerCase();
       const match = availableDefinitions(item).find(
-        (definition) => definition.label.trim().toLowerCase() === normalized || definition.code.trim().toLowerCase() === normalized,
+        (definition) =>
+          definition.label.trim().toLowerCase() === normalized ||
+          definition.code.trim().toLowerCase() === normalized,
       );
       if (match) {
         next[item.optionValueId] = match.id;
@@ -157,110 +196,417 @@ export default function SizeOptionMappingsPage() {
 
     setDraftMappings(next);
     setFeedback({
-      message: matched > 0 ? `${matched} exact label/code match${matched === 1 ? '' : 'es'} prepared. Review and save changes.` : 'No new exact matches were found on this page.',
+      message:
+        matched > 0
+          ? `${matched} exact label/code match${matched === 1 ? '' : 'es'} staged. Review below and click "Save Changes".`
+          : 'No new exact matches found on this page.',
       tone: matched > 0 ? 'success' : 'warning',
     });
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <OperationalPageHeader
-        eyebrow="Sizing"
-        title="Product Option Mapping"
-        description="Map product-level size option values to canonical size definitions so catalog variants, sizing systems, analytics, and future fit workflows speak the same language."
-      />
+    <AdminPage className="space-y-6">
+      <PageHeader>
+        <div>
+          <p className="text-xs font-semibold tracking-wider uppercase text-primary">Sizing &amp; Fit Operations</p>
+          <PageTitle>Product Option Mapping Console</PageTitle>
+          <PageDescription>
+            Bridge catalog variant option values to canonical size definitions. Ensures analytics, size guides,
+            inventory forecasting, and customer fit recommenders operate on unified sizing standards.
+          </PageDescription>
+        </div>
+        <PageActions className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void load()}
+            disabled={loading}
+            className="min-h-11 sm:min-h-9"
+          >
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={autoMatchCurrentPage}
+            disabled={loading || items.length === 0}
+            className="min-h-11 sm:min-h-9"
+          >
+            <Sparkles className="size-3.5 text-primary" />
+            Auto-Match Exact Labels
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => void saveBulk()}
+            disabled={bulkBusy || dirtyMappings.length === 0}
+            className="min-h-11 sm:min-h-9"
+          >
+            {bulkBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+            Save {dirtyMappings.length > 0 ? `(${dirtyMappings.length})` : ''} Changes
+          </Button>
+        </PageActions>
+      </PageHeader>
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-6">
-        {feedback ? <OperationalFeedback tone={feedback.tone}>{feedback.message}</OperationalFeedback> : null}
+      {feedback && (
+        <div
+          role="alert"
+          className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm transition-colors ${
+            feedback.tone === 'success'
+              ? 'border-success/30 bg-success/10 text-success'
+              : feedback.tone === 'warning'
+                ? 'border-warning/30 bg-warning/10 text-warning'
+                : 'border-destructive/30 bg-destructive/10 text-destructive'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {feedback.tone === 'success' ? (
+              <CheckCircle2 className="size-4 shrink-0" />
+            ) : (
+              <AlertCircle className="size-4 shrink-0" />
+            )}
+            <span>{feedback.message}</span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => setFeedback(null)}
+            className="h-6 px-2 text-xs"
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
 
-        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
-            <form onSubmit={submitSearch} className="flex min-w-64 flex-1 gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search product, axis, or size value…" className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm" />
+      {/* Filter and Configuration Strip */}
+      <PagePanel className="p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <form onSubmit={submitSearch} className="flex flex-1 items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Search product title, option axis, or size value..."
+                className="pl-9 h-10 sm:h-9"
+              />
+            </div>
+            <Button type="submit" variant="secondary" size="default" className="min-h-10 sm:min-h-9">
+              Search
+            </Button>
+          </form>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>Status:</span>
+              <NativeSelect
+                value={mappingStatus}
+                onChange={(event) => {
+                  setPage(1);
+                  setMappingStatus(event.target.value as SizingMappingStatusDto);
+                }}
+                className="w-36"
+              >
+                <NativeSelectOption value="ALL">All Mappings</NativeSelectOption>
+                <NativeSelectOption value="MAPPED">Mapped Only</NativeSelectOption>
+                <NativeSelectOption value="UNMAPPED">Unmapped Only</NativeSelectOption>
+              </NativeSelect>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>System:</span>
+              <NativeSelect
+                value={sizeSystemId}
+                onChange={(event) => {
+                  setPage(1);
+                  setSizeSystemId(event.target.value);
+                }}
+                className="w-48"
+              >
+                <NativeSelectOption value="ALL">All Configured Systems</NativeSelectOption>
+                {systems.map((system) => (
+                  <NativeSelectOption key={system.id} value={system.id}>
+                    {system.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          <GitCompareArrows className="size-3.5 text-primary shrink-0" />
+          <span>
+            Candidate definitions are automatically restricted to the product&apos;s configured size system when assigned.
+          </span>
+        </div>
+      </PagePanel>
+
+      {/* Main Content Area */}
+      <PageSection>
+        {loading ? (
+          <LoadingState message="Loading catalog size option mappings..." />
+        ) : items.length === 0 ? (
+          <EmptyState
+            title="No Matching Option Values Found"
+            description="No active catalog product size option values match your current search filters."
+          />
+        ) : (
+          <div className="space-y-4">
+            {/* Desktop / Tablet View (Table) */}
+            <div className="hidden rounded-xl border border-border bg-card shadow-2xs md:block overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-border text-left text-xs">
+                  <thead className="bg-muted/50 font-medium text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">Product</th>
+                      <th className="px-4 py-3">Axis &amp; Value</th>
+                      <th className="px-4 py-3">Configured System</th>
+                      <th className="px-4 py-3">Canonical Definition</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Quick Save</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {items.map((item) => {
+                      const candidates = availableDefinitions(item);
+                      const selected = draftMappings[item.optionValueId] ?? item.sizeDefinitionId ?? '';
+                      const busy = busyId === item.optionValueId;
+                      const isDirty = selected !== (item.sizeDefinitionId ?? '');
+                      const mismatch = Boolean(
+                        item.configuredSizeSystemId &&
+                          item.sizeDefinitionSystemId &&
+                          item.configuredSizeSystemId !== item.sizeDefinitionSystemId,
+                      );
+                      const system = systems.find((candidate) => candidate.id === item.configuredSizeSystemId);
+
+                      return (
+                        <tr
+                          key={item.optionValueId}
+                          className={`transition-colors hover:bg-muted/40 ${isDirty ? 'bg-primary/5' : ''}`}
+                        >
+                          <td className="px-4 py-3 max-w-xs">
+                            <Link
+                              href={`/products/${item.productId}`}
+                              className="font-medium text-foreground hover:text-primary hover:underline line-clamp-1"
+                            >
+                              {item.productTitle}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="text-muted-foreground mr-1.5">{item.optionAxisName}:</span>
+                            <span className="font-semibold text-foreground bg-muted/60 px-1.5 py-0.5 rounded text-xs">
+                              {item.optionValueLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                            {system ? (
+                              <span className="font-medium text-foreground">{system.name}</span>
+                            ) : item.configuredSizeSystemId ? (
+                              <span className="italic">Unknown system</span>
+                            ) : (
+                              <span className="text-muted-foreground/60 italic">Not configured</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <NativeSelect
+                              value={selected}
+                              disabled={busy}
+                              onChange={(event) =>
+                                setDraftMappings((current) => ({
+                                  ...current,
+                                  [item.optionValueId]: event.target.value,
+                                }))
+                              }
+                              className="w-64"
+                            >
+                              <NativeSelectOption value="">Unlinked (No Standard)</NativeSelectOption>
+                              {item.sizeDefinitionId &&
+                              !candidates.some((definition) => definition.id === item.sizeDefinitionId) ? (
+                                <NativeSelectOption value={item.sizeDefinitionId}>
+                                  {item.sizeDefinitionLabel ?? 'Current definition'} (Outside configured system)
+                                </NativeSelectOption>
+                              ) : null}
+                              {candidates.map((definition) => (
+                                <NativeSelectOption key={definition.id} value={definition.id}>
+                                  {definition.label} ({definition.code})
+                                </NativeSelectOption>
+                              ))}
+                            </NativeSelect>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {mismatch ? (
+                              <StatusBadge status="ATTENTION" tone="danger" />
+                            ) : item.sizeDefinitionId ? (
+                              <StatusBadge status="MATCHED" tone="success" />
+                            ) : (
+                              <StatusBadge status="UNMATCHED" tone="warning" />
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            <Button
+                              type="button"
+                              variant={isDirty ? 'default' : 'outline'}
+                              size="xs"
+                              disabled={busy || !isDirty}
+                              onClick={() => void saveOne(item, selected)}
+                              className="h-7 min-w-16"
+                            >
+                              {busy ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                'Save'
+                              )}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <button type="submit" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Search</button>
-            </form>
+            </div>
 
-            <select value={mappingStatus} onChange={(event) => { setPage(1); setMappingStatus(event.target.value as SizingMappingStatusDto); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs">
-              <option value="ALL">All mappings</option><option value="MAPPED">Mapped</option><option value="UNMAPPED">Unmapped</option>
-            </select>
-            <select value={sizeSystemId} onChange={(event) => { setPage(1); setSizeSystemId(event.target.value); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs">
-              <option value="ALL">All configured systems</option>{systems.map((system) => <option key={system.id} value={system.id}>{system.name}</option>)}
-            </select>
+            {/* Mobile / Touch View (Card Stack) */}
+            <div className="space-y-3 md:hidden">
+              {items.map((item) => {
+                const candidates = availableDefinitions(item);
+                const selected = draftMappings[item.optionValueId] ?? item.sizeDefinitionId ?? '';
+                const busy = busyId === item.optionValueId;
+                const isDirty = selected !== (item.sizeDefinitionId ?? '');
+                const mismatch = Boolean(
+                  item.configuredSizeSystemId &&
+                    item.sizeDefinitionSystemId &&
+                    item.configuredSizeSystemId !== item.sizeDefinitionSystemId,
+                );
+                const system = systems.find((candidate) => candidate.id === item.configuredSizeSystemId);
+
+                return (
+                  <div
+                    key={item.optionValueId}
+                    className={`rounded-xl border border-border bg-card p-4 shadow-2xs space-y-3 transition-colors ${
+                      isDirty ? 'border-primary/50 bg-primary/5' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/products/${item.productId}`}
+                          className="font-semibold text-sm text-foreground hover:text-primary line-clamp-1"
+                        >
+                          {item.productTitle}
+                        </Link>
+                        <div className="mt-1 flex items-center gap-2 text-xs">
+                          <span className="text-muted-foreground">{item.optionAxisName}:</span>
+                          <span className="font-semibold text-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                            {item.optionValueLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        {mismatch ? (
+                          <StatusBadge status="ATTENTION" tone="danger" />
+                        ) : item.sizeDefinitionId ? (
+                          <StatusBadge status="MATCHED" tone="success" />
+                        ) : (
+                          <StatusBadge status="UNMATCHED" tone="warning" />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium">Configured System: </span>
+                      {system?.name ?? (item.configuredSizeSystemId ? 'Unknown' : 'Not configured')}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-foreground block">
+                        Canonical Definition:
+                      </label>
+                      <NativeSelect
+                        value={selected}
+                        disabled={busy}
+                        onChange={(event) =>
+                          setDraftMappings((current) => ({
+                            ...current,
+                            [item.optionValueId]: event.target.value,
+                          }))
+                        }
+                        className="w-full h-11"
+                      >
+                        <NativeSelectOption value="">Unlinked (No Standard)</NativeSelectOption>
+                        {item.sizeDefinitionId &&
+                        !candidates.some((definition) => definition.id === item.sizeDefinitionId) ? (
+                          <NativeSelectOption value={item.sizeDefinitionId}>
+                            {item.sizeDefinitionLabel ?? 'Current definition'} (Outside system)
+                          </NativeSelectOption>
+                        ) : null}
+                        {candidates.map((definition) => (
+                          <NativeSelectOption key={definition.id} value={definition.id}>
+                            {definition.label} ({definition.code})
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        type="button"
+                        variant={isDirty ? 'default' : 'outline'}
+                        size="sm"
+                        disabled={busy || !isDirty}
+                        onClick={() => void saveOne(item, selected)}
+                        className="min-h-11 w-full"
+                      >
+                        {busy ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+                        {isDirty ? 'Save Staged Mapping' : 'Saved'}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+              <span>
+                Page <span className="font-mono font-medium text-foreground">{pagination.page}</span> of{' '}
+                <span className="font-mono font-medium text-foreground">{Math.max(pagination.totalPages, 1)}</span> ·{' '}
+                <span className="font-mono font-medium text-foreground">{pagination.totalItems}</span> catalog option values
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pagination.page <= 1 || loading}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                  className="min-h-10 sm:min-h-8"
+                >
+                  <ChevronLeft className="size-3.5" />
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pagination.totalPages === 0 || pagination.page >= pagination.totalPages || loading}
+                  onClick={() => setPage((value) => value + 1)}
+                  className="min-h-10 sm:min-h-8"
+                >
+                  Next
+                  <ChevronRight className="size-3.5" />
+                </Button>
+              </div>
+            </div>
           </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
-            <div className="flex items-center gap-2 text-[11px] text-slate-500">
-              <GitCompareArrows className="h-3.5 w-3.5" />
-              Definitions are restricted to the product’s configured size system when one exists.
-            </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={autoMatchCurrentPage} disabled={loading} className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">Auto-match exact labels</button>
-              <button type="button" onClick={() => void saveBulk()} disabled={bulkBusy || dirtyMappings.length === 0} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
-                {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save {dirtyMappings.length || ''} change{dirtyMappings.length === 1 ? '' : 's'}
-              </button>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="animate-pulse space-y-3 p-5"><div className="h-14 rounded bg-slate-100" /><div className="h-14 rounded bg-slate-100" /></div>
-          ) : items.length === 0 ? (
-            <OperationalEmptyState title="No matching size options" description="No active catalog size values match the current filters." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
-                <thead className="bg-slate-50 font-semibold text-slate-600">
-                  <tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Axis / value</th><th className="px-4 py-3">Configured system</th><th className="px-4 py-3">Canonical definition</th><th className="px-4 py-3">Health</th><th className="px-4 py-3 text-right">Quick save</th></tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {items.map((item) => {
-                    const candidates = availableDefinitions(item);
-                    const selected = draftMappings[item.optionValueId] ?? item.sizeDefinitionId ?? '';
-                    const busy = busyId === item.optionValueId;
-                    const mismatch = Boolean(item.configuredSizeSystemId && item.sizeDefinitionSystemId && item.configuredSizeSystemId !== item.sizeDefinitionSystemId);
-                    const system = systems.find((candidate) => candidate.id === item.configuredSizeSystemId);
-                    return (
-                      <tr key={item.optionValueId} className="hover:bg-slate-50/60">
-                        <td className="px-4 py-3"><Link href={`/products/${item.productId}`} className="font-medium text-slate-900 hover:underline">{item.productTitle}</Link></td>
-                        <td className="px-4 py-3"><div className="text-slate-500">{item.optionAxisName}</div><strong className="text-slate-900">{item.optionValueLabel}</strong></td>
-                        <td className="px-4 py-3 text-slate-600">{system?.name ?? (item.configuredSizeSystemId ? 'Unknown system' : 'Not configured')}</td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={selected}
-                            disabled={busy}
-                            onChange={(event) => setDraftMappings((current) => ({ ...current, [item.optionValueId]: event.target.value }))}
-                            className="min-w-56 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
-                          >
-                            <option value="">Unlinked</option>
-                            {item.sizeDefinitionId && !candidates.some((definition) => definition.id === item.sizeDefinitionId) ? <option value={item.sizeDefinitionId}>{item.sizeDefinitionLabel ?? 'Current definition'} — outside configured system</option> : null}
-                            {candidates.map((definition) => <option key={definition.id} value={definition.id}>{definition.label} ({definition.code})</option>)}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3">
-                          {mismatch ? <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700"><TriangleAlert className="h-3 w-3" /> Mismatch</span> : item.sizeDefinitionId ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700"><Check className="h-3 w-3" /> Mapped</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">Unmapped</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button type="button" disabled={busy || selected === (item.sizeDefinitionId ?? '')} onClick={() => void saveOne(item, selected)} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 disabled:opacity-30">{busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null} Save</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-            <span>Page {pagination.page} of {Math.max(pagination.totalPages, 1)} · {pagination.totalItems} option values</span>
-            <div className="flex gap-2">
-              <button type="button" disabled={pagination.page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 font-medium text-slate-700 disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" /> Previous</button>
-              <button type="button" disabled={pagination.totalPages === 0 || pagination.page >= pagination.totalPages || loading} onClick={() => setPage((value) => value + 1)} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 font-medium text-slate-700 disabled:opacity-40">Next <ChevronRight className="h-3.5 w-3.5" /></button>
-            </div>
-          </div>
-        </section>
-      </div>
-    </div>
+        )}
+      </PageSection>
+    </AdminPage>
   );
 }

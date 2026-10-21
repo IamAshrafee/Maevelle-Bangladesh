@@ -16,6 +16,7 @@ import {
   expireInventoryReservations,
   getInventoryStats,
   getInventoryItemDetail,
+  getStocktakeWorkspace,
   listInventoryItemChoices,
   listInventoryBalances,
   listInventoryHistory,
@@ -36,6 +37,7 @@ import {
   getLocationDetail,
   getTransferDetail,
   listWarehouseTransfers,
+  updateLocation,
 } from './warehouse.js';
 import { invalidateSettingsCache, updateSingleSetting } from './settings.js';
 import { getInventoryOverview } from './inventory-overview.js';
@@ -211,7 +213,7 @@ describe('ledger-backed inventory', () => {
           reorderPoint: '5.000000',
           targetStock: '10.000000',
           policySource: 'LOCATION_POLICY',
-          suggestedQuantity: '8',
+          suggestedQuantity: '8.000000',
           status: 'REPLENISH',
           suggestedAction: {
             type: 'TRANSFER',
@@ -608,6 +610,39 @@ describe('ledger-backed inventory', () => {
       totalOnHand: '1.000000',
       totalReserved: '1.000000',
     });
+    expect(location?.operationalCommitments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'STOCK_ON_HAND', count: 1 }),
+        expect.objectContaining({ code: 'ACTIVE_RESERVATIONS', count: 1 }),
+      ]),
+    );
+    await expect(
+      updateLocation(database.db, {
+        organizationId: f.organizationId,
+        actorId: f.actorId,
+        locationId: f.main.id,
+        expectedVersion: f.main.version,
+        capabilities: ['TRANSFER_SEND', 'TRANSFER_RECEIVE'],
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    const locationUpdateKey = crypto.randomUUID();
+    const renamed = await updateLocation(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+      expectedVersion: f.main.version,
+      name: 'Primary inventory facility',
+      idempotencyKey: locationUpdateKey,
+    });
+    const replayedRename = await updateLocation(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+      expectedVersion: f.main.version,
+      name: 'Primary inventory facility',
+      idempotencyKey: locationUpdateKey,
+    });
+    expect(replayedRename).toEqual(renamed);
     const balance = (await listInventoryBalances(database.db, f.organizationId)).items.find(
       (row) => row.condition === 'SELLABLE',
     )!;
@@ -898,20 +933,23 @@ describe('ledger-backed inventory', () => {
       lines: [{ variantId: f.variantId, quantity: '1' }],
       idempotencyKey: crypto.randomUUID(),
     });
-    await expect(
-      cancelWarehouseTransfer(database.db, {
+    const cancelKey = crypto.randomUUID();
+    const cancelInput = {
         organizationId: f.organizationId,
         actorId: f.actorId,
         transferId: transfer.transferId,
         expectedVersion: transfer.version,
-      }),
-    ).resolves.toMatchObject({ transferId: transfer.transferId, version: 2 });
+        idempotencyKey: cancelKey,
+      };
+    await expect(cancelWarehouseTransfer(database.db, cancelInput)).resolves.toMatchObject({ transferId: transfer.transferId, version: 2 });
+    await expect(cancelWarehouseTransfer(database.db, cancelInput)).resolves.toMatchObject({ transferId: transfer.transferId, version: 2 });
     await expect(
       cancelWarehouseTransfer(database.db, {
         organizationId: f.organizationId,
         actorId: f.actorId,
         transferId: transfer.transferId,
         expectedVersion: 2,
+        idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toMatchObject({ code: 'STALE_VERSION' });
   });
@@ -1053,6 +1091,52 @@ describe('ledger-backed inventory', () => {
         idempotencyKey: crypto.randomUUID(),
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('previews post-snapshot movement and current variance before posting', async () => {
+    const f = await fixture();
+    const opened = await opening(f, '5');
+    const stocktake = await startStocktake(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      locationId: f.main.id,
+    });
+    await recordStocktakeCount(database.db, {
+      organizationId: f.organizationId,
+      stocktakeId: stocktake.stocktakeId,
+      inventoryItemId: opened.inventoryItemId,
+      countedQuantity: '5',
+      expectedVersion: stocktake.version,
+    });
+    await submitStocktakeForReview(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      stocktakeId: stocktake.stocktakeId,
+      expectedVersion: stocktake.version + 1,
+    });
+    await adjustInventory(database.db, {
+      organizationId: f.organizationId,
+      actorId: f.actorId,
+      variantId: f.variantId,
+      locationId: f.main.id,
+      condition: 'SELLABLE',
+      quantityDelta: '2',
+      reasonCode: 'FOUND_STOCK',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const workspace = await getStocktakeWorkspace(
+      database.db,
+      f.organizationId,
+      stocktake.stocktakeId,
+    );
+
+    expect(workspace?.lines[0]).toMatchObject({
+      expectedQuantityAtSnapshot: '5',
+      movementsAfterSnapshot: '2',
+      finalExpectedQuantity: '7',
+      varianceQuantity: '-2',
+    });
   });
 
   it('reconciles a stocktake by physical condition rather than forcing variance into sellable stock', async () => {

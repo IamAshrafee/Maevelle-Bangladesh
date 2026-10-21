@@ -2,17 +2,22 @@
 
 import {
   Archive,
+  ArrowRight,
+  BookTemplate,
   ChevronLeft,
   ChevronRight,
+  FolderTree,
   Loader2,
   Plus,
   RotateCcw,
   Search,
+  Sparkles,
+  TableProperties,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { type FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   PaginationDto,
@@ -24,24 +29,46 @@ import type {
 import {
   archiveSizeGuide,
   createSizeGuide,
+  createSizeGuideRow,
   fetchSizeGuides,
   fetchSizingWorkspace,
   restoreSizeGuide,
+  updateSizeGuideMatrix,
 } from '@/lib/sizing/api';
+import { SIZING_TEMPLATE_PRESETS } from '@/lib/sizing/presets';
 
 import {
-  OperationalEmptyState,
-  OperationalFeedback,
-  OperationalPageHeader,
-} from '../../../components/operational-worklist';
-import { StatusBadge } from '../../../components/status-badge';
+  AdminPage,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageActions,
+  PageDescription,
+  PageHeader,
+  PagePanel,
+} from '@/components/ui/page-shell';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/status-badge';
+import { Input } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/native-select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
-type Feedback = { message: string; tone: 'success' | 'warning' | 'danger' } | null;
+type Feedback = { message: string; tone: 'success' | 'warning' | 'destructive' } | null;
 
 const EMPTY_PAGINATION: PaginationDto = { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 };
 
-export default function SizeGuidesListPage() {
+function SizeGuidesListContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const shouldOpenCreate = searchParams.get('create') === 'true';
+
   const [guides, setGuides] = useState<readonly SizeGuideSummaryDto[]>([]);
   const [domains, setDomains] = useState<readonly SizingDomainDto[]>([]);
   const [systems, setSystems] = useState<readonly SizeSystemDto[]>([]);
@@ -56,7 +83,11 @@ export default function SizeGuidesListPage() {
   const [domainId, setDomainId] = useState('ALL');
   const [page, setPage] = useState(1);
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  // Create Modals
+  const [showCreateModal, setShowCreateModal] = useState(shouldOpenCreate);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
+
   const [createName, setCreateName] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [createDomainId, setCreateDomainId] = useState('');
@@ -82,7 +113,10 @@ export default function SizeGuidesListPage() {
       setDomains(workspace.domains);
       setSystems(workspace.systems);
     } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : 'Failed to load size guides.', tone: 'danger' });
+      setFeedback({
+        message: error instanceof Error ? error.message : 'Failed to load size guides.',
+        tone: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -92,14 +126,14 @@ export default function SizeGuidesListPage() {
     void load();
   }, [load]);
 
-  const activeDomains = useMemo(() => domains.filter((domain) => domain.status === 'ACTIVE'), [domains]);
+  const activeDomains = useMemo(() => domains.filter((d) => d.status === 'ACTIVE'), [domains]);
   const createSystems = useMemo(
-    () => systems.filter((system) => system.status === 'ACTIVE' && system.sizingDomainId === createDomainId),
+    () => systems.filter((s) => s.status === 'ACTIVE' && s.sizingDomainId === createDomainId),
     [createDomainId, systems],
   );
 
-  function submitSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submitSearch(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
   }
@@ -114,8 +148,8 @@ export default function SizeGuidesListPage() {
     setShowCreateModal(true);
   }
 
-  async function handleCreateGuide(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleCreateGuide(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     if (!createName.trim() || !createDomainId) {
       setCreateError('Guide name and sizing domain are required.');
       return;
@@ -140,117 +174,540 @@ export default function SizeGuidesListPage() {
     }
   }
 
+  async function handleCreateFromPreset(presetId: string) {
+    const preset = SIZING_TEMPLATE_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+
+    setTemplateBusy(true);
+    setFeedback(null);
+
+    try {
+      // Find matching domain or use first active
+      const matchedDomain =
+        domains.find((d) => d.code === preset.domainCode || d.name.toLowerCase().includes(preset.domainName.toLowerCase())) ??
+        activeDomains[0];
+
+      if (!matchedDomain) {
+        throw new Error('Please create at least one active sizing domain before generating guides.');
+      }
+
+      // Check if a matching system exists
+      const matchedSystem = systems.find(
+        (s) => s.sizingDomainId === matchedDomain.id && s.code === preset.sizeSystemCode,
+      );
+
+      const created = await createSizeGuide({
+        name: preset.name,
+        description: `Standard commercial fit chart for ${preset.name}.`,
+        sizingDomainId: matchedDomain.id,
+        ...(matchedSystem ? { sizeSystemId: matchedSystem.id } : {}),
+      });
+
+      // Add sample rows if revision was created
+      if (created.revisionId && preset.standardSizes.length > 0) {
+        let position = 0;
+        for (const size of preset.standardSizes) {
+          await createSizeGuideRow(created.revisionId, {
+            expectedVersion: position,
+            displayLabel: size.label,
+            position,
+          });
+          position += 1;
+        }
+      }
+
+      setShowTemplateModal(false);
+      setFeedback({ message: `Guide "${preset.name}" created from preset.`, tone: 'success' });
+      router.push(`/sizing/guides/${created.id}`);
+    } catch (err) {
+      setFeedback({
+        message: err instanceof Error ? err.message : 'Failed to create guide from preset.',
+        tone: 'destructive',
+      });
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
+
   async function toggleGuide(guide: SizeGuideSummaryDto) {
-    const restoring = guide.status === 'ARCHIVED';
-    if (!restoring && !window.confirm(`Archive “${guide.name}”? Product and category dependencies must be removed first.`)) return;
+    const isRestoring = guide.status === 'ARCHIVED';
+    if (!isRestoring && !window.confirm(`Archive "${guide.name}"? Attached products will lose their direct guide link.`)) return;
 
     setBusyId(guide.id);
     setFeedback(null);
     try {
-      if (restoring) await restoreSizeGuide(guide.id);
+      if (isRestoring) await restoreSizeGuide(guide.id);
       else await archiveSizeGuide(guide.id);
-      setFeedback({ message: `Size guide ${restoring ? 'restored' : 'archived'}.`, tone: 'success' });
+      setFeedback({ message: `Size guide ${isRestoring ? 'restored' : 'archived'} successfully.`, tone: 'success' });
       await load();
-    } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : `Failed to ${restoring ? 'restore' : 'archive'} size guide.`, tone: 'danger' });
+    } catch (err) {
+      setFeedback({
+        message: err instanceof Error ? err.message : 'Action failed.',
+        tone: 'destructive',
+      });
     } finally {
       setBusyId(null);
     }
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <OperationalPageHeader
-        eyebrow="Sizing"
-        title="Size Guides"
-        description="Create revisioned measurement guides, bind them to canonical size systems, publish immutable customer-facing versions, and manage lifecycle dependencies."
+    <AdminPage>
+      <PageHeader
+        eyebrow="Measurement Charts"
+        title="Size Guides Studio"
+        description="Create version-controlled measurement guides, attach regional sizing systems, publish immutable customer-facing charts, and monitor catalog usage."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTemplateModal(true)}
+              className="min-h-10 sm:min-h-9 touch-manipulation gap-1.5"
+            >
+              <BookTemplate className="size-3.5" />
+              <span>Use Template Preset</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={openCreate}
+              disabled={activeDomains.length === 0}
+              className="min-h-10 sm:min-h-9 touch-manipulation gap-1.5"
+            >
+              <Plus className="size-4" />
+              <span>Create Guide</span>
+            </Button>
+          </div>
+        }
       />
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-6">
-        {feedback ? <OperationalFeedback tone={feedback.tone}>{feedback.message}</OperationalFeedback> : null}
-
-        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
-            <form onSubmit={submitSearch} className="flex min-w-64 flex-1 gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search guides by name…" className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm" />
-              </div>
-              <button type="submit" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Search</button>
-            </form>
-
-            <select value={status} onChange={(event) => { setPage(1); setStatus(event.target.value as typeof status); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs">
-              <option value="ACTIVE">Active</option><option value="ARCHIVED">Archived</option><option value="ALL">All statuses</option>
-            </select>
-            <select value={domainId} onChange={(event) => { setPage(1); setDomainId(event.target.value); }} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs">
-              <option value="ALL">All domains</option>{domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}
-            </select>
-            <button type="button" onClick={openCreate} disabled={activeDomains.length === 0} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40"><Plus className="h-3.5 w-3.5" /> Create guide</button>
-          </div>
-
-          {loading ? (
-            <div className="animate-pulse space-y-3 p-5"><div className="h-16 rounded bg-slate-100" /><div className="h-16 rounded bg-slate-100" /></div>
-          ) : guides.length === 0 ? (
-            <OperationalEmptyState title="No matching size guides" description="Create a size guide or change the current filters." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-left text-xs">
-                <thead className="bg-slate-50 font-semibold text-slate-600">
-                  <tr><th className="px-4 py-3">Guide</th><th className="px-4 py-3">Domain / system</th><th className="px-4 py-3">Publication</th><th className="px-4 py-3">Usage</th><th className="px-4 py-3">Updated</th><th className="px-4 py-3 text-right">Actions</th></tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {guides.map((guide) => {
-                    const busy = busyId === guide.id;
-                    return (
-                      <tr key={guide.id} className="hover:bg-slate-50/60">
-                        <td className="px-4 py-3">
-                          <Link href={`/sizing/guides/${guide.id}`} className="font-semibold text-slate-900 hover:underline">{guide.name}</Link>
-                          {guide.description ? <p className="mt-1 max-w-md truncate text-[11px] text-slate-500">{guide.description}</p> : null}
-                          <div className="mt-1"><StatusBadge status={guide.status} /></div>
-                        </td>
-                        <td className="px-4 py-3"><div className="font-medium text-slate-700">{guide.sizingDomainName}</div><div className="mt-0.5 text-[11px] text-slate-500">{guide.sizeSystemName ?? 'Unbound guide'}</div></td>
-                        <td className="px-4 py-3">{guide.hasPublishedRevision ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">Published</span> : <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">Draft only</span>}<div className="mt-1 text-[11px] text-slate-400">Guide v{guide.version}</div></td>
-                        <td className="px-4 py-3 text-slate-600"><div>{guide.productCount} product{guide.productCount === 1 ? '' : 's'}</div><div>{guide.categoryCount} categor{guide.categoryCount === 1 ? 'y' : 'ies'}</div></td>
-                        <td className="px-4 py-3 text-slate-500">{new Date(guide.updatedAt).toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="inline-flex items-center gap-1">
-                            <Link href={`/sizing/guides/${guide.id}`} className="rounded-md border border-slate-300 px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-50">Open</Link>
-                            {guide.status === 'ACTIVE' ? <button type="button" disabled={busy} onClick={() => void toggleGuide(guide)} className="rounded p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-40" title="Archive"><Archive className="h-3.5 w-3.5" /></button> : <button type="button" disabled={busy} onClick={() => void toggleGuide(guide)} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:opacity-40" title="Restore"><RotateCcw className="h-3.5 w-3.5" /></button>}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-            <span>Page {pagination.page} of {Math.max(pagination.totalPages, 1)} · {pagination.totalItems} guides</span>
-            <div className="flex gap-2">
-              <button type="button" disabled={pagination.page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 font-medium text-slate-700 disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" /> Previous</button>
-              <button type="button" disabled={pagination.totalPages === 0 || pagination.page >= pagination.totalPages || loading} onClick={() => setPage((value) => value + 1)} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 font-medium text-slate-700 disabled:opacity-40">Next <ChevronRight className="h-3.5 w-3.5" /></button>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      {showCreateModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3"><div><h2 className="text-base font-semibold text-slate-900">Create size guide</h2><p className="text-xs text-slate-500">A first draft revision is created automatically.</p></div><button type="button" onClick={() => setShowCreateModal(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button></div>
-            <form onSubmit={handleCreateGuide} className="mt-4 space-y-4">
-              {createError ? <div className="rounded-md bg-red-50 p-3 text-xs text-red-700">{createError}</div> : null}
-              <label className="block text-xs font-semibold text-slate-700">Guide name<input value={createName} onChange={(event) => setCreateName(event.target.value)} required className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Women’s Standard Tops" /></label>
-              <label className="block text-xs font-semibold text-slate-700">Sizing domain<select value={createDomainId} onChange={(event) => { setCreateDomainId(event.target.value); setCreateSystemId(''); }} required className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="" disabled>Choose domain</option>{activeDomains.map((domain) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}</select></label>
-              <label className="block text-xs font-semibold text-slate-700">Canonical size system <span className="font-normal text-slate-400">(optional)</span><select value={createSystemId} onChange={(event) => setCreateSystemId(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">No system binding</option>{createSystems.map((system) => <option key={system.id} value={system.id}>{system.name}{system.regionCode ? ` · ${system.regionCode}` : ''}</option>)}</select><span className="mt-1 block text-[11px] font-normal text-slate-500">Bind a system when rows should map to canonical definitions such as S/M/L or EU numeric sizes.</span></label>
-              <label className="block text-xs font-semibold text-slate-700">Description<textarea rows={3} value={createDescription} onChange={(event) => setCreateDescription(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Who should use this guide and for what products?" /></label>
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={createBusy} onClick={() => setShowCreateModal(false)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700">Cancel</button><button type="submit" disabled={createBusy || !createName.trim() || !createDomainId} className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{createBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Create & open</button></div>
-            </form>
-          </div>
+      {feedback ? (
+        <div
+          role="status"
+          className={`flex items-center gap-2.5 rounded-lg border px-4 py-3 text-sm animate-in fade-in duration-150 ${
+            feedback.tone === 'success'
+              ? 'border-success/30 bg-success-subtle text-success'
+              : 'border-destructive/30 bg-destructive-subtle text-destructive'
+          }`}
+        >
+          <span>{feedback.message}</span>
         </div>
       ) : null}
-    </div>
+
+      {/* Filter and Search Bar */}
+      <PagePanel className="p-4 border-border space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <form onSubmit={submitSearch} className="flex flex-1 gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search guides by title or description…"
+                className="h-9 pl-9 text-xs"
+              />
+            </div>
+            <Button type="submit" variant="secondary" size="sm" className="h-9 text-xs">
+              Search
+            </Button>
+          </form>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <NativeSelect
+              value={status}
+              onChange={(e) => {
+                setPage(1);
+                setStatus(e.target.value as typeof status);
+              }}
+              className="h-9 text-xs bg-card min-w-32"
+            >
+              <option value="ACTIVE">Active Guides</option>
+              <option value="ARCHIVED">Archived Guides</option>
+              <option value="ALL">All Statuses</option>
+            </NativeSelect>
+
+            <NativeSelect
+              value={domainId}
+              onChange={(e) => {
+                setPage(1);
+                setDomainId(e.target.value);
+              }}
+              className="h-9 text-xs bg-card min-w-36"
+            >
+              <option value="ALL">All Domains</option>
+              {domains.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        </div>
+      </PagePanel>
+
+      {/* Guide List / Empty / Loading */}
+      {loading ? (
+        <LoadingState message="Loading size guides library…" />
+      ) : guides.length === 0 ? (
+        <EmptyState
+          icon={TableProperties}
+          title="No size guides found"
+          description={search ? `No guides matched "${search}".` : 'Create your first measurement guide or start from a standard apparel template.'}
+          action={
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowTemplateModal(true)}>
+                Choose Template
+              </Button>
+              <Button size="sm" onClick={openCreate} disabled={activeDomains.length === 0}>
+                Create Custom Guide
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          {/* Desktop Table */}
+          <div className="hidden sm:block">
+            <PagePanel className="p-0 border-border overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/40 font-semibold text-muted-foreground border-b border-border">
+                    <tr>
+                      <th className="px-4 py-3">Guide Name</th>
+                      <th className="px-4 py-3">Domain / System</th>
+                      <th className="px-4 py-3">Publication State</th>
+                      <th className="px-4 py-3">Catalog Usage</th>
+                      <th className="px-4 py-3">Last Updated</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {guides.map((guide) => {
+                      const isBusy = busyId === guide.id;
+
+                      return (
+                        <tr key={guide.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/sizing/guides/${guide.id}`}
+                              className="font-semibold text-foreground text-sm hover:text-primary hover:underline block truncate max-w-xs"
+                            >
+                              {guide.name}
+                            </Link>
+                            {guide.description ? (
+                              <p className="mt-0.5 text-[11px] text-muted-foreground truncate max-w-sm">
+                                {guide.description}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-foreground">{guide.sizingDomainName}</div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {guide.sizeSystemName ? (
+                                <span className="font-mono">{guide.sizeSystemName}</span>
+                              ) : (
+                                <span className="italic">Unbound custom chart</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              {guide.hasPublishedRevision ? (
+                                <Badge variant="secondary" className="bg-success-subtle text-success text-[10px] font-medium">
+                                  Published (v{guide.version})
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="bg-warning-subtle text-warning text-[10px] font-medium">
+                                  Draft Only
+                                </Badge>
+                              )}
+                              <StatusBadge status={guide.status} />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-muted-foreground tabular-nums">
+                            <div>{guide.productCount} product{guide.productCount === 1 ? '' : 's'}</div>
+                            <div className="text-[10px]">{guide.categoryCount} categor{guide.categoryCount === 1 ? 'y' : 'ies'}</div>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground tabular-nums">
+                            {new Date(guide.updatedAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="inline-flex items-center gap-1.5">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                render={<Link href={`/sizing/guides/${guide.id}`} />}
+                                className="h-8 text-xs px-2.5"
+                              >
+                                Open Studio
+                              </Button>
+                              {guide.status === 'ACTIVE' ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy}
+                                  onClick={() => void toggleGuide(guide)}
+                                  className="size-8 p-0 text-muted-foreground hover:text-destructive"
+                                  title="Archive guide"
+                                >
+                                  <Archive className="size-3.5" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isBusy}
+                                  onClick={() => void toggleGuide(guide)}
+                                  className="size-8 p-0 text-success"
+                                  title="Restore guide"
+                                >
+                                  <RotateCcw className="size-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </PagePanel>
+          </div>
+
+          {/* Mobile Card Stack (< sm) */}
+          <div className="space-y-3 sm:hidden">
+            {guides.map((guide) => (
+              <PagePanel key={guide.id} className="p-4 border-border flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/sizing/guides/${guide.id}`}
+                      className="font-semibold text-foreground text-sm hover:text-primary block truncate"
+                    >
+                      {guide.name}
+                    </Link>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {guide.sizingDomainName} · {guide.sizeSystemName ?? 'Unbound chart'}
+                    </p>
+                  </div>
+                  <StatusBadge status={guide.status} />
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border/40 pt-2.5">
+                  <div className="flex items-center gap-2">
+                    {guide.hasPublishedRevision ? (
+                      <Badge variant="secondary" className="bg-success-subtle text-success text-[10px]">
+                        Published v{guide.version}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="bg-warning-subtle text-warning text-[10px]">
+                        Draft
+                      </Badge>
+                    )}
+                    <span className="font-mono text-[11px]">
+                      {guide.productCount} prod · {guide.categoryCount} cat
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={<Link href={`/sizing/guides/${guide.id}`} />}
+                    className="min-h-9 text-xs px-3"
+                  >
+                    Open Studio
+                  </Button>
+                </div>
+              </PagePanel>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground">
+            <span>
+              Page {pagination.page} of {Math.max(pagination.totalPages, 1)} · {pagination.totalItems} total guides
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.page <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="min-h-9 sm:min-h-8 text-xs gap-1"
+              >
+                <ChevronLeft className="size-3.5" />
+                <span>Previous</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.totalPages === 0 || pagination.page >= pagination.totalPages || loading}
+                onClick={() => setPage((p) => p + 1)}
+                className="min-h-9 sm:min-h-8 text-xs gap-1"
+              >
+                <span>Next</span>
+                <ChevronRight className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CUSTOM GUIDE CREATION */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create Size Guide</DialogTitle>
+            <DialogDescription className="text-xs">
+              A blank chart draft will be created. You can define size rows and measurements in the studio.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateGuide} className="space-y-4 pt-2">
+            {createError ? (
+              <div className="rounded-md bg-destructive/10 p-3 text-xs text-destructive">
+                {createError}
+              </div>
+            ) : null}
+
+            <label className="block text-xs font-medium text-foreground">
+              Guide Title
+              <Input
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                required
+                placeholder="e.g. Women's Standard Lawn Kurti, Men's Slim Panjabi"
+                className="mt-1 h-9 text-xs"
+              />
+            </label>
+
+            <label className="block text-xs font-medium text-foreground">
+              Sizing Domain
+              <NativeSelect
+                value={createDomainId}
+                onChange={(e) => {
+                  setCreateDomainId(e.target.value);
+                  setCreateSystemId('');
+                }}
+                required
+                className="mt-1 h-9 text-xs bg-card"
+              >
+                <option value="" disabled>Choose a sizing domain</option>
+                {activeDomains.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.subjectType})
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
+
+            <label className="block text-xs font-medium text-foreground">
+              Canonical Size System <span className="text-muted-foreground font-normal">(optional)</span>
+              <NativeSelect
+                value={createSystemId}
+                onChange={(e) => setCreateSystemId(e.target.value)}
+                className="mt-1 h-9 text-xs bg-card"
+              >
+                <option value="">No system binding (Unbound custom chart)</option>
+                {createSystems.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.regionCode ? `· ${s.regionCode}` : ''}
+                  </option>
+                ))}
+              </NativeSelect>
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                Bind a system when your rows map to canonical definitions (e.g. S/M/L, 38/40/42).
+              </span>
+            </label>
+
+            <label className="block text-xs font-medium text-foreground">
+              Description <span className="text-muted-foreground font-normal">(optional)</span>
+              <textarea
+                rows={2}
+                value={createDescription}
+                onChange={(e) => setCreateDescription(e.target.value)}
+                placeholder="Who should use this guide and for which apparel types?"
+                className="mt-1 w-full rounded-md border border-input bg-card p-2 text-xs outline-none focus:border-ring"
+              />
+            </label>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={createBusy || !createName.trim() || !createDomainId}>
+                {createBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                <span>Create & Open Studio</span>
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL: USE TEMPLATE PRESET */}
+      <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="size-4 text-primary" />
+              <span>Standard Apparel Sizing Presets</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Instantly create a complete size chart pre-populated with standard sizes and measurement dimensions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 pt-2 sm:grid-cols-2">
+            {SIZING_TEMPLATE_PRESETS.map((preset) => (
+              <div
+                key={preset.id}
+                className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between gap-3 hover:border-primary/50 transition-colors shadow-2xs"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {preset.category}
+                    </Badge>
+                    <Badge variant="secondary" className="text-[10px]">
+                      Unit: {preset.defaultUnit}
+                    </Badge>
+                  </div>
+                  <h4 className="mt-2 text-sm font-semibold text-foreground">{preset.name}</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Includes {preset.standardSizes.length} standard sizes ({preset.standardSizes.map((s) => s.label).join(', ')})
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {preset.standardMeasurements.map((m) => (
+                      <span
+                        key={m.code}
+                        className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                      >
+                        {m.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <Button
+                  size="sm"
+                  disabled={templateBusy}
+                  onClick={() => void handleCreateFromPreset(preset.id)}
+                  className="w-full text-xs min-h-9 gap-1"
+                >
+                  {templateBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+                  <span>Generate from Preset</span>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </AdminPage>
+  );
+}
+
+export default function SizeGuidesListPage() {
+  return (
+    <Suspense fallback={<LoadingState message="Loading size guides studio..." />}>
+      <SizeGuidesListContent />
+    </Suspense>
   );
 }

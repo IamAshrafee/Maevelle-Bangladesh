@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
@@ -92,6 +92,7 @@ export function CreatePurchaseDialog({
   onSuccess,
 }: CreatePurchaseDialogProps) {
   const router = useRouter();
+  const replenishmentPrefillApplied = useRef(false);
 
   const [loadedSuppliers, setLoadedSuppliers] = useState<readonly SupplierDto[]>(
     propSuppliers ?? [],
@@ -227,9 +228,46 @@ export function CreatePurchaseDialog({
     );
   }
 
+  useEffect(() => {
+    if (!open) {
+      replenishmentPrefillApplied.current = false;
+      return;
+    }
+    if (replenishmentPrefillApplied.current || activeVariants.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const variantId = params.get('variantId');
+    if (!variantId) return;
+    const variant = activeVariants.find((item) => item.id === variantId);
+    if (!variant) {
+      const sku = params.get('sku');
+      if (sku && variantChoices.query !== sku) variantChoices.setQuery(sku);
+      return;
+    }
+    replenishmentPrefillApplied.current = true;
+    setAddingVariantId(variant.id);
+    setAddingVariant(variant);
+    setAddingUnitPrice(
+      variant.estimatedCostAmount && Number(variant.estimatedCostAmount) > 0
+        ? variant.estimatedCostAmount
+        : '0',
+    );
+    const quantity = params.get('quantity');
+    if (quantity && Number(quantity) > 0) setAddingQuantity(quantity);
+    const destination = params.get('destinationLocationId');
+    if (destination) setDestinationLocationId(destination);
+  }, [activeVariants, open, variantChoices]);
+
   function handleClose(nextOpen: boolean) {
     if (!nextOpen) {
-      removeUrlParams('create', 'supplier');
+      removeUrlParams(
+        'create',
+        'supplier',
+        'inventoryItemId',
+        'variantId',
+        'sku',
+        'quantity',
+        'destinationLocationId',
+      );
       setError(null);
     }
     onOpenChange(nextOpen);

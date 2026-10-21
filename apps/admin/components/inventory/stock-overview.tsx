@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { RefreshCw, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
+import { BookmarkCheck, History, RefreshCw, RotateCcw, Search, SlidersHorizontal, TrendingDown } from 'lucide-react';
 import { useDeferredValue, useEffect, useState } from 'react';
 
 import type {
@@ -161,6 +161,15 @@ export function StockOverview() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" render={<Link href="/inventory/replenishment" />} nativeButton={false}>
+            <TrendingDown aria-hidden="true" /> Replenishment
+          </Button>
+          <Button variant="outline" render={<Link href="/inventory/reservations" />} nativeButton={false}>
+            <BookmarkCheck aria-hidden="true" /> Reservations
+          </Button>
+          <Button variant="outline" render={<Link href="/inventory/history" />} nativeButton={false}>
+            <History aria-hidden="true" /> Movements
+          </Button>
           <Button variant="outline" disabled={state === 'loading'} onClick={() => void load()}>
             <RefreshCw aria-hidden="true" /> Refresh
           </Button>

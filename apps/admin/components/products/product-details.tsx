@@ -969,18 +969,45 @@ export function ProductDetails({ productId }: { productId: string }) {
             {sizing?.configured ? (
               <dl className="mt-4 divide-y text-sm">
                 <div className="grid grid-cols-2 gap-3 py-2.5">
-                  <dt className="text-muted-foreground">System</dt>
-                  <dd>{sizing.sizeSystemName}</dd>
+                  <dt className="text-muted-foreground">Size System</dt>
+                  <dd className="font-medium text-foreground">{sizing.sizeSystemName ?? 'Unbound / Domain Standard'}</dd>
                 </div>
                 <div className="grid grid-cols-2 gap-3 py-2.5">
-                  <dt className="text-muted-foreground">Guide</dt>
+                  <dt className="text-muted-foreground">Product Guide</dt>
                   <dd>
-                    {sizing.sizeGuideName ?? 'No product guide — category default may apply'}
+                    {sizing.sizeGuideName ? (
+                      <span className="font-medium text-foreground">{sizing.sizeGuideName}</span>
+                    ) : (
+                      <span className="text-muted-foreground italic">None (Direct)</span>
+                    )}
                     {sizing.sizeGuideName && !sizing.hasPublishedGuide ? (
-                      <span className="block text-destructive">
-                        A published replacement is required.
+                      <span className="block text-xs text-destructive mt-0.5">
+                        A published revision is required.
                       </span>
                     ) : null}
+                  </dd>
+                </div>
+                <div className="grid grid-cols-2 gap-3 py-2.5">
+                  <dt className="text-muted-foreground">Effective Chart</dt>
+                  <dd>
+                    {sizing.effectiveGuideName ? (
+                      <div className="space-y-1">
+                        <span className="font-medium text-foreground">{sizing.effectiveGuideName}</span>
+                        <div>
+                          {sizing.effectiveSource === 'PRODUCT' ? (
+                            <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                              Direct Product Override
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              Inherited from Category ({sizing.categoryName ?? 'Primary'})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground italic">No effective guide</span>
+                    )}
                   </dd>
                 </div>
               </dl>
@@ -990,17 +1017,35 @@ export function ProductDetails({ productId }: { productId: string }) {
                 sizing access or open the editor to update it.
               </p>
             ) : (
-              <p className="mt-4 text-sm text-muted-foreground">
-                No product-specific sizing configuration. The Storefront can use the primary
-                category&apos;s published default guide when one is assigned.
-              </p>
+              <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                <p>
+                  No product-specific sizing configuration configured.
+                </p>
+                {sizing?.effectiveGuideName ? (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3">
+                    <span className="text-xs font-semibold text-foreground block">
+                      Category Default Available:
+                    </span>
+                    <span className="text-xs text-foreground font-medium">
+                      {sizing.effectiveGuideName}
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Inherited from primary category ({sizing.categoryName}).
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs">
+                    Assign a size system in the product editor to configure standardized sizes.
+                  </p>
+                )}
+              </div>
             )}
-            {sizing?.sizeGuideId ? (
+            {sizing?.effectiveGuideId ? (
               <Button
                 className="mt-4"
                 size="sm"
                 variant="outline"
-                render={<Link href={`/sizing/guides/${sizing.sizeGuideId}`} />}
+                render={<Link href={`/sizing/guides/${sizing.effectiveGuideId}`} />}
               >
                 Open size guide
               </Button>

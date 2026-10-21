@@ -18,6 +18,7 @@ const success = new Set([
   'SENT',
   'FULFILLED',
   'CONFIRMED',
+  'POSTED',
 ]);
 
 const warning = new Set([
@@ -46,6 +47,8 @@ const warning = new Set([
   'PENDING_MANUAL',
   'DELIVERY_DELAYED',
   'NEEDS_REVIEW',
+  'COUNTING',
+  'REVIEW',
 ]);
 
 const danger = new Set([
