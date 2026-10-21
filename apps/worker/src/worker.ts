@@ -32,6 +32,8 @@ import {
   purgeExpiredRealtimeEvents,
   purgeExpiredWebsiteVisitorResources,
   reclaimExpiredMessagingDeliveries,
+  processDueMessagingFollowUps,
+  processMessagingAssignmentRules,
 } from '@maevelle/database/messaging';
 import { websiteMessagingAdapter } from './website-messaging-adapter.js';
 
@@ -145,6 +147,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         messagingReclaimed,
         messagingEventsPurged,
         messagingVisitorResourcesPurged,
+        messagingFollowUps,
+        messagingAssignments,
       ] = await Promise.all([
         runJob(() => reclaimExpiredJobs(options.database.db)),
         runJob(() =>
@@ -236,6 +240,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         runJob(() => reclaimExpiredMessagingDeliveries(options.database.db)),
         runJob(() => purgeExpiredRealtimeEvents(options.database.db)),
         runJob(() => purgeExpiredWebsiteVisitorResources(options.database.db)),
+        runJob(() => processDueMessagingFollowUps(options.database.db)),
+        runJob(() => processMessagingAssignmentRules(options.database.db)),
       ]);
       logger?.debug(
         {
@@ -267,6 +273,8 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           messagingReclaimed,
           messagingEventsPurged,
           messagingVisitorResourcesPurged,
+          messagingFollowUps,
+          messagingAssignments,
         },
         'Worker recovery tick.',
       );

@@ -1,101 +1,25 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
 import * as messaging from '@maevelle/database/messaging';
-import { findActiveAdminContext, type AdminContextRecord } from '@maevelle/database/platform';
 import type { ObjectStoragePort } from '@maevelle/media';
 
-import type { createAuth } from '../auth/auth.js';
+import { registerOperationalMessagingRoutes } from './messaging-operations.js';
+import {
+  authenticateMessagingAdmin as requireCapability,
+  hasMessagingInboxAccess as hasInboxAccess,
+  messagingAccess as access,
+  messagingActor as actor,
+  messagingRequestHeaders as requestHeaders,
+  parseExpectedVersion as expectedVersion,
+  sendMessagingError as fail,
+  type MessagingAuth as Auth,
+} from './messaging-route-support.js';
 
-type Auth = ReturnType<typeof createAuth>;
+const authenticate = requireCapability;
+
 const conversationStatuses = ['NEW', 'OPEN', 'PENDING', 'RESOLVED', 'CLOSED'] as const;
-
-function requestHeaders(input: Record<string, string | string[] | undefined>): Headers {
-  return new Headers(
-    Object.entries(input).flatMap(([name, value]) =>
-      typeof value === 'string' ? [[name, value]] : [],
-    ),
-  );
-}
-
-async function authenticate(
-  database: DatabaseClient,
-  auth: Auth,
-  headers: Record<string, string | string[] | undefined>,
-  required?: string,
-): Promise<(AdminContextRecord & { actorId: string }) | undefined> {
-  const session = await auth.api.getSession({ headers: requestHeaders(headers) });
-  if (!session?.user?.id) return;
-  const selected = headers['x-organization-id'];
-  const context = await findActiveAdminContext(database.db, session.user.id, {
-    ...(typeof selected === 'string' ? { organizationId: selected } : {}),
-    ...(required ? { requiredCapability: required } : {}),
-  });
-  return context ? { ...context, actorId: session.user.id } : undefined;
-}
-
-function access(context: AdminContextRecord): messaging.ConversationAccess {
-  return context.capabilities.includes('messaging.inbox.view_all') ? 'ALL' : 'ASSIGNED';
-}
-
-function hasInboxAccess(context: AdminContextRecord): boolean {
-  return context.capabilities.some(
-    (capability) =>
-      capability === 'messaging.inbox.view_assigned' || capability === 'messaging.inbox.view_all',
-  );
-}
-
-function fail(reply: FastifyReply, error: unknown, requestId: string) {
-  if (!(error instanceof messaging.MessagingDomainError)) throw error;
-  const status =
-    error.code === 'CONVERSATION_NOT_FOUND'
-      ? 404
-      : error.code === 'EVENT_CURSOR_EXPIRED'
-        ? 410
-        : error.code === 'VALIDATION_FAILED'
-          ? 400
-          : [
-                'STALE_VERSION',
-                'ASSIGNMENT_CONFLICT',
-                'CONVERSATION_CLOSED',
-                'IDEMPOTENCY_IN_PROGRESS',
-                'IDEMPOTENCY_KEY_REUSED',
-              ].includes(error.code)
-            ? 409
-            : error.code === 'CONNECTION_UNAVAILABLE'
-              ? 503
-              : 422;
-  return reply.code(status).send({
-    error: {
-      code: error.code,
-      message: error.message,
-      ...(error.details ? { details: error.details } : {}),
-      requestId,
-    },
-  });
-}
-
-function expectedVersion(value: string | string[] | undefined): string {
-  if (typeof value !== 'string')
-    throw new messaging.MessagingDomainError('VALIDATION_FAILED', 'If-Match is required.');
-  const version = value.replace(/^W\//, '').replaceAll('"', '');
-  if (!/^\d+$/.test(version))
-    throw new messaging.MessagingDomainError(
-      'VALIDATION_FAILED',
-      'If-Match must contain a quoted numeric version.',
-    );
-  return version;
-}
-
-function actor(context: AdminContextRecord & { actorId: string }): messaging.MessagingActorContext {
-  return {
-    organizationId: context.organizationId,
-    actorId: context.actorId,
-    membershipId: context.membershipId,
-    capabilities: context.capabilities,
-  };
-}
 
 export function registerMessagingRoutes(
   app: FastifyInstance,
@@ -121,6 +45,8 @@ export function registerMessagingRoutes(
       });
   });
 
+  registerOperationalMessagingRoutes(app, database, auth);
+
   app.get(
     '/admin/messaging/conversations',
     {
@@ -139,8 +65,29 @@ export function registerMessagingRoutes(
               Type.Literal('INSTAGRAM'),
             ]),
           ),
+          priority: Type.Optional(
+            Type.Union(['LOW', 'NORMAL', 'HIGH', 'URGENT'].map((value) => Type.Literal(value))),
+          ),
+          assignedMembershipId: Type.Optional(Type.String({ format: 'uuid' })),
+          tagId: Type.Optional(Type.String({ format: 'uuid' })),
+          unread: Type.Optional(Type.Boolean()),
+          starred: Type.Optional(Type.Boolean()),
+          needsReply: Type.Optional(Type.Boolean()),
+          followUp: Type.Optional(
+            Type.Union([Type.Literal('pending'), Type.Literal('overdue'), Type.Literal('none')]),
+          ),
+          createdFrom: Type.Optional(Type.String({ format: 'date-time' })),
+          createdTo: Type.Optional(Type.String({ format: 'date-time' })),
+          activityFrom: Type.Optional(Type.String({ format: 'date-time' })),
+          activityTo: Type.Optional(Type.String({ format: 'date-time' })),
           search: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
-          sort: Type.Optional(Type.Union([Type.Literal('newest'), Type.Literal('oldest')])),
+          sort: Type.Optional(
+            Type.Union(
+              ['newest', 'oldest', 'created_newest', 'created_oldest', 'priority', 'follow_up'].map(
+                (value) => Type.Literal(value),
+              ),
+            ),
+          ),
           cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
           limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
@@ -160,8 +107,19 @@ export function registerMessagingRoutes(
         scope?: 'mine' | 'unassigned' | 'all';
         status?: (typeof conversationStatuses)[number];
         channelKind?: 'WEBSITE' | 'FACEBOOK' | 'INSTAGRAM';
+        priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+        assignedMembershipId?: string;
+        tagId?: string;
+        unread?: boolean;
+        starred?: boolean;
+        needsReply?: boolean;
+        followUp?: 'pending' | 'overdue' | 'none';
+        createdFrom?: string;
+        createdTo?: string;
+        activityFrom?: string;
+        activityTo?: string;
         search?: string;
-        sort?: 'newest' | 'oldest';
+        sort?: 'newest' | 'oldest' | 'created_newest' | 'created_oldest' | 'priority' | 'follow_up';
         cursor?: string;
         limit?: number;
       };
@@ -319,7 +277,11 @@ export function registerMessagingRoutes(
         const context = await authenticate(database, auth, request.headers);
         if (!context || !hasInboxAccess(context))
           return reply.code(403).send({
-            error: { code: 'FORBIDDEN', message: 'Messaging inbox access is required.', requestId: request.id },
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Messaging inbox access is required.',
+              requestId: request.id,
+            },
           });
         try {
           const attachment = await messaging.authorizeStaffMessagingAttachment(database.db, {
@@ -328,16 +290,30 @@ export function registerMessagingRoutes(
             access: access(context),
             attachmentId: (request.params as { attachmentId: string }).attachmentId,
           });
-          const locator = { provider: attachment.provider, bucket: attachment.bucket, key: attachment.objectKey };
+          const locator = {
+            provider: attachment.provider,
+            bucket: attachment.bucket,
+            key: attachment.objectKey,
+          };
           if (storage.provider !== 'local') {
             const url = await storage.createSignedRead(locator, { expiresInSeconds: 300 });
             if (url) return reply.redirect(url, 302);
           }
           const content = await storage.get(locator);
           if (!content)
-            return reply.code(404).send({ error: { code: 'CONVERSATION_NOT_FOUND', message: 'Attachment was not found.', requestId: request.id } });
-          return reply.header('content-type', attachment.mimeType).header('content-length', String(content.length))
-            .header('cache-control', 'private, no-store').header('content-disposition', 'inline').send(content);
+            return reply.code(404).send({
+              error: {
+                code: 'CONVERSATION_NOT_FOUND',
+                message: 'Attachment was not found.',
+                requestId: request.id,
+              },
+            });
+          return reply
+            .header('content-type', attachment.mimeType)
+            .header('content-length', String(content.length))
+            .header('cache-control', 'private, no-store')
+            .header('content-disposition', 'inline')
+            .send(content);
         } catch (error) {
           return fail(reply, error, request.id);
         }

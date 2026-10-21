@@ -35,6 +35,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create index contacts_customer on messaging.contacts(organization_id,customer_id,updated_at desc) where customer_id is not null;
     create index contacts_name on messaging.contacts(organization_id,lower(display_name)) where display_name is not null;
+    create index contacts_name_trgm on messaging.contacts using gin(lower(display_name) gin_trgm_ops) where display_name is not null;
 
     create table messaging.contact_identities (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), contact_id uuid not null,
@@ -48,6 +49,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       foreign key(organization_id,channel_connection_id) references messaging.channel_connections(organization_id,id)
     );
     create index contact_identities_contact on messaging.contact_identities(organization_id,contact_id,last_seen_at desc);
+    create index contact_identities_display_trgm on messaging.contact_identities using gin(lower(display_name) gin_trgm_ops) where display_name is not null;
+    create index contact_identities_username_trgm on messaging.contact_identities using gin(lower(username) gin_trgm_ops) where username is not null;
 
     create table messaging.visitor_sessions (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
@@ -151,6 +154,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index messages_sender_identity on messaging.messages(organization_id,sender_contact_identity_id) where sender_contact_identity_id is not null;
     create index messages_reply_to on messaging.messages(organization_id,reply_to_message_id) where reply_to_message_id is not null;
     create index messages_delivery on messaging.messages(organization_id,delivery_state,created_at) where direction='OUTBOUND' and delivery_state in ('QUEUED','SENDING','FAILED_TRANSIENT','UNKNOWN');
+    create index messages_search_trgm on messaging.messages using gin(lower(text_body) gin_trgm_ops) where text_body is not null and direction<>'INTERNAL';
     alter table messaging.conversations add constraint conversations_last_message_fk foreign key(organization_id,last_message_id) references messaging.messages(organization_id,id) deferrable initially deferred;
 
     create table messaging.message_external_references (
@@ -231,22 +235,191 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create index conversation_read_cursors_reader on messaging.conversation_read_cursors(organization_id,reader_type,reader_id,updated_at desc);
 
+    create table messaging.conversation_assignment_events (
+      id bigint generated always as identity primary key,
+      organization_id uuid not null references platform.organizations(id), conversation_id uuid not null,
+      previous_assignee_membership_id uuid, new_assignee_membership_id uuid, actor_membership_id uuid not null,
+      assignment_source text not null default 'MANUAL' check(assignment_source in ('CLAIM','MANUAL','RULE')),
+      reason text check(reason is null or length(trim(reason)) between 1 and 500),
+      conversation_version bigint not null check(conversation_version>0), created_at timestamptz not null default now(),
+      foreign key(organization_id,conversation_id) references messaging.conversations(organization_id,id),
+      foreign key(organization_id,previous_assignee_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,new_assignee_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,actor_membership_id) references iam.organization_memberships(organization_id,id)
+    );
+    create index conversation_assignment_history on messaging.conversation_assignment_events(organization_id,conversation_id,created_at desc,id desc);
+    create index conversation_assignment_assignee on messaging.conversation_assignment_events(organization_id,new_assignee_membership_id,created_at desc) where new_assignee_membership_id is not null;
+
+    create table messaging.conversation_events (
+      id bigint generated always as identity primary key,
+      organization_id uuid not null references platform.organizations(id), conversation_id uuid not null,
+      event_type text not null check(length(event_type) between 1 and 100), actor_membership_id uuid,
+      from_value jsonb, to_value jsonb, reason text check(reason is null or length(trim(reason)) between 1 and 500),
+      created_at timestamptz not null default now(),
+      foreign key(organization_id,conversation_id) references messaging.conversations(organization_id,id),
+      foreign key(organization_id,actor_membership_id) references iam.organization_memberships(organization_id,id),
+      check(from_value is null or jsonb_typeof(from_value) in ('object','string','number','boolean')),
+      check(to_value is null or jsonb_typeof(to_value) in ('object','string','number','boolean'))
+    );
+    create index conversation_events_timeline on messaging.conversation_events(organization_id,conversation_id,created_at desc,id desc);
+    create index conversation_events_reporting on messaging.conversation_events(organization_id,event_type,created_at desc);
+
+    create table messaging.internal_notes (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      conversation_id uuid not null, author_membership_id uuid not null,
+      body text not null check(length(trim(body)) between 1 and 10000), revision integer not null default 1 check(revision>0),
+      superseded_by_note_id uuid, deleted_at timestamptz, deleted_by_membership_id uuid,
+      deletion_reason text check(deletion_reason is null or length(trim(deletion_reason)) between 1 and 500),
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      unique(organization_id,id),
+      foreign key(organization_id,conversation_id) references messaging.conversations(organization_id,id),
+      foreign key(organization_id,author_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,deleted_by_membership_id) references iam.organization_memberships(organization_id,id),
+      check((deleted_at is null)=(deleted_by_membership_id is null))
+    );
+    alter table messaging.internal_notes add constraint internal_notes_superseded_fk
+      foreign key(organization_id,superseded_by_note_id) references messaging.internal_notes(organization_id,id);
+    create index internal_notes_conversation on messaging.internal_notes(organization_id,conversation_id,created_at desc,id desc);
+
+    create table messaging.tags (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      label text not null check(length(trim(label)) between 1 and 80), normalized_label text generated always as (lower(trim(label))) stored,
+      color_token text check(color_token is null or color_token ~ '^[a-z][a-z0-9_-]{0,39}$'),
+      status text not null default 'ACTIVE' check(status in ('ACTIVE','ARCHIVED')),
+      created_by_membership_id uuid not null, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      version bigint not null default 1 check(version>0), unique(organization_id,id), unique(organization_id,normalized_label),
+      foreign key(organization_id,created_by_membership_id) references iam.organization_memberships(organization_id,id)
+    );
+    create index messaging_tags_active on messaging.tags(organization_id,status,label);
+    create table messaging.conversation_tag_assignments (
+      organization_id uuid not null, conversation_id uuid not null, tag_id uuid not null,
+      assigned_by_membership_id uuid not null, assigned_at timestamptz not null default now(),
+      primary key(organization_id,conversation_id,tag_id),
+      foreign key(organization_id,conversation_id) references messaging.conversations(organization_id,id),
+      foreign key(organization_id,tag_id) references messaging.tags(organization_id,id),
+      foreign key(organization_id,assigned_by_membership_id) references iam.organization_memberships(organization_id,id)
+    );
+    create index conversation_tag_by_tag on messaging.conversation_tag_assignments(organization_id,tag_id,assigned_at desc);
+
+    create table messaging.saved_replies (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      title text not null check(length(trim(title)) between 1 and 160), body text not null check(length(trim(body)) between 1 and 10000),
+      shortcut text check(shortcut is null or shortcut ~ '^[a-z0-9_-]{1,80}$'), category text check(category is null or length(trim(category)) between 1 and 80),
+      status text not null default 'ACTIVE' check(status in ('ACTIVE','ARCHIVED')),
+      created_by_membership_id uuid not null, updated_by_membership_id uuid not null,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1 check(version>0),
+      unique(organization_id,id),
+      foreign key(organization_id,created_by_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,updated_by_membership_id) references iam.organization_memberships(organization_id,id)
+    );
+    create unique index saved_replies_active_shortcut on messaging.saved_replies(organization_id,shortcut) where shortcut is not null and status='ACTIVE';
+    create index saved_replies_lookup on messaging.saved_replies(organization_id,status,lower(title),id);
+    create table messaging.saved_reply_scopes (
+      organization_id uuid not null, saved_reply_id uuid not null,
+      scope_type text not null check(scope_type in ('CHANNEL_KIND','CONNECTION')), scope_id text not null,
+      primary key(organization_id,saved_reply_id,scope_type,scope_id),
+      foreign key(organization_id,saved_reply_id) references messaging.saved_replies(organization_id,id)
+    );
+
+    create table messaging.business_hours (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id), connection_id uuid,
+      timezone text not null default 'Asia/Dhaka' check(length(timezone) between 1 and 100),
+      weekly_schedule jsonb not null default '{}'::jsonb check(jsonb_typeof(weekly_schedule)='object'),
+      offline_accepts_messages boolean not null default true, manual_closure_until timestamptz,
+      created_by_membership_id uuid not null, updated_by_membership_id uuid not null,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1 check(version>0),
+      unique(organization_id,id), unique nulls not distinct(organization_id,connection_id),
+      foreign key(organization_id,connection_id) references messaging.channel_connections(organization_id,id),
+      foreign key(organization_id,created_by_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,updated_by_membership_id) references iam.organization_memberships(organization_id,id)
+    );
+    create table messaging.business_hour_exceptions (
+      id uuid primary key default uuidv7(), organization_id uuid not null, business_hours_id uuid not null,
+      local_date date not null, intervals jsonb not null default '[]'::jsonb check(jsonb_typeof(intervals)='array'),
+      is_closed boolean not null default false, label text check(label is null or length(trim(label)) between 1 and 160),
+      created_at timestamptz not null default now(), unique(organization_id,business_hours_id,local_date),
+      foreign key(organization_id,business_hours_id) references messaging.business_hours(organization_id,id)
+    );
+
+    create table messaging.agent_availability (
+      organization_id uuid not null, membership_id uuid not null,
+      status text not null default 'OFFLINE' check(status in ('ONLINE','BUSY','AWAY','OFFLINE')),
+      capacity integer not null default 100 check(capacity between 0 and 100), manual_override_until timestamptz,
+      last_heartbeat_at timestamptz, updated_at timestamptz not null default now(), version bigint not null default 1 check(version>0),
+      primary key(organization_id,membership_id),
+      foreign key(organization_id,membership_id) references iam.organization_memberships(organization_id,id)
+    );
+    create index agent_availability_routing on messaging.agent_availability(organization_id,status,last_heartbeat_at desc);
+
+    create table messaging.assignment_rules (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      name text not null check(length(trim(name)) between 1 and 160), position integer not null check(position>=0), is_enabled boolean not null default true,
+      conditions jsonb not null default '{}'::jsonb check(jsonb_typeof(conditions)='object'), actions jsonb not null default '{}'::jsonb check(jsonb_typeof(actions)='object'),
+      created_by_membership_id uuid not null, updated_by_membership_id uuid not null,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1 check(version>0),
+      unique(organization_id,id), unique(organization_id,position),
+      foreign key(organization_id,created_by_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,updated_by_membership_id) references iam.organization_memberships(organization_id,id)
+    );
+    create index assignment_rules_enabled on messaging.assignment_rules(organization_id,position) where is_enabled;
+
+    create table messaging.conversation_follow_ups (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      conversation_id uuid not null, responsible_membership_id uuid not null, created_by_membership_id uuid not null,
+      due_at timestamptz not null, note text check(note is null or length(trim(note)) between 1 and 2000),
+      status text not null default 'PENDING' check(status in ('PENDING','COMPLETED','CANCELLED')),
+      completed_at timestamptz, completed_by_membership_id uuid, cancelled_at timestamptz, cancelled_by_membership_id uuid,
+      reminder_sent_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      version bigint not null default 1 check(version>0), unique(organization_id,id),
+      foreign key(organization_id,conversation_id) references messaging.conversations(organization_id,id),
+      foreign key(organization_id,responsible_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,created_by_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,completed_by_membership_id) references iam.organization_memberships(organization_id,id),
+      foreign key(organization_id,cancelled_by_membership_id) references iam.organization_memberships(organization_id,id),
+      check((status='COMPLETED')=(completed_at is not null)), check((status='CANCELLED')=(cancelled_at is not null))
+    );
+    create index conversation_follow_ups_conversation on messaging.conversation_follow_ups(organization_id,conversation_id,created_at desc,id desc);
+    create index conversation_follow_ups_due on messaging.conversation_follow_ups(due_at,id) where status='PENDING' and reminder_sent_at is null;
+    create index conversation_follow_ups_responsible on messaging.conversation_follow_ups(organization_id,responsible_membership_id,due_at) where status='PENDING';
+
     insert into iam.capability_definitions(capability_code,domain,description,sensitivity,supported_scope_types,status) values
       ('messaging.inbox.view_assigned','messaging','View unassigned and self-assigned messaging conversations.','INTERNAL','{}','ACTIVE'),
       ('messaging.inbox.view_all','messaging','View all organization messaging conversations.','INTERNAL','{}','ACTIVE'),
       ('messaging.reply','messaging','Send replies in accessible messaging conversations.','HIGH','{}','ACTIVE'),
       ('messaging.claim','messaging','Claim unassigned messaging conversations.','HIGH','{}','ACTIVE'),
-      ('messaging.status.manage','messaging','Manage messaging conversation status.','HIGH','{}','ACTIVE')
+      ('messaging.status.manage','messaging','Manage messaging conversation status.','HIGH','{}','ACTIVE'),
+      ('messaging.assign','messaging','Assign, release, and transfer messaging conversations.','HIGH','{}','ACTIVE'),
+      ('messaging.priority.manage','messaging','Manage conversation priority and starred state.','HIGH','{}','ACTIVE'),
+      ('messaging.notes.create','messaging','Create and edit own internal conversation notes.','INTERNAL','{}','ACTIVE'),
+      ('messaging.notes.manage_all','messaging','Manage all internal conversation notes.','HIGH','{}','ACTIVE'),
+      ('messaging.tags.manage','messaging','Manage messaging tags and conversation classifications.','HIGH','{}','ACTIVE'),
+      ('messaging.saved_replies.use','messaging','Use organization saved replies.','INTERNAL','{}','ACTIVE'),
+      ('messaging.saved_replies.manage','messaging','Manage organization saved replies.','HIGH','{}','ACTIVE'),
+      ('messaging.customer_context.view','messaging','View verified linked customer and commerce context.','RESTRICTED','{}','ACTIVE'),
+      ('messaging.customer_link.manage','messaging','Link or unlink a messaging contact and customer with evidence.','RESTRICTED','{}','ACTIVE'),
+      ('messaging.contacts.search','messaging','Search messaging contacts and verified linked contact points.','RESTRICTED','{}','ACTIVE'),
+      ('messaging.availability.view','messaging','View messaging agent availability.','INTERNAL','{}','ACTIVE'),
+      ('messaging.settings.manage','messaging','Manage messaging hours, routing and operational settings.','CRITICAL','{}','ACTIVE'),
+      ('messaging.follow_ups.manage','messaging','Create and manage conversation follow-ups.','HIGH','{}','ACTIVE'),
+      ('messaging.reports.view','messaging','View organization messaging operations reporting.','RESTRICTED','{}','ACTIVE')
     on conflict(capability_code) do update set description=excluded.description,status='ACTIVE';
     insert into iam.membership_capability_grants(membership_id,capability_code)
       select m.id,c.code from iam.organization_memberships m cross join(values
-        ('messaging.inbox.view_assigned'),('messaging.inbox.view_all'),('messaging.reply'),('messaging.claim'),('messaging.status.manage')
+        ('messaging.inbox.view_assigned'),('messaging.inbox.view_all'),('messaging.reply'),('messaging.claim'),('messaging.status.manage'),
+        ('messaging.assign'),('messaging.priority.manage'),('messaging.notes.create'),('messaging.notes.manage_all'),
+        ('messaging.tags.manage'),('messaging.saved_replies.use'),('messaging.saved_replies.manage'),
+        ('messaging.customer_context.view'),('messaging.customer_link.manage'),('messaging.contacts.search'),('messaging.availability.view'),
+        ('messaging.settings.manage'),('messaging.follow_ups.manage'),('messaging.reports.view')
       ) c(code) where m.membership_type='OWNER' and m.status='ACTIVE' on conflict do nothing;
     insert into notifications.notification_policies(notification_type,delivery_requirement,category,default_priority,contains_sensitive_data)
-      values('MESSAGING_INBOUND_ATTENTION','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',false)
+      values('MESSAGING_INBOUND_ATTENTION','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',false),
+      ('MESSAGING_ASSIGNMENT','OPTIONAL','OPERATIONAL','HIGH',false),
+      ('MESSAGING_FOLLOW_UP_DUE','OPTIONAL','OPERATIONAL','HIGH',false)
       on conflict(notification_type) do nothing;
     insert into notifications.notification_channel_policies(notification_type,channel,enabled,automatic_enabled,manual_allowed)
-      values('MESSAGING_INBOUND_ATTENTION','IN_APP',true,true,false)
+      values('MESSAGING_INBOUND_ATTENTION','IN_APP',true,true,false),
+      ('MESSAGING_ASSIGNMENT','IN_APP',true,true,false),
+      ('MESSAGING_FOLLOW_UP_DUE','IN_APP',true,true,false)
       on conflict(notification_type,channel) do nothing;
   `.execute(db);
 }

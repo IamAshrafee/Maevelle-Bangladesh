@@ -505,10 +505,13 @@ async function createStaffInAppNotifications(
     priority: definition.priority,
   });
   const payload = eventPayload(event.payload);
+  const recipientMembershipId =
+    typeof payload.recipientMembershipId === 'string' ? payload.recipientMembershipId : null;
   const actionPath = definition.actionPath(event.aggregate_id, payload);
   const recipients = await sql<{ id: string }>`select membership.id
     from iam.organization_memberships membership
     where membership.organization_id=${event.organization_id} and membership.status='ACTIVE'
+      and (${recipientMembershipId}::uuid is null or membership.id=${recipientMembershipId}::uuid)
       and (
         membership.membership_type='OWNER'
         or exists(
@@ -1223,7 +1226,9 @@ export async function getNotificationDetail(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   notificationId: string,
-): Promise<DetailedNotificationRecord & { canRetry: boolean; canCancel: boolean; canSchedule: boolean }> {
+): Promise<
+  DetailedNotificationRecord & { canRetry: boolean; canCancel: boolean; canSchedule: boolean }
+> {
   const row = await sql<DetailedNotificationRecord>`select
       n.id,n.intent_id,n.notification_type,n.recipient_type,n.customer_id,n.membership_id,n.channel,
       n.category,n.priority,n.status,n.trigger_type,n.provider,n.provider_message_id,n.failure_code,
@@ -1272,7 +1277,8 @@ export async function getNotificationDetail(
   const status = String(item.status);
   const channel = String(item.channel);
   const canRetry = status === 'FAILED' && (channel === 'EMAIL' || channel === 'SMS');
-  const canCancel = ['QUEUED', 'PENDING_MANUAL', 'FAILED'].includes(status) && item.intent_id !== null;
+  const canCancel =
+    ['QUEUED', 'PENDING_MANUAL', 'FAILED'].includes(status) && item.intent_id !== null;
   const canSchedule = ['QUEUED', 'PENDING_MANUAL', 'FAILED'].includes(status);
   return {
     ...item,

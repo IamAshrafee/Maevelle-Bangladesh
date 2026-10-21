@@ -57,8 +57,135 @@ export interface ConversationSummary {
     readonly createdAt: string;
   } | null;
   readonly unreadCount: number;
+  readonly isStarred?: boolean;
+  readonly tags?: readonly MessagingTag[];
+  readonly followUp?: ConversationFollowUpSummary | null;
+  readonly needsReply?: boolean;
   readonly capabilities: ChannelCapabilities;
   readonly version: string;
+}
+
+export interface MessagingTag {
+  readonly id: string;
+  readonly label: string;
+  readonly colorToken: string | null;
+  readonly status: 'ACTIVE' | 'ARCHIVED';
+  readonly version: string;
+}
+
+export interface ConversationFollowUpSummary {
+  readonly id: string;
+  readonly dueAt: string;
+  readonly status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  readonly responsibleMembershipId: string;
+  readonly isOverdue: boolean;
+}
+
+export interface InternalNoteView {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly author: { readonly membershipId: string; readonly displayName: string };
+  readonly body: string;
+  readonly revision: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly deletedAt: string | null;
+}
+
+export interface SavedReplyView {
+  readonly id: string;
+  readonly title: string;
+  readonly body: string;
+  readonly shortcut: string | null;
+  readonly category: string | null;
+  readonly status: 'ACTIVE' | 'ARCHIVED';
+  readonly version: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface AgentAvailabilityView {
+  readonly membershipId: string;
+  readonly displayName: string;
+  readonly status: 'ONLINE' | 'BUSY' | 'AWAY' | 'OFFLINE';
+  readonly capacity: number;
+  readonly lastHeartbeatAt: string | null;
+  readonly effectiveStatus: 'ONLINE' | 'BUSY' | 'AWAY' | 'OFFLINE';
+  readonly version: string;
+}
+
+export interface BusinessHoursView {
+  readonly id: string;
+  readonly connectionId: string | null;
+  readonly timezone: string;
+  readonly weeklySchedule: Readonly<Record<string, readonly { start: string; end: string }[]>>;
+  readonly exceptions: readonly {
+    readonly id: string;
+    readonly localDate: string;
+    readonly intervals: readonly { start: string; end: string }[];
+    readonly isClosed: boolean;
+    readonly label: string | null;
+  }[];
+  readonly offlineAcceptsMessages: boolean;
+  readonly manualClosureUntil: string | null;
+  readonly version: string;
+}
+
+export interface FollowUpView extends ConversationFollowUpSummary {
+  readonly conversationId: string;
+  readonly note: string | null;
+  readonly createdByMembershipId: string;
+  readonly completedAt: string | null;
+  readonly cancelledAt: string | null;
+  readonly reminderSentAt: string | null;
+  readonly version: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ConversationActivityView {
+  readonly id: string;
+  readonly type: string;
+  readonly actorMembershipId: string | null;
+  readonly actorDisplayName: string | null;
+  readonly fromValue: unknown;
+  readonly toValue: unknown;
+  readonly reason: string | null;
+  readonly createdAt: string;
+}
+
+export interface InboxCounts {
+  readonly all: number;
+  readonly mine: number;
+  readonly unassigned: number;
+  readonly unread: number;
+  readonly new: number;
+  readonly open: number;
+  readonly pending: number;
+  readonly resolved: number;
+  readonly closed: number;
+  readonly needingReply: number;
+  readonly pendingFollowUps: number;
+  readonly overdueFollowUps: number;
+}
+
+export interface MessagingReportSummary {
+  readonly from: string;
+  readonly to: string;
+  readonly totals: Readonly<Record<string, number>>;
+  readonly response: {
+    readonly firstResponseCount: number;
+    readonly averageFirstResponseSeconds: number | null;
+    readonly resolutionCount: number;
+    readonly averageResolutionSeconds: number | null;
+  };
+  readonly byChannel: readonly { readonly channelKind: ChannelKind; readonly count: number }[];
+  readonly byAgent: readonly {
+    readonly membershipId: string;
+    readonly displayName: string;
+    readonly assigned: number;
+    readonly outboundMessages: number;
+  }[];
 }
 
 export interface ConversationDetail extends ConversationSummary {

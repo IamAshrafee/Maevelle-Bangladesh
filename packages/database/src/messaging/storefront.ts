@@ -18,17 +18,14 @@ import {
   listMessages,
   MessagingDomainError,
 } from './index.js';
+import { evaluateBusinessHours } from './settings.js';
 
 type Db = Kysely<DatabaseSchema>;
 type Tx = Transaction<DatabaseSchema>;
 
 const SESSION_IDLE_DAYS = 180;
 const SESSION_ABSOLUTE_DAYS = 365;
-export const WEBSITE_ATTACHMENT_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-] as const;
+export const WEBSITE_ATTACHMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 export const WEBSITE_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 export const WEBSITE_ATTACHMENT_MAX_COUNT = 5;
 
@@ -65,7 +62,9 @@ function credentialDigest(key: Buffer, sessionId: string, secret: string): Buffe
     .digest();
 }
 
-function parseCredential(value: string | undefined): { sessionId: string; secret: string } | undefined {
+function parseCredential(
+  value: string | undefined,
+): { sessionId: string; secret: string } | undefined {
   if (!value || value.length > 200) return undefined;
   const [sessionId, secret, extra] = value.split('.');
   if (extra || !sessionId || !secret) return undefined;
@@ -108,10 +107,12 @@ export async function getStorefrontChatConfig(
       where organization_id=${organizationId} and id=${connectionId}`.execute(db);
   const row = result.rows[0]!;
   const enabled = row.status === 'ACTIVE' || row.status === 'DEGRADED';
-  const acceptsMessages = enabled && row.configuration.acceptsOfflineMessages !== false;
+  const hours = await evaluateBusinessHours(db, { organizationId, connectionId });
+  const acceptsMessages =
+    enabled && hours.acceptsMessages && row.configuration.acceptsOfflineMessages !== false;
   return {
     enabled,
-    availability: enabled ? 'AVAILABLE' : 'DISABLED',
+    availability: !enabled ? 'DISABLED' : hours.isOpen ? 'AVAILABLE' : 'OFFLINE',
     acceptsMessages,
     greeting:
       typeof row.configuration.greeting === 'string'
@@ -177,7 +178,9 @@ async function appendContext(
   await sql`insert into messaging.conversation_context_events(
       organization_id,conversation_id,contact_identity_id,context_type,url_path,product_id,variant_id,product_title
     ) values (${input.organizationId},${input.conversationId},${input.contactIdentityId},${input.context.pageType},
-      ${input.context.path},${input.context.productId ?? null},${input.context.variantId ?? null},${input.context.productTitle ?? null})`.execute(tx);
+      ${input.context.path},${input.context.productId ?? null},${input.context.variantId ?? null},${input.context.productTitle ?? null})`.execute(
+    tx,
+  );
 }
 
 async function createOrResumeConversation(
@@ -195,7 +198,9 @@ async function createOrResumeConversation(
   const existing = await sql<{ id: string }>`select id from messaging.conversations
       where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}
         and contact_identity_id=${input.contactIdentityId} and channel_kind='WEBSITE'
-        and status in ('NEW','OPEN','PENDING','RESOLVED') order by created_at desc limit 1`.execute(tx);
+        and status in ('NEW','OPEN','PENDING','RESOLVED') order by created_at desc limit 1`.execute(
+    tx,
+  );
   let conversationId = existing.rows[0]?.id;
   if (!conversationId) {
     const created = await sql<{ id: string; version: string }>`insert into messaging.conversations(
@@ -215,7 +220,9 @@ async function createOrResumeConversation(
     });
     await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at)
       values(${input.organizationId},'messaging.conversation.created.v1',1,'messaging.conversation',${conversationId},${created.rows[0]!.version}::bigint,
-        ${JSON.stringify({ conversationId, version: created.rows[0]!.version })}::jsonb,now())`.execute(tx);
+        ${JSON.stringify({ conversationId, version: created.rows[0]!.version })}::jsonb,now())`.execute(
+      tx,
+    );
   }
   await appendContext(tx, { ...input, conversationId });
   return conversationId;
@@ -244,14 +251,26 @@ export async function authenticateVisitorCredential(
       from messaging.visitor_sessions s
       join messaging.contact_identities ci on ci.organization_id=s.organization_id and ci.id=s.contact_identity_id
       join messaging.contacts c on c.organization_id=ci.organization_id and c.id=ci.contact_id
-      where s.organization_id=${input.organizationId} and s.id=${parsed.sessionId}::uuid`.execute(db);
+      where s.organization_id=${input.organizationId} and s.id=${parsed.sessionId}::uuid`.execute(
+    db,
+  );
   const row = result.rows[0];
   const supplied = credentialDigest(input.digestKey, parsed.sessionId, parsed.secret);
-  if (!row || row.credential_digest.length !== supplied.length || !timingSafeEqual(row.credential_digest, supplied))
+  if (
+    !row ||
+    row.credential_digest.length !== supplied.length ||
+    !timingSafeEqual(row.credential_digest, supplied)
+  )
     throw new MessagingDomainError('UNAUTHENTICATED', 'Visitor session is invalid.');
-  if (row.status !== 'ACTIVE' || row.expires_at <= new Date() || row.absolute_expires_at <= new Date()) {
+  if (
+    row.status !== 'ACTIVE' ||
+    row.expires_at <= new Date() ||
+    row.absolute_expires_at <= new Date()
+  ) {
     if (row.status === 'ACTIVE')
-      await sql`update messaging.visitor_sessions set status='EXPIRED' where organization_id=${input.organizationId} and id=${row.id}`.execute(db);
+      await sql`update messaging.visitor_sessions set status='EXPIRED' where organization_id=${input.organizationId} and id=${row.id}`.execute(
+        db,
+      );
     throw new MessagingDomainError('SESSION_EXPIRED', 'Visitor session has expired.');
   }
   let expiresAt = row.expires_at;
@@ -260,7 +279,9 @@ export async function authenticateVisitorCredential(
       Math.min(row.absolute_expires_at.getTime(), Date.now() + SESSION_IDLE_DAYS * 86_400_000),
     );
     await sql`update messaging.visitor_sessions set last_seen_at=now(),expires_at=${expiresAt}
-      where organization_id=${input.organizationId} and id=${row.id} and status='ACTIVE'`.execute(db);
+      where organization_id=${input.organizationId} and id=${row.id} and status='ACTIVE'`.execute(
+      db,
+    );
   }
   return {
     sessionId: row.id,
@@ -325,14 +346,18 @@ export async function createOrResumeVisitorSession(
       values(${input.organizationId}) returning id`.execute(tx);
     const identity = await sql<{ id: string }>`insert into messaging.contact_identities(
       organization_id,contact_id,channel_kind,channel_connection_id,external_subject_id,verification_status
-    ) values (${input.organizationId},${contact.rows[0]!.id},'WEBSITE',${connectionId},${crypto.randomUUID()},'CHANNEL_ASSERTED') returning id`.execute(tx);
+    ) values (${input.organizationId},${contact.rows[0]!.id},'WEBSITE',${connectionId},${crypto.randomUUID()},'CHANNEL_ASSERTED') returning id`.execute(
+      tx,
+    );
     const sessionId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + SESSION_IDLE_DAYS * 86_400_000);
     const absoluteExpiresAt = new Date(Date.now() + SESSION_ABSOLUTE_DAYS * 86_400_000);
     await sql`insert into messaging.visitor_sessions(
       id,organization_id,channel_connection_id,contact_identity_id,credential_digest,expires_at,absolute_expires_at
     ) values (${sessionId},${input.organizationId},${connectionId},${identity.rows[0]!.id},
-      ${credentialDigest(input.digestKey, sessionId, secret)},${expiresAt},${absoluteExpiresAt})`.execute(tx);
+      ${credentialDigest(input.digestKey, sessionId, secret)},${expiresAt},${absoluteExpiresAt})`.execute(
+      tx,
+    );
     const conversationId = await createOrResumeConversation(tx, {
       organizationId: input.organizationId,
       connectionId,
@@ -431,9 +456,11 @@ export async function startVisitorConversation(
   context?: StorefrontContextInput,
 ): Promise<StorefrontConversationView> {
   const validated = await validateContext(db, visitor.organizationId, context);
-  const conversationId = await db.transaction().execute((tx) =>
-    createOrResumeConversation(tx, { ...visitor, ...(validated ? { context: validated } : {}) }),
-  );
+  const conversationId = await db
+    .transaction()
+    .execute((tx) =>
+      createOrResumeConversation(tx, { ...visitor, ...(validated ? { context: validated } : {}) }),
+    );
   return getVisitorConversation(db, visitor, conversationId);
 }
 
@@ -449,7 +476,9 @@ export async function reopenVisitorConversation(
     );
   if (current.status === 'RESOLVED') {
     await db.transaction().execute(async (tx) => {
-      const updated = await sql<{ version: string }>`update messaging.conversations set status='OPEN',resolved_at=null,
+      const updated = await sql<{
+        version: string;
+      }>`update messaging.conversations set status='OPEN',resolved_at=null,
         updated_at=now(),version=version+1 where organization_id=${input.visitor.organizationId}
           and id=${input.conversationId} and contact_identity_id=${input.visitor.contactIdentityId}
           and status='RESOLVED' returning version::text`.execute(tx);
@@ -521,7 +550,10 @@ export async function sendVisitorMessage(
 ): Promise<{ message: MessageView; replayed: boolean }> {
   const conversation = await getVisitorConversation(db, input.visitor, input.conversationId);
   if (conversation.status === 'CLOSED')
-    throw new MessagingDomainError('CONVERSATION_CLOSED', 'Closed conversations cannot receive messages.');
+    throw new MessagingDomainError(
+      'CONVERSATION_CLOSED',
+      'Closed conversations cannot receive messages.',
+    );
   if (input.context) {
     const validated = await validateContext(db, input.visitor.organizationId, input.context);
     await db.transaction().execute((tx) =>
@@ -557,8 +589,13 @@ export async function markVisitorConversationRead(
     throw new MessagingDomainError('VALIDATION_FAILED', 'Read sequence is invalid.');
   await getVisitorConversation(db, input.visitor, input.conversationId);
   return db.transaction().execute(async (tx) => {
-    const current = await sql<{ last_message_sequence: string; version: string }>`select last_message_sequence::text,version::text
-      from messaging.conversations where organization_id=${input.visitor.organizationId} and id=${input.conversationId} for update`.execute(tx);
+    const current = await sql<{
+      last_message_sequence: string;
+      version: string;
+    }>`select last_message_sequence::text,version::text
+      from messaging.conversations where organization_id=${input.visitor.organizationId} and id=${input.conversationId} for update`.execute(
+      tx,
+    );
     const bounded = String(
       BigInt(input.lastReadSequence) < BigInt(current.rows[0]!.last_message_sequence)
         ? BigInt(input.lastReadSequence)
@@ -567,8 +604,13 @@ export async function markVisitorConversationRead(
     await sql`insert into messaging.conversation_read_cursors(organization_id,conversation_id,reader_type,reader_id,last_read_sequence)
       values(${input.visitor.organizationId},${input.conversationId},'CONTACT_IDENTITY',${input.visitor.contactIdentityId},${bounded}::bigint)
       on conflict(organization_id,conversation_id,reader_type,reader_id) do update set
-        last_read_sequence=greatest(messaging.conversation_read_cursors.last_read_sequence,excluded.last_read_sequence),updated_at=now()`.execute(tx);
-    const changed = await sql<{ id: string; sequence: string }>`update messaging.messages set delivery_state='READ',read_at=coalesce(read_at,now()),
+        last_read_sequence=greatest(messaging.conversation_read_cursors.last_read_sequence,excluded.last_read_sequence),updated_at=now()`.execute(
+      tx,
+    );
+    const changed = await sql<{
+      id: string;
+      sequence: string;
+    }>`update messaging.messages set delivery_state='READ',read_at=coalesce(read_at,now()),
       delivered_at=coalesce(delivered_at,now()),updated_at=now()
       where organization_id=${input.visitor.organizationId} and conversation_id=${input.conversationId}
         and direction='OUTBOUND' and sequence<=${bounded}::bigint and delivery_state in ('SENT','DELIVERED')
@@ -580,7 +622,11 @@ export async function markVisitorConversationRead(
       eventType: 'messaging.read_cursor.advanced.v1',
       aggregateId: input.conversationId,
       aggregateVersion: current.rows[0]!.version,
-      payload: { conversationId: input.conversationId, readerScope: 'CONTACT_IDENTITY', sequence: bounded },
+      payload: {
+        conversationId: input.conversationId,
+        readerScope: 'CONTACT_IDENTITY',
+        sequence: bounded,
+      },
     });
     for (const message of changed.rows)
       await appendRealtimeEvent(tx as unknown as Db, {
@@ -590,7 +636,12 @@ export async function markVisitorConversationRead(
         eventType: 'messaging.message.delivery_changed.v1',
         aggregateId: message.id,
         aggregateVersion: message.sequence,
-        payload: { conversationId: input.conversationId, messageId: message.id, sequence: message.sequence, state: 'READ' },
+        payload: {
+          conversationId: input.conversationId,
+          messageId: message.id,
+          sequence: message.sequence,
+          state: 'READ',
+        },
       });
     return { lastReadSequence: bounded };
   });
@@ -609,12 +660,18 @@ export async function listVisitorRealtimeEvents(
   input: { visitor: VisitorCredentialContext; after?: string; limit?: number },
 ): Promise<readonly MessagingEvent[]> {
   const after = input.after ?? '0';
-  if (!/^\d+$/.test(after)) throw new MessagingDomainError('VALIDATION_FAILED', 'Event cursor is invalid.');
+  if (!/^\d+$/.test(after))
+    throw new MessagingDomainError('VALIDATION_FAILED', 'Event cursor is invalid.');
   const stream = await sql<{ retained_from_sequence: string }>`select retained_from_sequence::text
-    from messaging.realtime_streams where organization_id=${input.visitor.organizationId}`.execute(db);
+    from messaging.realtime_streams where organization_id=${input.visitor.organizationId}`.execute(
+    db,
+  );
   const retained = stream.rows[0]?.retained_from_sequence ?? '1';
   if (BigInt(after) > 0n && BigInt(after) < BigInt(retained) - 1n)
-    throw new MessagingDomainError('EVENT_CURSOR_EXPIRED', 'Event cursor is outside the retention window.');
+    throw new MessagingDomainError(
+      'EVENT_CURSOR_EXPIRED',
+      'Event cursor is outside the retention window.',
+    );
   const result = await sql<{
     event_id: string;
     stream_sequence: string;
@@ -658,7 +715,8 @@ export async function updateVisitorContact(
   const name = input.name?.trim();
   const email = input.email?.trim().toLowerCase();
   const phone = input.phone?.trim();
-  if (name && name.length > 160) throw new MessagingDomainError('VALIDATION_FAILED', 'Name is too long.');
+  if (name && name.length > 160)
+    throw new MessagingDomainError('VALIDATION_FAILED', 'Name is too long.');
   if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254))
     throw new MessagingDomainError('VALIDATION_FAILED', 'Email address is invalid.');
   if (phone && (!/^\+?[0-9]{7,15}$/.test(phone) || phone.length > 16))
@@ -666,10 +724,14 @@ export async function updateVisitorContact(
   await db.transaction().execute(async (tx) => {
     if (name)
       await sql`update messaging.contacts set display_name=${name},updated_at=now(),version=version+1
-        where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactId}`.execute(tx);
+        where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactId}`.execute(
+        tx,
+      );
     await sql`update messaging.contact_identities set display_name=coalesce(${name ?? null},display_name),
       profile_metadata=profile_metadata || ${JSON.stringify({ ...(email ? { unverifiedEmail: email, emailConsent: input.emailConsent === true } : {}), ...(phone ? { unverifiedPhone: phone, phoneConsent: input.phoneConsent === true } : {}) })}::jsonb,
-      updated_at=now(),last_seen_at=now() where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactIdentityId}`.execute(tx);
+      updated_at=now(),last_seen_at=now() where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactIdentityId}`.execute(
+      tx,
+    );
   });
   return { updated: true };
 }
@@ -678,10 +740,14 @@ export async function linkVisitorToAuthenticatedUser(
   db: Db,
   input: { visitor: VisitorCredentialContext; userId: string; digestKey: Buffer },
 ): Promise<{ credential: string; session: StorefrontVisitorSessionView }> {
-  const account = await sql<{ customer_id: string }>`select coalesce(a.canonical_customer_id,ca.customer_id) customer_id
+  const account = await sql<{
+    customer_id: string;
+  }>`select coalesce(a.canonical_customer_id,ca.customer_id) customer_id
     from customers.customer_accounts ca left join customers.customer_aliases a
       on a.organization_id=ca.organization_id and a.alias_customer_id=ca.customer_id
-    where ca.organization_id=${input.visitor.organizationId} and ca.user_id=${input.userId} and ca.status='ACTIVE' limit 1`.execute(db);
+    where ca.organization_id=${input.visitor.organizationId} and ca.user_id=${input.userId} and ca.status='ACTIVE' limit 1`.execute(
+    db,
+  );
   if (!account.rows[0]) return { credential: '', session: sessionView(input.visitor) };
   const customerId = account.rows[0].customer_id;
   if (input.visitor.customerId === customerId)
@@ -694,24 +760,41 @@ export async function linkVisitorToAuthenticatedUser(
       for update`.execute(tx);
     if (session.rows[0]?.status !== 'ACTIVE')
       throw new MessagingDomainError('SESSION_EXPIRED', 'Visitor session has expired.');
-    const current = await sql<{ customer_id: string | null }>`select customer_id from messaging.contacts
-      where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactId} for update`.execute(tx);
+    const current = await sql<{
+      customer_id: string | null;
+    }>`select customer_id from messaging.contacts
+      where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactId} for update`.execute(
+      tx,
+    );
     if (current.rows[0]?.customer_id && current.rows[0].customer_id !== customerId) {
       await sql`update messaging.contacts set link_status='DISPUTED',updated_at=now(),version=version+1
-        where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactId}`.execute(tx);
+        where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactId}`.execute(
+        tx,
+      );
     } else if (current.rows[0]?.customer_id !== customerId) {
       await sql`update messaging.contacts set customer_id=${customerId},link_status='LINKED',linked_at=now(),linked_by_actor_id=${input.userId},updated_at=now(),version=version+1
-        where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactId}`.execute(tx);
+        where organization_id=${input.visitor.organizationId} and id=${input.visitor.contactId}`.execute(
+        tx,
+      );
       await sql`insert into messaging.contact_customer_link_events(organization_id,contact_id,customer_id,action,method,actor_type,actor_id)
-        values(${input.visitor.organizationId},${input.visitor.contactId},${customerId},'LINKED','AUTHENTICATED_ACCOUNT','USER',${input.userId})`.execute(tx);
+        values(${input.visitor.organizationId},${input.visitor.contactId},${customerId},'LINKED','AUTHENTICATED_ACCOUNT','USER',${input.userId})`.execute(
+        tx,
+      );
     }
     const expiresAt = new Date(Date.now() + SESSION_IDLE_DAYS * 86_400_000);
     const absoluteExpiresAt = new Date(Date.now() + SESSION_ABSOLUTE_DAYS * 86_400_000);
     await sql`insert into messaging.visitor_sessions(id,organization_id,channel_connection_id,contact_identity_id,credential_digest,expires_at,absolute_expires_at)
-      values(${nextId},${input.visitor.organizationId},${input.visitor.connectionId},${input.visitor.contactIdentityId},${credentialDigest(input.digestKey, nextId, secret)},${expiresAt},${absoluteExpiresAt})`.execute(tx);
+      values(${nextId},${input.visitor.organizationId},${input.visitor.connectionId},${input.visitor.contactIdentityId},${credentialDigest(input.digestKey, nextId, secret)},${expiresAt},${absoluteExpiresAt})`.execute(
+      tx,
+    );
     await sql`update messaging.visitor_sessions set status='ROTATED',rotated_to_session_id=${nextId},revoked_at=now(),revocation_reason='AUTHENTICATED_CUSTOMER_LINK'
-      where organization_id=${input.visitor.organizationId} and id=${input.visitor.sessionId} and status='ACTIVE'`.execute(tx);
-    return { expiresAt, linked: current.rows[0]?.customer_id === customerId || !current.rows[0]?.customer_id };
+      where organization_id=${input.visitor.organizationId} and id=${input.visitor.sessionId} and status='ACTIVE'`.execute(
+      tx,
+    );
+    return {
+      expiresAt,
+      linked: current.rows[0]?.customer_id === customerId || !current.rows[0]?.customer_id,
+    };
   });
   return {
     credential: `${nextId}.${secret}`,
@@ -729,7 +812,9 @@ export async function revokeVisitorSession(
   visitor: VisitorCredentialContext,
 ): Promise<void> {
   await sql`update messaging.visitor_sessions set status='REVOKED',revoked_at=now(),revocation_reason='VISITOR_ENDED'
-    where organization_id=${visitor.organizationId} and id=${visitor.sessionId} and status='ACTIVE'`.execute(db);
+    where organization_id=${visitor.organizationId} and id=${visitor.sessionId} and status='ACTIVE'`.execute(
+    db,
+  );
 }
 
 export async function refreshWebsiteAttachmentUploadStatus(
@@ -804,12 +889,15 @@ export async function registerWebsiteAttachmentUpload(
 export async function getWebsiteAttachmentUploadAuthorization(
   db: Db,
   input: { visitor: VisitorCredentialContext; uploadId: string },
-): Promise<{
-  id: string;
-  mediaUploadSessionId: string;
-  expectedSha256: string;
-  status: string;
-} | undefined> {
+): Promise<
+  | {
+      id: string;
+      mediaUploadSessionId: string;
+      expectedSha256: string;
+      status: string;
+    }
+  | undefined
+> {
   const result = await sql<{
     id: string;
     media_upload_session_id: string;
@@ -880,7 +968,9 @@ export async function authorizeStaffMessagingAttachment(
     attachmentId: string;
   },
 ) {
-  const target = await sql<{ conversation_id: string }>`select m.conversation_id from messaging.message_attachments a
+  const target = await sql<{
+    conversation_id: string;
+  }>`select m.conversation_id from messaging.message_attachments a
     join messaging.messages m on m.organization_id=a.organization_id and m.id=a.message_id
     where a.organization_id=${input.organizationId} and a.id=${input.attachmentId}`.execute(db);
   if (!target.rows[0])

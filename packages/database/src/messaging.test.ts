@@ -78,6 +78,19 @@ const actor = () => ({
     'messaging.reply',
     'messaging.claim',
     'messaging.status.manage',
+    'messaging.assign',
+    'messaging.priority.manage',
+    'messaging.notes.create',
+    'messaging.notes.manage_all',
+    'messaging.tags.manage',
+    'messaging.saved_replies.use',
+    'messaging.saved_replies.manage',
+    'messaging.availability.view',
+    'messaging.settings.manage',
+    'messaging.follow_ups.manage',
+    'messaging.customer_context.view',
+    'messaging.customer_link.manage',
+    'messaging.reports.view',
   ],
 });
 
@@ -377,5 +390,289 @@ describe('messaging transactional core', () => {
     expect(await messaging.reclaimExpiredMessagingDeliveries(database.db)).toBeGreaterThanOrEqual(
       1,
     );
+  });
+
+  it('enforces eligible tenant assignment and records auditable assignment history', async () => {
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: connectionId,
+      contactId,
+      contactIdentityId: identityId,
+    });
+    const outsiderUser = await sql<{
+      id: string;
+    }>`insert into iam.users(name,email,email_normalized,email_verified,status)
+      values('Outsider',${`outsider-${crypto.randomUUID()}@example.test`},${`outsider-${crypto.randomUUID()}@example.test`},true,'ACTIVE') returning id`.execute(
+      database.db,
+    );
+    const outsider = await sql<{
+      id: string;
+    }>`insert into iam.organization_memberships(organization_id,user_id,membership_type,status,display_name,activated_at)
+      values(${otherOrganizationId},${outsiderUser.rows[0]!.id},'OWNER','ACTIVE','Outsider',now()) returning id`.execute(
+      database.db,
+    );
+    const before = await messaging.getConversation(database.db, {
+      organizationId,
+      conversationId,
+      membershipId,
+      access: 'ALL',
+    });
+    await expect(
+      messaging.assignConversation(database.db, {
+        actor: actor(),
+        access: 'ALL',
+        conversationId,
+        assigneeMembershipId: outsider.rows[0]!.id,
+        expectedVersion: before.version,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    const assigned = await messaging.assignConversation(database.db, {
+      actor: actor(),
+      access: 'ALL',
+      conversationId,
+      assigneeMembershipId: membershipId,
+      expectedVersion: before.version,
+      reason: 'Owner accepted the conversation.',
+    });
+    expect(assigned.assignee?.membershipId).toBe(membershipId);
+    const history = await messaging.listAssignmentHistory(database.db, {
+      actor: actor(),
+      access: 'ALL',
+      conversationId,
+    });
+    expect(history[0]).toMatchObject({
+      newAssigneeMembershipId: membershipId,
+      source: 'MANUAL',
+      reason: 'Owner accepted the conversation.',
+    });
+  });
+
+  it('keeps notes private, tenant-qualifies tags, and does not send saved replies', async () => {
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: connectionId,
+      contactId,
+      contactIdentityId: identityId,
+    });
+    const note = await messaging.createInternalNote(database.db, {
+      actor: actor(),
+      access: 'ALL',
+      conversationId,
+      body: 'Private staff evidence',
+    });
+    expect(
+      (
+        await messaging.listInternalNotes(database.db, {
+          actor: actor(),
+          access: 'ALL',
+          conversationId,
+        })
+      )[0]?.id,
+    ).toBe(note.id);
+    const leaked = await sql<{ count: string }>`select count(*)::text count from messaging.messages
+      where organization_id=${organizationId} and conversation_id=${conversationId}
+        and (direction='INTERNAL' or text_body='Private staff evidence')`.execute(database.db);
+    expect(leaked.rows[0]!.count).toBe('0');
+    const revisedNote = await messaging.updateInternalNote(database.db, {
+      actor: actor(),
+      noteId: note.id,
+      body: 'Private staff evidence, corrected',
+      expectedRevision: note.revision,
+    });
+    expect(revisedNote).toMatchObject({ revision: 2, body: 'Private staff evidence, corrected' });
+    const revisions = await sql<{
+      id: string;
+      superseded_by_note_id: string | null;
+    }>`select id,superseded_by_note_id from messaging.internal_notes
+      where organization_id=${organizationId} and conversation_id=${conversationId} order by revision`.execute(
+      database.db,
+    );
+    expect(revisions.rows).toEqual([
+      { id: note.id, superseded_by_note_id: revisedNote.id },
+      { id: revisedNote.id, superseded_by_note_id: null },
+    ]);
+    const tag = await messaging.createMessagingTag(database.db, {
+      actor: actor(),
+      label: 'Delivery issue',
+      colorToken: 'warning',
+    });
+    await messaging.setConversationTag(database.db, {
+      actor: actor(),
+      access: 'ALL',
+      conversationId,
+      tagId: tag.id,
+      assigned: true,
+    });
+    const listed = await messaging.listConversations(database.db, {
+      organizationId,
+      membershipId,
+      access: 'ALL',
+      tagId: tag.id,
+    });
+    expect(listed.data[0]?.tags?.map((item) => item.id)).toContain(tag.id);
+    const beforeMessages = await sql<{
+      count: string;
+    }>`select count(*)::text count from messaging.messages where organization_id=${organizationId} and conversation_id=${conversationId}`.execute(
+      database.db,
+    );
+    await messaging.createSavedReply(database.db, {
+      actor: actor(),
+      title: 'Delivery update',
+      body: 'We are checking your delivery now.',
+      shortcut: 'delivery-update',
+    });
+    const afterMessages = await sql<{
+      count: string;
+    }>`select count(*)::text count from messaging.messages where organization_id=${organizationId} and conversation_id=${conversationId}`.execute(
+      database.db,
+    );
+    expect(afterMessages.rows[0]!.count).toBe(beforeMessages.rows[0]!.count);
+  });
+
+  it('evaluates overnight business hours and delivers each due follow-up once', async () => {
+    await messaging.upsertBusinessHours(database.db, {
+      actor: actor(),
+      connectionId,
+      timezone: 'UTC',
+      weeklySchedule: { mon: [{ start: '22:00', end: '02:00' }] },
+      offlineAcceptsMessages: true,
+    });
+    expect(
+      (
+        await messaging.evaluateBusinessHours(database.db, {
+          organizationId,
+          connectionId,
+          at: new Date('2026-10-19T23:00:00Z'),
+        })
+      ).isOpen,
+    ).toBe(true);
+    expect(
+      (
+        await messaging.evaluateBusinessHours(database.db, {
+          organizationId,
+          connectionId,
+          at: new Date('2026-10-20T01:00:00Z'),
+        })
+      ).isOpen,
+    ).toBe(true);
+    expect(
+      (
+        await messaging.evaluateBusinessHours(database.db, {
+          organizationId,
+          connectionId,
+          at: new Date('2026-10-20T03:00:00Z'),
+        })
+      ).isOpen,
+    ).toBe(false);
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: connectionId,
+      contactId,
+      contactIdentityId: identityId,
+    });
+    const followUp = await messaging.createFollowUp(database.db, {
+      actor: actor(),
+      access: 'ALL',
+      conversationId,
+      responsibleMembershipId: membershipId,
+      dueAt: new Date(Date.now() - 1000).toISOString(),
+      note: 'Call customer',
+    });
+    expect(await messaging.processDueMessagingFollowUps(database.db)).toBeGreaterThanOrEqual(1);
+    expect(await messaging.processDueMessagingFollowUps(database.db)).toBe(0);
+    await processNotificationOutbox(database.db, 100);
+    const notifications = await sql<{
+      count: string;
+    }>`select count(*)::text count from notifications.notifications where organization_id=${organizationId} and notification_type='MESSAGING_FOLLOW_UP_DUE' and membership_id=${membershipId} and source_id=${followUp.id}`.execute(
+      database.db,
+    );
+    expect(notifications.rows[0]!.count).toBe('1');
+  });
+
+  it('binds inbox cursors to filters and applies bounded bulk/routing operations', async () => {
+    const conversations = await Promise.all(
+      [1, 2].map(async () => {
+        const identity = await messaging.createContactIdentity(database.db, {
+          organizationId,
+          channelConnectionId: connectionId,
+          channelKind: 'WEBSITE',
+          externalSubjectId: `bulk-${crypto.randomUUID()}`,
+        });
+        return messaging.createConversation(database.db, {
+          organizationId,
+          channelConnectionId: connectionId,
+          contactId: identity.contactId,
+          contactIdentityId: identity.identityId,
+        });
+      }),
+    );
+    const firstPage = await messaging.listConversations(database.db, {
+      organizationId,
+      membershipId,
+      access: 'ALL',
+      limit: 1,
+    });
+    await expect(
+      messaging.listConversations(database.db, {
+        organizationId,
+        membershipId,
+        access: 'ALL',
+        status: 'OPEN',
+        cursor: firstPage.pagination.nextCursor!,
+        limit: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    const items = await Promise.all(
+      conversations.map(async (conversationId) => ({
+        conversationId,
+        version: (
+          await messaging.getConversation(database.db, {
+            organizationId,
+            membershipId,
+            access: 'ALL',
+            conversationId,
+          })
+        ).version,
+      })),
+    );
+    const outcomes = await messaging.bulkUpdateConversations(database.db, {
+      actor: actor(),
+      access: 'ALL',
+      items,
+      action: { type: 'PRIORITY', priority: 'HIGH', isStarred: true },
+    });
+    expect(outcomes.every((outcome) => outcome.ok)).toBe(true);
+    await messaging.createAssignmentRule(database.db, {
+      actor: actor(),
+      name: 'Website default owner',
+      position: 999,
+      conditions: { channelKind: 'WEBSITE' },
+      actions: { assign: 'DEFAULT', membershipId },
+    });
+    const routedIdentity = await messaging.createContactIdentity(database.db, {
+      organizationId,
+      channelConnectionId: connectionId,
+      channelKind: 'WEBSITE',
+      externalSubjectId: `routed-${crypto.randomUUID()}`,
+    });
+    const routedConversation = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: connectionId,
+      contactId: routedIdentity.contactId,
+      contactIdentityId: routedIdentity.identityId,
+    });
+    expect(
+      await messaging.processMessagingAssignmentRules(database.db, 100),
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      (
+        await messaging.getConversation(database.db, {
+          organizationId,
+          membershipId,
+          access: 'ALL',
+          conversationId: routedConversation,
+        })
+      ).assignee?.membershipId,
+    ).toBe(membershipId);
   });
 });

@@ -11,6 +11,8 @@ import type {
   DeliveryOutcome,
   MessageView,
   MessagingEvent,
+  MessagingTag,
+  ConversationFollowUpSummary,
 } from '@maevelle/contracts/messaging';
 import type { DatabaseSchema } from '../index.js';
 import { appendAuditEvent, claimIdempotencyRecord } from '../platform.js';
@@ -107,6 +109,13 @@ interface ConversationRow {
   created_at: Date;
   updated_at: Date;
   reply_eligible_until: Date | null;
+  is_starred: boolean;
+  tags: unknown;
+  follow_up: unknown;
+  needs_reply: boolean;
+  activity_at: Date;
+  priority_rank: number;
+  follow_up_due_at: Date | null;
 }
 
 function capabilities(snapshot: Record<string, unknown>): ChannelCapabilities {
@@ -149,6 +158,13 @@ function mapConversation(row: ConversationRow): ConversationDetail {
           }
         : null,
     unreadCount: Number(row.unread_count),
+    isStarred: row.is_starred,
+    tags: Array.isArray(row.tags) ? (row.tags as readonly MessagingTag[]) : [],
+    followUp:
+      row.follow_up && typeof row.follow_up === 'object'
+        ? (row.follow_up as ConversationFollowUpSummary)
+        : null,
+    needsReply: row.needs_reply,
     capabilities: capabilities(row.capability_snapshot),
     version: row.version,
     subject: row.subject,
@@ -165,12 +181,19 @@ const conversationSelect = sql.raw(`
     c.last_message_sequence::text, lm.text_body last_message_text,
     lm.direction last_message_direction, lm.created_at last_message_created_at,
     (select count(*)::text from messaging.messages unread where unread.organization_id=c.organization_id and unread.conversation_id=c.id and unread.direction='INBOUND' and unread.sequence>coalesce(rc.last_read_sequence,0)) unread_count,
-    c.version::text, c.subject, c.created_at, c.updated_at, c.reply_eligible_until
+    c.version::text, c.subject, c.created_at, c.updated_at, c.reply_eligible_until,c.is_starred,
+    coalesce((select jsonb_agg(jsonb_build_object('id',tag.id,'label',tag.label,'colorToken',tag.color_token,'status',tag.status,'version',tag.version::text) order by tag.label,tag.id) from messaging.conversation_tag_assignments assignment join messaging.tags tag on tag.organization_id=assignment.organization_id and tag.id=assignment.tag_id where assignment.organization_id=c.organization_id and assignment.conversation_id=c.id),'[]'::jsonb) tags,
+    case when follow_up.id is null then null else jsonb_build_object('id',follow_up.id,'dueAt',follow_up.due_at,'status',follow_up.status,'responsibleMembershipId',follow_up.responsible_membership_id,'isOverdue',follow_up.due_at<now()) end follow_up,
+    (c.status in ('NEW','OPEN') and c.last_inbound_at is not null and (c.last_outbound_at is null or c.last_inbound_at>c.last_outbound_at)) needs_reply,
+    coalesce(c.last_message_at,c.created_at) activity_at,
+    case c.priority when 'URGENT' then 4 when 'HIGH' then 3 when 'NORMAL' then 2 else 1 end priority_rank,
+    follow_up.due_at follow_up_due_at
   from messaging.conversations c
   join messaging.channel_connections cc on cc.organization_id=c.organization_id and cc.id=c.channel_connection_id
   join messaging.contacts ct on ct.organization_id=c.organization_id and ct.id=c.contact_id
   left join iam.organization_memberships am on am.organization_id=c.organization_id and am.id=c.assignee_membership_id
   left join messaging.messages lm on lm.organization_id=c.organization_id and lm.id=c.last_message_id
+  left join lateral(select follow_up.id,follow_up.due_at,follow_up.status,follow_up.responsible_membership_id from messaging.conversation_follow_ups follow_up where follow_up.organization_id=c.organization_id and follow_up.conversation_id=c.id and follow_up.status='PENDING' order by follow_up.due_at,follow_up.id limit 1) follow_up on true
   left join messaging.conversation_read_cursors rc on rc.organization_id=c.organization_id and rc.conversation_id=c.id
     and rc.reader_type='MEMBERSHIP' and rc.reader_id=`);
 
@@ -237,9 +260,7 @@ export async function createConversation(
     }>`insert into messaging.conversations(organization_id,channel_connection_id,channel_kind,contact_id,contact_identity_id,subject)
       select ${input.organizationId},cc.id,cc.channel_kind,${input.contactId},${input.contactIdentityId},${input.subject ?? null}
       from messaging.channel_connections cc where cc.organization_id=${input.organizationId} and cc.id=${input.channelConnectionId}
-      returning id,version::text`.execute(
-      tx,
-    );
+      returning id,version::text`.execute(tx);
     const row = created.rows[0]!;
     await appendRealtimeEvent(tx as Db, {
       organizationId: input.organizationId,
@@ -308,18 +329,51 @@ export async function listConversations(
     scope?: 'mine' | 'unassigned' | 'all';
     status?: ConversationStatus;
     channelKind?: ChannelKind;
+    priority?: ConversationSummary['priority'];
+    assignedMembershipId?: string;
+    tagId?: string;
+    unread?: boolean;
+    starred?: boolean;
+    needsReply?: boolean;
+    followUp?: 'pending' | 'overdue' | 'none';
+    createdFrom?: string;
+    createdTo?: string;
+    activityFrom?: string;
+    activityTo?: string;
     search?: string;
-    sort?: 'newest' | 'oldest';
+    sort?: 'newest' | 'oldest' | 'created_newest' | 'created_oldest' | 'priority' | 'follow_up';
     cursor?: string;
     limit?: number;
   },
 ): Promise<CursorPage<ConversationSummary>> {
   const limit = Math.min(Math.max(input.limit ?? 30, 1), 100);
-  const cursor = decodeCursor<{ at: string; id: string; sort?: 'newest' | 'oldest' }>(input.cursor);
+  const cursor = decodeCursor<{
+    key: string;
+    id: string;
+    sort: NonNullable<typeof input.sort>;
+    filter: string;
+  }>(input.cursor);
   const allowed = accessSql(input.access, input.membershipId);
   const scope = input.scope ?? 'all';
   const sort = input.sort ?? 'newest';
-  if (cursor?.sort && cursor.sort !== sort)
+  const filter = fingerprint({
+    scope,
+    status: input.status ?? null,
+    channelKind: input.channelKind ?? null,
+    priority: input.priority ?? null,
+    assignedMembershipId: input.assignedMembershipId ?? null,
+    tagId: input.tagId ?? null,
+    unread: input.unread ?? null,
+    starred: input.starred ?? null,
+    needsReply: input.needsReply ?? null,
+    followUp: input.followUp ?? null,
+    createdFrom: input.createdFrom ?? null,
+    createdTo: input.createdTo ?? null,
+    activityFrom: input.activityFrom ?? null,
+    activityTo: input.activityTo ?? null,
+    search: input.search ?? null,
+  });
+  if (cursor && (cursor.sort !== sort || cursor.filter !== filter))
     throw new MessagingDomainError(
       'VALIDATION_FAILED',
       'The cursor does not match the sort order.',
@@ -328,24 +382,51 @@ export async function listConversations(
     where c.organization_id=${input.organizationId}::uuid and ${allowed}
       and (${input.status ?? null}::text is null or c.status=${input.status ?? null})
       and (${input.channelKind ?? null}::text is null or cc.channel_kind=${input.channelKind ?? null})
-      and (${input.search ?? null}::text is null or position(lower(${input.search ?? null}) in lower(coalesce(ct.display_name,'')))>0 or c.id::text=${input.search ?? null})
+      and (${input.priority ?? null}::text is null or c.priority=${input.priority ?? null})
+      and (${input.assignedMembershipId ?? null}::uuid is null or c.assignee_membership_id=${input.assignedMembershipId ?? null}::uuid)
+      and (${input.tagId ?? null}::uuid is null or exists(select 1 from messaging.conversation_tag_assignments filter_tag where filter_tag.organization_id=c.organization_id and filter_tag.conversation_id=c.id and filter_tag.tag_id=${input.tagId ?? null}::uuid))
+      and (${input.unread ?? null}::boolean is null or ${input.unread ?? null}=exists(select 1 from messaging.messages unread_filter where unread_filter.organization_id=c.organization_id and unread_filter.conversation_id=c.id and unread_filter.direction='INBOUND' and unread_filter.sequence>coalesce(rc.last_read_sequence,0)))
+      and (${input.starred ?? null}::boolean is null or c.is_starred=${input.starred ?? null})
+      and (${input.needsReply ?? null}::boolean is null or ${input.needsReply ?? null}=(c.status in ('NEW','OPEN') and c.last_inbound_at is not null and (c.last_outbound_at is null or c.last_inbound_at>c.last_outbound_at)))
+      and (${input.followUp ?? null}::text is null or (${input.followUp ?? null}='pending' and follow_up.id is not null) or (${input.followUp ?? null}='overdue' and follow_up.due_at<now()) or (${input.followUp ?? null}='none' and follow_up.id is null))
+      and (${input.createdFrom ?? null}::timestamptz is null or c.created_at>=${input.createdFrom ?? null}::timestamptz)
+      and (${input.createdTo ?? null}::timestamptz is null or c.created_at<${input.createdTo ?? null}::timestamptz)
+      and (${input.activityFrom ?? null}::timestamptz is null or coalesce(c.last_message_at,c.created_at)>=${input.activityFrom ?? null}::timestamptz)
+      and (${input.activityTo ?? null}::timestamptz is null or coalesce(c.last_message_at,c.created_at)<${input.activityTo ?? null}::timestamptz)
+      and (${input.search ?? null}::text is null or c.id::text=${input.search ?? null} or ct.display_name ilike ${input.search ? `%${input.search}%` : ''} or exists(select 1 from messaging.contact_identities identity where identity.organization_id=c.organization_id and identity.id=c.contact_identity_id and (identity.display_name ilike ${input.search ? `%${input.search}%` : ''} or identity.username ilike ${input.search ? `%${input.search}%` : ''})) or exists(select 1 from messaging.messages searched_message where searched_message.organization_id=c.organization_id and searched_message.conversation_id=c.id and searched_message.direction<>'INTERNAL' and searched_message.text_body ilike ${input.search ? `%${input.search}%` : ''} limit 1) or exists(select 1 from orders.orders searched_order where searched_order.organization_id=c.organization_id and searched_order.customer_id=ct.customer_id and searched_order.order_number ilike ${input.search ? `${input.search}%` : ''}))
       and (${scope}='all' or (${scope}='mine' and c.assignee_membership_id=${input.membershipId}::uuid) or (${scope}='unassigned' and c.assignee_membership_id is null))
-      and (${cursor?.at ?? null}::timestamptz is null or (${sort}='newest' and (coalesce(c.last_message_at,c.created_at),c.id)<(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid)) or (${sort}='oldest' and (coalesce(c.last_message_at,c.created_at),c.id)>(${cursor?.at ?? null}::timestamptz,${cursor?.id ?? null}::uuid)))
-    order by case when ${sort}='newest' then coalesce(c.last_message_at,c.created_at) end desc,case when ${sort}='newest' then c.id end desc,case when ${sort}='oldest' then coalesce(c.last_message_at,c.created_at) end asc,case when ${sort}='oldest' then c.id end asc limit ${limit + 1}`.execute(
+      and (${cursor?.key ?? null}::text is null
+        or (${sort}='newest' and (coalesce(c.last_message_at,c.created_at),c.id)<(${cursor?.key ?? null}::timestamptz,${cursor?.id ?? null}::uuid))
+        or (${sort}='oldest' and (coalesce(c.last_message_at,c.created_at),c.id)>(${cursor?.key ?? null}::timestamptz,${cursor?.id ?? null}::uuid))
+        or (${sort}='created_newest' and (c.created_at,c.id)<(${cursor?.key ?? null}::timestamptz,${cursor?.id ?? null}::uuid))
+        or (${sort}='created_oldest' and (c.created_at,c.id)>(${cursor?.key ?? null}::timestamptz,${cursor?.id ?? null}::uuid))
+        or (${sort}='priority' and ((case c.priority when 'URGENT' then 4 when 'HIGH' then 3 when 'NORMAL' then 2 else 1 end),c.id)<(${cursor?.key ?? null}::int,${cursor?.id ?? null}::uuid))
+        or (${sort}='follow_up' and (coalesce(follow_up.due_at,'infinity'::timestamptz),c.id)>(${cursor?.key ?? null}::timestamptz,${cursor?.id ?? null}::uuid)))
+    order by case when ${sort}='newest' then coalesce(c.last_message_at,c.created_at) end desc,case when ${sort}='newest' then c.id end desc,
+      case when ${sort}='oldest' then coalesce(c.last_message_at,c.created_at) end asc,case when ${sort}='oldest' then c.id end asc,
+      case when ${sort}='created_newest' then c.created_at end desc,case when ${sort}='created_newest' then c.id end desc,
+      case when ${sort}='created_oldest' then c.created_at end asc,case when ${sort}='created_oldest' then c.id end asc,
+      case when ${sort}='priority' then case c.priority when 'URGENT' then 4 when 'HIGH' then 3 when 'NORMAL' then 2 else 1 end end desc,case when ${sort}='priority' then c.id end desc,
+      case when ${sort}='follow_up' then coalesce(follow_up.due_at,'infinity'::timestamptz) end asc,case when ${sort}='follow_up' then c.id end asc limit ${limit + 1}`.execute(
     db,
   );
   const hasMore = result.rows.length > limit;
   const rows = result.rows.slice(0, limit);
   const last = rows.at(-1);
-  const lastAt = last?.last_message_created_at ?? last?.created_at;
+  const key = last
+    ? sort === 'priority'
+      ? String(last.priority_rank)
+      : sort === 'created_newest' || sort === 'created_oldest'
+        ? last.created_at.toISOString()
+        : sort === 'follow_up'
+          ? (last.follow_up_due_at?.toISOString() ?? 'infinity')
+          : last.activity_at.toISOString()
+    : null;
   return {
     data: rows.map(mapConversation),
     pagination: {
       hasMore,
-      nextCursor:
-        hasMore && last && lastAt
-          ? encodeCursor({ at: lastAt.toISOString(), id: last.id, sort })
-          : null,
+      nextCursor: hasMore && last && key ? encodeCursor({ key, id: last.id, sort, filter }) : null,
     },
   };
 }
@@ -408,7 +489,9 @@ async function loadAttachments(
     security_status: MessageView['attachments'][number]['securityStatus'];
   }>`select id,message_id,kind,filename,mime_type,byte_size::text,width_px,height_px,security_status
       from messaging.message_attachments where organization_id=${organizationId}
-        and message_id in (${sql.join(messageIds.map((id) => sql`${id}::uuid`))}) order by message_id,position`.execute(db);
+        and message_id in (${sql.join(messageIds.map((id) => sql`${id}::uuid`))}) order by message_id,position`.execute(
+    db,
+  );
   const grouped = new Map<string, MessageView['attachments']>();
   for (const row of result.rows) {
     const items = grouped.get(row.message_id) ?? [];
@@ -424,9 +507,7 @@ async function loadAttachments(
         height: row.height_px,
         securityStatus: row.security_status,
         downloadPath:
-          row.security_status === 'AVAILABLE'
-            ? `/api/admin/messaging/attachments/${row.id}`
-            : null,
+          row.security_status === 'AVAILABLE' ? `/api/admin/messaging/attachments/${row.id}` : null,
       },
     ]);
   }
@@ -474,7 +555,11 @@ export async function listMessages(
   const hasMore = result.rows.length > limit;
   const rows = result.rows.slice(0, limit);
   const oldest = rows.at(-1);
-  const attachments = await loadAttachments(db, input.organizationId, rows.map((row) => row.id));
+  const attachments = await loadAttachments(
+    db,
+    input.organizationId,
+    rows.map((row) => row.id),
+  );
   return {
     data: rows.reverse().map((row) => mapMessage(row, attachments.get(row.id))),
     pagination: {
@@ -653,10 +738,15 @@ export async function prepareOutboundMessage(
           }>`select a.id,a.original_filename,o.mime_type,o.byte_size::text,o.width_px,o.height_px
               from media.media_assets a join media.media_objects o on o.organization_id=a.organization_id and o.id=a.current_object_id
               where a.organization_id=${input.actor.organizationId} and a.id in (${sql.join(attachmentIds.map((id) => sql`${id}::uuid`))})
-                and a.visibility_class='PRIVATE' and a.status='READY' and a.asset_type='IMAGE'`.execute(tx)
+                and a.visibility_class='PRIVATE' and a.status='READY' and a.asset_type='IMAGE'`.execute(
+            tx,
+          )
         : { rows: [] };
       if (attachmentAssets.rows.length !== attachmentIds.length)
-        throw new MessagingDomainError('VALIDATION_FAILED', 'One or more attachments are unavailable.');
+        throw new MessagingDomainError(
+          'VALIDATION_FAILED',
+          'One or more attachments are unavailable.',
+        );
       const allocated = await sql<{
         sequence: string;
         version: string;
@@ -693,7 +783,9 @@ export async function prepareOutboundMessage(
       for (const [position, assetId] of attachmentIds.entries()) {
         const asset = attachmentAssets.rows.find((candidate) => candidate.id === assetId)!;
         await sql`insert into messaging.message_attachments(organization_id,message_id,media_asset_id,position,kind,filename,mime_type,byte_size,width_px,height_px,security_status)
-          values(${input.actor.organizationId},${messageId},${assetId},${position},'IMAGE',${asset.original_filename},${asset.mime_type},${asset.byte_size}::bigint,${asset.width_px},${asset.height_px},'AVAILABLE')`.execute(tx);
+          values(${input.actor.organizationId},${messageId},${assetId},${position},'IMAGE',${asset.original_filename},${asset.mime_type},${asset.byte_size}::bigint,${asset.width_px},${asset.height_px},'AVAILABLE')`.execute(
+          tx,
+        );
       }
       await sql`update messaging.conversations set last_message_id=${messageId},last_message_at=now(),last_outbound_at=now() where organization_id=${input.actor.organizationId} and id=${input.conversationId}`.execute(
         tx,
@@ -785,7 +877,10 @@ export async function acceptInboundMessage(
       if (!row || row.contact_identity_id !== input.contactIdentityId)
         throw new MessagingDomainError('CONVERSATION_NOT_FOUND', 'Conversation was not found.');
       if (row.status === 'CLOSED')
-        throw new MessagingDomainError('CONVERSATION_CLOSED', 'Closed conversations cannot receive messages.');
+        throw new MessagingDomainError(
+          'CONVERSATION_CLOSED',
+          'Closed conversations cannot receive messages.',
+        );
       const record = await claimIdempotencyRecord(tx, {
         organizationId: input.organizationId,
         principalType: 'CONTACT_IDENTITY',
@@ -874,7 +969,10 @@ export async function acceptInboundMessage(
                 and u.status='AVAILABLE' and u.expires_at>now() and a.status='READY'`.execute(tx)
         : { rows: [] };
       if (attachmentUploads.rows.length !== attachmentIds.length)
-        throw new MessagingDomainError('VALIDATION_FAILED', 'One or more attachments are unavailable.');
+        throw new MessagingDomainError(
+          'VALIDATION_FAILED',
+          'One or more attachments are unavailable.',
+        );
       const allocated = await sql<{
         sequence: string;
         version: string;
@@ -882,6 +980,11 @@ export async function acceptInboundMessage(
         tx,
       );
       const allocation = allocated.rows[0]!;
+      if (row.status === 'RESOLVED')
+        await sql`insert into messaging.conversation_events(organization_id,conversation_id,event_type,from_value,to_value,reason)
+          values(${input.organizationId},${input.conversationId},'STATUS_CHANGED',${JSON.stringify('RESOLVED')}::jsonb,${JSON.stringify('OPEN')}::jsonb,'Inbound customer message reopened the conversation.')`.execute(
+          tx,
+        );
       const inserted = await sql<{
         id: string;
       }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,sender_contact_identity_id,message_type,text_body,provider_message_id,client_message_id,delivery_state,provider_created_at) values(${input.organizationId},${input.conversationId},${allocation.sequence}::bigint,'INBOUND','CONTACT',${input.contactIdentityId},${attachmentIds.length ? (text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${text || null},${input.externalMessageId},${input.externalMessageId},'RECEIVED',${input.providerCreatedAt ?? null}) returning id`.execute(
@@ -891,9 +994,13 @@ export async function acceptInboundMessage(
       for (const [position, uploadId] of attachmentIds.entries()) {
         const upload = attachmentUploads.rows.find((candidate) => candidate.id === uploadId)!;
         await sql`insert into messaging.message_attachments(organization_id,message_id,media_asset_id,position,kind,filename,mime_type,byte_size,width_px,height_px,security_status)
-          values(${input.organizationId},${messageId},${upload.media_asset_id},${position},'IMAGE',${upload.file_name},${upload.mime_type},${upload.byte_size}::bigint,${upload.width_px},${upload.height_px},'AVAILABLE')`.execute(tx);
+          values(${input.organizationId},${messageId},${upload.media_asset_id},${position},'IMAGE',${upload.file_name},${upload.mime_type},${upload.byte_size}::bigint,${upload.width_px},${upload.height_px},'AVAILABLE')`.execute(
+          tx,
+        );
         await sql`update messaging.website_attachment_uploads set status='ATTACHED',attached_message_id=${messageId},updated_at=now()
-          where organization_id=${input.organizationId} and id=${uploadId} and status='AVAILABLE'`.execute(tx);
+          where organization_id=${input.organizationId} and id=${uploadId} and status='AVAILABLE'`.execute(
+          tx,
+        );
       }
       await sql`update messaging.conversations set last_message_id=${messageId},last_message_at=now() where organization_id=${input.organizationId} and id=${input.conversationId}`.execute(
         tx,
@@ -1024,6 +1131,10 @@ export async function transitionConversation(
     );
     if (!updated.rows[0])
       throw new MessagingDomainError('STALE_VERSION', 'Conversation changed before this request.');
+    await sql`insert into messaging.conversation_events(organization_id,conversation_id,event_type,actor_membership_id,from_value,to_value,reason)
+      values(${input.actor.organizationId},${input.conversationId},'STATUS_CHANGED',${input.actor.membershipId},${JSON.stringify(before.status)}::jsonb,${JSON.stringify(input.status)}::jsonb,${input.reason ?? null})`.execute(
+      tx,
+    );
     await appendRealtimeEvent(tx as Db, {
       organizationId: input.actor.organizationId,
       audienceType: 'ORGANIZATION',
@@ -1096,6 +1207,14 @@ export async function claimConversation(
         },
       );
     }
+    await sql`insert into messaging.conversation_assignment_events(organization_id,conversation_id,new_assignee_membership_id,actor_membership_id,assignment_source,conversation_version)
+      values(${input.actor.organizationId},${input.conversationId},${input.actor.membershipId},${input.actor.membershipId},'CLAIM',${updated.rows[0].version}::bigint)`.execute(
+      tx,
+    );
+    await sql`insert into messaging.conversation_events(organization_id,conversation_id,event_type,actor_membership_id,to_value)
+      values(${input.actor.organizationId},${input.conversationId},'ASSIGNMENT_CHANGED',${input.actor.membershipId},${JSON.stringify({ assigneeMembershipId: input.actor.membershipId })}::jsonb)`.execute(
+      tx,
+    );
     await appendRealtimeEvent(tx as Db, {
       organizationId: input.actor.organizationId,
       audienceType: 'ORGANIZATION',
@@ -1106,10 +1225,11 @@ export async function claimConversation(
       payload: {
         conversationId: input.conversationId,
         assigneeMembershipId: input.actor.membershipId,
+        recipientMembershipId: input.actor.membershipId,
         version: updated.rows[0].version,
       },
     });
-    await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values(${input.actor.organizationId},'messaging.conversation.assigned.v1',1,'messaging.conversation',${input.conversationId},${updated.rows[0].version}::bigint,${JSON.stringify({ conversationId: input.conversationId, assigneeMembershipId: input.actor.membershipId, version: updated.rows[0].version })}::jsonb,now())`.execute(
+    await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values(${input.actor.organizationId},'messaging.conversation.assigned.v1',1,'messaging.conversation',${input.conversationId},${updated.rows[0].version}::bigint,${JSON.stringify({ conversationId: input.conversationId, assigneeMembershipId: input.actor.membershipId, recipientMembershipId: input.actor.membershipId, version: updated.rows[0].version })}::jsonb,now())`.execute(
       tx,
     );
     await appendAuditEvent(tx, {
@@ -1359,3 +1479,7 @@ export async function reclaimExpiredMessagingDeliveries(db: Db): Promise<number>
 }
 
 export * from './storefront.js';
+export * from './operations.js';
+export * from './settings.js';
+export * from './customer-context.js';
+export * from './reporting.js';
