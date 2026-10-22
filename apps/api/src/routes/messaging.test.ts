@@ -73,6 +73,13 @@ describe('messaging HTTP authentication boundary', () => {
       data: [],
       pagination: { hasMore: false, nextCursor: null },
     });
+    const settings = await app.inject({
+      method: 'GET',
+      url: '/admin/messaging/settings/channels',
+      headers: { 'x-organization-id': organizationId },
+    });
+    expect(settings.statusCode).toBe(200);
+    expect(settings.json()).toEqual({ data: [] });
     await app.close();
   });
 

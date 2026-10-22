@@ -2,8 +2,20 @@ import type { FastifyInstance } from 'fastify';
 import { Type } from 'typebox';
 
 import type { DatabaseClient } from '@maevelle/database';
+import {
+  completeMediaUploadSession,
+  createMediaUploadSession,
+  findStaffMediaAssetStatus,
+  getMediaUploadSession,
+  MediaDomainError,
+} from '@maevelle/database/media';
 import * as messaging from '@maevelle/database/messaging';
-import type { ObjectStoragePort } from '@maevelle/media';
+import {
+  createMediaObjectKey,
+  sha256,
+  validateMediaSignature,
+  type ObjectStoragePort,
+} from '@maevelle/media';
 
 import { registerOperationalMessagingRoutes } from './messaging-operations.js';
 import {
@@ -20,6 +32,17 @@ import {
 const authenticate = requireCapability;
 
 const conversationStatuses = ['NEW', 'OPEN', 'PENDING', 'RESOLVED', 'CLOSED'] as const;
+const STAFF_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+const staffAttachmentMimeTypes = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+function sendUploadError(
+  reply: { code(statusCode: number): { send(body: unknown): unknown } },
+  error: unknown,
+) {
+  if (!(error instanceof MediaDomainError)) throw error;
+  const status = error.code === 'NOT_FOUND' ? 404 : error.code === 'CONFLICT' ? 409 : 422;
+  return reply.code(status).send({ error: { code: error.code, message: error.message } });
+}
 
 export function registerMessagingRoutes(
   app: FastifyInstance,
@@ -46,6 +69,261 @@ export function registerMessagingRoutes(
   });
 
   registerOperationalMessagingRoutes(app, database, auth);
+
+  if (storage) {
+    app.post(
+      '/admin/messaging/conversations/:conversationId/uploads',
+      {
+        schema: {
+          params: Type.Object({ conversationId: Type.String({ format: 'uuid' }) }),
+          body: Type.Object({
+            fileName: Type.String({ minLength: 1, maxLength: 255 }),
+            mimeType: Type.Union(staffAttachmentMimeTypes.map((value) => Type.Literal(value))),
+            byteSize: Type.Integer({ minimum: 1, maximum: STAFF_ATTACHMENT_MAX_BYTES }),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const context = await authenticate(database, auth, request.headers, 'messaging.reply');
+        if (!context || !hasInboxAccess(context))
+          return reply.code(403).send({
+            error: { code: 'FORBIDDEN', message: 'Messaging reply access is required.' },
+          });
+        try {
+          const conversationId = (request.params as { conversationId: string }).conversationId;
+          const conversation = await messaging.getConversation(database.db, {
+            organizationId: context.organizationId,
+            conversationId,
+            membershipId: context.membershipId,
+            access: access(context),
+          });
+          if (!conversation.capabilities.attachments)
+            throw new messaging.MessagingDomainError(
+              'VALIDATION_FAILED',
+              'This channel does not support image attachments.',
+            );
+          const body = request.body as {
+            fileName: string;
+            mimeType: (typeof staffAttachmentMimeTypes)[number];
+            byteSize: number;
+          };
+          const expiresAt = new Date(Date.now() + 15 * 60_000);
+          const session = await createMediaUploadSession(database.db, {
+            organizationId: context.organizationId,
+            actorId: context.actorId,
+            uploadSource: 'ADMIN_UPLOAD',
+            originalFilename: body.fileName,
+            declaredMimeType: body.mimeType,
+            declaredByteSize: body.byteSize,
+            visibility: 'PRIVATE',
+            storageProvider: storage.provider,
+            bucket: storage.privateBucket,
+            objectKey: (assetId, extension) =>
+              createMediaObjectKey({
+                organizationId: context.organizationId,
+                assetId,
+                extension,
+                purpose: 'original',
+              }),
+            expiresAt,
+            maximumBytes: STAFF_ATTACHMENT_MAX_BYTES,
+          });
+          const authorization = await storage.createSignedUpload(
+            { provider: session.provider, bucket: session.bucket, key: session.objectKey },
+            { contentType: session.mimeType, expiresInSeconds: 15 * 60 },
+          );
+          return reply.code(201).send({
+            data: {
+              assetId: session.assetId,
+              sessionId: session.id,
+              status: 'PENDING_UPLOAD',
+              upload: {
+                ...authorization,
+                ...(authorization.strategy === 'API_PROXY'
+                  ? {
+                      url: `/api/admin/messaging/conversations/${conversationId}/uploads/${session.id}/content`,
+                    }
+                  : {}),
+              },
+            },
+          });
+        } catch (error) {
+          if (error instanceof messaging.MessagingDomainError)
+            return fail(reply, error, request.id);
+          return sendUploadError(reply, error);
+        }
+      },
+    );
+
+    app.put(
+      '/admin/messaging/conversations/:conversationId/uploads/:sessionId/content',
+      {
+        bodyLimit: STAFF_ATTACHMENT_MAX_BYTES,
+        schema: {
+          params: Type.Object({
+            conversationId: Type.String({ format: 'uuid' }),
+            sessionId: Type.String({ format: 'uuid' }),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const context = await authenticate(database, auth, request.headers, 'messaging.reply');
+        if (!context || !hasInboxAccess(context))
+          return reply.code(403).send({
+            error: { code: 'FORBIDDEN', message: 'Messaging reply access is required.' },
+          });
+        if (storage.provider !== 'local')
+          return reply
+            .code(404)
+            .send({ error: { code: 'NOT_FOUND', message: 'Route not found.' } });
+        try {
+          const params = request.params as { conversationId: string; sessionId: string };
+          await messaging.getConversation(database.db, {
+            organizationId: context.organizationId,
+            conversationId: params.conversationId,
+            membershipId: context.membershipId,
+            access: access(context),
+          });
+          const session = await getMediaUploadSession(database.db, {
+            organizationId: context.organizationId,
+            sessionId: params.sessionId,
+            actorId: context.actorId,
+          });
+          if (!session) throw new MediaDomainError('NOT_FOUND', 'Upload session was not found.');
+          if (session.status !== 'PENDING')
+            throw new MediaDomainError('CONFLICT', 'Upload session is not open.');
+          if (!Buffer.isBuffer(request.body) || request.body.length !== session.declaredByteSize)
+            throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Upload body size is not authorized.');
+          if (!validateMediaSignature(request.body, session.declaredMimeType))
+            throw new MediaDomainError(
+              'VALIDATION_FAILED',
+              'Uploaded file signature does not match its declared type.',
+            );
+          await storage.put(
+            { provider: session.provider, bucket: session.bucket, key: session.objectKey },
+            request.body,
+            { contentType: session.declaredMimeType, checksumSha256: sha256(request.body) },
+          );
+          return reply.code(204).send();
+        } catch (error) {
+          if (error instanceof messaging.MessagingDomainError)
+            return fail(reply, error, request.id);
+          return sendUploadError(reply, error);
+        }
+      },
+    );
+
+    app.post(
+      '/admin/messaging/conversations/:conversationId/uploads/:sessionId/complete',
+      {
+        schema: {
+          params: Type.Object({
+            conversationId: Type.String({ format: 'uuid' }),
+            sessionId: Type.String({ format: 'uuid' }),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const context = await authenticate(database, auth, request.headers, 'messaging.reply');
+        if (!context || !hasInboxAccess(context))
+          return reply.code(403).send({
+            error: { code: 'FORBIDDEN', message: 'Messaging reply access is required.' },
+          });
+        try {
+          const params = request.params as { conversationId: string; sessionId: string };
+          await messaging.getConversation(database.db, {
+            organizationId: context.organizationId,
+            conversationId: params.conversationId,
+            membershipId: context.membershipId,
+            access: access(context),
+          });
+          const session = await getMediaUploadSession(database.db, {
+            organizationId: context.organizationId,
+            sessionId: params.sessionId,
+            actorId: context.actorId,
+          });
+          if (!session) throw new MediaDomainError('NOT_FOUND', 'Upload session was not found.');
+          const object = await storage.head({
+            provider: session.provider,
+            bucket: session.bucket,
+            key: session.objectKey,
+          });
+          if (!object)
+            throw new MediaDomainError('UPLOAD_INCOMPLETE', 'Uploaded object does not exist.');
+          const result = await completeMediaUploadSession(database.db, {
+            organizationId: context.organizationId,
+            sessionId: session.id,
+            actualByteSize: object.byteSize,
+            actualContentType: object.contentType,
+            checksumSha256: object.checksumSha256,
+          });
+          return reply.code(202).send({
+            data: {
+              assetId: result.assetId,
+              sessionId: session.id,
+              status: 'PROCESSING',
+            },
+          });
+        } catch (error) {
+          if (error instanceof messaging.MessagingDomainError)
+            return fail(reply, error, request.id);
+          return sendUploadError(reply, error);
+        }
+      },
+    );
+
+    app.get(
+      '/admin/messaging/conversations/:conversationId/uploads/:assetId',
+      {
+        schema: {
+          params: Type.Object({
+            conversationId: Type.String({ format: 'uuid' }),
+            assetId: Type.String({ format: 'uuid' }),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const context = await authenticate(database, auth, request.headers, 'messaging.reply');
+        if (!context || !hasInboxAccess(context))
+          return reply.code(403).send({
+            error: { code: 'FORBIDDEN', message: 'Messaging reply access is required.' },
+          });
+        try {
+          const params = request.params as { conversationId: string; assetId: string };
+          await messaging.getConversation(database.db, {
+            organizationId: context.organizationId,
+            conversationId: params.conversationId,
+            membershipId: context.membershipId,
+            access: access(context),
+          });
+          const asset = await findStaffMediaAssetStatus(database.db, {
+            organizationId: context.organizationId,
+            assetId: params.assetId,
+            actorId: context.actorId,
+          });
+          if (!asset) throw new MediaDomainError('NOT_FOUND', 'Attachment was not found.');
+          const status =
+            asset.status === 'READY'
+              ? 'AVAILABLE'
+              : ['FAILED', 'QUARANTINED', 'TRASHED', 'PURGING'].includes(asset.status)
+                ? 'REJECTED'
+                : 'PROCESSING';
+          return {
+            data: {
+              assetId: params.assetId,
+              sessionId: '',
+              status,
+              errorMessage: asset.errorMessage,
+            },
+          };
+        } catch (error) {
+          if (error instanceof messaging.MessagingDomainError)
+            return fail(reply, error, request.id);
+          return sendUploadError(reply, error);
+        }
+      },
+    );
+  }
 
   app.get(
     '/admin/messaging/conversations',

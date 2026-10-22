@@ -3,7 +3,12 @@ import { sql, type Kysely } from 'kysely';
 
 import type { DatabaseSchema } from '../index.js';
 import { withMediaTransaction } from './transaction.js';
-import { MediaDomainError, type MediaVisibility, type SupportedMediaMime } from './types.js';
+import {
+  MediaDomainError,
+  type MediaStatus,
+  type MediaVisibility,
+  type SupportedMediaMime,
+} from './types.js';
 
 const MIME_POLICY: Record<SupportedMediaMime, { type: 'IMAGE' | 'DOCUMENT'; extension: string }> = {
   'image/jpeg': { type: 'IMAGE', extension: 'jpg' },
@@ -40,11 +45,7 @@ export async function createMediaUploadSession(
     organizationId: string;
     actorId?: string;
     uploadSource?:
-      | 'ADMIN_UPLOAD'
-      | 'CUSTOMER_REVIEW'
-      | 'MESSAGING_ATTACHMENT'
-      | 'SUPPLIER_IMPORT'
-      | 'API';
+      'ADMIN_UPLOAD' | 'CUSTOMER_REVIEW' | 'MESSAGING_ATTACHMENT' | 'SUPPLIER_IMPORT' | 'API';
     guestOwnerHash?: string;
     originalFilename: string;
     declaredMimeType: string;
@@ -116,7 +117,12 @@ export async function createMediaUploadSession(
 
 export async function getMediaUploadSession(
   db: Kysely<DatabaseSchema>,
-  input: { organizationId: string; sessionId: string; guestOwnerHash?: string },
+  input: {
+    organizationId: string;
+    sessionId: string;
+    guestOwnerHash?: string;
+    actorId?: string;
+  },
 ) {
   const result = await sql<{
     id: string;
@@ -133,6 +139,7 @@ export async function getMediaUploadSession(
       storage_provider,bucket_name,object_key,expires_at::text
     from media.media_upload_sessions session
     where session.id=${input.sessionId}::uuid and session.organization_id=${input.organizationId}
+      ${input.actorId ? sql`and session.created_by=${input.actorId}::uuid` : sql``}
       ${
         input.guestOwnerHash
           ? sql`and exists (
@@ -156,6 +163,21 @@ export async function getMediaUploadSession(
         expiresAt: row.expires_at,
       }
     : undefined;
+}
+
+export async function findStaffMediaAssetStatus(
+  db: Kysely<DatabaseSchema>,
+  input: { organizationId: string; assetId: string; actorId: string },
+): Promise<{ status: MediaStatus; errorMessage: string | null } | undefined> {
+  const result = await sql<{
+    status: MediaStatus;
+    processing_error_message: string | null;
+  }>`select status,processing_error_message from media.media_assets
+    where organization_id=${input.organizationId} and id=${input.assetId}::uuid
+      and uploaded_by=${input.actorId}::uuid and upload_source='ADMIN_UPLOAD'
+      and visibility_class='PRIVATE' and asset_type='IMAGE'`.execute(db);
+  const row = result.rows[0];
+  return row ? { status: row.status, errorMessage: row.processing_error_message } : undefined;
 }
 
 export async function completeMediaUploadSession(

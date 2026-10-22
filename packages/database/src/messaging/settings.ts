@@ -47,6 +47,14 @@ export async function getChannelSettings(
   };
 }
 
+export async function listChannelSettings(db: Db, organizationId: string) {
+  const result = await sql<{ id: string }>`select id from messaging.channel_connections
+    where organization_id=${organizationId} order by channel_kind,display_name,id`.execute(db);
+  return Promise.all(
+    result.rows.map((row) => getChannelSettings(db, { organizationId, connectionId: row.id })),
+  );
+}
+
 export async function updateChannelSettings(
   db: Db,
   input: {

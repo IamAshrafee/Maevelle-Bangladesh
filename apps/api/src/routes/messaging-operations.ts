@@ -959,6 +959,18 @@ export function registerOperationalMessagingRoutes(
       }
     },
   );
+  app.get('/admin/messaging/settings/channels', async (request, reply) => {
+    const context = await authenticate(
+      database,
+      auth,
+      request.headers,
+      'messaging.settings.manage',
+    );
+    if (!context) return forbidden(reply, request.id);
+    return {
+      data: await messaging.listChannelSettings(database.db, context.organizationId),
+    };
+  });
   app.patch(
     '/admin/messaging/settings/channel/:connectionId',
     {

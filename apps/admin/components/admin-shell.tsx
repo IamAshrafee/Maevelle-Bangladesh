@@ -149,7 +149,8 @@ const navigation: readonly NavGroup[] = [
         href: '/inventory/units',
         icon: ScanBarcode,
         capability: 'inventory.units.view',
-        keywords: 'serial serialized individual barcode units qc inspection repair quarantine release write off',
+        keywords:
+          'serial serialized individual barcode units qc inspection repair quarantine release write off',
       },
     ],
   },
@@ -265,6 +266,13 @@ const navigation: readonly NavGroup[] = [
   {
     label: 'Communication',
     items: [
+      {
+        label: 'Messaging',
+        href: '/messaging',
+        icon: MessageSquareText,
+        capability: 'messaging.inbox.view_assigned',
+        keywords: 'inbox conversations chat agents follow ups customer support',
+      },
       {
         label: 'Notifications Center',
         href: '/notifications',
