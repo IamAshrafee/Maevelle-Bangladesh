@@ -304,23 +304,44 @@ function CustomerContext({
               key={followUp.id}
               className={cn(
                 'rounded-lg border p-3 text-xs',
-                followUp.isOverdue && 'border-destructive/50',
+                followUp.isOverdue && 'border-destructive/50 bg-destructive/5',
               )}
             >
-              <p className="font-medium tabular-nums font-mono">{formatDateTime(followUp.dueAt)}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium tabular-nums font-mono">{formatDateTime(followUp.dueAt)}</p>
+                {followUp.isOverdue ? (
+                  <span className="text-[10px] text-destructive font-semibold">Overdue</span>
+                ) : null}
+              </div>
               {followUp.note ? <p className="mt-1 text-muted-foreground">{followUp.note}</p> : null}
               {canFollowUp ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-2"
-                  onClick={async () => {
-                    await api.transitionFollowUp(followUp.id, followUp.version, 'COMPLETED');
-                    await onRefresh();
-                  }}
-                >
-                  <Check className="size-3.5" /> Complete
-                </Button>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={async () => {
+                      await api.transitionFollowUp(followUp.id, followUp.version, 'COMPLETED');
+                      await onRefresh();
+                      await messaging.refreshInbox();
+                    }}
+                  >
+                    <Check className="size-3.5" /> Complete
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={async () => {
+                      if (!window.confirm('Cancel this scheduled follow-up?')) return;
+                      await api.transitionFollowUp(followUp.id, followUp.version, 'CANCELLED');
+                      await onRefresh();
+                      await messaging.refreshInbox();
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               ) : null}
             </div>
           ))}
@@ -392,13 +413,38 @@ function Notes({
 }) {
   const messaging = useMessaging();
   const [body, setBody] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const canCreate = messaging.capabilities.includes('messaging.notes.create');
+
   async function add() {
     if (!body.trim() || !messaging.conversation) return;
     await api.createNote(messaging.conversation.id, body.trim());
     setBody('');
     await onRefresh();
   }
+
+  async function saveRevision(note: InternalNoteView) {
+    if (!editingBody.trim()) return;
+    setSavingEdit(true);
+    try {
+      await api.updateNote(note.id, note.revision, editingBody.trim());
+      setEditingId(null);
+      setEditingBody('');
+      toast.add({ title: 'Note updated', type: 'success' });
+      await onRefresh();
+    } catch (error) {
+      toast.add({
+        title: 'Could not update note',
+        description: error instanceof Error ? error.message : 'Try again.',
+        type: 'error',
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {canCreate ? (
@@ -421,27 +467,80 @@ function Notes({
         <article key={note.id} className="rounded-xl border border-border p-3">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-xs font-medium">{note.author.displayName}</p>
+              <p className="text-xs font-medium">
+                {note.author.displayName}
+                {note.revision > 1 ? (
+                  <span className="ml-1 text-[10px] text-muted-foreground font-mono">
+                    (rev. {note.revision})
+                  </span>
+                ) : null}
+              </p>
               <time className="text-[10px] text-muted-foreground tabular-nums font-mono">
                 {formatDateTime(note.createdAt)}
               </time>
             </div>
             {canCreate ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Delete note"
-                onClick={async () => {
-                  if (!window.confirm('Delete this internal note?')) return;
-                  await api.deleteNote(note.id, 'Removed from collaboration panel');
-                  await onRefresh();
-                }}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Edit note"
+                  onClick={() => {
+                    if (editingId === note.id) {
+                      setEditingId(null);
+                    } else {
+                      setEditingId(note.id);
+                      setEditingBody(note.body);
+                    }
+                  }}
+                >
+                  <NotebookPen className="size-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Delete note"
+                  onClick={async () => {
+                    if (!window.confirm('Delete this internal note?')) return;
+                    await api.deleteNote(note.id, 'Removed from collaboration panel');
+                    await onRefresh();
+                  }}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
             ) : null}
           </div>
-          <p className="mt-2 whitespace-pre-wrap text-sm">{note.body}</p>
+          {editingId === note.id ? (
+            <div className="mt-2 space-y-2">
+              <Textarea
+                value={editingBody}
+                onChange={(event) => setEditingBody(event.target.value)}
+                className="min-h-20 text-sm"
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={!editingBody.trim() || savingEdit}
+                  onClick={() => void saveRevision(note)}
+                >
+                  Save revision
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditingId(null);
+                    setEditingBody('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 whitespace-pre-wrap text-sm">{note.body}</p>
+          )}
         </article>
       ))}
       {!notes.length ? (

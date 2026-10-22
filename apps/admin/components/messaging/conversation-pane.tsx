@@ -200,7 +200,7 @@ export function ConversationPane({ onOpenContext }: { onOpenContext: () => void 
             <DropdownMenuTrigger render={<Button variant="ghost" size="sm" />}>
               {conversation.assignee?.displayName ?? 'Assign'} <ChevronDown className="size-3.5" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent>
+            <DropdownMenuContent className="max-h-60 overflow-y-auto">
               <DropdownMenuItem
                 onClick={() => void messaging.assign(null, 'Released from workspace')}
               >
@@ -366,7 +366,18 @@ function Composer({
   const [text, setText] = useState('');
   const [attachmentIds, setAttachmentIds] = useState<readonly string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [replyQuery, setReplyQuery] = useState('');
   const conversation = messaging.conversation;
+
+  const filteredReplies = savedReplies.filter((reply) => {
+    if (!replyQuery.trim()) return true;
+    const q = replyQuery.toLowerCase();
+    return (
+      reply.title.toLowerCase().includes(q) ||
+      reply.body.toLowerCase().includes(q) ||
+      (reply.shortcut && reply.shortcut.toLowerCase().includes(q))
+    );
+  });
 
   async function submit() {
     const sent = await messaging.send(text, attachmentIds);
@@ -456,21 +467,46 @@ function Composer({
               <DropdownMenuTrigger render={<Button variant="ghost" size="sm" />}>
                 Saved reply <ChevronDown className="size-3" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="max-h-72 w-72">
+              <DropdownMenuContent className="max-h-80 w-80 p-2">
                 {savedReplies.length ? (
-                  savedReplies.map((reply) => (
-                    <DropdownMenuItem
-                      key={reply.id}
-                      onClick={() =>
-                        setText((current) => `${current}${current ? '\n' : ''}${reply.body}`)
-                      }
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{reply.title}</p>
-                        <p className="line-clamp-2 text-xs text-muted-foreground">{reply.body}</p>
-                      </div>
-                    </DropdownMenuItem>
-                  ))
+                  <>
+                    <input
+                      type="text"
+                      value={replyQuery}
+                      onChange={(e) => setReplyQuery(e.target.value)}
+                      placeholder="Search saved replies…"
+                      className="mb-2 w-full rounded border border-border bg-muted/30 px-2 py-1 text-xs outline-none focus:border-primary"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    />
+                    <div className="max-h-60 overflow-y-auto">
+                      {filteredReplies.map((reply) => (
+                        <DropdownMenuItem
+                          key={reply.id}
+                          onClick={() =>
+                            setText((current) => `${current}${current ? '\n' : ''}${reply.body}`)
+                          }
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate font-medium">{reply.title}</p>
+                              {reply.shortcut ? (
+                                <Badge variant="outline" className="font-mono text-[9px] px-1 py-0">
+                                  {reply.shortcut}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <p className="line-clamp-2 text-xs text-muted-foreground">{reply.body}</p>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                      {!filteredReplies.length ? (
+                        <p className="py-2 text-center text-xs text-muted-foreground">
+                          No matching replies
+                        </p>
+                      ) : null}
+                    </div>
+                  </>
                 ) : (
                   <DropdownMenuLabel>No saved replies yet</DropdownMenuLabel>
                 )}
@@ -491,3 +527,4 @@ function Composer({
     </div>
   );
 }
+

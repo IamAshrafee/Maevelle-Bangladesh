@@ -246,77 +246,251 @@ function BusinessHours({
   onChange: (value: BusinessHoursView) => void;
   onReload: () => Promise<void>;
 }) {
+  const [newExceptionDate, setNewExceptionDate] = useState('');
+  const [newExceptionLabel, setNewExceptionLabel] = useState('');
+  const [newExceptionClosed, setNewExceptionClosed] = useState(true);
+  const [newExceptionStart, setNewExceptionStart] = useState('10:00');
+  const [newExceptionEnd, setNewExceptionEnd] = useState('16:00');
+
   function updateDay(day: string, part: 'enabled' | 'start' | 'end', input: boolean | string) {
     const current = value.weeklySchedule[day]?.[0] ?? { start: '09:00', end: '18:00' };
     const intervals =
       part === 'enabled' ? (input ? [current] : []) : [{ ...current, [part]: input }];
     onChange({ ...value, weeklySchedule: { ...value.weeklySchedule, [day]: intervals } });
   }
+
+  function addException() {
+    if (!newExceptionDate) return;
+    const item = {
+      id: crypto.randomUUID(),
+      localDate: newExceptionDate,
+      label: newExceptionLabel.trim() || null,
+      isClosed: newExceptionClosed,
+      intervals: newExceptionClosed
+        ? []
+        : [{ start: newExceptionStart, end: newExceptionEnd }],
+    };
+    onChange({
+      ...value,
+      exceptions: [...value.exceptions.filter((e) => e.localDate !== newExceptionDate), item],
+    });
+    setNewExceptionDate('');
+    setNewExceptionLabel('');
+  }
+
+  function removeException(localDate: string) {
+    onChange({
+      ...value,
+      exceptions: value.exceptions.filter((e) => e.localDate !== localDate),
+    });
+  }
+
   return (
-    <section className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center gap-2">
-        <Clock3 className="size-5 text-primary" />
-        <div>
-          <h3 className="font-semibold">Business hours</h3>
-          <p className="text-xs text-muted-foreground">
-            Timezone-aware customer availability and offline behavior.
-          </p>
+    <div className="space-y-6">
+      <section className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2">
+          <Clock3 className="size-5 text-primary" />
+          <div>
+            <h3 className="font-semibold">Weekly business hours</h3>
+            <p className="text-xs text-muted-foreground">
+              Timezone-aware customer availability and offline messaging policy.
+            </p>
+          </div>
         </div>
-      </div>
-      <label className="mt-4 block space-y-1 text-sm font-medium">
-        Timezone
-        <Input
-          value={value.timezone}
-          onChange={(event) => onChange({ ...value, timezone: event.target.value })}
-        />
-      </label>
-      <div className="mt-4 divide-y divide-border">
-        {weekdays.map(([day, label]) => {
-          const interval = value.weeklySchedule[day]?.[0];
-          return (
-            <div
-              key={day}
-              className="grid grid-cols-[7rem_1fr] items-center gap-3 py-3 sm:grid-cols-[8rem_1fr_1fr]"
+        <label className="mt-4 block space-y-1 text-sm font-medium">
+          Timezone (IANA)
+          <Input
+            value={value.timezone}
+            onChange={(event) => onChange({ ...value, timezone: event.target.value })}
+            placeholder="Asia/Dhaka"
+          />
+        </label>
+        <div className="mt-4 divide-y divide-border">
+          {weekdays.map(([day, label]) => {
+            const interval = value.weeklySchedule[day]?.[0];
+            return (
+              <div
+                key={day}
+                className="grid grid-cols-[7rem_1fr] items-center gap-3 py-3 sm:grid-cols-[8rem_1fr_1fr]"
+              >
+                <label className="flex items-center gap-2 text-sm capitalize">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(interval)}
+                    onChange={(event) => updateDay(day, 'enabled', event.target.checked)}
+                  />
+                  {label}
+                </label>
+                {interval ? (
+                  <>
+                    <Input
+                      type="time"
+                      value={interval.start}
+                      onChange={(event) => updateDay(day, 'start', event.target.value)}
+                      aria-label={`${day} opening time`}
+                    />
+                    <Input
+                      type="time"
+                      value={interval.end}
+                      onChange={(event) => updateDay(day, 'end', event.target.value)}
+                      aria-label={`${day} closing time`}
+                    />
+                  </>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Closed</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <label className="mt-4 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={value.offlineAcceptsMessages}
+            onChange={(event) =>
+              onChange({ ...value, offlineAcceptsMessages: event.target.checked })
+            }
+          />{' '}
+          Accept messages while closed
+        </label>
+      </section>
+
+      {/* Temporary Manual Closure */}
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h3 className="text-sm font-semibold">Temporary manual closure</h3>
+        <p className="text-xs text-muted-foreground">
+          Override regular hours to mark chat as closed until a specific date and time.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <label className="space-y-1 text-sm font-medium">
+            Closed until
+            <Input
+              type="datetime-local"
+              value={
+                value.manualClosureUntil
+                  ? value.manualClosureUntil.slice(0, 16)
+                  : ''
+              }
+              onChange={(event) =>
+                onChange({
+                  ...value,
+                  manualClosureUntil: event.target.value
+                    ? new Date(event.target.value).toISOString()
+                    : null,
+                })
+              }
+            />
+          </label>
+          {value.manualClosureUntil ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-6"
+              onClick={() => onChange({ ...value, manualClosureUntil: null })}
             >
-              <label className="flex items-center gap-2 text-sm capitalize">
-                <input
-                  type="checkbox"
-                  checked={Boolean(interval)}
-                  onChange={(event) => updateDay(day, 'enabled', event.target.checked)}
-                />
-                {label}
-              </label>
-              {interval ? (
-                <>
-                  <Input
-                    type="time"
-                    value={interval.start}
-                    onChange={(event) => updateDay(day, 'start', event.target.value)}
-                    aria-label={`${day} opening time`}
-                  />
-                  <Input
-                    type="time"
-                    value={interval.end}
-                    onChange={(event) => updateDay(day, 'end', event.target.value)}
-                    aria-label={`${day} closing time`}
-                  />
-                </>
-              ) : (
-                <span className="text-sm text-muted-foreground">Closed</span>
-              )}
+              Clear manual closure
+            </Button>
+          ) : null}
+        </div>
+      </section>
+
+      {/* Special Date Exceptions */}
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h3 className="text-sm font-semibold">Holiday & special date exceptions</h3>
+        <p className="text-xs text-muted-foreground">
+          Add specific dates when the schedule differs (e.g. Eid holidays, maintenance).
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+          <label className="space-y-1 text-sm font-medium">
+            Date
+            <Input
+              type="date"
+              value={newExceptionDate}
+              onChange={(event) => setNewExceptionDate(event.target.value)}
+            />
+          </label>
+          <label className="space-y-1 text-sm font-medium">
+            Label
+            <Input
+              value={newExceptionLabel}
+              onChange={(event) => setNewExceptionLabel(event.target.value)}
+              placeholder="e.g. Public Holiday"
+            />
+          </label>
+          <label className="flex items-center gap-2 pt-6 text-sm">
+            <input
+              type="checkbox"
+              checked={newExceptionClosed}
+              onChange={(event) => setNewExceptionClosed(event.target.checked)}
+            />{' '}
+            Fully closed
+          </label>
+          <div className="flex items-end">
+            <Button
+              disabled={!newExceptionDate}
+              onClick={addException}
+              size="sm"
+            >
+              <Plus className="size-4" /> Add exception
+            </Button>
+          </div>
+        </div>
+        {!newExceptionClosed ? (
+          <div className="mt-2 flex gap-2">
+            <label className="space-y-1 text-xs">
+              Open from
+              <Input
+                type="time"
+                value={newExceptionStart}
+                onChange={(event) => setNewExceptionStart(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-xs">
+              Close at
+              <Input
+                type="time"
+                value={newExceptionEnd}
+                onChange={(event) => setNewExceptionEnd(event.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
+        <div className="mt-4 divide-y divide-border">
+          {value.exceptions.map((exc) => (
+            <div
+              key={exc.localDate}
+              className="flex items-center justify-between py-2 text-sm"
+            >
+              <div>
+                <span className="font-mono text-xs tabular-nums font-medium">
+                  {exc.localDate}
+                </span>
+                {exc.label ? <span className="ml-2 font-medium">· {exc.label}</span> : null}
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {exc.isClosed
+                    ? 'Closed all day'
+                    : `Special hours: ${exc.intervals.map((i) => `${i.start}–${i.end}`).join(', ')}`}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                onClick={() => removeException(exc.localDate)}
+              >
+                Remove
+              </Button>
             </div>
-          );
-        })}
-      </div>
-      <label className="mt-4 flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={value.offlineAcceptsMessages}
-          onChange={(event) => onChange({ ...value, offlineAcceptsMessages: event.target.checked })}
-        />{' '}
-        Accept messages while closed
-      </label>
-      <div className="mt-5 flex justify-end">
+          ))}
+          {!value.exceptions.length ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">
+              No holiday or date exceptions configured.
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="flex justify-end">
         <Button
           onClick={async () => {
             await api.updateBusinessHours(value);
@@ -324,10 +498,10 @@ function BusinessHours({
             await onReload();
           }}
         >
-          <Save className="size-4" /> Save hours
+          <Save className="size-4" /> Save all hours & exceptions
         </Button>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -343,6 +517,20 @@ function Routing({
   const [name, setName] = useState('');
   const [channel, setChannel] = useState('WEBSITE');
   const [agentId, setAgentId] = useState('');
+
+  async function moveRule(rule: AssignmentRuleView, direction: 'up' | 'down') {
+    const currentIndex = rules.findIndex((r) => r.id === rule.id);
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= rules.length) return;
+    const targetRule = rules[targetIndex]!;
+
+    await Promise.all([
+      api.updateAssignmentRule({ ...rule, position: targetRule.position }),
+      api.updateAssignmentRule({ ...targetRule, position: rule.position }),
+    ]);
+    await onReload();
+  }
+
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-border bg-card p-4">
@@ -351,7 +539,7 @@ function Routing({
           <div>
             <h3 className="font-semibold">Assignment rules</h3>
             <p className="text-xs text-muted-foreground">
-              Ordered rules route new conversations to a specific eligible agent.
+              Ordered rules automatically route incoming customer conversations to eligible team members.
             </p>
           </div>
         </div>
@@ -402,7 +590,7 @@ function Routing({
         </Button>
       </section>
       <div className="space-y-2">
-        {rules.map((rule) => (
+        {rules.map((rule, index) => (
           <article
             key={rule.id}
             className="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
@@ -417,6 +605,26 @@ function Routing({
                 {agents.find((agent) => agent.membershipId === rule.actions.assigneeMembershipId)
                   ?.displayName ?? 'Configured action'}
               </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={index === 0}
+                onClick={() => void moveRule(rule, 'up')}
+                aria-label="Move rule up"
+              >
+                ↑
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={index === rules.length - 1}
+                onClick={() => void moveRule(rule, 'down')}
+                aria-label="Move rule down"
+              >
+                ↓
+              </Button>
             </div>
             <label className="flex items-center gap-2 text-xs">
               <input
@@ -453,11 +661,26 @@ function ContentLibrary({
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [shortcut, setShortcut] = useState('');
+  const [replySearch, setReplySearch] = useState('');
+
+  const filteredReplies = replies.filter((reply) => {
+    if (!replySearch.trim()) return true;
+    const q = replySearch.toLowerCase();
+    return (
+      reply.title.toLowerCase().includes(q) ||
+      reply.body.toLowerCase().includes(q) ||
+      (reply.shortcut && reply.shortcut.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <section className="rounded-xl border border-border bg-card p-4">
         <h3 className="font-semibold">Conversation tags</h3>
-        <div className="mt-3 flex gap-2">
+        <p className="text-xs text-muted-foreground mb-3">
+          Manage organization tags applied to conversations.
+        </p>
+        <div className="flex gap-2">
           <Input
             value={tagLabel}
             onChange={(event) => setTagLabel(event.target.value)}
@@ -495,11 +718,18 @@ function ContentLibrary({
               </Badge>
             </button>
           ))}
+          {!tags.length ? (
+            <p className="text-xs text-muted-foreground">No tags created yet.</p>
+          ) : null}
         </div>
       </section>
+
       <section className="rounded-xl border border-border bg-card p-4">
         <h3 className="font-semibold">Saved replies</h3>
-        <div className="mt-3 space-y-2">
+        <p className="text-xs text-muted-foreground mb-3">
+          Canned responses with optional shortcuts for fast staff replies.
+        </p>
+        <div className="space-y-2">
           <Input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -535,12 +765,31 @@ function ContentLibrary({
             <Plus className="size-4" /> Add saved reply
           </Button>
         </div>
-        <div className="mt-4 divide-y divide-border">
-          {replies.map((reply) => (
-            <article key={reply.id} className="py-3">
+
+        {replies.length ? (
+          <div className="mt-4">
+            <Input
+              value={replySearch}
+              onChange={(event) => setReplySearch(event.target.value)}
+              placeholder="Search saved replies…"
+              className="text-xs"
+            />
+          </div>
+        ) : null}
+
+        <div className="mt-3 divide-y divide-border max-h-72 overflow-y-auto">
+          {filteredReplies.map((reply) => (
+            <article key={reply.id} className="py-2.5">
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium">{reply.title}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium">{reply.title}</p>
+                    {reply.shortcut ? (
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        {reply.shortcut}
+                      </Badge>
+                    ) : null}
+                  </div>
                   <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{reply.body}</p>
                 </div>
                 <Button
@@ -566,6 +815,11 @@ function ContentLibrary({
               </div>
             </article>
           ))}
+          {!filteredReplies.length && replies.length ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">
+              No saved replies matching &ldquo;{replySearch}&rdquo;
+            </p>
+          ) : null}
         </div>
       </section>
     </div>

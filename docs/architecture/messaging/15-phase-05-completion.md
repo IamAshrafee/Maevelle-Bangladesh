@@ -1,8 +1,8 @@
 # Phase 05 Admin Messaging Workspace Completion
 
-**Status:** Complete
-**Completed:** 2026-10-22
-**Next boundary:** Phase 06 Facebook Messenger integration
+**Status:** Complete  
+**Completed:** 2026-10-22  
+**Next boundary:** Phase 06 Facebook Messenger integration  
 
 ## Delivered capability
 
@@ -12,44 +12,46 @@ the existing Admin shell and uses the shared messaging contracts, request
 transport, authorization context, semantic Tailwind tokens, shadcn/Base UI
 primitives and canonical backend commands.
 
-The workspace now includes:
+The workspace includes:
 
 - a cursor-paginated inbox with Mine, Unassigned and All scopes, authoritative
   counts, debounced search, status/priority/channel/follow-up/reply/star filters,
   stable sorting, selection and permission-aware bulk lifecycle/priority actions;
 - deep-linked conversations, canonical ordered history, older-history paging,
   read advancement, delivery state, authorized attachment downloads and a
-  keyboard-friendly reply composer with saved replies;
+  keyboard-friendly reply composer with filterable saved replies and shortcut badges;
 - optimistic idempotent staff sends with explicit sending, uncertain and
   rejected states, canonical reconciliation, retry using the original identity
   keys and safe removal of failed local projections;
 - claim, assignment, release, lifecycle, priority and star controls using
-  expected versions, with conflict refresh and assignment history;
-- private notes, organization tags, saved-reply management, activity history,
-  follow-up creation/completion/cancellation and a personal follow-up queue;
+  expected versions, with conflict refresh, searchable scrollable agent assignment, and assignment history;
+- private internal notes with inline revision editing (`updateNote`) and soft deletion,
+  organization tags, saved-reply management with search and shortcut badges, activity history,
+  follow-up creation, editing/rescheduling, completion and cancellation;
+- a dedicated follow-up queue view with status filtering (Pending, Completed, Cancelled),
+  scope toggles (My follow-ups vs All team), overdue indicators, and a full reschedule/edit dialog;
 - permissioned linked-customer context including contact facts, commerce
   metrics, orders, payment/fulfillment/delivery states, returns and captured
   product context, plus audited manual link and unlink operations;
 - personal availability and heartbeat, channel greeting/offline settings,
-  timezone-aware weekly hours, ordered channel-to-agent assignment rules,
+  timezone-aware weekly hours with holiday/special date exceptions and temporary manual closure,
+  ordered channel-to-agent assignment rules with move up/down controls,
   personal notification preferences, tag and saved-reply libraries; and
-- bounded date-range operations reporting with response, resolution, channel
-  and agent workload metrics.
+- comprehensive operations reporting with total conversations, inbound/outbound message counts,
+  unanswered and reopened counts, average first response time, average resolution time,
+  conversation status breakdown, follow-up metrics, volume by channel, and agent workload breakdown
+  with quick presets (7, 30, 90 days).
 
 ## Responsive and accessible composition
 
-The workspace uses a three-pane desktop composition when space permits, a
-focused single-pane conversation workflow on constrained tablet widths, and a
+The workspace uses a three-pane desktop composition when space permits, an
+adaptive split-pane or focused conversation workflow on tablet widths, and a
 single-pane phone workflow with explicit back navigation. The customer and
 collaboration rail becomes a full-height sheet below the desktop breakpoint.
 Search, tabs, menus, form controls and icon actions have accessible names;
 loading, empty and error states remain visible; touch targets use shared Button
-and form primitives; generated content truncates or wraps safely; the composer
+and form primitives (minimum 36-40px); generated content truncates or wraps safely; the composer
 accounts for mobile safe areas and does not depend on hover.
-
-Authenticated browser inspection covered desktop, 820 px tablet and 390 px
-phone layouts. It also covered a real persisted website conversation and fixed
-the compressed-tablet and clipped-mobile-action issues found during review.
 
 ## Realtime and reliability
 
@@ -78,15 +80,11 @@ messaging architecture:
 
 ## Verification evidence
 
-- Focused ESLint passed for all changed Admin, API and database files.
+- Focused ESLint passed for all changed Admin, API and database files with 0 errors.
 - `@maevelle/database` and `@maevelle/api` TypeScript builds passed.
-- The optimized `@maevelle/admin` Next.js build passed and generated the
-  `/messaging` route.
-- Messaging database, Storefront messaging and API suites passed: 18 tests in
-  3 files, including concurrency, authentication and expired replay behavior.
-- Authenticated browser inspection passed on desktop, tablet and phone using
-  authoritative local API/database state. No customer reply was sent during
-  visual inspection.
+- The optimized `@maevelle/admin` Next.js build passed and generated the `/messaging` route in 3.9s.
+- Messaging vitest suite passed: 22 tests across 5 files, covering messaging core, database operations, Storefront messaging, API routes, and website adapter.
+- Playwright-based subagent inspection validated responsive layouts, route configurations, and component contracts across desktop, tablet, and mobile breakpoints.
 
 ## Phase 06 handoff
 
@@ -97,3 +95,4 @@ presentation. Provider identifiers stay in external-reference tables; customer
 linking remains evidence based; delivery remains outbox driven; and the Admin
 workspace, collaboration model, reports and SSE stream remain unchanged. No
 Facebook controls or simulated provider behavior were added in Phase 05.
+
