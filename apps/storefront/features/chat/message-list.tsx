@@ -1,31 +1,48 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import * as React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
-import { cx } from '@/components/ui/classnames';
+import { Button } from '../../components/ui/button';
+import { cx } from '../../components/ui/classnames';
+import { ChevronDownIcon } from '../../components/ui/icons';
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+  useMessageScroller,
+  useMessageScrollerScrollable,
+  useMessageScrollerVisibility,
+} from '../../components/ui/message-scroller';
 
 import { ImageLightbox } from './image-lightbox';
+import { findFirstUnreadStaffIndex } from './model';
 import { PrivateChatImage } from './private-image';
 import type { ChatMessageItem, PendingMessage } from './types';
 
 const URL_REGEX = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
 const BANGLA_REGEX = /[\u0980-\u09FF]/;
 
-function time(value: string) {
+export function formatTime(value: string): string {
   return new Intl.DateTimeFormat('en-BD', { hour: 'numeric', minute: '2-digit' }).format(
     new Date(value),
   );
 }
 
-function day(value: string) {
+export function formatDay(value: string): string {
   const date = new Date(value);
   const today = new Date();
   if (date.toDateString() === today.toDateString()) return 'Today';
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
   return new Intl.DateTimeFormat('en-BD', { day: 'numeric', month: 'short' }).format(date);
 }
 
-function deliveryLabel(item: ChatMessageItem) {
+export function deliveryLabel(item: ChatMessageItem): string | null {
   if (item.pending) {
     if (item.pending.state === 'sending') return 'Sending…';
     if (item.pending.state === 'uncertain') return 'Not confirmed';
@@ -37,7 +54,7 @@ function deliveryLabel(item: ChatMessageItem) {
   return item.canonical?.direction === 'INBOUND' ? 'Sent' : null;
 }
 
-function renderFormattedMessage(text: string) {
+export function renderFormattedMessage(text: string) {
   const hasBangla = BANGLA_REGEX.test(text);
   const parts = text.split(URL_REGEX);
 
@@ -69,7 +86,7 @@ function renderFormattedMessage(text: string) {
   );
 }
 
-function MessageBubble({
+export function MessageBubble({
   isGrouped,
   item,
   onOpenImage,
@@ -183,8 +200,8 @@ function MessageBubble({
         ) : null}
         {text ? renderFormattedMessage(text) : null}
       </div>
-      <div className="flex items-center gap-2 px-1 text-label-sm text-on-surface-variant tabular-nums">
-        <time dateTime={createdAt}>{time(createdAt)}</time>
+      <div className="flex items-center gap-2 px-1 text-label-sm text-on-surface-variant font-mono tabular-nums">
+        <time dateTime={createdAt}>{formatTime(createdAt)}</time>
         {status ? <span>· {status}</span> : null}
       </div>
       {pending && pending.state !== 'sending' ? (
@@ -209,26 +226,35 @@ function MessageBubble({
   );
 }
 
-export function MessageList({
-  hasMore,
-  items,
-  loadingOlder,
-  onLoadOlder,
-  onRemove,
-  onRetry,
-}: {
+export interface MessageListProps {
+  readonly conversationId?: string | undefined;
+  readonly lastReadSequence?: string | null | undefined;
   readonly hasMore: boolean;
   readonly items: readonly ChatMessageItem[];
   readonly loadingOlder: boolean;
   readonly onLoadOlder: () => void;
+  readonly onMarkAsRead?: ((sequence: string) => Promise<void>) | undefined;
   readonly onRemove: (id: string) => void;
   readonly onRetry: (message: PendingMessage) => void;
-}) {
-  const viewport = useRef<HTMLDivElement>(null);
-  const previousHeight = useRef(0);
-  const previousCount = useRef(0);
-  const [awayFromBottom, setAwayFromBottom] = useState(false);
-  const [newWhileAway, setNewWhileAway] = useState(false);
+  readonly open?: boolean | undefined;
+}
+
+function MessageListInner({
+  hasMore,
+  items,
+  lastReadSequence,
+  loadingOlder,
+  onLoadOlder,
+  onMarkAsRead,
+  onRemove,
+  onRetry,
+  open = true,
+}: MessageListProps) {
+  const scroller = useMessageScroller();
+  const scrollable = useMessageScrollerScrollable();
+  const { visibleMessageIds } = useMessageScrollerVisibility();
+
+  const [offscreenUnreadCount, setOffscreenUnreadCount] = useState(0);
   const [lightbox, setLightbox] = useState<{
     isOpen: boolean;
     imageSrc: string;
@@ -237,118 +263,260 @@ export function MessageList({
     downloadPath?: string | null;
   } | null>(null);
 
-  useLayoutEffect(() => {
-    const node = viewport.current;
-    if (!node) return;
-    if (previousHeight.current && items.length > previousCount.current) {
-      node.scrollTop += node.scrollHeight - previousHeight.current;
-      previousHeight.current = 0;
-    } else if (!awayFromBottom) {
-      node.scrollTop = node.scrollHeight;
-    } else if (items.length > previousCount.current) {
-      setNewWhileAway(true);
-    }
-    previousCount.current = items.length;
-  }, [awayFromBottom, items.length]);
+  const previousCountRef = useRef(items.length);
+  const previousPendingCountRef = useRef(items.filter((i) => i.pending !== null).length);
+  const isAtEndRef = useRef(!scrollable.end);
+  const currentReadingIdRef = useRef<string | null>(null);
+  const wasOpenRef = useRef(open);
 
+  // Maintain reading position anchor based on visible messages
   useEffect(() => {
-    const node = viewport.current;
-    if (node && items.length) node.scrollTop = node.scrollHeight;
-  }, []);
+    if (visibleMessageIds.length > 0) {
+      const candidate = visibleMessageIds.find((id) => id.startsWith('msg-'));
+      if (candidate) {
+        currentReadingIdRef.current = candidate;
+      }
+    }
+  }, [visibleMessageIds]);
+
+  // Keep track of live edge state; reset offscreen unread counter when at bottom
+  useEffect(() => {
+    isAtEndRef.current = !scrollable.end;
+    if (!scrollable.end) {
+      setOffscreenUnreadCount(0);
+    }
+  }, [scrollable.end]);
+
+  // When new messages arrive while away from the edge, increment offscreen unread counter
+  useEffect(() => {
+    if (items.length > previousCountRef.current) {
+      const addedItems = items.slice(previousCountRef.current);
+      if (scrollable.end) {
+        const newStaffCount = addedItems.filter(
+          (item) => item.canonical?.direction === 'OUTBOUND',
+        ).length;
+        if (newStaffCount > 0) {
+          setOffscreenUnreadCount((count) => count + newStaffCount);
+        }
+      }
+    }
+    previousCountRef.current = items.length;
+  }, [items, scrollable.end]);
+
+  // When customer sends an outgoing message (pending message added), follow to the live edge
+  const currentPendingCount = useMemo(
+    () => items.filter((i) => i.pending !== null).length,
+    [items],
+  );
+  useEffect(() => {
+    if (currentPendingCount > previousPendingCountRef.current) {
+      scroller.scrollToEnd({ behavior: 'smooth' });
+      setOffscreenUnreadCount(0);
+    }
+    previousPendingCountRef.current = currentPendingCount;
+  }, [currentPendingCount, scroller]);
+
+  // Restore position when chat transitions from minimized to reopened
+  useEffect(() => {
+    if (!wasOpenRef.current && open) {
+      if (isAtEndRef.current) {
+        scroller.scrollToEnd({ behavior: 'instant' });
+      } else if (currentReadingIdRef.current) {
+        scroller.scrollToMessage(currentReadingIdRef.current, {
+          behavior: 'instant',
+          align: 'start',
+        });
+      }
+    }
+    wasOpenRef.current = open;
+  }, [open, scroller]);
+
+  // Viewport visibility-driven read receipts: only mark staff messages read when visible
+  useEffect(() => {
+    if (
+      !open ||
+      !onMarkAsRead ||
+      !visibleMessageIds.length ||
+      typeof document === 'undefined' ||
+      document.visibilityState !== 'visible'
+    ) {
+      return;
+    }
+
+    let highestVisibleStaffSeq: bigint | null = null;
+
+    for (const visibleId of visibleMessageIds) {
+      if (!visibleId.startsWith('msg-')) continue;
+      const key = visibleId.slice(4);
+      const item = items.find((i) => i.key === key);
+      if (item?.canonical && item.canonical.direction === 'OUTBOUND') {
+        try {
+          const seq = BigInt(item.canonical.sequence);
+          if (highestVisibleStaffSeq === null || seq > highestVisibleStaffSeq) {
+            highestVisibleStaffSeq = seq;
+          }
+        } catch {
+          // ignore parsing error
+        }
+      }
+    }
+
+    if (highestVisibleStaffSeq !== null) {
+      void onMarkAsRead(highestVisibleStaffSeq.toString());
+    }
+  }, [visibleMessageIds, items, onMarkAsRead, open]);
+
+  const handleScrollToEnd = useCallback(() => {
+    scroller.scrollToEnd({ behavior: 'smooth' });
+    setOffscreenUnreadCount(0);
+  }, [scroller]);
+
+  // Identify first unread outbound staff message for unread marker
+  const firstUnreadIndex = useMemo(() => {
+    return findFirstUnreadStaffIndex(items, lastReadSequence);
+  }, [items, lastReadSequence]);
 
   let lastDay = '';
 
   return (
-    <div className="relative min-h-0 flex-1">
-      <div
-        aria-label="Conversation messages"
-        className="h-full overflow-y-auto overscroll-contain px-4 py-4"
-        onScroll={(event) => {
-          const node = event.currentTarget;
-          const away = node.scrollHeight - node.scrollTop - node.clientHeight > 96;
-          setAwayFromBottom(away);
-          if (!away) setNewWhileAway(false);
-        }}
-        ref={viewport}
-        role="log"
-      >
-        {hasMore ? (
-          <div className="mb-4 flex justify-center">
-            <Button
-              loading={loadingOlder}
-              onClick={() => {
-                if (viewport.current) previousHeight.current = viewport.current.scrollHeight;
-                onLoadOlder();
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              Load older messages
-            </Button>
-          </div>
-        ) : null}
-        <div>
-          {items.map((item, index) => {
-            const createdAt = item.pending?.createdAt ?? item.canonical?.createdAt ?? '';
-            const currentDay = day(createdAt);
-            const separator = currentDay !== lastDay;
-            lastDay = currentDay;
-
-            // Grouping logic: check previous item
-            const prevItem = index > 0 ? items[index - 1] : null;
-            const prevCreatedAt =
-              prevItem?.pending?.createdAt ?? prevItem?.canonical?.createdAt ?? '';
-            const isCustomer = item.pending !== null || item.canonical?.direction === 'INBOUND';
-            const prevIsCustomer =
-              prevItem?.pending !== null || prevItem?.canonical?.direction === 'INBOUND';
-
-            const timeDiff =
-              createdAt && prevCreatedAt
-                ? Math.abs(new Date(createdAt).getTime() - new Date(prevCreatedAt).getTime())
-                : Infinity;
-
-            const isGrouped =
-              !separator &&
-              prevItem !== null &&
-              isCustomer === prevIsCustomer &&
-              timeDiff < 2 * 60_000;
-
-            return (
-              <div key={item.key}>
-                {separator ? (
-                  <div className="my-4 flex items-center justify-center">
-                    <span className="rounded-full bg-surface-container px-3 py-1 text-label-sm font-medium text-on-surface-variant">
-                      {currentDay}
-                    </span>
-                  </div>
-                ) : null}
-                <MessageBubble
-                  isGrouped={isGrouped}
-                  item={item}
-                  onOpenImage={(props) => setLightbox({ isOpen: true, ...props })}
-                  onRemove={onRemove}
-                  onRetry={onRetry}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {newWhileAway ? (
-        <button
-          aria-label="Scroll to new messages"
-          className="absolute bottom-3 left-1/2 flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full bg-inverse-surface px-4 text-label-md font-semibold text-inverse-on-surface shadow-floating transition-transform duration-150 hover:scale-105 active:scale-98"
-          onClick={() => {
-            if (viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight;
-            setNewWhileAway(false);
-          }}
-          type="button"
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+      <MessageScroller className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <MessageScrollerViewport
+          aria-label="Customer conversation messages"
+          className="size-full min-h-0 overflow-y-auto overscroll-contain px-4 py-4"
+          preserveScrollOnPrepend={true}
+          role="log"
         >
-          <span>New messages</span>
-          <span aria-hidden="true">↓</span>
-        </button>
-      ) : null}
+          <MessageScrollerContent className="mx-auto flex w-full flex-col gap-2">
+            {/* History loader / start marker */}
+            {hasMore ? (
+              <MessageScrollerItem
+                messageId="history-loader"
+                className="my-2 flex justify-center [contain-intrinsic-size:auto_2.5rem]"
+              >
+                <Button
+                  disabled={loadingOlder}
+                  loading={loadingOlder}
+                  onClick={onLoadOlder}
+                  size="sm"
+                  variant="ghost"
+                >
+                  {loadingOlder ? 'Loading older messages…' : 'Load older messages'}
+                </Button>
+              </MessageScrollerItem>
+            ) : items.length > 0 ? (
+              <MessageScrollerItem
+                messageId="history-start"
+                className="my-2 flex justify-center [contain-intrinsic-size:auto_2rem]"
+              >
+                <span className="font-mono text-label-sm text-on-surface-variant/60 select-none">
+                  Beginning of conversation history
+                </span>
+              </MessageScrollerItem>
+            ) : null}
+
+            {/* Message transcript items */}
+            {items.map((item, index) => {
+              const createdAt =
+                item.pending?.createdAt ?? item.canonical?.createdAt ?? '';
+              const currentDay = formatDay(createdAt);
+              const separator = currentDay !== lastDay;
+              lastDay = currentDay;
+
+              const prevItem = index > 0 ? items[index - 1] : null;
+              const prevCreatedAt =
+                prevItem?.pending?.createdAt ?? prevItem?.canonical?.createdAt ?? '';
+              const isCustomer =
+                item.pending !== null || item.canonical?.direction === 'INBOUND';
+              const prevIsCustomer =
+                prevItem?.pending !== null || prevItem?.canonical?.direction === 'INBOUND';
+
+              const timeDiff =
+                createdAt && prevCreatedAt
+                  ? Math.abs(new Date(createdAt).getTime() - new Date(prevCreatedAt).getTime())
+                  : Infinity;
+
+              const isGrouped =
+                !separator &&
+                prevItem !== null &&
+                isCustomer === prevIsCustomer &&
+                timeDiff < 2 * 60_000;
+
+              const isFirstUnread = index === firstUnreadIndex;
+
+              return (
+                <React.Fragment key={item.key}>
+                  {/* Calendar day divider */}
+                  {separator ? (
+                    <MessageScrollerItem
+                      messageId={`date-${item.key}`}
+                      scrollAnchor={false}
+                      className="my-3 flex justify-center [contain-intrinsic-size:auto_2rem]"
+                    >
+                      <span className="rounded-full bg-surface-container px-3 py-1 text-label-sm font-medium text-on-surface-variant select-none">
+                        {currentDay}
+                      </span>
+                    </MessageScrollerItem>
+                  ) : null}
+
+                  {/* Unread marker divider */}
+                  {isFirstUnread ? (
+                    <MessageScrollerItem
+                      messageId="unread-marker"
+                      scrollAnchor={true}
+                      className="my-3 flex items-center gap-3 [contain-intrinsic-size:auto_2rem]"
+                    >
+                      <div className="h-px flex-1 bg-primary/25" />
+                      <span className="flex items-center gap-1 rounded-full bg-primary-subtle px-3 py-0.5 text-label-sm font-semibold text-primary shadow-xs select-none">
+                        New messages
+                      </span>
+                      <div className="h-px flex-1 bg-primary/25" />
+                    </MessageScrollerItem>
+                  ) : null}
+
+                  {/* Standard message bubble */}
+                  <MessageScrollerItem
+                    messageId={`msg-${item.key}`}
+                    scrollAnchor={false}
+                    className="min-w-0"
+                  >
+                    <MessageBubble
+                      isGrouped={isGrouped}
+                      item={item}
+                      onOpenImage={(props) => setLightbox({ isOpen: true, ...props })}
+                      onRemove={onRemove}
+                      onRetry={onRetry}
+                    />
+                  </MessageScrollerItem>
+                </React.Fragment>
+              );
+            })}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+
+        {/* Floating scroll to end button with unread counter */}
+        {offscreenUnreadCount > 0 ? (
+          <MessageScrollerButton
+            direction="end"
+            className="bottom-3 right-4 z-10"
+            onClick={handleScrollToEnd}
+          >
+            <span className="flex min-h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-label-sm font-semibold text-on-primary shadow-floating transition-transform duration-150 hover:bg-primary-hover active:scale-98">
+              <ChevronDownIcon size={16} />
+              <span>
+                {offscreenUnreadCount} new message
+                {offscreenUnreadCount > 1 ? 's' : ''}
+              </span>
+            </span>
+          </MessageScrollerButton>
+        ) : (
+          <MessageScrollerButton
+            direction="end"
+            className="bottom-3 right-4 z-10"
+            onClick={handleScrollToEnd}
+          />
+        )}
+      </MessageScroller>
 
       {lightbox?.isOpen ? (
         <ImageLightbox
@@ -361,5 +529,26 @@ export function MessageList({
         />
       ) : null}
     </div>
+  );
+}
+
+export function MessageList(props: MessageListProps) {
+  const { conversationId, items, lastReadSequence } = props;
+
+  // Determine if this conversation opens with unread staff messages
+  const hasInitialUnread = useMemo(() => {
+    return findFirstUnreadStaffIndex(items, lastReadSequence) !== -1;
+  }, [items, lastReadSequence]);
+
+  return (
+    <MessageScrollerProvider
+      key={conversationId ?? 'storefront-chat'}
+      defaultScrollPosition={hasInitialUnread ? 'last-anchor' : 'end'}
+      scrollPreviousItemPeek={48}
+      scrollEdgeThreshold={48}
+      autoScroll={true}
+    >
+      <MessageListInner {...props} />
+    </MessageScrollerProvider>
   );
 }

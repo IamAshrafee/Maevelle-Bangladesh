@@ -10,7 +10,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatApiError, chatApi, streamChatEvents, uploadChatImage } from './api';
 import {
-  latestStaffSequence,
   mergeCanonicalMessages,
   messageItems,
   reconcilePending,
@@ -278,21 +277,24 @@ export function useChat(input: {
 
   useEffect(() => input.onUnreadChange(unreadCount), [input.onUnreadChange, unreadCount]);
 
-  useEffect(() => {
-    if (!input.open || document.visibilityState !== 'visible' || !conversation) return;
-    const latest = latestStaffSequence(messages);
-    if (!latest || BigInt(latest) <= BigInt(readSequence.current)) return;
-    const timer = window.setTimeout(() => {
-      void chatApi
-        .read(conversation.id, latest)
-        .then(({ lastReadSequence }) => {
-          readSequence.current = lastReadSequence;
-          setConversation((current) => current && { ...current, lastReadSequence });
-        })
-        .catch(() => undefined);
-    }, 800);
-    return () => window.clearTimeout(timer);
-  }, [conversation, input.open, messages]);
+  const markAsRead = useCallback(
+    async (sequence: string) => {
+      if (!conversation) return;
+      try {
+        if (BigInt(sequence) <= BigInt(readSequence.current)) return;
+      } catch {
+        return;
+      }
+      try {
+        const result = await chatApi.read(conversation.id, sequence);
+        readSequence.current = result.lastReadSequence;
+        setConversation((current) => current && { ...current, lastReadSequence: result.lastReadSequence });
+      } catch {
+        // ignore transient network errors
+      }
+    },
+    [conversation],
+  );
 
   const loadOlder = useCallback(async () => {
     if (!conversation || !nextCursor || loadingOlder) return;
@@ -483,5 +485,6 @@ export function useChat(input: {
     reopen,
     startNew,
     saveContact,
+    markAsRead,
   };
 }

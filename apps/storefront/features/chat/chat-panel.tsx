@@ -256,12 +256,16 @@ export function ChatPanel({
               </div>
             ) : (
               <MessageList
+                conversationId={chat.conversation?.id}
                 hasMore={chat.hasMore}
                 items={chat.items}
+                lastReadSequence={chat.conversation?.lastReadSequence}
                 loadingOlder={chat.loadingOlder}
                 onLoadOlder={() => void chat.loadOlder()}
+                onMarkAsRead={chat.markAsRead}
                 onRemove={chat.removePending}
                 onRetry={(message) => void chat.retry(message)}
+                open={open}
               />
             )}
           </div>

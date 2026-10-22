@@ -44,3 +44,41 @@ export function messageItems(
 export function latestStaffSequence(messages: readonly MessageView[]): string | null {
   return messages.filter((message) => message.direction === 'OUTBOUND').at(-1)?.sequence ?? null;
 }
+
+export function findFirstUnreadStaffIndex(
+  items: readonly ChatMessageItem[],
+  lastReadSequence?: string | null | undefined,
+): number {
+  if (items.length === 0) return -1;
+  const readSeq = BigInt(lastReadSequence ?? '0');
+  return items.findIndex((item) => {
+    if (!item.canonical || item.canonical.direction !== 'OUTBOUND') return false;
+    try {
+      return BigInt(item.canonical.sequence) > readSeq;
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function countUnreadStaffMessages(
+  items: readonly ChatMessageItem[],
+  lastReadSequence?: string | null | undefined,
+): number {
+  if (items.length === 0) return 0;
+  const readSeq = BigInt(lastReadSequence ?? '0');
+  let count = 0;
+  for (const item of items) {
+    if (item.canonical && item.canonical.direction === 'OUTBOUND') {
+      try {
+        if (BigInt(item.canonical.sequence) > readSeq) {
+          count++;
+        }
+      } catch {
+        // ignore invalid sequence format
+      }
+    }
+  }
+  return count;
+}
+

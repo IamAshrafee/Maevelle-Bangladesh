@@ -8,10 +8,22 @@ const defaultTestDatabaseUrl =
   'postgresql://maevelle_dev:maevelle_dev_password@127.0.0.1:5434/maevelle_test';
 
 export default defineConfig({
+  esbuild: {
+    jsx: 'automatic',
+  },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'apps/admin'),
-    },
+    alias: [
+      {
+        find: /^@\/(.*)/,
+        replacement: '$1',
+        customResolver(source, importer) {
+          if (importer && importer.includes('apps/storefront')) {
+            return path.resolve(__dirname, 'apps/storefront', source);
+          }
+          return path.resolve(__dirname, 'apps/admin', source);
+        },
+      },
+    ],
   },
   test: {
     environment: 'node',
