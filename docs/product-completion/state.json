@@ -1,16 +1,20 @@
 {
   "program": "Maevelle Product Completion V2",
   "version": 2,
-  "active_area": "supply-operations",
-  "active_substage": "OWNER_OPERATIONAL_WALKTHROUGH",
-  "active_status": "CORE_SUPPLY_WORKFLOW_COMPLETE_OWNER_REVIEW_PENDING",
+  "active_area": "omnichannel-messaging",
+  "active_substage": "PHASE_07_FACEBOOK_ADMIN_FRONTEND",
+  "active_status": "PHASE_06_BACKEND_CODE_COMPLETE_META_ACTIVATION_PENDING",
   "baseline_commit": "d2cce2c",
-  "last_checkpoint_commit": "d402680",
-  "last_verified_commit": "d402680",
-  "last_completed_action": "Normalized quantity and money behavior across Admin, Storefront and server boundaries. Sellable-unit inputs now use whole units, monetary displays avoid floating-point noise, and server validation rejects fractional order, fulfillment and procurement quantities. Admin, Storefront, API and Database typechecks, 5 formatting tests, 54 focused integration tests, focused lint, git diff checks, and fresh Admin and Storefront production builds passed.",
-  "next_action": "Conduct the owner operational walkthrough with representative SkyBuy orders SKY363126 and SKY395285; only plan direct synchronization if an authorized provider API or export contract is available.",
+  "last_checkpoint_commit": "f257397",
+  "last_verified_commit": "f257397",
+  "last_completed_action": "Completed the Phase 06 Facebook Messenger backend across Meta OAuth and Page selection, encrypted credentials, signed durable webhooks, canonical inbound normalization, Page-scoped identities, 24-hour reply eligibility, Send API text/private-image delivery, delivery/read/echo handling, diagnostics, lifecycle controls and resumable historical sync. Fresh development and test database migrations, repository typechecking, focused lint, 17 focused tests, credential scanning and git diff checks passed; live Meta communication remains unverified.",
+  "next_action": "Implement Phase 07's responsive Facebook connection, Page-selection, diagnostics, lifecycle and historical-sync Admin experience over the Phase 06 contracts; independently complete Meta app/Page setup, Advanced Access and public callback activation before claiming live integration.",
   "interrupted": false,
-  "blocked_by": [],
+  "blocked_by": [
+    "LIVE_META_APP_AND_PAGE_CREDENTIALS_NOT_AVAILABLE",
+    "META_APP_REVIEW_AND_ADVANCED_ACCESS_NOT_EVIDENCED",
+    "PUBLIC_HTTPS_META_CALLBACK_NOT_CONFIGURED"
+  ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": ["analytics", "supply-operations"]
 }

@@ -2,111 +2,54 @@
 
 ## Active area
 
-Supply operations — supplier policy, purchasing, inbound shipment, landed cost,
-receipt-backed variant costing, and inventory visibility.
+Omnichannel messaging — Phase 07 Facebook Messenger Admin connection and
+operations experience.
 
 ## Evidence state
 
-`CORE SUPPLY WORKFLOW COMPLETE / OWNER OPERATIONAL REVIEW PENDING`
+`PHASE 06 BACKEND CODE COMPLETE / LIVE META ACTIVATION PENDING`
 
-The system now supports the operating model where a Bangladesh intermediary such
-as SkyBuy sources from China, purchases merchandise, coordinates domestic China
-delivery, international freight and import clearance, then completes Bangladesh
-final-mile delivery.
+Commit `f257397` completes the repository-controlled Facebook Messenger backend:
 
-Implemented behavior includes:
+- organization/member-bound OAuth state and authorized Page discovery;
+- encrypted Page credentials, atomic reauthorization and global Page ownership;
+- exact-body HMAC webhook verification with durable batched event intake;
+- idempotent Page-scoped contact/conversation resolution into the canonical inbox;
+- text, Unicode/Bangla, quick reply, postback, image, echo, delivery and read handling;
+- server-authoritative 24-hour reply eligibility and worker revalidation;
+- Send API text and reusable private-image delivery with conservative unknown outcomes;
+- safe connection health, diagnostics, suspend/resume, disconnect and audit behavior; and
+- resumable, bounded historical conversation/message synchronization.
 
-- structured supplier type, advance percentage, balance-due event, payment terms,
-  currencies, lead time and service scope, with an editable intermediary preset;
-- immutable supplier-policy snapshots on placed purchases;
-- supplier-authoritative percentage and fixed-amount purchase discounts with
-  deterministic allocation to variant lines;
-- shipment provider references, status milestones, actual/chargeable weights,
-  rates and reported freight evidence;
-- Finance expenses linked to purchases and shipments, including a single cash
-  settlement across merchandise and logistics obligations;
-- explicit China local courier, international freight/import and Bangladesh
-  delivery landed-cost categories with reconciliation gates;
-- discounted merchandise and finalized landed costs flowing into receipt-backed
-  FIFO cost layers, Catalog variant acquisition cost and location-weighted
-  Inventory cost without replacing manual Catalog estimates; and
-- image-first product/variant selection and cost visibility in Purchase, Catalog
-  and Inventory workflows;
-- a consistent Supply workspace navigation layer across overview, suppliers,
-  purchases, shipments, receiving, landed cost and costing;
-- server-paginated, tenant-scoped Catalog variant search by product title, SKU,
-  barcode and option value, with image-led cards, retry and load-more recovery;
-  and
-- accessible, mobile-conscious Supply worklists with URL-backed filters,
-  announced feedback, touch-friendly tabs and a corrected global inbound
-  shipment route/capability; and
-- one canonical shipment-level landed-cost workflow: the global Landed Cost
-  workspace is now an oversight queue, while charge entry, allocation review,
-  revisions and finalization live only in the shipment's URL-addressable
-  `Landed Cost & Valuation` tab; and
-- one intentional responsive Supply information architecture: listing pages
-  discover and prioritize work, detail workspaces own record mutations, Receiving
-  owns intake/history/condition resolution, and Costing remains a downstream
-  Inventory valuation surface rather than a duplicate Supply destination.
-- image-led mobile cards now cover Suppliers, Purchases, Shipments, Receiving and
-  Landed Cost queues; long operational forms become full-screen mobile task
-  dialogs; tabs, filters and primary actions use touch-conscious targets; and
-  Receiving exposes its previously missing pagination controls.
-- reopening a draft product after receiving now loads each variant's latest
-  receipt-backed acquisition cost into the Catalog pricing experience, including
-  receipt and finalization provenance, without copying that authoritative value
-  into the editable planning estimate; and
-- simple and multi-variant pricing can apply 30%, 40% or 50% target-margin
-  suggestions from the effective per-unit cost, rounded upward to the next BDT
-  10, while final selling prices remain an explicit merchandising decision.
-- the multi-variant matrix includes a responsive quick price mapper for one
-  shared selling/compare-at price or independent cost-aware pricing with preset
-  and custom target margins, configurable upward rounding, enabled-row scope and
-  explicit reporting when variants lack usable cost data.
-- quantity controls now use whole sellable units consistently across Admin,
-  Storefront and server boundaries, while money and calculated quantity displays
-  use bounded decimal formatting instead of exposing floating-point noise.
+The complete architecture, API catalog, security controls, activation steps,
+limitations and Phase 07 handoff are recorded in
+`docs/architecture/messaging/16-phase-06-completion.md`.
 
 ## Verification completed
 
-- Rebuilt the disposable PostgreSQL volume and migrated both development and test
-  databases from the edited baseline.
-- Database, API and Admin production builds passed.
-- Procurement, Landed Cost/Costing, Inventory, Finance, Catalog and Admin supply
-  helper suites passed: 80 tests across 7 files.
-- Supplier policy snapshot regression verifies that placement captures the current
-  agreement and later supplier edits do not rewrite committed purchases.
-- The frontend completion pass additionally passed the Database Catalog integration
-  suite (8 tests), Admin Supply helper suites (5 tests), Admin production build and
-  a complete Docker build/start with healthy PostgreSQL, API and Admin services.
-- The landed-cost workflow consolidation passed a fresh Admin production build;
-  old `/landed-cost?shipment=...` bookmarks redirect to the canonical shipment
-  costing tab.
-- The complete Supply frontend consolidation at `54e6bfc` passed focused ESLint
-  with zero findings, both Admin Supply helper suites (5 tests), `git diff
-  --check`, and a fresh Admin production build including TypeScript and all 84
-  generated routes.
-- The Catalog/Supply pricing handoff at `2ebb571` passed focused ESLint, 5
-  pricing-rule tests, `git diff --check`, and a fresh Admin production build
-  including TypeScript and all 84 generated routes.
-- The quick variant price mapper at `8c52bc1` passed focused ESLint, the same 5
-  pricing-rule tests, `git diff --check`, and a fresh Admin production build
-  including TypeScript and all 84 generated routes.
-- The numeric-integrity pass passed Admin, Storefront, API and Database
-  typechecking; 5 focused formatting tests; 54 Order, Procurement and
-  Fulfillment/Delivery integration tests against the migrated test database;
-  focused ESLint; `git diff --check`; and fresh Admin and Storefront production
-  builds, including all 84 Admin routes.
-- Browser verification confirmed the local Admin route and responsive 390×844
-  authentication shell. The authenticated operator walkthrough remains an owner
-  review gate rather than being represented as complete.
+- Rebuilt the disposable PostgreSQL volume and migrated development and test
+  databases through the edited `3200_messaging_core` baseline.
+- Repository TypeScript build and focused ESLint passed.
+- Sixteen focused database/core/API/worker tests and the focused Meta configuration
+  test passed.
+- Secret scanning and `git diff --check` passed.
+- A full Docker rebuild was attempted, but package installation timed out against
+  the npm registry before compilation; it is not recorded as passed.
+- The broad hardening script retains unrelated pre-existing Admin/chart findings;
+  it did not report the new Facebook route.
+- No live Meta credential, Page, approved recipient or public callback was
+  available, so live webhook and customer-message behavior remains unverified.
 
 ## Next implementation boundary
 
-- Conduct an owner walkthrough using representative real orders such as
-  `SKY363126` and `SKY395285`, including discount, split payment, freight evidence,
-  receipt, landed-cost finalization and resulting variant cost.
-- Treat direct SkyBuy synchronization as an optional external integration. Do not
-  automate it without an authorized and documented provider API/export contract.
-- Preserve the existing historical import safety boundary: it must not fabricate
-  receipts, inventory, payments or landed costs from incomplete source evidence.
+- Build Phase 07's responsive Admin connection flow: availability, OAuth launch,
+  callback result/Page selection, connection health, diagnostics, reauthorization,
+  suspend/resume, disconnect and historical-sync progress.
+- Keep Meta access tokens out of all browser contracts and preserve server-side
+  authorization, reply eligibility and optimistic concurrency as authoritative.
+- In parallel, the owner must prepare a Meta app and Page, current supported Graph
+  version, business/domain verification where required, App Review/Advanced Access,
+  public HTTPS webhook/OAuth callbacks and an approved test recipient.
+- Do not claim deployment or live Messenger completion until those external gates
+  and the activation checklist have been verified against current official Meta
+  documentation.
