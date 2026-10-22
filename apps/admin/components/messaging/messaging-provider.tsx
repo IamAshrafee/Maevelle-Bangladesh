@@ -63,6 +63,8 @@ interface MessagingContextValue {
   readonly setStatus: (status: ConversationStatus, reason?: string) => Promise<void>;
   readonly setPriority: (priority: ConversationPriority, isStarred?: boolean) => Promise<void>;
   readonly replaceConversation: (conversation: ConversationDetail) => void;
+  readonly markAsRead: (sequence: string) => Promise<void>;
+  readonly ensureMessageLoaded: (messageId: string) => Promise<boolean>;
 }
 
 const MessagingContext = createContext<MessagingContextValue | null>(null);
@@ -111,6 +113,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   >('idle');
   const [conversationError, setConversationError] = useState('');
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMarkedSequenceRef = useRef<string | null>(null);
 
   const setFilters = useCallback((value: InboxFilters) => {
     setFiltersState(value);
@@ -175,9 +178,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       );
       setConversationError('');
       setConversationState('ready');
-      const latest = page.data.at(-1);
-      if (latest && document.visibilityState === 'visible')
-        void api.markRead(selectedConversationId, latest.sequence).catch(() => undefined);
     } catch (error) {
       setConversationError(friendlyError(error, 'The conversation could not be loaded.'));
       setConversationState('error');
@@ -193,6 +193,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     setMessages([]);
     setPendingMessages([]);
     setMessageCursor(null);
+    lastMarkedSequenceRef.current = null;
     if (!selectedConversationId) {
       setConversationState('idle');
       return;
@@ -209,9 +210,6 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
         setMessageCursor(page.pagination.nextCursor);
         setConversationError('');
         setConversationState('ready');
-        const latest = page.data.at(-1);
-        if (latest && document.visibilityState === 'visible')
-          void api.markRead(selectedConversationId, latest.sequence).catch(() => undefined);
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -299,6 +297,51 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       });
     }
   }, [messageCursor, selectedConversationId]);
+
+  const markAsRead = useCallback(
+    async (sequence: string) => {
+      if (!selectedConversationId) return;
+      if (
+        lastMarkedSequenceRef.current &&
+        BigInt(sequence) <= BigInt(lastMarkedSequenceRef.current)
+      ) {
+        return;
+      }
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      lastMarkedSequenceRef.current = sequence;
+      try {
+        await api.markRead(selectedConversationId, sequence);
+      } catch {
+        // ignore transient mark-read network failure
+      }
+    },
+    [selectedConversationId],
+  );
+
+  const ensureMessageLoaded = useCallback(
+    async (targetMessageId: string): Promise<boolean> => {
+      if (!selectedConversationId) return false;
+      if (messages.some((m) => m.id === targetMessageId)) return true;
+      let currentCursor = messageCursor;
+      for (let i = 0; i < 3 && currentCursor; i++) {
+        try {
+          const page = await api.listMessages(selectedConversationId, currentCursor);
+          setMessages((current) => mergeMessages(page.data, current));
+          setMessageCursor(page.pagination.nextCursor);
+          currentCursor = page.pagination.nextCursor;
+          if (page.data.some((m) => m.id === targetMessageId)) {
+            return true;
+          }
+        } catch {
+          break;
+        }
+      }
+      return false;
+    },
+    [messageCursor, messages, selectedConversationId],
+  );
 
   const submitPending = useCallback(
     async (pending: PendingMessage) => {
@@ -458,6 +501,8 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
         );
       },
       replaceConversation: setConversation,
+      markAsRead,
+      ensureMessageLoaded,
     }),
     [
       context.capabilities,
@@ -484,6 +529,8 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       send,
       retryPending,
       canonicalMutation,
+      markAsRead,
+      ensureMessageLoaded,
     ],
   );
 

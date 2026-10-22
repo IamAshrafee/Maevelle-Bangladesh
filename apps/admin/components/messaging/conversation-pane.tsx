@@ -8,12 +8,12 @@ import {
   ImagePlus,
   Loader2,
   PanelRightOpen,
+  Search,
   Send,
   Star,
   UserRoundCheck,
-  X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type {
   AgentAvailabilityView,
@@ -38,6 +38,7 @@ import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import * as api from './api';
 import { formatDateTime } from './format';
+import { MessageTranscript } from './message-transcript';
 import { useMessaging } from './messaging-provider';
 
 const statuses: readonly ConversationStatus[] = ['NEW', 'OPEN', 'PENDING', 'RESOLVED', 'CLOSED'];
@@ -48,6 +49,7 @@ export function ConversationPane({ onOpenContext }: { onOpenContext: () => void 
   const conversation = messaging.conversation;
   const [agents, setAgents] = useState<readonly AgentAvailabilityView[]>([]);
   const [savedReplies, setSavedReplies] = useState<readonly SavedReplyView[]>([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const canAssign = messaging.capabilities.includes('messaging.assign');
   const canReply = messaging.capabilities.includes('messaging.reply');
   const canManageStatus = messaging.capabilities.includes('messaging.status.manage');
@@ -168,6 +170,15 @@ export function ConversationPane({ onOpenContext }: { onOpenContext: () => void 
           </Button>
         ) : null}
         <Button
+          variant={isSearchOpen ? 'secondary' : 'ghost'}
+          size="icon"
+          aria-label={isSearchOpen ? 'Close search' : 'Search in conversation'}
+          title="Search in conversation"
+          onClick={() => setIsSearchOpen((open) => !open)}
+        >
+          <Search className="size-4" />
+        </Button>
+        <Button
           variant="ghost"
           size="icon"
           onClick={onOpenContext}
@@ -238,120 +249,15 @@ export function ConversationPane({ onOpenContext }: { onOpenContext: () => void 
         ) : null}
       </div>
 
-      <MessageTranscript />
+      <MessageTranscript
+        isSearchOpen={isSearchOpen}
+        onCloseSearch={() => setIsSearchOpen(false)}
+      />
       <Composer
         canReply={canReply && conversation.capabilities.replies}
         savedReplies={savedReplies}
       />
     </section>
-  );
-}
-
-function MessageTranscript() {
-  const messaging = useMessaging();
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const previousCount = useRef(0);
-
-  useEffect(() => {
-    if (messaging.messages.length >= previousCount.current)
-      bottomRef.current?.scrollIntoView({ block: 'end' });
-    previousCount.current = messaging.messages.length;
-  }, [messaging.messages.length, messaging.pendingMessages.length]);
-
-  return (
-    <div
-      className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4"
-      aria-live="polite"
-    >
-      <div className="mx-auto flex max-w-3xl flex-col gap-3">
-        {messaging.hasOlderMessages ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="self-center"
-            onClick={() => void messaging.loadOlderMessages()}
-          >
-            Load older messages
-          </Button>
-        ) : null}
-        {messaging.messages.map((message) => {
-          const outbound = message.direction === 'OUTBOUND';
-          const system = message.type === 'SYSTEM_EVENT';
-          return (
-            <article
-              key={message.id}
-              className={cn(
-                'max-w-[86%] rounded-2xl border px-3 py-2 text-sm shadow-2xs',
-                outbound ? 'ml-auto border-primary/20 bg-primary-subtle' : 'mr-auto bg-card',
-                system &&
-                  'mx-auto max-w-full border-dashed bg-muted text-center text-muted-foreground',
-              )}
-            >
-              <div className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span>{message.sender.name ?? (outbound ? 'Maevelle team' : 'Customer')}</span>
-                <time className="tabular-nums font-mono">{formatDateTime(message.createdAt)}</time>
-              </div>
-              {message.text ? (
-                <p className="whitespace-pre-wrap break-words">{message.text}</p>
-              ) : null}
-              {message.attachments.map((attachment) => (
-                <a
-                  key={attachment.id}
-                  href={
-                    attachment.downloadPath ?? `/api/admin/messaging/attachments/${attachment.id}`
-                  }
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 block rounded-lg border border-border bg-card p-2 text-xs underline-offset-4 hover:underline"
-                >
-                  {attachment.fileName ?? 'Attachment'} · {attachment.securityStatus.toLowerCase()}
-                </a>
-              ))}
-              <p className="mt-1 text-right text-[10px] text-muted-foreground">
-                {message.delivery.state.toLowerCase().replace('_', ' ')}
-              </p>
-            </article>
-          );
-        })}
-        {messaging.pendingMessages.map((message) => (
-          <article
-            key={message.key}
-            className="ml-auto max-w-[86%] rounded-2xl border border-primary/20 bg-primary-subtle px-3 py-2 text-sm opacity-80"
-          >
-            {message.text ? (
-              <p className="whitespace-pre-wrap">{message.text}</p>
-            ) : (
-              <p>Image attachment</p>
-            )}
-            <div className="mt-1 flex items-center justify-end gap-2 text-[10px] text-muted-foreground">
-              {message.state === 'SENDING' ? <Loader2 className="size-3 animate-spin" /> : null}
-              <span>
-                {message.state === 'SENDING'
-                  ? 'Sending'
-                  : (message.error ?? 'Send result uncertain')}
-              </span>
-              {message.state !== 'SENDING' ? (
-                <>
-                  <button
-                    className="font-medium text-foreground"
-                    onClick={() => void messaging.retryPending(message.key)}
-                  >
-                    Retry
-                  </button>
-                  <button
-                    aria-label="Remove failed message"
-                    onClick={() => messaging.removePending(message.key)}
-                  >
-                    <X className="size-3" />
-                  </button>
-                </>
-              ) : null}
-            </div>
-          </article>
-        ))}
-        <div ref={bottomRef} />
-      </div>
-    </div>
   );
 }
 

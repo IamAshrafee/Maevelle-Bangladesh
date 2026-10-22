@@ -65,7 +65,7 @@ export const listMessages = (conversationId: string, before?: string, signal?: A
 export const markRead = (conversationId: string, sequence: string) =>
   apiRequest<void>(`${base}/conversations/${conversationId}/read`, {
     method: 'POST',
-    body: JSON.stringify({ sequence }),
+    body: JSON.stringify({ lastReadSequence: sequence }),
   });
 
 export const sendMessage = (
