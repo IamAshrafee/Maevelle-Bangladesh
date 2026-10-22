@@ -138,4 +138,21 @@ describe('parseConfig', () => {
     expect(config.mediaMaxUploadBytes).toBe(10 * 1024 * 1024);
     expect(config.mediaUploadExpirySeconds).toBe(900);
   });
+
+  it('requires complete Meta configuration and keeps it optional by default', () => {
+    expect(parseConfig(validEnvironment).metaAppId).toBeUndefined();
+    expect(() => parseConfig({ ...validEnvironment, META_APP_ID: '123' })).toThrow(
+      /must be configured together/,
+    );
+    const configured = parseConfig({
+      ...validEnvironment,
+      META_APP_ID: '123',
+      META_APP_SECRET: 'a-secure-meta-app-secret',
+      META_GRAPH_API_VERSION: 'v27.0',
+      META_WEBHOOK_VERIFY_TOKEN: 'a-long-random-webhook-token',
+      META_OAUTH_CALLBACK_URL:
+        'https://admin.example.test/integrations/messaging/facebook/oauth/callback',
+    });
+    expect(configured.metaOAuthScopes).toContain('pages_messaging');
+  });
 });

@@ -34,8 +34,16 @@ import {
   reclaimExpiredMessagingDeliveries,
   processDueMessagingFollowUps,
   processMessagingAssignmentRules,
+  purgeExpiredFacebookResources,
+  refreshFacebookAttachmentSecurity,
 } from '@maevelle/database/messaging';
 import { websiteMessagingAdapter } from './website-messaging-adapter.js';
+import {
+  createFacebookMessagingAdapter,
+  processFacebookHistoricalSyncs,
+  processFacebookProviderEvents,
+  type FacebookWorkerConfig,
+} from './facebook-messaging-adapter.js';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -60,6 +68,7 @@ export interface WorkerOptions {
   readonly smsRuntime?: SmsRuntimeOptions;
   readonly smsMaxPerTick?: number;
   readonly messagingAdapters?: ChannelAdapterRegistry;
+  readonly facebookConfig?: FacebookWorkerConfig;
 }
 
 export interface WorkerRuntime {
@@ -82,6 +91,20 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
   const smsRuntime = options.smsRuntime;
   const messagingAdapters = options.messagingAdapters ?? new ChannelAdapterRegistry();
   if (!messagingAdapters.has('WEBSITE')) messagingAdapters.register(websiteMessagingAdapter);
+  if (
+    options.facebookConfig &&
+    options.encryptionKey &&
+    options.mediaStorage &&
+    !messagingAdapters.has('FACEBOOK')
+  )
+    messagingAdapters.register(
+      createFacebookMessagingAdapter({
+        database: options.database,
+        encryptionKey: options.encryptionKey,
+        storage: options.mediaStorage,
+        config: options.facebookConfig,
+      }),
+    );
   const invitationEmailAdapter = {
     name: emailAdapter.name,
     send: async (request: {
@@ -149,6 +172,10 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         messagingVisitorResourcesPurged,
         messagingFollowUps,
         messagingAssignments,
+        facebookProviderEvents,
+        facebookResourcesPurged,
+        facebookHistoricalSyncs,
+        facebookAttachmentsRefreshed,
       ] = await Promise.all([
         runJob(() => reclaimExpiredJobs(options.database.db)),
         runJob(() =>
@@ -242,6 +269,26 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         runJob(() => purgeExpiredWebsiteVisitorResources(options.database.db)),
         runJob(() => processDueMessagingFollowUps(options.database.db)),
         runJob(() => processMessagingAssignmentRules(options.database.db)),
+        runJob(() =>
+          processFacebookProviderEvents(
+            options.database,
+            `worker:${process.pid}`,
+            20,
+            options.mediaStorage ? { storage: options.mediaStorage } : undefined,
+          ),
+        ),
+        runJob(() => purgeExpiredFacebookResources(options.database.db)),
+        options.facebookConfig && options.encryptionKey
+          ? runJob(() =>
+              processFacebookHistoricalSyncs({
+                database: options.database,
+                workerId: `worker:${process.pid}`,
+                encryptionKey: options.encryptionKey!,
+                config: options.facebookConfig!,
+              }),
+            )
+          : Promise.resolve(0),
+        runJob(() => refreshFacebookAttachmentSecurity(options.database.db)),
       ]);
       logger?.debug(
         {
@@ -275,6 +322,10 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           messagingVisitorResourcesPurged,
           messagingFollowUps,
           messagingAssignments,
+          facebookProviderEvents,
+          facebookResourcesPurged,
+          facebookHistoricalSyncs,
+          facebookAttachmentsRefreshed,
         },
         'Worker recovery tick.',
       );

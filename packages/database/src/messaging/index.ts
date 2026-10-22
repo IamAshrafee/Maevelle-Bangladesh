@@ -23,6 +23,7 @@ export type MessagingErrorCode =
   | 'CONVERSATION_NOT_FOUND'
   | 'CONVERSATION_CLOSED'
   | 'CHANNEL_CAPABILITY_UNSUPPORTED'
+  | 'REPLY_WINDOW_CLOSED'
   | 'CONNECTION_UNAVAILABLE'
   | 'IDEMPOTENCY_IN_PROGRESS'
   | 'IDEMPOTENCY_KEY_REUSED'
@@ -118,11 +119,14 @@ interface ConversationRow {
   follow_up_due_at: Date | null;
 }
 
-function capabilities(snapshot: Record<string, unknown>): ChannelCapabilities {
+function capabilities(
+  snapshot: Record<string, unknown>,
+  repliesAllowed = true,
+): ChannelCapabilities {
   return {
     text: snapshot.text !== false,
     attachments: snapshot.attachments === true,
-    replies: snapshot.replies !== false,
+    replies: snapshot.replies !== false && repliesAllowed,
     readReceipts: snapshot.readReceipts === true,
     maximumTextLength:
       typeof snapshot.maximumTextLength === 'number' ? snapshot.maximumTextLength : 10_000,
@@ -165,7 +169,11 @@ function mapConversation(row: ConversationRow): ConversationDetail {
         ? (row.follow_up as ConversationFollowUpSummary)
         : null,
     needsReply: row.needs_reply,
-    capabilities: capabilities(row.capability_snapshot),
+    capabilities: capabilities(
+      row.capability_snapshot,
+      row.channel_kind !== 'FACEBOOK' ||
+        (row.reply_eligible_until !== null && row.reply_eligible_until > new Date()),
+    ),
     version: row.version,
     subject: row.subject,
     createdAt: row.created_at.toISOString(),
@@ -642,6 +650,27 @@ export async function prepareOutboundMessage(
           'Closed conversations cannot receive replies.',
         );
       if (
+        conversation.channel.kind === 'FACEBOOK' &&
+        (!conversation.replyEligibleUntil ||
+          new Date(conversation.replyEligibleUntil) <= new Date())
+      )
+        throw new MessagingDomainError(
+          'REPLY_WINDOW_CLOSED',
+          'The Facebook customer-service reply window is closed.',
+          {
+            eligibleUntil: conversation.replyEligibleUntil,
+            channelKind: 'FACEBOOK',
+          },
+        );
+      if (
+        conversation.channel.kind === 'FACEBOOK' &&
+        (attachmentIds.length > 1 || (text && attachmentIds.length))
+      )
+        throw new MessagingDomainError(
+          'CHANNEL_CAPABILITY_UNSUPPORTED',
+          'Facebook replies support either one image or one text message per canonical message.',
+        );
+      if (
         !conversation.capabilities.replies ||
         (text && !conversation.capabilities.text) ||
         (attachmentIds.length && !conversation.capabilities.attachments)
@@ -853,12 +882,27 @@ export async function acceptInboundMessage(
     externalMessageId: string;
     text?: string;
     attachmentIds?: readonly string[];
+    providerAttachments?: readonly {
+      kind: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'FILE' | 'STICKER' | 'PROVIDER_SHARE';
+      externalId?: string;
+      sourceUrl?: string;
+      mimeType?: string;
+      mediaAssetId?: string;
+      fileName?: string;
+      byteSize?: number;
+    }[];
     providerCreatedAt?: Date;
+    historical?: boolean;
   },
 ): Promise<{ message: MessageView; replayed: boolean }> {
   const text = input.text?.trim() ?? '';
   const attachmentIds = [...new Set(input.attachmentIds ?? [])];
-  if ((!text && !attachmentIds.length) || text.length > 10_000 || attachmentIds.length > 5)
+  const providerAttachments = input.providerAttachments ?? [];
+  if (
+    (!text && !attachmentIds.length && !providerAttachments.length) ||
+    text.length > 10_000 ||
+    attachmentIds.length + providerAttachments.length > 5
+  )
     throw new MessagingDomainError(
       'VALIDATION_FAILED',
       'A message requires text or up to five attachments; text cannot exceed 10,000 characters.',
@@ -892,7 +936,9 @@ export async function acceptInboundMessage(
           externalMessageId: input.externalMessageId,
           text,
           attachmentIds,
+          providerAttachments,
           providerCreatedAt: input.providerCreatedAt?.toISOString() ?? null,
+          historical: input.historical ?? false,
         }),
       });
       if (!record.created) {
@@ -987,7 +1033,7 @@ export async function acceptInboundMessage(
         );
       const inserted = await sql<{
         id: string;
-      }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,sender_contact_identity_id,message_type,text_body,provider_message_id,client_message_id,delivery_state,provider_created_at) values(${input.organizationId},${input.conversationId},${allocation.sequence}::bigint,'INBOUND','CONTACT',${input.contactIdentityId},${attachmentIds.length ? (text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${text || null},${input.externalMessageId},${input.externalMessageId},'RECEIVED',${input.providerCreatedAt ?? null}) returning id`.execute(
+      }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,sender_contact_identity_id,message_type,text_body,provider_message_id,client_message_id,delivery_state,provider_created_at) values(${input.organizationId},${input.conversationId},${allocation.sequence}::bigint,'INBOUND','CONTACT',${input.contactIdentityId},${attachmentIds.length || providerAttachments.length ? (text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${text || null},${input.externalMessageId},${input.externalMessageId},'RECEIVED',${input.providerCreatedAt ?? null}) returning id`.execute(
         tx,
       );
       const messageId = inserted.rows[0]!.id;
@@ -999,6 +1045,12 @@ export async function acceptInboundMessage(
         );
         await sql`update messaging.website_attachment_uploads set status='ATTACHED',attached_message_id=${messageId},updated_at=now()
           where organization_id=${input.organizationId} and id=${uploadId} and status='AVAILABLE'`.execute(
+          tx,
+        );
+      }
+      for (const [offset, attachment] of providerAttachments.entries()) {
+        await sql`insert into messaging.message_attachments(organization_id,message_id,media_asset_id,position,kind,filename,mime_type,byte_size,security_status,provider_metadata,expires_at)
+          values(${input.organizationId},${messageId},${attachment.mediaAssetId ?? null},${attachmentIds.length + offset},${attachment.kind},${attachment.fileName ?? null},${attachment.mimeType ?? null},${attachment.byteSize ?? null},${attachment.mediaAssetId ? 'QUARANTINED' : 'REMOTE_ONLY'},${JSON.stringify({ externalId: attachment.externalId ?? null, sourceUrl: attachment.sourceUrl ?? null })}::jsonb,now()+interval '7 days')`.execute(
           tx,
         );
       }
@@ -1022,7 +1074,7 @@ export async function acceptInboundMessage(
           direction: 'INBOUND',
         },
       });
-      await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values(${input.organizationId},'messaging.inbound_message.created.v1',1,'messaging.message',${messageId},${allocation.sequence}::bigint,${JSON.stringify({ conversationId: input.conversationId, messageId, sequence: allocation.sequence, direction: 'INBOUND' })}::jsonb,now())`.execute(
+      await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values(${input.organizationId},${input.historical ? 'messaging.historical_message.imported.v1' : 'messaging.inbound_message.created.v1'},1,'messaging.message',${messageId},${allocation.sequence}::bigint,${JSON.stringify({ conversationId: input.conversationId, messageId, sequence: allocation.sequence, direction: 'INBOUND', historical: input.historical ?? false })}::jsonb,now())`.execute(
         tx,
       );
       await sql`update platform.idempotency_records set status='SUCCEEDED',result_entity_type='messaging.message',result_entity_id=${messageId},safe_response=${JSON.stringify({ messageId })}::jsonb,completed_at=now() where id=${record.id}`.execute(
@@ -1483,3 +1535,4 @@ export * from './operations.js';
 export * from './settings.js';
 export * from './customer-context.js';
 export * from './reporting.js';
+export * from './facebook.js';

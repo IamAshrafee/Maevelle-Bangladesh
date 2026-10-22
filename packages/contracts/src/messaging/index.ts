@@ -313,3 +313,91 @@ export interface MessagingErrorBody {
     readonly requestId?: string;
   };
 }
+
+export type FacebookConnectionStatus =
+  | 'AUTHORIZATION_PENDING'
+  | 'CONNECTED'
+  | 'LIMITED_PERMISSIONS'
+  | 'WEBHOOK_INCOMPLETE'
+  | 'NEEDS_REAUTHORIZATION'
+  | 'SUSPENDED'
+  | 'DISCONNECTED'
+  | 'ERROR';
+
+export interface FacebookIntegrationAvailability {
+  readonly configured: boolean;
+  readonly graphApiVersion: string | null;
+  readonly requiredScopes: readonly string[];
+  readonly oauthCallbackUrl: string | null;
+}
+
+export interface FacebookEligiblePage {
+  readonly pageId: string;
+  readonly name: string;
+  readonly category: string | null;
+  readonly tasks: readonly string[];
+  readonly grantedScopes: readonly string[];
+  readonly isEligible: boolean;
+  readonly ineligibilityReasons: readonly string[];
+}
+
+export interface FacebookConnectionView {
+  readonly id: string;
+  readonly pageId: string;
+  readonly pageName: string;
+  readonly status: FacebookConnectionStatus;
+  readonly graphApiVersion: string;
+  readonly grantedScopes: readonly string[];
+  readonly missingScopes: readonly string[];
+  readonly subscribedFields: readonly string[];
+  readonly webhookSubscriptionHealthy: boolean;
+  readonly credentialHealthy: boolean;
+  readonly lastWebhookAt: string | null;
+  readonly lastInboundAt: string | null;
+  readonly lastOutboundAt: string | null;
+  readonly lastVerifiedAt: string | null;
+  readonly lastErrorCode: string | null;
+  readonly disconnectedAt: string | null;
+  readonly version: string;
+}
+
+export interface FacebookOAuthStartView {
+  readonly authorizationUrl: string;
+  readonly attemptId: string;
+  readonly expiresAt: string;
+}
+
+export interface FacebookOAuthStatusView {
+  readonly attemptId: string;
+  readonly status: 'PENDING' | 'AUTHORIZED' | 'CONSUMED' | 'FAILED' | 'EXPIRED';
+  readonly pages: readonly FacebookEligiblePage[];
+  readonly errorCode: string | null;
+  readonly expiresAt: string;
+}
+
+export interface FacebookReplyEligibility {
+  readonly allowed: boolean;
+  readonly reason:
+    | 'ELIGIBLE'
+    | 'NO_CUSTOMER_MESSAGE'
+    | 'WINDOW_CLOSED'
+    | 'CONNECTION_UNAVAILABLE'
+    | 'PERMISSION_MISSING'
+    | 'UNSUPPORTED_CONTENT';
+  readonly eligibleUntil: string | null;
+  readonly supportedAttachmentMimeTypes: readonly string[];
+  readonly nextAction: 'REPLY' | 'WAIT_FOR_CUSTOMER' | 'REAUTHORIZE' | 'CONTACT_UNAVAILABLE';
+}
+
+export interface FacebookSyncView {
+  readonly id: string;
+  readonly connectionId: string;
+  readonly status: 'PENDING' | 'PROCESSING' | 'PAUSED' | 'COMPLETED' | 'FAILED';
+  readonly importedConversations: number;
+  readonly importedMessages: number;
+  readonly errorCount: number;
+  readonly lastErrorCode: string | null;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
+  readonly updatedAt: string;
+}

@@ -147,6 +147,9 @@ importers:
       '@maevelle/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@maevelle/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@maevelle/database':
         specifier: workspace:*
         version: link:../../packages/database

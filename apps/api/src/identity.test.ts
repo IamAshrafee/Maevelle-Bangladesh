@@ -57,6 +57,8 @@ const config: RuntimeConfig = {
   smsAllowedTestRecipients: [],
   smsSenderType: 'PROVIDER_DEFAULT',
   smsMaxPerTick: 20,
+  metaOAuthScopes: [],
+  metaRequestTimeoutMs: 10_000,
 };
 
 function cookieHeader(setCookie: string | string[] | undefined): string {

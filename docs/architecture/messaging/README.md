@@ -1,6 +1,6 @@
 # Omnichannel Messaging Architecture
 
-**Status:** Phase 05 Admin Messaging Workspace complete
+**Status:** Phase 06 Facebook Messenger backend code complete; live Meta activation pending
 **Date:** 2026-10-22
 **Scope:** Storefront live chat, unified Admin inbox, Facebook Messenger, and Instagram Direct
 **Authority:** Current source and migrations outrank historical design documents. This design does not authorize a production migration or provider connection.
@@ -29,6 +29,7 @@ The design deliberately does **not** introduce Redis, a broker, a messaging micr
 14. [Phase 03 Storefront live chat frontend completion](13-phase-03-completion.md)
 15. [Phase 04 Unified Inbox and messaging operations backend completion](14-phase-04-completion.md)
 16. [Phase 05 Admin Messaging Workspace completion](15-phase-05-completion.md)
+17. [Phase 06 Facebook Messenger backend completion](16-phase-06-completion.md)
 
 ## Architecture at a glance
 
@@ -62,7 +63,7 @@ flowchart LR
 - Message bodies and private attachment URLs are not written to ordinary logs, notifications, or analytics payloads.
 - Storefront and Admin messaging UIs remain separate compositions over the same canonical contracts.
 
-## Phase 06 readiness
+## Phase 07 readiness
 
 Phases 01–04 are implemented. The shared core has a complete website channel,
 and the Storefront now has the lazy, responsive customer chat interface over
@@ -75,9 +76,12 @@ notification and reporting APIs. See the
 [Phase 04 backend completion record](14-phase-04-completion.md).
 
 Phase 05 adds the complete responsive Admin Messaging Workspace over the same
-canonical contracts. Staff can operate the website inbox, reply with text and
-private images, collaborate, link verified customer context, manage follow-ups,
-configure operations and inspect bounded reports without a second messaging
-store. Phase 06 can add the Facebook adapter by creating a channel connection
-and provider ingress/delivery adapter; the Admin workspace remains channel
-neutral and requires no parallel inbox.
+canonical contracts. Phase 06 adds the Facebook Page OAuth, encrypted credential,
+signed durable webhook ingress, canonical normalization, Send API delivery,
+reply-window enforcement, health, diagnostics and bounded historical sync
+backend. See the [Phase 06 completion and activation record](16-phase-06-completion.md).
+
+Phase 07 can add the responsive connection, diagnostics and sync management UI
+over the Phase 06 contracts. Live Meta communication remains an explicit owner
+activation gate until an approved app, Page, permissions, public callback and
+test recipient are available.

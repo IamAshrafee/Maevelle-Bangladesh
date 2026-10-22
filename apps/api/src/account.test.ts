@@ -56,6 +56,8 @@ const config: RuntimeConfig = {
   smsAllowedTestRecipients: [],
   smsSenderType: 'PROVIDER_DEFAULT',
   smsMaxPerTick: 20,
+  metaOAuthScopes: [],
+  metaRequestTimeoutMs: 10_000,
 };
 
 function cookieHeader(setCookie: string | string[] | undefined): string {
@@ -275,10 +277,7 @@ describe('My Account / Self-Service Account Management API', () => {
     expect(reqRes.json().data.expiresAt).toBeDefined();
 
     // 2. Fetch token from database directly (simulating clicking link sent to email)
-    const token = await findUserAuthVerificationValue(
-      database.db,
-      `email-verification:${user.id}`,
-    );
+    const token = await findUserAuthVerificationValue(database.db, `email-verification:${user.id}`);
     expect(token).toBeDefined();
 
     // 3. Confirm verification
@@ -339,10 +338,7 @@ describe('My Account / Self-Service Account Management API', () => {
     expect(overviewPending.json().data.pendingEmailChange?.pendingEmail).toBe(newEmail);
 
     // 4. Retrieve verification token for the pending email change
-    const tokenVal = await findUserAuthVerificationValue(
-      database.db,
-      `email-change:${user.id}`,
-    );
+    const tokenVal = await findUserAuthVerificationValue(database.db, `email-change:${user.id}`);
     expect(tokenVal).toBeDefined();
     const parsed = JSON.parse(tokenVal!) as { token: string };
 

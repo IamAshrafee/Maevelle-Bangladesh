@@ -22,7 +22,44 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create unique index channel_connections_website on messaging.channel_connections(organization_id,channel_kind) where channel_kind='WEBSITE';
     create unique index channel_connections_provider on messaging.channel_connections(organization_id,channel_kind,provider_account_id) where provider_account_id is not null;
+    create unique index channel_connections_meta_account_owner on messaging.channel_connections(channel_kind,provider_account_id)
+      where channel_kind in ('FACEBOOK','INSTAGRAM') and provider_account_id is not null and status<>'DISCONNECTED';
     create index channel_connections_status on messaging.channel_connections(organization_id,status,channel_kind);
+
+    create table messaging.facebook_oauth_attempts (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      actor_id uuid not null references iam.users(id), membership_id uuid not null,
+      state_digest text not null unique check(state_digest ~ '^[0-9a-f]{64}$'),
+      status text not null default 'PENDING' check(status in ('PENDING','AUTHORIZED','CONSUMED','FAILED','EXPIRED')),
+      requested_scopes text[] not null, granted_scopes text[] not null default '{}',
+      authorization_ciphertext text, authorization_key_id text,
+      eligible_pages jsonb not null default '[]'::jsonb check(jsonb_typeof(eligible_pages)='array'),
+      error_code text, expires_at timestamptz not null, authorized_at timestamptz, consumed_at timestamptz,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      unique(organization_id,id),
+      foreign key(organization_id,membership_id) references iam.organization_memberships(organization_id,id),
+      check((authorization_ciphertext is null)=(authorization_key_id is null))
+    );
+    create index facebook_oauth_attempts_actor on messaging.facebook_oauth_attempts(organization_id,membership_id,created_at desc);
+    create index facebook_oauth_attempts_expiry on messaging.facebook_oauth_attempts(expires_at,id) where status in ('PENDING','AUTHORIZED');
+
+    create table messaging.facebook_connection_state (
+      organization_id uuid not null references platform.organizations(id), channel_connection_id uuid not null,
+      integration_account_id uuid not null, app_id text not null, page_id text not null,
+      status text not null check(status in ('AUTHORIZATION_PENDING','CONNECTED','LIMITED_PERMISSIONS','WEBHOOK_INCOMPLETE','NEEDS_REAUTHORIZATION','SUSPENDED','DISCONNECTED','ERROR')),
+      graph_api_version text not null check(graph_api_version ~ '^v[0-9]+\\.0$'),
+      granted_scopes text[] not null default '{}', required_scopes text[] not null,
+      page_tasks text[] not null default '{}', subscribed_fields text[] not null default '{}',
+      webhook_subscription_healthy boolean not null default false, credential_healthy boolean not null default true,
+      last_webhook_at timestamptz, last_inbound_at timestamptz, last_outbound_at timestamptz,
+      last_verified_at timestamptz, last_error_at timestamptz, last_error_code text,
+      disconnected_at timestamptz, disconnected_by_actor_id uuid references iam.users(id),
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now(), version bigint not null default 1 check(version>0),
+      primary key(organization_id,channel_connection_id), unique(channel_connection_id), unique(app_id,page_id),
+      foreign key(organization_id,channel_connection_id) references messaging.channel_connections(organization_id,id),
+      foreign key(organization_id,integration_account_id) references integrations.integration_accounts(organization_id,id)
+    ) with (fillfactor=90);
+    create index facebook_connection_health on messaging.facebook_connection_state(status,last_verified_at nulls first,channel_connection_id);
 
     create table messaging.contacts (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
@@ -112,6 +149,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index conversations_assigned_by on messaging.conversations(organization_id,assigned_by_membership_id) where assigned_by_membership_id is not null;
     create unique index conversations_website_active on messaging.conversations(organization_id,channel_connection_id,contact_identity_id)
       where channel_kind='WEBSITE' and status in ('NEW','OPEN','PENDING','RESOLVED');
+    create unique index conversations_facebook_active on messaging.conversations(organization_id,channel_connection_id,contact_identity_id)
+      where channel_kind='FACEBOOK' and status in ('NEW','OPEN','PENDING','RESOLVED');
 
     create table messaging.conversation_context_events (
       id bigint generated always as identity primary key,
@@ -173,6 +212,39 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create index message_attachments_media on messaging.message_attachments(organization_id,media_asset_id) where media_asset_id is not null;
     create index message_attachments_purge on messaging.message_attachments(security_status,expires_at) where expires_at is not null;
+
+    create table messaging.provider_events (
+      id bigint generated always as identity primary key,
+      organization_id uuid, channel_connection_id uuid, provider text not null check(provider in ('META_MESSENGER')),
+      provider_account_id text not null, event_key text not null, event_type text not null,
+      status text not null default 'PENDING' check(status in ('PENDING','PROCESSING','RETRY_WAIT','PROCESSED','IGNORED','FAILED_FINAL')),
+      payload jsonb not null check(jsonb_typeof(payload)='object'),
+      provider_occurred_at timestamptz, received_at timestamptz not null default now(), available_at timestamptz not null default now(),
+      lease_owner text, lease_expires_at timestamptz, attempt_count integer not null default 0 check(attempt_count>=0),
+      max_attempts integer not null default 8 check(max_attempts between 1 and 25), last_error_code text,
+      processed_at timestamptz, expires_at timestamptz not null default now()+interval '7 days',
+      unique(provider,provider_account_id,event_key),
+      foreign key(organization_id,channel_connection_id) references messaging.channel_connections(organization_id,id),
+      check((organization_id is null)=(channel_connection_id is null))
+    );
+    create index provider_events_claim on messaging.provider_events(status,available_at,id) where status in ('PENDING','RETRY_WAIT');
+    create index provider_events_connection on messaging.provider_events(organization_id,channel_connection_id,received_at desc) where organization_id is not null;
+    create index provider_events_expiry on messaging.provider_events(expires_at,id);
+
+    create table messaging.facebook_sync_jobs (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      channel_connection_id uuid not null, requested_by_membership_id uuid not null,
+      status text not null default 'PENDING' check(status in ('PENDING','PROCESSING','PAUSED','COMPLETED','FAILED')),
+      cursor text, imported_conversations integer not null default 0 check(imported_conversations>=0),
+      imported_messages integer not null default 0 check(imported_messages>=0), error_count integer not null default 0 check(error_count>=0),
+      last_error_code text, available_at timestamptz not null default now(), lease_owner text, lease_expires_at timestamptz,
+      started_at timestamptz, completed_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      unique(organization_id,id),
+      foreign key(organization_id,channel_connection_id) references messaging.channel_connections(organization_id,id),
+      foreign key(organization_id,requested_by_membership_id) references iam.organization_memberships(organization_id,id)
+    );
+    create unique index facebook_sync_one_active on messaging.facebook_sync_jobs(organization_id,channel_connection_id) where status in ('PENDING','PROCESSING','PAUSED');
+    create index facebook_sync_claim on messaging.facebook_sync_jobs(status,available_at,id) where status in ('PENDING','PROCESSING');
 
     create table messaging.website_attachment_uploads (
       id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
@@ -402,6 +474,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
       ('messaging.settings.manage','messaging','Manage messaging hours, routing and operational settings.','CRITICAL','{}','ACTIVE'),
       ('messaging.follow_ups.manage','messaging','Create and manage conversation follow-ups.','HIGH','{}','ACTIVE'),
       ('messaging.reports.view','messaging','View organization messaging operations reporting.','RESTRICTED','{}','ACTIVE')
+      ,('messaging.connections.view','messaging','View provider connection health and diagnostics.','RESTRICTED','{}','ACTIVE')
+      ,('messaging.connections.manage','messaging','Authorize, connect, verify, synchronize and disconnect provider accounts.','CRITICAL','{}','ACTIVE')
     on conflict(capability_code) do update set description=excluded.description,status='ACTIVE';
     insert into iam.membership_capability_grants(membership_id,capability_code)
       select m.id,c.code from iam.organization_memberships m cross join(values
@@ -409,7 +483,8 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
         ('messaging.assign'),('messaging.priority.manage'),('messaging.notes.create'),('messaging.notes.manage_all'),
         ('messaging.tags.manage'),('messaging.saved_replies.use'),('messaging.saved_replies.manage'),
         ('messaging.customer_context.view'),('messaging.customer_link.manage'),('messaging.contacts.search'),('messaging.availability.view'),
-        ('messaging.settings.manage'),('messaging.follow_ups.manage'),('messaging.reports.view')
+        ('messaging.settings.manage'),('messaging.follow_ups.manage'),('messaging.reports.view'),
+        ('messaging.connections.view'),('messaging.connections.manage')
       ) c(code) where m.membership_type='OWNER' and m.status='ACTIVE' on conflict do nothing;
     insert into notifications.notification_policies(notification_type,delivery_requirement,category,default_priority,contains_sensitive_data)
       values('MESSAGING_INBOUND_ATTENTION','REQUIRED_OPERATIONAL','OPERATIONAL','HIGH',false),

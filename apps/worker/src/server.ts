@@ -82,6 +82,20 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
       environment: config.smsEnvironment,
     },
     smsMaxPerTick: config.smsMaxPerTick,
+    ...(config.metaAppId &&
+    config.metaAppSecret &&
+    config.metaGraphApiVersion &&
+    config.metaOAuthCallbackUrl
+      ? {
+          facebookConfig: {
+            appId: config.metaAppId,
+            appSecret: config.metaAppSecret,
+            graphApiVersion: config.metaGraphApiVersion,
+            oauthCallbackUrl: config.metaOAuthCallbackUrl,
+            requestTimeoutMs: config.metaRequestTimeoutMs,
+          },
+        }
+      : {}),
   });
 
   try {
@@ -122,7 +136,10 @@ if (entrypoint && import.meta.url === pathToFileURL(entrypoint).href) {
       installWorkerShutdownHandlers(worker);
     })
     .catch((error) => {
-      console.error('Worker startup failed. Check configuration and PostgreSQL availability.', error);
+      console.error(
+        'Worker startup failed. Check configuration and PostgreSQL availability.',
+        error,
+      );
       process.exitCode = 1;
     });
 }

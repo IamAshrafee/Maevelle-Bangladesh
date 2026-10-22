@@ -8,6 +8,7 @@
     "@fastify/type-provider-typebox": "6.1.0",
     "@maevelle/config": "workspace:*",
     "@maevelle/contracts": "workspace:*",
+    "@maevelle/core": "workspace:*",
     "@maevelle/database": "workspace:*",
     "@maevelle/media": "workspace:*",
     "@maevelle/observability": "workspace:*",

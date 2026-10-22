@@ -15,7 +15,11 @@ export interface BuildApiOptions {
   readonly logger?: FastifyBaseLogger | false;
 }
 
-function matchesExpectedOrigin(origin: string, expectedOrigin: string, requestHost?: string): boolean {
+function matchesExpectedOrigin(
+  origin: string,
+  expectedOrigin: string,
+  requestHost?: string,
+): boolean {
   if (origin === expectedOrigin) return true;
   try {
     return new URL(origin).host === requestHost;
@@ -98,6 +102,7 @@ export function buildApi(options: BuildApiOptions) {
       { prefix: '/storefront/v1/orders/confirmation', maximum: 60 },
       { prefix: '/integrations/', maximum: 120 },
       { prefix: '/webhooks/resend', maximum: 240 },
+      { prefix: '/webhooks/meta/', maximum: 600 },
       { prefix: '/admin/email/', maximum: 120 },
       { prefix: '/admin/sms/', maximum: 60 },
       { prefix: '/admin/integrity/', maximum: 30 },

@@ -116,6 +116,8 @@ describe('API hardening foundation', () => {
         smsAllowedTestRecipients: [],
         smsSenderType: 'PROVIDER_DEFAULT',
         smsMaxPerTick: 20,
+        metaOAuthScopes: [],
+        metaRequestTimeoutMs: 10_000,
       },
     });
     const productId = '018f1f77-6b10-7cc0-9b11-4fefab124000';
@@ -297,6 +299,8 @@ describe('API hardening foundation', () => {
         smsAllowedTestRecipients: [],
         smsSenderType: 'PROVIDER_DEFAULT',
         smsMaxPerTick: 20,
+        metaOAuthScopes: [],
+        metaRequestTimeoutMs: 10_000,
       },
     });
     const publicResponse = await app.inject({ method: 'GET', url: '/health/live' });
@@ -374,6 +378,8 @@ describe('API hardening foundation', () => {
       smsAllowedTestRecipients: [],
       smsSenderType: 'PROVIDER_DEFAULT' as const,
       smsMaxPerTick: 20,
+      metaOAuthScopes: [],
+      metaRequestTimeoutMs: 10_000,
     };
 
     const unconfiguredApp = buildApi({
@@ -455,4 +461,3 @@ describe('API hardening foundation', () => {
     await configuredApp.close();
   });
 });
-

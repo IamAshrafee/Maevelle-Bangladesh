@@ -676,3 +676,104 @@ describe('messaging transactional core', () => {
     ).toBe(membershipId);
   });
 });
+
+describe('Facebook messaging provider boundaries', () => {
+  it('durably deduplicates batched webhook events and scopes identities by Page connection', async () => {
+    const pageId = `page-${crypto.randomUUID()}`;
+    const facebookConnectionId = await messaging.createChannelConnection(database.db, {
+      organizationId,
+      channelKind: 'FACEBOOK',
+      displayName: 'Facebook Test Page',
+      status: 'ACTIVE',
+    });
+    await sql`update messaging.channel_connections set provider_account_id=${pageId} where id=${facebookConnectionId}`.execute(
+      database.db,
+    );
+    const entry = [
+      {
+        id: pageId,
+        messaging: [
+          {
+            sender: { id: 'psid-1' },
+            recipient: { id: pageId },
+            timestamp: Date.now(),
+            message: { mid: `mid.${crypto.randomUUID()}`, text: 'হ্যালো 👋' },
+          },
+          {
+            sender: { id: 'psid-1' },
+            recipient: { id: pageId },
+            timestamp: Date.now(),
+            message: { mid: `mid.${crypto.randomUUID()}`, text: 'Second' },
+          },
+        ],
+      },
+    ];
+    expect(await messaging.acceptFacebookWebhookEvents(database.db, entry)).toMatchObject({
+      accepted: 2,
+      duplicates: 0,
+    });
+    expect(await messaging.acceptFacebookWebhookEvents(database.db, entry)).toMatchObject({
+      accepted: 0,
+      duplicates: 2,
+    });
+    const resolved = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        messaging.resolveFacebookConversation(database.db, {
+          organizationId,
+          connectionId: facebookConnectionId,
+          senderId: 'psid-1',
+        }),
+      ),
+    );
+    expect(new Set(resolved.map((item) => item.conversationId)).size).toBe(1);
+    expect(new Set(resolved.map((item) => item.contactIdentityId)).size).toBe(1);
+  });
+
+  it('enforces the Facebook reply window before a delivery intent is accepted', async () => {
+    const facebookConnectionId = await messaging.createChannelConnection(database.db, {
+      organizationId,
+      channelKind: 'FACEBOOK',
+      displayName: 'Window Page',
+      status: 'ACTIVE',
+      capabilities: { attachments: true },
+    });
+    await sql`update messaging.channel_connections set provider_account_id=${`page-${crypto.randomUUID()}`} where id=${facebookConnectionId}`.execute(
+      database.db,
+    );
+    const identity = await messaging.createContactIdentity(database.db, {
+      organizationId,
+      channelConnectionId: facebookConnectionId,
+      channelKind: 'FACEBOOK',
+      externalSubjectId: 'psid-window',
+    });
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: facebookConnectionId,
+      contactId: identity.contactId,
+      contactIdentityId: identity.identityId,
+    });
+    await expect(
+      messaging.prepareOutboundMessage(database.db, {
+        actor: actor(),
+        access: 'ALL',
+        conversationId,
+        idempotencyKey: crypto.randomUUID(),
+        clientMessageId: crypto.randomUUID(),
+        text: 'Too late',
+      }),
+    ).rejects.toMatchObject({ code: 'REPLY_WINDOW_CLOSED' });
+    await sql`update messaging.conversations set reply_eligible_until=now()+interval '1 hour' where id=${conversationId}`.execute(
+      database.db,
+    );
+    await expect(
+      messaging.prepareOutboundMessage(database.db, {
+        actor: actor(),
+        access: 'ALL',
+        conversationId,
+        idempotencyKey: crypto.randomUUID(),
+        clientMessageId: crypto.randomUUID(),
+        text: 'Allowed',
+      }),
+    ).resolves.toMatchObject({ replayed: false });
+  });
+});

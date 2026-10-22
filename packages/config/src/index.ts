@@ -56,6 +56,13 @@ export interface RuntimeConfig {
   readonly smsSenderType: 'MASKING' | 'NON_MASKING' | 'PROVIDER_DEFAULT';
   readonly smsSenderId?: string;
   readonly smsMaxPerTick: number;
+  readonly metaAppId?: string;
+  readonly metaAppSecret?: string;
+  readonly metaGraphApiVersion?: string;
+  readonly metaWebhookVerifyToken?: string;
+  readonly metaOAuthCallbackUrl?: string;
+  readonly metaOAuthScopes: readonly string[];
+  readonly metaRequestTimeoutMs: number;
 }
 
 type Environment = Record<string, string | undefined>;
@@ -165,7 +172,9 @@ function emailAddress(value: string, variableName: string): string {
 function smsPhone(value: string, variableName: string): string {
   const normalized = value.trim();
   if (!/^\+8801\d{9}$/.test(normalized))
-    throw new ConfigurationError(`${variableName} entries must be normalized Bangladesh mobile numbers such as +8801712345678.`);
+    throw new ConfigurationError(
+      `${variableName} entries must be normalized Bangladesh mobile numbers such as +8801712345678.`,
+    );
   return normalized;
 }
 
@@ -176,6 +185,18 @@ function httpUrl(value: string, variableName: string): string {
     return url.origin;
   } catch {
     throw new ConfigurationError(`${variableName} must be a valid HTTP(S) URL.`);
+  }
+}
+
+function optionalHttpsUrl(value: string | undefined, variableName: string): string | undefined {
+  if (!value?.trim()) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname))
+      throw new Error('HTTPS is required.');
+    return url.toString();
+  } catch {
+    throw new ConfigurationError(`${variableName} must be a valid HTTPS URL.`);
   }
 }
 
@@ -249,9 +270,7 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     throw new ConfigurationError('EMAIL_PROVIDER must be local or resend.');
   const emailEnabled = boolean(environment, 'EMAIL_ENABLED', false);
   const emailEnvironment = (environment.EMAIL_ENVIRONMENT?.trim().toLowerCase() || nodeEnv) as
-    | 'development'
-    | 'test'
-    | 'production';
+    'development' | 'test' | 'production';
   if (!nodeEnvironments.has(emailEnvironment))
     throw new ConfigurationError('EMAIL_ENVIRONMENT must be development, test, or production.');
   const emailTestRecipientOverride = environment.EMAIL_TEST_RECIPIENT_OVERRIDE?.trim();
@@ -292,30 +311,80 @@ export function parseConfig(environment: Environment): RuntimeConfig {
 
   const smsProvider = environment.SMS_PROVIDER?.trim().toLowerCase() || 'none';
   if (smsProvider !== 'none' && smsProvider !== 'mock')
-    throw new ConfigurationError('SMS_PROVIDER must be none or mock until a production adapter is installed.');
+    throw new ConfigurationError(
+      'SMS_PROVIDER must be none or mock until a production adapter is installed.',
+    );
   const smsEnabled = boolean(environment, 'SMS_ENABLED', false);
-  const smsEnvironment = (environment.SMS_ENVIRONMENT?.trim().toLowerCase() || nodeEnv) as NodeEnvironment;
+  const smsEnvironment = (environment.SMS_ENVIRONMENT?.trim().toLowerCase() ||
+    nodeEnv) as NodeEnvironment;
   if (!nodeEnvironments.has(smsEnvironment))
     throw new ConfigurationError('SMS_ENVIRONMENT must be development, test, or production.');
   const smsTestMode = boolean(environment, 'SMS_TEST_MODE', smsEnvironment !== 'production');
   const smsRecipientOverride = environment.SMS_RECIPIENT_OVERRIDE?.trim();
-  const smsAllowedTestRecipients = (environment.SMS_ALLOWED_TEST_RECIPIENTS ?? '').split(',').map((v) => v.trim()).filter(Boolean).map((v) => smsPhone(v, 'SMS_ALLOWED_TEST_RECIPIENTS'));
+  const smsAllowedTestRecipients = (environment.SMS_ALLOWED_TEST_RECIPIENTS ?? '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map((v) => smsPhone(v, 'SMS_ALLOWED_TEST_RECIPIENTS'));
   if (smsEnvironment === 'production' && (smsRecipientOverride || smsTestMode))
-    throw new ConfigurationError('SMS_RECIPIENT_OVERRIDE and SMS_TEST_MODE are not allowed in the production SMS environment.');
+    throw new ConfigurationError(
+      'SMS_RECIPIENT_OVERRIDE and SMS_TEST_MODE are not allowed in the production SMS environment.',
+    );
   if (smsRecipientOverride) {
     const normalizedOverride = smsPhone(smsRecipientOverride, 'SMS_RECIPIENT_OVERRIDE');
     if (!smsAllowedTestRecipients.includes(normalizedOverride))
-      throw new ConfigurationError('SMS_RECIPIENT_OVERRIDE must also appear in SMS_ALLOWED_TEST_RECIPIENTS.');
+      throw new ConfigurationError(
+        'SMS_RECIPIENT_OVERRIDE must also appear in SMS_ALLOWED_TEST_RECIPIENTS.',
+      );
   }
   if (nodeEnv === 'production' && smsEnabled)
-    throw new ConfigurationError('Production SMS cannot be enabled until a real SMS provider adapter is installed.');
+    throw new ConfigurationError(
+      'Production SMS cannot be enabled until a real SMS provider adapter is installed.',
+    );
   if (smsEnabled && smsProvider === 'none')
     throw new ConfigurationError('SMS_PROVIDER must be configured when SMS_ENABLED is true.');
-  const smsSenderType = (environment.SMS_SENDER_TYPE?.trim().toUpperCase() || 'PROVIDER_DEFAULT') as RuntimeConfig['smsSenderType'];
+  const smsSenderType = (environment.SMS_SENDER_TYPE?.trim().toUpperCase() ||
+    'PROVIDER_DEFAULT') as RuntimeConfig['smsSenderType'];
   if (!['MASKING', 'NON_MASKING', 'PROVIDER_DEFAULT'].includes(smsSenderType))
-    throw new ConfigurationError('SMS_SENDER_TYPE must be MASKING, NON_MASKING, or PROVIDER_DEFAULT.');
+    throw new ConfigurationError(
+      'SMS_SENDER_TYPE must be MASKING, NON_MASKING, or PROVIDER_DEFAULT.',
+    );
   const smsSenderId = environment.SMS_SENDER_ID?.trim();
-  if (smsSenderId && smsSenderId.length > 32) throw new ConfigurationError('SMS_SENDER_ID must not exceed 32 characters.');
+  if (smsSenderId && smsSenderId.length > 32)
+    throw new ConfigurationError('SMS_SENDER_ID must not exceed 32 characters.');
+
+  const metaAppId = environment.META_APP_ID?.trim();
+  const metaAppSecret = environment.META_APP_SECRET?.trim();
+  const metaGraphApiVersion = environment.META_GRAPH_API_VERSION?.trim();
+  const metaWebhookVerifyToken = environment.META_WEBHOOK_VERIFY_TOKEN?.trim();
+  const metaOAuthCallbackUrl = optionalHttpsUrl(
+    environment.META_OAUTH_CALLBACK_URL,
+    'META_OAUTH_CALLBACK_URL',
+  );
+  const metaConfiguredValues = [
+    metaAppId,
+    metaAppSecret,
+    metaGraphApiVersion,
+    metaWebhookVerifyToken,
+    metaOAuthCallbackUrl,
+  ];
+  if (metaConfiguredValues.some(Boolean) && !metaConfiguredValues.every(Boolean))
+    throw new ConfigurationError(
+      'META_APP_ID, META_APP_SECRET, META_GRAPH_API_VERSION, META_WEBHOOK_VERIFY_TOKEN, and META_OAUTH_CALLBACK_URL must be configured together.',
+    );
+  if (metaGraphApiVersion && !/^v\d+\.0$/.test(metaGraphApiVersion))
+    throw new ConfigurationError('META_GRAPH_API_VERSION must use the form vNN.0.');
+  if (metaAppSecret && metaAppSecret.length < 16)
+    throw new ConfigurationError('META_APP_SECRET must be at least 16 characters.');
+  if (metaWebhookVerifyToken && metaWebhookVerifyToken.length < 24)
+    throw new ConfigurationError('META_WEBHOOK_VERIFY_TOKEN must be at least 24 characters.');
+  const metaOAuthScopes = (
+    environment.META_OAUTH_SCOPES ??
+    'pages_show_list,pages_manage_metadata,pages_messaging,pages_read_engagement'
+  )
+    .split(',')
+    .map((scope) => scope.trim())
+    .filter(Boolean);
 
   return Object.freeze({
     nodeEnv,
@@ -341,27 +410,9 @@ export function parseConfig(environment: Environment): RuntimeConfig {
           .filter(Boolean)
       : ['http://localhost:3000', 'http://localhost:3001'],
     authTotpIssuer: shortLabel(environment, 'AUTH_TOTP_ISSUER', 'Maevelle', 64),
-    authTotpChallengeSeconds: integer(
-      environment,
-      'AUTH_TOTP_CHALLENGE_SECONDS',
-      600,
-      120,
-      1_800,
-    ),
-    authTotpMaxFailedAttempts: integer(
-      environment,
-      'AUTH_TOTP_MAX_FAILED_ATTEMPTS',
-      10,
-      3,
-      20,
-    ),
-    authTotpLockSeconds: integer(
-      environment,
-      'AUTH_TOTP_LOCK_SECONDS',
-      900,
-      60,
-      86_400,
-    ),
+    authTotpChallengeSeconds: integer(environment, 'AUTH_TOTP_CHALLENGE_SECONDS', 600, 120, 1_800),
+    authTotpMaxFailedAttempts: integer(environment, 'AUTH_TOTP_MAX_FAILED_ATTEMPTS', 10, 3, 20),
+    authTotpLockSeconds: integer(environment, 'AUTH_TOTP_LOCK_SECONDS', 900, 60, 86_400),
     mediaStorageProvider,
     mediaStoragePath: environment.MEDIA_STORAGE_PATH ?? 'var/media',
     ...(mediaStorageEndpoint ? { mediaStorageEndpoint } : {}),
@@ -388,7 +439,8 @@ export function parseConfig(environment: Environment): RuntimeConfig {
       environment.STOREFRONT_BASE_URL ?? 'http://localhost:3000',
       'STOREFRONT_BASE_URL',
     ),
-    storefrontInternalApiUrl: environment.STOREFRONT_INTERNAL_API_URL?.trim() || 'http://127.0.0.1:3002',
+    storefrontInternalApiUrl:
+      environment.STOREFRONT_INTERNAL_API_URL?.trim() || 'http://127.0.0.1:3002',
     emailEnabled,
     emailProvider,
     emailEnvironment,
@@ -413,11 +465,20 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     smsProvider,
     smsEnvironment,
     smsTestMode,
-    ...(smsRecipientOverride ? { smsRecipientOverride: smsPhone(smsRecipientOverride, 'SMS_RECIPIENT_OVERRIDE') } : {}),
+    ...(smsRecipientOverride
+      ? { smsRecipientOverride: smsPhone(smsRecipientOverride, 'SMS_RECIPIENT_OVERRIDE') }
+      : {}),
     smsAllowedTestRecipients,
     smsSenderType,
     ...(smsSenderId ? { smsSenderId } : {}),
     smsMaxPerTick: integer(environment, 'SMS_MAX_PER_TICK', 20, 1, 500),
+    ...(metaAppId ? { metaAppId } : {}),
+    ...(metaAppSecret ? { metaAppSecret } : {}),
+    ...(metaGraphApiVersion ? { metaGraphApiVersion } : {}),
+    ...(metaWebhookVerifyToken ? { metaWebhookVerifyToken } : {}),
+    ...(metaOAuthCallbackUrl ? { metaOAuthCallbackUrl } : {}),
+    metaOAuthScopes,
+    metaRequestTimeoutMs: integer(environment, 'META_REQUEST_TIMEOUT_MS', 15_000, 1_000, 60_000),
   });
 }
 

@@ -2,10 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import type { RuntimeConfig } from '@maevelle/config';
 import { createDatabase, sql } from '@maevelle/database';
-import {
-  createOrganization,
-  createOwnerMembership,
-} from '@maevelle/database/platform';
+import { createOrganization, createOwnerMembership } from '@maevelle/database/platform';
 import { adjustInventory } from '@maevelle/database/inventory';
 
 import { buildApi } from './app.js';
@@ -60,6 +57,8 @@ const config: RuntimeConfig = {
   smsAllowedTestRecipients: [],
   smsSenderType: 'PROVIDER_DEFAULT',
   smsMaxPerTick: 20,
+  metaOAuthScopes: [],
+  metaRequestTimeoutMs: 10_000,
 };
 
 function cookieHeader(setCookieHeader: string | string[] | undefined): string {

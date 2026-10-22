@@ -63,7 +63,9 @@ export function sendMessagingError(reply: FastifyReply, error: unknown, requestI
             ? 409
             : error.code === 'CONNECTION_UNAVAILABLE'
               ? 503
-              : 422;
+              : error.code === 'REPLY_WINDOW_CLOSED'
+                ? 422
+                : 422;
   return reply.code(status).send({
     error: {
       code: error.code,

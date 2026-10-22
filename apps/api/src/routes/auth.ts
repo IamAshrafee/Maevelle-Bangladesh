@@ -41,6 +41,7 @@ import { registerSettingsRoutes } from './settings.js';
 import { registerInventoryReplenishmentRoutes } from './inventory-replenishment.js';
 import { registerMessagingRoutes } from './messaging.js';
 import { registerStorefrontMessagingRoutes } from './storefront-messaging.js';
+import { registerFacebookMessagingRoutes } from './facebook-messaging.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -109,9 +110,7 @@ export function registerAuthRoutes(
             event: 'recovery_code_used',
             requestId: request.id,
             ipAddress: request.ip,
-            ...(request.headers['user-agent']
-              ? { userAgent: request.headers['user-agent'] }
-              : {}),
+            ...(request.headers['user-agent'] ? { userAgent: request.headers['user-agent'] } : {}),
           });
         } catch (error) {
           request.log.error(
@@ -147,9 +146,7 @@ export function registerAuthRoutes(
     if (!session?.user?.id) return;
     const selectedOrganization = request.headers['x-organization-id'];
     const active = await findActiveAdminContext(database.db, session.user.id, {
-      ...(typeof selectedOrganization === 'string'
-        ? { organizationId: selectedOrganization }
-        : {}),
+      ...(typeof selectedOrganization === 'string' ? { organizationId: selectedOrganization } : {}),
     });
     if (!active) return;
     const state = await resolveTwoFactorAccessState(
@@ -218,5 +215,6 @@ export function registerAuthRoutes(
   registerAssetRoutes(app, database, auth);
   registerSettingsRoutes(app, database, auth, config);
   registerMessagingRoutes(app, database, auth, objectStorage);
+  registerFacebookMessagingRoutes(app, database, auth, config);
   registerStorefrontMessagingRoutes(app, database, auth, config, objectStorage);
 }
