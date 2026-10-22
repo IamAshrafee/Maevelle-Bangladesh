@@ -46,7 +46,10 @@ export class LocalObjectStorage implements ObjectStoragePort {
   public async put(
     locator: StoredObjectLocator,
     content: Buffer,
+    input?: { readonly contentType?: string; readonly checksumSha256?: string },
   ): Promise<void> {
+    if (input?.checksumSha256 && sha256(content) !== input.checksumSha256)
+      throw new Error('Content checksum does not match provided checksum.');
     const destination = this.resolveLocator(locator);
     await mkdir(dirname(destination), { recursive: true });
     try {
