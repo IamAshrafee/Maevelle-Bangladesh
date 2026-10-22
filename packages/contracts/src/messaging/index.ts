@@ -422,3 +422,113 @@ export interface FacebookSyncView {
   readonly lastSuccessfulAt: string | null;
   readonly updatedAt: string;
 }
+
+export type InstagramConnectionStatus =
+  | 'AUTHORIZATION_PENDING'
+  | 'CONNECTED'
+  | 'LIMITED_PERMISSIONS'
+  | 'WEBHOOK_INCOMPLETE'
+  | 'NEEDS_REAUTHORIZATION'
+  | 'SUSPENDED'
+  | 'DISCONNECTED'
+  | 'ERROR';
+
+export interface InstagramIntegrationAvailability {
+  readonly configured: boolean;
+  readonly authorizationMethod: 'FACEBOOK_LOGIN';
+  readonly graphApiVersion: string | null;
+  readonly requiredScopes: readonly string[];
+  readonly oauthCallbackUrl: string | null;
+  readonly limitations: readonly string[];
+}
+
+export interface InstagramEligibleAccount {
+  readonly instagramAccountId: string;
+  readonly pageId: string;
+  readonly username: string | null;
+  readonly displayName: string;
+  readonly profilePictureUrl: string | null;
+  readonly accountType: string | null;
+  readonly pageName: string;
+  readonly pageTasks: readonly string[];
+  readonly grantedScopes: readonly string[];
+  readonly isEligible: boolean;
+  readonly ineligibilityReasons: readonly string[];
+}
+
+export interface InstagramConnectionView {
+  readonly id: string;
+  readonly instagramAccountId: string;
+  readonly pageId: string;
+  readonly username: string | null;
+  readonly displayName: string;
+  readonly accountType: string | null;
+  readonly authorizationMethod: 'FACEBOOK_LOGIN';
+  readonly status: InstagramConnectionStatus;
+  readonly graphApiVersion: string;
+  readonly grantedScopes: readonly string[];
+  readonly missingScopes: readonly string[];
+  readonly permissionReviewStatus:
+    'UNKNOWN' | 'DEVELOPMENT_ONLY' | 'APP_REVIEW_PENDING' | 'ADVANCED_ACCESS_CONFIRMED';
+  readonly subscribedFields: readonly string[];
+  readonly webhookSubscriptionHealthy: boolean;
+  readonly credentialHealthy: boolean;
+  readonly lastWebhookAt: string | null;
+  readonly lastInboundAt: string | null;
+  readonly lastOutboundAt: string | null;
+  readonly lastVerifiedAt: string | null;
+  readonly lastErrorCode: string | null;
+  readonly disconnectedAt: string | null;
+  readonly readiness: {
+    readonly authorization: 'READY' | 'INCOMPLETE' | 'NEEDS_REAUTHORIZATION';
+    readonly webhook: 'READY' | 'NOT_SUBSCRIBED' | 'UNHEALTHY';
+    readonly inbound: 'UNVERIFIED' | 'OBSERVED';
+    readonly outbound: 'UNVERIFIED' | 'OBSERVED';
+    readonly history:
+      'NOT_STARTED' | 'IN_PROGRESS' | 'PROVIDER_EXHAUSTED' | 'FAILED' | 'UNAVAILABLE';
+    readonly isOperational: boolean;
+    readonly blockers: readonly string[];
+  };
+  readonly version: string;
+}
+
+export interface InstagramOAuthStatusView {
+  readonly attemptId: string;
+  readonly status: 'PENDING' | 'AUTHORIZED' | 'CONSUMED' | 'FAILED' | 'EXPIRED';
+  readonly accounts: readonly InstagramEligibleAccount[];
+  readonly errorCode: string | null;
+  readonly expiresAt: string;
+}
+
+export interface InstagramReplyEligibility {
+  readonly allowed: boolean;
+  readonly reason:
+    | 'ELIGIBLE'
+    | 'NO_CUSTOMER_MESSAGE'
+    | 'WINDOW_CLOSED'
+    | 'CONNECTION_UNAVAILABLE'
+    | 'PERMISSION_MISSING'
+    | 'ACTIVATION_INCOMPLETE'
+    | 'UNSUPPORTED_CONTENT';
+  readonly eligibleUntil: string | null;
+  readonly supportedAttachmentMimeTypes: readonly string[];
+  readonly nextAction:
+    'REPLY' | 'WAIT_FOR_CUSTOMER' | 'REAUTHORIZE' | 'REVIEW_ACTIVATION' | 'CONTACT_UNAVAILABLE';
+}
+
+export interface InstagramSyncView {
+  readonly id: string;
+  readonly connectionId: string;
+  readonly status: 'PENDING' | 'PROCESSING' | 'PAUSED' | 'COMPLETED' | 'FAILED';
+  readonly importedConversations: number;
+  readonly importedMessages: number;
+  readonly duplicateMessages: number;
+  readonly attachmentFailures: number;
+  readonly coverageStatus: 'UNKNOWN' | 'PARTIAL' | 'PROVIDER_EXHAUSTED' | 'UNAVAILABLE';
+  readonly errorCount: number;
+  readonly lastErrorCode: string | null;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
+  readonly lastSuccessfulAt: string | null;
+  readonly updatedAt: string;
+}

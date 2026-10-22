@@ -1,6 +1,6 @@
 # Omnichannel Messaging Architecture
 
-**Status:** Phase 06 Facebook Messenger backend code complete; live Meta activation pending
+**Status:** Phase 08 Instagram Direct backend code complete; live Meta activation pending
 **Date:** 2026-10-22
 **Scope:** Storefront live chat, unified Admin inbox, Facebook Messenger, and Instagram Direct
 **Authority:** Current source and migrations outrank historical design documents. This design does not authorize a production migration or provider connection.
@@ -30,6 +30,8 @@ The design deliberately does **not** introduce Redis, a broker, a messaging micr
 15. [Phase 04 Unified Inbox and messaging operations backend completion](14-phase-04-completion.md)
 16. [Phase 05 Admin Messaging Workspace completion](15-phase-05-completion.md)
 17. [Phase 06 Facebook Messenger backend completion](16-phase-06-completion.md)
+18. [Phase 07 Facebook Messenger frontend completion](17-phase-07-completion.md)
+19. [Phase 08 Instagram Direct backend completion](18-phase-08-instagram-backend-completion.md)
 
 ## Architecture at a glance
 

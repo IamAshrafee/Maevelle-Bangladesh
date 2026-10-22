@@ -36,6 +36,8 @@ import {
   processMessagingAssignmentRules,
   purgeExpiredFacebookResources,
   refreshFacebookAttachmentSecurity,
+  purgeExpiredInstagramResources,
+  refreshInstagramAttachmentSecurity,
 } from '@maevelle/database/messaging';
 import { websiteMessagingAdapter } from './website-messaging-adapter.js';
 import {
@@ -44,6 +46,12 @@ import {
   processFacebookProviderEvents,
   type FacebookWorkerConfig,
 } from './facebook-messaging-adapter.js';
+import {
+  createInstagramMessagingAdapter,
+  processInstagramHistoricalSyncs,
+  processInstagramProviderEvents,
+  type InstagramWorkerConfig,
+} from './instagram-messaging-adapter.js';
 
 export interface WorkerLogger {
   info(bindings: object, message?: string): void;
@@ -69,6 +77,7 @@ export interface WorkerOptions {
   readonly smsMaxPerTick?: number;
   readonly messagingAdapters?: ChannelAdapterRegistry;
   readonly facebookConfig?: FacebookWorkerConfig;
+  readonly instagramConfig?: InstagramWorkerConfig;
 }
 
 export interface WorkerRuntime {
@@ -103,6 +112,20 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         encryptionKey: options.encryptionKey,
         storage: options.mediaStorage,
         config: options.facebookConfig,
+      }),
+    );
+  if (
+    options.instagramConfig &&
+    options.encryptionKey &&
+    options.mediaStorage &&
+    !messagingAdapters.has('INSTAGRAM')
+  )
+    messagingAdapters.register(
+      createInstagramMessagingAdapter({
+        database: options.database,
+        encryptionKey: options.encryptionKey,
+        storage: options.mediaStorage,
+        config: options.instagramConfig,
       }),
     );
   const invitationEmailAdapter = {
@@ -176,6 +199,10 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
         facebookResourcesPurged,
         facebookHistoricalSyncs,
         facebookAttachmentsRefreshed,
+        instagramProviderEvents,
+        instagramResourcesPurged,
+        instagramHistoricalSyncs,
+        instagramAttachmentsRefreshed,
       ] = await Promise.all([
         runJob(() => reclaimExpiredJobs(options.database.db)),
         runJob(() =>
@@ -289,6 +316,26 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
             )
           : Promise.resolve(0),
         runJob(() => refreshFacebookAttachmentSecurity(options.database.db)),
+        runJob(() =>
+          processInstagramProviderEvents(
+            options.database,
+            `worker:${process.pid}`,
+            20,
+            options.mediaStorage ? { storage: options.mediaStorage } : undefined,
+          ),
+        ),
+        runJob(() => purgeExpiredInstagramResources(options.database.db)),
+        options.instagramConfig && options.encryptionKey
+          ? runJob(() =>
+              processInstagramHistoricalSyncs({
+                database: options.database,
+                workerId: `worker:${process.pid}`,
+                encryptionKey: options.encryptionKey!,
+                config: options.instagramConfig!,
+              }),
+            )
+          : Promise.resolve(0),
+        runJob(() => refreshInstagramAttachmentSecurity(options.database.db)),
       ]);
       logger?.debug(
         {
@@ -326,6 +373,10 @@ export function createWorker(options: WorkerOptions): WorkerRuntime {
           facebookResourcesPurged,
           facebookHistoricalSyncs,
           facebookAttachmentsRefreshed,
+          instagramProviderEvents,
+          instagramResourcesPurged,
+          instagramHistoricalSyncs,
+          instagramAttachmentsRefreshed,
         },
         'Worker recovery tick.',
       );

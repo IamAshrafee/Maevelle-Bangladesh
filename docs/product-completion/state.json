@@ -2,18 +2,18 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "omnichannel-messaging",
-  "active_substage": "PHASE_07_FACEBOOK_ADMIN_FRONTEND",
-  "active_status": "PHASE_07_FRONTEND_CODE_COMPLETE_META_ACTIVATION_PENDING",
+  "active_substage": "PHASE_08_INSTAGRAM_DIRECT_BACKEND",
+  "active_status": "PHASE_08_BACKEND_CODE_COMPLETE_META_ACTIVATION_PENDING",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "051bd51",
   "last_verified_commit": "051bd51",
-  "last_completed_action": "Completed Phase 07 Facebook Messenger frontend integration across connection wizard, overview & diagnostics, health & permissions matrix, Phase 06.5 safety assurance dialog, historical conversation synchronization, non-destructive disconnect, unified inbox filtering, and policy-aware reply composer enforcing Meta 24-hr reply window and 1-image limit. Workspace typecheck, ESLint, and test suites passed cleanly.",
-  "next_action": "Phase 08 External Meta activation: complete Meta App Review, Business Verification, configure public HTTPS webhooks, and execute live end-to-end message delivery verification.",
+  "last_completed_action": "Completed Phase 08 Instagram Direct backend integration with isolated Facebook Login authorization, encrypted credentials, signed durable webhooks, canonical inbound DMs, private images, customer-initiated Send API delivery, echo/read reconciliation, resumable history sync, diagnostics, typed Phase 09 APIs, focused security review, clean migration verification, typecheck, lint, and focused tests.",
+  "next_action": "Phase 09 Instagram Admin frontend integration, followed by owner-controlled Meta App Review, public HTTPS webhook configuration, and live end-to-end verification.",
   "interrupted": false,
   "blocked_by": [
-    "LIVE_META_APP_AND_PAGE_CREDENTIALS_NOT_AVAILABLE",
-    "META_APP_REVIEW_AND_ADVANCED_ACCESS_NOT_EVIDENCED",
-    "PUBLIC_HTTPS_META_CALLBACK_NOT_CONFIGURED"
+    "LIVE_INSTAGRAM_META_CREDENTIALS_NOT_AVAILABLE",
+    "INSTAGRAM_APP_REVIEW_AND_ADVANCED_ACCESS_NOT_EVIDENCED",
+    "PUBLIC_HTTPS_INSTAGRAM_CALLBACK_NOT_CONFIGURED"
   ],
   "owner_review_status": "PENDING",
   "verified_complete_areas": ["analytics", "supply-operations"]

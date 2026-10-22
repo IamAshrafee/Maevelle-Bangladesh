@@ -92,6 +92,9 @@ interface ConversationRow {
   facebook_status: string | null;
   facebook_granted_scopes: string[] | null;
   facebook_page_tasks: string[] | null;
+  instagram_status: string | null;
+  instagram_granted_scopes: string[] | null;
+  instagram_page_tasks: string[] | null;
   capability_snapshot: Record<string, unknown>;
   contact_id: string;
   contact_name: string | null;
@@ -175,13 +178,17 @@ function mapConversation(row: ConversationRow): ConversationDetail {
     needsReply: row.needs_reply,
     capabilities: capabilities(
       row.capability_snapshot,
-      row.channel_kind !== 'FACEBOOK' ||
-        (['CONNECTED', 'LIMITED_PERMISSIONS'].includes(row.facebook_status ?? '') &&
-          ['ACTIVE', 'DEGRADED'].includes(row.channel_status) &&
-          (row.facebook_granted_scopes ?? []).includes('pages_messaging') &&
-          (row.facebook_page_tasks ?? []).includes('MESSAGING') &&
-          row.reply_eligible_until !== null &&
-          row.reply_eligible_until > new Date()),
+      ['ACTIVE', 'DEGRADED'].includes(row.channel_status) &&
+        (row.channel_kind !== 'FACEBOOK' ||
+          (['CONNECTED', 'LIMITED_PERMISSIONS'].includes(row.facebook_status ?? '') &&
+            (row.facebook_granted_scopes ?? []).includes('pages_messaging') &&
+            (row.facebook_page_tasks ?? []).includes('MESSAGING'))) &&
+        (row.channel_kind !== 'INSTAGRAM' ||
+          (['CONNECTED', 'LIMITED_PERMISSIONS'].includes(row.instagram_status ?? '') &&
+            (row.instagram_granted_scopes ?? []).includes('instagram_manage_messages') &&
+            (row.instagram_page_tasks ?? []).includes('MESSAGING'))) &&
+        (row.channel_kind === 'WEBSITE' ||
+          (row.reply_eligible_until !== null && row.reply_eligible_until > new Date())),
     ),
     version: row.version,
     subject: row.subject,
@@ -194,6 +201,7 @@ function mapConversation(row: ConversationRow): ConversationDetail {
 const conversationSelect = sql.raw(`
   select c.id, cc.channel_kind, c.channel_connection_id, cc.display_name channel_name,cc.status channel_status,
     facebook.status facebook_status,facebook.granted_scopes facebook_granted_scopes,facebook.page_tasks facebook_page_tasks,
+    instagram.status instagram_status,instagram.granted_scopes instagram_granted_scopes,instagram.page_tasks instagram_page_tasks,
     cc.capability_snapshot, c.contact_id, ct.display_name contact_name, ct.customer_id,
     c.status, c.priority, c.assignee_membership_id, am.display_name assignee_name,
     c.last_message_sequence::text, lm.text_body last_message_text,
@@ -209,6 +217,7 @@ const conversationSelect = sql.raw(`
   from messaging.conversations c
   join messaging.channel_connections cc on cc.organization_id=c.organization_id and cc.id=c.channel_connection_id
   left join messaging.facebook_connection_state facebook on facebook.organization_id=cc.organization_id and facebook.channel_connection_id=cc.id
+  left join messaging.instagram_connection_state instagram on instagram.organization_id=cc.organization_id and instagram.channel_connection_id=cc.id
   join messaging.contacts ct on ct.organization_id=c.organization_id and ct.id=c.contact_id
   left join iam.organization_memberships am on am.organization_id=c.organization_id and am.id=c.assignee_membership_id
   left join messaging.messages lm on lm.organization_id=c.organization_id and lm.id=c.last_message_id
@@ -661,25 +670,25 @@ export async function prepareOutboundMessage(
           'Closed conversations cannot receive replies.',
         );
       if (
-        conversation.channel.kind === 'FACEBOOK' &&
+        (conversation.channel.kind === 'FACEBOOK' || conversation.channel.kind === 'INSTAGRAM') &&
         (!conversation.replyEligibleUntil ||
           new Date(conversation.replyEligibleUntil) <= new Date())
       )
         throw new MessagingDomainError(
           'REPLY_WINDOW_CLOSED',
-          'The Facebook customer-service reply window is closed.',
+          `The ${conversation.channel.kind === 'FACEBOOK' ? 'Facebook' : 'Instagram'} customer-service reply window is closed.`,
           {
             eligibleUntil: conversation.replyEligibleUntil,
-            channelKind: 'FACEBOOK',
+            channelKind: conversation.channel.kind,
           },
         );
       if (
-        conversation.channel.kind === 'FACEBOOK' &&
+        (conversation.channel.kind === 'FACEBOOK' || conversation.channel.kind === 'INSTAGRAM') &&
         (attachmentIds.length > 1 || (text && attachmentIds.length))
       )
         throw new MessagingDomainError(
           'CHANNEL_CAPABILITY_UNSUPPORTED',
-          'Facebook replies support either one image or one text message per canonical message.',
+          `${conversation.channel.kind === 'FACEBOOK' ? 'Facebook' : 'Instagram'} replies support either one image or one text message per canonical message.`,
         );
       if (
         !conversation.capabilities.replies ||
@@ -1549,3 +1558,4 @@ export * from './settings.js';
 export * from './customer-context.js';
 export * from './reporting.js';
 export * from './facebook.js';
+export * from './instagram.js';

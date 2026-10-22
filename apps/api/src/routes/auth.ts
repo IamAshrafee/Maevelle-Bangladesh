@@ -42,6 +42,7 @@ import { registerInventoryReplenishmentRoutes } from './inventory-replenishment.
 import { registerMessagingRoutes } from './messaging.js';
 import { registerStorefrontMessagingRoutes } from './storefront-messaging.js';
 import { registerFacebookMessagingRoutes } from './facebook-messaging.js';
+import { registerInstagramMessagingRoutes } from './instagram-messaging.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,
@@ -216,5 +217,6 @@ export function registerAuthRoutes(
   registerSettingsRoutes(app, database, auth, config);
   registerMessagingRoutes(app, database, auth, objectStorage);
   registerFacebookMessagingRoutes(app, database, auth, config);
+  registerInstagramMessagingRoutes(app, database, auth, config);
   registerStorefrontMessagingRoutes(app, database, auth, config, objectStorage);
 }

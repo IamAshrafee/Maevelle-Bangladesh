@@ -2,16 +2,23 @@
 
 ## Active area
 
-Omnichannel messaging — Phase 07 Facebook Messenger Admin connection and
-operations experience.
+Omnichannel messaging — Phase 08 Instagram Direct backend integration.
 
 ## Evidence state
 
-## Evidence state
+`PHASE 08 INSTAGRAM BACKEND CODE COMPLETE / LIVE META ACTIVATION PENDING`
 
-`PHASE 07 FRONTEND CODE COMPLETE / LIVE META ACTIVATION PENDING`
+Phase 08 adds the official Instagram professional-account backend as a separate,
+credential-isolated provider adapter over the existing canonical messaging core.
 
-Phase 07 completes the Facebook Messenger administrative and operator frontend integration:
+Repository-controlled work now includes secure Page-linked account discovery,
+OAuth state binding, encrypted credentials, signed durable webhooks, canonical
+DM/contact/conversation ingestion, private images, policy-aware Send API
+delivery, echo/read reconciliation, resumable history sync, diagnostics, and
+typed Phase 09 APIs. Details and activation limits are recorded in
+`docs/architecture/messaging/18-phase-08-instagram-backend-completion.md`.
+
+The existing Phase 07 Facebook Messenger administrative and operator frontend includes:
 
 - Multi-step connection wizard with scope disclosures, availability preflight, popup/redirect OAuth flow, and eligible Page discovery;
 - Connection overview dashboard with 5-pillar readiness matrix (Auth, Webhook, Routing, Historical Sync, Operational);
@@ -29,13 +36,16 @@ The complete architecture, operational flows, safety controls, and verification 
 ## Verification completed
 
 - Repository TypeScript build passed (`pnpm typecheck`).
-- Focused ESLint passed with 0 errors and 0 warnings (`pnpm --filter @maevelle/admin exec eslint components/messaging`).
-- Database messaging tests passed (`pnpm vitest run packages/database/src/messaging.test.ts` - 12/12 passed).
-- Core Meta messenger tests passed (`pnpm vitest run packages/core/src/meta-messenger.test.ts` - 5/5 passed).
-- API test suite passed (`pnpm vitest run apps/api` - 11 files, 39 tests passed).
-- Config validation tests passed (`pnpm vitest run packages/config/src/index.test.ts` - 12/12 passed).
+- Focused ESLint passed with 0 errors and 0 warnings on the touched TypeScript paths.
+- Database messaging tests passed (`packages/database/src/messaging.test.ts` - 14/14 passed).
+- Core Meta messenger tests passed (`packages/core/src/meta-messenger.test.ts` - 7/7 passed).
+- Config validation tests passed (`packages/config/src/index.test.ts` - 13/13 passed).
+- Clean PostgreSQL baseline migration and rerun passed (`packages/database/src/migrate.test.ts` - 1/1 passed).
+- Focused combined provider/regression verification passed (36/36 tests).
+- API suite passed (`pnpm vitest run apps/api` - 11 files, 39 tests).
+- Credential-pattern scan passed (`pnpm check:secrets`).
 
 ## Next implementation boundary
 
-- Phase 08 External Meta activation: complete Meta App Review, Business Verification, configure public HTTPS webhooks, and execute live end-to-end message delivery verification.
-- Live Meta communication requires production Meta App credentials, webhook verify token matching, and Advanced Access permissions.
+- Phase 09: implement the Instagram connection, diagnostics, history-sync, inbox badge/filter, context rendering, and policy-aware composer frontend over the completed contracts.
+- Live Meta activation remains owner-controlled and requires App Review, Business Verification, Instagram/Page eligibility, production credentials, public HTTPS callbacks, and controlled real-message verification.

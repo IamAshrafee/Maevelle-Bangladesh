@@ -63,6 +63,12 @@ export interface RuntimeConfig {
   readonly metaOAuthCallbackUrl?: string;
   readonly metaOAuthScopes: readonly string[];
   readonly metaRequestTimeoutMs: number;
+  readonly instagramAppId?: string;
+  readonly instagramAppSecret?: string;
+  readonly instagramGraphApiVersion?: string;
+  readonly instagramWebhookVerifyToken?: string;
+  readonly instagramOAuthCallbackUrl?: string;
+  readonly instagramOAuthScopes?: readonly string[];
 }
 
 type Environment = Record<string, string | undefined>;
@@ -389,6 +395,42 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     .split(',')
     .map((scope) => scope.trim())
     .filter(Boolean);
+  const instagramAppId = environment.INSTAGRAM_APP_ID?.trim();
+  const instagramAppSecret = environment.INSTAGRAM_APP_SECRET?.trim();
+  const instagramGraphApiVersion = environment.INSTAGRAM_GRAPH_API_VERSION?.trim();
+  const instagramWebhookVerifyToken = environment.INSTAGRAM_WEBHOOK_VERIFY_TOKEN?.trim();
+  const instagramOAuthCallbackUrl = optionalHttpsUrl(
+    environment.INSTAGRAM_OAUTH_CALLBACK_URL,
+    'INSTAGRAM_OAUTH_CALLBACK_URL',
+  );
+  const instagramConfiguredValues = [
+    instagramAppId,
+    instagramAppSecret,
+    instagramGraphApiVersion,
+    instagramWebhookVerifyToken,
+    instagramOAuthCallbackUrl,
+  ];
+  if (instagramConfiguredValues.some(Boolean) && !instagramConfiguredValues.every(Boolean))
+    throw new ConfigurationError(
+      'INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, INSTAGRAM_GRAPH_API_VERSION, INSTAGRAM_WEBHOOK_VERIFY_TOKEN, and INSTAGRAM_OAUTH_CALLBACK_URL must be configured together.',
+    );
+  if (instagramGraphApiVersion && !/^v\d+\.0$/.test(instagramGraphApiVersion))
+    throw new ConfigurationError('INSTAGRAM_GRAPH_API_VERSION must use the form vNN.0.');
+  if (instagramGraphApiVersion && instagramGraphApiVersion !== 'v26.0')
+    throw new ConfigurationError(
+      'INSTAGRAM_GRAPH_API_VERSION must be v26.0 until a reviewed compatibility update changes the supported version.',
+    );
+  if (instagramAppSecret && instagramAppSecret.length < 16)
+    throw new ConfigurationError('INSTAGRAM_APP_SECRET must be at least 16 characters.');
+  if (instagramWebhookVerifyToken && instagramWebhookVerifyToken.length < 24)
+    throw new ConfigurationError('INSTAGRAM_WEBHOOK_VERIFY_TOKEN must be at least 24 characters.');
+  const instagramOAuthScopes = (
+    environment.INSTAGRAM_OAUTH_SCOPES ??
+    'pages_show_list,pages_manage_metadata,instagram_basic,instagram_manage_messages'
+  )
+    .split(',')
+    .map((scope) => scope.trim())
+    .filter(Boolean);
 
   return Object.freeze({
     nodeEnv,
@@ -483,6 +525,12 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     ...(metaOAuthCallbackUrl ? { metaOAuthCallbackUrl } : {}),
     metaOAuthScopes,
     metaRequestTimeoutMs: integer(environment, 'META_REQUEST_TIMEOUT_MS', 15_000, 1_000, 60_000),
+    ...(instagramAppId ? { instagramAppId } : {}),
+    ...(instagramAppSecret ? { instagramAppSecret } : {}),
+    ...(instagramGraphApiVersion ? { instagramGraphApiVersion } : {}),
+    ...(instagramWebhookVerifyToken ? { instagramWebhookVerifyToken } : {}),
+    ...(instagramOAuthCallbackUrl ? { instagramOAuthCallbackUrl } : {}),
+    instagramOAuthScopes,
   });
 }
 

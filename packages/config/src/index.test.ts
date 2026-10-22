@@ -155,4 +155,26 @@ describe('parseConfig', () => {
     });
     expect(configured.metaOAuthScopes).toContain('pages_messaging');
   });
+
+  it('requires complete isolated Instagram configuration', () => {
+    expect(parseConfig(validEnvironment).instagramAppId).toBeUndefined();
+    expect(() => parseConfig({ ...validEnvironment, INSTAGRAM_APP_ID: '123' })).toThrow(
+      /INSTAGRAM_APP_ID.*must be configured together/,
+    );
+    const configured = parseConfig({
+      ...validEnvironment,
+      INSTAGRAM_APP_ID: 'instagram-app',
+      INSTAGRAM_APP_SECRET: 'a-secure-instagram-app-secret',
+      INSTAGRAM_GRAPH_API_VERSION: 'v26.0',
+      INSTAGRAM_WEBHOOK_VERIFY_TOKEN: 'a-long-random-instagram-webhook-token',
+      INSTAGRAM_OAUTH_CALLBACK_URL:
+        'https://admin.example.test/integrations/messaging/instagram/oauth/callback',
+    });
+    expect(configured.instagramOAuthScopes).toEqual([
+      'pages_show_list',
+      'pages_manage_metadata',
+      'instagram_basic',
+      'instagram_manage_messages',
+    ]);
+  });
 });

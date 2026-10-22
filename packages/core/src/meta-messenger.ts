@@ -14,6 +14,18 @@ export interface MetaPageCredential {
   readonly tasks: readonly string[];
 }
 
+export interface MetaInstagramCredential {
+  readonly id: string;
+  readonly username: string | null;
+  readonly name: string;
+  readonly profilePictureUrl: string | null;
+  readonly accountType: string | null;
+  readonly pageId: string;
+  readonly pageName: string;
+  readonly pageAccessToken: string;
+  readonly pageTasks: readonly string[];
+}
+
 export interface MetaConversationPage {
   readonly conversations: readonly {
     id: string;
@@ -177,6 +189,51 @@ export class MetaMessengerClient {
     });
   }
 
+  /** Discover only Instagram professional accounts proven by the authorized Page response. */
+  public async listInstagramAccounts(
+    userToken: string,
+  ): Promise<readonly MetaInstagramCredential[]> {
+    const url = this.url('/me/accounts');
+    url.searchParams.set(
+      'fields',
+      'id,name,access_token,tasks,instagram_business_account{id,username,name,profile_picture_url,account_type}',
+    );
+    url.searchParams.set('limit', '100');
+    const response = object(await this.request(url, { headers: this.auth(userToken) }));
+    if (!Array.isArray(response.data))
+      throw new MetaGraphError(
+        'PROVIDER',
+        'META_RESPONSE_INVALID',
+        'Meta response omitted Page data.',
+      );
+    return response.data.flatMap((item) => {
+      const page = object(item);
+      if (!page.instagram_business_account) return [];
+      const account = object(page.instagram_business_account);
+      return [
+        {
+          id: requiredText(account.id, 'instagram_business_account.id'),
+          username: typeof account.username === 'string' ? account.username : null,
+          name:
+            typeof account.name === 'string' && account.name
+              ? account.name
+              : typeof account.username === 'string' && account.username
+                ? account.username
+                : 'Instagram professional account',
+          profilePictureUrl:
+            typeof account.profile_picture_url === 'string' ? account.profile_picture_url : null,
+          accountType: typeof account.account_type === 'string' ? account.account_type : null,
+          pageId: requiredText(page.id, 'page.id'),
+          pageName: requiredText(page.name, 'page.name'),
+          pageAccessToken: requiredText(page.access_token, 'page.access_token'),
+          pageTasks: Array.isArray(page.tasks)
+            ? page.tasks.filter((task): task is string => typeof task === 'string')
+            : [],
+        },
+      ];
+    });
+  }
+
   public async inspectPermissions(userToken: string): Promise<readonly string[]> {
     const url = this.url('/me/permissions');
     const response = object(await this.request(url, { headers: this.auth(userToken) }));
@@ -240,6 +297,104 @@ export class MetaMessengerClient {
     url.searchParams.set('fields', 'id,name');
     const response = object(await this.request(url, { headers: this.auth(pageToken) }));
     return { id: requiredText(response.id, 'id'), name: requiredText(response.name, 'name') };
+  }
+
+  public async verifyInstagramAccount(
+    instagramAccountId: string,
+    pageToken: string,
+  ): Promise<{
+    id: string;
+    username: string | null;
+    name: string | null;
+    accountType: string | null;
+  }> {
+    const url = this.url(`/${encodeURIComponent(instagramAccountId)}`);
+    url.searchParams.set('fields', 'id,username,name,account_type');
+    const response = object(await this.request(url, { headers: this.auth(pageToken) }));
+    return {
+      id: requiredText(response.id, 'id'),
+      username: typeof response.username === 'string' ? response.username : null,
+      name: typeof response.name === 'string' ? response.name : null,
+      accountType: typeof response.account_type === 'string' ? response.account_type : null,
+    };
+  }
+
+  public async subscribeInstagramAccount(
+    instagramAccountId: string,
+    pageToken: string,
+    fields: readonly string[],
+  ): Promise<void> {
+    const url = this.url(`/${encodeURIComponent(instagramAccountId)}/subscribed_apps`);
+    url.searchParams.set('subscribed_fields', fields.join(','));
+    await this.request(url, { method: 'POST', headers: this.auth(pageToken) });
+  }
+
+  public async unsubscribeInstagramAccount(
+    instagramAccountId: string,
+    pageToken: string,
+  ): Promise<void> {
+    await this.request(this.url(`/${encodeURIComponent(instagramAccountId)}/subscribed_apps`), {
+      method: 'DELETE',
+      headers: this.auth(pageToken),
+    });
+  }
+
+  public async inspectInstagramSubscription(
+    instagramAccountId: string,
+    pageToken: string,
+  ): Promise<{ subscribed: boolean; fields: readonly string[] }> {
+    const response = object(
+      await this.request(this.url(`/${encodeURIComponent(instagramAccountId)}/subscribed_apps`), {
+        headers: this.auth(pageToken),
+      }),
+    );
+    const data = Array.isArray(response.data) ? response.data.map(object) : [];
+    const ownSubscription = data.find((item) => item.id === this.config.appId);
+    return {
+      subscribed: Boolean(ownSubscription),
+      fields: Array.isArray(ownSubscription?.subscribed_fields)
+        ? ownSubscription.subscribed_fields.filter(
+            (field): field is string => typeof field === 'string',
+          )
+        : [],
+    };
+  }
+
+  public async listInstagramConversations(
+    instagramAccountId: string,
+    pageToken: string,
+    after?: string,
+  ): Promise<MetaConversationPage> {
+    const url = this.url(`/${encodeURIComponent(instagramAccountId)}/conversations`);
+    url.searchParams.set('platform', 'instagram');
+    url.searchParams.set('fields', 'id,participants');
+    // One conversation per durable checkpoint prevents a crash from skipping
+    // the remainder of a provider page after partially importing messages.
+    url.searchParams.set('limit', '1');
+    if (after) url.searchParams.set('after', after);
+    const response = object(await this.request(url, { headers: this.auth(pageToken) }));
+    const data = Array.isArray(response.data) ? response.data : [];
+    const paging = object(response.paging ?? {});
+    const cursors = object(paging.cursors ?? {});
+    return {
+      conversations: data.map((item) => {
+        const conversation = object(item);
+        const participants = object(conversation.participants ?? {});
+        return {
+          id: requiredText(conversation.id, 'conversation.id'),
+          participants: Array.isArray(participants.data)
+            ? participants.data.map((participant) => {
+                const value = object(participant);
+                return {
+                  id: requiredText(value.id, 'participant.id'),
+                  name: typeof value.name === 'string' ? value.name : null,
+                };
+              })
+            : [],
+        };
+      }),
+      nextCursor: typeof cursors.after === 'string' ? cursors.after : null,
+    };
   }
 
   public async listConversations(
@@ -322,6 +477,30 @@ export class MetaMessengerClient {
       recipient: { id: recipientId },
       messaging_type: 'RESPONSE',
       message: { text: message },
+    });
+  }
+
+  public async sendInstagramText(
+    instagramAccountId: string,
+    recipientId: string,
+    message: string,
+    pageToken: string,
+  ) {
+    return this.send(instagramAccountId, pageToken, {
+      recipient: { id: recipientId },
+      message: { text: message },
+    });
+  }
+
+  public async sendInstagramImage(
+    instagramAccountId: string,
+    recipientId: string,
+    imageUrl: string,
+    pageToken: string,
+  ) {
+    return this.send(instagramAccountId, pageToken, {
+      recipient: { id: recipientId },
+      message: { attachment: { type: 'image', payload: { url: imageUrl } } },
     });
   }
 

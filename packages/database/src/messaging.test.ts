@@ -842,3 +842,113 @@ describe('Facebook messaging provider boundaries', () => {
     expect(state.rows[0]!.last_inbound_at.toISOString()).toBe(currentActivity.toISOString());
   });
 });
+
+describe('Instagram messaging provider boundaries', () => {
+  it('deduplicates account-scoped webhooks and prevents duplicate active conversations', async () => {
+    const accountId = `ig-${crypto.randomUUID()}`;
+    const instagramConnectionId = await messaging.createChannelConnection(database.db, {
+      organizationId,
+      channelKind: 'INSTAGRAM',
+      displayName: 'Instagram Test Account',
+      status: 'ACTIVE',
+    });
+    await sql`update messaging.channel_connections set provider_account_id=${accountId} where id=${instagramConnectionId}`.execute(
+      database.db,
+    );
+    const entry = [
+      {
+        id: accountId,
+        messaging: [
+          {
+            sender: { id: 'igsid-1' },
+            recipient: { id: accountId },
+            timestamp: Date.now(),
+            message: { mid: `ig-mid.${crypto.randomUUID()}`, text: 'হ্যালো Instagram 👋' },
+          },
+        ],
+      },
+    ];
+    expect(await messaging.acceptInstagramWebhookEvents(database.db, entry)).toMatchObject({
+      accepted: 1,
+      duplicates: 0,
+    });
+    expect(await messaging.acceptInstagramWebhookEvents(database.db, entry)).toMatchObject({
+      accepted: 0,
+      duplicates: 1,
+    });
+    const resolved = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        messaging.resolveInstagramConversation(database.db, {
+          organizationId,
+          connectionId: instagramConnectionId,
+          senderId: 'igsid-1',
+        }),
+      ),
+    );
+    expect(new Set(resolved.map((item) => item.conversationId)).size).toBe(1);
+    expect(new Set(resolved.map((item) => item.contactIdentityId)).size).toBe(1);
+  });
+
+  it('enforces Instagram authorization and the customer-initiated reply window', async () => {
+    const accountId = `ig-${crypto.randomUUID()}`;
+    const pageId = `page-${crypto.randomUUID()}`;
+    const connectionId = await messaging.createChannelConnection(database.db, {
+      organizationId,
+      channelKind: 'INSTAGRAM',
+      displayName: 'Instagram Window Account',
+      status: 'ACTIVE',
+      capabilities: { attachments: true },
+    });
+    const integration = await sql<{
+      id: string;
+    }>`insert into integrations.integrations(organization_id,provider_code,integration_type,name,status) values(${organizationId},'META_INSTAGRAM','MESSAGING','Instagram Direct','ACTIVE') on conflict(organization_id,provider_code,integration_type) do update set status='ACTIVE' returning id`.execute(
+      database.db,
+    );
+    const account = await sql<{
+      id: string;
+    }>`insert into integrations.integration_accounts(organization_id,integration_id,external_account_id,name,status,non_secret_config,secret_reference) values(${organizationId},${integration.rows[0]!.id},${accountId},'Instagram Window Account','ACTIVE','{}'::jsonb,'TEST') returning id`.execute(
+      database.db,
+    );
+    await sql`update messaging.channel_connections set provider_account_id=${accountId},integration_account_id=${account.rows[0]!.id} where id=${connectionId}`.execute(
+      database.db,
+    );
+    await sql`insert into messaging.instagram_connection_state(organization_id,channel_connection_id,integration_account_id,app_id,page_id,instagram_account_id,username,account_type,status,graph_api_version,granted_scopes,required_scopes,page_tasks,subscribed_fields,permission_review_status,webhook_subscription_healthy,credential_healthy) values(${organizationId},${connectionId},${account.rows[0]!.id},'ig-app',${pageId},${accountId},'maevelle','BUSINESS','CONNECTED','v26.0',${[...messaging.INSTAGRAM_REQUIRED_SCOPES]}::text[],${[...messaging.INSTAGRAM_REQUIRED_SCOPES]}::text[],array['MESSAGING'],${[...messaging.INSTAGRAM_WEBHOOK_FIELDS]}::text[],'ADVANCED_ACCESS_CONFIRMED',true,true)`.execute(
+      database.db,
+    );
+    const identity = await messaging.createContactIdentity(database.db, {
+      organizationId,
+      channelConnectionId: connectionId,
+      channelKind: 'INSTAGRAM',
+      externalSubjectId: 'igsid-window',
+    });
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: connectionId,
+      contactId: identity.contactId,
+      contactIdentityId: identity.identityId,
+    });
+    await expect(
+      messaging.prepareOutboundMessage(database.db, {
+        actor: actor(),
+        access: 'ALL',
+        conversationId,
+        idempotencyKey: crypto.randomUUID(),
+        clientMessageId: crypto.randomUUID(),
+        text: 'Unsolicited',
+      }),
+    ).rejects.toMatchObject({ code: 'REPLY_WINDOW_CLOSED' });
+    await sql`update messaging.conversations set reply_eligible_until=now()+interval '1 hour' where id=${conversationId}`.execute(
+      database.db,
+    );
+    await expect(
+      messaging.prepareOutboundMessage(database.db, {
+        actor: actor(),
+        access: 'ALL',
+        conversationId,
+        idempotencyKey: crypto.randomUUID(),
+        clientMessageId: crypto.randomUUID(),
+        text: 'Eligible reply',
+      }),
+    ).resolves.toMatchObject({ replayed: false });
+  });
+});

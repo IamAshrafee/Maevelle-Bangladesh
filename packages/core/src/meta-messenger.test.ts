@@ -91,4 +91,65 @@ describe('MetaMessengerClient', () => {
       new MetaMessengerClient(config, fetcher).verifyPage('page-1', 'page-token'),
     ).rejects.toMatchObject({ category: 'TEMPORARY', code: 'META_HTTP_503' });
   });
+
+  it('discovers only professional Instagram accounts proven by the authorized Page response', async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 'page-1',
+                name: 'Maevelle Page',
+                access_token: 'page-token',
+                tasks: ['MESSAGING'],
+                instagram_business_account: {
+                  id: 'ig-1',
+                  username: 'maevelle',
+                  name: 'Maevelle Bangladesh',
+                  account_type: 'BUSINESS',
+                },
+              },
+              { id: 'page-2', name: 'Page without Instagram', access_token: 'other', tasks: [] },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    ) as typeof fetch;
+
+    await expect(
+      new MetaMessengerClient(config, fetcher).listInstagramAccounts('user-token'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: 'ig-1',
+        username: 'maevelle',
+        pageId: 'page-1',
+        pageAccessToken: 'page-token',
+        pageTasks: ['MESSAGING'],
+      }),
+    ]);
+  });
+
+  it('sends Instagram text without Messenger-only messaging_type', async () => {
+    const fetcher = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toContain('/v26.0/ig-1/messages');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        recipient: { id: 'igsid-1' },
+        message: { text: 'হ্যালো Instagram' },
+      });
+      return new Response(JSON.stringify({ recipient_id: 'igsid-1', message_id: 'ig-mid-1' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    await expect(
+      new MetaMessengerClient(config, fetcher).sendInstagramText(
+        'ig-1',
+        'igsid-1',
+        'হ্যালো Instagram',
+        'page-token',
+      ),
+    ).resolves.toEqual({ recipientId: 'igsid-1', messageId: 'ig-mid-1' });
+  });
 });

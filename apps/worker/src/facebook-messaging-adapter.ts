@@ -183,8 +183,8 @@ async function validateRemoteUrl(value: string): Promise<URL> {
     url.username ||
     url.password ||
     url.port ||
-    !['.fbcdn.net', '.fbsbx.com', '.facebook.com', '.facebook.net'].some((suffix) =>
-      host.endsWith(suffix),
+    !['.fbcdn.net', '.fbsbx.com', '.facebook.com', '.facebook.net', '.cdninstagram.com'].some(
+      (suffix) => host.endsWith(suffix),
     )
   )
     throw new Error('UNSAFE_MEDIA_URL');
@@ -246,18 +246,19 @@ async function fetchProviderImage(
   throw new Error('MEDIA_DOWNLOAD_FAILED');
 }
 
-async function importProviderImage(input: {
+export async function importMetaProviderImage(input: {
   database: DatabaseClient;
   storage: ObjectStoragePort;
   organizationId: string;
   url: string;
   fetcher: typeof fetch;
+  fileName?: string;
 }) {
   const downloaded = await fetchProviderImage(input.url, input.fetcher);
   const session = await createMediaUploadSession(input.database.db, {
     organizationId: input.organizationId,
     uploadSource: 'API',
-    originalFilename: 'facebook-image',
+    originalFilename: input.fileName ?? 'meta-image',
     declaredMimeType: downloaded.mimeType,
     declaredByteSize: downloaded.content.length,
     visibility: 'PRIVATE',
@@ -289,7 +290,7 @@ async function importProviderImage(input: {
   return {
     mediaAssetId: session.assetId,
     mimeType: downloaded.mimeType,
-    fileName: 'facebook-image',
+    fileName: input.fileName ?? 'meta-image',
     byteSize: downloaded.content.length,
   };
 }
@@ -367,12 +368,13 @@ export async function processFacebookProviderEvents(
                   try {
                     return {
                       ...base,
-                      ...(await importProviderImage({
+                      ...(await importMetaProviderImage({
                         database,
                         storage: media.storage,
                         organizationId: event.organizationId,
                         url: providerPayload.url,
                         fetcher: media.fetcher ?? fetch,
+                        fileName: 'facebook-image',
                       })),
                     };
                   } catch {

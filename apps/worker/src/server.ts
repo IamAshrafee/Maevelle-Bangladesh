@@ -96,6 +96,20 @@ export async function startWorker(config: RuntimeConfig = loadConfig()): Promise
           },
         }
       : {}),
+    ...(config.instagramAppId &&
+    config.instagramAppSecret &&
+    config.instagramGraphApiVersion &&
+    config.instagramOAuthCallbackUrl
+      ? {
+          instagramConfig: {
+            appId: config.instagramAppId,
+            appSecret: config.instagramAppSecret,
+            graphApiVersion: config.instagramGraphApiVersion,
+            oauthCallbackUrl: config.instagramOAuthCallbackUrl,
+            requestTimeoutMs: config.metaRequestTimeoutMs,
+          },
+        }
+      : {}),
   });
 
   try {
