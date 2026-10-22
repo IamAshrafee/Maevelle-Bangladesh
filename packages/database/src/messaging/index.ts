@@ -88,6 +88,10 @@ interface ConversationRow {
   channel_kind: ChannelKind;
   channel_connection_id: string;
   channel_name: string;
+  channel_status: string;
+  facebook_status: string | null;
+  facebook_granted_scopes: string[] | null;
+  facebook_page_tasks: string[] | null;
   capability_snapshot: Record<string, unknown>;
   contact_id: string;
   contact_name: string | null;
@@ -172,7 +176,12 @@ function mapConversation(row: ConversationRow): ConversationDetail {
     capabilities: capabilities(
       row.capability_snapshot,
       row.channel_kind !== 'FACEBOOK' ||
-        (row.reply_eligible_until !== null && row.reply_eligible_until > new Date()),
+        (['CONNECTED', 'LIMITED_PERMISSIONS'].includes(row.facebook_status ?? '') &&
+          ['ACTIVE', 'DEGRADED'].includes(row.channel_status) &&
+          (row.facebook_granted_scopes ?? []).includes('pages_messaging') &&
+          (row.facebook_page_tasks ?? []).includes('MESSAGING') &&
+          row.reply_eligible_until !== null &&
+          row.reply_eligible_until > new Date()),
     ),
     version: row.version,
     subject: row.subject,
@@ -183,7 +192,8 @@ function mapConversation(row: ConversationRow): ConversationDetail {
 }
 
 const conversationSelect = sql.raw(`
-  select c.id, cc.channel_kind, c.channel_connection_id, cc.display_name channel_name,
+  select c.id, cc.channel_kind, c.channel_connection_id, cc.display_name channel_name,cc.status channel_status,
+    facebook.status facebook_status,facebook.granted_scopes facebook_granted_scopes,facebook.page_tasks facebook_page_tasks,
     cc.capability_snapshot, c.contact_id, ct.display_name contact_name, ct.customer_id,
     c.status, c.priority, c.assignee_membership_id, am.display_name assignee_name,
     c.last_message_sequence::text, lm.text_body last_message_text,
@@ -198,6 +208,7 @@ const conversationSelect = sql.raw(`
     follow_up.due_at follow_up_due_at
   from messaging.conversations c
   join messaging.channel_connections cc on cc.organization_id=c.organization_id and cc.id=c.channel_connection_id
+  left join messaging.facebook_connection_state facebook on facebook.organization_id=cc.organization_id and facebook.channel_connection_id=cc.id
   join messaging.contacts ct on ct.organization_id=c.organization_id and ct.id=c.contact_id
   left join iam.organization_memberships am on am.organization_id=c.organization_id and am.id=c.assignee_membership_id
   left join messaging.messages lm on lm.organization_id=c.organization_id and lm.id=c.last_message_id
@@ -896,6 +907,7 @@ export async function acceptInboundMessage(
   },
 ): Promise<{ message: MessageView; replayed: boolean }> {
   const text = input.text?.trim() ?? '';
+  const occurredAt = input.providerCreatedAt ?? new Date();
   const attachmentIds = [...new Set(input.attachmentIds ?? [])];
   const providerAttachments = input.providerAttachments ?? [];
   if (
@@ -920,7 +932,7 @@ export async function acceptInboundMessage(
       const row = conversation.rows[0];
       if (!row || row.contact_identity_id !== input.contactIdentityId)
         throw new MessagingDomainError('CONVERSATION_NOT_FOUND', 'Conversation was not found.');
-      if (row.status === 'CLOSED')
+      if (row.status === 'CLOSED' && !input.historical)
         throw new MessagingDomainError(
           'CONVERSATION_CLOSED',
           'Closed conversations cannot receive messages.',
@@ -1022,18 +1034,18 @@ export async function acceptInboundMessage(
       const allocated = await sql<{
         sequence: string;
         version: string;
-      }>`update messaging.conversations set next_message_sequence=next_message_sequence+1,last_message_sequence=next_message_sequence,status=case when status='RESOLVED' then 'OPEN' else status end,resolved_at=null,last_inbound_at=coalesce(${input.providerCreatedAt ?? new Date()},now()),updated_at=now(),version=version+1 where organization_id=${input.organizationId} and id=${input.conversationId} and status<>'CLOSED' returning (next_message_sequence-1)::text sequence,version::text`.execute(
+      }>`update messaging.conversations set next_message_sequence=next_message_sequence+1,last_message_sequence=next_message_sequence,status=case when not ${input.historical ?? false} and status='RESOLVED' then 'OPEN' else status end,resolved_at=case when not ${input.historical ?? false} then null else resolved_at end,last_inbound_at=greatest(coalesce(last_inbound_at,'-infinity'::timestamptz),${occurredAt}),updated_at=now(),version=version+1 where organization_id=${input.organizationId} and id=${input.conversationId} and (status<>'CLOSED' or ${input.historical ?? false}) returning (next_message_sequence-1)::text sequence,version::text`.execute(
         tx,
       );
       const allocation = allocated.rows[0]!;
-      if (row.status === 'RESOLVED')
+      if (row.status === 'RESOLVED' && !input.historical)
         await sql`insert into messaging.conversation_events(organization_id,conversation_id,event_type,from_value,to_value,reason)
           values(${input.organizationId},${input.conversationId},'STATUS_CHANGED',${JSON.stringify('RESOLVED')}::jsonb,${JSON.stringify('OPEN')}::jsonb,'Inbound customer message reopened the conversation.')`.execute(
           tx,
         );
       const inserted = await sql<{
         id: string;
-      }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,sender_contact_identity_id,message_type,text_body,provider_message_id,client_message_id,delivery_state,provider_created_at) values(${input.organizationId},${input.conversationId},${allocation.sequence}::bigint,'INBOUND','CONTACT',${input.contactIdentityId},${attachmentIds.length || providerAttachments.length ? (text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${text || null},${input.externalMessageId},${input.externalMessageId},'RECEIVED',${input.providerCreatedAt ?? null}) returning id`.execute(
+      }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,sender_contact_identity_id,message_type,text_body,provider_message_id,client_message_id,delivery_state,provider_created_at,created_at) values(${input.organizationId},${input.conversationId},${allocation.sequence}::bigint,'INBOUND','CONTACT',${input.contactIdentityId},${attachmentIds.length || providerAttachments.length ? (text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${text || null},${input.externalMessageId},${input.externalMessageId},'RECEIVED',${input.providerCreatedAt ?? null},${input.historical ? occurredAt : new Date()}) returning id`.execute(
         tx,
       );
       const messageId = inserted.rows[0]!.id;
@@ -1054,26 +1066,27 @@ export async function acceptInboundMessage(
           tx,
         );
       }
-      await sql`update messaging.conversations set last_message_id=${messageId},last_message_at=now() where organization_id=${input.organizationId} and id=${input.conversationId}`.execute(
+      await sql`update messaging.conversations set last_message_id=case when last_message_at is null or last_message_at<=${occurredAt} then ${messageId} else last_message_id end,last_message_at=greatest(coalesce(last_message_at,'-infinity'::timestamptz),${occurredAt}) where organization_id=${input.organizationId} and id=${input.conversationId}`.execute(
         tx,
       );
       await sql`insert into messaging.message_external_references(organization_id,message_id,channel_connection_id,reference_type,external_id) values(${input.organizationId},${messageId},${row.channel_connection_id},'PROVIDER_MESSAGE',${input.externalMessageId})`.execute(
         tx,
       );
-      await appendRealtimeEvent(tx as Db, {
-        organizationId: input.organizationId,
-        audienceType: 'ORGANIZATION',
-        conversationId: input.conversationId,
-        eventType: 'messaging.message.created.v1',
-        aggregateId: messageId,
-        aggregateVersion: allocation.sequence,
-        payload: {
+      if (!input.historical)
+        await appendRealtimeEvent(tx as Db, {
+          organizationId: input.organizationId,
+          audienceType: 'ORGANIZATION',
           conversationId: input.conversationId,
-          messageId,
-          sequence: allocation.sequence,
-          direction: 'INBOUND',
-        },
-      });
+          eventType: 'messaging.message.created.v1',
+          aggregateId: messageId,
+          aggregateVersion: allocation.sequence,
+          payload: {
+            conversationId: input.conversationId,
+            messageId,
+            sequence: allocation.sequence,
+            direction: 'INBOUND',
+          },
+        });
       await sql`insert into platform.outbox_events(organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at) values(${input.organizationId},${input.historical ? 'messaging.historical_message.imported.v1' : 'messaging.inbound_message.created.v1'},1,'messaging.message',${messageId},${allocation.sequence}::bigint,${JSON.stringify({ conversationId: input.conversationId, messageId, sequence: allocation.sequence, direction: 'INBOUND', historical: input.historical ?? false })}::jsonb,now())`.execute(
         tx,
       );

@@ -1,6 +1,7 @@
 'use client';
 
-import { Archive, Check, Clock3, Plus, Save, Settings2, UsersRound } from 'lucide-react';
+import { Archive, Check, Clock3, Facebook, MessageSquare, Plus, Save, Settings2, UsersRound } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type {
   AgentAvailabilityView,
@@ -15,10 +16,12 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 import * as api from './api';
+import { FacebookSettingsPanel } from './facebook/facebook-settings-panel';
 import { useMessaging } from './messaging-provider';
 import type { AssignmentRuleView, ChannelSettingsView, NotificationPreferenceView } from './types';
 
 type SettingsTab = 'channels' | 'hours' | 'routing' | 'content' | 'notifications';
+type ChannelSubTab = 'website' | 'facebook';
 const weekdays = [
   ['sun', 'Sunday'],
   ['mon', 'Monday'],
@@ -31,7 +34,10 @@ const weekdays = [
 
 export function SettingsView() {
   const messaging = useMessaging();
-  const [tab, setTab] = useState<SettingsTab>('channels');
+  const searchParams = useSearchParams();
+  const hasFacebookParam = Boolean(searchParams.get('facebook'));
+  const [tab, setTab] = useState<SettingsTab>(hasFacebookParam ? 'channels' : 'channels');
+  const [channelSubTab, setChannelSubTab] = useState<ChannelSubTab>(hasFacebookParam ? 'facebook' : 'website');
   const [channels, setChannels] = useState<readonly ChannelSettingsView[]>([]);
   const [hours, setHours] = useState<BusinessHoursView | null>(null);
   const [rules, setRules] = useState<readonly AssignmentRuleView[]>([]);
@@ -107,7 +113,34 @@ export function SettingsView() {
           </div>
         ) : null}
         {state === 'ready' && tab === 'channels' ? (
-          <Channels channels={channels} onReload={load} />
+          <div className="space-y-5">
+            <div className="flex gap-1 rounded-xl border border-border bg-card p-1 max-w-sm">
+              <Button
+                variant={channelSubTab === 'website' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="flex-1 text-xs gap-1.5"
+                onClick={() => setChannelSubTab('website')}
+              >
+                <MessageSquare className="size-3.5" />
+                Website Live Chat
+              </Button>
+              <Button
+                variant={channelSubTab === 'facebook' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="flex-1 text-xs gap-1.5"
+                onClick={() => setChannelSubTab('facebook')}
+              >
+                <Facebook className="size-3.5 text-[#1877f2]" />
+                Facebook Messenger
+              </Button>
+            </div>
+
+            {channelSubTab === 'website' ? (
+              <Channels channels={channels} onReload={load} />
+            ) : (
+              <FacebookSettingsPanel />
+            )}
+          </div>
         ) : null}
         {state === 'ready' && tab === 'hours' && hours ? (
           <BusinessHours value={hours} onChange={setHours} onReload={load} />

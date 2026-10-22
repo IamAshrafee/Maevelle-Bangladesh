@@ -319,6 +319,7 @@ export type FacebookConnectionStatus =
   | 'CONNECTED'
   | 'LIMITED_PERMISSIONS'
   | 'WEBHOOK_INCOMPLETE'
+  | 'ROUTING_UNVERIFIED'
   | 'NEEDS_REAUTHORIZATION'
   | 'SUSPENDED'
   | 'DISCONNECTED'
@@ -349,6 +350,8 @@ export interface FacebookConnectionView {
   readonly graphApiVersion: string;
   readonly grantedScopes: readonly string[];
   readonly missingScopes: readonly string[];
+  readonly permissionReviewStatus:
+    'UNKNOWN' | 'DEVELOPMENT_ONLY' | 'APP_REVIEW_PENDING' | 'ADVANCED_ACCESS_CONFIRMED';
   readonly subscribedFields: readonly string[];
   readonly webhookSubscriptionHealthy: boolean;
   readonly credentialHealthy: boolean;
@@ -358,6 +361,18 @@ export interface FacebookConnectionView {
   readonly lastVerifiedAt: string | null;
   readonly lastErrorCode: string | null;
   readonly disconnectedAt: string | null;
+  readonly readiness: {
+    readonly authorization: 'READY' | 'INCOMPLETE' | 'NEEDS_REAUTHORIZATION';
+    readonly webhook: 'READY' | 'NOT_SUBSCRIBED' | 'UNHEALTHY';
+    readonly routing: 'UNVERIFIED' | 'OWNER_CONFIRMED' | 'CONFLICT';
+    readonly inbound: 'UNVERIFIED' | 'OBSERVED';
+    readonly outbound: 'UNVERIFIED' | 'OBSERVED';
+    readonly history:
+      'NOT_STARTED' | 'IN_PROGRESS' | 'PROVIDER_EXHAUSTED' | 'FAILED' | 'UNAVAILABLE';
+    readonly operational: 'NOT_RUN' | 'PASSED' | 'FAILED';
+    readonly isOperational: boolean;
+    readonly blockers: readonly string[];
+  };
   readonly version: string;
 }
 
@@ -383,10 +398,12 @@ export interface FacebookReplyEligibility {
     | 'WINDOW_CLOSED'
     | 'CONNECTION_UNAVAILABLE'
     | 'PERMISSION_MISSING'
+    | 'ACTIVATION_INCOMPLETE'
     | 'UNSUPPORTED_CONTENT';
   readonly eligibleUntil: string | null;
   readonly supportedAttachmentMimeTypes: readonly string[];
-  readonly nextAction: 'REPLY' | 'WAIT_FOR_CUSTOMER' | 'REAUTHORIZE' | 'CONTACT_UNAVAILABLE';
+  readonly nextAction:
+    'REPLY' | 'WAIT_FOR_CUSTOMER' | 'REAUTHORIZE' | 'REVIEW_ACTIVATION' | 'CONTACT_UNAVAILABLE';
 }
 
 export interface FacebookSyncView {
@@ -395,9 +412,13 @@ export interface FacebookSyncView {
   readonly status: 'PENDING' | 'PROCESSING' | 'PAUSED' | 'COMPLETED' | 'FAILED';
   readonly importedConversations: number;
   readonly importedMessages: number;
+  readonly duplicateMessages: number;
+  readonly attachmentFailures: number;
+  readonly coverageStatus: 'UNKNOWN' | 'PARTIAL' | 'PROVIDER_EXHAUSTED' | 'UNAVAILABLE';
   readonly errorCount: number;
   readonly lastErrorCode: string | null;
   readonly startedAt: string | null;
   readonly completedAt: string | null;
+  readonly lastSuccessfulAt: string | null;
   readonly updatedAt: string;
 }

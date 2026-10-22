@@ -1,10 +1,12 @@
 'use client';
 
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   ChevronDown,
   Clock3,
+  Facebook,
   ImagePlus,
   Loader2,
   PanelRightOpen,
@@ -14,11 +16,13 @@ import {
   UserRoundCheck,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { formatDistanceToNowStrict } from 'date-fns';
 
 import type {
   AgentAvailabilityView,
   ConversationPriority,
   ConversationStatus,
+  FacebookReplyEligibility,
   SavedReplyView,
 } from '@maevelle/contracts/messaging';
 
@@ -118,11 +122,20 @@ export function ConversationPane({ onOpenContext }: { onOpenContext: () => void 
         <div className="min-w-0 flex-1 basis-[calc(100%-3rem)] sm:basis-auto">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-sm font-semibold">
-              {conversation.contact.displayName ?? 'Website visitor'}
+              {conversation.contact.displayName ?? (conversation.channel.kind === 'FACEBOOK' ? 'Facebook user' : 'Website visitor')}
             </h2>
-            <Badge variant="secondary" className="shrink-0 text-[10px]">
-              {conversation.channel.kind.toLowerCase()}
-            </Badge>
+            {conversation.channel.kind === 'FACEBOOK' ? (
+              <Badge
+                variant="secondary"
+                className="shrink-0 text-[10px] bg-[#1877f2]/10 text-[#1877f2] border-[#1877f2]/20 gap-1 font-medium"
+              >
+                <Facebook className="size-2.5" /> Messenger
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="shrink-0 text-[10px]">
+                {conversation.channel.kind.toLowerCase()}
+              </Badge>
+            )}
           </div>
           <p className="truncate text-xs text-muted-foreground">
             {conversation.subject ?? conversation.channel.name} ·{' '}
@@ -273,7 +286,22 @@ function Composer({
   const [attachmentIds, setAttachmentIds] = useState<readonly string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [replyQuery, setReplyQuery] = useState('');
+  const [eligibility, setEligibility] = useState<FacebookReplyEligibility | null>(null);
   const conversation = messaging.conversation;
+  const isFacebook = conversation?.channel.kind === 'FACEBOOK';
+
+  useEffect(() => {
+    if (!isFacebook || !conversation?.id) {
+      setEligibility(null);
+      return;
+    }
+    const controller = new AbortController();
+    api
+      .getFacebookReplyEligibility(conversation.id, controller.signal)
+      .then((data) => setEligibility(data))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [conversation?.id, isFacebook, messaging.messages.length]);
 
   const filteredReplies = savedReplies.filter((reply) => {
     if (!replyQuery.trim()) return true;
@@ -290,11 +318,24 @@ function Composer({
     if (sent) {
       setText('');
       setAttachmentIds([]);
+      if (isFacebook && conversation) {
+        void api.getFacebookReplyEligibility(conversation.id).then(setEligibility).catch(() => undefined);
+      }
+    } else if (isFacebook && conversation) {
+      void api.getFacebookReplyEligibility(conversation.id).then(setEligibility).catch(() => undefined);
     }
   }
 
   async function attach(file: File) {
     if (!conversation) return;
+    if (isFacebook && attachmentIds.length >= 1) {
+      toast.add({
+        title: 'Single image limit',
+        description: 'Facebook Messenger Send API policy allows at most one image attachment per outgoing message.',
+        type: 'warning',
+      });
+      return;
+    }
     setUploading(true);
     try {
       const assetId = await api.uploadStaffAttachment(conversation.id, file);
@@ -311,6 +352,9 @@ function Composer({
     }
   }
 
+  // Check if Facebook reply policy prohibits sending
+  const isFacebookBlocked = isFacebook && eligibility !== null && !eligibility.allowed;
+
   if (!canReply)
     return (
       <div className="shrink-0 border-t border-border bg-card p-3 text-center text-sm text-muted-foreground">
@@ -320,20 +364,76 @@ function Composer({
 
   return (
     <div className="shrink-0 border-t border-border bg-card p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]">
-      <div className="mx-auto max-w-3xl rounded-xl border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring/40">
+      {/* Facebook Policy / Reply Window Banner */}
+      {isFacebook && eligibility ? (
+        <div className="mx-auto max-w-3xl mb-2.5">
+          {eligibility.allowed ? (
+            <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary-subtle px-3 py-1.5 text-xs text-foreground">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Facebook className="size-3.5 text-[#1877f2]" />
+                Messenger 24-hour reply window active
+              </span>
+              {eligibility.eligibleUntil ? (
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                  Expires {formatDistanceToNowStrict(new Date(eligibility.eligibleUntil), { addSuffix: true })}
+                </span>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-foreground space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 font-semibold text-warning">
+                  <AlertTriangle className="size-4 shrink-0" />
+                  <span>
+                    {eligibility.reason === 'WINDOW_CLOSED'
+                      ? 'Messenger 24-Hour Reply Window Closed'
+                      : eligibility.reason === 'NO_CUSTOMER_MESSAGE'
+                        ? 'Awaiting Customer Message'
+                        : eligibility.reason === 'PERMISSION_MISSING'
+                          ? 'Facebook Permission Missing'
+                          : eligibility.reason === 'ACTIVATION_INCOMPLETE'
+                            ? 'Channel Activation Pending'
+                            : 'Replies Unavailable'}
+                  </span>
+                </div>
+                <Badge variant="outline" className="text-[10px] font-mono border-warning/40 bg-card text-foreground">
+                  {eligibility.nextAction}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {eligibility.reason === 'WINDOW_CLOSED'
+                  ? 'Meta platform policy permits standard replies within 24 hours of the customer’s latest message. A new message from the customer is required to send standard replies.'
+                  : eligibility.reason === 'NO_CUSTOMER_MESSAGE'
+                    ? 'A customer must send an initial message to this Facebook Page to open the 24-hour reply window.'
+                    : eligibility.reason === 'PERMISSION_MISSING'
+                      ? 'Page messaging permissions are missing or the token expired. Please reauthorize in Channel Settings.'
+                      : eligibility.reason === 'ACTIVATION_INCOMPLETE'
+                        ? 'Facebook webhook subscription or Conversation Routing review is required in Channel Settings.'
+                        : 'Messenger sending is restricted under current connection status.'}
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div className={cn(
+        'mx-auto max-w-3xl rounded-xl border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-ring/40 transition-opacity',
+        isFacebookBlocked && 'opacity-60 bg-muted/30 cursor-not-allowed',
+      )}>
         <Textarea
           value={text}
+          disabled={isFacebookBlocked}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
+            if (event.key === 'Enter' && !event.shiftKey && !isFacebookBlocked) {
               event.preventDefault();
               void submit();
             }
           }}
-          placeholder="Reply to the customer…"
+          placeholder={isFacebookBlocked ? 'Replies restricted by Messenger policy…' : 'Reply to the customer…'}
           aria-label="Customer reply"
-          maxLength={conversation?.capabilities.maximumTextLength ?? 10000}
-          className="min-h-20 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+          maxLength={conversation?.capabilities.maximumTextLength ?? (isFacebook ? 2000 : 10000)}
+          className="min-h-20 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 disabled:cursor-not-allowed"
         />
         {attachmentIds.length ? (
           <div className="mb-2 flex flex-wrap gap-1">
@@ -348,9 +448,10 @@ function Composer({
               <Button
                 variant="ghost"
                 size="icon"
-                disabled={uploading}
+                disabled={uploading || isFacebookBlocked || (isFacebook && attachmentIds.length >= 1)}
                 render={<label />}
                 aria-label="Attach image"
+                title={isFacebook && attachmentIds.length >= 1 ? 'Only 1 image allowed per Facebook message' : 'Attach image'}
               >
                 {uploading ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -359,7 +460,8 @@ function Composer({
                 )}
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept={isFacebook ? (eligibility?.supportedAttachmentMimeTypes.join(',') || 'image/jpeg,image/png,image/webp') : 'image/jpeg,image/png,image/webp'}
+                  disabled={uploading || isFacebookBlocked || (isFacebook && attachmentIds.length >= 1)}
                   className="sr-only"
                   onChange={(event) => {
                     const file = event.target.files?.[0];

@@ -200,7 +200,23 @@ function DeliveryStatusIndicator({
           className="flex items-center gap-1 font-mono text-[10px] tabular-nums text-destructive"
           title={delivery.failureCode ?? 'Delivery failed'}
         >
-          <AlertCircle className="size-3" /> Failed
+          <AlertCircle className="size-3" />
+          {delivery.failureCode === 'REPLY_WINDOW_CLOSED'
+            ? 'Reply window closed'
+            : delivery.failureCode === 'CONNECTION_DISCONNECTED'
+              ? 'Disconnected'
+              : delivery.failureCode === 'PERMISSION_MISSING'
+                ? 'Permission missing'
+                : 'Failed'}
+        </span>
+      );
+    case 'UNKNOWN':
+      return (
+        <span
+          className="flex items-center gap-1 font-mono text-[10px] tabular-nums text-warning"
+          title="Provider send confirmation pending reconciliation"
+        >
+          <AlertCircle className="size-3" /> Meta confirmation pending
         </span>
       );
     case 'SENDING':
@@ -250,15 +266,21 @@ export function TranscriptMessageItem({
     );
   }
 
+  const isProviderPage =
+    message.sender.type === 'PROVIDER' ||
+    (message.sender as { role?: string }).role === 'PAGE';
   const senderName =
-    message.sender.name ?? (outbound ? 'Maevelle Staff' : 'Customer');
-  const initials = senderName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase() || (outbound ? 'M' : 'C');
+    message.sender.name ??
+    (isProviderPage ? 'Facebook Page' : outbound ? 'Maevelle Staff' : 'Customer');
+  const initials = isProviderPage
+    ? 'FB'
+    : senderName
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((word) => word[0])
+        .join('')
+        .toUpperCase() || (outbound ? 'M' : 'C');
 
   return (
     <Message
@@ -273,9 +295,11 @@ export function TranscriptMessageItem({
       <MessageAvatar
         className={cn(
           'size-7 text-xs font-semibold select-none',
-          outbound
-            ? 'bg-primary/15 text-primary border border-primary/20'
-            : 'bg-muted text-muted-foreground border border-border',
+          isProviderPage
+            ? 'bg-[#1877f2]/10 text-[#1877f2] border border-[#1877f2]/30'
+            : outbound
+              ? 'bg-primary/15 text-primary border border-primary/20'
+              : 'bg-muted text-muted-foreground border border-border',
         )}
         aria-hidden="true"
       >

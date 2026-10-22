@@ -5,7 +5,7 @@ import { MetaMessengerClient } from './meta-messenger.js';
 const config = {
   appId: 'app-1',
   appSecret: 'secret-secret-secret',
-  graphApiVersion: 'v27.0',
+  graphApiVersion: 'v26.0',
   oauthCallbackUrl: 'https://admin.example.test/integrations/messaging/facebook/oauth/callback',
   requestTimeoutMs: 1_000,
 };
@@ -15,7 +15,7 @@ describe('MetaMessengerClient', () => {
     const url = new URL(
       new MetaMessengerClient(config).authorizationUrl('state-token', ['pages_messaging']),
     );
-    expect(url.pathname).toBe('/v27.0/dialog/oauth');
+    expect(url.pathname).toBe('/v26.0/dialog/oauth');
     expect(url.searchParams.get('state')).toBe('state-token');
     expect(url.searchParams.get('scope')).toBe('pages_messaging');
     expect(url.toString()).not.toContain(config.appSecret);
@@ -60,5 +60,35 @@ describe('MetaMessengerClient', () => {
       code: 'META_190_463',
       requestId: 'trace',
     });
+  });
+
+  it('inspects the current app subscription without mutating the Page', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.method ?? 'GET').toBe('GET');
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: config.appId,
+              subscribed_fields: ['messages', 'message_reads'],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch;
+
+    await expect(
+      new MetaMessengerClient(config, fetcher).inspectPageSubscription('page-1', 'page-token'),
+    ).resolves.toEqual({ subscribed: true, fields: ['messages', 'message_reads'] });
+  });
+
+  it('treats an unstructured provider outage as retryable', async () => {
+    const fetcher = vi.fn(
+      async () => new Response('upstream unavailable', { status: 503 }),
+    ) as typeof fetch;
+    await expect(
+      new MetaMessengerClient(config, fetcher).verifyPage('page-1', 'page-token'),
+    ).rejects.toMatchObject({ category: 'TEMPORARY', code: 'META_HTTP_503' });
   });
 });

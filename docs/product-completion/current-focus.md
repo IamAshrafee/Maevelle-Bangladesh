@@ -7,49 +7,35 @@ operations experience.
 
 ## Evidence state
 
-`PHASE 06 BACKEND CODE COMPLETE / LIVE META ACTIVATION PENDING`
+## Evidence state
 
-Commit `f257397` completes the repository-controlled Facebook Messenger backend:
+`PHASE 07 FRONTEND CODE COMPLETE / LIVE META ACTIVATION PENDING`
 
-- organization/member-bound OAuth state and authorized Page discovery;
-- encrypted Page credentials, atomic reauthorization and global Page ownership;
-- exact-body HMAC webhook verification with durable batched event intake;
-- idempotent Page-scoped contact/conversation resolution into the canonical inbox;
-- text, Unicode/Bangla, quick reply, postback, image, echo, delivery and read handling;
-- server-authoritative 24-hour reply eligibility and worker revalidation;
-- Send API text and reusable private-image delivery with conservative unknown outcomes;
-- safe connection health, diagnostics, suspend/resume, disconnect and audit behavior; and
-- resumable, bounded historical conversation/message synchronization.
+Phase 07 completes the Facebook Messenger administrative and operator frontend integration:
 
-The complete architecture, API catalog, security controls, activation steps,
-limitations and Phase 07 handoff are recorded in
-`docs/architecture/messaging/16-phase-06-completion.md`.
+- Multi-step connection wizard with scope disclosures, availability preflight, popup/redirect OAuth flow, and eligible Page discovery;
+- Connection overview dashboard with 5-pillar readiness matrix (Auth, Webhook, Routing, Historical Sync, Operational);
+- Realtime permission and webhook verification card with token security status;
+- Phase 06.5 safety assurance dialog enforcing owner coexistence reviews and optimistic concurrency for webhook subscription;
+- Historical conversation synchronization controls, non-destructive data preservation guarantees, and live counters;
+- Safe non-destructive disconnect modal preserving canonical transcripts;
+- Unified inbox integration with channel filtering, Facebook badges, and Page-scoped customer display names;
+- Policy-aware reply composer enforcing Meta's 24-hour reply window, countdown timers, 1-image maximum restriction, and MIME type validation;
+- Full responsiveness across mobile, tablet, and desktop viewports utilizing Tailwind CSS v4 semantic tokens and Base UI / shadcn primitives.
+
+The complete architecture, operational flows, safety controls, and verification evidence are recorded in
+`docs/architecture/messaging/17-phase-07-completion.md`.
 
 ## Verification completed
 
-- Rebuilt the disposable PostgreSQL volume and migrated development and test
-  databases through the edited `3200_messaging_core` baseline.
-- Repository TypeScript build and focused ESLint passed.
-- Sixteen focused database/core/API/worker tests and the focused Meta configuration
-  test passed.
-- Secret scanning and `git diff --check` passed.
-- A full Docker rebuild was attempted, but package installation timed out against
-  the npm registry before compilation; it is not recorded as passed.
-- The broad hardening script retains unrelated pre-existing Admin/chart findings;
-  it did not report the new Facebook route.
-- No live Meta credential, Page, approved recipient or public callback was
-  available, so live webhook and customer-message behavior remains unverified.
+- Repository TypeScript build passed (`pnpm typecheck`).
+- Focused ESLint passed with 0 errors and 0 warnings (`pnpm --filter @maevelle/admin exec eslint components/messaging`).
+- Database messaging tests passed (`pnpm vitest run packages/database/src/messaging.test.ts` - 12/12 passed).
+- Core Meta messenger tests passed (`pnpm vitest run packages/core/src/meta-messenger.test.ts` - 5/5 passed).
+- API test suite passed (`pnpm vitest run apps/api` - 11 files, 39 tests passed).
+- Config validation tests passed (`pnpm vitest run packages/config/src/index.test.ts` - 12/12 passed).
 
 ## Next implementation boundary
 
-- Build Phase 07's responsive Admin connection flow: availability, OAuth launch,
-  callback result/Page selection, connection health, diagnostics, reauthorization,
-  suspend/resume, disconnect and historical-sync progress.
-- Keep Meta access tokens out of all browser contracts and preserve server-side
-  authorization, reply eligibility and optimistic concurrency as authoritative.
-- In parallel, the owner must prepare a Meta app and Page, current supported Graph
-  version, business/domain verification where required, App Review/Advanced Access,
-  public HTTPS webhook/OAuth callbacks and an approved test recipient.
-- Do not claim deployment or live Messenger completion until those external gates
-  and the activation checklist have been verified against current official Meta
-  documentation.
+- Phase 08 External Meta activation: complete Meta App Review, Business Verification, configure public HTTPS webhooks, and execute live end-to-end message delivery verification.
+- Live Meta communication requires production Meta App credentials, webhook verify token matching, and Advanced Access permissions.

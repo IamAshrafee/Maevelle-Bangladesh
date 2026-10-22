@@ -737,7 +737,21 @@ describe('Facebook messaging provider boundaries', () => {
       status: 'ACTIVE',
       capabilities: { attachments: true },
     });
-    await sql`update messaging.channel_connections set provider_account_id=${`page-${crypto.randomUUID()}`} where id=${facebookConnectionId}`.execute(
+    const pageId = `page-${crypto.randomUUID()}`;
+    const integration = await sql<{
+      id: string;
+    }>`insert into integrations.integrations(organization_id,provider_code,integration_type,name,status) values(${organizationId},'META_MESSENGER','MESSAGING','Facebook Messenger','ACTIVE') on conflict(organization_id,provider_code,integration_type) do update set status='ACTIVE' returning id`.execute(
+      database.db,
+    );
+    const account = await sql<{
+      id: string;
+    }>`insert into integrations.integration_accounts(organization_id,integration_id,external_account_id,name,status,non_secret_config,secret_reference) values(${organizationId},${integration.rows[0]!.id},${pageId},'Window Page','ACTIVE','{}'::jsonb,'TEST') returning id`.execute(
+      database.db,
+    );
+    await sql`update messaging.channel_connections set provider_account_id=${pageId},integration_account_id=${account.rows[0]!.id} where id=${facebookConnectionId}`.execute(
+      database.db,
+    );
+    await sql`insert into messaging.facebook_connection_state(organization_id,channel_connection_id,integration_account_id,app_id,page_id,status,graph_api_version,granted_scopes,required_scopes,page_tasks,subscribed_fields,permission_review_status,routing_status,webhook_subscription_healthy,credential_healthy) values(${organizationId},${facebookConnectionId},${account.rows[0]!.id},'test-app',${pageId},'CONNECTED','v26.0',${[...messaging.FACEBOOK_REQUIRED_SCOPES]}::text[],${[...messaging.FACEBOOK_REQUIRED_SCOPES]}::text[],array['MESSAGING'],${[...messaging.FACEBOOK_WEBHOOK_FIELDS]}::text[],'ADVANCED_ACCESS_CONFIRMED','OWNER_CONFIRMED',true,true)`.execute(
       database.db,
     );
     const identity = await messaging.createContactIdentity(database.db, {
@@ -775,5 +789,56 @@ describe('Facebook messaging provider boundaries', () => {
         text: 'Allowed',
       }),
     ).resolves.toMatchObject({ replayed: false });
+  });
+
+  it('imports historical messages without reopening or reordering an existing conversation', async () => {
+    const facebookConnectionId = await messaging.createChannelConnection(database.db, {
+      organizationId,
+      channelKind: 'FACEBOOK',
+      displayName: 'Historical Page',
+      status: 'ACTIVE',
+    });
+    await sql`update messaging.channel_connections set provider_account_id=${`page-${crypto.randomUUID()}`} where id=${facebookConnectionId}`.execute(
+      database.db,
+    );
+    const senderId = `psid-history-${crypto.randomUUID()}`;
+    const identity = await messaging.createContactIdentity(database.db, {
+      organizationId,
+      channelConnectionId: facebookConnectionId,
+      channelKind: 'FACEBOOK',
+      externalSubjectId: senderId,
+    });
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: facebookConnectionId,
+      contactId: identity.contactId,
+      contactIdentityId: identity.identityId,
+    });
+    const currentActivity = new Date('2026-10-20T12:00:00.000Z');
+    await sql`update messaging.conversations set status='RESOLVED',resolved_at=now(),last_message_at=${currentActivity},last_inbound_at=${currentActivity} where id=${conversationId}`.execute(
+      database.db,
+    );
+
+    await messaging.ingestHistoricalFacebookMessage(database.db, {
+      organizationId,
+      connectionId: facebookConnectionId,
+      senderId,
+      fromPage: false,
+      messageId: `history-${crypto.randomUUID()}`,
+      text: 'An older customer message',
+      providerCreatedAt: new Date('2025-01-01T00:00:00.000Z'),
+      providerConversationId: `thread-${crypto.randomUUID()}`,
+    });
+
+    const state = await sql<{
+      status: string;
+      last_message_at: Date;
+      last_inbound_at: Date;
+    }>`select status,last_message_at,last_inbound_at from messaging.conversations where id=${conversationId}`.execute(
+      database.db,
+    );
+    expect(state.rows[0]).toMatchObject({ status: 'RESOLVED' });
+    expect(state.rows[0]!.last_message_at.toISOString()).toBe(currentActivity.toISOString());
+    expect(state.rows[0]!.last_inbound_at.toISOString()).toBe(currentActivity.toISOString());
   });
 });

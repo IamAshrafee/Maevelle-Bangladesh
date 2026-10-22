@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckSquare2, ChevronsUp, Filter, MessageCircle, Search, Star, X } from 'lucide-react';
+import { CheckSquare2, ChevronsUp, Facebook, Filter, MessageCircle, Search, Star, X } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNowStrict } from 'date-fns';
 
@@ -301,7 +301,7 @@ export function InboxPane() {
                         <span
                           className={cn('truncate text-sm', item.unreadCount && 'font-semibold')}
                         >
-                          {item.contact.displayName ?? 'Website visitor'}
+                          {item.contact.displayName ?? (item.channel.kind === 'FACEBOOK' ? 'Facebook user' : 'Website visitor')}
                         </span>
                         {item.isStarred ? (
                           <Star className="size-3.5 shrink-0 fill-warning text-warning" />
@@ -333,9 +333,18 @@ export function InboxPane() {
                         <ChevronsUp className="size-3" /> {item.priority.toLowerCase()}
                       </Badge>
                     ) : null}
-                    <Badge variant="secondary" className="text-[10px]">
-                      <MessageCircle className="size-3" /> {item.channel.kind.toLowerCase()}
-                    </Badge>
+                    {item.channel.kind === 'FACEBOOK' ? (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] bg-[#1877f2]/10 text-[#1877f2] border-[#1877f2]/20 gap-1 font-medium"
+                      >
+                        <Facebook className="size-2.5" /> Messenger
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[10px]">
+                        <MessageCircle className="size-3" /> {item.channel.kind.toLowerCase()}
+                      </Badge>
+                    )}
                     {item.followUp ? (
                       <Badge
                         variant="outline"
@@ -431,7 +440,10 @@ export function InboxPane() {
                   ),
                 )
               }
-              options={[{ value: 'WEBSITE', label: 'Website' }]}
+              options={[
+                { value: 'WEBSITE', label: 'Website' },
+                { value: 'FACEBOOK', label: 'Facebook Messenger' },
+              ]}
             />
             <FilterSelect
               label="Follow-up"

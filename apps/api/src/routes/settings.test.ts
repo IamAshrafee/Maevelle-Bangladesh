@@ -72,22 +72,14 @@ describe('Settings API route authentication and RBAC', () => {
     await app.close();
   });
 
-  it('rejects invalid module path on GET /admin/settings/:module with 404', async () => {
+  it('rejects unauthenticated requests to GET /admin/settings/:module with 403', async () => {
     const app = fastify();
     const database = createMockDatabase();
-    const orgId = crypto.randomUUID();
-    const userId = crypto.randomUUID();
-
-    // Mock authorized session
     const mockAuth = {
       api: {
-        getSession: vi.fn().mockResolvedValue({
-          user: { id: userId },
-        }),
+        getSession: vi.fn().mockResolvedValue(null),
       },
     } as any;
-
-    // Fastify will check the context, if we mock context or route
     const config = parseConfig({
       ...process.env,
       DATABASE_URL: 'postgresql://maevelle_dev:maevelle_dev_password@localhost:5434/maevelle_dev',
@@ -102,8 +94,7 @@ describe('Settings API route authentication and RBAC', () => {
       url: '/admin/settings/unknown-module-xyz',
     });
 
-    // Unauthenticated or unknown module returns error
-    expect([403, 404]).toContain(response.statusCode);
+    expect(response.statusCode).toBe(403);
     await app.close();
   });
 

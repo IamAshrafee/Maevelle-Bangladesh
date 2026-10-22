@@ -374,6 +374,10 @@ export function parseConfig(environment: Environment): RuntimeConfig {
     );
   if (metaGraphApiVersion && !/^v\d+\.0$/.test(metaGraphApiVersion))
     throw new ConfigurationError('META_GRAPH_API_VERSION must use the form vNN.0.');
+  if (metaGraphApiVersion && metaGraphApiVersion !== 'v26.0')
+    throw new ConfigurationError(
+      'META_GRAPH_API_VERSION must be v26.0 until a reviewed compatibility update changes the supported version.',
+    );
   if (metaAppSecret && metaAppSecret.length < 16)
     throw new ConfigurationError('META_APP_SECRET must be at least 16 characters.');
   if (metaWebhookVerifyToken && metaWebhookVerifyToken.length < 24)

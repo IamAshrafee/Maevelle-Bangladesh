@@ -60,6 +60,24 @@ export function createFacebookMessagingAdapter(input: {
             code: 'FACEBOOK_CONNECTION_UNAVAILABLE',
             safeMessage: 'Facebook connection is unavailable.',
           };
+        if (
+          !credential.grantedScopes.includes('pages_messaging') ||
+          !credential.pageTasks.includes('MESSAGING')
+        )
+          return {
+            type: 'PERMANENT_FAILURE',
+            code: 'FACEBOOK_MESSAGING_PERMISSION_MISSING',
+            safeMessage: 'Facebook Page messaging permission must be renewed.',
+          };
+        if (
+          !credential.webhookSubscriptionHealthy ||
+          credential.routingStatus !== 'OWNER_CONFIRMED'
+        )
+          return {
+            type: 'PERMANENT_FAILURE',
+            code: 'FACEBOOK_ACTIVATION_INCOMPLETE',
+            safeMessage: 'Facebook subscription and Conversation Routing review are incomplete.',
+          };
         const context = await facebook.loadFacebookDeliveryContext(input.database.db, {
           organizationId: command.organizationId,
           connectionId: command.connectionId,
@@ -469,6 +487,19 @@ export async function processFacebookHistoricalSyncs(input: {
       connectionId: job.connectionId,
       encryptionKey: input.encryptionKey,
     });
+    const missingHistoryScope = facebook.FACEBOOK_REQUIRED_SCOPES.find(
+      (scope) => !credential.grantedScopes.includes(scope),
+    );
+    if (missingHistoryScope) {
+      await facebook.failFacebookSyncJob(
+        input.database.db,
+        job.id,
+        `MISSING_${missingHistoryScope.toUpperCase()}`,
+        false,
+        true,
+      );
+      return 1;
+    }
     let cursor = job.cursor ?? {};
     let conversationId = cursor.conversationId;
     let participantId = cursor.participantId;
@@ -514,6 +545,7 @@ export async function processFacebookHistoricalSyncs(input: {
       cursor.messageAfter,
     );
     let importedMessages = 0;
+    let duplicateMessages = 0;
     for (const message of [...messages.messages].sort((left, right) =>
       left.createdAt.localeCompare(right.createdAt),
     )) {
@@ -541,6 +573,7 @@ export async function processFacebookHistoricalSyncs(input: {
         ...(attachments.length ? { attachments } : {}),
       });
       if (inserted) importedMessages++;
+      else duplicateMessages++;
     }
     if (messages.nextCursor)
       await facebook.advanceFacebookSyncJob(input.database.db, {
@@ -548,6 +581,7 @@ export async function processFacebookHistoricalSyncs(input: {
         cursor: { ...cursor, messageAfter: messages.nextCursor },
         importedConversations,
         importedMessages,
+        duplicateMessages,
       });
     else if (cursor.endAfterCurrent)
       await facebook.advanceFacebookSyncJob(input.database.db, {
@@ -555,6 +589,7 @@ export async function processFacebookHistoricalSyncs(input: {
         cursor: null,
         importedConversations,
         importedMessages,
+        duplicateMessages,
         complete: true,
       });
     else
@@ -563,15 +598,24 @@ export async function processFacebookHistoricalSyncs(input: {
         cursor: cursor.conversationAfter ? { conversationAfter: cursor.conversationAfter } : null,
         importedConversations,
         importedMessages,
+        duplicateMessages,
       });
     return 1;
   } catch (error) {
     const graph = error instanceof MetaGraphError ? error : undefined;
+    if (graph)
+      await facebook.recordFacebookProviderFailure(input.database.db, {
+        organizationId: job.organizationId,
+        connectionId: job.connectionId,
+        category: graph.category,
+        code: graph.code,
+      });
     await facebook.failFacebookSyncJob(
       input.database.db,
       job.id,
       graph?.code ?? 'SYNC_FAILED',
       Boolean(graph && ['RATE_LIMIT', 'TEMPORARY'].includes(graph.category)),
+      Boolean(graph && ['AUTHENTICATION', 'PERMISSION'].includes(graph.category)),
     );
     return 1;
   }

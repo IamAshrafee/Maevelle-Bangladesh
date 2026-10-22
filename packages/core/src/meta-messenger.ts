@@ -83,7 +83,16 @@ function requiredText(value: unknown, field: string): string {
 }
 
 function classifyError(payload: unknown, status: number, retryAfter?: string): MetaGraphError {
-  const error = object(object(payload).error);
+  const root = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+  const rawError = (root as Record<string, unknown>).error;
+  if (!rawError || typeof rawError !== 'object' || Array.isArray(rawError))
+    return new MetaGraphError(
+      status === 429 ? 'RATE_LIMIT' : status >= 500 ? 'TEMPORARY' : 'PROVIDER',
+      `META_HTTP_${status}`,
+      'Meta request failed.',
+      retryAfter,
+    );
+  const error = rawError as Record<string, unknown>;
   const code = typeof error.code === 'number' ? error.code : 0;
   const subcode = typeof error.error_subcode === 'number' ? error.error_subcode : 0;
   const safeCode = `META_${code}${subcode ? `_${subcode}` : ''}`;
@@ -196,6 +205,31 @@ export class MetaMessengerClient {
       method: 'DELETE',
       headers: this.auth(pageToken),
     });
+  }
+
+  public async inspectPageSubscription(
+    pageId: string,
+    pageToken: string,
+  ): Promise<{ subscribed: boolean; fields: readonly string[] }> {
+    const url = this.url(`/${encodeURIComponent(pageId)}/subscribed_apps`);
+    const response = object(await this.request(url, { headers: this.auth(pageToken) }));
+    if (!Array.isArray(response.data))
+      throw new MetaGraphError(
+        'PROVIDER',
+        'META_RESPONSE_INVALID',
+        'Meta response omitted subscription data.',
+      );
+    const ownSubscription = response.data
+      .map((item) => object(item))
+      .find((item) => item.id === this.config.appId);
+    return {
+      subscribed: Boolean(ownSubscription),
+      fields: Array.isArray(ownSubscription?.subscribed_fields)
+        ? ownSubscription.subscribed_fields.filter(
+            (field): field is string => typeof field === 'string',
+          )
+        : [],
+    };
   }
 
   public async verifyPage(

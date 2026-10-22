@@ -459,3 +459,5 @@ export async function uploadStaffAttachment(
   }
   throw new Error('Attachment processing is taking longer than expected. Try again shortly.');
 }
+
+export * from './facebook/facebook-api';

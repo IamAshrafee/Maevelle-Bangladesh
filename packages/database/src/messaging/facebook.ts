@@ -129,7 +129,7 @@ export async function failFacebookOAuthAttempt(db: Db, state: string, code: stri
 
 export async function getFacebookOAuthStatus(
   db: Db,
-  input: { organizationId: string; membershipId: string; attemptId: string },
+  input: { organizationId: string; actorId: string; membershipId: string; attemptId: string },
 ): Promise<FacebookOAuthStatusView> {
   const found = await sql<{
     id: string;
@@ -137,7 +137,7 @@ export async function getFacebookOAuthStatus(
     eligible_pages: unknown;
     error_code: string | null;
     expires_at: Date;
-  }>`select id,case when status in('PENDING','AUTHORIZED','CONSUMED','FAILED') then status else 'EXPIRED' end status,eligible_pages,error_code,expires_at from messaging.facebook_oauth_attempts where organization_id=${input.organizationId} and membership_id=${input.membershipId} and id=${input.attemptId}::uuid`.execute(
+  }>`select id,case when status in('PENDING','AUTHORIZED','CONSUMED','FAILED') then status else 'EXPIRED' end status,eligible_pages,error_code,expires_at from messaging.facebook_oauth_attempts where organization_id=${input.organizationId} and actor_id=${input.actorId} and membership_id=${input.membershipId} and id=${input.attemptId}::uuid`.execute(
     db,
   );
   const row = found.rows[0];
@@ -176,7 +176,7 @@ export async function connectFacebookPage(
       authorization_key_id: string | null;
       granted_scopes: string[];
       expires_at: Date;
-    }>`select status,authorization_ciphertext,authorization_key_id,granted_scopes,expires_at from messaging.facebook_oauth_attempts where organization_id=${input.organizationId} and membership_id=${input.membershipId} and id=${input.attemptId}::uuid for update`.execute(
+    }>`select status,authorization_ciphertext,authorization_key_id,granted_scopes,expires_at from messaging.facebook_oauth_attempts where organization_id=${input.organizationId} and actor_id=${input.actorId} and membership_id=${input.membershipId} and id=${input.attemptId}::uuid for update`.execute(
       tx,
     );
     const attempt = found.rows[0];
@@ -211,11 +211,15 @@ export async function connectFacebookPage(
     const missingScopes = input.requiredScopes.filter(
       (scope) => !attempt.granted_scopes.includes(scope),
     );
+    await sql`select pg_advisory_xact_lock(hashtextextended(${`facebook:${input.appId}:${page.id}`},0))`.execute(
+      tx,
+    );
     const prior = await sql<{
       organization_id: string;
       channel_connection_id: string;
       integration_account_id: string;
-    }>`select organization_id,channel_connection_id,integration_account_id from messaging.facebook_connection_state where app_id=${input.appId} and page_id=${page.id} for update`.execute(
+      status: string;
+    }>`select organization_id,channel_connection_id,integration_account_id,status from messaging.facebook_connection_state where app_id=${input.appId} and page_id=${page.id} for update`.execute(
       tx,
     );
     if (prior.rows[0]) {
@@ -234,7 +238,7 @@ export async function connectFacebookPage(
       await sql`update messaging.channel_connections set display_name=${page.name},status=${missingScopes.length ? 'DEGRADED' : 'ACTIVE'},last_error_code=null,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and id=${prior.rows[0].channel_connection_id}`.execute(
         tx,
       );
-      await sql`update messaging.facebook_connection_state set status=${status},graph_api_version=${input.graphApiVersion},granted_scopes=${attempt.granted_scopes}::text[],required_scopes=${input.requiredScopes}::text[],page_tasks=${page.tasks}::text[],credential_healthy=true,webhook_subscription_healthy=false,subscribed_fields='{}',disconnected_at=null,disconnected_by_actor_id=null,last_error_code=null,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${prior.rows[0].channel_connection_id}`.execute(
+      await sql`update messaging.facebook_connection_state set status=${status},graph_api_version=${input.graphApiVersion},granted_scopes=${attempt.granted_scopes}::text[],required_scopes=${input.requiredScopes}::text[],page_tasks=${page.tasks}::text[],credential_healthy=true,webhook_subscription_healthy=false,subscribed_fields='{}',routing_status=case when ${prior.rows[0].status}='DISCONNECTED' then 'UNVERIFIED' else routing_status end,routing_confirmed_at=case when ${prior.rows[0].status}='DISCONNECTED' then null else routing_confirmed_at end,routing_confirmed_by_actor_id=case when ${prior.rows[0].status}='DISCONNECTED' then null else routing_confirmed_by_actor_id end,operational_status=case when ${prior.rows[0].status}='DISCONNECTED' then 'NOT_RUN' else operational_status end,operational_checked_at=case when ${prior.rows[0].status}='DISCONNECTED' then null else operational_checked_at end,operational_checked_by_actor_id=case when ${prior.rows[0].status}='DISCONNECTED' then null else operational_checked_by_actor_id end,disconnected_at=null,disconnected_by_actor_id=null,last_error_code=null,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${prior.rows[0].channel_connection_id}`.execute(
         tx,
       );
       await sql`update messaging.facebook_oauth_attempts set status='CONSUMED',authorization_ciphertext=null,authorization_key_id=null,consumed_at=now(),updated_at=now() where id=${input.attemptId}::uuid`.execute(
@@ -297,7 +301,13 @@ interface ConnectionRow {
   graph_api_version: string;
   granted_scopes: string[];
   required_scopes: string[];
+  page_tasks: string[];
   subscribed_fields: string[];
+  permission_review_status: FacebookConnectionView['permissionReviewStatus'];
+  routing_status: FacebookConnectionView['readiness']['routing'];
+  operational_status: FacebookConnectionView['readiness']['operational'];
+  sync_status: FacebookSyncView['status'] | null;
+  coverage_status: FacebookSyncView['coverageStatus'] | null;
   webhook_subscription_healthy: boolean;
   credential_healthy: boolean;
   last_webhook_at: Date | null;
@@ -309,6 +319,38 @@ interface ConnectionRow {
   version: string;
 }
 function mapConnection(row: ConnectionRow): FacebookConnectionView {
+  const missingScopes = row.required_scopes.filter((scope) => !row.granted_scopes.includes(scope));
+  const authorization = !row.credential_healthy
+    ? 'NEEDS_REAUTHORIZATION'
+    : missingScopes.length || !row.page_tasks.includes('MESSAGING')
+      ? 'INCOMPLETE'
+      : 'READY';
+  const webhook = row.webhook_subscription_healthy
+    ? 'READY'
+    : row.last_verified_at
+      ? 'UNHEALTHY'
+      : 'NOT_SUBSCRIBED';
+  const history =
+    row.coverage_status === 'PROVIDER_EXHAUSTED'
+      ? 'PROVIDER_EXHAUSTED'
+      : row.coverage_status === 'UNAVAILABLE'
+        ? 'UNAVAILABLE'
+        : row.sync_status === 'FAILED'
+          ? 'FAILED'
+          : row.sync_status === 'PENDING' || row.sync_status === 'PROCESSING'
+            ? 'IN_PROGRESS'
+            : 'NOT_STARTED';
+  const blockers = [
+    ...(authorization !== 'READY' ? [`AUTHORIZATION_${authorization}`] : []),
+    ...(row.permission_review_status !== 'ADVANCED_ACCESS_CONFIRMED'
+      ? ['ADVANCED_ACCESS_NOT_CONFIRMED']
+      : []),
+    ...(webhook !== 'READY' ? [`WEBHOOK_${webhook}`] : []),
+    ...(row.routing_status !== 'OWNER_CONFIRMED' ? [`ROUTING_${row.routing_status}`] : []),
+    ...(!row.last_inbound_at ? ['INBOUND_NOT_OBSERVED'] : []),
+    ...(!row.last_outbound_at ? ['OUTBOUND_NOT_OBSERVED'] : []),
+    ...(row.operational_status !== 'PASSED' ? [`OPERATIONAL_${row.operational_status}`] : []),
+  ];
   return {
     id: row.id,
     pageId: row.provider_account_id,
@@ -316,7 +358,8 @@ function mapConnection(row: ConnectionRow): FacebookConnectionView {
     status: row.facebook_status,
     graphApiVersion: row.graph_api_version,
     grantedScopes: row.granted_scopes,
-    missingScopes: row.required_scopes.filter((scope) => !row.granted_scopes.includes(scope)),
+    missingScopes,
+    permissionReviewStatus: row.permission_review_status,
     subscribedFields: row.subscribed_fields,
     webhookSubscriptionHealthy: row.webhook_subscription_healthy,
     credentialHealthy: row.credential_healthy,
@@ -326,11 +369,22 @@ function mapConnection(row: ConnectionRow): FacebookConnectionView {
     lastVerifiedAt: iso(row.last_verified_at),
     lastErrorCode: row.last_error_code,
     disconnectedAt: iso(row.disconnected_at),
+    readiness: {
+      authorization,
+      webhook,
+      routing: row.routing_status,
+      inbound: row.last_inbound_at ? 'OBSERVED' : 'UNVERIFIED',
+      outbound: row.last_outbound_at ? 'OBSERVED' : 'UNVERIFIED',
+      history,
+      operational: row.operational_status,
+      isOperational: blockers.length === 0,
+      blockers,
+    },
     version: row.version,
   };
 }
 const connectionSelect = sql.raw(
-  `select cc.id,cc.provider_account_id,cc.display_name,state.status facebook_status,state.graph_api_version,state.granted_scopes,state.required_scopes,state.subscribed_fields,state.webhook_subscription_healthy,state.credential_healthy,state.last_webhook_at,state.last_inbound_at,state.last_outbound_at,state.last_verified_at,state.last_error_code,state.disconnected_at,state.version::text from messaging.channel_connections cc join messaging.facebook_connection_state state on state.organization_id=cc.organization_id and state.channel_connection_id=cc.id`,
+  `select cc.id,cc.provider_account_id,cc.display_name,state.status facebook_status,state.graph_api_version,state.granted_scopes,state.required_scopes,state.page_tasks,state.subscribed_fields,state.permission_review_status,state.routing_status,state.operational_status,state.webhook_subscription_healthy,state.credential_healthy,state.last_webhook_at,state.last_inbound_at,state.last_outbound_at,state.last_verified_at,state.last_error_code,state.disconnected_at,state.version::text,sync.status sync_status,sync.coverage_status from messaging.channel_connections cc join messaging.facebook_connection_state state on state.organization_id=cc.organization_id and state.channel_connection_id=cc.id left join lateral(select job.status,job.coverage_status from messaging.facebook_sync_jobs job where job.organization_id=cc.organization_id and job.channel_connection_id=cc.id order by job.created_at desc limit 1) sync on true`,
 );
 
 export async function listFacebookConnections(
@@ -367,6 +421,10 @@ export async function loadFacebookCredential(
   pageAccessToken: string;
   graphApiVersion: string;
   status: string;
+  grantedScopes: readonly string[];
+  pageTasks: readonly string[];
+  webhookSubscriptionHealthy: boolean;
+  routingStatus: FacebookConnectionView['readiness']['routing'];
   lastInboundAt: Date | null;
 }> {
   const organizationScope = input.organizationId
@@ -378,10 +436,14 @@ export async function loadFacebookCredential(
     display_name: string;
     graph_api_version: string;
     facebook_status: string;
+    granted_scopes: string[];
+    page_tasks: string[];
+    webhook_subscription_healthy: boolean;
+    routing_status: FacebookConnectionView['readiness']['routing'];
     secret_ciphertext: string;
     secret_key_id: string;
     last_inbound_at: Date | null;
-  }>`select cc.organization_id,cc.provider_account_id,cc.display_name,state.graph_api_version,state.status facebook_status,credential.secret_ciphertext,credential.secret_key_id,state.last_inbound_at from messaging.channel_connections cc join messaging.facebook_connection_state state on state.organization_id=cc.organization_id and state.channel_connection_id=cc.id join integrations.provider_credentials credential on credential.organization_id=state.organization_id and credential.integration_account_id=state.integration_account_id where cc.id=${input.connectionId}::uuid${organizationScope}`.execute(
+  }>`select cc.organization_id,cc.provider_account_id,cc.display_name,state.graph_api_version,state.status facebook_status,state.granted_scopes,state.page_tasks,state.webhook_subscription_healthy,state.routing_status,credential.secret_ciphertext,credential.secret_key_id,state.last_inbound_at from messaging.channel_connections cc join messaging.facebook_connection_state state on state.organization_id=cc.organization_id and state.channel_connection_id=cc.id join integrations.provider_credentials credential on credential.organization_id=state.organization_id and credential.integration_account_id=state.integration_account_id where cc.id=${input.connectionId}::uuid${organizationScope}`.execute(
     db,
   );
   const row = result.rows[0];
@@ -400,6 +462,10 @@ export async function loadFacebookCredential(
     pageAccessToken: credential.pageAccessToken,
     graphApiVersion: row.graph_api_version,
     status: row.facebook_status,
+    grantedScopes: row.granted_scopes,
+    pageTasks: row.page_tasks,
+    webhookSubscriptionHealthy: row.webhook_subscription_healthy,
+    routingStatus: row.routing_status,
     lastInboundAt: row.last_inbound_at,
   };
 }
@@ -477,15 +543,87 @@ export async function markFacebookSubscription(
     healthy: boolean;
     fields: readonly string[];
     errorCode?: string;
+    actorId?: string;
   },
 ): Promise<void> {
   await db.transaction().execute(async (tx) => {
-    await sql`update messaging.facebook_connection_state set status=case when ${input.healthy} then case when required_scopes<@granted_scopes then 'CONNECTED' else 'LIMITED_PERMISSIONS' end else 'WEBHOOK_INCOMPLETE' end,webhook_subscription_healthy=${input.healthy},subscribed_fields=${input.fields}::text[],last_verified_at=now(),last_error_at=case when ${input.errorCode ?? null} is null then last_error_at else now() end,last_error_code=${input.errorCode ?? null},updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid`.execute(
+    await sql`update messaging.facebook_connection_state set status=case when not ${input.healthy} then 'WEBHOOK_INCOMPLETE' when routing_status<>'OWNER_CONFIRMED' then 'ROUTING_UNVERIFIED' when required_scopes<@granted_scopes then 'CONNECTED' else 'LIMITED_PERMISSIONS' end,webhook_subscription_healthy=${input.healthy},subscribed_fields=${input.fields}::text[],last_verified_at=now(),last_error_at=case when ${input.errorCode ?? null} is null then last_error_at else now() end,last_error_code=${input.errorCode ?? null},updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid`.execute(
       tx,
     );
-    await sql`update messaging.channel_connections set status=${input.healthy ? 'ACTIVE' : 'DEGRADED'},last_healthy_at=case when ${input.healthy} then now() else last_healthy_at end,last_error_at=case when ${input.healthy} then last_error_at else now() end,last_error_code=${input.errorCode ?? null},updated_at=now(),version=version+1 where organization_id=${input.organizationId} and id=${input.connectionId}::uuid`.execute(
+    await sql`update messaging.channel_connections connection set status=case when state.status='CONNECTED' then 'ACTIVE' else 'DEGRADED' end,last_healthy_at=case when state.status='CONNECTED' then now() else connection.last_healthy_at end,last_error_at=case when ${input.healthy} then connection.last_error_at else now() end,last_error_code=${input.errorCode ?? null},updated_at=now(),version=version+1 from messaging.facebook_connection_state state where connection.organization_id=${input.organizationId} and connection.id=${input.connectionId}::uuid and state.organization_id=connection.organization_id and state.channel_connection_id=connection.id`.execute(
       tx,
     );
+    if (input.actorId)
+      await appendAuditEvent(tx, {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        actorType: 'USER',
+        action: input.healthy
+          ? 'messaging.facebook.subscription_enabled'
+          : 'messaging.facebook.subscription_disabled',
+        targetType: 'messaging.channel_connection',
+        targetId: input.connectionId,
+        metadata: { fields: input.fields },
+      });
+  });
+}
+
+export async function assertFacebookConnectionVersion(
+  db: Db,
+  input: { organizationId: string; connectionId: string; expectedVersion: string },
+): Promise<void> {
+  const result =
+    await sql`select 1 from messaging.facebook_connection_state where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid and version=${input.expectedVersion}::bigint and status<>'DISCONNECTED'`.execute(
+      db,
+    );
+  if (!result.rows[0])
+    throw new MessagingDomainError(
+      'STALE_VERSION',
+      'Facebook connection changed before this request.',
+    );
+}
+
+export async function updateFacebookAssurance(
+  db: Db,
+  input: {
+    organizationId: string;
+    connectionId: string;
+    actorId: string;
+    expectedVersion: string;
+    permissionReviewStatus?: FacebookConnectionView['permissionReviewStatus'];
+    routingStatus?: FacebookConnectionView['readiness']['routing'];
+    operationalStatus?: FacebookConnectionView['readiness']['operational'];
+  },
+): Promise<void> {
+  await db.transaction().execute(async (tx) => {
+    const updated =
+      await sql`update messaging.facebook_connection_state set permission_review_status=coalesce(${input.permissionReviewStatus ?? null},permission_review_status),routing_status=coalesce(${input.routingStatus ?? null},routing_status),routing_confirmed_at=case when ${input.routingStatus ?? null}='OWNER_CONFIRMED' then now() when ${input.routingStatus ?? null} is null then routing_confirmed_at else null end,routing_confirmed_by_actor_id=case when ${input.routingStatus ?? null}='OWNER_CONFIRMED' then ${input.actorId} when ${input.routingStatus ?? null} is null then routing_confirmed_by_actor_id else null end,operational_status=coalesce(${input.operationalStatus ?? null},operational_status),operational_checked_at=case when ${input.operationalStatus ?? null} in('PASSED','FAILED') then now() when ${input.operationalStatus ?? null} is null then operational_checked_at else null end,operational_checked_by_actor_id=case when ${input.operationalStatus ?? null} in('PASSED','FAILED') then ${input.actorId} when ${input.operationalStatus ?? null} is null then operational_checked_by_actor_id else null end,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid and version=${input.expectedVersion}::bigint and status<>'DISCONNECTED' returning channel_connection_id`.execute(
+        tx,
+      );
+    if (!updated.rows[0])
+      throw new MessagingDomainError(
+        'STALE_VERSION',
+        'Facebook connection changed before this request.',
+      );
+    await sql`update messaging.facebook_connection_state set status=case when status in('SUSPENDED','NEEDS_REAUTHORIZATION','DISCONNECTED') then status when not webhook_subscription_healthy then 'WEBHOOK_INCOMPLETE' when routing_status<>'OWNER_CONFIRMED' then 'ROUTING_UNVERIFIED' when required_scopes<@granted_scopes then 'CONNECTED' else 'LIMITED_PERMISSIONS' end where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid`.execute(
+      tx,
+    );
+    await sql`update messaging.channel_connections connection set status=case when state.status='CONNECTED' then 'ACTIVE' when state.status='SUSPENDED' then 'DISABLED' else 'DEGRADED' end,updated_at=now(),version=version+1 from messaging.facebook_connection_state state where connection.organization_id=${input.organizationId} and connection.id=${input.connectionId}::uuid and state.organization_id=connection.organization_id and state.channel_connection_id=connection.id`.execute(
+      tx,
+    );
+    await appendAuditEvent(tx, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      actorType: 'USER',
+      action: 'messaging.facebook.assurance_updated',
+      targetType: 'messaging.channel_connection',
+      targetId: input.connectionId,
+      metadata: {
+        permissionReviewStatus: input.permissionReviewStatus ?? null,
+        routingStatus: input.routingStatus ?? null,
+        operationalStatus: input.operationalStatus ?? null,
+      },
+    });
   });
 }
 
@@ -541,7 +679,7 @@ export async function setFacebookConnectionSuspended(
   await db.transaction().execute(async (tx) => {
     const updated = await sql<{
       version: string;
-    }>`update messaging.facebook_connection_state state set status=case when ${input.suspended} then 'SUSPENDED' when credential_healthy and webhook_subscription_healthy and required_scopes<@granted_scopes then 'CONNECTED' when credential_healthy then 'LIMITED_PERMISSIONS' else 'NEEDS_REAUTHORIZATION' end,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid and version=${input.expectedVersion}::bigint and status<>'DISCONNECTED' returning version::text`.execute(
+    }>`update messaging.facebook_connection_state state set status=case when ${input.suspended} then 'SUSPENDED' when not credential_healthy then 'NEEDS_REAUTHORIZATION' when not webhook_subscription_healthy then 'WEBHOOK_INCOMPLETE' when routing_status<>'OWNER_CONFIRMED' then 'ROUTING_UNVERIFIED' when required_scopes<@granted_scopes then 'CONNECTED' else 'LIMITED_PERMISSIONS' end,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid and version=${input.expectedVersion}::bigint and status<>'DISCONNECTED' returning version::text`.execute(
       tx,
     );
     if (!updated.rows[0])
@@ -549,7 +687,7 @@ export async function setFacebookConnectionSuspended(
         'STALE_VERSION',
         'Facebook connection changed before this request.',
       );
-    await sql`update messaging.channel_connections set status=case when ${input.suspended} then 'DISABLED' else case when last_error_code is null then 'ACTIVE' else 'DEGRADED' end end,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and id=${input.connectionId}::uuid`.execute(
+    await sql`update messaging.channel_connections connection set status=case when state.status='SUSPENDED' then 'DISABLED' when state.status='CONNECTED' then 'ACTIVE' else 'DEGRADED' end,updated_at=now(),version=version+1 from messaging.facebook_connection_state state where connection.organization_id=${input.organizationId} and connection.id=${input.connectionId}::uuid and state.organization_id=connection.organization_id and state.channel_connection_id=connection.id`.execute(
       tx,
     );
     await appendAuditEvent(tx, {
@@ -646,7 +784,7 @@ export async function claimFacebookProviderEvent(
     payload: Record<string, unknown>;
     attempt_count: number;
     max_attempts: number;
-  }>`with candidate as(select id from messaging.provider_events where provider='META_MESSENGER' and ((status in('PENDING','RETRY_WAIT') and available_at<=now()) or (status='PROCESSING' and lease_expires_at<=now())) and attempt_count<max_attempts order by available_at,id for update skip locked limit 1) update messaging.provider_events event set status='PROCESSING',lease_owner=${workerId},lease_expires_at=now()+interval '60 seconds',attempt_count=attempt_count+1 from candidate where event.id=candidate.id returning event.id::text,event.organization_id,event.channel_connection_id,event.provider_account_id,event.event_type,event.payload,event.attempt_count,event.max_attempts`.execute(
+  }>`with candidate as(select event.id from messaging.provider_events event join messaging.facebook_connection_state state on state.organization_id=event.organization_id and state.channel_connection_id=event.channel_connection_id where event.provider='META_MESSENGER' and state.status not in('SUSPENDED','DISCONNECTED') and ((event.status in('PENDING','RETRY_WAIT') and event.available_at<=now()) or (event.status='PROCESSING' and event.lease_expires_at<=now())) and event.attempt_count<event.max_attempts order by event.available_at,event.id for update of event skip locked limit 1) update messaging.provider_events event set status='PROCESSING',lease_owner=${workerId},lease_expires_at=now()+interval '60 seconds',attempt_count=attempt_count+1 from candidate where event.id=candidate.id returning event.id::text,event.organization_id,event.channel_connection_id,event.provider_account_id,event.event_type,event.payload,event.attempt_count,event.max_attempts`.execute(
     db,
   );
   const row = result.rows[0];
@@ -672,7 +810,7 @@ export async function completeFacebookProviderEvent(
   },
 ): Promise<void> {
   const status = input.outcome === 'RETRY' ? 'RETRY_WAIT' : input.outcome;
-  await sql`update messaging.provider_events set status=${status},available_at=case when ${status}='RETRY_WAIT' then now()+interval '30 seconds' else available_at end,lease_owner=null,lease_expires_at=null,last_error_code=${input.errorCode ?? null},processed_at=case when ${status}<>'RETRY_WAIT' then now() else null end where id=${input.id}::bigint and status='PROCESSING'`.execute(
+  await sql`update messaging.provider_events set status=${status},available_at=case when ${status}='RETRY_WAIT' then now()+(least(1800,power(2,greatest(attempt_count-1,0))*5)::text||' seconds')::interval else available_at end,lease_owner=null,lease_expires_at=null,last_error_code=${input.errorCode ?? null},processed_at=case when ${status}<>'RETRY_WAIT' then now() else null end where id=${input.id}::bigint and status='PROCESSING'`.execute(
     db,
   );
 }
@@ -685,6 +823,7 @@ export async function resolveFacebookConversation(
     senderId: string;
     displayName?: string | null;
     providerConversationId?: string | null;
+    reuseClosed?: boolean;
   },
 ): Promise<{ conversationId: string; contactIdentityId: string }> {
   return db.transaction().execute(async (tx) => {
@@ -715,7 +854,7 @@ export async function resolveFacebookConversation(
       );
     let conversation = await sql<{
       id: string;
-    }>`select id from messaging.conversations where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid and contact_identity_id=${identity.rows[0]!.id} and status in('NEW','OPEN','PENDING','RESOLVED') order by created_at desc limit 1`.execute(
+    }>`select id from messaging.conversations where organization_id=${input.organizationId} and channel_connection_id=${input.connectionId}::uuid and contact_identity_id=${identity.rows[0]!.id} and (${input.reuseClosed ?? false} or status in('NEW','OPEN','PENDING','RESOLVED')) order by created_at desc limit 1`.execute(
       tx,
     );
     if (!conversation.rows[0])
@@ -792,6 +931,7 @@ export async function ingestHistoricalFacebookMessage(
     connectionId: input.connectionId,
     senderId: input.senderId,
     providerConversationId: input.providerConversationId,
+    reuseClosed: true,
   });
   if (!input.fromPage) {
     const accepted = await acceptInboundMessage(db, {
@@ -820,7 +960,7 @@ export async function ingestHistoricalFacebookMessage(
     );
     const message = await sql<{
       id: string;
-    }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,message_type,text_body,provider_message_id,delivery_state,provider_created_at,sent_at) values(${input.organizationId},${target.conversationId},${allocation.rows[0]!.sequence}::bigint,'OUTBOUND','PROVIDER',${input.attachments?.length ? (input.text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${input.text ?? null},${input.messageId},'SENT',${input.providerCreatedAt},${input.providerCreatedAt}) returning id`.execute(
+    }>`insert into messaging.messages(organization_id,conversation_id,sequence,direction,sender_type,message_type,text_body,provider_message_id,delivery_state,provider_created_at,sent_at,created_at) values(${input.organizationId},${target.conversationId},${allocation.rows[0]!.sequence}::bigint,'OUTBOUND','PROVIDER',${input.attachments?.length ? (input.text ? 'MIXED' : 'ATTACHMENT') : 'TEXT'},${input.text ?? null},${input.messageId},'SENT',${input.providerCreatedAt},${input.providerCreatedAt},${input.providerCreatedAt}) returning id`.execute(
       tx,
     );
     for (const [position, attachment] of (input.attachments ?? []).entries())
@@ -913,8 +1053,10 @@ export async function getFacebookReplyEligibility(
   const result = await sql<{
     connection_status: string;
     credential_healthy: boolean;
+    granted_scopes: string[];
+    page_tasks: string[];
     reply_eligible_until: Date | null;
-  }>`select state.status connection_status,state.credential_healthy,conversation.reply_eligible_until from messaging.conversations conversation join messaging.facebook_connection_state state on state.organization_id=conversation.organization_id and state.channel_connection_id=conversation.channel_connection_id where conversation.organization_id=${input.organizationId} and conversation.id=${input.conversationId}::uuid and conversation.channel_kind='FACEBOOK'`.execute(
+  }>`select state.status connection_status,state.credential_healthy,state.granted_scopes,state.page_tasks,conversation.reply_eligible_until from messaging.conversations conversation join messaging.facebook_connection_state state on state.organization_id=conversation.organization_id and state.channel_connection_id=conversation.channel_connection_id where conversation.organization_id=${input.organizationId} and conversation.id=${input.conversationId}::uuid and conversation.channel_kind='FACEBOOK'`.execute(
     db,
   );
   const row = result.rows[0];
@@ -923,15 +1065,22 @@ export async function getFacebookReplyEligibility(
       'CONVERSATION_NOT_FOUND',
       'Facebook conversation was not found.',
     );
+  const messagingPermissionMissing =
+    !row.granted_scopes.includes('pages_messaging') || !row.page_tasks.includes('MESSAGING');
   const unavailable =
     !row.credential_healthy ||
+    messagingPermissionMissing ||
     !['CONNECTED', 'LIMITED_PERMISSIONS'].includes(row.connection_status);
   const noMessage = !row.reply_eligible_until;
   const closed = row.reply_eligible_until !== null && row.reply_eligible_until <= new Date();
   const reason = unavailable
-    ? row.connection_status === 'NEEDS_REAUTHORIZATION'
+    ? row.connection_status === 'NEEDS_REAUTHORIZATION' || messagingPermissionMissing
       ? 'PERMISSION_MISSING'
-      : 'CONNECTION_UNAVAILABLE'
+      : ['WEBHOOK_INCOMPLETE', 'ROUTING_UNVERIFIED', 'AUTHORIZATION_PENDING'].includes(
+            row.connection_status,
+          )
+        ? 'ACTIVATION_INCOMPLETE'
+        : 'CONNECTION_UNAVAILABLE'
     : noMessage
       ? 'NO_CUSTOMER_MESSAGE'
       : closed
@@ -945,9 +1094,11 @@ export async function getFacebookReplyEligibility(
     nextAction:
       reason === 'ELIGIBLE'
         ? 'REPLY'
-        : reason === 'PERMISSION_MISSING' || reason === 'CONNECTION_UNAVAILABLE'
-          ? 'REAUTHORIZE'
-          : 'WAIT_FOR_CUSTOMER',
+        : reason === 'ACTIVATION_INCOMPLETE'
+          ? 'REVIEW_ACTIVATION'
+          : reason === 'PERMISSION_MISSING' || reason === 'CONNECTION_UNAVAILABLE'
+            ? 'REAUTHORIZE'
+            : 'WAIT_FOR_CUSTOMER',
   };
 }
 
@@ -957,9 +1108,14 @@ export async function createFacebookSyncJob(
 ): Promise<FacebookSyncView> {
   const result = await sql<{
     id: string;
-  }>`insert into messaging.facebook_sync_jobs(organization_id,channel_connection_id,requested_by_membership_id) values(${input.organizationId},${input.connectionId},${input.membershipId}) on conflict(organization_id,channel_connection_id) where status in('PENDING','PROCESSING','PAUSED') do update set updated_at=now() returning id`.execute(
+  }>`insert into messaging.facebook_sync_jobs(organization_id,channel_connection_id,requested_by_membership_id) select state.organization_id,state.channel_connection_id,${input.membershipId} from messaging.facebook_connection_state state where state.organization_id=${input.organizationId} and state.channel_connection_id=${input.connectionId}::uuid and state.credential_healthy and state.status not in('SUSPENDED','DISCONNECTED','NEEDS_REAUTHORIZATION') on conflict(organization_id,channel_connection_id) where status in('PENDING','PROCESSING','PAUSED') do update set updated_at=now() returning id`.execute(
     db,
   );
+  if (!result.rows[0])
+    throw new MessagingDomainError(
+      'CONNECTION_UNAVAILABLE',
+      'Facebook historical synchronization is unavailable for this connection.',
+    );
   return getFacebookSyncJob(db, input.organizationId, result.rows[0]!.id);
 }
 export async function getFacebookSyncJob(
@@ -973,12 +1129,16 @@ export async function getFacebookSyncJob(
     status: FacebookSyncView['status'];
     imported_conversations: number;
     imported_messages: number;
+    duplicate_messages: number;
+    attachment_failures: number;
+    coverage_status: FacebookSyncView['coverageStatus'];
     error_count: number;
     last_error_code: string | null;
     started_at: Date | null;
     completed_at: Date | null;
+    last_successful_at: Date | null;
     updated_at: Date;
-  }>`select id,channel_connection_id,status,imported_conversations,imported_messages,error_count,last_error_code,started_at,completed_at,updated_at from messaging.facebook_sync_jobs where organization_id=${organizationId} and id=${id}::uuid`.execute(
+  }>`select id,channel_connection_id,status,imported_conversations,imported_messages,duplicate_messages,attachment_failures,coverage_status,error_count,last_error_code,started_at,completed_at,last_successful_at,updated_at from messaging.facebook_sync_jobs where organization_id=${organizationId} and id=${id}::uuid`.execute(
     db,
   );
   const row = result.rows[0];
@@ -993,10 +1153,14 @@ export async function getFacebookSyncJob(
     status: row.status,
     importedConversations: row.imported_conversations,
     importedMessages: row.imported_messages,
+    duplicateMessages: row.duplicate_messages,
+    attachmentFailures: row.attachment_failures,
+    coverageStatus: row.coverage_status,
     errorCount: row.error_count,
     lastErrorCode: row.last_error_code,
     startedAt: iso(row.started_at),
     completedAt: iso(row.completed_at),
+    lastSuccessfulAt: iso(row.last_successful_at),
     updatedAt: row.updated_at.toISOString(),
   };
 }
@@ -1042,11 +1206,13 @@ export async function advanceFacebookSyncJob(
     cursor: ClaimedFacebookSyncJob['cursor'];
     importedConversations?: number;
     importedMessages?: number;
+    duplicateMessages?: number;
+    attachmentFailures?: number;
     complete?: boolean;
     errorCode?: string;
   },
 ): Promise<void> {
-  await sql`update messaging.facebook_sync_jobs set status=case when ${input.complete ?? false} then 'COMPLETED' else 'PROCESSING' end,cursor=${input.cursor ? JSON.stringify(input.cursor) : null},imported_conversations=imported_conversations+${input.importedConversations ?? 0},imported_messages=imported_messages+${input.importedMessages ?? 0},error_count=error_count+${input.errorCode ? 1 : 0},last_error_code=${input.errorCode ?? null},available_at=now()+interval '5 seconds',lease_owner=null,lease_expires_at=null,completed_at=case when ${input.complete ?? false} then now() else null end,updated_at=now() where id=${input.id}::uuid`.execute(
+  await sql`update messaging.facebook_sync_jobs set status=case when ${input.complete ?? false} then 'COMPLETED' else 'PROCESSING' end,cursor=${input.cursor ? JSON.stringify(input.cursor) : null},imported_conversations=imported_conversations+${input.importedConversations ?? 0},imported_messages=imported_messages+${input.importedMessages ?? 0},duplicate_messages=duplicate_messages+${input.duplicateMessages ?? 0},attachment_failures=attachment_failures+${input.attachmentFailures ?? 0},coverage_status=case when ${input.complete ?? false} then 'PROVIDER_EXHAUSTED' when coverage_status='UNKNOWN' then 'PARTIAL' else coverage_status end,error_count=error_count+${input.errorCode ? 1 : 0},last_error_code=${input.errorCode ?? null},available_at=now()+interval '5 seconds',lease_owner=null,lease_expires_at=null,completed_at=case when ${input.complete ?? false} then now() else null end,last_successful_at=now(),updated_at=now() where id=${input.id}::uuid`.execute(
     db,
   );
 }
@@ -1055,8 +1221,9 @@ export async function failFacebookSyncJob(
   id: string,
   code: string,
   retry: boolean,
+  unavailable = false,
 ): Promise<void> {
-  await sql`update messaging.facebook_sync_jobs set status=case when ${retry} then 'PROCESSING' else 'FAILED' end,error_count=error_count+1,last_error_code=${code},available_at=now()+interval '1 minute',lease_owner=null,lease_expires_at=null,completed_at=case when ${retry} then null else now() end,updated_at=now() where id=${id}::uuid`.execute(
+  await sql`update messaging.facebook_sync_jobs set status=case when ${retry} then 'PROCESSING' else 'FAILED' end,coverage_status=case when ${unavailable} then 'UNAVAILABLE' else coverage_status end,error_count=error_count+1,last_error_code=${code},available_at=now()+interval '1 minute',lease_owner=null,lease_expires_at=null,completed_at=case when ${retry} then null else now() end,updated_at=now() where id=${id}::uuid`.execute(
     db,
   );
 }

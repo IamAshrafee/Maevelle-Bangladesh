@@ -121,7 +121,7 @@ describe('parseConfig', () => {
 
   it('populates storefrontInternalApiUrl with fallback when omitted', () => {
     const config = parseConfig(validEnvironment);
-    expect(config.storefrontInternalApiUrl).toBe('http://127.0.0.1:3000');
+    expect(config.storefrontInternalApiUrl).toBe('http://127.0.0.1:3002');
   });
 
   it('boots cleanly with Category A deployment variables only without requiring business settings', () => {
@@ -148,7 +148,7 @@ describe('parseConfig', () => {
       ...validEnvironment,
       META_APP_ID: '123',
       META_APP_SECRET: 'a-secure-meta-app-secret',
-      META_GRAPH_API_VERSION: 'v27.0',
+      META_GRAPH_API_VERSION: 'v26.0',
       META_WEBHOOK_VERIFY_TOKEN: 'a-long-random-webhook-token',
       META_OAUTH_CALLBACK_URL:
         'https://admin.example.test/integrations/messaging/facebook/oauth/callback',

@@ -248,6 +248,7 @@ export function registerFacebookMessagingRoutes(
         return {
           data: await facebook.getFacebookOAuthStatus(database.db, {
             organizationId: context.organizationId,
+            actorId: context.actorId,
             membershipId: context.membershipId,
             attemptId: (request.params as { attemptId: string }).attemptId,
           }),
@@ -306,18 +307,21 @@ export function registerFacebookMessagingRoutes(
         });
         try {
           await client.verifyPage(credential.pageId, credential.pageAccessToken);
-          await client.subscribePage(
-            credential.pageId,
-            credential.pageAccessToken,
-            facebook.FACEBOOK_WEBHOOK_FIELDS,
-          );
           await facebook.markFacebookSubscription(database.db, {
             organizationId: context.organizationId,
             connectionId: id,
-            healthy: true,
-            fields: facebook.FACEBOOK_WEBHOOK_FIELDS,
+            healthy: false,
+            fields: [],
+            errorCode: 'SUBSCRIPTION_NOT_ACTIVATED',
           });
         } catch (error) {
+          if (error instanceof MetaGraphError)
+            await facebook.recordFacebookProviderFailure(database.db, {
+              organizationId: context.organizationId,
+              connectionId: id,
+              category: error.category,
+              code: error.code,
+            });
           await facebook.markFacebookSubscription(database.db, {
             organizationId: context.organizationId,
             connectionId: id,
@@ -449,16 +453,19 @@ export function registerFacebookMessagingRoutes(
           encryptionKey: encryptionKey(config),
         });
         await client.verifyPage(credential.pageId, credential.pageAccessToken);
-        await client.subscribePage(
+        const subscription = await client.inspectPageSubscription(
           credential.pageId,
           credential.pageAccessToken,
-          facebook.FACEBOOK_WEBHOOK_FIELDS,
         );
+        const healthy =
+          subscription.subscribed &&
+          facebook.FACEBOOK_WEBHOOK_FIELDS.every((field) => subscription.fields.includes(field));
         await facebook.markFacebookSubscription(database.db, {
           organizationId: context.organizationId,
           connectionId,
-          healthy: true,
-          fields: facebook.FACEBOOK_WEBHOOK_FIELDS,
+          healthy,
+          fields: subscription.fields,
+          ...(!healthy ? { errorCode: 'WEBHOOK_SUBSCRIPTION_INCOMPLETE' } : {}),
         });
         return {
           data: await facebook.getFacebookConnection(
@@ -470,6 +477,13 @@ export function registerFacebookMessagingRoutes(
       } catch (error) {
         if (error instanceof facebook.MessagingDomainError)
           return sendMessagingError(reply, error, request.id);
+        if (error instanceof MetaGraphError)
+          await facebook.recordFacebookProviderFailure(database.db, {
+            organizationId: context.organizationId,
+            connectionId,
+            category: error.category,
+            code: error.code,
+          });
         await facebook.markFacebookSubscription(database.db, {
           organizationId: context.organizationId,
           connectionId,
@@ -483,6 +497,166 @@ export function registerFacebookMessagingRoutes(
             message: 'Facebook connection verification failed.',
           },
         });
+      }
+    },
+  );
+
+  app.patch(
+    '/admin/messaging/connections/facebook/:connectionId/assurance',
+    {
+      schema: {
+        params: Type.Object({ connectionId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object(
+          {
+            permissionReviewStatus: Type.Optional(
+              Type.Union([
+                Type.Literal('UNKNOWN'),
+                Type.Literal('DEVELOPMENT_ONLY'),
+                Type.Literal('APP_REVIEW_PENDING'),
+                Type.Literal('ADVANCED_ACCESS_CONFIRMED'),
+              ]),
+            ),
+            routingStatus: Type.Optional(
+              Type.Union([
+                Type.Literal('UNVERIFIED'),
+                Type.Literal('OWNER_CONFIRMED'),
+                Type.Literal('CONFLICT'),
+              ]),
+            ),
+            operationalStatus: Type.Optional(
+              Type.Union([Type.Literal('NOT_RUN'), Type.Literal('PASSED'), Type.Literal('FAILED')]),
+            ),
+          },
+          { minProperties: 1, additionalProperties: false },
+        ),
+      },
+    },
+    async (request, reply) => {
+      const context = await authenticateMessagingAdmin(
+        database,
+        auth,
+        request.headers,
+        'messaging.connections.manage',
+      );
+      if (!context)
+        return reply.code(403).send({
+          error: { code: 'FORBIDDEN', message: 'Connection management access is required.' },
+        });
+      const connectionId = (request.params as { connectionId: string }).connectionId;
+      try {
+        await facebook.updateFacebookAssurance(database.db, {
+          organizationId: context.organizationId,
+          connectionId,
+          actorId: context.actorId,
+          expectedVersion: parseExpectedVersion(request.headers['if-match']),
+          ...(request.body as {
+            permissionReviewStatus?:
+              'UNKNOWN' | 'DEVELOPMENT_ONLY' | 'APP_REVIEW_PENDING' | 'ADVANCED_ACCESS_CONFIRMED';
+            routingStatus?: 'UNVERIFIED' | 'OWNER_CONFIRMED' | 'CONFLICT';
+            operationalStatus?: 'NOT_RUN' | 'PASSED' | 'FAILED';
+          }),
+        });
+        return {
+          data: await facebook.getFacebookConnection(
+            database.db,
+            context.organizationId,
+            connectionId,
+          ),
+        };
+      } catch (error) {
+        return sendMessagingError(reply, error, request.id);
+      }
+    },
+  );
+
+  app.put(
+    '/admin/messaging/connections/facebook/:connectionId/subscription',
+    {
+      schema: {
+        params: Type.Object({ connectionId: Type.String({ format: 'uuid' }) }),
+        body: Type.Object(
+          {
+            subscribed: Type.Boolean(),
+            businessSuiteCoexistenceReviewed: Type.Boolean(),
+            routingImpactReviewed: Type.Boolean(),
+          },
+          { additionalProperties: false },
+        ),
+      },
+    },
+    async (request, reply) => {
+      const context = await authenticateMessagingAdmin(
+        database,
+        auth,
+        request.headers,
+        'messaging.connections.manage',
+      );
+      if (!context)
+        return reply.code(403).send({
+          error: { code: 'FORBIDDEN', message: 'Connection management access is required.' },
+        });
+      if (!client)
+        return reply.code(503).send({
+          error: { code: 'META_NOT_CONFIGURED', message: 'Facebook is not configured.' },
+        });
+      const connectionId = (request.params as { connectionId: string }).connectionId;
+      const body = request.body as {
+        subscribed: boolean;
+        businessSuiteCoexistenceReviewed: boolean;
+        routingImpactReviewed: boolean;
+      };
+      if (
+        body.subscribed &&
+        (!body.businessSuiteCoexistenceReviewed || !body.routingImpactReviewed)
+      )
+        return reply.code(422).send({
+          error: {
+            code: 'META_ROUTING_REVIEW_REQUIRED',
+            message: 'Business Suite coexistence and Conversation Routing must be reviewed first.',
+          },
+        });
+      try {
+        await facebook.assertFacebookConnectionVersion(database.db, {
+          organizationId: context.organizationId,
+          connectionId,
+          expectedVersion: parseExpectedVersion(request.headers['if-match']),
+        });
+        const credential = await facebook.loadFacebookCredential(database.db, {
+          organizationId: context.organizationId,
+          connectionId,
+          encryptionKey: encryptionKey(config),
+        });
+        if (body.subscribed && credential.routingStatus !== 'OWNER_CONFIRMED')
+          return reply.code(409).send({
+            error: {
+              code: 'META_ROUTING_NOT_CONFIRMED',
+              message: 'Conversation Routing must be owner-confirmed before subscription.',
+            },
+          });
+        if (body.subscribed)
+          await client.subscribePage(
+            credential.pageId,
+            credential.pageAccessToken,
+            facebook.FACEBOOK_WEBHOOK_FIELDS,
+          );
+        else await client.unsubscribePage(credential.pageId, credential.pageAccessToken);
+        await facebook.markFacebookSubscription(database.db, {
+          organizationId: context.organizationId,
+          connectionId,
+          healthy: body.subscribed,
+          fields: body.subscribed ? facebook.FACEBOOK_WEBHOOK_FIELDS : [],
+          actorId: context.actorId,
+          ...(!body.subscribed ? { errorCode: 'SUBSCRIPTION_DISABLED' } : {}),
+        });
+        return {
+          data: await facebook.getFacebookConnection(
+            database.db,
+            context.organizationId,
+            connectionId,
+          ),
+        };
+      } catch (error) {
+        return sendMessagingError(reply, error, request.id);
       }
     },
   );
