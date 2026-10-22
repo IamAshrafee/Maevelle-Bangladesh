@@ -8,10 +8,12 @@ export function PrivateChatImage({
   alt,
   className,
   path,
+  onClick,
 }: {
   readonly alt: string;
   readonly className?: string;
   readonly path: string;
+  readonly onClick?: (blobUrl: string) => void;
 }) {
   const [source, setSource] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -58,7 +60,12 @@ export function PrivateChatImage({
   return (
     <img
       alt={alt}
-      className={cx('aspect-square rounded-xl object-cover', className)}
+      className={cx(
+        'aspect-square rounded-xl object-cover',
+        onClick && 'cursor-pointer transition-opacity duration-150 hover:opacity-90',
+        className,
+      )}
+      onClick={onClick ? () => onClick(source) : undefined}
       src={source}
     />
   );

@@ -38,7 +38,7 @@ export function StorefrontChat() {
       {!open ? (
         <button
           aria-label={unread ? `Open support chat, ${unread} unread messages` : 'Open support chat'}
-          className="fixed bottom-20 right-3 z-50 flex min-h-12 items-center gap-2 rounded-full bg-primary px-4 text-label-md font-semibold text-on-primary shadow-floating transition-[background-color,transform,box-shadow] duration-150 hover:bg-primary-hover active:scale-98 sm:bottom-6 sm:right-6"
+          className="fixed bottom-20 right-3 z-50 flex min-h-12 items-center gap-2 rounded-full bg-primary px-4 text-label-md font-semibold text-on-primary shadow-floating transition-[background-color,transform,box-shadow] duration-150 hover:bg-primary-hover active:scale-98 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 sm:bottom-6 sm:right-6"
           onClick={() => {
             setLoaded(true);
             setOpen(true);
@@ -48,7 +48,10 @@ export function StorefrontChat() {
           <ChatCheckIcon size={22} />
           <span>Chat with us</span>
           {unread ? (
-            <span className="grid size-6 place-items-center rounded-full bg-white font-mono text-label-sm font-bold text-primary tabular-nums">
+            <span
+              aria-hidden="true"
+              className="grid size-6 place-items-center rounded-full bg-white font-mono text-label-sm font-bold text-primary tabular-nums shadow-xs"
+            >
               {unread > 9 ? '9+' : unread}
             </span>
           ) : null}

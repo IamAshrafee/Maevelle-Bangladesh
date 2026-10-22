@@ -194,7 +194,13 @@ export async function uploadChatImage(
     );
   }
   if (status.status !== 'AVAILABLE')
-    throw new ChatApiError(422, 'ATTACHMENT_NOT_READY', 'The image could not be prepared.');
+    throw new ChatApiError(
+      422,
+      'ATTACHMENT_NOT_READY',
+      status.status === 'REJECTED'
+        ? 'The image was rejected during processing. Please choose another image.'
+        : 'The image could not be prepared.',
+    );
   return status;
 }
 
@@ -228,7 +234,13 @@ export async function streamChatEvents(input: {
         .find((line) => line.startsWith('data:'))
         ?.slice(5)
         .trim();
-      if (data) input.onEvent(JSON.parse(data) as MessagingEvent);
+      if (data) {
+        try {
+          input.onEvent(JSON.parse(data) as MessagingEvent);
+        } catch {
+          // ignore malformed frame
+        }
+      }
       boundary = /\r?\n\r?\n/.exec(buffer);
     }
   }

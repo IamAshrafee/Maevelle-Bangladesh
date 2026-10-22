@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { CloseIcon } from '@/components/ui/icons';
+import { cx } from '@/components/ui/classnames';
+import { CloseIcon, ImageIcon } from '@/components/ui/icons';
 import { Textarea } from '@/components/ui/textarea';
 
 import type { AttachmentDraft } from './types';
@@ -42,7 +43,9 @@ export function Composer({
   const [attachments, setAttachments] = useState<readonly AttachmentDraft[]>([]);
   const [validation, setValidation] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachmentRef = useRef(attachments);
   attachmentRef.current = attachments;
 
@@ -59,6 +62,75 @@ export function Composer({
     );
   };
 
+  const handleProcessFiles = useCallback(
+    (selectedFiles: readonly File[]) => {
+      if (!selectedFiles.length) return;
+
+      if (attachments.length + selectedFiles.length > maximumCount) {
+        setValidation(`You can attach up to ${maximumCount} images per message.`);
+        return;
+      }
+
+      const invalid = selectedFiles.find(
+        (file) =>
+          !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+          file.size > maximumBytes,
+      );
+
+      if (invalid) {
+        setValidation(
+          `Choose JPEG, PNG or WebP images up to ${Math.round(maximumBytes / 1_048_576)} MB each.`,
+        );
+        return;
+      }
+
+      setValidation(null);
+      setAttachments((current) => [...current, ...selectedFiles.map(newDraft)]);
+    },
+    [attachments.length, maximumBytes, maximumCount],
+  );
+
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const clipboardFiles = Array.from(event.clipboardData.files);
+      const imageFiles = clipboardFiles.filter((file) => file.type.startsWith('image/'));
+
+      if (imageFiles.length > 0 && acceptsAttachments) {
+        event.preventDefault();
+        handleProcessFiles(imageFiles);
+      }
+    },
+    [acceptsAttachments, handleProcessFiles],
+  );
+
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsDraggingOver(false);
+
+      if (disabled || sending || !acceptsAttachments) return;
+
+      const droppedFiles = Array.from(event.dataTransfer.files).filter((file) =>
+        file.type.startsWith('image/'),
+      );
+      handleProcessFiles(droppedFiles);
+    },
+    [acceptsAttachments, disabled, handleProcessFiles, sending],
+  );
+
   async function submit() {
     if (sending || disabled) return;
     if (!text.trim() && !attachments.length) {
@@ -73,13 +145,24 @@ export function Composer({
       setText('');
       for (const attachment of attachments) URL.revokeObjectURL(attachment.previewUrl);
       setAttachments([]);
+      textareaRef.current?.focus();
     }
   }
 
+  const isNearLimit = text.length > maximumTextLength - 200;
+
   return (
-    <div className="border-t border-border-subtle bg-surface-container-lowest px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-3 sm:rounded-b-3xl sm:px-4 sm:pb-4">
+    <div
+      className={cx(
+        'border-t border-border-subtle bg-surface-container-lowest px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-3 transition-colors duration-150 sm:rounded-b-3xl sm:px-4 sm:pb-4',
+        isDraggingOver && 'border-primary/50 bg-primary-subtle/20 ring-2 ring-primary/30',
+      )}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {attachments.length ? (
-        <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+        <div className="mb-2.5 flex gap-2 overflow-x-auto pb-1">
           {attachments.map((attachment) => (
             <div className="relative w-20 shrink-0" key={attachment.localId}>
               <img
@@ -89,7 +172,7 @@ export function Composer({
               />
               <button
                 aria-label={`Remove ${attachment.file.name}`}
-                className="absolute -right-1 -top-1 grid size-8 place-items-center rounded-full bg-inverse-surface text-inverse-on-surface shadow-sm"
+                className="absolute -right-1 -top-1 grid size-7 place-items-center rounded-full bg-inverse-surface text-inverse-on-surface shadow-sm transition-transform duration-120 hover:scale-105 active:scale-95"
                 disabled={sending}
                 onClick={() => {
                   URL.revokeObjectURL(attachment.previewUrl);
@@ -99,19 +182,24 @@ export function Composer({
                 }}
                 type="button"
               >
-                <CloseIcon size={14} />
+                <CloseIcon size={12} />
               </button>
-              <span className="mt-1 block truncate text-label-sm text-on-surface-variant">
+              <span className="mt-1 block truncate text-label-sm text-on-surface-variant tabular-nums">
                 {attachment.status === 'selected'
                   ? 'Ready'
-                  : attachment.status === 'failed'
-                    ? 'Failed'
-                    : attachment.status}
+                  : attachment.status === 'uploading'
+                    ? 'Uploading…'
+                    : attachment.status === 'processing'
+                      ? 'Processing…'
+                      : attachment.status === 'failed'
+                        ? 'Failed'
+                        : attachment.status}
               </span>
             </div>
           ))}
         </div>
       ) : null}
+
       <div className="flex items-end gap-2">
         {acceptsAttachments ? (
           <>
@@ -121,81 +209,87 @@ export function Composer({
               disabled={disabled || sending}
               multiple
               onChange={(event) => {
-                const selected = [...(event.target.files ?? [])];
+                const selected = Array.from(event.target.files ?? []);
                 event.target.value = '';
-                if (attachments.length + selected.length > maximumCount) {
-                  setValidation(`You can attach up to ${maximumCount} images.`);
-                  return;
-                }
-                const invalid = selected.find(
-                  (file) =>
-                    !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
-                    file.size > maximumBytes,
-                );
-                if (invalid) {
-                  setValidation(
-                    `Choose JPEG, PNG or WebP images up to ${Math.round(maximumBytes / 1_048_576)} MB each.`,
-                  );
-                  return;
-                }
-                setValidation(null);
-                setAttachments((current) => [...current, ...selected.map(newDraft)]);
+                handleProcessFiles(selected);
               }}
               ref={fileInput}
               type="file"
             />
             <button
               aria-label="Attach images"
-              className="grid size-12 shrink-0 place-items-center rounded-xl border border-border bg-surface-container-low text-xl text-primary hover:bg-primary-subtle disabled:opacity-50"
+              className="grid size-12 shrink-0 place-items-center rounded-xl border border-border-subtle bg-surface-container-low text-primary transition-colors duration-150 hover:bg-primary-subtle active:scale-98 disabled:opacity-50"
               disabled={disabled || sending || attachments.length >= maximumCount}
               onClick={() => fileInput.current?.click()}
               type="button"
             >
-              +
+              <ImageIcon size={22} />
             </button>
           </>
         ) : null}
-        <Textarea
-          aria-describedby={validation ? 'chat-composer-error' : undefined}
-          aria-label="Message"
-          className="max-h-32"
-          disabled={disabled || sending}
-          maxLength={maximumTextLength}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (
-              event.key === 'Enter' &&
-              !event.shiftKey &&
-              event.nativeEvent.isComposing === false &&
-              window.matchMedia('(pointer: fine)').matches
-            ) {
-              event.preventDefault();
-              void submit();
+
+        <div className="relative min-w-0 flex-1">
+          <Textarea
+            aria-describedby={validation ? 'chat-composer-error' : undefined}
+            aria-label="Message"
+            className="max-h-32 min-h-12 resize-none"
+            disabled={disabled || sending}
+            maxLength={maximumTextLength}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                event.key === 'Enter' &&
+                !event.shiftKey &&
+                event.nativeEvent.isComposing === false &&
+                window.matchMedia('(pointer: fine)').matches
+              ) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+            onPaste={handlePaste}
+            placeholder={
+              acceptsAttachments ? 'Type your message or paste an image…' : 'Type your message…'
             }
-          }}
-          placeholder="Type your message…"
-          rows={1}
-          sizeVariant="compact"
-          value={text}
-        />
+            ref={textareaRef}
+            rows={1}
+            sizeVariant="compact"
+            value={text}
+          />
+          {isNearLimit ? (
+            <span className="absolute bottom-1 right-2 text-label-sm text-on-surface-variant tabular-nums">
+              {text.length}/{maximumTextLength}
+            </span>
+          ) : null}
+        </div>
+
         <Button
           aria-label="Send message"
-          className="size-12 px-0"
+          className="size-12 shrink-0 px-0"
           disabled={disabled || (!text.trim() && !attachments.length)}
           loading={sending}
           onClick={() => void submit()}
         >
-          <span aria-hidden="true">Send</span>
+          <span aria-hidden="true" className="font-semibold">
+            Send
+          </span>
         </Button>
       </div>
+
       {validation ? (
-        <p className="mt-2 text-body-sm text-danger" id="chat-composer-error" role="alert">
+        <p className="mt-2 text-body-sm font-medium text-danger" id="chat-composer-error" role="alert">
           {validation}
         </p>
       ) : null}
-      <p className="mt-1.5 text-label-sm text-on-surface-variant">
-        Enter to send · Shift+Enter for a new line
-      </p>
+
+      <div className="mt-1.5 flex items-center justify-between text-label-sm text-on-surface-variant">
+        <span>Enter to send · Shift+Enter for new line</span>
+        {attachments.length > 0 ? (
+          <span className="tabular-nums">
+            {attachments.length}/{maximumCount} images
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -63,4 +63,31 @@ describe('chat message reconciliation', () => {
       ]),
     ).toBe('3');
   });
+
+  it('returns null if there are no outbound staff messages', () => {
+    expect(
+      latestStaffSequence([
+        message({ id: 'one', sequence: '1', direction: 'INBOUND' }),
+        message({ id: 'two', sequence: '2', direction: 'INBOUND' }),
+      ]),
+    ).toBeNull();
+  });
+
+  it('preserves pending messages whose clientMessageId has not yet been accepted', () => {
+    const pendingTwo: PendingMessage = {
+      clientMessageId: 'client-2',
+      idempotencyKey: 'idem-2',
+      text: 'Second message',
+      previewUrls: [],
+      attachmentIds: [],
+      createdAt: '2026-10-21T00:01:00.000Z',
+      state: 'sending',
+      error: null,
+    };
+    const reconciled = reconcilePending(
+      [pending, pendingTwo],
+      [message({ id: 'canonical-1', sequence: '10', clientMessageId: 'client-1' })],
+    );
+    expect(reconciled).toEqual([pendingTwo]);
+  });
 });

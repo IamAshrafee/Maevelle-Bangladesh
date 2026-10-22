@@ -24,12 +24,14 @@ const CURSOR_KEY = 'maevelle_chat_event_cursor_v1';
 const CHANNEL_NAME = 'maevelle_storefront_chat_v1';
 
 function friendlyError(error: unknown): string {
-  if (!navigator.onLine) return 'You are offline. Check your connection and try again.';
+  if (typeof navigator !== 'undefined' && !navigator.onLine)
+    return 'You are offline. Check your connection and try again.';
   if (error instanceof ChatApiError) {
     if (error.code === 'RATE_LIMITED')
       return 'Chat is busy right now. Please wait a moment and try again.';
     if (error.code === 'CONVERSATION_CLOSED')
       return 'This conversation is closed. Start a new chat to continue.';
+    if (error.code === 'ATTACHMENT_NOT_READY') return error.message;
     if (error.code === 'VALIDATION_FAILED') return error.message;
     if (error.status >= 500) return 'Chat is temporarily unavailable. Please try again shortly.';
   }
@@ -84,11 +86,13 @@ export function useChat(input: {
       setBootstrap(next);
       setConfig(next.config);
       setConversation(next.conversation);
-      readSequence.current = next.conversation.lastReadSequence;
+      readSequence.current = next.conversation?.lastReadSequence ?? '0';
       lastContextSignature.current = JSON.stringify(currentContext.current);
       setMessages([]);
       setPending([]);
-      await loadLatest(next.conversation);
+      if (next.conversation) {
+        await loadLatest(next.conversation);
+      }
       if (!mounted.current) return;
       setPhase(next.config.enabled ? 'ready' : 'unavailable');
     } catch (cause) {
@@ -433,15 +437,25 @@ export function useChat(input: {
 
   const reopen = useCallback(async () => {
     if (!conversation) return;
-    setConversation(await chatApi.reopen(conversation.id));
+    try {
+      setConversation(await chatApi.reopen(conversation.id));
+      setError(null);
+    } catch (cause) {
+      setError(friendlyError(cause));
+    }
   }, [conversation]);
 
   const startNew = useCallback(async () => {
-    const next = await chatApi.startConversation(currentContext.current);
-    setConversation(next);
-    setMessages([]);
-    setPending([]);
-    await loadLatest(next);
+    try {
+      const next = await chatApi.startConversation(currentContext.current);
+      setConversation(next);
+      setMessages([]);
+      setPending([]);
+      await loadLatest(next);
+      setError(null);
+    } catch (cause) {
+      setError(friendlyError(cause));
+    }
   }, [loadLatest]);
 
   const saveContact = useCallback(async (details: ContactDetails) => {

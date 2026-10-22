@@ -66,4 +66,25 @@ describe('chat event stream', () => {
       code: 'EVENT_CURSOR_EXPIRED',
     });
   });
+
+  it('safely ignores keepalive comments and malformed JSON frames', async () => {
+    const raw = ': keepalive\r\n\r\nid: 41\r\ndata: {invalid-json\r\n\r\nid: 42\r\ndata: ' + JSON.stringify(event) + '\r\n\r\n';
+    const encoded = new TextEncoder().encode(raw);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoded);
+        controller.close();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+    const received: MessagingEvent[] = [];
+
+    await streamChatEvents({
+      cursor: '40',
+      signal: new AbortController().signal,
+      onEvent: (next) => received.push(next),
+    });
+
+    expect(received).toEqual([event]);
+  });
 });
