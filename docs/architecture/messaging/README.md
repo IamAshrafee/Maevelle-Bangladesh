@@ -33,6 +33,7 @@ The design deliberately does **not** introduce Redis, a broker, a messaging micr
 18. [Phase 07 Facebook Messenger frontend completion](17-phase-07-completion.md)
 19. [Phase 08 Instagram Direct backend completion](18-phase-08-instagram-backend-completion.md)
 20. [Phase 09 Instagram Direct frontend completion](19-phase-09-instagram-frontend-completion.md)
+21. [Phase 10 Comprehensive system assurance and release readiness](20-phase-10-comprehensive-system-assurance.md)
 
 ## Architecture at a glance
 
@@ -90,7 +91,13 @@ responsive connection, diagnostics, lifecycle, history-sync, unified-inbox,
 provider-context, and policy-aware composer frontend. See the
 [Phase 09 completion and activation record](19-phase-09-instagram-frontend-completion.md).
 
-The original Phases 00–09 roadmap is repository code-complete. Live Meta
+Phase 10 completes comprehensive system assurance, database migration reconciliation
+(clean fresh baseline and existing installation reconciliation via migration 3201),
+concurrency race remediation for provider delivery echo/receipt recovery, and security
+hardening across all channels. See the
+[Phase 10 completion and system assurance record](20-phase-10-comprehensive-system-assurance.md).
+
+The codebase is technically 100% verified across 16 test suites and 89 tests. Live Meta
 communication remains an explicit owner-controlled activation gate until the
 approved app, eligible Page-linked Instagram account, required permissions,
 public HTTPS callbacks, and controlled real-message verification are available.

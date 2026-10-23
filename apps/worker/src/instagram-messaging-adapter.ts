@@ -47,6 +47,7 @@ export function createInstagramMessagingAdapter(input: {
     kind: 'INSTAGRAM',
     async deliver(command) {
       let credential: Awaited<ReturnType<typeof instagram.loadInstagramCredential>> | undefined;
+      let acceptedProviderMessageId: string | undefined;
       try {
         credential = await instagram.loadInstagramCredential(input.database.db, {
           connectionId: command.connectionId,
@@ -121,12 +122,19 @@ export function createInstagramMessagingAdapter(input: {
             safeMessage: 'Message content is unavailable.',
           };
         }
+        acceptedProviderMessageId = sent.messageId;
         await instagram.recordInstagramSendSuccess(input.database.db, {
           organizationId: command.organizationId,
           connectionId: command.connectionId,
         });
         return { type: 'ACCEPTED', providerMessageId: sent.messageId };
       } catch (error) {
+        if (acceptedProviderMessageId)
+          return {
+            type: 'UNKNOWN',
+            code: 'POST_SEND_BOOKKEEPING_FAILED',
+            reconciliationKey: acceptedProviderMessageId,
+          };
         if (credential && error instanceof MetaGraphError)
           await instagram.recordInstagramProviderFailure(input.database.db, {
             organizationId: command.organizationId,

@@ -10,6 +10,8 @@ import * as instagram from '@maevelle/database/messaging';
 import { verifyMetaSignature } from './facebook-messaging.js';
 import {
   authenticateMessagingAdmin,
+  hasMessagingInboxAccess,
+  messagingAccess,
   parseExpectedVersion,
   sendMessagingError,
   type MessagingAuth,
@@ -573,10 +575,21 @@ export function registerInstagramMessagingRoutes(
           .code(403)
           .send({ error: { code: 'FORBIDDEN', message: 'Reply access is required.' } });
       try {
+        const conversationId = (request.params as { conversationId: string }).conversationId;
+        if (!hasMessagingInboxAccess(context))
+          return reply
+            .code(403)
+            .send({ error: { code: 'FORBIDDEN', message: 'Messaging inbox access is required.' } });
+        await instagram.getConversation(database.db, {
+          organizationId: context.organizationId,
+          conversationId,
+          membershipId: context.membershipId,
+          access: messagingAccess(context),
+        });
         return {
           data: await instagram.getInstagramReplyEligibility(database.db, {
             organizationId: context.organizationId,
-            conversationId: (request.params as { conversationId: string }).conversationId,
+            conversationId,
           }),
         };
       } catch (error) {

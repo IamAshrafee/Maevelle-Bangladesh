@@ -357,6 +357,45 @@ export async function getConversation(
   return result;
 }
 
+export async function registerStaffAttachmentUpload(
+  db: Db,
+  input: {
+    organizationId: string;
+    conversationId: string;
+    actorId: string;
+    mediaAssetId: string;
+    mediaUploadSessionId: string;
+    expiresAt: Date;
+  },
+): Promise<void> {
+  await sql`insert into messaging.staff_attachment_uploads(
+      organization_id,conversation_id,actor_id,media_asset_id,media_upload_session_id,expires_at
+    ) values (${input.organizationId},${input.conversationId},${input.actorId},${input.mediaAssetId},${input.mediaUploadSessionId},${input.expiresAt})`.execute(
+    db,
+  );
+}
+
+export async function assertStaffAttachmentUploadAccess(
+  db: Db,
+  input: {
+    organizationId: string;
+    conversationId: string;
+    actorId: string;
+    mediaUploadSessionId?: string;
+    mediaAssetId?: string;
+  },
+): Promise<void> {
+  const found = await sql`select 1 from messaging.staff_attachment_uploads
+    where organization_id=${input.organizationId} and conversation_id=${input.conversationId}
+      and actor_id=${input.actorId} and expires_at>now()
+      and (${input.mediaUploadSessionId ?? null}::uuid is null or media_upload_session_id=${input.mediaUploadSessionId ?? null}::uuid)
+      and (${input.mediaAssetId ?? null}::uuid is null or media_asset_id=${input.mediaAssetId ?? null}::uuid)`.execute(
+    db,
+  );
+  if (!found.rows[0])
+    throw new MessagingDomainError('CONVERSATION_NOT_FOUND', 'Attachment upload was not found.');
+}
+
 export async function listConversations(
   db: Db,
   input: {
@@ -794,8 +833,12 @@ export async function prepareOutboundMessage(
             width_px: number | null;
             height_px: number | null;
           }>`select a.id,a.original_filename,o.mime_type,o.byte_size::text,o.width_px,o.height_px
-              from media.media_assets a join media.media_objects o on o.organization_id=a.organization_id and o.id=a.current_object_id
+              from messaging.staff_attachment_uploads upload
+              join media.media_assets a on a.organization_id=upload.organization_id and a.id=upload.media_asset_id
+              join media.media_objects o on o.organization_id=a.organization_id and o.id=a.current_object_id
               where a.organization_id=${input.actor.organizationId} and a.id in (${sql.join(attachmentIds.map((id) => sql`${id}::uuid`))})
+                and upload.conversation_id=${input.conversationId}::uuid and upload.actor_id=${input.actor.actorId}::uuid
+                and upload.attached_message_id is null and upload.expires_at>now()
                 and a.visibility_class='PRIVATE' and a.status='READY' and a.asset_type='IMAGE'`.execute(
             tx,
           )
@@ -842,6 +885,11 @@ export async function prepareOutboundMessage(
         const asset = attachmentAssets.rows.find((candidate) => candidate.id === assetId)!;
         await sql`insert into messaging.message_attachments(organization_id,message_id,media_asset_id,position,kind,filename,mime_type,byte_size,width_px,height_px,security_status)
           values(${input.actor.organizationId},${messageId},${assetId},${position},'IMAGE',${asset.original_filename},${asset.mime_type},${asset.byte_size}::bigint,${asset.width_px},${asset.height_px},'AVAILABLE')`.execute(
+          tx,
+        );
+        await sql`update messaging.staff_attachment_uploads set attached_message_id=${messageId},updated_at=now()
+          where organization_id=${input.actor.organizationId} and conversation_id=${input.conversationId}
+            and actor_id=${input.actor.actorId} and media_asset_id=${assetId} and attached_message_id is null`.execute(
           tx,
         );
       }
@@ -1557,12 +1605,51 @@ async function completeDelivery(
 }
 
 export async function reclaimExpiredMessagingDeliveries(db: Db): Promise<number> {
-  const result = await sql<{
-    id: string;
-  }>`with reclaimed as(update messaging.delivery_intents set status='RECONCILIATION_REQUIRED',lease_owner=null,lease_expires_at=null,last_error_code='LEASE_EXPIRED',completed_at=now(),updated_at=now() where status='PROCESSING' and lease_expires_at<=now() returning organization_id,message_id) update messaging.messages m set delivery_state='UNKNOWN',failed_at=now(),failure_code='LEASE_EXPIRED',updated_at=now() from reclaimed where m.organization_id=reclaimed.organization_id and m.id=reclaimed.message_id returning m.id`.execute(
-    db,
-  );
-  return result.rows.length;
+  return db.transaction().execute(async (tx) => {
+    const result = await sql<{
+      id: string;
+      organization_id: string;
+      conversation_id: string;
+      attempt_count: number;
+    }>`with reclaimed as(
+        update messaging.delivery_intents set
+          status='RECONCILIATION_REQUIRED',lease_owner=null,lease_expires_at=null,
+          last_error_code='LEASE_EXPIRED',completed_at=now(),updated_at=now()
+        where status='PROCESSING' and lease_expires_at<=now()
+        returning organization_id,message_id,attempt_count
+      )
+      update messaging.messages message set
+        delivery_state='UNKNOWN',failed_at=now(),failure_code='LEASE_EXPIRED',updated_at=now()
+      from reclaimed
+      where message.organization_id=reclaimed.organization_id and message.id=reclaimed.message_id
+      returning message.id,message.organization_id,message.conversation_id,reclaimed.attempt_count`.execute(
+      tx,
+    );
+    for (const message of result.rows) {
+      const payload = {
+        conversationId: message.conversation_id,
+        messageId: message.id,
+        state: 'UNKNOWN',
+        failureCode: 'LEASE_EXPIRED',
+      };
+      await appendRealtimeEvent(tx as Db, {
+        organizationId: message.organization_id,
+        audienceType: 'ORGANIZATION',
+        conversationId: message.conversation_id,
+        eventType: 'messaging.message.delivery_changed.v1',
+        aggregateId: message.id,
+        aggregateVersion: message.attempt_count,
+        payload,
+      });
+      await sql`insert into platform.outbox_events(
+          organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at
+        ) values(
+          ${message.organization_id},'messaging.message.delivery_changed.v1',1,'messaging.message',
+          ${message.id},${message.attempt_count},${JSON.stringify(payload)}::jsonb,now()
+        )`.execute(tx);
+    }
+    return result.rows.length;
+  });
 }
 
 export * from './storefront.js';

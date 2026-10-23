@@ -49,6 +49,7 @@ import * as assetManagement from './2900_asset_management.js';
 import * as centralizedRuntimeSettings from './3000_centralized_runtime_settings.js';
 import * as unitTraceability from './3100_unit_traceability.js';
 import * as messagingCore from './3200_messaging_core.js';
+import * as messagingReconciliation from './3201_messaging_reconciliation.js';
 
 /**
  * The migration list is deliberately explicit. Migration files are reviewed
@@ -104,6 +105,7 @@ export const migrations = {
   '3000_centralized_runtime_settings': centralizedRuntimeSettings,
   '3100_unit_traceability': unitTraceability,
   '3200_messaging_core': messagingCore,
+  '3201_messaging_reconciliation': messagingReconciliation,
 } satisfies Record<string, Migration>;
 
 export const migrationProvider: MigrationProvider = {

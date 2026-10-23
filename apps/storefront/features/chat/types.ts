@@ -42,3 +42,10 @@ export interface ContactDetails {
   readonly emailConsent: boolean;
   readonly phoneConsent: boolean;
 }
+
+export type ComposerSubmitOutcome = 'accepted' | 'pending' | 'not-queued';
+
+export function shouldClearComposerDraft(outcome: ComposerSubmitOutcome): boolean {
+  return outcome === 'accepted' || outcome === 'pending';
+}
+

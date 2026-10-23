@@ -128,6 +128,14 @@ export function registerMessagingRoutes(
             expiresAt,
             maximumBytes: STAFF_ATTACHMENT_MAX_BYTES,
           });
+          await messaging.registerStaffAttachmentUpload(database.db, {
+            organizationId: context.organizationId,
+            conversationId,
+            actorId: context.actorId,
+            mediaAssetId: session.assetId,
+            mediaUploadSessionId: session.id,
+            expiresAt,
+          });
           const authorization = await storage.createSignedUpload(
             { provider: session.provider, bucket: session.bucket, key: session.objectKey },
             { contentType: session.mimeType, expiresInSeconds: 15 * 60 },
@@ -190,6 +198,12 @@ export function registerMessagingRoutes(
             actorId: context.actorId,
           });
           if (!session) throw new MediaDomainError('NOT_FOUND', 'Upload session was not found.');
+          await messaging.assertStaffAttachmentUploadAccess(database.db, {
+            organizationId: context.organizationId,
+            conversationId: params.conversationId,
+            actorId: context.actorId,
+            mediaUploadSessionId: session.id,
+          });
           if (session.status !== 'PENDING')
             throw new MediaDomainError('CONFLICT', 'Upload session is not open.');
           if (!Buffer.isBuffer(request.body) || request.body.length !== session.declaredByteSize)
@@ -243,6 +257,12 @@ export function registerMessagingRoutes(
             actorId: context.actorId,
           });
           if (!session) throw new MediaDomainError('NOT_FOUND', 'Upload session was not found.');
+          await messaging.assertStaffAttachmentUploadAccess(database.db, {
+            organizationId: context.organizationId,
+            conversationId: params.conversationId,
+            actorId: context.actorId,
+            mediaUploadSessionId: session.id,
+          });
           const object = await storage.head({
             provider: session.provider,
             bucket: session.bucket,
@@ -302,6 +322,12 @@ export function registerMessagingRoutes(
             actorId: context.actorId,
           });
           if (!asset) throw new MediaDomainError('NOT_FOUND', 'Attachment was not found.');
+          await messaging.assertStaffAttachmentUploadAccess(database.db, {
+            organizationId: context.organizationId,
+            conversationId: params.conversationId,
+            actorId: context.actorId,
+            mediaAssetId: params.assetId,
+          });
           const status =
             asset.status === 'READY'
               ? 'AVAILABLE'

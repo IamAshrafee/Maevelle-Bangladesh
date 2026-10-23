@@ -17,7 +17,7 @@ import {
   UserRoundCheck,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatDistanceToNowStrict } from 'date-fns';
 
 import type {
@@ -44,6 +44,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import * as api from './api';
+import { isSendKeyboardShortcut } from './client-state';
 import * as instagramApi from './instagram/instagram-api';
 import { instagramReplyCopy, instagramReplyDraftIssue } from './instagram/instagram-types';
 import { formatDateTime } from './format';
@@ -345,6 +346,7 @@ function Composer({
   const [text, setText] = useState('');
   const [attachmentIds, setAttachmentIds] = useState<readonly string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [replyQuery, setReplyQuery] = useState('');
   const [eligibility, setEligibility] = useState<
     FacebookReplyEligibility | InstagramReplyEligibility | null
@@ -356,6 +358,18 @@ function Composer({
   const isFacebook = conversation?.channel.kind === 'FACEBOOK';
   const isInstagram = conversation?.channel.kind === 'INSTAGRAM';
   const isMeta = isFacebook || isInstagram;
+  const operationGenerationRef = useRef(0);
+  const sendingRef = useRef(false);
+
+  useEffect(() => {
+    operationGenerationRef.current += 1;
+    sendingRef.current = false;
+    setText('');
+    setAttachmentIds([]);
+    setUploading(false);
+    setSending(false);
+    setReplyQuery('');
+  }, [conversation?.id]);
 
   const refreshEligibility = useCallback(
     async (signal?: AbortSignal) => {
@@ -411,6 +425,7 @@ function Composer({
   });
 
   async function submit() {
+    if (sendingRef.current || !conversation || (!text.trim() && !attachmentIds.length)) return;
     const instagramDraftIssue = isInstagram
       ? instagramReplyDraftIssue(text, attachmentIds.length)
       : null;
@@ -422,45 +437,60 @@ function Composer({
       });
       return;
     }
-    if (isMeta && conversation) {
-      try {
-        const latest = isInstagram
-          ? await instagramApi.getInstagramReplyEligibility(conversation.id)
-          : await api.getFacebookReplyEligibility(conversation.id);
-        setEligibility(latest);
-        setEligibilityState('ready');
-        if (!latest.allowed) {
+    const generation = operationGenerationRef.current;
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      if (isMeta) {
+        try {
+          const latest = isInstagram
+            ? await instagramApi.getInstagramReplyEligibility(conversation.id)
+            : await api.getFacebookReplyEligibility(conversation.id);
+          if (generation !== operationGenerationRef.current) return;
+          setEligibility(latest);
+          setEligibilityState('ready');
+          if (!latest.allowed) {
+            toast.add({
+              title: isInstagram
+                ? instagramReplyCopy(latest.reason).title
+                : 'Messenger Reply Restricted',
+              description: isInstagram
+                ? instagramReplyCopy(latest.reason).description
+                : 'The current Meta reply window or connection state does not allow this send.',
+              type: 'warning',
+            });
+            return;
+          }
+        } catch {
+          if (generation !== operationGenerationRef.current) return;
+          setEligibilityState('error');
           toast.add({
-            title: isInstagram
-              ? instagramReplyCopy(latest.reason).title
-              : 'Messenger Reply Restricted',
-            description: isInstagram
-              ? instagramReplyCopy(latest.reason).description
-              : 'The current Meta reply window or connection state does not allow this send.',
-            type: 'warning',
+            title: 'Reply Eligibility Could Not Be Verified',
+            description: 'The message was not sent. Check the connection and try again.',
+            type: 'error',
           });
           return;
         }
-      } catch {
-        setEligibilityState('error');
-        toast.add({
-          title: 'Reply Eligibility Could Not Be Verified',
-          description: 'The message was not sent. Check the connection and try again.',
-          type: 'error',
-        });
-        return;
+      }
+      await messaging.send(text, attachmentIds);
+      if (generation === operationGenerationRef.current) {
+        // The pending message now owns this immutable draft, including uncertain outcomes.
+        setText('');
+        setAttachmentIds([]);
+      }
+      if (isMeta) void refreshEligibility();
+    } finally {
+      if (generation === operationGenerationRef.current) {
+        sendingRef.current = false;
+        setSending(false);
       }
     }
-    const sent = await messaging.send(text, attachmentIds);
-    if (sent) {
-      setText('');
-      setAttachmentIds([]);
-    }
-    if (isMeta) void refreshEligibility();
   }
 
   async function attach(file: File) {
     if (!conversation) return;
+    const generation = operationGenerationRef.current;
+    const conversationId = conversation.id;
     if (isMeta && attachmentIds.length >= 1) {
       toast.add({
         title: 'Single image limit',
@@ -479,17 +509,19 @@ function Composer({
     }
     setUploading(true);
     try {
-      const assetId = await api.uploadStaffAttachment(conversation.id, file);
+      const assetId = await api.uploadStaffAttachment(conversationId, file);
+      if (generation !== operationGenerationRef.current) return;
       setAttachmentIds((current) => [...current, assetId]);
       toast.add({ title: 'Image ready to send', type: 'success' });
     } catch (error) {
+      if (generation !== operationGenerationRef.current) return;
       toast.add({
         title: 'Image upload failed',
         description: error instanceof Error ? error.message : 'Try again.',
         type: 'error',
       });
     } finally {
-      setUploading(false);
+      if (generation === operationGenerationRef.current) setUploading(false);
     }
   }
 
@@ -603,10 +635,17 @@ function Composer({
           value={text}
           name="customer-reply"
           autoComplete="off"
-          disabled={isMetaBlocked || (isInstagram && attachmentIds.length > 0)}
+          disabled={sending || isMetaBlocked || (isInstagram && attachmentIds.length > 0)}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey && !isMetaBlocked) {
+            if (
+              isSendKeyboardShortcut({
+                key: event.key,
+                shiftKey: event.shiftKey,
+                isComposing: event.nativeEvent.isComposing,
+              }) &&
+              !isMetaBlocked
+            ) {
               event.preventDefault();
               void submit();
             }
@@ -645,6 +684,7 @@ function Composer({
                 size="icon"
                 disabled={
                   uploading ||
+                  sending ||
                   isMetaBlocked ||
                   (isMeta && attachmentIds.length >= 1) ||
                   (isInstagram && Boolean(text.trim()))
@@ -674,6 +714,7 @@ function Composer({
                   }
                   disabled={
                     uploading ||
+                    sending ||
                     isMetaBlocked ||
                     (isMeta && attachmentIds.length >= 1) ||
                     (isInstagram && Boolean(text.trim()))
@@ -743,6 +784,7 @@ function Composer({
             disabled={
               (!text.trim() && !attachmentIds.length) ||
               uploading ||
+              sending ||
               isMetaBlocked ||
               instagramMixedPayload
             }

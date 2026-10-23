@@ -49,6 +49,7 @@ export function createFacebookMessagingAdapter(input: {
     kind: 'FACEBOOK',
     async deliver(command) {
       let credential: Awaited<ReturnType<typeof facebook.loadFacebookCredential>> | undefined;
+      let acceptedProviderMessageId: string | undefined;
       try {
         credential = await facebook.loadFacebookCredential(input.database.db, {
           connectionId: command.connectionId,
@@ -121,14 +122,21 @@ export function createFacebookMessagingAdapter(input: {
           return {
             type: 'PERMANENT_FAILURE',
             code: 'MESSAGE_CONTENT_UNAVAILABLE',
-            safeMessage: 'Message content is unavailable.',
-          };
+              safeMessage: 'Message content is unavailable.',
+            };
+        acceptedProviderMessageId = sent.messageId;
         await facebook.recordFacebookSendSuccess(input.database.db, {
           organizationId: command.organizationId,
           connectionId: command.connectionId,
         });
         return { type: 'ACCEPTED', providerMessageId: sent.messageId };
       } catch (error) {
+        if (acceptedProviderMessageId)
+          return {
+            type: 'UNKNOWN',
+            code: 'POST_SEND_BOOKKEEPING_FAILED',
+            reconciliationKey: acceptedProviderMessageId,
+          };
         if (credential && error instanceof MetaGraphError)
           await facebook.recordFacebookProviderFailure(input.database.db, {
             organizationId: command.organizationId,

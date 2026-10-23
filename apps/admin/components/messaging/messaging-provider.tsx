@@ -30,6 +30,11 @@ import { ApiRequestError } from '@/lib/api';
 import * as api from './api';
 import type { InboxFilters, PendingMessage } from './types';
 import { useMessagingRealtime } from './use-messaging-realtime';
+import {
+  isConversationOperationCurrent,
+  latestReadSequence,
+  type ConversationOperationToken,
+} from './client-state';
 
 const initialFilters: InboxFilters = { scope: 'mine', sort: 'newest' };
 
@@ -114,6 +119,30 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   const [conversationError, setConversationError] = useState('');
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMarkedSequenceRef = useRef<string | null>(null);
+  const markReadInFlightRef = useRef(new Set<string>());
+  const selectedConversationRef = useRef<string | null>(selectedConversationId);
+  const selectionGenerationRef = useRef(0);
+  if (selectedConversationRef.current !== selectedConversationId) {
+    selectedConversationRef.current = selectedConversationId;
+    selectionGenerationRef.current += 1;
+  }
+
+  const operationFor = useCallback(
+    (conversationId: string): ConversationOperationToken => ({
+      conversationId,
+      generation: selectionGenerationRef.current,
+    }),
+    [],
+  );
+  const operationIsCurrent = useCallback(
+    (operation: ConversationOperationToken) =>
+      isConversationOperationCurrent(
+        operation,
+        selectedConversationRef.current,
+        selectionGenerationRef.current,
+      ),
+    [],
+  );
 
   const setFilters = useCallback((value: InboxFilters) => {
     setFiltersState(value);
@@ -162,11 +191,13 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 
   const refreshConversation = useCallback(async () => {
     if (!selectedConversationId) return;
+    const operation = operationFor(selectedConversationId);
     try {
       const [detail, page] = await Promise.all([
         api.getConversation(selectedConversationId),
         api.listMessages(selectedConversationId),
       ]);
+      if (!operationIsCurrent(operation)) return;
       setConversation(detail);
       setMessages((current) => mergeMessages(current, page.data));
       setMessageCursor(page.pagination.nextCursor);
@@ -179,6 +210,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       setConversationError('');
       setConversationState('ready');
     } catch (error) {
+      if (!operationIsCurrent(operation)) return;
       setConversationError(friendlyError(error, 'The conversation could not be loaded.'));
       setConversationState('error');
       if (error instanceof ApiRequestError && [403, 404].includes(error.status)) {
@@ -186,7 +218,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
         setMessages([]);
       }
     }
-  }, [selectedConversationId]);
+  }, [operationFor, operationIsCurrent, selectedConversationId]);
 
   useEffect(() => {
     setConversation(null);
@@ -194,6 +226,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
     setPendingMessages([]);
     setMessageCursor(null);
     lastMarkedSequenceRef.current = null;
+    markReadInFlightRef.current.clear();
     if (!selectedConversationId) {
       setConversationState('idle');
       return;
@@ -285,18 +318,21 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
 
   const loadOlderMessages = useCallback(async () => {
     if (!selectedConversationId || !messageCursor) return;
+    const operation = operationFor(selectedConversationId);
     try {
       const page = await api.listMessages(selectedConversationId, messageCursor);
+      if (!operationIsCurrent(operation)) return;
       setMessages((current) => mergeMessages(page.data, current));
       setMessageCursor(page.pagination.nextCursor);
     } catch (error) {
+      if (!operationIsCurrent(operation)) return;
       toast.add({
         title: 'Could not load older messages',
         description: friendlyError(error, 'Try again.'),
         type: 'error',
       });
     }
-  }, [messageCursor, selectedConversationId]);
+  }, [messageCursor, operationFor, operationIsCurrent, selectedConversationId]);
 
   const markAsRead = useCallback(
     async (sequence: string) => {
@@ -310,24 +346,36 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return;
       }
-      lastMarkedSequenceRef.current = sequence;
+      if (markReadInFlightRef.current.has(sequence)) return;
+      const operation = operationFor(selectedConversationId);
+      markReadInFlightRef.current.add(sequence);
       try {
         await api.markRead(selectedConversationId, sequence);
+        if (operationIsCurrent(operation)) {
+          lastMarkedSequenceRef.current = latestReadSequence(
+            lastMarkedSequenceRef.current,
+            sequence,
+          );
+        }
       } catch {
         // ignore transient mark-read network failure
+      } finally {
+        markReadInFlightRef.current.delete(sequence);
       }
     },
-    [selectedConversationId],
+    [operationFor, operationIsCurrent, selectedConversationId],
   );
 
   const ensureMessageLoaded = useCallback(
     async (targetMessageId: string): Promise<boolean> => {
       if (!selectedConversationId) return false;
       if (messages.some((m) => m.id === targetMessageId)) return true;
+      const operation = operationFor(selectedConversationId);
       let currentCursor = messageCursor;
       for (let i = 0; i < 3 && currentCursor; i++) {
         try {
           const page = await api.listMessages(selectedConversationId, currentCursor);
+          if (!operationIsCurrent(operation)) return false;
           setMessages((current) => mergeMessages(page.data, current));
           setMessageCursor(page.pagination.nextCursor);
           currentCursor = page.pagination.nextCursor;
@@ -340,11 +388,12 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
       }
       return false;
     },
-    [messageCursor, messages, selectedConversationId],
+    [messageCursor, messages, operationFor, operationIsCurrent, selectedConversationId],
   );
 
   const submitPending = useCallback(
     async (pending: PendingMessage) => {
+      const operation = operationFor(pending.conversationId);
       try {
         const canonical = await api.sendMessage(pending.conversationId, {
           clientMessageId: pending.clientMessageId,
@@ -352,11 +401,13 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
           ...(pending.text ? { text: pending.text } : {}),
           attachmentIds: pending.attachmentIds,
         });
+        if (!operationIsCurrent(operation)) return true;
         setMessages((current) => mergeMessages(current, [canonical]));
         setPendingMessages((current) => current.filter((item) => item.key !== pending.key));
         void refreshInbox();
         return true;
       } catch (error) {
+        if (!operationIsCurrent(operation)) return false;
         const definite =
           error instanceof ApiRequestError && error.status < 500 && error.status !== 429;
         setPendingMessages((current) =>
@@ -373,7 +424,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [refreshInbox],
+    [operationFor, operationIsCurrent, refreshInbox],
   );
 
   const send = useCallback(

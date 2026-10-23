@@ -333,6 +333,21 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     create index website_attachment_uploads_owner on messaging.website_attachment_uploads(organization_id,contact_identity_id,created_at desc);
     create index website_attachment_uploads_cleanup on messaging.website_attachment_uploads(status,expires_at) where status in ('PENDING','PROCESSING','AVAILABLE');
 
+    create table messaging.staff_attachment_uploads (
+      id uuid primary key default uuidv7(), organization_id uuid not null references platform.organizations(id),
+      conversation_id uuid not null, actor_id uuid not null references iam.users(id),
+      media_asset_id uuid not null, media_upload_session_id uuid not null,
+      expires_at timestamptz not null, attached_message_id uuid,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      unique(organization_id,id), unique(organization_id,media_asset_id), unique(organization_id,media_upload_session_id),
+      foreign key(organization_id,conversation_id) references messaging.conversations(organization_id,id),
+      foreign key(organization_id,media_asset_id) references media.media_assets(organization_id,id),
+      foreign key(organization_id,media_upload_session_id) references media.media_upload_sessions(organization_id,id),
+      foreign key(organization_id,attached_message_id) references messaging.messages(organization_id,id)
+    );
+    create index staff_attachment_uploads_owner on messaging.staff_attachment_uploads(organization_id,actor_id,conversation_id,created_at desc);
+    create index staff_attachment_uploads_cleanup on messaging.staff_attachment_uploads(expires_at,id) where attached_message_id is null;
+
     create table messaging.realtime_streams (
       organization_id uuid primary key references platform.organizations(id), next_sequence bigint not null default 1 check(next_sequence>0), retained_from_sequence bigint not null default 1 check(retained_from_sequence>0), updated_at timestamptz not null default now()
     );

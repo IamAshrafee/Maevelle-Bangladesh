@@ -699,7 +699,10 @@ export async function acceptInstagramWebhookEvents(
     }>`select organization_id,id from messaging.channel_connections where channel_kind='INSTAGRAM' and provider_account_id=${accountId} and status<>'DISCONNECTED'`.execute(
       db,
     );
-    if (!connection.rows[0]) unknownAccounts++;
+    if (!connection.rows[0]) {
+      unknownAccounts++;
+      continue;
+    }
     for (const raw of entry.messaging) {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
       const event = raw as Record<string, unknown>;
@@ -713,7 +716,7 @@ export async function acceptInstagramWebhookEvents(
               ? 'REACTION'
               : 'UNSUPPORTED';
       const inserted =
-        await sql`insert into messaging.provider_events(organization_id,channel_connection_id,provider,provider_account_id,event_key,event_type,payload,provider_occurred_at,status) values(${connection.rows[0]?.organization_id ?? null},${connection.rows[0]?.id ?? null},'META_INSTAGRAM',${accountId},${instagramEventKey(accountId, event)},${eventType},${JSON.stringify(event)}::jsonb,${typeof event.timestamp === 'number' ? new Date(event.timestamp) : null},${connection.rows[0] ? 'PENDING' : 'IGNORED'}) on conflict(provider,provider_account_id,event_key) do nothing returning id`.execute(
+        await sql`insert into messaging.provider_events(organization_id,channel_connection_id,provider,provider_account_id,event_key,event_type,payload,provider_occurred_at,status) values(${connection.rows[0].organization_id},${connection.rows[0].id},'META_INSTAGRAM',${accountId},${instagramEventKey(accountId, event)},${eventType},${JSON.stringify(event)}::jsonb,${typeof event.timestamp === 'number' ? new Date(event.timestamp) : null},'PENDING') on conflict(provider,provider_account_id,event_key) do nothing returning id`.execute(
           db,
         );
       if (inserted.rows.length) accepted++;
@@ -953,39 +956,108 @@ export async function reconcileInstagramEcho(
   db: Db,
   input: { organizationId: string; connectionId: string; providerMessageId: string },
 ): Promise<boolean> {
-  const result = await sql<{
-    message_id: string;
-  }>`select ref.message_id from messaging.message_external_references ref where ref.organization_id=${input.organizationId} and ref.channel_connection_id=${input.connectionId}::uuid and ref.reference_type='PROVIDER_MESSAGE' and ref.external_id=${input.providerMessageId}`.execute(
-    db,
-  );
-  if (!result.rows[0]) return false;
-  await sql`update messaging.messages set delivery_state=case when delivery_state in('QUEUED','SENDING') then 'SENT' else delivery_state end,sent_at=coalesce(sent_at,now()),updated_at=now() where organization_id=${input.organizationId} and id=${result.rows[0].message_id}`.execute(
-    db,
-  );
-  return true;
+  return db.transaction().execute(async (tx) => {
+    const result = await sql<{
+      message_id: string;
+      conversation_id: string;
+      previous_state: string;
+    }>`select ref.message_id,message.conversation_id,message.delivery_state as previous_state
+       from messaging.message_external_references ref
+       join messaging.messages message on message.organization_id=ref.organization_id and message.id=ref.message_id
+       where ref.organization_id=${input.organizationId} and ref.channel_connection_id=${input.connectionId}::uuid
+         and ref.reference_type='PROVIDER_MESSAGE' and ref.external_id=${input.providerMessageId}`.execute(tx);
+    const message = result.rows[0];
+    if (!message) return false;
+
+    await sql`update messaging.messages set
+        delivery_state=case when delivery_state in('QUEUED','SENDING','UNKNOWN') then 'SENT' else delivery_state end,
+        sent_at=coalesce(sent_at,now()),
+        failed_at=case when delivery_state='UNKNOWN' then null else failed_at end,
+        failure_code=case when delivery_state='UNKNOWN' then null else failure_code end,
+        updated_at=now()
+      where organization_id=${input.organizationId} and id=${message.message_id}`.execute(tx);
+
+    await sql`update messaging.delivery_intents set
+        status='SUCCEEDED',completed_at=coalesce(completed_at,now()),lease_owner=null,lease_expires_at=null,
+        last_error_code=null,updated_at=now()
+      where organization_id=${input.organizationId} and message_id=${message.message_id} and status in ('PROCESSING','RECONCILIATION_REQUIRED','RETRY_WAIT','PENDING')`.execute(tx);
+
+    if (['QUEUED', 'SENDING', 'UNKNOWN'].includes(message.previous_state)) {
+      const payload = {
+        conversationId: message.conversation_id,
+        messageId: message.message_id,
+        state: 'SENT',
+      };
+      await appendRealtimeEvent(tx as Db, {
+        organizationId: input.organizationId,
+        audienceType: 'ORGANIZATION',
+        conversationId: message.conversation_id,
+        eventType: 'messaging.message.delivery_changed.v1',
+        aggregateId: message.message_id,
+        aggregateVersion: 1,
+        payload,
+      });
+      await sql`insert into platform.outbox_events(
+          organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at
+        ) values(
+          ${input.organizationId},'messaging.message.delivery_changed.v1',1,'messaging.message',
+          ${message.message_id},1,${JSON.stringify(payload)}::jsonb,now()
+        )`.execute(tx);
+    }
+    return true;
+  });
 }
 
 export async function applyInstagramReadWatermark(
   db: Db,
   input: { organizationId: string; connectionId: string; recipientId: string; occurredAt: Date },
 ): Promise<number> {
-  const result = await sql<{
-    id: string;
-    conversation_id: string;
-  }>`update messaging.messages message set delivery_state='READ',delivered_at=coalesce(delivered_at,${input.occurredAt}),read_at=coalesce(read_at,${input.occurredAt}),updated_at=now() from messaging.conversations conversation join messaging.contact_identities identity on identity.organization_id=conversation.organization_id and identity.id=conversation.contact_identity_id where message.organization_id=${input.organizationId} and message.conversation_id=conversation.id and conversation.channel_connection_id=${input.connectionId}::uuid and identity.external_subject_id=${input.recipientId} and message.direction='OUTBOUND' and message.created_at<=${input.occurredAt} and message.delivery_state in('QUEUED','SENDING','SENT','DELIVERED') returning message.id,message.conversation_id`.execute(
-    db,
-  );
-  for (const row of result.rows)
-    await appendRealtimeEvent(db, {
-      organizationId: input.organizationId,
-      audienceType: 'ORGANIZATION',
-      conversationId: row.conversation_id,
-      eventType: 'messaging.message.delivery_changed.v1',
-      aggregateId: row.id,
-      aggregateVersion: 1,
-      payload: { conversationId: row.conversation_id, messageId: row.id, state: 'READ' },
-    });
-  return result.rows.length;
+  return db.transaction().execute(async (tx) => {
+    const result = await sql<{
+      id: string;
+      conversation_id: string;
+    }>`update messaging.messages message set
+        delivery_state='READ',
+        delivered_at=coalesce(delivered_at,${input.occurredAt}),
+        read_at=coalesce(read_at,${input.occurredAt}),
+        failed_at=case when delivery_state='UNKNOWN' then null else failed_at end,
+        failure_code=case when delivery_state='UNKNOWN' then null else failure_code end,
+        updated_at=now()
+      from messaging.conversations conversation
+      join messaging.contact_identities identity on identity.organization_id=conversation.organization_id and identity.id=conversation.contact_identity_id
+      where message.organization_id=${input.organizationId} and message.conversation_id=conversation.id
+        and conversation.channel_connection_id=${input.connectionId}::uuid
+        and identity.external_subject_id=${input.recipientId}
+        and message.direction='OUTBOUND'
+        and message.created_at<=${input.occurredAt}
+        and message.delivery_state in('QUEUED','SENDING','SENT','DELIVERED','UNKNOWN')
+      returning message.id,message.conversation_id`.execute(tx);
+
+    for (const row of result.rows) {
+      await sql`update messaging.delivery_intents set
+          status='SUCCEEDED',completed_at=coalesce(completed_at,now()),lease_owner=null,lease_expires_at=null,
+          last_error_code=null,updated_at=now()
+        where organization_id=${input.organizationId} and message_id=${row.id} and status in ('PROCESSING','RECONCILIATION_REQUIRED','RETRY_WAIT','PENDING')`.execute(tx);
+
+      const payload = { conversationId: row.conversation_id, messageId: row.id, state: 'READ' };
+      await appendRealtimeEvent(tx as Db, {
+        organizationId: input.organizationId,
+        audienceType: 'ORGANIZATION',
+        conversationId: row.conversation_id,
+        eventType: 'messaging.message.delivery_changed.v1',
+        aggregateId: row.id,
+        aggregateVersion: 1,
+        payload,
+      });
+      await sql`insert into platform.outbox_events(
+          organization_id,event_type,event_version,aggregate_type,aggregate_id,aggregate_version,payload,occurred_at
+        ) values(
+          ${input.organizationId},'messaging.message.delivery_changed.v1',1,'messaging.message',
+          ${row.id},1,${JSON.stringify(payload)}::jsonb,now()
+        )`.execute(tx);
+    }
+    return result.rows.length;
+  });
 }
 
 export async function getInstagramReplyEligibility(

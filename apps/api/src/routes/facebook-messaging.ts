@@ -9,6 +9,8 @@ import * as facebook from '@maevelle/database/messaging';
 
 import {
   authenticateMessagingAdmin,
+  hasMessagingInboxAccess,
+  messagingAccess,
   parseExpectedVersion,
   sendMessagingError,
   type MessagingAuth,
@@ -717,10 +719,21 @@ export function registerFacebookMessagingRoutes(
           .code(403)
           .send({ error: { code: 'FORBIDDEN', message: 'Messaging reply access is required.' } });
       try {
+        const conversationId = (request.params as { conversationId: string }).conversationId;
+        if (!hasMessagingInboxAccess(context))
+          return reply
+            .code(403)
+            .send({ error: { code: 'FORBIDDEN', message: 'Messaging inbox access is required.' } });
+        await facebook.getConversation(database.db, {
+          organizationId: context.organizationId,
+          conversationId,
+          membershipId: context.membershipId,
+          access: messagingAccess(context),
+        });
         return {
           data: await facebook.getFacebookReplyEligibility(database.db, {
             organizationId: context.organizationId,
-            conversationId: (request.params as { conversationId: string }).conversationId,
+            conversationId,
           }),
         };
       } catch (error) {

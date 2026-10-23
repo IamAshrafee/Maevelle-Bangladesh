@@ -437,6 +437,14 @@ describe('messaging transactional core', () => {
     await sql`update messaging.delivery_intents set lease_expires_at=now()-interval '1 second' where message_id=${outbound.message.id}`.execute(
       database.db,
     );
+    const evidenceBefore = await sql<{
+      realtime: string;
+      outbox: string;
+    }>`select
+      (select count(*)::text from messaging.realtime_events where aggregate_id=${outbound.message.id} and event_type='messaging.message.delivery_changed.v1') realtime,
+      (select count(*)::text from platform.outbox_events where aggregate_id=${outbound.message.id} and event_type='messaging.message.delivery_changed.v1') outbox`.execute(
+      database.db,
+    );
     await messaging.reclaimExpiredMessagingDeliveries(database.db);
     finish();
     await processing;
@@ -449,6 +457,28 @@ describe('messaging transactional core', () => {
     expect(result.rows[0]).toEqual({
       status: 'RECONCILIATION_REQUIRED',
       delivery_state: 'UNKNOWN',
+    });
+    const evidenceAfter = await sql<{
+      realtime: string;
+      outbox: string;
+      payload: Record<string, unknown>;
+    }>`select
+      (select count(*)::text from messaging.realtime_events where aggregate_id=${outbound.message.id} and event_type='messaging.message.delivery_changed.v1') realtime,
+      (select count(*)::text from platform.outbox_events where aggregate_id=${outbound.message.id} and event_type='messaging.message.delivery_changed.v1') outbox,
+      (select payload from messaging.realtime_events where aggregate_id=${outbound.message.id} and event_type='messaging.message.delivery_changed.v1' order by stream_sequence desc limit 1) payload`.execute(
+      database.db,
+    );
+    expect(BigInt(evidenceAfter.rows[0]!.realtime) - BigInt(evidenceBefore.rows[0]!.realtime)).toBe(
+      1n,
+    );
+    expect(BigInt(evidenceAfter.rows[0]!.outbox) - BigInt(evidenceBefore.rows[0]!.outbox)).toBe(
+      1n,
+    );
+    expect(evidenceAfter.rows[0]!.payload).toMatchObject({
+      conversationId,
+      messageId: outbound.message.id,
+      state: 'UNKNOWN',
+      failureCode: 'LEASE_EXPIRED',
     });
   });
 
@@ -1011,4 +1041,133 @@ describe('Instagram messaging provider boundaries', () => {
       }),
     ).resolves.toMatchObject({ replayed: false });
   });
+
+  it('reconciles Facebook echo to recover UNKNOWN message delivery and complete intent', async () => {
+    const fbConnId = await messaging.createChannelConnection(database.db, {
+      organizationId,
+      channelKind: 'FACEBOOK',
+      displayName: 'Facebook Echo Test',
+      status: 'ACTIVE',
+    });
+    const identity = await messaging.createContactIdentity(database.db, {
+      organizationId,
+      channelConnectionId: fbConnId,
+      channelKind: 'FACEBOOK',
+      externalSubjectId: 'psid-echo-test',
+    });
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: fbConnId,
+      contactId: identity.contactId,
+      contactIdentityId: identity.identityId,
+    });
+    const messageId = crypto.randomUUID();
+    const providerMessageId = `mid.fb.${crypto.randomUUID()}`;
+    await sql`insert into messaging.messages(id,organization_id,conversation_id,sequence,direction,sender_type,sender_membership_id,message_type,text_body,delivery_state,failed_at,failure_code)
+      values(${messageId},${organizationId},${conversationId},100,'OUTBOUND','STAFF',${membershipId},'TEXT','Echo test message','UNKNOWN',now(),'LEASE_EXPIRED')`.execute(
+      database.db,
+    );
+    await sql`insert into messaging.delivery_intents(id,organization_id,message_id,channel_connection_id,status,provider_request_key,last_error_code)
+      values(${crypto.randomUUID()},${organizationId},${messageId},${fbConnId},'RECONCILIATION_REQUIRED',${`req-${crypto.randomUUID()}`},'LEASE_EXPIRED')`.execute(
+      database.db,
+    );
+    await sql`insert into messaging.message_external_references(organization_id,message_id,channel_connection_id,reference_type,external_id)
+      values(${organizationId},${messageId},${fbConnId},'PROVIDER_MESSAGE',${providerMessageId})`.execute(
+      database.db,
+    );
+
+    const reconciled = await messaging.reconcileFacebookEcho(database.db, {
+      organizationId,
+      connectionId: fbConnId,
+      providerMessageId,
+    });
+    expect(reconciled).toBe(true);
+
+    const msgCheck = await sql<{
+      delivery_state: string;
+      failed_at: string | null;
+      failure_code: string | null;
+      intent_status: string;
+    }>`select m.delivery_state,m.failed_at::text,m.failure_code,di.status as intent_status
+       from messaging.messages m
+       join messaging.delivery_intents di on di.message_id=m.id
+       where m.id=${messageId}`.execute(database.db);
+
+    expect(msgCheck.rows[0]).toEqual({
+      delivery_state: 'SENT',
+      failed_at: null,
+      failure_code: null,
+      intent_status: 'SUCCEEDED',
+    });
+
+    const events = await sql<{ count: string }>`select count(*)::text from messaging.realtime_events where aggregate_id=${messageId} and event_type='messaging.message.delivery_changed.v1' and payload->>'state'='SENT'`.execute(
+      database.db,
+    );
+    expect(Number(events.rows[0]!.count)).toBeGreaterThanOrEqual(1);
+  });
+
+  it('reconciles Instagram echo to recover UNKNOWN message delivery and complete intent', async () => {
+    const igConnId = await messaging.createChannelConnection(database.db, {
+      organizationId,
+      channelKind: 'INSTAGRAM',
+      displayName: 'Instagram Echo Test',
+      status: 'ACTIVE',
+    });
+    const identity = await messaging.createContactIdentity(database.db, {
+      organizationId,
+      channelConnectionId: igConnId,
+      channelKind: 'INSTAGRAM',
+      externalSubjectId: 'igsid-echo-test',
+    });
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: igConnId,
+      contactId: identity.contactId,
+      contactIdentityId: identity.identityId,
+    });
+    const messageId = crypto.randomUUID();
+    const providerMessageId = `mid.ig.${crypto.randomUUID()}`;
+    await sql`insert into messaging.messages(id,organization_id,conversation_id,sequence,direction,sender_type,sender_membership_id,message_type,text_body,delivery_state,failed_at,failure_code)
+      values(${messageId},${organizationId},${conversationId},101,'OUTBOUND','STAFF',${membershipId},'TEXT','Instagram echo message','UNKNOWN',now(),'LEASE_EXPIRED')`.execute(
+      database.db,
+    );
+    await sql`insert into messaging.delivery_intents(id,organization_id,message_id,channel_connection_id,status,provider_request_key,last_error_code)
+      values(${crypto.randomUUID()},${organizationId},${messageId},${igConnId},'RECONCILIATION_REQUIRED',${`req-${crypto.randomUUID()}`},'LEASE_EXPIRED')`.execute(
+      database.db,
+    );
+    await sql`insert into messaging.message_external_references(organization_id,message_id,channel_connection_id,reference_type,external_id)
+      values(${organizationId},${messageId},${igConnId},'PROVIDER_MESSAGE',${providerMessageId})`.execute(
+      database.db,
+    );
+
+    const reconciled = await messaging.reconcileInstagramEcho(database.db, {
+      organizationId,
+      connectionId: igConnId,
+      providerMessageId,
+    });
+    expect(reconciled).toBe(true);
+
+    const msgCheck = await sql<{
+      delivery_state: string;
+      failed_at: string | null;
+      failure_code: string | null;
+      intent_status: string;
+    }>`select m.delivery_state,m.failed_at::text,m.failure_code,di.status as intent_status
+       from messaging.messages m
+       join messaging.delivery_intents di on di.message_id=m.id
+       where m.id=${messageId}`.execute(database.db);
+
+    expect(msgCheck.rows[0]).toEqual({
+      delivery_state: 'SENT',
+      failed_at: null,
+      failure_code: null,
+      intent_status: 'SUCCEEDED',
+    });
+
+    const events = await sql<{ count: string }>`select count(*)::text from messaging.realtime_events where aggregate_id=${messageId} and event_type='messaging.message.delivery_changed.v1' and payload->>'state'='SENT'`.execute(
+      database.db,
+    );
+    expect(Number(events.rows[0]!.count)).toBeGreaterThanOrEqual(1);
+  });
 });
+
