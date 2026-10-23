@@ -105,4 +105,24 @@ describe('messaging HTTP authentication boundary', () => {
     expect(membership.rows[0]).toBeDefined();
     await app.close();
   });
+
+  it('handles follow-ups listing with query parameters', async () => {
+    const auth = { api: { getSession: async () => ({ user: { id: ownerUserId } }) } };
+    const app = Fastify();
+    registerMessagingRoutes(app, database, auth as never);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/admin/messaging/follow-ups?status=PENDING&mine=true&limit=200',
+      headers: { 'x-organization-id': organizationId },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ data: [] });
+    const invalidLimit = await app.inject({
+      method: 'GET',
+      url: '/admin/messaging/follow-ups?limit=500',
+      headers: { 'x-organization-id': organizationId },
+    });
+    expect(invalidLimit.statusCode).toBe(400);
+    await app.close();
+  });
 });

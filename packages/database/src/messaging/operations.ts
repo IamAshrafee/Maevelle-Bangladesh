@@ -917,7 +917,7 @@ export async function listFollowUps(
 ): Promise<readonly FollowUpView[]> {
   if (input.conversationId)
     await ensureConversationAccess(db, input.actor, input.access, input.conversationId);
-  const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 250);
   const accessFilter =
     input.access === 'ALL'
       ? sql`true`

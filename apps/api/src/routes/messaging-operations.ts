@@ -549,7 +549,7 @@ export function registerOperationalMessagingRoutes(
             Type.Union(['PENDING', 'COMPLETED', 'CANCELLED'].map((value) => Type.Literal(value))),
           ),
           mine: Type.Optional(Type.Boolean()),
-          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 250 })),
         }),
       },
     },
