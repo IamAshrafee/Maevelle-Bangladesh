@@ -85,7 +85,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
 
     create table messaging.instagram_connection_state (
       organization_id uuid not null references platform.organizations(id), channel_connection_id uuid not null,
-      integration_account_id uuid not null, app_id text not null, page_id text not null,
+      integration_account_id uuid not null, app_id text not null, page_id text not null, page_name text not null,
       instagram_account_id text not null, username text, account_type text,
       status text not null check(status in ('AUTHORIZATION_PENDING','CONNECTED','LIMITED_PERMISSIONS','WEBHOOK_INCOMPLETE','NEEDS_REAUTHORIZATION','SUSPENDED','DISCONNECTED','ERROR')),
       authorization_method text not null default 'FACEBOOK_LOGIN' check(authorization_method='FACEBOOK_LOGIN'),

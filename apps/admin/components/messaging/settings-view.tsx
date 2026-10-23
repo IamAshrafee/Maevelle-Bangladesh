@@ -1,6 +1,18 @@
 'use client';
 
-import { Archive, Check, Clock3, Facebook, MessageSquare, Plus, Save, Settings2, UsersRound } from 'lucide-react';
+import {
+  Archive,
+  Check,
+  Clock3,
+  Facebook,
+  Instagram,
+  MessageSquare,
+  Plus,
+  Save,
+  Settings2,
+  UsersRound,
+} from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type {
@@ -21,7 +33,16 @@ import { useMessaging } from './messaging-provider';
 import type { AssignmentRuleView, ChannelSettingsView, NotificationPreferenceView } from './types';
 
 type SettingsTab = 'channels' | 'hours' | 'routing' | 'content' | 'notifications';
-type ChannelSubTab = 'website' | 'facebook';
+type ChannelSubTab = 'website' | 'facebook' | 'instagram';
+const InstagramSettingsPanel = dynamic(
+  () =>
+    import('./instagram/instagram-settings-panel').then((module) => module.InstagramSettingsPanel),
+  {
+    loading: () => (
+      <p className="py-12 text-center text-sm text-muted-foreground">Loading Instagram settings…</p>
+    ),
+  },
+);
 const weekdays = [
   ['sun', 'Sunday'],
   ['mon', 'Monday'],
@@ -36,8 +57,11 @@ export function SettingsView() {
   const messaging = useMessaging();
   const searchParams = useSearchParams();
   const hasFacebookParam = Boolean(searchParams.get('facebook'));
-  const [tab, setTab] = useState<SettingsTab>(hasFacebookParam ? 'channels' : 'channels');
-  const [channelSubTab, setChannelSubTab] = useState<ChannelSubTab>(hasFacebookParam ? 'facebook' : 'website');
+  const hasInstagramParam = Boolean(searchParams.get('instagram'));
+  const [tab, setTab] = useState<SettingsTab>('channels');
+  const [channelSubTab, setChannelSubTab] = useState<ChannelSubTab>(
+    hasInstagramParam ? 'instagram' : hasFacebookParam ? 'facebook' : 'website',
+  );
   const [channels, setChannels] = useState<readonly ChannelSettingsView[]>([]);
   const [hours, setHours] = useState<BusinessHoursView | null>(null);
   const [rules, setRules] = useState<readonly AssignmentRuleView[]>([]);
@@ -88,7 +112,7 @@ export function SettingsView() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
-        <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1">
+        <div className="no-scrollbar mb-5 flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1">
           {(['channels', 'hours', 'routing', 'content', 'notifications'] as const).map((value) => (
             <Button
               key={value}
@@ -114,7 +138,7 @@ export function SettingsView() {
         ) : null}
         {state === 'ready' && tab === 'channels' ? (
           <div className="space-y-5">
-            <div className="flex gap-1 rounded-xl border border-border bg-card p-1 max-w-sm">
+            <div className="no-scrollbar flex max-w-xl gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1">
               <Button
                 variant={channelSubTab === 'website' ? 'secondary' : 'ghost'}
                 size="sm"
@@ -133,12 +157,23 @@ export function SettingsView() {
                 <Facebook className="size-3.5 text-[#1877f2]" />
                 Facebook Messenger
               </Button>
+              <Button
+                variant={channelSubTab === 'instagram' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="shrink-0 flex-1 gap-1.5 text-xs"
+                onClick={() => setChannelSubTab('instagram')}
+              >
+                <Instagram className="size-3.5 text-primary" aria-hidden="true" />
+                Instagram Direct
+              </Button>
             </div>
 
             {channelSubTab === 'website' ? (
               <Channels channels={channels} onReload={load} />
-            ) : (
+            ) : channelSubTab === 'facebook' ? (
               <FacebookSettingsPanel />
+            ) : (
+              <InstagramSettingsPanel />
             )}
           </div>
         ) : null}
@@ -299,9 +334,7 @@ function BusinessHours({
       localDate: newExceptionDate,
       label: newExceptionLabel.trim() || null,
       isClosed: newExceptionClosed,
-      intervals: newExceptionClosed
-        ? []
-        : [{ start: newExceptionStart, end: newExceptionEnd }],
+      intervals: newExceptionClosed ? [] : [{ start: newExceptionStart, end: newExceptionEnd }],
     };
     onChange({
       ...value,
@@ -399,11 +432,7 @@ function BusinessHours({
             Closed until
             <Input
               type="datetime-local"
-              value={
-                value.manualClosureUntil
-                  ? value.manualClosureUntil.slice(0, 16)
-                  : ''
-              }
+              value={value.manualClosureUntil ? value.manualClosureUntil.slice(0, 16) : ''}
               onChange={(event) =>
                 onChange({
                   ...value,
@@ -459,11 +488,7 @@ function BusinessHours({
             Fully closed
           </label>
           <div className="flex items-end">
-            <Button
-              disabled={!newExceptionDate}
-              onClick={addException}
-              size="sm"
-            >
+            <Button disabled={!newExceptionDate} onClick={addException} size="sm">
               <Plus className="size-4" /> Add exception
             </Button>
           </div>
@@ -490,14 +515,9 @@ function BusinessHours({
         ) : null}
         <div className="mt-4 divide-y divide-border">
           {value.exceptions.map((exc) => (
-            <div
-              key={exc.localDate}
-              className="flex items-center justify-between py-2 text-sm"
-            >
+            <div key={exc.localDate} className="flex items-center justify-between py-2 text-sm">
               <div>
-                <span className="font-mono text-xs tabular-nums font-medium">
-                  {exc.localDate}
-                </span>
+                <span className="font-mono text-xs tabular-nums font-medium">{exc.localDate}</span>
                 {exc.label ? <span className="ml-2 font-medium">· {exc.label}</span> : null}
                 <span className="ml-2 text-xs text-muted-foreground">
                   {exc.isClosed
@@ -572,7 +592,8 @@ function Routing({
           <div>
             <h3 className="font-semibold">Assignment rules</h3>
             <p className="text-xs text-muted-foreground">
-              Ordered rules automatically route incoming customer conversations to eligible team members.
+              Ordered rules automatically route incoming customer conversations to eligible team
+              members.
             </p>
           </div>
         </div>

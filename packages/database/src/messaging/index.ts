@@ -98,6 +98,7 @@ interface ConversationRow {
   capability_snapshot: Record<string, unknown>;
   contact_id: string;
   contact_name: string | null;
+  contact_username: string | null;
   customer_id: string | null;
   status: ConversationStatus;
   priority: ConversationSummary['priority'];
@@ -114,6 +115,7 @@ interface ConversationRow {
   unread_count: string;
   version: string;
   subject: string | null;
+  context: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
   reply_eligible_until: Date | null;
@@ -148,7 +150,12 @@ function mapConversation(row: ConversationRow): ConversationDetail {
       connectionId: row.channel_connection_id,
       name: row.channel_name,
     },
-    contact: { id: row.contact_id, displayName: row.contact_name, customerId: row.customer_id },
+    contact: {
+      id: row.contact_id,
+      displayName: row.contact_name,
+      username: row.contact_username,
+      customerId: row.customer_id,
+    },
     status: row.status,
     priority: row.priority,
     assignee: row.assignee_membership_id
@@ -192,6 +199,7 @@ function mapConversation(row: ConversationRow): ConversationDetail {
     ),
     version: row.version,
     subject: row.subject,
+    providerContext: row.context,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     replyEligibleUntil: iso(row.reply_eligible_until),
@@ -202,12 +210,12 @@ const conversationSelect = sql.raw(`
   select c.id, cc.channel_kind, c.channel_connection_id, cc.display_name channel_name,cc.status channel_status,
     facebook.status facebook_status,facebook.granted_scopes facebook_granted_scopes,facebook.page_tasks facebook_page_tasks,
     instagram.status instagram_status,instagram.granted_scopes instagram_granted_scopes,instagram.page_tasks instagram_page_tasks,
-    cc.capability_snapshot, c.contact_id, ct.display_name contact_name, ct.customer_id,
+    cc.capability_snapshot, c.contact_id, ct.display_name contact_name, ci.username contact_username, ct.customer_id,
     c.status, c.priority, c.assignee_membership_id, am.display_name assignee_name,
     c.last_message_sequence::text, lm.text_body last_message_text,
     lm.direction last_message_direction, lm.created_at last_message_created_at,
     (select count(*)::text from messaging.messages unread where unread.organization_id=c.organization_id and unread.conversation_id=c.id and unread.direction='INBOUND' and unread.sequence>coalesce(rc.last_read_sequence,0)) unread_count,
-    c.version::text, c.subject, c.created_at, c.updated_at, c.reply_eligible_until,c.is_starred,
+    c.version::text, c.subject, c.context, c.created_at, c.updated_at, c.reply_eligible_until,c.is_starred,
     coalesce((select jsonb_agg(jsonb_build_object('id',tag.id,'label',tag.label,'colorToken',tag.color_token,'status',tag.status,'version',tag.version::text) order by tag.label,tag.id) from messaging.conversation_tag_assignments assignment join messaging.tags tag on tag.organization_id=assignment.organization_id and tag.id=assignment.tag_id where assignment.organization_id=c.organization_id and assignment.conversation_id=c.id),'[]'::jsonb) tags,
     case when follow_up.id is null then null else jsonb_build_object('id',follow_up.id,'dueAt',follow_up.due_at,'status',follow_up.status,'responsibleMembershipId',follow_up.responsible_membership_id,'isOverdue',follow_up.due_at<now()) end follow_up,
     (c.status in ('NEW','OPEN') and c.last_inbound_at is not null and (c.last_outbound_at is null or c.last_inbound_at>c.last_outbound_at)) needs_reply,
@@ -219,6 +227,7 @@ const conversationSelect = sql.raw(`
   left join messaging.facebook_connection_state facebook on facebook.organization_id=cc.organization_id and facebook.channel_connection_id=cc.id
   left join messaging.instagram_connection_state instagram on instagram.organization_id=cc.organization_id and instagram.channel_connection_id=cc.id
   join messaging.contacts ct on ct.organization_id=c.organization_id and ct.id=c.contact_id
+  join messaging.contact_identities ci on ci.organization_id=c.organization_id and ci.id=c.contact_identity_id
   left join iam.organization_memberships am on am.organization_id=c.organization_id and am.id=c.assignee_membership_id
   left join messaging.messages lm on lm.organization_id=c.organization_id and lm.id=c.last_message_id
   left join lateral(select follow_up.id,follow_up.due_at,follow_up.status,follow_up.responsible_membership_id from messaging.conversation_follow_ups follow_up where follow_up.organization_id=c.organization_id and follow_up.conversation_id=c.id and follow_up.status='PENDING' order by follow_up.due_at,follow_up.id limit 1) follow_up on true

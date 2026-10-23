@@ -2,23 +2,24 @@
 
 ## Active area
 
-Omnichannel messaging — Phase 08 Instagram Direct backend integration.
+Omnichannel messaging — Phase 09 Instagram Direct frontend integration completed.
 
 ## Evidence state
 
-`PHASE 08 INSTAGRAM BACKEND CODE COMPLETE / LIVE META ACTIVATION PENDING`
+`PHASES 00–09 ROADMAP CODE COMPLETE / LIVE META ACTIVATION AND PRODUCTION VERIFICATION PENDING`
 
-Phase 08 adds the official Instagram professional-account backend as a separate,
-credential-isolated provider adapter over the existing canonical messaging core.
+Phase 09 completes the responsive Instagram Direct administration and unified
+inbox experience over the Phase 08 provider adapter. Repository-controlled work
+now includes official authorization preflight and return handling, eligible
+professional-account selection, Page identity confirmation, health and
+permission evidence, diagnostics, reauthorization, suspend/restore,
+non-destructive disconnect, history-sync monitoring, Instagram filters and
+context, and a server-authoritative text-or-one-image reply composer.
 
-Repository-controlled work now includes secure Page-linked account discovery,
-OAuth state binding, encrypted credentials, signed durable webhooks, canonical
-DM/contact/conversation ingestion, private images, policy-aware Send API
-delivery, echo/read reconciliation, resumable history sync, diagnostics, and
-typed Phase 09 APIs. Details and activation limits are recorded in
-`docs/architecture/messaging/18-phase-08-instagram-backend-completion.md`.
+Implementation and activation limits are recorded in
+`docs/architecture/messaging/19-phase-09-instagram-frontend-completion.md`.
 
-The existing Phase 07 Facebook Messenger administrative and operator frontend includes:
+The existing Facebook Messenger administrative and operator frontend continues to include:
 
 - Multi-step connection wizard with scope disclosures, availability preflight, popup/redirect OAuth flow, and eligible Page discovery;
 - Connection overview dashboard with 5-pillar readiness matrix (Auth, Webhook, Routing, Historical Sync, Operational);
@@ -37,15 +38,16 @@ The complete architecture, operational flows, safety controls, and verification 
 
 - Repository TypeScript build passed (`pnpm typecheck`).
 - Focused ESLint passed with 0 errors and 0 warnings on the touched TypeScript paths.
-- Database messaging tests passed (`packages/database/src/messaging.test.ts` - 14/14 passed).
-- Core Meta messenger tests passed (`packages/core/src/meta-messenger.test.ts` - 7/7 passed).
-- Config validation tests passed (`packages/config/src/index.test.ts` - 13/13 passed).
+- Admin production build passed (`pnpm --filter @maevelle/admin build`, 90 routes).
 - Clean PostgreSQL baseline migration and rerun passed (`packages/database/src/migrate.test.ts` - 1/1 passed).
-- Focused combined provider/regression verification passed (36/36 tests).
-- API suite passed (`pnpm vitest run apps/api` - 11 files, 39 tests).
+- Focused Instagram/database/messaging/Facebook regression verification passed (4 files, 21/21 tests).
+- Architecture boundary check passed (`pnpm check:architecture`).
 - Credential-pattern scan passed (`pnpm check:secrets`).
+- Responsive browser inspection passed at 390/820/1440 widths with no console warnings or errors.
+- Design-system scan found no new literal Instagram colors, `transition-all`, or routine `!important` usage.
 
 ## Next implementation boundary
 
-- Phase 09: implement the Instagram connection, diagnostics, history-sync, inbox badge/filter, context rendering, and policy-aware composer frontend over the completed contracts.
-- Live Meta activation remains owner-controlled and requires App Review, Business Verification, Instagram/Page eligibility, production credentials, public HTTPS callbacks, and controlled real-message verification.
+- Owner-controlled Meta App Review, Business Verification, Instagram/Page eligibility, production credentials, and public HTTPS OAuth/webhook configuration.
+- Controlled live Instagram authorization, inbound/outbound text and image messaging, story/shared context, delivery/read reconciliation, historical coverage, reauthorization, and disconnect verification.
+- Comprehensive regression/security/accessibility testing and an explicitly authorized production deployment.

@@ -258,7 +258,7 @@ export async function connectInstagramAccount(
       await sql`update messaging.channel_connections set display_name=${account.name},status=${missingScopes.length ? 'DEGRADED' : 'ACTIVE'},provider_account_id=${account.id},last_error_code=null,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and id=${connectionId}`.execute(
         tx,
       );
-      await sql`update messaging.instagram_connection_state set page_id=${account.pageId},username=${account.username},account_type=${account.accountType},status=${stateStatus},graph_api_version=${input.graphApiVersion},granted_scopes=${attempt.granted_scopes}::text[],required_scopes=${input.requiredScopes}::text[],page_tasks=${account.pageTasks}::text[],credential_healthy=true,webhook_subscription_healthy=false,subscribed_fields='{}',disconnected_at=null,disconnected_by_actor_id=null,last_error_code=null,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${connectionId}`.execute(
+      await sql`update messaging.instagram_connection_state set page_id=${account.pageId},page_name=${account.pageName},username=${account.username},account_type=${account.accountType},status=${stateStatus},graph_api_version=${input.graphApiVersion},granted_scopes=${attempt.granted_scopes}::text[],required_scopes=${input.requiredScopes}::text[],page_tasks=${account.pageTasks}::text[],credential_healthy=true,webhook_subscription_healthy=false,subscribed_fields='{}',disconnected_at=null,disconnected_by_actor_id=null,last_error_code=null,updated_at=now(),version=version+1 where organization_id=${input.organizationId} and channel_connection_id=${connectionId}`.execute(
         tx,
       );
     } else {
@@ -281,7 +281,7 @@ export async function connectInstagramAccount(
         tx,
       );
       connectionId = connection.rows[0]!.id;
-      await sql`insert into messaging.instagram_connection_state(organization_id,channel_connection_id,integration_account_id,app_id,page_id,instagram_account_id,username,account_type,status,graph_api_version,granted_scopes,required_scopes,page_tasks) values(${input.organizationId},${connectionId},${integrationAccount.rows[0]!.id},${input.appId},${account.pageId},${account.id},${account.username},${account.accountType},${stateStatus},${input.graphApiVersion},${attempt.granted_scopes}::text[],${input.requiredScopes}::text[],${account.pageTasks}::text[])`.execute(
+      await sql`insert into messaging.instagram_connection_state(organization_id,channel_connection_id,integration_account_id,app_id,page_id,page_name,instagram_account_id,username,account_type,status,graph_api_version,granted_scopes,required_scopes,page_tasks) values(${input.organizationId},${connectionId},${integrationAccount.rows[0]!.id},${input.appId},${account.pageId},${account.pageName},${account.id},${account.username},${account.accountType},${stateStatus},${input.graphApiVersion},${attempt.granted_scopes}::text[],${input.requiredScopes}::text[],${account.pageTasks}::text[])`.execute(
         tx,
       );
     }
@@ -305,6 +305,7 @@ interface ConnectionRow {
   id: string;
   instagram_account_id: string;
   page_id: string;
+  page_name: string;
   username: string | null;
   display_name: string;
   account_type: string | null;
@@ -312,6 +313,7 @@ interface ConnectionRow {
   graph_api_version: string;
   granted_scopes: string[];
   required_scopes: string[];
+  page_tasks: string[];
   subscribed_fields: string[];
   permission_review_status: InstagramConnectionView['permissionReviewStatus'];
   webhook_subscription_healthy: boolean;
@@ -323,6 +325,7 @@ interface ConnectionRow {
   last_error_code: string | null;
   disconnected_at: Date | null;
   version: string;
+  sync_id: string | null;
   sync_status: InstagramSyncView['status'] | null;
   coverage_status: InstagramSyncView['coverageStatus'] | null;
 }
@@ -362,14 +365,17 @@ function mapConnection(row: ConnectionRow): InstagramConnectionView {
     id: row.id,
     instagramAccountId: row.instagram_account_id,
     pageId: row.page_id,
+    pageName: row.page_name,
     username: row.username,
     displayName: row.display_name,
     accountType: row.account_type,
     authorizationMethod: 'FACEBOOK_LOGIN',
     status: row.instagram_status,
     graphApiVersion: row.graph_api_version,
+    requiredScopes: row.required_scopes,
     grantedScopes: row.granted_scopes,
     missingScopes,
+    pageTasks: row.page_tasks,
     permissionReviewStatus: row.permission_review_status,
     subscribedFields: row.subscribed_fields,
     webhookSubscriptionHealthy: row.webhook_subscription_healthy,
@@ -380,6 +386,7 @@ function mapConnection(row: ConnectionRow): InstagramConnectionView {
     lastVerifiedAt: iso(row.last_verified_at),
     lastErrorCode: row.last_error_code,
     disconnectedAt: iso(row.disconnected_at),
+    latestSyncId: row.sync_id,
     readiness: {
       authorization,
       webhook,
@@ -394,7 +401,7 @@ function mapConnection(row: ConnectionRow): InstagramConnectionView {
 }
 
 const connectionSelect = sql.raw(
-  `select cc.id,state.instagram_account_id,state.page_id,state.username,cc.display_name,state.account_type,state.status instagram_status,state.graph_api_version,state.granted_scopes,state.required_scopes,state.subscribed_fields,state.permission_review_status,state.webhook_subscription_healthy,state.credential_healthy,state.last_webhook_at,state.last_inbound_at,state.last_outbound_at,state.last_verified_at,state.last_error_code,state.disconnected_at,state.version::text,sync.status sync_status,sync.coverage_status from messaging.channel_connections cc join messaging.instagram_connection_state state on state.organization_id=cc.organization_id and state.channel_connection_id=cc.id left join lateral(select job.status,job.coverage_status from messaging.instagram_sync_jobs job where job.organization_id=cc.organization_id and job.channel_connection_id=cc.id order by job.created_at desc limit 1) sync on true`,
+  `select cc.id,state.instagram_account_id,state.page_id,state.page_name,state.username,cc.display_name,state.account_type,state.status instagram_status,state.graph_api_version,state.granted_scopes,state.required_scopes,state.page_tasks,state.subscribed_fields,state.permission_review_status,state.webhook_subscription_healthy,state.credential_healthy,state.last_webhook_at,state.last_inbound_at,state.last_outbound_at,state.last_verified_at,state.last_error_code,state.disconnected_at,state.version::text,sync.id sync_id,sync.status sync_status,sync.coverage_status from messaging.channel_connections cc join messaging.instagram_connection_state state on state.organization_id=cc.organization_id and state.channel_connection_id=cc.id left join lateral(select job.id,job.status,job.coverage_status from messaging.instagram_sync_jobs job where job.organization_id=cc.organization_id and job.channel_connection_id=cc.id order by job.created_at desc limit 1) sync on true`,
 );
 
 export async function listInstagramConnections(

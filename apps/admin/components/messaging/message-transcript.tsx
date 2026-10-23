@@ -21,10 +21,7 @@ import {
 } from '@/components/ui/message-scroller';
 import { formatDateSeparator, isSameDay } from './format';
 import { useMessaging } from './messaging-provider';
-import {
-  TranscriptMessageItem,
-  TranscriptPendingItem,
-} from './transcript-message-item';
+import { TranscriptMessageItem, TranscriptPendingItem } from './transcript-message-item';
 import { TranscriptSearchBar } from './transcript-search-bar';
 
 export function findFirstUnreadIndex(
@@ -111,10 +108,7 @@ export interface MessageTranscriptProps {
   onCloseSearch?: (() => void) | undefined;
 }
 
-function MessageTranscriptInner({
-  isSearchOpen = false,
-  onCloseSearch,
-}: MessageTranscriptProps) {
+function MessageTranscriptInner({ isSearchOpen = false, onCloseSearch }: MessageTranscriptProps) {
   const messaging = useMessaging();
   const searchParams = useSearchParams();
   const scroller = useMessageScroller();
@@ -196,8 +190,7 @@ function MessageTranscriptInner({
 
   const handlePrevMatch = useCallback(() => {
     if (!searchMatchIds.length) return;
-    const prevIndex =
-      (currentMatchIndex - 1 + searchMatchIds.length) % searchMatchIds.length;
+    const prevIndex = (currentMatchIndex - 1 + searchMatchIds.length) % searchMatchIds.length;
     setCurrentMatchIndex(prevIndex);
     const matchId = searchMatchIds[prevIndex];
     scroller.scrollToMessage(`msg-${matchId}`, {
@@ -260,7 +253,8 @@ function MessageTranscriptInner({
   }, [scroller]);
 
   // Identify first unread inbound message for the unread marker
-  const lastReadSeq = (conversation as { lastReadSequence?: string | null } | null)?.lastReadSequence;
+  const lastReadSeq = (conversation as { lastReadSequence?: string | null } | null)
+    ?.lastReadSequence;
   const unreadCount = conversation?.unreadCount ?? 0;
   const firstUnreadIndex = useMemo(() => {
     return findFirstUnreadIndex(messages, unreadCount, lastReadSeq);
@@ -284,10 +278,7 @@ function MessageTranscriptInner({
         />
       ) : null}
 
-      <TranscriptVisibilityTracker
-        messages={messages}
-        onMarkAsRead={messaging.markAsRead}
-      />
+      <TranscriptVisibilityTracker messages={messages} onMarkAsRead={messaging.markAsRead} />
 
       <MessageScroller className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <MessageScrollerViewport
@@ -376,6 +367,7 @@ function MessageTranscriptInner({
                   >
                     <TranscriptMessageItem
                       message={message}
+                      channelKind={conversation?.channel.kind}
                       searchQuery={searchQuery}
                       isSearchMatch={isMatch}
                       isTarget={isTarget}
@@ -447,7 +439,8 @@ export function MessageTranscript(props: MessageTranscriptProps) {
   const messages = messaging.messages;
 
   // Determine if this conversation initially opens with unread messages
-  const lastReadSeq = (conversation as { lastReadSequence?: string | null } | null)?.lastReadSequence;
+  const lastReadSeq = (conversation as { lastReadSequence?: string | null } | null)
+    ?.lastReadSequence;
   const unreadCount = conversation?.unreadCount ?? 0;
   const hasInitialUnread = useMemo(() => {
     return findFirstUnreadIndex(messages, unreadCount, lastReadSeq) !== -1;

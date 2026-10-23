@@ -1,6 +1,16 @@
 'use client';
 
-import { CheckSquare2, ChevronsUp, Facebook, Filter, MessageCircle, Search, Star, X } from 'lucide-react';
+import {
+  CheckSquare2,
+  ChevronsUp,
+  Facebook,
+  Filter,
+  Instagram,
+  MessageCircle,
+  Search,
+  Star,
+  X,
+} from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNowStrict } from 'date-fns';
 
@@ -301,7 +311,12 @@ export function InboxPane() {
                         <span
                           className={cn('truncate text-sm', item.unreadCount && 'font-semibold')}
                         >
-                          {item.contact.displayName ?? (item.channel.kind === 'FACEBOOK' ? 'Facebook user' : 'Website visitor')}
+                          {item.contact.displayName ??
+                            (item.channel.kind === 'FACEBOOK'
+                              ? 'Facebook user'
+                              : item.channel.kind === 'INSTAGRAM'
+                                ? 'Instagram user'
+                                : 'Website visitor')}
                         </span>
                         {item.isStarred ? (
                           <Star className="size-3.5 shrink-0 fill-warning text-warning" />
@@ -339,6 +354,13 @@ export function InboxPane() {
                         className="text-[10px] bg-[#1877f2]/10 text-[#1877f2] border-[#1877f2]/20 gap-1 font-medium"
                       >
                         <Facebook className="size-2.5" /> Messenger
+                      </Badge>
+                    ) : item.channel.kind === 'INSTAGRAM' ? (
+                      <Badge
+                        variant="secondary"
+                        className="gap-1 border-primary/20 bg-primary-subtle text-[10px] font-medium text-primary"
+                      >
+                        <Instagram className="size-2.5" aria-hidden="true" /> Instagram
                       </Badge>
                     ) : (
                       <Badge variant="secondary" className="text-[10px]">
@@ -443,6 +465,7 @@ export function InboxPane() {
               options={[
                 { value: 'WEBSITE', label: 'Website' },
                 { value: 'FACEBOOK', label: 'Facebook Messenger' },
+                { value: 'INSTAGRAM', label: 'Instagram Direct' },
               ]}
             />
             <FilterSelect

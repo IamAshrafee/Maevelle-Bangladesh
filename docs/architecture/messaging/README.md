@@ -1,7 +1,7 @@
 # Omnichannel Messaging Architecture
 
-**Status:** Phase 08 Instagram Direct backend code complete; live Meta activation pending
-**Date:** 2026-10-22
+**Status:** Phases 00–09 repository code complete; live Meta activation and production verification pending
+**Date:** 2026-10-23
 **Scope:** Storefront live chat, unified Admin inbox, Facebook Messenger, and Instagram Direct
 **Authority:** Current source and migrations outrank historical design documents. This design does not authorize a production migration or provider connection.
 
@@ -32,6 +32,7 @@ The design deliberately does **not** introduce Redis, a broker, a messaging micr
 17. [Phase 06 Facebook Messenger backend completion](16-phase-06-completion.md)
 18. [Phase 07 Facebook Messenger frontend completion](17-phase-07-completion.md)
 19. [Phase 08 Instagram Direct backend completion](18-phase-08-instagram-backend-completion.md)
+20. [Phase 09 Instagram Direct frontend completion](19-phase-09-instagram-frontend-completion.md)
 
 ## Architecture at a glance
 
@@ -65,7 +66,7 @@ flowchart LR
 - Message bodies and private attachment URLs are not written to ordinary logs, notifications, or analytics payloads.
 - Storefront and Admin messaging UIs remain separate compositions over the same canonical contracts.
 
-## Phase 07 readiness
+## Roadmap readiness
 
 Phases 01–04 are implemented. The shared core has a complete website channel,
 and the Storefront now has the lazy, responsive customer chat interface over
@@ -83,7 +84,13 @@ signed durable webhook ingress, canonical normalization, Send API delivery,
 reply-window enforcement, health, diagnostics and bounded historical sync
 backend. See the [Phase 06 completion and activation record](16-phase-06-completion.md).
 
-Phase 07 can add the responsive connection, diagnostics and sync management UI
-over the Phase 06 contracts. Live Meta communication remains an explicit owner
-activation gate until an approved app, Page, permissions, public callback and
-test recipient are available.
+Phase 07 completes the Facebook administrative/operator frontend. Phase 08 adds
+the isolated Instagram professional-account backend, and Phase 09 completes its
+responsive connection, diagnostics, lifecycle, history-sync, unified-inbox,
+provider-context, and policy-aware composer frontend. See the
+[Phase 09 completion and activation record](19-phase-09-instagram-frontend-completion.md).
+
+The original Phases 00–09 roadmap is repository code-complete. Live Meta
+communication remains an explicit owner-controlled activation gate until the
+approved app, eligible Page-linked Instagram account, required permissions,
+public HTTPS callbacks, and controlled real-message verification are available.

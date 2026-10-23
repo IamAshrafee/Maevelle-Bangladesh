@@ -2,7 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import { BarChart3, CalendarClock, Inbox, Settings2 } from 'lucide-react';
-import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -41,8 +42,14 @@ export function MessagingWorkspace() {
 
 function MessagingWorkspaceContent() {
   const messaging = useMessaging();
-  const [view, setView] = useState<WorkspaceView>('inbox');
+  const searchParams = useSearchParams();
+  const [view, setView] = useState<WorkspaceView>(() =>
+    searchParams.has('facebook') || searchParams.has('instagram') ? 'settings' : 'inbox',
+  );
   const [contextOpen, setContextOpen] = useState(false);
+  useEffect(() => {
+    if (searchParams.has('facebook') || searchParams.has('instagram')) setView('settings');
+  }, [searchParams]);
   const items = [
     { value: 'inbox' as const, label: 'Inbox', icon: Inbox, visible: true },
     {
@@ -78,7 +85,7 @@ function MessagingWorkspaceContent() {
         </div>
         <div className="flex min-w-0 items-center gap-2">
           <nav
-            className="flex min-w-0 flex-1 gap-1 overflow-x-auto"
+            className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto"
             aria-label="Messaging sections"
           >
             {items

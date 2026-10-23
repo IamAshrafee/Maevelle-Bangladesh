@@ -7,6 +7,7 @@ import {
   Download,
   FileIcon,
   ImageIcon,
+  Instagram,
   Loader2,
   RefreshCw,
   ShieldAlert,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
-import type { AttachmentView, MessageView } from '@maevelle/contracts/messaging';
+import type { AttachmentView, ChannelKind, MessageView } from '@maevelle/contracts/messaging';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -28,13 +29,7 @@ import { cn } from '@/lib/utils';
 import { formatFileSize, formatTime } from './format';
 import type { PendingMessage } from './types';
 
-export function HighlightedText({
-  text,
-  query,
-}: {
-  text: string;
-  query?: string | undefined;
-}) {
+export function HighlightedText({ text, query }: { text: string; query?: string | undefined }) {
   if (!query || !query.trim()) {
     return <>{text}</>;
   }
@@ -47,10 +42,7 @@ export function HighlightedText({
     <>
       {parts.map((part, index) =>
         part.toLowerCase() === trimmed.toLowerCase() ? (
-          <mark
-            key={index}
-            className="rounded-xs bg-warning/35 px-0.5 font-medium text-foreground"
-          >
+          <mark key={index} className="rounded-xs bg-warning/35 px-0.5 font-medium text-foreground">
             {part}
           </mark>
         ) : (
@@ -73,15 +65,14 @@ function AttachmentPreview({
     attachment.mimeType?.startsWith('image/') ||
     /\.(jpe?g|png|webp|gif|svg)$/i.test(attachment.fileName ?? '');
 
-  const href =
-    attachment.downloadPath ?? `/api/admin/messaging/attachments/${attachment.id}`;
+  const href = attachment.downloadPath;
 
   const isQuarantined =
     attachment.securityStatus === 'QUARANTINED' ||
     attachment.securityStatus === 'REJECTED' ||
     attachment.securityStatus === 'PURGED';
 
-  if (isImage && !isQuarantined) {
+  if (isImage && !isQuarantined && href) {
     return (
       <div className="group/attachment relative mt-1.5 overflow-hidden rounded-lg border border-border bg-muted/40">
         <a
@@ -121,6 +112,21 @@ function AttachmentPreview({
     );
   }
 
+  if (attachment.kind === 'PROVIDER_SHARE') {
+    return (
+      <div className="mt-1.5 flex items-start gap-2 rounded-lg border border-primary/20 bg-primary-subtle p-2.5 text-xs">
+        <Instagram className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+        <div>
+          <p className="font-medium">Instagram Shared Content</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Meta supplied share or story context. The original content may expire or require
+            Instagram access.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-1.5 flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-2.5 text-xs shadow-2xs">
       <div className="flex min-w-0 items-center gap-2">
@@ -139,13 +145,14 @@ function AttachmentPreview({
           </p>
           <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
             {formatFileSize(attachment.byteSize)}
-            {attachment.securityStatus !== 'AVAILABLE' && attachment.securityStatus !== 'REMOTE_ONLY' ? (
+            {attachment.securityStatus !== 'AVAILABLE' &&
+            attachment.securityStatus !== 'REMOTE_ONLY' ? (
               <span className="ml-1 text-warning">({attachment.securityStatus.toLowerCase()})</span>
             ) : null}
           </p>
         </div>
       </div>
-      {!isQuarantined ? (
+      {!isQuarantined && href ? (
         <a
           href={href}
           download={attachment.fileName ?? 'attachment'}
@@ -160,11 +167,7 @@ function AttachmentPreview({
   );
 }
 
-function DeliveryStatusIndicator({
-  delivery,
-}: {
-  delivery: MessageView['delivery'];
-}) {
+function DeliveryStatusIndicator({ delivery }: { delivery: MessageView['delivery'] }) {
   switch (delivery.state) {
     case 'READ':
       return (
@@ -232,6 +235,7 @@ function DeliveryStatusIndicator({
 
 export interface TranscriptMessageItemProps {
   message: MessageView;
+  channelKind?: ChannelKind | undefined;
   searchQuery?: string | undefined;
   isSearchMatch?: boolean | undefined;
   isTarget?: boolean | undefined;
@@ -239,6 +243,7 @@ export interface TranscriptMessageItemProps {
 
 export function TranscriptMessageItem({
   message,
+  channelKind,
   searchQuery,
   isSearchMatch,
   isTarget,
@@ -267,13 +272,20 @@ export function TranscriptMessageItem({
   }
 
   const isProviderPage =
-    message.sender.type === 'PROVIDER' ||
-    (message.sender as { role?: string }).role === 'PAGE';
+    message.sender.type === 'PROVIDER' || (message.sender as { role?: string }).role === 'PAGE';
   const senderName =
     message.sender.name ??
-    (isProviderPage ? 'Facebook Page' : outbound ? 'Maevelle Staff' : 'Customer');
+    (isProviderPage
+      ? channelKind === 'INSTAGRAM'
+        ? 'Instagram Account'
+        : 'Facebook Page'
+      : outbound
+        ? 'Maevelle Staff'
+        : 'Customer');
   const initials = isProviderPage
-    ? 'FB'
+    ? channelKind === 'INSTAGRAM'
+      ? 'IG'
+      : 'FB'
     : senderName
         .split(' ')
         .filter(Boolean)
@@ -296,7 +308,9 @@ export function TranscriptMessageItem({
         className={cn(
           'size-7 text-xs font-semibold select-none',
           isProviderPage
-            ? 'bg-[#1877f2]/10 text-[#1877f2] border border-[#1877f2]/30'
+            ? channelKind === 'INSTAGRAM'
+              ? 'border border-primary/20 bg-primary-subtle text-primary'
+              : 'bg-[#1877f2]/10 text-[#1877f2] border border-[#1877f2]/30'
             : outbound
               ? 'bg-primary/15 text-primary border border-primary/20'
               : 'bg-muted text-muted-foreground border border-border',
@@ -338,9 +352,7 @@ export function TranscriptMessageItem({
         </div>
 
         <MessageFooter className="gap-2">
-          {outbound ? (
-            <DeliveryStatusIndicator delivery={message.delivery} />
-          ) : null}
+          {outbound ? <DeliveryStatusIndicator delivery={message.delivery} /> : null}
         </MessageFooter>
       </MessageContent>
     </Message>
@@ -353,11 +365,7 @@ export interface TranscriptPendingItemProps {
   onDismiss: (key: string) => void;
 }
 
-export function TranscriptPendingItem({
-  pending,
-  onRetry,
-  onDismiss,
-}: TranscriptPendingItemProps) {
+export function TranscriptPendingItem({ pending, onRetry, onDismiss }: TranscriptPendingItemProps) {
   const isFailed = pending.state === 'REJECTED' || pending.state === 'UNCERTAIN';
 
   return (
@@ -382,9 +390,7 @@ export function TranscriptPendingItem({
         </MessageHeader>
 
         <div className="rounded-2xl rounded-tr-xs border border-primary/25 bg-primary-subtle px-3.5 py-2.5 text-sm text-foreground shadow-2xs leading-relaxed">
-          {pending.text ? (
-            <p className="whitespace-pre-wrap break-words">{pending.text}</p>
-          ) : null}
+          {pending.text ? <p className="whitespace-pre-wrap break-words">{pending.text}</p> : null}
           {pending.attachmentIds.length ? (
             <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
               <ImageIcon className="size-3.5" />

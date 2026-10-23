@@ -45,6 +45,7 @@ export interface ConversationSummary {
   readonly contact: {
     readonly id: string;
     readonly displayName: string | null;
+    readonly username: string | null;
     readonly customerId: string | null;
   };
   readonly status: ConversationStatus;
@@ -190,6 +191,7 @@ export interface MessagingReportSummary {
 
 export interface ConversationDetail extends ConversationSummary {
   readonly subject: string | null;
+  readonly providerContext: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly replyEligibleUntil: string | null;
@@ -460,14 +462,17 @@ export interface InstagramConnectionView {
   readonly id: string;
   readonly instagramAccountId: string;
   readonly pageId: string;
+  readonly pageName: string;
   readonly username: string | null;
   readonly displayName: string;
   readonly accountType: string | null;
   readonly authorizationMethod: 'FACEBOOK_LOGIN';
   readonly status: InstagramConnectionStatus;
   readonly graphApiVersion: string;
+  readonly requiredScopes: readonly string[];
   readonly grantedScopes: readonly string[];
   readonly missingScopes: readonly string[];
+  readonly pageTasks: readonly string[];
   readonly permissionReviewStatus:
     'UNKNOWN' | 'DEVELOPMENT_ONLY' | 'APP_REVIEW_PENDING' | 'ADVANCED_ACCESS_CONFIRMED';
   readonly subscribedFields: readonly string[];
@@ -479,6 +484,7 @@ export interface InstagramConnectionView {
   readonly lastVerifiedAt: string | null;
   readonly lastErrorCode: string | null;
   readonly disconnectedAt: string | null;
+  readonly latestSyncId: string | null;
   readonly readiness: {
     readonly authorization: 'READY' | 'INCOMPLETE' | 'NEEDS_REAUTHORIZATION';
     readonly webhook: 'READY' | 'NOT_SUBSCRIBED' | 'UNHEALTHY';
