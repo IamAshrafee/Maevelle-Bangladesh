@@ -17,12 +17,17 @@ export interface BuildApiOptions {
 
 function matchesExpectedOrigin(
   origin: string,
-  expectedOrigin: string,
+  trustedOrigins: readonly string[],
   requestHost?: string,
+  forwardedHost?: string | string[],
 ): boolean {
-  if (origin === expectedOrigin) return true;
   try {
-    return new URL(origin).host === requestHost;
+    const originUrl = new URL(origin);
+    if (trustedOrigins.some((candidate) => candidate === originUrl.origin)) return true;
+    if (originUrl.host === requestHost) return true;
+    const fHost = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost;
+    if (fHost && originUrl.host === fHost.split(',')[0]?.trim()) return true;
+    return false;
   } catch {
     return false;
   }
@@ -76,8 +81,18 @@ export function buildApi(options: BuildApiOptions) {
       ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
       (request.url.startsWith('/admin/') || request.url.startsWith('/invitations/'))
     ) {
-      const trustedOrigin = new URL(options.config.authBaseUrl).origin;
-      if (!matchesExpectedOrigin(origin, trustedOrigin, request.headers.host))
+      const trustedOrigins = [
+        new URL(options.config.authBaseUrl).origin,
+        ...(options.config.authTrustedOrigins ?? []),
+      ];
+      if (
+        !matchesExpectedOrigin(
+          origin,
+          trustedOrigins,
+          request.headers.host,
+          request.headers['x-forwarded-host'],
+        )
+      )
         return reply.code(403).send({
           error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
         });
@@ -88,8 +103,18 @@ export function buildApi(options: BuildApiOptions) {
       ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
       request.url.startsWith('/storefront/v1/chat/')
     ) {
-      const storefrontOrigin = new URL(options.config.storefrontBaseUrl).origin;
-      if (!matchesExpectedOrigin(origin, storefrontOrigin, request.headers.host))
+      const trustedOrigins = [
+        new URL(options.config.storefrontBaseUrl).origin,
+        ...(options.config.authTrustedOrigins ?? []),
+      ];
+      if (
+        !matchesExpectedOrigin(
+          origin,
+          trustedOrigins,
+          request.headers.host,
+          request.headers['x-forwarded-host'],
+        )
+      )
         return reply.code(403).send({
           error: { code: 'ORIGIN_REJECTED', message: 'Request origin is not trusted.' },
         });

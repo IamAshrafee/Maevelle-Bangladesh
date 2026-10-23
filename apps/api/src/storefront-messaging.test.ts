@@ -173,6 +173,15 @@ describe('storefront messaging API', () => {
     });
     expect(malformed.statusCode).toBe(403);
     expect(malformed.json().error.code).toBe('ORIGIN_REJECTED');
+
+    const trustedAlternate = await app.inject({
+      method: 'POST',
+      url: '/storefront/v1/chat/session',
+      headers: { origin: 'http://localhost:3000' },
+      payload: {},
+    });
+    expect(trustedAlternate.statusCode).toBe(201);
+    expect(trustedAlternate.json().data.conversation).toBeDefined();
   });
 
   it('authorizes, verifies, and completes a visitor-owned local image upload', async () => {
