@@ -1473,7 +1473,8 @@ export async function processMessagingDeliveries(
         text: claimed.text_body,
       });
     } catch {
-      outcome = { type: 'TRANSIENT_FAILURE', code: 'ADAPTER_EXCEPTION' };
+      // An exception can occur after a provider accepted the request.
+      outcome = { type: 'UNKNOWN', code: 'ADAPTER_EXCEPTION' };
     }
     await completeDelivery(db, claimed, outcome, started);
     processed++;
@@ -1519,9 +1520,12 @@ async function completeDelivery(
         ? new Date(outcome.retryAfter)
         : new Date(Date.now() + Math.min(300_000, 1000 * 2 ** claim.attempt_count));
     const code = outcome.type === 'ACCEPTED' ? null : outcome.code;
-    await sql`update messaging.delivery_intents set status=${intentStatus},available_at=${retryAt},lease_owner=null,lease_expires_at=null,last_error_code=${code},completed_at=case when ${intentStatus} in('SUCCEEDED','FAILED_FINAL','RECONCILIATION_REQUIRED') then now() else null end,updated_at=now() where id=${claim.id} and status='PROCESSING'`.execute(
+    const completed = await sql<{
+      id: string;
+    }>`update messaging.delivery_intents set status=${intentStatus},available_at=${retryAt},lease_owner=null,lease_expires_at=null,last_error_code=${code},completed_at=case when ${intentStatus} in('SUCCEEDED','FAILED_FINAL','RECONCILIATION_REQUIRED') then now() else null end,updated_at=now() where id=${claim.id} and status='PROCESSING' and attempt_count=${claim.attempt_count} returning id`.execute(
       tx,
     );
+    if (!completed.rows.length) return;
     await sql`update messaging.messages set delivery_state=${messageState},provider_message_id=case when ${outcome.type}='ACCEPTED' then ${(outcome as { providerMessageId?: string }).providerMessageId ?? null} else provider_message_id end,sent_at=case when ${messageState}='SENT' then now() else sent_at end,failed_at=case when ${messageState} in('FAILED_TRANSIENT','FAILED_PERMANENT','UNKNOWN') then now() else failed_at end,failure_code=${code},updated_at=now() where organization_id=${claim.organization_id} and id=${claim.message_id}`.execute(
       tx,
     );
@@ -1555,7 +1559,7 @@ async function completeDelivery(
 export async function reclaimExpiredMessagingDeliveries(db: Db): Promise<number> {
   const result = await sql<{
     id: string;
-  }>`with reclaimed as(update messaging.delivery_intents set status=case when attempt_count>=max_attempts then 'FAILED_FINAL' else 'RETRY_WAIT' end,available_at=now(),lease_owner=null,lease_expires_at=null,last_error_code='LEASE_EXPIRED',completed_at=case when attempt_count>=max_attempts then now() else null end,updated_at=now() where status='PROCESSING' and lease_expires_at<=now() returning organization_id,message_id,status) update messaging.messages m set delivery_state=case when reclaimed.status='FAILED_FINAL' then 'FAILED_PERMANENT' else 'FAILED_TRANSIENT' end,failed_at=now(),failure_code='LEASE_EXPIRED',updated_at=now() from reclaimed where m.organization_id=reclaimed.organization_id and m.id=reclaimed.message_id returning m.id`.execute(
+  }>`with reclaimed as(update messaging.delivery_intents set status='RECONCILIATION_REQUIRED',lease_owner=null,lease_expires_at=null,last_error_code='LEASE_EXPIRED',completed_at=now(),updated_at=now() where status='PROCESSING' and lease_expires_at<=now() returning organization_id,message_id) update messaging.messages m set delivery_state='UNKNOWN',failed_at=now(),failure_code='LEASE_EXPIRED',updated_at=now() from reclaimed where m.organization_id=reclaimed.organization_id and m.id=reclaimed.message_id returning m.id`.execute(
     db,
   );
   return result.rows.length;

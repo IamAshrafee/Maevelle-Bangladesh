@@ -2,19 +2,22 @@
   "program": "Maevelle Product Completion V2",
   "version": 2,
   "active_area": "omnichannel-messaging",
-  "active_substage": "PHASE_09_INSTAGRAM_DIRECT_FRONTEND_COMPLETE",
-  "active_status": "PHASES_00_09_CODE_COMPLETE_META_ACTIVATION_PENDING",
+  "active_substage": "PHASE_10_ASSURANCE_IN_PROGRESS",
+  "active_status": "PHASE_10_PARTIAL_NO_GO",
   "baseline_commit": "d2cce2c",
   "last_checkpoint_commit": "051bd51",
   "last_verified_commit": "051bd51",
-  "last_completed_action": "Completed Phase 09 Instagram Direct frontend integration with official authorization preflight/return handling, professional-account selection, Page identity, health and lifecycle controls, historical sync monitoring, unified inbox context, server-authoritative reply eligibility, text-or-one-image enforcement, responsive verification, and focused regression checks.",
-  "next_action": "Owner-controlled Meta App Review and Business Verification, production credentials and public HTTPS callbacks, controlled live Instagram end-to-end verification, comprehensive testing, and explicitly authorized deployment.",
-  "interrupted": false,
+  "last_completed_action": "Established an isolated audit database, ran initial focused messaging checks, and fixed an ambiguous delivery lease and stale-worker race; comprehensive assurance remains in progress.",
+  "next_action": "Continue the Phase 10 audit and reconciliation workflow described in docs/architecture/messaging/phase-10/audit.md; verify existing-installation migration safety and remaining readiness gates.",
+  "interrupted": true,
   "blocked_by": [
-    "LIVE_INSTAGRAM_META_CREDENTIALS_NOT_AVAILABLE",
-    "INSTAGRAM_APP_REVIEW_AND_ADVANCED_ACCESS_NOT_EVIDENCED",
-    "PUBLIC_HTTPS_INSTAGRAM_CALLBACK_NOT_CONFIGURED"
+    "EXISTING_DEPLOYMENT_SCHEMA_AND_MIGRATION_HISTORY_UNKNOWN",
+    "MESSAGING_RECONCILIATION_AND_REALTIME_RECOVERY_INCOMPLETE",
+    "LIVE_META_ACTIVATION_AND_ACCEPTANCE_UNVERIFIED"
   ],
   "owner_review_status": "PENDING",
-  "verified_complete_areas": ["analytics", "supply-operations"]
+  "verified_complete_areas": [
+    "analytics",
+    "supply-operations"
+  ]
 }

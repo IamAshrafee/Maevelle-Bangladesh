@@ -392,6 +392,66 @@ describe('messaging transactional core', () => {
     );
   });
 
+  it('does not retry an ambiguous expired delivery or let its stale worker overwrite recovery', async () => {
+    const conversationId = await messaging.createConversation(database.db, {
+      organizationId,
+      channelConnectionId: connectionId,
+      contactId,
+      contactIdentityId: identityId,
+    });
+    const outbound = await messaging.prepareOutboundMessage(database.db, {
+      actor: actor(),
+      access: 'ALL',
+      conversationId,
+      idempotencyKey: `lease-${crypto.randomUUID()}`,
+      clientMessageId: `lease-client-${crypto.randomUUID()}`,
+      text: 'Ambiguous delivery',
+    });
+    await sql`update messaging.delivery_intents set available_at='1900-01-01' where message_id=${outbound.message.id}`.execute(
+      database.db,
+    );
+    let started!: () => void;
+    const deliveryStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let finish!: () => void;
+    const deliveryFinished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const registry = new messaging.ChannelAdapterRegistry();
+    registry.register({
+      kind: 'WEBSITE',
+      deliver: async () => {
+        started();
+        await deliveryFinished;
+        return { type: 'ACCEPTED', providerMessageId: 'late-provider-result' };
+      },
+    });
+    const processing = messaging.processMessagingDeliveries(
+      database.db,
+      registry,
+      'slow-worker',
+      1,
+    );
+    await deliveryStarted;
+    await sql`update messaging.delivery_intents set lease_expires_at=now()-interval '1 second' where message_id=${outbound.message.id}`.execute(
+      database.db,
+    );
+    await messaging.reclaimExpiredMessagingDeliveries(database.db);
+    finish();
+    await processing;
+    const result = await sql<{
+      status: string;
+      delivery_state: string;
+    }>`select di.status,m.delivery_state from messaging.delivery_intents di join messaging.messages m on m.id=di.message_id where m.id=${outbound.message.id}`.execute(
+      database.db,
+    );
+    expect(result.rows[0]).toEqual({
+      status: 'RECONCILIATION_REQUIRED',
+      delivery_state: 'UNKNOWN',
+    });
+  });
+
   it('enforces eligible tenant assignment and records auditable assignment history', async () => {
     const conversationId = await messaging.createConversation(database.db, {
       organizationId,
