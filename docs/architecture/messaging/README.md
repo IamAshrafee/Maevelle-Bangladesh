@@ -91,13 +91,13 @@ responsive connection, diagnostics, lifecycle, history-sync, unified-inbox,
 provider-context, and policy-aware composer frontend. See the
 [Phase 09 completion and activation record](19-phase-09-instagram-frontend-completion.md).
 
-Phase 10 completes comprehensive system assurance, database migration reconciliation
-(clean fresh baseline and existing installation reconciliation via migration 3201),
-concurrency race remediation for provider delivery echo/receipt recovery, and security
-hardening across all channels. See the
-[Phase 10 completion and system assurance record](20-phase-10-comprehensive-system-assurance.md).
+Phase 10 completes the local audit and remediation pass for migration continuity,
+worker fencing, ambiguous-delivery recovery, attachment provenance, client send
+safety, dependencies, builds, and inbox query performance. See the
+[Phase 10 assurance record](20-phase-10-comprehensive-system-assurance.md) and its
+[authoritative evidence audit](phase-10/audit.md).
 
-The codebase is technically 100% verified across 16 test suites and 89 tests. Live Meta
-communication remains an explicit owner-controlled activation gate until the
-approved app, eligible Page-linked Instagram account, required permissions,
-public HTTPS callbacks, and controlled real-message verification are available.
+The production verdict is **NO-GO**. Focused local checks pass, but the target
+deployment schema and recovery procedure, repository-wide hardening/lint gates,
+authenticated browser/accessibility acceptance, and live Meta integration remain
+unverified release gates. No production or Meta environment was changed by the audit.

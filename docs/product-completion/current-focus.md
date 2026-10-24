@@ -1,5 +1,5 @@
 # Current Focus
 
-Omnichannel messaging — Phase 10 assurance is in progress, with a **NO-GO** interim verdict.
+Omnichannel messaging — the Phase 10 local audit and remediation pass is complete at commit `16f648a`; the production verdict remains **NO-GO**.
 
-The isolated audit, verified lease-recovery fix, remaining work, and migration and external activation blockers are recorded in [the Phase 10 audit](../architecture/messaging/phase-10/audit.md). Continue that work before claiming readiness.
+Focused implementation, migration, test, build, dependency, and performance evidence is recorded in the [authoritative Phase 10 audit](../architecture/messaging/phase-10/audit.md). Resume by closing its four release-gate groups: target-schema and backup rehearsal, hardening/lint baselines, authenticated browser/accessibility acceptance, and live Meta acceptance. Do not treat the passing local suite as production approval.
