@@ -27,13 +27,20 @@ export class ChatApiError extends Error {
 }
 
 async function responseError(response: Response): Promise<ChatApiError> {
-  const body = (await response.json().catch(() => undefined)) as
-    { error?: { code?: string; message?: string } } | undefined;
+  const text = await response.text().catch(() => '');
+  let body: { error?: { code?: string; message?: string } } | undefined;
+  if (text.trim()) {
+    try {
+      body = JSON.parse(text) as { error?: { code?: string; message?: string } };
+    } catch {
+      body = undefined;
+    }
+  }
   const retry = Number(response.headers.get('retry-after'));
   return new ChatApiError(
     response.status,
     body?.error?.code ?? 'REQUEST_FAILED',
-    body?.error?.message ?? 'The request could not be completed.',
+    body?.error?.message ?? (text.trim() ? text.trim().slice(0, 200) : 'The request could not be completed.'),
     Number.isFinite(retry) && retry > 0 ? retry : null,
   );
 }
@@ -46,8 +53,22 @@ async function envelope<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { accept: 'application/json', ...init?.headers },
   });
   if (!response.ok) throw await responseError(response);
-  const body = (await response.json()) as { data: T };
-  return body.data;
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  if (!text || !text.trim()) return undefined as T;
+  try {
+    const body = JSON.parse(text) as { data?: T } | T;
+    if (typeof body === 'object' && body !== null && 'data' in body) {
+      return (body as { data: T }).data;
+    }
+    return body as T;
+  } catch {
+    throw new ChatApiError(
+      response.status,
+      'INVALID_RESPONSE',
+      'The server returned an unparseable response.',
+    );
+  }
 }
 
 function json(method: string, body?: unknown): RequestInit {
@@ -88,7 +109,15 @@ export const chatApi = {
       { credentials: 'include', cache: 'no-store', headers: { accept: 'application/json' } },
     );
     if (!response.ok) throw await responseError(response);
-    return (await response.json()) as CursorPage<MessageView>;
+    const text = await response.text();
+    if (!text || !text.trim()) {
+      return { data: [], pagination: { hasMore: false, nextCursor: null } } as CursorPage<MessageView>;
+    }
+    try {
+      return JSON.parse(text) as CursorPage<MessageView>;
+    } catch {
+      return { data: [], pagination: { hasMore: false, nextCursor: null } } as CursorPage<MessageView>;
+    }
   },
   send: (
     conversationId: string,

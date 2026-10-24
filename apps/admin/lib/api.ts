@@ -30,13 +30,18 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   });
 
   if (!response.ok) {
-    const payload = (await response.json().catch(() => undefined)) as
-      | ApiErrorDto
-      | { error?: string }
-      | undefined;
+    const text = await response.text().catch(() => '');
+    let payload: ApiErrorDto | { error?: string } | undefined;
+    if (text.trim()) {
+      try {
+        payload = JSON.parse(text) as ApiErrorDto | { error?: string };
+      } catch {
+        payload = undefined;
+      }
+    }
     const structured = payload && typeof payload.error === 'object' ? payload.error : undefined;
     throw new ApiRequestError(
-      structured?.message ?? 'The operation could not be completed. Try again.',
+      structured?.message ?? (text.trim() ? text.trim().slice(0, 200) : 'The operation could not be completed. Try again.'),
       structured?.code ?? (typeof payload?.error === 'string' ? payload.error : 'REQUEST_FAILED'),
       response.status,
       undefined,
@@ -44,10 +49,24 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   }
   
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  if (!text || !text.trim()) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiRequestError(
+      'The server returned an unparseable response.',
+      'INVALID_RESPONSE',
+      response.status,
+      undefined,
+    );
+  }
 }
 
 export async function fetchApiData<T>(path: string, init?: RequestInit): Promise<T> {
   const envelope = await apiRequest<ApiEnvelope<T> | undefined>(path, init);
-  return envelope?.data as T;
+  if (envelope && typeof envelope === 'object' && 'data' in envelope) {
+    return envelope.data as T;
+  }
+  return envelope as T;
 }

@@ -51,6 +51,7 @@ export async function requestStorefrontApi<T>(path: string, init?: RequestInit):
         : 'The Storefront service is unavailable.',
     );
   }
+  if (response.status === 204) return undefined as T;
   const body = (await response.json().catch(() => undefined)) as
     ApiEnvelope<T> | ApiErrorBody | undefined;
 

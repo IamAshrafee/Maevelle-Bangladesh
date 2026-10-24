@@ -19,6 +19,7 @@ export async function requestStorefrontClient<T>(path: string, init?: RequestIni
     ...init,
     headers: { accept: 'application/json', ...init?.headers },
   });
+  if (response.status === 204) return undefined as T;
   const body = (await response.json().catch(() => undefined)) as
     | ApiEnvelope<T>
     | { readonly error?: { readonly code?: string; readonly message?: string } | string }

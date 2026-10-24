@@ -320,6 +320,14 @@ describe('API hardening foundation', () => {
     });
     expect(malformed.statusCode).toBe(400);
     expect(malformed.json()).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+    const notFound = await app.inject({
+      method: 'GET',
+      url: '/non-existent-api-route',
+    });
+    expect(notFound.statusCode).toBe(404);
+    expect(notFound.json()).toMatchObject({
+      error: { code: 'NOT_FOUND', message: expect.stringContaining('not found') },
+    });
     await app.close();
   });
 

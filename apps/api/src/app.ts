@@ -189,6 +189,16 @@ export function buildApi(options: BuildApiOptions) {
     });
   });
 
+  app.setNotFoundHandler((request, reply) => {
+    return reply.status(404).send({
+      error: {
+        code: 'NOT_FOUND',
+        message: `Route ${request.method}:${request.url} was not found.`,
+        requestId: request.id,
+      },
+    });
+  });
+
   registerHealthRoutes(app, options.database);
   if (options.config) {
     registerAuthRoutes(app, options.config, options.database);
