@@ -16,17 +16,13 @@ export interface MaevelleAuth {
     signUpEmail(input: {
       body: { email: string; password: string; name: string };
     }): Promise<{ user?: { id?: string } }>;
-    enableTwoFactor(input: {
-      headers: Headers;
-      body: { password: string; issuer?: string };
-    }): Promise<{ totpURI: string; backupCodes: string[] }>;
     generateTOTP(input: { body: { secret: string } }): Promise<{ code: string }>;
     viewBackupCodes(input: { body: { userId: string } }): Promise<{ backupCodes: string[] }>;
   };
 }
 
 /**
- * Better Auth 1.6.25 is authentication-only. Maevelle authorization is
+ * Better Auth establishes authentication only. Maevelle authorization is
  * resolved separately through active organization membership and capabilities.
  */
 export function createAuth(
@@ -52,6 +48,18 @@ export function createAuth(
         emailVerified: 'email_verified',
         createdAt: 'created_at',
         updatedAt: 'updated_at',
+      },
+      additionalFields: {
+        // PostgreSQL maintains this required column through the normalization
+        // trigger. Declaring it keeps Better Auth's runtime schema validator
+        // aware of the column without accepting or returning it through auth.
+        emailNormalized: {
+          type: 'string',
+          fieldName: 'email_normalized',
+          required: false,
+          input: false,
+          returned: false,
+        },
       },
     },
     account: {

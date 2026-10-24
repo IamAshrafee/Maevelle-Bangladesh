@@ -186,6 +186,7 @@ export async function up(db: Kysely<DatabaseSchema>): Promise<void> {
     );
     create unique index conversations_provider on messaging.conversations(organization_id,channel_connection_id,provider_conversation_id) where provider_conversation_id is not null;
     create index conversations_inbox on messaging.conversations(organization_id,status,last_message_at desc nulls last,id desc);
+    create index conversations_activity on messaging.conversations(organization_id,(coalesce(last_message_at,created_at)) desc,id desc);
     create index conversations_mine on messaging.conversations(organization_id,assignee_membership_id,status,last_message_at desc nulls last,id desc);
     create index conversations_unassigned on messaging.conversations(organization_id,last_message_at desc nulls last,id desc) where assignee_membership_id is null and status in ('NEW','OPEN','PENDING');
     create index conversations_channel on messaging.conversations(organization_id,channel_connection_id,status,last_message_at desc nulls last,id desc);

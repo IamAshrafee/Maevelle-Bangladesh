@@ -14,7 +14,13 @@ import {
   messageItems,
   reconcilePending,
 } from './model';
-import type { AttachmentDraft, ChatPageContext, ContactDetails, PendingMessage } from './types';
+import type {
+  AttachmentDraft,
+  ChatPageContext,
+  ComposerSubmitOutcome,
+  ContactDetails,
+  PendingMessage,
+} from './types';
 
 type Phase = 'idle' | 'initializing' | 'ready' | 'expired' | 'unavailable' | 'error';
 type Connection = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline' | 'standby';
@@ -316,8 +322,8 @@ export function useChat(input: {
       text: string,
       attachments: readonly AttachmentDraft[],
       updateAttachment: (localId: string, update: Partial<AttachmentDraft>) => void,
-    ) => {
-      if (!conversation) return false;
+    ): Promise<ComposerSubmitOutcome> => {
+      if (!conversation) return 'not-queued';
       const attachmentIds: string[] = [];
       const controller = new AbortController();
       activeUploads.current.add(controller);
@@ -336,7 +342,7 @@ export function useChat(input: {
         for (const attachment of attachments)
           updateAttachment(attachment.localId, { status: 'failed', error: friendlyError(cause) });
         setError(friendlyError(cause));
-        return false;
+        return 'not-queued';
       } finally {
         activeUploads.current.delete(controller);
       }
@@ -388,7 +394,7 @@ export function useChat(input: {
           return false;
         }
       };
-      return submit();
+      return (await submit()) ? 'accepted' : 'pending';
     },
     [conversation],
   );

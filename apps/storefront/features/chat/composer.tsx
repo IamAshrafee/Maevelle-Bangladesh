@@ -7,7 +7,11 @@ import { cx } from '@/components/ui/classnames';
 import { CloseIcon, ImageIcon } from '@/components/ui/icons';
 import { Textarea } from '@/components/ui/textarea';
 
-import type { AttachmentDraft } from './types';
+import {
+  shouldClearComposerDraft,
+  type AttachmentDraft,
+  type ComposerSubmitOutcome,
+} from './types';
 
 function newDraft(file: File): AttachmentDraft {
   return {
@@ -37,7 +41,7 @@ export function Composer({
     text: string,
     attachments: readonly AttachmentDraft[],
     update: (localId: string, patch: Partial<AttachmentDraft>) => void,
-  ) => Promise<boolean>;
+  ) => Promise<ComposerSubmitOutcome>;
 }) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<readonly AttachmentDraft[]>([]);
@@ -139,9 +143,9 @@ export function Composer({
     }
     setValidation(null);
     setSending(true);
-    const accepted = await onSend(text, attachments, update);
+    const outcome = await onSend(text, attachments, update);
     setSending(false);
-    if (accepted) {
+    if (shouldClearComposerDraft(outcome)) {
       setText('');
       for (const attachment of attachments) URL.revokeObjectURL(attachment.previewUrl);
       setAttachments([]);

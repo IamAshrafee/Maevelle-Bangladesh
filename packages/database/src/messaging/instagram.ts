@@ -739,6 +739,7 @@ export interface ClaimedInstagramEvent {
   readonly payload: Record<string, unknown>;
   readonly attemptCount: number;
   readonly maxAttempts: number;
+  readonly leaseOwner: string;
 }
 
 export async function claimInstagramProviderEvent(
@@ -768,6 +769,7 @@ export async function claimInstagramProviderEvent(
         payload: row.payload,
         attemptCount: row.attempt_count,
         maxAttempts: row.max_attempts,
+        leaseOwner: workerId,
       }
     : undefined;
 }
@@ -776,12 +778,14 @@ export async function completeInstagramProviderEvent(
   db: Db,
   input: {
     id: string;
+    leaseOwner: string;
+    attemptCount: number;
     outcome: 'PROCESSED' | 'IGNORED' | 'RETRY' | 'FAILED_FINAL';
     errorCode?: string;
   },
 ): Promise<void> {
   const status = input.outcome === 'RETRY' ? 'RETRY_WAIT' : input.outcome;
-  await sql`update messaging.provider_events set status=${status},available_at=case when ${status}='RETRY_WAIT' then now()+(least(1800,power(2,greatest(attempt_count-1,0))*5)::text||' seconds')::interval else available_at end,lease_owner=null,lease_expires_at=null,last_error_code=${input.errorCode ?? null},processed_at=case when ${status}<>'RETRY_WAIT' then now() else null end where id=${input.id}::bigint and status='PROCESSING'`.execute(
+  await sql`update messaging.provider_events set status=${status},available_at=case when ${status}='RETRY_WAIT' then now()+(least(1800,power(2,greatest(attempt_count-1,0))*5)::text||' seconds')::interval else available_at end,lease_owner=null,lease_expires_at=null,last_error_code=${input.errorCode ?? null},processed_at=case when ${status}<>'RETRY_WAIT' then now() else null end where id=${input.id}::bigint and status='PROCESSING' and lease_owner=${input.leaseOwner} and attempt_count=${input.attemptCount}`.execute(
     db,
   );
 }
@@ -1189,6 +1193,7 @@ export interface ClaimedInstagramSyncJob {
     participantId?: string;
     endAfterCurrent?: boolean;
   } | null;
+  readonly leaseOwner: string;
 }
 
 export async function claimInstagramSyncJob(
@@ -1210,6 +1215,7 @@ export async function claimInstagramSyncJob(
         organizationId: row.organization_id,
         connectionId: row.channel_connection_id,
         cursor: row.cursor,
+        leaseOwner: workerId,
       }
     : undefined;
 }
@@ -1218,6 +1224,7 @@ export async function advanceInstagramSyncJob(
   db: Db,
   input: {
     id: string;
+    leaseOwner: string;
     cursor: ClaimedInstagramSyncJob['cursor'];
     importedConversations?: number;
     importedMessages?: number;
@@ -1227,19 +1234,19 @@ export async function advanceInstagramSyncJob(
     errorCode?: string;
   },
 ): Promise<void> {
-  await sql`update messaging.instagram_sync_jobs set status=case when ${input.complete ?? false} then 'COMPLETED' else 'PROCESSING' end,cursor=${input.cursor ? JSON.stringify(input.cursor) : null}::jsonb,imported_conversations=imported_conversations+${input.importedConversations ?? 0},imported_messages=imported_messages+${input.importedMessages ?? 0},duplicate_messages=duplicate_messages+${input.duplicateMessages ?? 0},attachment_failures=attachment_failures+${input.attachmentFailures ?? 0},coverage_status=case when ${input.complete ?? false} then 'PROVIDER_EXHAUSTED' when coverage_status='UNKNOWN' then 'PARTIAL' else coverage_status end,error_count=error_count+${input.errorCode ? 1 : 0},last_error_code=${input.errorCode ?? null},available_at=now()+interval '5 seconds',lease_owner=null,lease_expires_at=null,completed_at=case when ${input.complete ?? false} then now() else null end,last_successful_at=now(),updated_at=now() where id=${input.id}::uuid`.execute(
+  await sql`update messaging.instagram_sync_jobs set status=case when ${input.complete ?? false} then 'COMPLETED' else 'PROCESSING' end,cursor=${input.cursor ? JSON.stringify(input.cursor) : null}::jsonb,imported_conversations=imported_conversations+${input.importedConversations ?? 0},imported_messages=imported_messages+${input.importedMessages ?? 0},duplicate_messages=duplicate_messages+${input.duplicateMessages ?? 0},attachment_failures=attachment_failures+${input.attachmentFailures ?? 0},coverage_status=case when ${input.complete ?? false} then 'PROVIDER_EXHAUSTED' when coverage_status='UNKNOWN' then 'PARTIAL' else coverage_status end,error_count=error_count+${input.errorCode ? 1 : 0},last_error_code=${input.errorCode ?? null},available_at=now()+interval '5 seconds',lease_owner=null,lease_expires_at=null,completed_at=case when ${input.complete ?? false} then now() else null end,last_successful_at=now(),updated_at=now() where id=${input.id}::uuid and status='PROCESSING' and lease_owner=${input.leaseOwner}`.execute(
     db,
   );
 }
 
 export async function failInstagramSyncJob(
   db: Db,
-  id: string,
+  claim: Pick<ClaimedInstagramSyncJob, 'id' | 'leaseOwner'>,
   code: string,
   retry: boolean,
   unavailable = false,
 ): Promise<void> {
-  await sql`update messaging.instagram_sync_jobs set status=case when ${retry} then 'PROCESSING' else 'FAILED' end,coverage_status=case when ${unavailable} then 'UNAVAILABLE' else coverage_status end,error_count=error_count+1,last_error_code=${code},available_at=now()+interval '1 minute',lease_owner=null,lease_expires_at=null,completed_at=case when ${retry} then null else now() end,updated_at=now() where id=${id}::uuid`.execute(
+  await sql`update messaging.instagram_sync_jobs set status=case when ${retry} then 'PROCESSING' else 'FAILED' end,coverage_status=case when ${unavailable} then 'UNAVAILABLE' else coverage_status end,error_count=error_count+1,last_error_code=${code},available_at=now()+interval '1 minute',lease_owner=null,lease_expires_at=null,completed_at=case when ${retry} then null else now() end,updated_at=now() where id=${claim.id}::uuid and status='PROCESSING' and lease_owner=${claim.leaseOwner}`.execute(
     db,
   );
 }

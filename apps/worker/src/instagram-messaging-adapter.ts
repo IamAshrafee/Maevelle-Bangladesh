@@ -195,6 +195,8 @@ export async function processInstagramProviderEvents(
         if (!message || !mid || !senderId || !recipientId) {
           await instagram.completeInstagramProviderEvent(database.db, {
             id: event.id,
+            leaseOwner: event.leaseOwner,
+            attemptCount: event.attemptCount,
             outcome: 'FAILED_FINAL',
             errorCode: 'MALFORMED_MESSAGE',
           });
@@ -209,6 +211,8 @@ export async function processInstagramProviderEvents(
           });
           await instagram.completeInstagramProviderEvent(database.db, {
             id: event.id,
+            leaseOwner: event.leaseOwner,
+            attemptCount: event.attemptCount,
             outcome: matched ? 'PROCESSED' : event.attemptCount < 3 ? 'RETRY' : 'IGNORED',
             ...(!matched ? { errorCode: 'UNMATCHED_ECHO' } : {}),
           });
@@ -274,6 +278,8 @@ export async function processInstagramProviderEvents(
         });
         await instagram.completeInstagramProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'PROCESSED',
         });
       } else if (event.eventType === 'POSTBACK' && senderId) {
@@ -293,6 +299,8 @@ export async function processInstagramProviderEvents(
         });
         await instagram.completeInstagramProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'PROCESSED',
         });
       } else if (event.eventType === 'REACTION' && senderId) {
@@ -311,6 +319,8 @@ export async function processInstagramProviderEvents(
         });
         await instagram.completeInstagramProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'PROCESSED',
         });
       } else if (event.eventType === 'READ' && senderId) {
@@ -322,17 +332,23 @@ export async function processInstagramProviderEvents(
         });
         await instagram.completeInstagramProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'PROCESSED',
         });
       } else {
         await instagram.completeInstagramProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'IGNORED',
         });
       }
     } catch (error) {
       await instagram.completeInstagramProviderEvent(database.db, {
         id: event.id,
+        leaseOwner: event.leaseOwner,
+        attemptCount: event.attemptCount,
         outcome: event.attemptCount >= event.maxAttempts ? 'FAILED_FINAL' : 'RETRY',
         errorCode: error instanceof Error ? error.name : 'PROCESSING_FAILED',
       });
@@ -360,7 +376,7 @@ export async function processInstagramHistoricalSyncs(input: {
     if (!credential.grantedScopes.includes('instagram_manage_messages')) {
       await instagram.failInstagramSyncJob(
         input.database.db,
-        job.id,
+        job,
         'INSTAGRAM_MESSAGING_PERMISSION_MISSING',
         false,
         true,
@@ -378,6 +394,7 @@ export async function processInstagramHistoricalSyncs(input: {
       if (!conversation) {
         await instagram.advanceInstagramSyncJob(input.database.db, {
           id: job.id,
+          leaseOwner: job.leaseOwner,
           cursor: null,
           complete: true,
         });
@@ -389,6 +406,7 @@ export async function processInstagramHistoricalSyncs(input: {
       if (!participant) {
         await instagram.advanceInstagramSyncJob(input.database.db, {
           id: job.id,
+          leaseOwner: job.leaseOwner,
           cursor: page.nextCursor ? { conversationAfter: page.nextCursor } : null,
           complete: !page.nextCursor,
         });
@@ -396,6 +414,7 @@ export async function processInstagramHistoricalSyncs(input: {
       }
       await instagram.advanceInstagramSyncJob(input.database.db, {
         id: job.id,
+        leaseOwner: job.leaseOwner,
         cursor: {
           ...(page.nextCursor ? { conversationAfter: page.nextCursor } : {}),
           conversationId: conversation.id,
@@ -438,6 +457,7 @@ export async function processInstagramHistoricalSyncs(input: {
     if (messages.nextCursor)
       await instagram.advanceInstagramSyncJob(input.database.db, {
         id: job.id,
+        leaseOwner: job.leaseOwner,
         cursor: { ...cursor, messageAfter: messages.nextCursor },
         importedMessages: imported,
         duplicateMessages: duplicates,
@@ -445,6 +465,7 @@ export async function processInstagramHistoricalSyncs(input: {
     else if (cursor.endAfterCurrent)
       await instagram.advanceInstagramSyncJob(input.database.db, {
         id: job.id,
+        leaseOwner: job.leaseOwner,
         cursor: null,
         importedMessages: imported,
         duplicateMessages: duplicates,
@@ -453,6 +474,7 @@ export async function processInstagramHistoricalSyncs(input: {
     else
       await instagram.advanceInstagramSyncJob(input.database.db, {
         id: job.id,
+        leaseOwner: job.leaseOwner,
         cursor: cursor.conversationAfter ? { conversationAfter: cursor.conversationAfter } : null,
         importedMessages: imported,
         duplicateMessages: duplicates,
@@ -463,7 +485,7 @@ export async function processInstagramHistoricalSyncs(input: {
       error instanceof MetaGraphError && ['RATE_LIMIT', 'TEMPORARY'].includes(error.category);
     await instagram.failInstagramSyncJob(
       input.database.db,
-      job.id,
+      job,
       graphErrorCode(error),
       retry,
       error instanceof MetaGraphError && ['PERMISSION', 'AUTHENTICATION'].includes(error.category),

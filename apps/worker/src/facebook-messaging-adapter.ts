@@ -325,6 +325,8 @@ export async function processFacebookProviderEvents(
         if (!message || !mid || !senderId || !recipientId) {
           await facebook.completeFacebookProviderEvent(database.db, {
             id: event.id,
+            leaseOwner: event.leaseOwner,
+            attemptCount: event.attemptCount,
             outcome: 'FAILED_FINAL',
             errorCode: 'MALFORMED_MESSAGE',
           });
@@ -339,6 +341,8 @@ export async function processFacebookProviderEvents(
           });
           await facebook.completeFacebookProviderEvent(database.db, {
             id: event.id,
+            leaseOwner: event.leaseOwner,
+            attemptCount: event.attemptCount,
             outcome: matched ? 'PROCESSED' : event.attemptCount < 3 ? 'RETRY' : 'IGNORED',
             ...(!matched ? { errorCode: 'UNMATCHED_ECHO' } : {}),
           });
@@ -408,6 +412,8 @@ export async function processFacebookProviderEvents(
         });
         await facebook.completeFacebookProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'PROCESSED',
         });
       } else if (event.eventType === 'POSTBACK') {
@@ -416,6 +422,8 @@ export async function processFacebookProviderEvents(
         if (!senderId || !postback) {
           await facebook.completeFacebookProviderEvent(database.db, {
             id: event.id,
+            leaseOwner: event.leaseOwner,
+            attemptCount: event.attemptCount,
             outcome: 'FAILED_FINAL',
             errorCode: 'MALFORMED_POSTBACK',
           });
@@ -435,6 +443,8 @@ export async function processFacebookProviderEvents(
           });
           await facebook.completeFacebookProviderEvent(database.db, {
             id: event.id,
+            leaseOwner: event.leaseOwner,
+            attemptCount: event.attemptCount,
             outcome: 'PROCESSED',
           });
         }
@@ -452,6 +462,8 @@ export async function processFacebookProviderEvents(
         });
         await facebook.completeFacebookProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'PROCESSED',
         });
       } else if (event.eventType === 'READ' && senderId) {
@@ -463,16 +475,22 @@ export async function processFacebookProviderEvents(
         });
         await facebook.completeFacebookProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'PROCESSED',
         });
       } else
         await facebook.completeFacebookProviderEvent(database.db, {
           id: event.id,
+          leaseOwner: event.leaseOwner,
+          attemptCount: event.attemptCount,
           outcome: 'IGNORED',
         });
     } catch (error) {
       await facebook.completeFacebookProviderEvent(database.db, {
         id: event.id,
+        leaseOwner: event.leaseOwner,
+        attemptCount: event.attemptCount,
         outcome: event.attemptCount >= event.maxAttempts ? 'FAILED_FINAL' : 'RETRY',
         errorCode: error instanceof Error ? error.name : 'PROCESSING_FAILED',
       });
@@ -503,7 +521,7 @@ export async function processFacebookHistoricalSyncs(input: {
     if (missingHistoryScope) {
       await facebook.failFacebookSyncJob(
         input.database.db,
-        job.id,
+        job,
         `MISSING_${missingHistoryScope.toUpperCase()}`,
         false,
         true,
@@ -524,6 +542,7 @@ export async function processFacebookHistoricalSyncs(input: {
       if (!conversation) {
         await facebook.advanceFacebookSyncJob(input.database.db, {
           id: job.id,
+          leaseOwner: job.leaseOwner,
           cursor: null,
           complete: true,
         });
@@ -535,6 +554,7 @@ export async function processFacebookHistoricalSyncs(input: {
       if (!participant) {
         await facebook.advanceFacebookSyncJob(input.database.db, {
           id: job.id,
+          leaseOwner: job.leaseOwner,
           cursor: page.nextCursor ? { conversationAfter: page.nextCursor } : null,
           complete: !page.nextCursor,
         });
@@ -588,6 +608,7 @@ export async function processFacebookHistoricalSyncs(input: {
     if (messages.nextCursor)
       await facebook.advanceFacebookSyncJob(input.database.db, {
         id: job.id,
+        leaseOwner: job.leaseOwner,
         cursor: { ...cursor, messageAfter: messages.nextCursor },
         importedConversations,
         importedMessages,
@@ -596,6 +617,7 @@ export async function processFacebookHistoricalSyncs(input: {
     else if (cursor.endAfterCurrent)
       await facebook.advanceFacebookSyncJob(input.database.db, {
         id: job.id,
+        leaseOwner: job.leaseOwner,
         cursor: null,
         importedConversations,
         importedMessages,
@@ -605,6 +627,7 @@ export async function processFacebookHistoricalSyncs(input: {
     else
       await facebook.advanceFacebookSyncJob(input.database.db, {
         id: job.id,
+        leaseOwner: job.leaseOwner,
         cursor: cursor.conversationAfter ? { conversationAfter: cursor.conversationAfter } : null,
         importedConversations,
         importedMessages,
@@ -622,7 +645,7 @@ export async function processFacebookHistoricalSyncs(input: {
       });
     await facebook.failFacebookSyncJob(
       input.database.db,
-      job.id,
+      job,
       graph?.code ?? 'SYNC_FAILED',
       Boolean(graph && ['RATE_LIMIT', 'TEMPORARY'].includes(graph.category)),
       Boolean(graph && ['AUTHENTICATION', 'PERMISSION'].includes(graph.category)),

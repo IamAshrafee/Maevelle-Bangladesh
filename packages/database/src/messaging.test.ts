@@ -4,6 +4,8 @@ import { sql } from 'kysely';
 import { createDatabase } from './index.js';
 import { createOrganization } from './platform.js';
 import * as messaging from './messaging/index.js';
+import * as facebook from './messaging/facebook.js';
+import * as instagram from './messaging/instagram.js';
 import { processNotificationOutbox } from './notifications.js';
 
 const database = createDatabase({
@@ -479,6 +481,86 @@ describe('messaging transactional core', () => {
       messageId: outbound.message.id,
       state: 'UNKNOWN',
       failureCode: 'LEASE_EXPIRED',
+    });
+  });
+
+  it('rejects stale Meta event and history-sync lease completions', async () => {
+    const event = await sql<{ id: string }>`insert into messaging.provider_events(
+        provider,provider_account_id,event_key,event_type,payload,status,lease_owner,
+        lease_expires_at,attempt_count
+      ) values(
+        'META_MESSENGER','lease-test-page',${`lease-${crypto.randomUUID()}`},'MESSAGE','{}',
+        'PROCESSING','current-event-worker',now()+interval '1 minute',2
+      ) returning id::text`.execute(database.db);
+    const eventId = event.rows[0]!.id;
+
+    await facebook.completeFacebookProviderEvent(database.db, {
+      id: eventId,
+      leaseOwner: 'stale-event-worker',
+      attemptCount: 1,
+      outcome: 'PROCESSED',
+    });
+    let eventState = await sql<{ status: string; lease_owner: string | null }>`select status,lease_owner
+      from messaging.provider_events where id=${eventId}::bigint`.execute(database.db);
+    expect(eventState.rows[0]).toEqual({
+      status: 'PROCESSING',
+      lease_owner: 'current-event-worker',
+    });
+
+    await facebook.completeFacebookProviderEvent(database.db, {
+      id: eventId,
+      leaseOwner: 'current-event-worker',
+      attemptCount: 2,
+      outcome: 'PROCESSED',
+    });
+    eventState = await sql<{ status: string; lease_owner: string | null }>`select status,lease_owner
+      from messaging.provider_events where id=${eventId}::bigint`.execute(database.db);
+    expect(eventState.rows[0]).toEqual({ status: 'PROCESSED', lease_owner: null });
+
+    const sync = await sql<{ id: string }>`insert into messaging.instagram_sync_jobs(
+        organization_id,channel_connection_id,requested_by_membership_id,status,lease_owner,
+        lease_expires_at
+      ) values(
+        ${organizationId},${connectionId},${membershipId},'PROCESSING','current-sync-worker',
+        now()+interval '1 minute'
+      ) returning id`.execute(database.db);
+    const syncId = sync.rows[0]!.id;
+
+    await instagram.advanceInstagramSyncJob(database.db, {
+      id: syncId,
+      leaseOwner: 'stale-sync-worker',
+      cursor: null,
+      importedMessages: 3,
+    });
+    let syncState = await sql<{
+      status: string;
+      lease_owner: string | null;
+      imported_messages: number;
+    }>`select status,lease_owner,imported_messages from messaging.instagram_sync_jobs
+      where id=${syncId}::uuid`.execute(database.db);
+    expect(syncState.rows[0]).toEqual({
+      status: 'PROCESSING',
+      lease_owner: 'current-sync-worker',
+      imported_messages: 0,
+    });
+
+    await instagram.advanceInstagramSyncJob(database.db, {
+      id: syncId,
+      leaseOwner: 'current-sync-worker',
+      cursor: null,
+      importedMessages: 3,
+      complete: true,
+    });
+    syncState = await sql<{
+      status: string;
+      lease_owner: string | null;
+      imported_messages: number;
+    }>`select status,lease_owner,imported_messages from messaging.instagram_sync_jobs
+      where id=${syncId}::uuid`.execute(database.db);
+    expect(syncState.rows[0]).toEqual({
+      status: 'COMPLETED',
+      lease_owner: null,
+      imported_messages: 3,
     });
   });
 
@@ -1170,4 +1252,3 @@ describe('Instagram messaging provider boundaries', () => {
     expect(Number(events.rows[0]!.count)).toBeGreaterThanOrEqual(1);
   });
 });
-
